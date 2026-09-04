@@ -187,8 +187,8 @@ def _validate_ref(ref: str) -> str:
     return ref
 
 
-def _validate_sha(sha: str) -> str:
-    if not _SHA_RE.fullmatch(sha):
+def _validate_sha(sha: object) -> str:
+    if not isinstance(sha, str) or not _SHA_RE.fullmatch(sha):
         raise RepositoryTruthError("malformed_provider_response", "provider returned invalid commit SHA")
     return sha.lower()
 
@@ -605,11 +605,12 @@ class RepositoryTruthService:
             _validate_path(path)
             size = entry.get("size")
             if isinstance(size, int) and size > MAX_FILE_PREVIEW_BYTES:
+                partial = True
                 continue
             if len(candidates) >= MAX_SEARCH_CANDIDATES:
                 partial = True
                 break
-            candidates.append((path, blob_sha))
+            candidates.append((path, _validate_sha(blob_sha)))
 
         matches: list[dict[str, object]] = []
         examined = 0
@@ -632,13 +633,16 @@ class RepositoryTruthService:
                 raise
             blob = _json_object(blob_response)
             encoded = blob.get("content")
-            if blob.get("encoding") != "base64" or not isinstance(encoded, str):
+            if blob.get("encoding") != "base64":
+                partial = True
                 continue
+            if not isinstance(encoded, str):
+                raise RepositoryTruthError(
+                    "malformed_provider_response", "blob content is missing"
+                )
+            raw = _decode_github_base64(encoded)
             try:
-                raw = _decode_github_base64(encoded)
                 text = raw.decode("utf-8")
-            except RepositoryTruthError:
-                continue
             except UnicodeDecodeError:
                 continue
             if len(raw) > MAX_FILE_PREVIEW_BYTES:
@@ -814,7 +818,12 @@ class RepositoryTruthService:
             raise RepositoryTruthError(
                 "malformed_provider_response", "check-runs payload is malformed"
             )
-        partial = len(runs) > MAX_COLLECTION_ITEMS or int(data.get("total_count", len(runs))) > len(runs)
+        total_count = data.get("total_count", len(runs))
+        if isinstance(total_count, bool) or not isinstance(total_count, int) or total_count < 0:
+            raise RepositoryTruthError(
+                "malformed_provider_response", "check-runs total_count is malformed"
+            )
+        partial = len(runs) > MAX_COLLECTION_ITEMS or total_count > len(runs)
         projected = []
         for run in runs[:MAX_COLLECTION_ITEMS]:
             if not isinstance(run, dict):
