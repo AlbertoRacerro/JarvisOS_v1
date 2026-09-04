@@ -211,8 +211,8 @@ def test_probe_environment_is_minimal_and_disables_optional_locks(monkeypatch):
     assert "JARVISOS_FAKE_SECRET" not in env
 
 
-def test_snapshot_uses_shared_deadline(monkeypatch, tmp_path: Path):
-    calls: list[float] = []
+def test_snapshot_uses_shared_deadline_and_exact_probe_family(monkeypatch, tmp_path: Path):
+    calls: list[tuple[tuple[str, ...], float]] = []
     outputs = [
         rt.ProbeResult(0, str(tmp_path).encode(), b""),
         rt.ProbeResult(0, SHA_LOCAL.encode(), b""),
@@ -221,7 +221,8 @@ def test_snapshot_uses_shared_deadline(monkeypatch, tmp_path: Path):
     ]
 
     def fake_probe(root, args, timeout):
-        calls.append(timeout)
+        assert root == tmp_path.resolve()
+        calls.append((args, timeout))
         return outputs.pop(0)
 
     ticks = iter([10.0, 10.0, 10.4, 10.8, 11.2])
@@ -229,7 +230,13 @@ def test_snapshot_uses_shared_deadline(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(rt, "_run_git_probe", fake_probe)
     result = rt.capture_runtime_snapshot(provenance="live_worktree_observation", root=tmp_path)
     assert result.failure_code is None
-    assert calls == pytest.approx([2.0, 1.6, 1.2, 0.8])
+    assert [args for args, _ in calls] == [
+        ("rev-parse", "--show-toplevel"),
+        ("rev-parse", "--verify", "HEAD"),
+        ("symbolic-ref", "--quiet", "--short", "HEAD"),
+        ("status", "--porcelain=v1", "--untracked-files=normal"),
+    ]
+    assert [timeout for _, timeout in calls] == pytest.approx([2.0, 1.6, 1.2, 0.8])
 
 
 def test_git_unavailable_is_typed(monkeypatch, tmp_path: Path):
@@ -266,6 +273,96 @@ def test_malformed_sha_is_typed_without_raw_output(monkeypatch, tmp_path: Path):
     result = rt.capture_runtime_snapshot(provenance="live_worktree_observation", root=tmp_path)
     assert result.failure_code == "malformed_probe_output"
     assert "secret" not in repr(result)
+
+
+def test_hostile_status_text_only_sets_dirty(monkeypatch, tmp_path: Path):
+    outputs = [
+        rt.ProbeResult(0, str(tmp_path).encode(), b""),
+        rt.ProbeResult(0, SHA_LOCAL.encode(), b""),
+        rt.ProbeResult(0, b"master", b""),
+        rt.ProbeResult(0, b'?? $(touch owned);`echo nope`.py\n', b""),
+    ]
+    monkeypatch.setattr(rt, "_run_git_probe", lambda *args, **kwargs: outputs.pop(0))
+    result = rt.capture_runtime_snapshot(provenance="live_worktree_observation", root=tmp_path)
+    assert result.dirty_state == "dirty"
+    assert "owned" not in repr(result)
+
+
+def test_pipe_capture_marks_oversize_without_retaining_unbounded_data():
+    import io
+
+    capture = rt._PipeCapture(bytearray())
+    rt._drain_pipe(io.BytesIO(b"x" * (rt.MAX_PROBE_OUTPUT_BYTES + 4096)), capture)
+    assert capture.oversized is True
+    assert len(capture.data) <= rt.MAX_PROBE_OUTPUT_BYTES + 1
+
+
+def test_git_probe_timeout_kills_and_reaps_child(monkeypatch, tmp_path: Path):
+    import io
+    import subprocess
+
+    class FakeProcess:
+        def __init__(self):
+            self.stdout = io.BytesIO(b"")
+            self.stderr = io.BytesIO(b"")
+            self.returncode = 0
+            self.killed = False
+            self.wait_calls = 0
+
+        def wait(self, timeout=None):
+            self.wait_calls += 1
+            if self.wait_calls == 1:
+                raise subprocess.TimeoutExpired(cmd="git", timeout=timeout)
+            return self.returncode
+
+        def kill(self):
+            self.killed = True
+            self.returncode = -9
+
+    fake = FakeProcess()
+    captured: dict[str, object] = {}
+
+    def fake_popen(argv, **kwargs):
+        captured["argv"] = argv
+        captured.update(kwargs)
+        return fake
+
+    monkeypatch.setattr(rt.subprocess, "Popen", fake_popen)
+    with pytest.raises(TimeoutError):
+        rt._run_git_probe(tmp_path, ("rev-parse", "--verify", "HEAD"), 0.01)
+    assert fake.killed is True
+    assert fake.wait_calls == 2
+    assert captured["argv"] == ["git", "rev-parse", "--verify", "HEAD"]
+    assert captured["shell"] is False
+    assert captured["cwd"] == str(tmp_path)
+    assert captured["stdin"] is rt.subprocess.DEVNULL
+    env = captured["env"]
+    assert isinstance(env, dict)
+    assert env["GIT_OPTIONAL_LOCKS"] == "0"
+    assert env["GIT_TERMINAL_PROMPT"] == "0"
+
+
+def test_runtime_route_signature_has_no_local_execution_inputs():
+    import inspect as pyinspect
+
+    from app.modules.coding.runtime_routes import runtime_truth
+
+    assert set(pyinspect.signature(runtime_truth).parameters) == {
+        "request",
+        "repository",
+        "target_ref",
+    }
+
+
+def test_public_snapshot_contains_digest_not_raw_root(tmp_path: Path):
+    snapshot_value = rt._failed_snapshot(
+        tmp_path.resolve(),
+        "live_worktree_observation",
+        "not_git_worktree",
+    )
+    public = rt._snapshot_public(snapshot_value)
+    assert "root_identity" in public
+    assert str(tmp_path.resolve()) not in repr(public)
 
 
 def test_worktree_change_detects_ref_and_dirty_changes():
