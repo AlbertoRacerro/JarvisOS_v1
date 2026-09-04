@@ -463,7 +463,7 @@ class RepositoryTruthService:
             resolved_sha=sha,
         )
         entries = _json_list(response)
-        partial = len(entries) > MAX_TREE_ENTRIES
+        partial = len(entries) >= MAX_TREE_ENTRIES
         projected: list[dict[str, object]] = []
         for entry in entries[:MAX_TREE_ENTRIES]:
             if not isinstance(entry, dict):
