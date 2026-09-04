@@ -16,6 +16,11 @@ from app.core.spa_static import SpaStaticFiles, derive_reserved_roots
 from app.modules.ai.routes import router as ai_router
 from app.modules.ai.sensitivity_routes import router as sensitivity_router
 from app.modules.bluecad.routes import router as bluecad_router
+from app.modules.coding.runtime_routes import router as coding_runtime_router
+from app.modules.coding.runtime_truth import (
+    capture_runtime_snapshot,
+    startup_snapshot_unavailable,
+)
 from app.modules.flowsheet.routes import router as flowsheet_router
 from app.modules.local_ai.runtime.lifecycle import create_local_ai_runtime_lifecycle_from_env
 from app.modules.memory.routes import router as memory_router
@@ -67,6 +72,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.local_ai_runtime_lifecycle = lifecycle
     recovery_task: asyncio.Task[None] | None = None
     try:
+        try:
+            app.state.runtime_startup_snapshot = await asyncio.to_thread(
+                capture_runtime_snapshot,
+                provenance="process_start_observation",
+            )
+        except Exception:
+            # Runtime-truth observation must never make JarvisOS fail to start.
+            app.state.runtime_startup_snapshot = startup_snapshot_unavailable()
         await lifecycle.startup()
         live_working_dirs = live_stranded_runner_working_dirs()
         reconcile_stranded_runner_jobs()
@@ -119,6 +132,7 @@ def create_app() -> FastAPI:
     app.include_router(runner_router)
     app.include_router(flowsheet_router)
     app.include_router(project_knowledge_router)
+    app.include_router(coding_runtime_router)
 
     frontend_dist = _frontend_dist_path()
     if frontend_dist.is_dir():
