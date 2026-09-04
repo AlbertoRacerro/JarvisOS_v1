@@ -995,7 +995,6 @@ class RepositoryTruthService:
                     "id": comment.get("id") if isinstance(comment.get("id"), int) else None,
                     "author": _project_text(author, max_chars=128),
                     "body": _project_text(raw_body, max_chars=MAX_COMMENT_BODY_CHARS),
-                    "body_truncated": body_truncated,
                 }
             )
         return self._result(
