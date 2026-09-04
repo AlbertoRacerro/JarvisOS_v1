@@ -154,6 +154,7 @@ def test_valid_semantic_proposal_is_exact_base_and_proposal_only() -> None:
         nonlocal calls
         calls += 1
         assert kwargs["task_kind"] == "synthesis"
+        assert kwargs["route_class"] == "local:coder"
         return ai_outcome(good_payload())
 
     response = CodingActionsService(FakeTruth(), ai_runner=fake_ai).suggest_modification(  # type: ignore[arg-type]
@@ -191,7 +192,19 @@ def test_ref_move_after_generation_invalidates_proposal_without_retry() -> None:
         },
         {
             "path": "backend/app/example.py",
+            "diff": "diff --git a/other.py b/other.py\n--- a/backend/app/example.py\n+++ b/backend/app/example.py\n@@ -1 +1 @@\n-x\n+y",
+        },
+        {
+            "path": "backend/app/example.py",
             "diff": "old mode 100644\nnew mode 100755\n--- a/backend/app/example.py\n+++ b/backend/app/example.py",
+        },
+        {
+            "path": "backend/app/example.py",
+            "diff": "new file mode 100644\n--- /dev/null\n+++ b/backend/app/example.py",
+        },
+        {
+            "path": "backend/app/example.py",
+            "diff": "deleted file mode 100644\n--- a/backend/app/example.py\n+++ /dev/null",
         },
         {
             "path": "backend/app/example.py",
