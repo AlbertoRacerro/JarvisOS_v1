@@ -77,3 +77,172 @@ Prefer a thin action adapter over the accepted owners. Do not add a generic codi
 - no new provider credential or egress path;
 - no Hermes runtime/re-derivation or legacy 066–068 reopening;
 - no frontend redesign or unrelated Coding/Development feature work.
+
+## Full specification
+
+### Product surface and capability identities
+
+123 adds exactly two route-scoped capabilities on the existing canonical Coding routes:
+
+- `coding.inspect` — action class `READ`, available on `coding-repository` and `coding-runtime`, returning an exact-context explanation assembled from accepted 118/119/120 projections;
+- `coding.suggest-modification` — action class `PROPOSE`, available on `coding-repository`, returning one bounded modification proposal tied to an exact repository/ref/base SHA.
+
+No new canonical frontend route is required. The implementation reuses 111 `JarvisCapabilityDescriptor`, exact-ref validation, context preview/digest semantics, and existing Coding route owners. It must not register `COMMIT` or `EXECUTE`.
+
+### Request boundary
+
+A suggest-modification request contains only:
+
+- `workspace_id`;
+- configured `repository`;
+- exact `base_ref` and 40-character `base_sha`;
+- one bounded natural-language `intent` (1–4000 chars);
+- 1–16 explicit repository-relative `target_paths`;
+- optional exact 111 context refs already accepted by the context preview boundary;
+- optional expected deterministic checks, maximum 16 short strings.
+
+Paths must be normalized POSIX-style repository-relative text, unique after normalization, at most 256 chars each, with no absolute path, drive prefix, `..`, NUL, backslash traversal, `.git/`, data-root path, or unsupported binary target. `.github/**`, `AGENTS.md`, `CODEOWNERS`, secret-bearing/config credential surfaces, and any path outside the explicitly requested set are rejected for the first release. The full proposal is unavailable rather than silently widening paths.
+
+### Exact-evidence inputs
+
+The action may consume only bounded projections owned by accepted slices:
+
+- 118 configured repository/ref/file/PR/check/review truth for the exact target repository and SHA;
+- 119 runtime observation only when its observed repository identity corresponds to the same configured repository and its reported SHA/ref relation can be tied to the request;
+- 120 pipeline-state evidence only when its repository/PR/head/base identity is consistent with the same exact target;
+- 111 exact context refs whose workspace matches the request and whose preview is dispatchable/current.
+
+Mismatched repository, workspace, ref, SHA, stale/partial identity, or conflicting evidence fails closed with a typed refusal. 119 dirty/runtime state may create warnings or refusal but never grants mutation authority. 120 lifecycle state may explain a lawful next step but never grants readiness, review acceptance, merge, or reconciliation authority.
+
+### Freshness / CAS protocol
+
+For every proposal:
+
+1. resolve the configured repository target through 118 and freeze exact `base_ref -> base_sha`;
+2. build/validate any 111 context preview and digest;
+3. read only the explicit bounded source evidence needed for the requested target paths and optional 119/120 evidence;
+4. generate and validate the proposal;
+5. re-resolve `base_ref` through 118 and revalidate any exact evidence identities used;
+6. if ref/SHA/context identity moved or became partial/unknown, return `stale` and no current proposal.
+
+There is no retry loop chasing a moving head. Callers may retry from fresh evidence.
+
+### Proposal generation
+
+The first release is a bounded composition:
+
+- deterministic code owns target identity, path admission, evidence selection, prompt/schema construction, output parsing, diff validation, size limits, staleness, and refusal;
+- when a non-template change proposal requires semantic generation, it may call the existing `run_ai_task` execution spine only through current JarvisOS routing/egress/sensitivity/budget/provider policy; no provider is called directly and `route_class="auto"` remains non-external;
+- deterministic inspect/explain may return directly from accepted projections without a model call when no semantic synthesis is needed.
+
+Model output is never accepted as repository truth. It is parsed into the closed proposal schema below and rejected on malformed/oversized/out-of-scope content.
+
+### Modification proposal contract
+
+A successful proposal contains:
+
+- `state = "proposed"`;
+- exact `repository`, `base_ref`, `base_sha`, `workspace_id`;
+- original bounded `intent`;
+- ordered `target_paths`;
+- `summary` (max 2000 chars);
+- `changes`: 1–16 entries, each naming exactly one admitted target path and containing either a bounded unified-diff text fragment or a bounded structured change plan, never both;
+- `assumptions` and `warnings`, each at most 16 strings of 256 chars;
+- `expected_checks`, at most 16 strings of 128 chars;
+- provenance containing the 111 context digest when used plus exact 118/119/120 identities actually consumed;
+- `generated_by` identifying deterministic/template or AI-task provenance without exposing hidden prompts/provider credentials.
+
+Total serialized proposal payload is capped at 128 KiB; each diff/plan entry is capped at 32 KiB. Binary patches, renames outside the admitted set, file-mode changes, symlink/submodule changes, Git metadata changes, and any diff header/path not exactly matching an admitted target are rejected.
+
+The response is an ephemeral action result only. 123 adds no database table, task queue, proposal ledger, background worker, branch, PR, artifact persistence, or automatic handoff actuator.
+
+### Refusal taxonomy
+
+Non-success responses use a closed reason family:
+
+- `missing_evidence`;
+- `stale_target`;
+- `identity_conflict`;
+- `unsupported_target`;
+- `policy_denied`;
+- `provider_unavailable`;
+- `proposal_invalid`;
+- `proposal_too_large`;
+- `unknown`.
+
+Provider exception text, secrets, raw unrestricted file contents, hidden prompts, and sensitive policy internals are never returned.
+
+### Relationship to authorized development writers
+
+A 123 proposal may be copied/consumed by the existing human/ChatGPT development process as advisory input only. The consumer must independently revalidate current repository authority and exact head before applying anything. No response field is an actuator token or permission grant. 123 has no GitHub write client, local Git/subprocess/shell/filesystem-write path, workflow dispatch, review request, branch/PR creation, STATUS mutation, merge, self-update, restart, rollback, PTY, or terminal session capability.
+
+### Implementation surface
+
+Fresh master supports the following minimum bounded implementation:
+
+- `backend/app/modules/ai/jarvis_context_models.py` — add the closed request/response/proposal models and keep action class bounded to existing `READ`/`PROPOSE` vocabulary;
+- `backend/app/modules/coding/actions.py` — thin stateless 123 service over injected 118/119/120/context/AI owners, path admission, exact identity, validation, and proposal parsing;
+- `backend/app/modules/coding/runtime_routes.py` — add the bounded inspect/suggest endpoints under the existing `/api/coding` router; no new root router;
+- `backend/tests/test_jarvis_coding_actions_123.py` — deterministic unit/route/hostile-output acceptance coverage.
+
+A deterministic implementation failure may justify the smallest supporting change to an existing 111/118/119/120 owner, but no new repository provider, credential seam, schema/migration, durable store, workflow, frontend redesign, generic coding-agent framework, or mutation API is authorized.
+
+### Deterministic acceptance matrix
+
+The implementation must prove at least:
+
+1. current configured repository + exact base ref/SHA + admitted targets yields an inspectable proposal tied to that exact base;
+2. ref moves before return -> `stale_target`, no current proposal;
+3. unconfigured repository -> refusal before provider dispatch;
+4. workspace/exact-ref mismatch -> `identity_conflict`;
+5. stale/unknown 111 context -> no proposal dispatch;
+6. conflicting 118/119/120 repository/ref/SHA evidence -> fail closed;
+7. absolute/traversal/backslash-drive/Git-metadata/protected/undeclared path -> `unsupported_target`;
+8. duplicate/over-limit target paths are rejected;
+9. model output attempting an undeclared second path is rejected;
+10. binary/file-mode/symlink/submodule/rename-outside-scope diff is rejected;
+11. malformed proposal JSON/schema -> `proposal_invalid`;
+12. per-change or total payload limit breach -> `proposal_too_large`;
+13. policy/provider denial maps to bounded refusal without leaking raw provider errors;
+14. deterministic inspect/explain can complete without a provider call when accepted projections suffice;
+15. semantic generation, when used, goes only through the existing AI execution spine and creates its normal AI-job/accounting evidence;
+16. no `COMMIT`/`EXECUTE` capability is registered by 123;
+17. route/service expose no GitHub write, local Git/subprocess/shell/filesystem write, workflow/review/merge/STATUS/self-update/PTTY authority;
+18. existing 111 context preview and 118/119/120 read-only endpoints remain unchanged.
+
+## Readiness decision — 2026-09-04
+
+### Exact-master revalidation
+
+Readiness is derived from exact master `eb7b053b9b94ad5614f566b46bc9a271a420e025` after definition PR #543 merged.
+
+Fresh code confirms:
+
+- 111 already defines `READ` and `PROPOSE` action classes, canonical Coding routes, exact refs, bounded context preview, stale-ref refusal, and a capability registry that rejects `COMMIT`/`EXECUTE`;
+- 118/119/120 are merged and expose the exact remote repository truth, local runtime observation, and development-pipeline projection that 123 is defined to consume;
+- the existing `/api/coding` router is already mounted, so no second router/provider/config owner is needed;
+- current Coding modules contain no repository mutation owner or generic coding-agent framework that 123 must preserve;
+- no schema/migration, credential, provider route, durable task store, PTY, self-update, workflow, or frontend redesign is required for the accepted first release.
+
+### Failure-mode disposition
+
+- **Stale ref between evidence and proposal:** closed by final exact-ref revalidation and fail-closed response.
+- **Model invents files/paths:** closed by explicit target allowlist plus post-parse diff-path validation.
+- **Authority laundering through a proposal:** closed by no write/tool actuator in the service and no COMMIT/EXECUTE capability.
+- **Provider/egress bypass:** closed by allowing semantic generation only through the existing AI execution spine.
+- **Secret/unbounded repository disclosure:** closed by bounded accepted projections, explicit target paths, size limits and safe refusal mapping.
+- **Proposal becomes shadow queue/state:** closed by ephemeral response-only contract and no store/background worker.
+- **Dirty/divergent runtime mistaken for write permission:** closed by 119 remaining observation-only and never an authorization input.
+- **Need for arbitrary binary/rename/mode changes:** PARK; outside the first-release proposal boundary and not required by the acceptance target.
+
+### Minimum-necessary test
+
+Criterio di accettazione: provide an exact-context Coding inspection and bounded modification suggestion without granting repository/runtime mutation authority.
+
+Questo lavoro serve a soddisfarlo? **sì**.
+
+Il criterio è raggiungibile without a new writer/provider/store/framework? **sì** — reuse 111/118/119/120 and the existing AI execution spine; therefore none is added.
+
+### Readiness verdict
+
+**READY once this planning/readiness PR merges and the live registry row is transitioned to `ready`, either atomically in the same accepted PR or through the smallest mechanical follow-up.**
