@@ -331,7 +331,14 @@ def test_git_probe_timeout_kills_and_reaps_child(monkeypatch, tmp_path: Path):
         rt._run_git_probe(tmp_path, ("rev-parse", "--verify", "HEAD"), 0.01)
     assert fake.killed is True
     assert fake.wait_calls == 2
-    assert captured["argv"] == ["git", "rev-parse", "--verify", "HEAD"]
+    assert captured["argv"] == [
+        "git",
+        "-c",
+        "core.fsmonitor=false",
+        "rev-parse",
+        "--verify",
+        "HEAD",
+    ]
     assert captured["shell"] is False
     assert captured["cwd"] == str(tmp_path)
     assert captured["stdin"] is rt.subprocess.DEVNULL
@@ -370,8 +377,7 @@ def test_worktree_change_detects_ref_and_dirty_changes():
     assert rt.worktree_changed_since_start(startup, replace(startup, dirty_state="dirty"))
 
 
-@pytest.mark.asyncio
-async def test_blocking_snapshot_can_run_off_event_loop():
+def test_blocking_snapshot_can_run_off_event_loop():
     thread_seen = False
 
     def blocking_capture(**kwargs):
@@ -380,6 +386,12 @@ async def test_blocking_snapshot_can_run_off_event_loop():
         thread_seen = threading.current_thread() is not threading.main_thread()
         return snapshot()
 
-    result = await asyncio.to_thread(blocking_capture, provenance="process_start_observation")
+    async def run() -> rt.RuntimeSnapshot:
+        return await asyncio.to_thread(
+            blocking_capture,
+            provenance="process_start_observation",
+        )
+
+    result = asyncio.run(run())
     assert result.git_sha == SHA_LOCAL
     assert thread_seen

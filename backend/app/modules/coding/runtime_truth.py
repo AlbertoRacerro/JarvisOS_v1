@@ -125,7 +125,7 @@ def _run_git_probe(
         raise TimeoutError("runtime truth snapshot deadline exhausted")
     try:
         process = subprocess.Popen(
-            ["git", *args],
+            ["git", "-c", "core.fsmonitor=false", *args],
             cwd=str(root),
             env=_minimal_git_environment(),
             stdin=subprocess.DEVNULL,
