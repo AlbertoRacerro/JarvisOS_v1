@@ -1,0 +1,76 @@
+from __future__ import annotations
+
+from app.modules.ai.contracts import RoutingDecision
+from app.modules.ai.execution import AiTaskOutcome
+from app.modules.coding.actions import CodingActionsService, CodingSuggestModificationRequest
+from app.modules.coding.repository_truth import RepositoryTruthError, RepositoryTruthResult
+
+REPOSITORY = "AlbertoRacerro/JarvisOS_v1"
+HEAD = "a" * 40
+
+
+def _result(operation: str) -> RepositoryTruthResult:
+    return RepositoryTruthResult(
+        provider="github",
+        repository=REPOSITORY,
+        operation=operation,
+        requested_ref="master",
+        resolved_sha=HEAD,
+        partial=False,
+        payload={"text": "content"},
+        observed_at="2026-09-04T00:00:00+00:00",
+    )
+
+
+class TruthThatFailsFinalRefresh:
+    def __init__(self) -> None:
+        self.ref_reads = 0
+
+    def repository_ref_truth(self, repository: str, ref: str) -> RepositoryTruthResult:
+        self.ref_reads += 1
+        if self.ref_reads > 1:
+            raise RepositoryTruthError("provider_unavailable", "sensitive provider detail")
+        return _result("repository_ref_truth")
+
+    def file_preview(self, repository: str, ref: str, path: str) -> RepositoryTruthResult:
+        return _result("file_preview")
+
+
+def _request() -> CodingSuggestModificationRequest:
+    return CodingSuggestModificationRequest(
+        workspace_id="ws-1",
+        repository=REPOSITORY,
+        base_ref="master",
+        base_sha=HEAD,
+        target_paths=["backend/app/example.py"],
+        intent="Make behavior explicit",
+    )
+
+
+def test_provider_exception_is_closed_refusal_without_error_leak() -> None:
+    service = CodingActionsService(
+        TruthThatFailsFinalRefresh(),  # type: ignore[arg-type]
+        ai_runner=lambda **_: (_ for _ in ()).throw(RuntimeError("sensitive provider detail")),
+    )
+    assert service.suggest_modification(_request()) == {
+        "state": "refused",
+        "reason": "provider_unavailable",
+    }
+
+
+def test_final_exact_ref_refresh_failure_is_closed_missing_evidence() -> None:
+    outcome = AiTaskOutcome(
+        "success",
+        "job-1",
+        "local:fake",
+        RoutingDecision(provider_id="fake", model_id="fake", decision_reason="test"),
+    )
+    outcome.status = "refused"
+    service = CodingActionsService(
+        TruthThatFailsFinalRefresh(),  # type: ignore[arg-type]
+        ai_runner=lambda **_: outcome,
+    )
+    assert service.suggest_modification(_request()) == {
+        "state": "refused",
+        "reason": "provider_unavailable",
+    }
