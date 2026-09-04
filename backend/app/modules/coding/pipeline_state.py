@@ -145,6 +145,11 @@ def _check_runs(result: RepositoryTruthResult | None) -> list[dict[str, object]]
     return [run for run in runs if isinstance(run, dict)]
 
 
+def _run_id(run: dict[str, object]) -> int:
+    value = run.get("id")
+    return value if isinstance(value, int) else -1
+
+
 def _latest_exact_run(
     runs: list[dict[str, object]], name: str, head_sha: str
 ) -> tuple[dict[str, object] | None, bool]:
@@ -161,7 +166,7 @@ def _latest_exact_run(
     with_ids = [run for run in exact if isinstance(run.get("id"), int)]
     if len(exact) > 1 and len(with_ids) != len(exact):
         return None, stale_seen
-    return (max(with_ids, key=lambda run: int(run["id"])) if with_ids else exact[0]), stale_seen
+    return (max(with_ids, key=_run_id) if with_ids else exact[0]), stale_seen
 
 
 def _tests_stage(
@@ -175,10 +180,8 @@ def _tests_stage(
         return _stage("tests", "unknown", "check_collection_partial")
     runs = _check_runs(checks)
     selected: dict[str, dict[str, object]] = {}
-    stale_required = False
     for name in ("backend", "evidence"):
         run, stale_seen = _latest_exact_run(runs, name, head_sha)
-        stale_required = stale_required or stale_seen
         if run is None:
             if stale_seen:
                 return _stage("tests", "stale", "required_check_only_stale", {"check": name})
