@@ -105,6 +105,20 @@ def test_mutable_ref_is_resolved_before_content_read() -> None:
     ]
 
 
+def test_file_preview_accepts_github_wrapped_base64() -> None:
+    encoded = base64.b64encode(b"hello wrapped provider payload").decode("ascii")
+    wrapped = f"{encoded[:12]}\n{encoded[12:24]}\r\n{encoded[24:]}\n"
+    routes = {
+        **commit_route(),
+        f"/repos/{REPOSITORY}/contents/README.md?ref={HEAD_SHA}": response(
+            {"type": "file", "encoding": "base64", "content": wrapped, "sha": OLD_SHA}
+        ),
+    }
+    subject, _ = service(routes)
+    result = subject.file_preview(REPOSITORY, "master", "README.md")
+    assert result.payload["text"] == "hello wrapped provider payload"
+
+
 def test_binary_preview_is_typed_unsupported() -> None:
     encoded = base64.b64encode(b"\xff\xfe").decode("ascii")
     routes = {
@@ -155,6 +169,26 @@ def test_literal_search_reads_exact_sha_tree_and_blobs_without_code_search() -> 
         {"path": "a.txt", "line": 4, "offset": 19},
     ]
     assert all("/search/" not in path for path in transport.calls)
+
+
+def test_literal_search_accepts_github_wrapped_blob_base64() -> None:
+    encoded = base64.b64encode(b"alpha\nneedle\nomega").decode("ascii")
+    wrapped = f"{encoded[:10]}\n{encoded[10:20]}\n{encoded[20:]}\n"
+    routes = {
+        **commit_route(),
+        f"/repos/{REPOSITORY}/git/trees/{HEAD_SHA}?recursive=1": response(
+            {
+                "truncated": False,
+                "tree": [{"type": "blob", "path": "a.txt", "sha": OLD_SHA, "size": 18}],
+            }
+        ),
+        f"/repos/{REPOSITORY}/git/blobs/{OLD_SHA}": response(
+            {"encoding": "base64", "content": wrapped}
+        ),
+    }
+    subject, _ = service(routes)
+    result = subject.literal_search(REPOSITORY, "master", "needle")
+    assert result.payload["matches"] == [{"path": "a.txt", "line": 2, "offset": 6}]
 
 
 def test_literal_search_candidate_bound_is_explicit_partial() -> None:
