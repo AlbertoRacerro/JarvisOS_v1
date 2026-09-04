@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 from dataclasses import replace
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
@@ -372,7 +371,7 @@ def test_worktree_change_detects_ref_and_dirty_changes():
 
 
 @pytest.mark.asyncio
-async def test_blocking_snapshot_can_run_off_event_loop(monkeypatch):
+async def test_blocking_snapshot_can_run_off_event_loop():
     thread_seen = False
 
     def blocking_capture(**kwargs):
