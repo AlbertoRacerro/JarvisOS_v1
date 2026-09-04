@@ -16,6 +16,8 @@ from app.core.spa_static import SpaStaticFiles, derive_reserved_roots
 from app.modules.ai.routes import router as ai_router
 from app.modules.ai.sensitivity_routes import router as sensitivity_router
 from app.modules.bluecad.routes import router as bluecad_router
+from app.modules.coding.runtime_routes import router as coding_runtime_router
+from app.modules.coding.runtime_truth import capture_runtime_snapshot
 from app.modules.flowsheet.routes import router as flowsheet_router
 from app.modules.local_ai.runtime.lifecycle import create_local_ai_runtime_lifecycle_from_env
 from app.modules.memory.routes import router as memory_router
@@ -31,6 +33,7 @@ from app.modules.secrets.routes import router as secrets_router
 from app.modules.workspaces.routes import router as workspaces_router
 
 RUNNER_RECOVERY_RECHECK_SECONDS = 0.25
+CODING_RUNTIME_STARTUP_SNAPSHOT = capture_runtime_snapshot("process_start_observation")
 
 
 async def _reconcile_after_live_owners_exit(
@@ -97,6 +100,7 @@ def create_app() -> FastAPI:
         description="Local-first architecture spine for JarvisOS.",
         lifespan=lifespan,
     )
+    app.state.coding_runtime_startup_snapshot = CODING_RUNTIME_STARTUP_SNAPSHOT
 
     app.add_middleware(
         CORSMiddleware,
@@ -112,6 +116,7 @@ def create_app() -> FastAPI:
     app.include_router(ai_router)
     app.include_router(sensitivity_router)
     app.include_router(bluecad_router)
+    app.include_router(coding_runtime_router)
     app.include_router(secrets_router)
     app.include_router(workspaces_router)
     app.include_router(modeling_router)
