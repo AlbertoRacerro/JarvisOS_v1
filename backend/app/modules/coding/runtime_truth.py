@@ -687,7 +687,7 @@ class RuntimeTruthService:
                 remote_status="unknown_relation",
             )
 
-        result = {
+        result: dict[str, object] = {
             "startup": _snapshot_public(startup),
             "live": _snapshot_public(live),
             "remote": _remote_public(final_target),
