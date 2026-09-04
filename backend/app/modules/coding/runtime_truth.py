@@ -515,7 +515,8 @@ def _valid_relation(
     ahead = payload.get("ahead_by")
     behind = payload.get("behind_by")
     if (
-        status not in {"ahead", "behind", "diverged", "identical"}
+        not isinstance(status, str)
+        or status not in {"ahead", "behind", "diverged", "identical"}
         or isinstance(ahead, bool)
         or isinstance(behind, bool)
         or not isinstance(ahead, int)
