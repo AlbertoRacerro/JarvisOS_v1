@@ -15,6 +15,7 @@ class Settings:
     database_filename: str
     ai_provider: str
     cors_origins: list[str]
+    coding_repositories: tuple[str, ...]
 
     @property
     def database_path(self) -> Path:
@@ -25,11 +26,18 @@ def _split_origins(value: str) -> list[str]:
     return [origin.strip() for origin in value.split(",") if origin.strip()]
 
 
+def _split_repositories(value: str) -> tuple[str, ...]:
+    return tuple(repository.strip() for repository in value.split(",") if repository.strip())
+
+
 @lru_cache
 def get_settings() -> Settings:
     data_root = Path(os.getenv("JARVISOS_DATA_ROOT", str(DEFAULT_DATA_ROOT)))
     cors_origins = _split_origins(
         os.getenv("JARVISOS_CORS_ORIGINS", "http://127.0.0.1:5173,http://localhost:5173")
+    )
+    coding_repositories = _split_repositories(
+        os.getenv("JARVISOS_CODING_REPOSITORIES", "AlbertoRacerro/JarvisOS_v1")
     )
 
     return Settings(
@@ -40,4 +48,5 @@ def get_settings() -> Settings:
         database_filename=os.getenv("JARVISOS_DATABASE_FILENAME", "jarvisos.db"),
         ai_provider=os.getenv("JARVISOS_AI_PROVIDER", "none"),
         cors_origins=cors_origins,
+        coding_repositories=coding_repositories,
     )
