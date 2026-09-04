@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from app.modules.coding.repository_truth import RepositoryTruthError, RepositoryTruthResult
 from app.modules.coding import runtime_truth as rt
+from app.modules.coding.repository_truth import RepositoryTruthError, RepositoryTruthResult
 
 SHA_LOCAL = "1" * 40
 SHA_TARGET = "2" * 40
