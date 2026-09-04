@@ -416,7 +416,7 @@ def test_malformed_json_is_typed() -> None:
 def test_directory_bound_is_partial_not_complete() -> None:
     entries = [
         {"path": f"dir/{index}.txt", "type": "file", "sha": HEAD_SHA, "size": 1}
-        for index in range(1_001)
+        for index in range(1_000)
     ]
     routes = {
         **commit_route(),
