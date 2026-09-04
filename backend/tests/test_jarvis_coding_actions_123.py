@@ -9,7 +9,6 @@ from app.modules.ai.execution import AiTaskOutcome
 from app.modules.ai.jarvis_context import JarvisCapabilityRegistry, JarvisContextError
 from app.modules.ai.jarvis_context_models import JarvisCapabilityDescriptor
 from app.modules.coding.actions import (
-    CodingActionError,
     CodingActionsService,
     CodingInspectRequest,
     CodingSuggestModificationRequest,
