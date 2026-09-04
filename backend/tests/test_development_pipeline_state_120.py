@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import base64
 import json
-from collections.abc import Callable
 from types import SimpleNamespace
 
 import pytest
@@ -219,7 +217,7 @@ def test_exact_registry_and_green_evidence_complete_current_stages() -> None:
 
 @pytest.mark.parametrize(
     ("status", "expected"),
-    [("planned", "pending"), ("blocked", "blocked")],
+    [("planned", "pending"), ("blocked", "blocked"), ("cancelled", "complete")],
 )
 def test_plan_comes_only_from_canonical_status(status: str, expected: str) -> None:
     stages = stage_map(inspect(FakeTruth(master_status=status, implementation_pr=None)))
@@ -468,7 +466,7 @@ def test_repository_truth_existing_public_read_surface_remains_available() -> No
     )
     for operation in existing_operations:
         assert callable(getattr(RepositoryTruthService, operation))
-    assert callable(getattr(RepositoryTruthService, "pull_request_comments_truth"))
+    assert callable(RepositoryTruthService.pull_request_comments_truth)
 
 
 def http_response(payload: object, *, link: str | None = None) -> HttpResponse:
