@@ -278,6 +278,35 @@ def test_review_truth_never_converts_reviews_or_checks_into_merge_authority() ->
     assert result.payload["semantic_approval"] == "not_decided_by_repository_truth"
 
 
+def test_review_truth_marks_provider_next_page_as_partial() -> None:
+    reviews = [
+        {
+            "id": index,
+            "state": "COMMENTED",
+            "commit_id": HEAD_SHA,
+            "user": {"login": f"reviewer-{index}"},
+        }
+        for index in range(MAX_COLLECTION_ITEMS)
+    ]
+    routes = {
+        f"/repos/{REPOSITORY}/pulls/7": response(
+            {
+                "state": "open",
+                "head": {"ref": "feature", "sha": HEAD_SHA},
+                "base": {"ref": "master", "sha": BASE_SHA},
+            }
+        ),
+        f"/repos/{REPOSITORY}/pulls/7/reviews?per_page={MAX_COLLECTION_ITEMS}": response(
+            reviews,
+            link='<https://api.github.com/repos/owner/repo/pulls/7/reviews?page=2>; rel="next"',
+        ),
+    }
+    subject, _ = service(routes)
+    result = subject.review_truth(REPOSITORY, 7, expected_head_sha=HEAD_SHA)
+    assert result.partial is True
+    assert len(result.payload["reviews"]) == MAX_COLLECTION_ITEMS
+
+
 @pytest.mark.parametrize(
     ("status", "headers", "code"),
     [
