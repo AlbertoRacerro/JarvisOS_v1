@@ -217,6 +217,8 @@ def test_snapshot_uses_shared_deadline_and_exact_probe_family(monkeypatch, tmp_p
         rt.ProbeResult(0, SHA_LOCAL.encode(), b""),
         rt.ProbeResult(1, b"", b""),
         rt.ProbeResult(0, b"", b""),
+        rt.ProbeResult(0, SHA_LOCAL.encode(), b""),
+        rt.ProbeResult(1, b"", b""),
     ]
 
     def fake_probe(root, args, timeout):
@@ -224,7 +226,7 @@ def test_snapshot_uses_shared_deadline_and_exact_probe_family(monkeypatch, tmp_p
         calls.append((args, timeout))
         return outputs.pop(0)
 
-    ticks = iter([10.0, 10.0, 10.4, 10.8, 11.2])
+    ticks = iter([10.0, 10.0, 10.3, 10.6, 10.9, 11.2, 11.5])
     monkeypatch.setattr(rt.time, "monotonic", lambda: next(ticks))
     monkeypatch.setattr(rt, "_run_git_probe", fake_probe)
     result = rt.capture_runtime_snapshot(provenance="live_worktree_observation", root=tmp_path)
@@ -234,8 +236,39 @@ def test_snapshot_uses_shared_deadline_and_exact_probe_family(monkeypatch, tmp_p
         ("rev-parse", "--verify", "HEAD"),
         ("symbolic-ref", "--quiet", "--short", "HEAD"),
         ("status", "--porcelain=v1", "--untracked-files=normal"),
+        ("rev-parse", "--verify", "HEAD"),
+        ("symbolic-ref", "--quiet", "--short", "HEAD"),
     ]
-    assert [timeout for _, timeout in calls] == pytest.approx([2.0, 1.6, 1.2, 0.8])
+    assert [timeout for _, timeout in calls] == pytest.approx(
+        [2.0, 1.7, 1.4, 1.1, 0.8, 0.5]
+    )
+
+
+@pytest.mark.parametrize(
+    ("final_sha", "final_symbolic"),
+    [(SHA_TARGET, b"master"), (SHA_LOCAL, b"feature")],
+)
+def test_snapshot_rejects_identity_move_during_status(
+    monkeypatch,
+    tmp_path: Path,
+    final_sha: str,
+    final_symbolic: bytes,
+):
+    outputs = [
+        rt.ProbeResult(0, str(tmp_path).encode(), b""),
+        rt.ProbeResult(0, SHA_LOCAL.encode(), b""),
+        rt.ProbeResult(0, b"master", b""),
+        rt.ProbeResult(0, b"", b""),
+        rt.ProbeResult(0, final_sha.encode(), b""),
+        rt.ProbeResult(0, final_symbolic, b""),
+    ]
+    monkeypatch.setattr(rt, "_run_git_probe", lambda *args, **kwargs: outputs.pop(0))
+    result = rt.capture_runtime_snapshot(
+        provenance="live_worktree_observation",
+        root=tmp_path,
+    )
+    assert result.failure_code == "probe_failed"
+    assert result.dirty_state == "unknown"
 
 
 def test_git_unavailable_is_typed(monkeypatch, tmp_path: Path):
@@ -280,6 +313,8 @@ def test_hostile_status_text_only_sets_dirty(monkeypatch, tmp_path: Path):
         rt.ProbeResult(0, SHA_LOCAL.encode(), b""),
         rt.ProbeResult(0, b"master", b""),
         rt.ProbeResult(0, b'?? $(touch owned);`echo nope`.py\n', b""),
+        rt.ProbeResult(0, SHA_LOCAL.encode(), b""),
+        rt.ProbeResult(0, b"master", b""),
     ]
     monkeypatch.setattr(rt, "_run_git_probe", lambda *args, **kwargs: outputs.pop(0))
     result = rt.capture_runtime_snapshot(provenance="live_worktree_observation", root=tmp_path)

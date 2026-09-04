@@ -394,6 +394,126 @@ def capture_runtime_snapshot(
         )
 
     dirty_state: DirtyState = "dirty" if status.stdout.strip() else "clean"
+
+    # A checkout/commit can move HEAD while the status probe is running. Re-read
+    # the exact SHA/ref identity before accepting the sampled dirty state so one
+    # snapshot cannot combine metadata from two different worktrees.
+    try:
+        final_head = probe(("rev-parse", "--verify", "HEAD"))
+        final_symbolic = probe(
+            ("symbolic-ref", "--quiet", "--short", "HEAD")
+        )
+    except TimeoutError:
+        return _failed_snapshot(
+            expected_root,
+            provenance,
+            "probe_timeout",
+            git_sha=git_sha,
+            head_state=head_state,
+            branch=branch,
+        )
+    except OverflowError:
+        return _failed_snapshot(
+            expected_root,
+            provenance,
+            "probe_output_oversized",
+            git_sha=git_sha,
+            head_state=head_state,
+            branch=branch,
+        )
+    except (OSError, RuntimeError):
+        return _failed_snapshot(
+            expected_root,
+            provenance,
+            "probe_failed",
+            git_sha=git_sha,
+            head_state=head_state,
+            branch=branch,
+        )
+    if final_head.returncode != 0:
+        return _failed_snapshot(
+            expected_root,
+            provenance,
+            "probe_failed",
+            git_sha=git_sha,
+            head_state=head_state,
+            branch=branch,
+        )
+    try:
+        final_git_sha = _decode_probe(final_head.stdout).lower()
+    except ValueError:
+        return _failed_snapshot(
+            expected_root,
+            provenance,
+            "malformed_probe_output",
+            git_sha=git_sha,
+            head_state=head_state,
+            branch=branch,
+        )
+    if not _SHA_RE.fullmatch(final_git_sha):
+        return _failed_snapshot(
+            expected_root,
+            provenance,
+            "malformed_probe_output",
+            git_sha=git_sha,
+            head_state=head_state,
+            branch=branch,
+        )
+
+    final_head_state: HeadState
+    final_branch: str | None = None
+    if final_symbolic.returncode == 0:
+        try:
+            final_branch = _decode_probe(final_symbolic.stdout)
+        except ValueError:
+            return _failed_snapshot(
+                expected_root,
+                provenance,
+                "malformed_probe_output",
+                git_sha=git_sha,
+                head_state=head_state,
+                branch=branch,
+            )
+        if (
+            not final_branch
+            or len(final_branch) > 255
+            or _CONTROL_RE.search(final_branch)
+        ):
+            return _failed_snapshot(
+                expected_root,
+                provenance,
+                "malformed_probe_output",
+                git_sha=git_sha,
+                head_state=head_state,
+                branch=branch,
+            )
+        final_head_state = "branch"
+    elif final_symbolic.returncode == 1:
+        final_head_state = "detached"
+    else:
+        return _failed_snapshot(
+            expected_root,
+            provenance,
+            "probe_failed",
+            git_sha=git_sha,
+            head_state=head_state,
+            branch=branch,
+        )
+
+    if (
+        final_git_sha != git_sha
+        or final_head_state != head_state
+        or final_branch != branch
+    ):
+        return _failed_snapshot(
+            expected_root,
+            provenance,
+            "probe_failed",
+            git_sha=git_sha,
+            head_state=head_state,
+            branch=branch,
+        )
+
     return RuntimeSnapshot(
         root_identity=_root_identity(expected_root),
         observed_at=datetime.now(UTC).isoformat(),
