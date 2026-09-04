@@ -14,13 +14,10 @@ from app.modules.ai.jarvis_context import (
     PRODUCTION_ADAPTER_REGISTRY,
     JarvisContextAdapterRegistry,
     JarvisContextConflictError,
+    JarvisContextError,
     require_dispatchable_preview,
 )
-from app.modules.ai.jarvis_context_models import (
-    JarvisContextRequest,
-    JarvisExactRef,
-    JarvisRouteDescriptor,
-)
+from app.modules.ai.jarvis_context_models import JarvisContextRequest, JarvisExactRef, JarvisRouteDescriptor
 from app.modules.coding.repository_truth import RepositoryTruthError, RepositoryTruthService
 
 MAX_PROPOSAL_BYTES = 128 * 1024
@@ -69,7 +66,6 @@ class CodingActionError(ValueError):
 
 class CodingInspectRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
     workspace_id: str = Field(min_length=1, max_length=128)
     repository: str = Field(min_length=1, max_length=256)
     base_ref: str = Field(min_length=1, max_length=512)
@@ -94,7 +90,6 @@ class CodingSuggestModificationRequest(CodingInspectRequest):
 
 class CodingChange(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
     path: str = Field(min_length=1, max_length=256)
     diff: str | None = None
     plan: str | None = None
@@ -108,7 +103,6 @@ class CodingChange(BaseModel):
 
 class CodingGeneratedProposal(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
     summary: str = Field(min_length=1, max_length=2000)
     changes: list[CodingChange] = Field(min_length=1, max_length=16)
     assumptions: list[str] = Field(default_factory=list, max_length=16)
@@ -187,8 +181,7 @@ def _safe_file_evidence(service: RepositoryTruthService, frozen: _FrozenTarget) 
 
 
 def _validate_diff(diff: str, expected_path: str, admitted: set[str]) -> None:
-    encoded = diff.encode("utf-8")
-    if len(encoded) > MAX_CHANGE_BYTES:
+    if len(diff.encode("utf-8")) > MAX_CHANGE_BYTES:
         raise CodingActionError("proposal_too_large", "change exceeds per-change limit")
     if any(marker in diff for marker in _FORBIDDEN_DIFF_MARKERS):
         raise CodingActionError("proposal_invalid", "unsupported diff artifact type")
@@ -209,8 +202,7 @@ def _validate_diff(diff: str, expected_path: str, admitted: set[str]) -> None:
 
 def _validate_generated(raw_text: str, frozen: _FrozenTarget) -> CodingGeneratedProposal:
     try:
-        raw = json.loads(raw_text)
-        proposal = CodingGeneratedProposal.model_validate(raw)
+        proposal = CodingGeneratedProposal.model_validate(json.loads(raw_text))
     except (json.JSONDecodeError, ValidationError) as exc:
         raise CodingActionError("proposal_invalid", "model proposal did not match the closed schema") from exc
     admitted = set(frozen.target_paths)
@@ -264,7 +256,6 @@ class CodingActionsService:
         try:
             frozen = _freeze_target(self._truth, request)
             file_evidence = _safe_file_evidence(self._truth, frozen)
-
             context_blocks: list[dict[str, object]] = []
             context_digest: str | None = None
             context_sources: list[dict[str, object]] = []
@@ -282,6 +273,8 @@ class CodingActionsService:
                     )
                 except JarvisContextConflictError as exc:
                     raise CodingActionError("identity_conflict", "exact context identity is stale or conflicting") from exc
+                except JarvisContextError as exc:
+                    raise CodingActionError("missing_evidence", "exact context evidence is unavailable") from exc
                 context_blocks = list(preview.blocks)
                 context_digest = preview.context_digest
                 context_sources = list(preview.context_sources_manifest)
@@ -308,17 +301,23 @@ class CodingActionsService:
                 "Each changes item must contain path and exactly one of diff or plan. Never name a path "
                 "outside the admitted target paths. Intent: " + request.intent
             )
-            outcome = self._ai_runner(
-                user_prompt=prompt,
-                task_kind="synthesis",
-                context_blocks=[evidence_block, *context_blocks],
-                workspace_id=request.workspace_id,
-            )
+            try:
+                outcome = self._ai_runner(
+                    user_prompt=prompt,
+                    task_kind="synthesis",
+                    context_blocks=[evidence_block, *context_blocks],
+                    workspace_id=request.workspace_id,
+                )
+            except Exception as exc:
+                raise CodingActionError("provider_unavailable", "proposal generation was unavailable") from exc
             if outcome.status != "success" or outcome.response is None or outcome.response.text is None:
                 raise CodingActionError("provider_unavailable", "proposal generation was unavailable")
             generated = _validate_generated(outcome.response.text, frozen)
 
-            refreshed = self._truth.repository_ref_truth(frozen.repository, frozen.base_ref)
+            try:
+                refreshed = self._truth.repository_ref_truth(frozen.repository, frozen.base_ref)
+            except RepositoryTruthError as exc:
+                raise CodingActionError("missing_evidence", "repository/ref truth became unavailable") from exc
             if refreshed.partial or refreshed.resolved_sha != frozen.base_sha:
                 raise CodingActionError("stale_target", "base ref moved while proposal was generated")
 
