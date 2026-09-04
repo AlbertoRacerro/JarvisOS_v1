@@ -86,14 +86,15 @@ class JarvisContextAdapterRegistry:
 
 class JarvisCapabilityRegistry:
     def __init__(self) -> None:
-        self._capabilities: dict[str, JarvisCapabilityDescriptor] = {}
+        self._capabilities: dict[tuple[str, str], JarvisCapabilityDescriptor] = {}
 
     def register(self, capability: JarvisCapabilityDescriptor) -> None:
         if capability.action_class in {"COMMIT", "EXECUTE"}:
             raise JarvisContextError("common Jarvis capability registry cannot own COMMIT or EXECUTE")
-        if capability.capability_id in self._capabilities:
-            raise JarvisContextConflictError("Jarvis capability id is already registered")
-        self._capabilities[capability.capability_id] = capability
+        key = (capability.route_id, capability.capability_id)
+        if key in self._capabilities:
+            raise JarvisContextConflictError("Jarvis capability id is already registered for this route")
+        self._capabilities[key] = capability
 
     def for_route(self, route_id: str) -> list[JarvisCapabilityDescriptor]:
         return [
@@ -163,8 +164,6 @@ def build_jarvis_context_preview(
     *,
     registry: JarvisContextAdapterRegistry = PRODUCTION_ADAPTER_REGISTRY,
 ) -> JarvisContextPreview:
-    # Validate exact identity conflicts across the complete request first; then
-    # preserve selected-vs-added semantics so selection never implies context.
     _dedupe_refs([*request.selected_refs, *request.added_context_refs])
     selected_refs = _dedupe_refs(request.selected_refs)
     added_refs = _dedupe_refs(request.added_context_refs)
@@ -208,10 +207,7 @@ def build_jarvis_context_preview(
 
         blocks.append(block)
         char_count += block_chars
-        source = {
-            "ref": _canonical_ref(ref),
-            "provenance": resolved.provenance,
-        }
+        source = {"ref": _canonical_ref(ref), "provenance": resolved.provenance}
         source_manifest.append(source)
         outcomes.append(
             JarvisContextRefOutcome(
@@ -236,9 +232,7 @@ def build_jarvis_context_preview(
     included_count = sum(outcome.included for outcome in outcomes)
     dropped_count = sum(outcome.dropped_for_budget for outcome in outcomes)
     return JarvisContextPreview(
-        request=request.model_copy(
-            update={"selected_refs": selected_refs, "added_context_refs": added_refs}
-        ),
+        request=request.model_copy(update={"selected_refs": selected_refs, "added_context_refs": added_refs}),
         blocks=blocks,
         context_digest=context_digest,
         context_sources_manifest=source_manifest,
