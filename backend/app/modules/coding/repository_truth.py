@@ -7,10 +7,10 @@ import http.client
 import json
 import logging
 import re
-import socket
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, Callable, Iterable, Literal
+from typing import Any, Literal
 from urllib.parse import quote, unquote
 
 API_HOST = "api.github.com"
@@ -161,7 +161,7 @@ def _github_request(path: str) -> HttpResponse:
             raise RepositoryTruthError("oversized", "provider response exceeded aggregate byte bound")
         headers = {key.lower(): value for key, value in response.getheaders()}
         return HttpResponse(status=response.status, headers=headers, body=body)
-    except (socket.timeout, TimeoutError) as exc:
+    except TimeoutError as exc:
         raise RepositoryTruthError("timeout", "GitHub read timed out") from exc
     except (OSError, http.client.HTTPException) as exc:
         raise RepositoryTruthError("provider_unavailable", "GitHub read failed") from exc
