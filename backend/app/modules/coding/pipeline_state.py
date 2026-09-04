@@ -188,7 +188,7 @@ def _tests_stage(
             return _stage("tests", "unknown", "required_check_missing", {"check": name})
         selected[name] = run
 
-    evidence = {
+    evidence: dict[str, object] = {
         name: {
             "id": run.get("id"),
             "status": run.get("status"),
