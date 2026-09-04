@@ -3,9 +3,12 @@ from __future__ import annotations
 import base64
 import json
 from collections.abc import Callable
+from types import SimpleNamespace
 
 import pytest
+from fastapi import HTTPException
 
+from app.modules.coding import runtime_routes
 from app.modules.coding.pipeline_state import (
     DevelopmentPipelineStateService,
     PipelineStateInputError,
@@ -108,7 +111,11 @@ def review_comment(
         "verdict": verdict,
         "findings": [{"severity": "P2", "disposition": disposition}],
     }
-    return {"id": 9, "author": "claude", "body": "JARVIS_CLAUDE_REVIEW_V3_2_JSON:" + json.dumps(marker)}
+    return {
+        "id": 9,
+        "author": "claude",
+        "body": "JARVIS_CLAUDE_REVIEW_V3_2_JSON:" + json.dumps(marker),
+    }
 
 
 class FakeTruth:
@@ -243,12 +250,23 @@ def test_wrong_registry_pr_never_completes_implementation() -> None:
     [
         (FakeTruth(head_moves=True), "implementation", "stale"),
         (FakeTruth(head_moves=True), "tests", "stale"),
+        (FakeTruth(head_moves=True), "independent_review", "stale"),
         (FakeTruth(base_moves=True), "independent_review", "stale"),
         (FakeTruth(master_moves=True), "reconciliation", "not_applicable"),
     ],
 )
 def test_identity_moves_fail_closed(subject: FakeTruth, stage: str, expected: str) -> None:
     assert stage_map(inspect(subject))[stage]["state"] == expected
+
+
+def test_master_move_invalidates_merged_reconciliation_projection() -> None:
+    subject = FakeTruth(
+        merged=True,
+        state="closed",
+        master_status="merged",
+        master_moves=True,
+    )
+    assert stage_map(inspect(subject))["reconciliation"]["state"] == "stale"
 
 
 @pytest.mark.parametrize(
@@ -312,6 +330,30 @@ def test_review_marker_requires_exact_structured_nonpartial_evidence(
     assert stage["state"] == expected
 
 
+def test_review_workflow_success_without_structured_marker_is_not_approval() -> None:
+    checks = check_result()
+    runs = checks.payload["check_runs"]
+    assert isinstance(runs, list)
+    runs.append(
+        {
+            "id": 3,
+            "name": "Claude Expert Review",
+            "status": "completed",
+            "conclusion": "success",
+            "head_sha": HEAD,
+            "stale": False,
+        }
+    )
+    comments = truth(
+        "pull_request_comments_truth",
+        {"comments": [{"id": 1, "author": "github-actions[bot]", "body": "APPROVE"}]},
+    )
+    stage = stage_map(inspect(FakeTruth(checks=checks, comments=comments)))[
+        "independent_review"
+    ]
+    assert stage["state"] == "unknown"
+
+
 @pytest.mark.parametrize(
     ("merged", "state", "master_status", "implementation_pr", "merge_state", "reconcile"),
     [
@@ -358,6 +400,75 @@ def test_invalid_spec_id_is_rejected_before_truth_reads(spec_id: str) -> None:
         DevelopmentPipelineStateService(FakeTruth()).inspect(  # type: ignore[arg-type]
             repository=REPOSITORY, pr_number=PR, spec_id=spec_id
         )
+
+
+def test_pipeline_route_rejects_bad_inputs_without_provider_dispatch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    constructed = 0
+
+    class NoDispatchTruth:
+        def pull_request_truth(self, repository: str, pr_number: int) -> RepositoryTruthResult:
+            raise AssertionError("provider dispatch must not occur for invalid route input")
+
+    def repository_truth_factory(repositories: object) -> NoDispatchTruth:
+        nonlocal constructed
+        constructed += 1
+        return NoDispatchTruth()
+
+    monkeypatch.setattr(
+        runtime_routes,
+        "get_settings",
+        lambda: SimpleNamespace(coding_repositories=(REPOSITORY,)),
+    )
+    monkeypatch.setattr(runtime_routes, "RepositoryTruthService", repository_truth_factory)
+
+    with pytest.raises(HTTPException) as unauthorized:
+        runtime_routes.pipeline_state(
+            repository="other/repository",
+            pr_number=PR,
+            spec_id="120",
+        )
+    assert unauthorized.value.status_code == 400
+    assert constructed == 0
+
+    for pr_number, spec_id in ((0, "120"), (PR, "000")):
+        with pytest.raises(HTTPException) as invalid:
+            runtime_routes.pipeline_state(
+                repository=REPOSITORY,
+                pr_number=pr_number,
+                spec_id=spec_id,
+            )
+        assert invalid.value.status_code == 400
+    assert constructed == 2
+
+
+def test_coding_routes_remain_get_only_and_runtime_truth_route_is_preserved() -> None:
+    methods_by_path = {
+        route.path: route.methods
+        for route in runtime_routes.router.routes
+        if hasattr(route, "methods")
+    }
+    assert methods_by_path["/api/coding/runtime-truth"] == {"GET"}
+    assert methods_by_path["/api/coding/pipeline-state"] == {"GET"}
+
+
+def test_repository_truth_existing_public_read_surface_remains_available() -> None:
+    existing_operations = (
+        "repository_ref_truth",
+        "commit_truth",
+        "path_list",
+        "file_preview",
+        "literal_search",
+        "compare_truth",
+        "pull_request_truth",
+        "check_truth",
+        "review_truth",
+        "safe_github_url",
+    )
+    for operation in existing_operations:
+        assert callable(getattr(RepositoryTruthService, operation))
+    assert callable(getattr(RepositoryTruthService, "pull_request_comments_truth"))
 
 
 def http_response(payload: object, *, link: str | None = None) -> HttpResponse:
