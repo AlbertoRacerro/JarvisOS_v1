@@ -24,6 +24,7 @@ MAX_SEARCH_CANDIDATES = 100
 MAX_SEARCH_MATCHES = 100
 MAX_COMPARE_FILES = 100
 MAX_COLLECTION_ITEMS = 100
+MAX_COMMENT_BODY_CHARS = 8_192
 MAX_PAGES = 10
 CONNECT_TIMEOUT_SECONDS = 5.0
 READ_TIMEOUT_SECONDS = 10.0
@@ -40,6 +41,7 @@ _ALLOWED_OPERATIONS = frozenset(
         "pull_request_truth",
         "check_truth",
         "review_truth",
+        "pull_request_comments_truth",
         "safe_github_url",
     }
 )
@@ -936,6 +938,74 @@ class RepositoryTruthService:
                 "reviews": projected,
                 "thread_state": "unavailable",
                 "semantic_approval": "not_decided_by_repository_truth",
+                "collection_limit": MAX_COLLECTION_ITEMS,
+            },
+            partial=partial,
+        )
+
+    def pull_request_comments_truth(
+        self,
+        repository: str,
+        pr_number: int,
+        *,
+        expected_head_sha: str,
+    ) -> RepositoryTruthResult:
+        operation = _validate_operation("pull_request_comments_truth")
+        repository = self._authorize(repository)
+        expected = _validate_sha(expected_head_sha)
+        budget = _Budget()
+        pr = self._pull_request(repository, pr_number, operation, budget)
+        head_sha = str(pr["head_sha"])
+        if head_sha != expected:
+            raise RepositoryTruthError(
+                "stale_ref",
+                "expected PR head no longer matches provider head",
+                metadata={"expected_head_sha": expected, "current_head_sha": head_sha},
+            )
+        response = self._read(
+            repository,
+            operation,
+            f"/repos/{repository}/issues/{pr_number}/comments?per_page={MAX_COLLECTION_ITEMS}",
+            budget=budget,
+            resolved_sha=head_sha,
+        )
+        comments = _json_list(response)
+        partial = (
+            len(comments) > MAX_COLLECTION_ITEMS
+            or 'rel="next"' in response.headers.get("link", "")
+        )
+        projected: list[dict[str, object]] = []
+        for comment in comments[:MAX_COLLECTION_ITEMS]:
+            if not isinstance(comment, dict):
+                raise RepositoryTruthError(
+                    "malformed_provider_response", "issue comment payload is malformed"
+                )
+            user = comment.get("user")
+            author = user.get("login") if isinstance(user, dict) else None
+            raw_body = comment.get("body")
+            if raw_body is not None and not isinstance(raw_body, str):
+                raise RepositoryTruthError(
+                    "malformed_provider_response", "provider text field had the wrong type"
+                )
+            body_truncated = isinstance(raw_body, str) and len(raw_body) > MAX_COMMENT_BODY_CHARS
+            if body_truncated:
+                partial = True
+            projected.append(
+                {
+                    "id": comment.get("id") if isinstance(comment.get("id"), int) else None,
+                    "author": _project_text(author, max_chars=128),
+                    "body": _project_text(raw_body, max_chars=MAX_COMMENT_BODY_CHARS),
+                }
+            )
+        return self._result(
+            repository,
+            operation,
+            requested_ref=f"pr:{pr_number}",
+            resolved_sha=head_sha,
+            payload={
+                "pr": pr,
+                "expected_head_sha": expected,
+                "comments": projected,
                 "collection_limit": MAX_COLLECTION_ITEMS,
             },
             partial=partial,
