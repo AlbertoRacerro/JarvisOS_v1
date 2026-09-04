@@ -34,8 +34,8 @@ _FORBIDDEN_DIFF_MARKERS = (
     "copy to ",
     "old mode ",
     "new mode ",
-    "new file mode 120000",
-    "deleted file mode 120000",
+    "new file mode ",
+    "deleted file mode ",
     "Subproject commit ",
 )
 _PROTECTED_EXACT = {"AGENTS.md", "CODEOWNERS"}
@@ -186,13 +186,16 @@ def _validate_diff(diff: str, expected_path: str, admitted: set[str]) -> None:
     if any(marker in diff for marker in _FORBIDDEN_DIFF_MARKERS):
         raise CodingActionError("proposal_invalid", "unsupported diff artifact type")
     headers: list[str] = []
+    expected_git_header = f"diff --git a/{expected_path} b/{expected_path}"
     for line in diff.splitlines():
+        if line.startswith("diff --git ") and line != expected_git_header:
+            raise CodingActionError("proposal_invalid", "diff header escapes admitted target set")
         match = _DIFF_HEADER.match(line)
         if not match:
             continue
         path = match.group(2)
         if path == "/dev/null":
-            continue
+            raise CodingActionError("proposal_invalid", "file creation or deletion is unsupported")
         headers.append(path)
         if path not in admitted or path != expected_path:
             raise CodingActionError("proposal_invalid", "diff header escapes admitted target set")
@@ -305,6 +308,7 @@ class CodingActionsService:
                 outcome = self._ai_runner(
                     user_prompt=prompt,
                     task_kind="synthesis",
+                    route_class="local:coder",
                     context_blocks=[evidence_block, *context_blocks],
                     workspace_id=request.workspace_id,
                 )
