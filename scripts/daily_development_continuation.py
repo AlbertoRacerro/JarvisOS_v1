@@ -51,6 +51,10 @@ CONTROL_PATHS = {
     "docs/CODEOWNERS",
     "scripts/daily_development_continuation.py",
     "backend/tests/test_daily_development_continuation.py",
+    "scripts/event_bound_continuation_plan.py",
+    "scripts/event_driven_continuation.py",
+    "backend/tests/test_event_bound_continuation_plan.py",
+    "backend/tests/test_event_driven_continuation.py",
 }
 SENSITIVE_PART_RE = re.compile(
     r"(^|[._/-])(env|secret|secrets|token|tokens|credential|credentials|key|keys)([._/-]|$)",
