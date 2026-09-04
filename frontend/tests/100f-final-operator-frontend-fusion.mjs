@@ -58,7 +58,7 @@ check(contextNav.includes("ROADMAP_STAGE_ITEMS"), "Roadmap Timeline/Calendar sec
 check(app.includes('route.id === "design-process" || route.id === "design-bluecad"'), "Process/BLUECAD do not reuse the existing stage shell");
 check(app.includes('sidecar: route.primaryNav === "settings" ? undefined : jarvisSidecar'), "Settings must not expose Jarvis sidecar");
 includesAll(app, [
-  'FinalOperatorReadSurface kind="project-basis"', 'FinalOperatorReadSurface kind="models"',
+  'FinalOperatorReadSurface kind="project-basis"', 'ModelDossier workspaceId=',
   'kind="literature"', 'kind="roadmap"', 'kind="calendar"', 'kind="brainstorm"',
   'kind="repository"', 'FinalOperatorReadSurface kind="runtime"'
 ], "missing final production surface composition");
