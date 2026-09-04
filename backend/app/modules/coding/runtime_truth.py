@@ -87,7 +87,14 @@ def _minimal_git_environment() -> dict[str, str]:
         "GIT_OPTIONAL_LOCKS": "0",
         "GIT_TERMINAL_PROMPT": "0",
     }
-    for key in ("PATH", "PATHEXT", "SystemRoot", "SYSTEMROOT", "WINDIR", "COMSPEC"):
+    for key in (
+        "PATH",
+        "PATHEXT",
+        "SystemRoot",
+        "SYSTEMROOT",
+        "WINDIR",
+        "COMSPEC",
+    ):
         value = os.environ.get(key)
         if value:
             env[key] = value
@@ -109,7 +116,11 @@ def _drain_pipe(stream: BinaryIO, capture: _PipeCapture) -> None:
         stream.close()
 
 
-def _run_git_probe(root: Path, args: tuple[str, ...], timeout: float) -> ProbeResult:
+def _run_git_probe(
+    root: Path,
+    args: tuple[str, ...],
+    timeout: float,
+) -> ProbeResult:
     if timeout <= 0:
         raise TimeoutError("runtime truth snapshot deadline exhausted")
     try:
@@ -132,15 +143,19 @@ def _run_git_probe(root: Path, args: tuple[str, ...], timeout: float) -> ProbeRe
     stdout_capture = _PipeCapture(bytearray())
     stderr_capture = _PipeCapture(bytearray())
     stdout_thread = threading.Thread(
-        target=_drain_pipe, args=(process.stdout, stdout_capture), daemon=True
+        target=_drain_pipe,
+        args=(process.stdout, stdout_capture),
+        daemon=True,
     )
     stderr_thread = threading.Thread(
-        target=_drain_pipe, args=(process.stderr, stderr_capture), daemon=True
+        target=_drain_pipe,
+        args=(process.stderr, stderr_capture),
+        daemon=True,
     )
     stdout_thread.start()
     stderr_thread.start()
     try:
-        process.wait(timeout=timeout)
+        returncode = process.wait(timeout=timeout)
     except subprocess.TimeoutExpired as exc:
         process.kill()
         process.wait()
@@ -152,7 +167,7 @@ def _run_git_probe(root: Path, args: tuple[str, ...], timeout: float) -> ProbeRe
     if stdout_capture.oversized or stderr_capture.oversized:
         raise OverflowError("git probe output exceeded bound")
     return ProbeResult(
-        returncode=process.returncode,
+        returncode=returncode,
         stdout=bytes(stdout_capture.data),
         stderr=bytes(stderr_capture.data),
     )
@@ -167,7 +182,10 @@ def _decode_probe(raw: bytes) -> str:
 
 def _failed_snapshot(
     root: Path,
-    provenance: Literal["process_start_observation", "live_worktree_observation"],
+    provenance: Literal[
+        "process_start_observation",
+        "live_worktree_observation",
+    ],
     code: LocalFailureCode,
     *,
     git_available: bool = True,
@@ -191,23 +209,36 @@ def _failed_snapshot(
 
 def capture_runtime_snapshot(
     *,
-    provenance: Literal["process_start_observation", "live_worktree_observation"],
+    provenance: Literal[
+        "process_start_observation",
+        "live_worktree_observation",
+    ],
     root: Path | None = None,
 ) -> RuntimeSnapshot:
     expected_root = (root or trusted_repository_root()).resolve()
     deadline = time.monotonic() + SNAPSHOT_DEADLINE_SECONDS
 
     def probe(args: tuple[str, ...]) -> ProbeResult:
-        return _run_git_probe(expected_root, args, max(0.0, deadline - time.monotonic()))
+        remaining = max(0.0, deadline - time.monotonic())
+        return _run_git_probe(expected_root, args, remaining)
 
     try:
         top = probe(("rev-parse", "--show-toplevel"))
     except FileNotFoundError:
-        return _failed_snapshot(expected_root, provenance, "git_unavailable", git_available=False)
+        return _failed_snapshot(
+            expected_root,
+            provenance,
+            "git_unavailable",
+            git_available=False,
+        )
     except TimeoutError:
         return _failed_snapshot(expected_root, provenance, "probe_timeout")
     except OverflowError:
-        return _failed_snapshot(expected_root, provenance, "probe_output_oversized")
+        return _failed_snapshot(
+            expected_root,
+            provenance,
+            "probe_output_oversized",
+        )
     except (OSError, RuntimeError):
         return _failed_snapshot(expected_root, provenance, "probe_failed")
     if top.returncode != 0:
@@ -215,7 +246,11 @@ def capture_runtime_snapshot(
     try:
         observed_root = Path(_decode_probe(top.stdout)).resolve()
     except (ValueError, OSError):
-        return _failed_snapshot(expected_root, provenance, "malformed_probe_output")
+        return _failed_snapshot(
+            expected_root,
+            provenance,
+            "malformed_probe_output",
+        )
     if os.path.normcase(str(observed_root)) != os.path.normcase(str(expected_root)):
         return _failed_snapshot(expected_root, provenance, "root_mismatch")
 
@@ -224,7 +259,11 @@ def capture_runtime_snapshot(
     except TimeoutError:
         return _failed_snapshot(expected_root, provenance, "probe_timeout")
     except OverflowError:
-        return _failed_snapshot(expected_root, provenance, "probe_output_oversized")
+        return _failed_snapshot(
+            expected_root,
+            provenance,
+            "probe_output_oversized",
+        )
     except (OSError, RuntimeError):
         return _failed_snapshot(expected_root, provenance, "probe_failed")
     if head.returncode != 0:
@@ -232,42 +271,80 @@ def capture_runtime_snapshot(
     try:
         git_sha = _decode_probe(head.stdout).lower()
     except ValueError:
-        return _failed_snapshot(expected_root, provenance, "malformed_probe_output")
+        return _failed_snapshot(
+            expected_root,
+            provenance,
+            "malformed_probe_output",
+        )
     if not _SHA_RE.fullmatch(git_sha):
-        return _failed_snapshot(expected_root, provenance, "malformed_probe_output")
+        return _failed_snapshot(
+            expected_root,
+            provenance,
+            "malformed_probe_output",
+        )
 
     head_state: HeadState = "unavailable"
     branch: str | None = None
     try:
         symbolic = probe(("symbolic-ref", "--quiet", "--short", "HEAD"))
     except TimeoutError:
-        return _failed_snapshot(expected_root, provenance, "probe_timeout", git_sha=git_sha)
+        return _failed_snapshot(
+            expected_root,
+            provenance,
+            "probe_timeout",
+            git_sha=git_sha,
+        )
     except OverflowError:
         return _failed_snapshot(
-            expected_root, provenance, "probe_output_oversized", git_sha=git_sha
+            expected_root,
+            provenance,
+            "probe_output_oversized",
+            git_sha=git_sha,
         )
     except (OSError, RuntimeError):
-        return _failed_snapshot(expected_root, provenance, "probe_failed", git_sha=git_sha)
+        return _failed_snapshot(
+            expected_root,
+            provenance,
+            "probe_failed",
+            git_sha=git_sha,
+        )
     if symbolic.returncode == 0:
         try:
             candidate = _decode_probe(symbolic.stdout)
         except ValueError:
             return _failed_snapshot(
-                expected_root, provenance, "malformed_probe_output", git_sha=git_sha
+                expected_root,
+                provenance,
+                "malformed_probe_output",
+                git_sha=git_sha,
             )
-        if not candidate or len(candidate) > 255 or _CONTROL_RE.search(candidate):
+        if (
+            not candidate
+            or len(candidate) > 255
+            or _CONTROL_RE.search(candidate)
+        ):
             return _failed_snapshot(
-                expected_root, provenance, "malformed_probe_output", git_sha=git_sha
+                expected_root,
+                provenance,
+                "malformed_probe_output",
+                git_sha=git_sha,
             )
         head_state = "branch"
         branch = candidate
     elif symbolic.returncode == 1:
         head_state = "detached"
     else:
-        return _failed_snapshot(expected_root, provenance, "probe_failed", git_sha=git_sha)
+        return _failed_snapshot(
+            expected_root,
+            provenance,
+            "probe_failed",
+            git_sha=git_sha,
+        )
 
     try:
-        status = probe(("status", "--porcelain=v1", "--untracked-files=normal"))
+        status = probe(
+            ("status", "--porcelain=v1", "--untracked-files=normal")
+        )
     except TimeoutError:
         return _failed_snapshot(
             expected_root,
@@ -315,6 +392,7 @@ def capture_runtime_snapshot(
             head_state=head_state,
             branch=branch,
         )
+
     dirty_state: DirtyState = "dirty" if status.stdout.strip() else "clean"
     return RuntimeSnapshot(
         root_identity=_root_identity(expected_root),
@@ -331,10 +409,17 @@ def capture_runtime_snapshot(
 
 def startup_snapshot_unavailable() -> RuntimeSnapshot:
     root = trusted_repository_root()
-    return _failed_snapshot(root, "process_start_observation", "startup_snapshot_unavailable")
+    return _failed_snapshot(
+        root,
+        "process_start_observation",
+        "startup_snapshot_unavailable",
+    )
 
 
-def worktree_changed_since_start(startup: RuntimeSnapshot, live: RuntimeSnapshot) -> bool:
+def worktree_changed_since_start(
+    startup: RuntimeSnapshot,
+    live: RuntimeSnapshot,
+) -> bool:
     return (
         startup.git_sha != live.git_sha
         or startup.dirty_state != live.dirty_state
@@ -362,14 +447,19 @@ def _unknown(
         "remote": _remote_public(target),
         "alignment": "unknown",
         "reason": reason,
-        "worktree_changed_since_start": worktree_changed_since_start(startup, live),
+        "worktree_changed_since_start": worktree_changed_since_start(
+            startup,
+            live,
+        ),
         "semantic_delta": _compare_public(compare, reason=reason),
         "observer_status": _observer_status(startup, live),
         "remote_status": remote_status,
     }
 
 
-def _remote_public(result: RepositoryTruthResult | None) -> dict[str, object] | None:
+def _remote_public(
+    result: RepositoryTruthResult | None,
+) -> dict[str, object] | None:
     if result is None:
         return None
     return {
@@ -382,7 +472,9 @@ def _remote_public(result: RepositoryTruthResult | None) -> dict[str, object] | 
 
 
 def _compare_public(
-    result: RepositoryTruthResult | None, *, reason: str | None = None
+    result: RepositoryTruthResult | None,
+    *,
+    reason: str | None = None,
 ) -> dict[str, object]:
     if result is None:
         return {"status": "unavailable", "reason": reason}
@@ -397,7 +489,10 @@ def _compare_public(
     }
 
 
-def _observer_status(startup: RuntimeSnapshot, live: RuntimeSnapshot) -> ObserverStatus:
+def _observer_status(
+    startup: RuntimeSnapshot,
+    live: RuntimeSnapshot,
+) -> ObserverStatus:
     if not startup.git_available or not live.git_available:
         return "unavailable"
     if startup.failure_code is not None or live.failure_code is not None:
@@ -405,9 +500,16 @@ def _observer_status(startup: RuntimeSnapshot, live: RuntimeSnapshot) -> Observe
     return "ok"
 
 
-def _valid_relation(result: RepositoryTruthResult, local_sha: str, target_sha: str) -> tuple[str, int, int] | None:
+def _valid_relation(
+    result: RepositoryTruthResult,
+    local_sha: str,
+    target_sha: str,
+) -> tuple[str, int, int] | None:
     payload = result.payload
-    if payload.get("base_sha") != local_sha or payload.get("head_sha") != target_sha:
+    if (
+        payload.get("base_sha") != local_sha
+        or payload.get("head_sha") != target_sha
+    ):
         return None
     status = payload.get("status")
     ahead = payload.get("ahead_by")
@@ -444,12 +546,17 @@ class RuntimeTruthService:
         target_ref: str,
         startup: RuntimeSnapshot,
     ) -> dict[str, object]:
-        live = capture_runtime_snapshot(provenance="live_worktree_observation")
+        live = capture_runtime_snapshot(
+            provenance="live_worktree_observation"
+        )
         if repository != CANONICAL_RUNTIME_REPOSITORY:
             return _unknown(startup, live, reason="repository_mismatch")
 
         try:
-            initial_target = self._repository_truth.repository_ref_truth(repository, target_ref)
+            initial_target = self._repository_truth.repository_ref_truth(
+                repository,
+                target_ref,
+            )
         except RepositoryTruthError as exc:
             return _unknown(
                 startup,
@@ -483,7 +590,10 @@ class RuntimeTruthService:
                 target=initial_target,
                 remote_status="ok",
             )
-        if startup.dirty_state != "clean" or live.dirty_state != "clean":
+        if (
+            startup.dirty_state != "clean"
+            or live.dirty_state != "clean"
+        ):
             return _unknown(
                 startup,
                 live,
@@ -491,6 +601,7 @@ class RuntimeTruthService:
                 target=initial_target,
                 remote_status="ok",
             )
+
         local_sha = live.git_sha
         target_sha = initial_target.resolved_sha
         if local_sha is None or target_sha is None:
@@ -506,7 +617,11 @@ class RuntimeTruthService:
         relation: tuple[str, int, int] | None = None
         if local_sha != target_sha:
             try:
-                compare = self._repository_truth.compare_truth(repository, local_sha, target_sha)
+                compare = self._repository_truth.compare_truth(
+                    repository,
+                    local_sha,
+                    target_sha,
+                )
             except RepositoryTruthError as exc:
                 return _unknown(
                     startup,
@@ -527,7 +642,10 @@ class RuntimeTruthService:
                 )
 
         try:
-            final_target = self._repository_truth.repository_ref_truth(repository, target_ref)
+            final_target = self._repository_truth.repository_ref_truth(
+                repository,
+                target_ref,
+            )
         except RepositoryTruthError as exc:
             return _unknown(
                 startup,
@@ -580,7 +698,9 @@ class RuntimeTruthService:
             "remote_status": "ok",
         }
         logger.info(
-            "coding_runtime_truth repository_digest=%s target_sha=%s root_identity=%s observer_status=%s alignment=%s reason=%s dirty_state=%s compare=%s",
+            "coding_runtime_truth repository_digest=%s target_sha=%s "
+            "root_identity=%s observer_status=%s alignment=%s reason=%s "
+            "dirty_state=%s compare=%s",
             hashlib.sha256(repository.encode("utf-8")).hexdigest(),
             target_sha[:12],
             live.root_identity,
@@ -588,6 +708,12 @@ class RuntimeTruthService:
             alignment,
             reason,
             live.dirty_state,
-            "partial" if compare is not None and compare.partial else "complete" if compare else "not_needed",
+            (
+                "partial"
+                if compare is not None and compare.partial
+                else "complete"
+                if compare is not None
+                else "not_needed"
+            ),
         )
         return result
