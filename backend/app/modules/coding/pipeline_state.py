@@ -460,8 +460,8 @@ class DevelopmentPipelineStateService:
             )
             if master_row.status == "planned":
                 plan = _stage("plan", "pending", "canonical_status_planned")
-            elif master_row.status in {"blocked", "cancelled"}:
-                plan = _stage("plan", "blocked", f"canonical_status_{master_row.status}")
+            elif master_row.status == "blocked":
+                plan = _stage("plan", "blocked", "canonical_status_blocked")
             else:
                 plan = _stage("plan", "complete", "canonical_planning_advanced")
 
