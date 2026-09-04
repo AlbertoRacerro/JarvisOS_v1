@@ -694,12 +694,30 @@ class RepositoryTruthService:
             resolved_sha=head_sha,
         )
         data = _json_object(response)
-        files = data.get("files", [])
+        files = data.get("files")
+        commits = data.get("commits")
+        total_commits = data.get("total_commits")
         if not isinstance(files, list):
             raise RepositoryTruthError(
                 "malformed_provider_response", "compare files payload is malformed"
             )
-        partial = len(files) > MAX_COMPARE_FILES
+        if not isinstance(commits, list):
+            raise RepositoryTruthError(
+                "malformed_provider_response", "compare commits payload is malformed"
+            )
+        if (
+            isinstance(total_commits, bool)
+            or not isinstance(total_commits, int)
+            or total_commits < 0
+        ):
+            raise RepositoryTruthError(
+                "malformed_provider_response", "compare total_commits is malformed"
+            )
+        partial = (
+            len(files) > MAX_COMPARE_FILES
+            or 'rel="next"' in response.headers.get("link", "")
+            or total_commits > len(commits)
+        )
         projected: list[dict[str, object]] = []
         for item in files[:MAX_COMPARE_FILES]:
             if not isinstance(item, dict) or not isinstance(item.get("filename"), str):
