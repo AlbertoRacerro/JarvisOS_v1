@@ -53,7 +53,7 @@ Once fresh exact `master` shows 112 as `merged`, `docs/POST_112_PARALLEL_DELIVER
 ### Canonical post-112 lanes
 
 - **Knowledge:** `113 -> 114 -> 115`, then `121` when its hard dependencies are merged and its own readiness authorizes implementation.
-- **Development:** `116 -> 117`, then `122` when its hard dependencies are merged and its own readiness authorizes implementation.
+- **Development:** `116 -> 117`, then `122` when its hard dependencies and readiness authorizes implementation.
 - **Coding acceleration:** `118 -> 119 -> 120 -> 123 -> fresh Hermes V1 re-derivation/release gate`.
 - **Provider/settings:** `124` is an independent owner when its dependencies and readiness are satisfied and may be scheduled post-112 without blocking unrelated lanes.
 - **Separately gated:** `125` and `126` are not automatically parallelized.
@@ -218,7 +218,7 @@ The queue is binding but not immutable. If a slice proves non-implementable with
 | 120 | merged | [#541](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/541) | DEVELOPMENT-PIPELINE-STATE-1 | 118 | Inspectable exact Proposal→Plan→Implementation→Tests→Independent Review→Reconciliation→Merge state with stale-gate invalidation; no hidden auto-merge or second queue. |
 | 121 | planned | — | JARVIS-PROJECT-KNOWLEDGE-ACTIONS-1 | 111, 112, 113, 114, 115 | Explicit exact context refs and stale-safe CONTEXT/PROPOSE actions over Project Basis, Models and Literature; domain COMMIT remains with Project Knowledge owners. |
 | 122 | planned | — | JARVIS-DEVELOPMENT-ACTIONS-1 | 111, 116, 117 | Explicit Development context basket and scheduling/reconciliation/Roadmap/promotion proposals; browsing remains context-neutral and acceptance stays domain-owned. |
-| 123 | ready | — | JARVIS-CODING-ACTIONS-1 | 111, 118, 119, 120 | Inspect/explain/context and Suggest modification as proposal/diff/plan only through accepted server-side development authority; no direct file mutation. |
+| 123 | in_review | [#546](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/546) | JARVIS-CODING-ACTIONS-1 | 111, 118, 119, 120 | Inspect/explain/context and Suggest modification as proposal/diff/plan only through accepted server-side development authority; no direct file mutation. |
 | 124 | planned | — | PROVIDER-SETTINGS-GENERIC-1 | 015, 018, 021, 059b, 061a, 082, 094, 111 | Provider/integration-scoped credential/config/status/test/catalogue/usage/budget/system projections over existing secure storage/provider/egress/policy owners; no model-scoped keys or Hermes claim. |
 | 125 | planned | — | SAFE-SELF-UPDATE-1 | 119, 120 | Guarded exact-target update/restart/rollback authority with dirty refusal, state preservation, migration/build/smoke/health and known-good rollback evidence; separate from observation and PTY. |
 | 126 | planned | — | LOCAL-TERMINAL-PTY-1 | 118, 119, 123 | Security-gated typed local PTY/session authority with validated cwd, scrubbed environment, secret-safe/redacted display boundary and explicit high-risk confirmation; remains unavailable until full security/readiness proof. |
