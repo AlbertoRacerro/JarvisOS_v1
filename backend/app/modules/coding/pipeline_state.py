@@ -224,46 +224,49 @@ def _structured_markers(
         body = comment.get("body")
         if not isinstance(body, str):
             continue
-        offset = body.find(CLAUDE_MARKER)
-        if offset < 0:
-            continue
-        fragment = body[offset + len(CLAUDE_MARKER) :].lstrip()
-        try:
-            marker, _ = decoder.raw_decode(fragment)
-        except json.JSONDecodeError:
-            continue
-        if not isinstance(marker, dict) or marker.get("schema") != "jarvis.claude-review.v3.2":
-            continue
-        marker_head = marker.get("head_sha")
-        marker_base = marker.get("base_sha")
-        if marker_head != head_sha or marker_base != base_sha:
-            stale_seen = True
-            continue
-        verdict = marker.get("verdict")
-        findings = marker.get("findings")
-        if verdict not in {"APPROVE", "REQUEST_CHANGES"} or not isinstance(findings, list):
-            continue
-        bounded_findings: list[dict[str, object]] = []
-        malformed = False
-        for finding in findings[:100]:
-            if not isinstance(finding, dict):
-                malformed = True
+        search_from = 0
+        while True:
+            offset = body.find(CLAUDE_MARKER, search_from)
+            if offset < 0:
                 break
-            severity = finding.get("severity")
-            disposition = finding.get("disposition")
-            if severity not in _REVIEW_SEVERITIES or disposition not in _REVIEW_DISPOSITIONS:
-                malformed = True
-                break
-            bounded_findings.append({"severity": severity, "disposition": disposition})
-        if malformed or len(findings) > 100:
-            continue
-        exact.append(
-            {
-                "comment_id": comment.get("id"),
-                "verdict": verdict,
-                "findings": bounded_findings,
-            }
-        )
+            search_from = offset + len(CLAUDE_MARKER)
+            fragment = body[search_from:].lstrip()
+            try:
+                marker, _ = decoder.raw_decode(fragment)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(marker, dict) or marker.get("schema") != "jarvis.claude-review.v3.2":
+                continue
+            marker_head = marker.get("head_sha")
+            marker_base = marker.get("base_sha")
+            if marker_head != head_sha or marker_base != base_sha:
+                stale_seen = True
+                continue
+            verdict = marker.get("verdict")
+            findings = marker.get("findings")
+            if verdict not in {"APPROVE", "REQUEST_CHANGES"} or not isinstance(findings, list):
+                continue
+            bounded_findings: list[dict[str, object]] = []
+            malformed = False
+            for finding in findings[:100]:
+                if not isinstance(finding, dict):
+                    malformed = True
+                    break
+                severity = finding.get("severity")
+                disposition = finding.get("disposition")
+                if severity not in _REVIEW_SEVERITIES or disposition not in _REVIEW_DISPOSITIONS:
+                    malformed = True
+                    break
+                bounded_findings.append({"severity": severity, "disposition": disposition})
+            if malformed or len(findings) > 100:
+                continue
+            exact.append(
+                {
+                    "comment_id": comment.get("id"),
+                    "verdict": verdict,
+                    "findings": bounded_findings,
+                }
+            )
     return exact, stale_seen
 
 
