@@ -112,7 +112,6 @@ def test_truncated_review_comment_cannot_complete_from_early_spoof_marker() -> N
             "id": 9,
             "author": "github-actions[bot]",
             "body": body[:8_192],
-            "body_truncated": True,
         }
     ]
 
