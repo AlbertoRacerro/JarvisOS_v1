@@ -20,8 +20,17 @@ BIG_SHA = "c" * 40
 SMALL_SHA = "d" * 40
 
 
-def response(payload: object, status: int = 200) -> HttpResponse:
-    return HttpResponse(status=status, headers={}, body=json.dumps(payload).encode("utf-8"))
+def response(
+    payload: object,
+    status: int = 200,
+    *,
+    headers: dict[str, str] | None = None,
+) -> HttpResponse:
+    return HttpResponse(
+        status=status,
+        headers=headers or {},
+        body=json.dumps(payload).encode("utf-8"),
+    )
 
 
 class FakeTransport:
@@ -44,6 +53,14 @@ def service(routes: dict[str, HttpResponse]) -> tuple[RepositoryTruthService, Fa
 
 def commit_route(payload: object | None = None) -> dict[str, HttpResponse]:
     return {f"/repos/{REPOSITORY}/commits/master": response(payload or {"sha": HEAD_SHA})}
+
+
+def compare_routes(compare_response: HttpResponse) -> dict[str, HttpResponse]:
+    return {
+        f"/repos/{REPOSITORY}/commits/base": response({"sha": BASE_SHA}),
+        f"/repos/{REPOSITORY}/commits/head": response({"sha": HEAD_SHA}),
+        f"/repos/{REPOSITORY}/compare/{BASE_SHA}...{HEAD_SHA}": compare_response,
+    }
 
 
 def pr_payload(*, head_sha: object = HEAD_SHA) -> dict[str, object]:
@@ -118,6 +135,71 @@ def test_literal_search_malformed_base64_is_typed() -> None:
     subject, _ = service(routes)
     with pytest.raises(RepositoryTruthError) as exc:
         subject.literal_search(REPOSITORY, "master", "needle")
+    assert exc.value.code == "malformed_provider_response"
+
+
+def test_compare_truth_link_pagination_marks_partial() -> None:
+    compare = response(
+        {
+            "status": "ahead",
+            "ahead_by": 31,
+            "behind_by": 0,
+            "total_commits": 30,
+            "commits": [{} for _ in range(30)],
+            "files": [
+                {
+                    "filename": "backend/app.py",
+                    "status": "modified",
+                    "additions": 1,
+                    "deletions": 0,
+                    "patch": "@@ -1 +1 @@",
+                }
+            ],
+        },
+        headers={"link": '<https://api.github.com/example?page=2>; rel="next"'},
+    )
+    subject, _ = service(compare_routes(compare))
+    result = subject.compare_truth(REPOSITORY, "base", "head")
+    assert result.partial is True
+
+
+def test_compare_truth_total_commit_gap_marks_partial() -> None:
+    compare = response(
+        {
+            "status": "ahead",
+            "ahead_by": 45,
+            "behind_by": 0,
+            "total_commits": 45,
+            "commits": [{} for _ in range(30)],
+            "files": [
+                {
+                    "filename": "backend/app.py",
+                    "status": "modified",
+                    "additions": 1,
+                    "deletions": 0,
+                    "patch": "@@ -1 +1 @@",
+                }
+            ],
+        }
+    )
+    subject, _ = service(compare_routes(compare))
+    result = subject.compare_truth(REPOSITORY, "base", "head")
+    assert result.partial is True
+
+
+def test_compare_truth_missing_files_is_typed() -> None:
+    compare = response(
+        {
+            "status": "identical",
+            "ahead_by": 0,
+            "behind_by": 0,
+            "total_commits": 0,
+            "commits": [],
+        }
+    )
+    subject, _ = service(compare_routes(compare))
+    with pytest.raises(RepositoryTruthError) as exc:
+        subject.compare_truth(REPOSITORY, "base", "head")
     assert exc.value.code == "malformed_provider_response"
 
 
