@@ -866,7 +866,10 @@ class RepositoryTruthService:
             resolved_sha=head_sha,
         )
         reviews = _json_list(response)
-        partial = len(reviews) > MAX_COLLECTION_ITEMS
+        partial = (
+            len(reviews) > MAX_COLLECTION_ITEMS
+            or 'rel="next"' in response.headers.get("link", "")
+        )
         projected = []
         for review in reviews[:MAX_COLLECTION_ITEMS]:
             if not isinstance(review, dict):
