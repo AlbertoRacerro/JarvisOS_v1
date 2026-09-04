@@ -259,6 +259,16 @@ def _project_text(value: object, *, max_chars: int = 8_192) -> str | None:
     return value[:max_chars]
 
 
+def _decode_github_base64(encoded: str) -> bytes:
+    compact = encoded.replace("\n", "").replace("\r", "")
+    try:
+        return base64.b64decode(compact, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise RepositoryTruthError(
+            "malformed_provider_response", "file base64 payload is malformed"
+        ) from exc
+
+
 class RepositoryTruthService:
     def __init__(
         self,
@@ -526,12 +536,7 @@ class RepositoryTruthService:
             raise RepositoryTruthError(
                 "malformed_provider_response", "file content is missing"
             )
-        try:
-            raw = base64.b64decode(encoded, validate=True)
-        except (binascii.Error, ValueError) as exc:
-            raise RepositoryTruthError(
-                "malformed_provider_response", "file base64 payload is malformed"
-            ) from exc
+        raw = _decode_github_base64(encoded)
         if len(raw) > MAX_FILE_PREVIEW_BYTES:
             raise RepositoryTruthError(
                 "oversized",
@@ -630,9 +635,11 @@ class RepositoryTruthService:
             if blob.get("encoding") != "base64" or not isinstance(encoded, str):
                 continue
             try:
-                raw = base64.b64decode(encoded, validate=True)
+                raw = _decode_github_base64(encoded)
                 text = raw.decode("utf-8")
-            except (binascii.Error, ValueError, UnicodeDecodeError):
+            except RepositoryTruthError:
+                continue
+            except UnicodeDecodeError:
                 continue
             if len(raw) > MAX_FILE_PREVIEW_BYTES:
                 partial = True
