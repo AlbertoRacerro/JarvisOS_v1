@@ -70,9 +70,18 @@ def _repository_service() -> RepositoryTruthService:
 
 
 class _CodingRepositoryFileContextAdapter:
-    def __init__(self, service: RepositoryTruthService, repository: str) -> None:
+    def __init__(
+        self,
+        service: RepositoryTruthService,
+        repository: str,
+        *,
+        expected_sha: str,
+        allowed_paths: frozenset[str],
+    ) -> None:
         self._service = service
         self._repository = repository
+        self._expected_sha = expected_sha
+        self._allowed_paths = allowed_paths
 
     def resolve(self, ref: JarvisExactRef) -> JarvisResolvedRef:
         provenance: dict[str, object] = {
@@ -81,15 +90,20 @@ class _CodingRepositoryFileContextAdapter:
             "path": ref.id,
             "base_sha": ref.version,
         }
-        if ref.owner != "coding" or ref.kind != "repository-file" or ref.version is None:
+        if (
+            ref.owner != "coding"
+            or ref.kind != "repository-file"
+            or ref.version != self._expected_sha
+            or ref.id not in self._allowed_paths
+        ):
             return JarvisResolvedRef(
                 ref=ref,
                 state="unknown",
-                reason="unsupported Coding context ref",
+                reason="Coding context ref is outside the exact admitted target",
                 provenance=provenance,
             )
         try:
-            result = self._service.file_preview(self._repository, ref.version, ref.id)
+            result = self._service.file_preview(self._repository, self._expected_sha, ref.id)
         except RepositoryTruthError as exc:
             return JarvisResolvedRef(
                 ref=ref,
@@ -105,7 +119,7 @@ class _CodingRepositoryFileContextAdapter:
                 reason="partial_repository_evidence",
                 provenance=provenance,
             )
-        if result.resolved_sha != ref.version:
+        if result.resolved_sha != self._expected_sha:
             return JarvisResolvedRef(
                 ref=ref,
                 state="stale",
@@ -117,7 +131,7 @@ class _CodingRepositoryFileContextAdapter:
             state="current",
             content={
                 "repository": self._repository,
-                "base_sha": ref.version,
+                "base_sha": self._expected_sha,
                 "path": ref.id,
                 "payload": result.payload,
             },
@@ -129,12 +143,20 @@ class _CodingRepositoryFileContextAdapter:
 def _coding_context_registry(
     service: RepositoryTruthService,
     repository: str,
+    *,
+    expected_sha: str,
+    allowed_paths: list[str],
 ) -> JarvisContextAdapterRegistry:
     registry = JarvisContextAdapterRegistry()
     registry.register(
         owner="coding",
         kind="repository-file",
-        adapter=_CodingRepositoryFileContextAdapter(service, repository),
+        adapter=_CodingRepositoryFileContextAdapter(
+            service,
+            repository,
+            expected_sha=expected_sha,
+            allowed_paths=frozenset(allowed_paths),
+        ),
         action_classes=("READ", "CONTEXT"),
     )
     return registry
@@ -324,7 +346,12 @@ def coding_context_preview(payload: CodingInspectRequest) -> dict[str, object]:
             ),
             added_context_refs=refs,
         ),
-        registry=_coding_context_registry(truth, payload.repository),
+        registry=_coding_context_registry(
+            truth,
+            payload.repository,
+            expected_sha=payload.base_sha,
+            allowed_paths=payload.target_paths,
+        ),
     )
     if not preview.dispatchable:
         return {"state": "refused", "reason": "missing_evidence"}
@@ -347,6 +374,11 @@ def coding_suggest_modification(payload: CodingSuggestModificationRequest) -> di
     truth = _repository_service()
     service = CodingActionsService(
         truth,
-        context_registry=_coding_context_registry(truth, payload.repository),
+        context_registry=_coding_context_registry(
+            truth,
+            payload.repository,
+            expected_sha=payload.base_sha,
+            allowed_paths=payload.target_paths,
+        ),
     )
     return service.suggest_modification(payload)
