@@ -5,8 +5,18 @@ from dataclasses import asdict
 from fastapi import APIRouter, HTTPException, Request
 
 from app.core.config import get_settings
-from app.modules.ai.jarvis_context import PRODUCTION_CAPABILITY_REGISTRY
-from app.modules.ai.jarvis_context_models import JarvisCapabilityDescriptor
+from app.modules.ai.jarvis_context import (
+    PRODUCTION_CAPABILITY_REGISTRY,
+    JarvisContextAdapterRegistry,
+    build_jarvis_context_preview,
+)
+from app.modules.ai.jarvis_context_models import (
+    JarvisCapabilityDescriptor,
+    JarvisContextRequest,
+    JarvisExactRef,
+    JarvisResolvedRef,
+    JarvisRouteDescriptor,
+)
 from app.modules.coding.actions import (
     CodingActionError,
     CodingActionsService,
@@ -40,6 +50,12 @@ for _capability in (
         label="Inspect exact Coding runtime evidence",
     ),
     JarvisCapabilityDescriptor(
+        capability_id="coding.add-context",
+        route_id="coding-repository",
+        action_class="CONTEXT",
+        label="Add exact Coding repository evidence to proposal context",
+    ),
+    JarvisCapabilityDescriptor(
         capability_id="coding.suggest-modification",
         route_id="coding-repository",
         action_class="PROPOSE",
@@ -51,6 +67,77 @@ for _capability in (
 
 def _repository_service() -> RepositoryTruthService:
     return RepositoryTruthService(get_settings().coding_repositories)
+
+
+class _CodingRepositoryFileContextAdapter:
+    def __init__(self, service: RepositoryTruthService, repository: str) -> None:
+        self._service = service
+        self._repository = repository
+
+    def resolve(self, ref: JarvisExactRef) -> JarvisResolvedRef:
+        provenance: dict[str, object] = {
+            "source": "118:repository-truth",
+            "repository": self._repository,
+            "path": ref.id,
+            "base_sha": ref.version,
+        }
+        if ref.owner != "coding" or ref.kind != "repository-file" or ref.version is None:
+            return JarvisResolvedRef(
+                ref=ref,
+                state="unknown",
+                reason="unsupported Coding context ref",
+                provenance=provenance,
+            )
+        try:
+            result = self._service.file_preview(self._repository, ref.version, ref.id)
+        except RepositoryTruthError as exc:
+            return JarvisResolvedRef(
+                ref=ref,
+                state="unavailable",
+                reason=exc.code,
+                provenance=provenance,
+            )
+        provenance["resolved_sha"] = result.resolved_sha
+        if result.partial:
+            return JarvisResolvedRef(
+                ref=ref,
+                state="unavailable",
+                reason="partial_repository_evidence",
+                provenance=provenance,
+            )
+        if result.resolved_sha != ref.version:
+            return JarvisResolvedRef(
+                ref=ref,
+                state="stale",
+                reason="repository evidence no longer matches exact context SHA",
+                provenance=provenance,
+            )
+        return JarvisResolvedRef(
+            ref=ref,
+            state="current",
+            content={
+                "repository": self._repository,
+                "base_sha": ref.version,
+                "path": ref.id,
+                "payload": result.payload,
+            },
+            provenance=provenance,
+            action_classes=["READ", "CONTEXT"],
+        )
+
+
+def _coding_context_registry(
+    service: RepositoryTruthService,
+    repository: str,
+) -> JarvisContextAdapterRegistry:
+    registry = JarvisContextAdapterRegistry()
+    registry.register(
+        owner="coding",
+        kind="repository-file",
+        adapter=_CodingRepositoryFileContextAdapter(service, repository),
+        action_classes=("READ", "CONTEXT"),
+    )
+    return registry
 
 
 def _repository_result(call: object) -> dict[str, object]:
@@ -207,10 +294,59 @@ def coding_inspect(payload: CodingInspectRequest) -> dict[str, object]:
         return {"state": "refused", "reason": exc.reason}
 
 
+@router.post("/actions/context-preview")
+def coding_context_preview(payload: CodingInspectRequest) -> dict[str, object]:
+    settings = get_settings()
+    if payload.repository not in settings.coding_repositories:
+        return {"state": "refused", "reason": "missing_evidence"}
+    truth = _repository_service()
+    actions = CodingActionsService(truth)
+    try:
+        inspected = actions.inspect(payload)
+    except CodingActionError as exc:
+        return {"state": "refused", "reason": exc.reason}
+    refs = [
+        JarvisExactRef(
+            workspace_id=payload.workspace_id,
+            owner="coding",
+            kind="repository-file",
+            id=path,
+            version=payload.base_sha,
+        )
+        for path in payload.target_paths
+    ]
+    preview = build_jarvis_context_preview(
+        JarvisContextRequest(
+            workspace_id=payload.workspace_id,
+            route=JarvisRouteDescriptor(
+                route_id="coding-repository",
+                canonical_path="/coding/repository",
+            ),
+            added_context_refs=refs,
+        ),
+        registry=_coding_context_registry(truth, payload.repository),
+    )
+    if not preview.dispatchable:
+        return {"state": "refused", "reason": "missing_evidence"}
+    return {
+        "state": "current",
+        "repository": inspected["repository"],
+        "base_sha": inspected["base_sha"],
+        "target_paths": inspected["target_paths"],
+        "added_context_refs": [ref.model_dump(exclude_none=True, mode="json") for ref in refs],
+        "context_digest": preview.context_digest,
+        "context_sources_manifest": preview.context_sources_manifest,
+    }
+
+
 @router.post("/actions/suggest-modification")
 def coding_suggest_modification(payload: CodingSuggestModificationRequest) -> dict[str, object]:
     settings = get_settings()
     if payload.repository not in settings.coding_repositories:
         return {"state": "refused", "reason": "missing_evidence"}
-    service = CodingActionsService(_repository_service())
+    truth = _repository_service()
+    service = CodingActionsService(
+        truth,
+        context_registry=_coding_context_registry(truth, payload.repository),
+    )
     return service.suggest_modification(payload)
