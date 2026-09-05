@@ -261,6 +261,8 @@ function RepositorySurface({ workspaceId }: Readonly<{ workspaceId: string | nul
         setError(next.reason ?? "context_preview_refused");
         return;
       }
+      proposalGeneration.current += 1;
+      setProposal(null);
       setContextBinding(next);
     } catch (cause) {
       if (contextPreviewGeneration.current === requestGeneration) setError(errorText(cause));
