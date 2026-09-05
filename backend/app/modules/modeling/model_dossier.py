@@ -4,6 +4,7 @@ from app.core.database import open_sqlite_connection
 from app.modules.modeling.dossier_models import (
     ModelDossierArtifactRef,
     ModelDossierDetail,
+    ModelDossierEvidenceRef,
     ModelDossierIndexItem,
     ModelDossierRunSummary,
     ModelDossierVersionIdentity,
@@ -13,6 +14,7 @@ MODEL_DOSSIER_MAX_MODELS = 100
 MODEL_DOSSIER_MAX_VERSIONS_PER_MODEL = 20
 MODEL_DOSSIER_MAX_RUNS = 50
 MODEL_DOSSIER_MAX_ARTIFACTS = 100
+MODEL_DOSSIER_MAX_EVIDENCE = 100
 
 
 def _version_identity(row: sqlite3.Row) -> ModelDossierVersionIdentity:
@@ -150,6 +152,34 @@ def get_model_dossier(workspace_id: str, model_version_id: str) -> ModelDossierD
         ).fetchall()
         artifacts = [ModelDossierArtifactRef(**dict(row)) for row in artifact_rows]
 
+        evidence_rows = connection.execute(
+            """
+            SELECT
+                er.id AS evidence_id,
+                er.kind,
+                CASE WHEN fm.record_id IS NULL THEN NULL ELSE 'stale' END AS freshness,
+                report.source_ref,
+                CASE WHEN report.id IS NULL THEN 'unavailable' ELSE 'available' END AS availability
+            FROM evidence_records AS er
+            JOIN simulation_runs AS sr
+              ON sr.id = er.source_run_id
+             AND sr.workspace_id = er.workspace_id
+            LEFT JOIN artifacts AS report
+              ON report.id = er.report_artifact_id
+             AND report.workspace_id = er.workspace_id
+            LEFT JOIN freshness_marks AS fm
+              ON fm.workspace_id = er.workspace_id
+             AND fm.record_kind = 'evidence'
+             AND fm.record_id = er.id
+            WHERE er.workspace_id = ? AND sr.model_version_id = ?
+            GROUP BY er.id
+            ORDER BY er.created_at DESC, er.id ASC
+            LIMIT ?
+            """,
+            (workspace_id, model_version_id, MODEL_DOSSIER_MAX_EVIDENCE),
+        ).fetchall()
+        evidence = [ModelDossierEvidenceRef(**dict(row)) for row in evidence_rows]
+
         return ModelDossierDetail(
             identity=_version_identity(identity_row),
             title=identity_row["title"],
@@ -161,5 +191,5 @@ def get_model_dossier(workspace_id: str, model_version_id: str) -> ModelDossierD
             outputs_summary=identity_row["outputs_summary"],
             runs=runs,
             artifacts=artifacts,
-            evidence=[],
+            evidence=evidence,
         )
