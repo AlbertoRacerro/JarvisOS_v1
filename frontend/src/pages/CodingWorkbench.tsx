@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import {
   CODING_REPOSITORY,
@@ -29,7 +29,7 @@ type Props = Readonly<{
 type TreeEntry = Readonly<{ path?: string; type?: string; sha?: string | null; size?: number | null }>;
 type SearchMatch = Readonly<{ path?: string; line?: number; offset?: number }>;
 
-function Panel({ title, status, children }: Readonly<{ title: string; status?: string; children: React.ReactNode }>) {
+function Panel({ title, status, children }: Readonly<{ title: string; status?: string; children: ReactNode }>) {
   return <section className="final-fusion__panel" aria-label={title}><header className="final-fusion__panel-head"><h2>{title}</h2>{status ? <span>{status}</span> : null}</header>{children}</section>;
 }
 
@@ -179,8 +179,8 @@ function RuntimeSurface() {
     try { setPipeline(await readPipelineState(CODING_REPOSITORY, prNumber, specId.trim())); } catch (cause) { setError(errorText(cause)); }
   };
 
-  const live = runtime?.live ?? {};
-  const remote = runtime?.remote ?? {};
+  const live: Record<string, unknown> = runtime?.live ?? {};
+  const remote: Record<string, unknown> = runtime?.remote ?? {};
   const localSha = exactSha(live.git_sha);
   const remoteSha = exactSha(remote.resolved_sha);
   const relation = runtime?.alignment ?? "unknown";
@@ -201,6 +201,5 @@ function RuntimeSurface() {
 }
 
 export default function CodingWorkbench({ mode, workspaceId }: Props) {
-  const content = useMemo(() => mode === "repository" ? <RepositorySurface workspaceId={workspaceId} /> : <RuntimeSurface />, [mode, workspaceId]);
-  return content;
+  return mode === "repository" ? <RepositorySurface workspaceId={workspaceId} /> : <RuntimeSurface />;
 }
