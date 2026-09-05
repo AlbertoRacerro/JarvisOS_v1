@@ -87,11 +87,13 @@ function RepositorySurface({ workspaceId }: Readonly<{ workspaceId: string | nul
   const [proposal, setProposal] = useState<CodingActionResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const fileReadGeneration = useRef(0);
 
   const resolvedSha = truth?.resolved_sha ?? null;
   const anyPartial = truth?.partial || Object.values(partial).some(Boolean);
 
   const clearSelectedEvidence = () => {
+    fileReadGeneration.current += 1;
     setSelectedPath("");
     setSafeUrl(null);
     setPreview("");
@@ -125,18 +127,23 @@ function RepositorySurface({ workspaceId }: Readonly<{ workspaceId: string | nul
   useEffect(() => { void refresh(); }, []);
 
   const openFile = async (path: string) => {
+    const requestGeneration = ++fileReadGeneration.current;
     setSelectedPath(path); setSafeUrl(null); setPreview(""); setContextBinding(null); setProposal(null); setError(null);
     setPartial((current) => ({ ...current, file: false }));
-    if (!resolvedSha) { setError("missing_exact_sha"); return; }
+    const requestSha = resolvedSha;
+    if (!requestSha) { setError("missing_exact_sha"); return; }
     try {
       const [result, navigation] = await Promise.all([
-        readRepositoryFile(repository, resolvedSha, path),
-        readSafeGithubUrl(repository, resolvedSha, path)
+        readRepositoryFile(repository, requestSha, path),
+        readSafeGithubUrl(repository, requestSha, path)
       ]);
+      if (fileReadGeneration.current !== requestGeneration) return;
       setPreview(typeof result.payload.text === "string" ? result.payload.text : "");
       setSafeUrl(typeof navigation.payload.url === "string" ? navigation.payload.url : null);
       setPartial((current) => ({ ...current, file: result.partial }));
-    } catch (cause) { setError(errorText(cause)); }
+    } catch (cause) {
+      if (fileReadGeneration.current === requestGeneration) setError(errorText(cause));
+    }
   };
 
   const openDirectory = async (path: string) => {
