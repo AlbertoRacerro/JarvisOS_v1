@@ -92,6 +92,9 @@ function RepositorySurface({ workspaceId }: Readonly<{ workspaceId: string | nul
   const proposalGeneration = useRef(0);
   const contextPreviewGeneration = useRef(0);
   const inspectGeneration = useRef(0);
+  const refreshGeneration = useRef(0);
+  const treeReadGeneration = useRef(0);
+  const searchGeneration = useRef(0);
 
   const resolvedSha = truth?.resolved_sha ?? null;
   const anyPartial = truth?.partial || Object.values(partial).some(Boolean);
@@ -114,21 +117,26 @@ function RepositorySurface({ workspaceId }: Readonly<{ workspaceId: string | nul
   };
 
   const refresh = async () => {
+    const requestGeneration = ++refreshGeneration.current;
+    const requestTreeGeneration = ++treeReadGeneration.current;
+    searchGeneration.current += 1;
     setBusy(true); setError(null); setTruth(null); setTree([]); clearSelectedEvidence();
     setTreePath("");
     try {
       const nextTruth = await readRepositoryRef(repository, ref);
+      if (refreshGeneration.current !== requestGeneration) return;
       setTruth(nextTruth);
       const exactRef = nextTruth.resolved_sha;
       if (!exactRef || !/^[0-9a-f]{40}$/.test(exactRef)) throw new Error("missing_exact_sha");
       const nextTree = await readRepositoryTree(repository, exactRef);
+      if (refreshGeneration.current !== requestGeneration || treeReadGeneration.current !== requestTreeGeneration) return;
       const entries = nextTree.payload.entries;
       setTree(Array.isArray(entries) ? entries as TreeEntry[] : []);
       setPartial((current) => ({ ...current, tree: nextTree.partial }));
     } catch (cause) {
-      setError(errorText(cause));
+      if (refreshGeneration.current === requestGeneration) setError(errorText(cause));
     } finally {
-      setBusy(false);
+      if (refreshGeneration.current === requestGeneration) setBusy(false);
     }
   };
 
@@ -166,28 +174,37 @@ function RepositorySurface({ workspaceId }: Readonly<{ workspaceId: string | nul
   };
 
   const openDirectory = async (path: string) => {
-    if (!resolvedSha) { setError("missing_exact_sha"); return; }
+    const requestSha = resolvedSha;
+    if (!requestSha) { setError("missing_exact_sha"); return; }
+    const requestGeneration = ++treeReadGeneration.current;
     setTree([]); setError(null);
     setPartial((current) => ({ ...current, tree: false }));
     try {
-      const result = await readRepositoryTree(repository, resolvedSha, path);
+      const result = await readRepositoryTree(repository, requestSha, path);
+      if (treeReadGeneration.current !== requestGeneration) return;
       const entries = result.payload.entries;
       setTree(Array.isArray(entries) ? entries as TreeEntry[] : []);
       setTreePath(path);
       setPartial((current) => ({ ...current, tree: result.partial }));
     } catch (cause) {
-      setError(errorText(cause));
+      if (treeReadGeneration.current === requestGeneration) setError(errorText(cause));
     }
   };
 
   const runSearch = async () => {
-    if (!literal.trim() || !resolvedSha) return;
+    const requestLiteral = literal.trim();
+    const requestSha = resolvedSha;
+    if (!requestLiteral || !requestSha) return;
+    const requestGeneration = ++searchGeneration.current;
     setMatches([]); setError(null); setPartial((current) => ({ ...current, search: false }));
     try {
-      const result = await searchRepository(repository, resolvedSha, literal.trim());
+      const result = await searchRepository(repository, requestSha, requestLiteral);
+      if (searchGeneration.current !== requestGeneration) return;
       setMatches(Array.isArray(result.payload.matches) ? result.payload.matches as SearchMatch[] : []);
       setPartial((current) => ({ ...current, search: result.partial }));
-    } catch (cause) { setError(errorText(cause)); }
+    } catch (cause) {
+      if (searchGeneration.current === requestGeneration) setError(errorText(cause));
+    }
   };
 
   const loadPr = async () => {
@@ -292,7 +309,7 @@ function RepositorySurface({ workspaceId }: Readonly<{ workspaceId: string | nul
     <Panel title="File / search / PR evidence" status={anyPartial ? "PARTIAL · READ only" : "READ only"}>
       <div className="final-fusion__toolbar-line"><span>Selected path · {selectedPath || "None"}</span>{safeUrl ? <a href={safeUrl} target="_blank" rel="noreferrer">Open server-validated GitHub path</a> : null}</div>
       <pre className="final-fusion__searchbox">{preview || "Select a file for bounded UTF-8 preview."}</pre>
-      <div className="final-fusion__toolbar-line"><input aria-label="Literal repository search" value={literal} onChange={(event) => setLiteral(event.target.value)} placeholder="Literal search" maxLength={512}/><button type="button" onClick={() => void runSearch()} disabled={!literal.trim() || !resolvedSha}>Search</button></div>
+      <div className="final-fusion__toolbar-line"><input aria-label="Literal repository search" value={literal} onChange={(event) => { searchGeneration.current += 1; setLiteral(event.target.value); setMatches([]); setPartial((current) => ({ ...current, search: false })); }} placeholder="Literal search" maxLength={512}/><button type="button" onClick={() => void runSearch()} disabled={!literal.trim() || !resolvedSha}>Search</button></div>
       <div className="final-fusion__source-list">{matches.map((match, index) => <div className="final-fusion__disclosure-row" key={`${match.path}:${match.offset}:${index}`}><span>›</span><strong>{match.path ?? "Unknown"}</strong><em>line {match.line ?? "?"}</em></div>)}</div>
       <div className="final-fusion__toolbar-line"><input aria-label="Pull request number" inputMode="numeric" value={prInput} onChange={(event) => { prEvidenceGeneration.current += 1; setPrInput(event.target.value); setPrEvidence(null); setPartial((current) => ({ ...current, pr: false, checks: false, reviews: false })); }} placeholder="PR number"/><button type="button" onClick={() => void loadPr()} disabled={!prInput}>Load PR evidence</button></div>
       {prEvidence ? <pre className="final-fusion__searchbox">{JSON.stringify(prEvidence, null, 2)}</pre> : null}
