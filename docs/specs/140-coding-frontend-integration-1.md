@@ -1,63 +1,177 @@
 # 140 CODING-FRONTEND-INTEGRATION-1
 
-Status: definition only; planned; no implementation authority.
+Status: full specification / planning authority; implementation remains unauthorized until the canonical registry row is `ready`.
 
-Base authority: exact `master` `04bbb5e7ddf4a2c2a91a5745e112af1eb0ccfa2a`.
+Definition authority merged through PR #549. Full-spec derivation basis: exact `master` `084c382451972081c23c4b05fd76cf1ba238b95c`.
 
-## Problem
+## Purpose
 
-The Coding acceleration backend authorities are now merged: 118 owns remote repository/ref/SHA/PR/check/review truth, 119 owns local runtime identity and remote-alignment truth, 120 owns inspectable development-pipeline state, and 123 owns bounded Jarvis Coding READ/PROPOSE behavior. The existing operator frontend predates that completed backend chain and therefore needs one bounded integration slice so the Coding surface consumes those accepted server-owned contracts rather than placeholders or parallel client-side truth.
+Replace the remaining Coding operator placeholders with one bounded frontend integration over the already accepted Coding backend owners. The browser consumes server-owned repository, runtime, pipeline and Jarvis Coding contracts; it does not create a second truth layer or acquire new GitHub/provider/filesystem/execution authority.
 
-This definition creates planning authority only. It does not authorize product-code implementation. A full specification and readiness decision remain mandatory before `140` can become `ready`.
+The accepted owners remain:
 
-## Dependencies and owners
+- 118 — remote repository/ref/exact-SHA, bounded tree/file/literal-search, PR/check/review evidence and safe GitHub URL truth;
+- 119 — actual local executed path/ref/SHA/dirty/build/runtime identity and deterministic relation to an exact remote target;
+- 120 — inspectable Proposal → Plan → Implementation → Tests → Independent Review → Reconciliation → Merge state;
+- 123 — bounded Jarvis Coding `READ` / `PROPOSE` actions with exact-base/context/path binding and stale refusal;
+- 091/100f/100g — existing operator-workstation composition and Coding route/visual ownership;
+- 111 — explicit context/action boundary; ordinary browsing remains context-neutral.
 
-Hard dependencies for derivation are `091`, `100f`, `100g`, `111`, `118`, `119`, `120`, and `123`. The frontend shell/visual ownership established by 091/100f/100g is reused; 111 remains the context/action foundation; 118/119/120/123 remain the sole backend/domain authorities for the facts and actions they already own.
+## Fresh implementation evidence
 
-No new repository, runtime, pipeline, proposal, context, credential, provider, filesystem, or GitHub authority is created by 140.
+Fresh master already exposes the stable Coding routes `/coding/repository` and `/coding/runtime`. `frontend/src/App.tsx` still renders the Repository route through `FinalOperatorUnavailableSurface`, explicitly saying that no frontend-safe repository observer is wired. The Runtime route uses `FinalOperatorReadSurface`, which currently reads `/system/info` and truthfully leaves executed SHA, remote SHA and alignment `Unknown`.
 
-## Bounded delivery target
+The accepted server routes in `backend/app/modules/coding/runtime_routes.py` already expose:
 
-A later accepted implementation may only wire the existing Coding/operator surface so that:
+- `GET /api/coding/runtime-truth` from 119;
+- `GET /api/coding/pipeline-state` from 120;
+- `POST /api/coding/actions/inspect` from 123;
+- `POST /api/coding/actions/suggest-modification` from 123.
 
-- `Coding -> Repository` consumes 118 server-owned truth for the selected repository/ref/exact SHA, bounded tree/file preview/search, available PR/check/review evidence, and safe GitHub URLs;
-- `Coding -> Runtime` consumes 119 server-owned executed path/ref/SHA/dirty/build/runtime identity and its deterministic `aligned` / `local_behind` / `divergent` / `unknown` relation to the exact remote target;
-- the existing Coding/operator surface exposes the relevant 120 proposal-to-merge pipeline-state projection without introducing a second queue, store, roadmap, or workflow authority;
-- the Jarvis sidecar/surface exposes only the 123 Coding `READ` / `PROPOSE` capabilities, including inspect/explain/context and bounded Suggest modification proposal/diff/plan behavior bound to exact base SHA, target paths, context digest, and stale refusal;
-- ordinary repository browsing remains context-neutral; explicit context insertion continues through 111/123 rather than silently adding browsed material to model context.
+118 is presently implemented as the bounded `RepositoryTruthService` read-only authority rather than as a browser-facing GitHub client. Therefore 140 may add only the minimum FastAPI projection/adaptor required for the existing browser Coding surface to invoke accepted 118 operations through JarvisOS. That adaptor must delegate to 118 without reimplementing repository validation, network transport, bounds, freshness, URL validation, error taxonomy or credentials. It is an integration seam, not a new repository authority.
 
-## Security and authority boundary
+## Required product behavior
 
-The browser must never call GitHub directly, receive GitHub/provider credentials, or gain filesystem authority. 140 must not add `COMMIT`, `APPLY`, `EXECUTE`, file mutation, branch creation, pull-request creation, merge, workflow dispatch, STATUS mutation, provider dispatch, PTY, or self-update authority.
+### Coding → Repository
 
-Safe external links may be rendered only from server-validated URLs already supplied by accepted backend contracts. Stale/exact-head failures remain fail-closed and visible; the frontend may not infer success, freshness, mergeability, runtime alignment, or proposal validity from local state.
+The existing `/coding/repository` surface must consume 118 through JarvisOS server routes and show only server-proven facts for a configured repository/ref:
 
-## Frontend boundary
+1. repository identity, requested ref and resolved exact 40-character SHA;
+2. bounded repository tree/path listing;
+3. bounded file preview for an explicitly selected path;
+4. bounded literal search when requested by the operator;
+5. available pull-request/check/review evidence when a PR is explicitly selected;
+6. safe GitHub navigation URLs only when returned by the server-owned 118 contract.
 
-Reuse the existing operator-workstation composition and Coding surfaces established by 091/100f/100g. No general frontend redesign, new global store, duplicate API client, or parallel Coding page architecture is in scope. A minimal causal correction to an existing shared frontend integration point is allowed only when the full spec proves it necessary to consume the accepted contracts.
+No stale/ref-mismatch result may be relabelled as current. Provider timeout, unavailable, partial, oversized, malformed and authentication-required states remain explicit truthful error/partial states. No fixture/placeholder repository fact may remain visible as if live once a server request has resolved.
 
-## Controlled-parallel compatibility with 113
+### Coding → Runtime
 
-At this base SHA, active 113 is the Knowledge model-dossier slice: its runtime scope is the model-dossier backend/read projection and `/memory/models`. 140 is a Coding frontend-integration slice over already merged 118/119/120/123 authority. It requires no 113 schema, store, model-dossier route, `/memory/models` component, or model/evidence mutation. Shared frontend/client integration remains serialized by the global ChatGPT writer mutex.
+The existing `/coding/runtime` surface must use 119 `/api/coding/runtime-truth` for the selected configured repository and exact target ref. It must show the server-returned local executed path/ref/SHA, dirty/build/runtime identity, remote target identity, and only the deterministic relation returned by 119: `aligned`, `local_behind`, `divergent`, or `unknown`.
 
-Accordingly 113 may truthfully remain parked `in_review` on its accepted exact-head real-browser proof while 140 advances through planning. This does not permit 114 to start: 114 remains held until both 113 and 140 are merged and mechanically reconciled under current maintainer scheduling authority.
+The frontend must not compare SHAs, infer ancestry, infer cleanliness, or derive alignment independently. A missing startup snapshot, unauthorized repository, stale target or other typed failure must remain visible rather than falling back to `/system/info` as proof of exact code identity. `/system/info` may remain supplementary non-authoritative system detail only if it is not presented as repository/runtime alignment truth.
 
-## Failure modes to freeze in the full spec
+### Development pipeline projection
 
-The full specification must at minimum close these failure modes without broadening authority:
+The Coding operator surface must expose the relevant 120 pipeline-state projection for an explicitly selected repository/PR/spec identity. It must render server-owned stage state/evidence and stale invalidation; it must not create a second roadmap, queue, workflow state machine, merge decision or client-side stage progression.
 
-- stale repository/ref/SHA displayed as current;
-- local runtime identity compared against a different remote target;
-- frontend-derived pipeline state diverging from 120;
-- direct browser GitHub/provider calls or credential exposure;
-- repository browsing implicitly entering Jarvis context;
-- proposal submitted against a stale base SHA or mismatched target paths/context digest;
-- UI affordances implying commit/apply/execute/merge authority that 123 does not grant;
-- placeholder/fixture data surviving when server truth is available;
-- duplicate global stores or API ownership created solely for the integration.
+A missing PR/spec selection is an explicit unselected/empty state, not a synthetic pipeline. A stale or invalidated server projection must not retain previously rendered green/complete state as current.
 
-## Expected verification shape
+### Jarvis Coding READ / PROPOSE
 
-Readiness must freeze deterministic frontend/API contract tests for exact identity propagation, stale refusal, context-neutral browsing, absence of unauthorized actions, and truthful empty/unknown/error states. Because this is visible operator behavior, readiness should require exact-head real-browser proof of the accepted Coding interaction unless fresh canonical evidence proves an existing deterministic browser-proof mechanism already covers the same behavior.
+The existing Jarvis sidecar may expose the accepted 123 Coding capabilities only:
 
-The later implementation remains independently reviewable and bounded to the accepted integration diff. No Hermes derivation, Knowledge 114+, Development 116+, Ruff-autofix, CI-digest, or unrelated cleanup belongs in this slice.
+- inspect/explain exact repository/runtime evidence via `coding.inspect`;
+- explicitly insert accepted Coding evidence into context through the 111/123 context mechanism;
+- `Suggest modification` through `coding.suggest-modification`, producing a bounded proposal/diff/plan only.
+
+The Suggest modification request and result must preserve exact repository/base SHA, bounded target paths and context digest as defined by 123. Stale base, mismatched context/path evidence or missing evidence must remain a refusal. The UI must not imply that a proposal was committed, applied, executed, pushed, branched, opened as a PR, merged or dispatched.
+
+Ordinary tree browsing, file preview, search and PR evidence inspection do not silently enter Jarvis context. Context insertion requires the explicit accepted 111/123 action.
+
+## HTTP integration boundary for 118
+
+If current 118 lacks the minimum browser-consumable HTTP projection, implementation may add one bounded route family under the existing `/api/coding` router. It must:
+
+- accept only configured repository identities and validated operation-specific inputs;
+- delegate operation semantics to `RepositoryTruthService` rather than duplicate its provider logic;
+- preserve 118 hard bounds (`MAX_*` limits), exact-SHA/ref validation, partial/error semantics and safe URL validation;
+- return no GitHub credential, request header, raw secret, filesystem path outside an already accepted safe runtime identity, or arbitrary provider URL;
+- expose only read operations already in 118's allowlist;
+- add no mutation, branch, commit-create, PR-create, review-create, merge, workflow-dispatch or secret API.
+
+A broad generic RPC endpoint that accepts arbitrary operation names/paths is not required and should be avoided if typed bounded routes are smaller and safer.
+
+## Frontend implementation boundary
+
+Reuse the current route IDs, workspace shell, header, fusion styles and Jarvis sidecar. Expected touch points are a bounded subset of:
+
+- `frontend/src/App.tsx` only to replace the existing Repository placeholder and/or compose the accepted Coding surface;
+- `frontend/src/components/fusion/FinalOperatorReadSurface.tsx` only where the existing Runtime composition can remain the smallest owner;
+- one focused Coding surface/component module if separating repository/runtime/pipeline behavior materially reduces accidental coupling;
+- one focused frontend API client module for `/api/coding/*` rather than provider/GitHub clients;
+- existing Jarvis sidecar/context integration points required to expose 123 capabilities;
+- deterministic frontend/API contract tests;
+- the minimum server router/tests needed only for the 118 HTTP projection described above.
+
+Do not create a second app router, global store, Coding page hierarchy, design system, GitHub client, provider SDK or parallel context basket.
+
+## Controlled-parallel boundary with 113
+
+113 remains parked on its accepted exact-head real-browser `/memory/models` gate. Its active implementation branch owns model-dossier backend/read projection and `/memory/models` integration and currently also touches shared `frontend/src/App.tsx`.
+
+140 owns Coding routes/surfaces and Coding API integration only. It must not modify model-dossier schemas/services/routes, `frontend/src/api/modelDossier.ts`, `frontend/src/pages/ModelDossier.tsx`, model evidence/run binding, or `/memory/models` behavior. Any unavoidable shared `App.tsx` edit is serialized by the global writer mutex and must be kept to the smallest Coding-only switch/composition change so later integration with 113 is mechanically reviewable. 140 must not consume unmerged 113 code or make 113's browser gate easier to bypass.
+
+114 remains forbidden until both 113 and 140 are merged and mechanically reconciled.
+
+## Deterministic acceptance matrix
+
+| Case | Required result |
+| --- | --- |
+| configured repository/ref resolves through 118 | exact repository/ref/resolved SHA rendered from server response |
+| stale/invalid ref or provider failure | explicit fail-closed/partial/error state; no previous fact retained as current |
+| repository tree/file/search request | existing 118 bounds and path/ref validation preserved; browser never contacts GitHub |
+| PR/check/review evidence selected | server-owned evidence rendered without client-derived mergeability/review truth |
+| safe GitHub navigation link | only server-validated `github.com` URL is rendered as external navigation |
+| runtime target selected | 119 local identity + exact remote target + server-returned relation shown |
+| runtime snapshot unavailable/unknown | truthful unknown/error; `/system/info` is not promoted to exact Git identity |
+| pipeline repository/PR/spec selected | 120 projection shown exactly; stale invalidation clears/marks prior current state |
+| no pipeline selection | explicit empty/unselected state; no synthetic stages |
+| ordinary browsing | Jarvis context unchanged |
+| explicit accepted context action | 111/123-bound context evidence inserted with exact provenance/digest |
+| valid Suggest modification | proposal/diff/plan shown with exact base SHA/target paths/context digest |
+| stale/mismatched Suggest modification | visible refusal; no optimistic success |
+| rendered actions | no Commit/Apply/Execute/Push/Create PR/Merge/STATUS mutation affordance |
+| browser network surface | JarvisOS backend only; no GitHub/provider credential or direct provider request |
+
+## Required tests and evidence
+
+Implementation must include deterministic tests that materially prove:
+
+1. frontend API requests target only JarvisOS `/api/coding/*` endpoints and propagate exact repository/ref/SHA/PR/spec/context identities;
+2. the 118 HTTP projection, if added, delegates to 118 and preserves unauthorized-repository, invalid-ref/path, stale, partial/bounds and safe-URL behavior without exposing mutation operations;
+3. Runtime renders 119 relation and does not independently infer alignment;
+4. pipeline rendering follows 120 and invalidates stale prior state;
+5. browsing is context-neutral and explicit context insertion remains the only path into Jarvis context;
+6. Suggest modification success/refusal surfaces preserve 123 exact-base/context/path semantics and never claim apply/commit/execute authority;
+7. no direct browser request targets `github.com`, `api.github.com`, a provider endpoint, filesystem API or execution tool;
+8. current Coding placeholders are removed only where accepted server truth now exists, while truthful unknown/empty/error states remain;
+9. focused frontend tests plus `npm run build` pass on exact implementation head;
+10. focused backend route/service tests plus normal repository CI pass on exact implementation head.
+
+Because this changes visible operator behavior and security/authority presentation across accepted Coding contracts, final acceptance also requires independent exact-head semantic review and exact-head real-browser proof of the accepted `/coding/repository` and `/coding/runtime` interaction. Browser proof must demonstrate real JarvisOS backend responses or deterministic accepted local fixtures at the server boundary; static screenshots or mocked React-only state are insufficient to prove wiring.
+
+## Security / failure modes
+
+The implementation must fail closed against:
+
+- direct browser GitHub/provider access or credential leakage;
+- arbitrary operation/path/provider RPC accidentally broadening 118;
+- stale repository/ref/SHA remaining visually current after an error or target change;
+- client-side SHA ancestry/alignment inference diverging from 119;
+- client-side pipeline progression diverging from 120;
+- implicit context capture during repository browsing;
+- stale-base proposal presented as actionable/current;
+- UI labels/buttons implying mutation/execute/merge authority;
+- partial/provider-failure responses displayed as complete evidence;
+- shared `App.tsx` edits accidentally changing parked 113 `/memory/models` behavior;
+- duplicate API/store/context authorities introduced only for frontend convenience.
+
+## Non-goals
+
+- no repository/file mutation;
+- no commit/apply/execute/push/branch/PR/merge/workflow-dispatch authority;
+- no STATUS mutation from product runtime;
+- no PTY or self-update authority;
+- no GitHub/provider credential management;
+- no generic repository/provider abstraction redesign;
+- no second development queue, roadmap or workflow engine;
+- no general frontend redesign or new design system;
+- no Knowledge 113/114/115/121 implementation;
+- no Hermes derivation;
+- no Development 116/117/122 implementation;
+- no Ruff-autofix or CI-digest work.
+
+## Minimum-necessary test
+
+Every implementation addition must be necessary to expose an already accepted 118/119/120/123 fact/action through the existing operator surface. If an existing server/client seam can carry the contract safely, reuse it. New repository/runtime/pipeline/context state ownership, generic RPC infrastructure or mutation authority fails this test and requires separate authority.
