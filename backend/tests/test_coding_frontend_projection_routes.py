@@ -207,6 +207,27 @@ def test_coding_context_preview_refuses_budget_dropped_requested_evidence(monkey
     assert response.json() == {"state": "refused", "reason": "missing_evidence"}
 
 
+def test_coding_context_preview_refuses_oversized_adapter_evidence(monkeypatch) -> None:
+    client, _service = _client(monkeypatch)
+
+    def _oversized(*_args, **_kwargs):
+        raise runtime_routes.JarvisContextError("context adapter returned oversized preview evidence")
+
+    monkeypatch.setattr(runtime_routes, "build_jarvis_context_preview", _oversized)
+    payload = {
+        "workspace_id": "ws-140",
+        "repository": REPOSITORY,
+        "base_ref": "master",
+        "base_sha": SHA,
+        "target_paths": ["README.md"],
+    }
+    with client:
+        response = client.post("/api/coding/actions/context-preview", json=payload)
+
+    assert response.status_code == 200
+    assert response.json() == {"state": "refused", "reason": "missing_evidence"}
+
+
 def test_repository_projection_routes_preserve_fail_closed_error_classes(monkeypatch) -> None:
     class FailingService(FakeRepositoryTruthService):
         def repository_ref_truth(self, repository: str, ref: str) -> RepositoryTruthResult:
