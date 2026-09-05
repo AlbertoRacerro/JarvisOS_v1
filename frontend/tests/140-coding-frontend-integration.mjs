@@ -80,6 +80,8 @@ includesAll(workbench, [
   "contextPreviewGeneration.current += 1",
   "inspectGeneration.current += 1",
   "searchGeneration.current += 1",
+  "canonicalPrNumber",
+  "canonicalSpecId",
   "repositoryErrors",
   "setRepositoryError",
   "File preview refused / unavailable",
@@ -130,6 +132,19 @@ check(
   /status=\{pipelineError \? "Projection error"/.test(workbench),
   "runtime and pipeline refusal states are not independently owned/rendered"
 );
+check(
+  /function canonicalPrNumber\(value: string\): number \| null \{[\s\S]*?\/\^\[1-9\]\[0-9\]\*\$\/[\s\S]*?Number\.isSafeInteger/.test(workbench) &&
+  /const prNumber = canonicalPrNumber\(prInput\);/.test(workbench),
+  "PR evidence still coerces non-canonical operator identities"
+);
+check(
+  /function canonicalSpecId\(value: string\): string \| null \{[\s\S]*?\/\^\[0-9\]\{3\}\[a-z\]\?\$\/[\s\S]*?value\.slice\(0, 3\)/.test(workbench) &&
+  /const requestSpecId = canonicalSpecId\(specId\);/.test(workbench) &&
+  /readPipelineState\(CODING_REPOSITORY, prNumber, requestSpecId\)/.test(workbench),
+  "pipeline projection still normalizes a different PR/spec selection"
+);
+check(!/Number\(prInput\)/.test(workbench), "raw PR selection is still coerced with Number()");
+check(!/readPipelineState\(CODING_REPOSITORY, prNumber, specId\.trim\(\)\)/.test(workbench), "pipeline request still trims the selected spec id");
 check(!/const \[error, setError\]/.test(workbench), "shared cross-operation error slot remains in Coding surfaces");
 check(!/api\.github\.com|github\.com\/api|localStorage|sessionStorage|child_process|powershell|cmd\.exe/i.test(workbench), "Coding surface crossed the browser authority boundary");
 check(!/fetch\(/.test(workbench), "Coding surface bypasses the shared API client");
