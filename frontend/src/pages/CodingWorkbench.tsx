@@ -13,6 +13,7 @@ import {
   readRepositoryTree,
   readReviews,
   readRuntimeTruth,
+  readSafeGithubUrl,
   searchRepository,
   suggestCodingModification,
   type CodingActionResult,
@@ -47,6 +48,7 @@ function RepositorySurface({ workspaceId }: Readonly<{ workspaceId: string | nul
   const [truth, setTruth] = useState<RepositoryTruthResult | null>(null);
   const [tree, setTree] = useState<TreeEntry[]>([]);
   const [selectedPath, setSelectedPath] = useState("");
+  const [safeUrl, setSafeUrl] = useState<string | null>(null);
   const [preview, setPreview] = useState("");
   const [literal, setLiteral] = useState("");
   const [matches, setMatches] = useState<SearchMatch[]>([]);
@@ -61,7 +63,7 @@ function RepositorySurface({ workspaceId }: Readonly<{ workspaceId: string | nul
   const resolvedSha = truth?.resolved_sha ?? null;
 
   const refresh = async () => {
-    setBusy(true); setError(null); setTruth(null); setTree([]); setPreview(""); setMatches([]); setPrEvidence(null); setInspectResult(null); setProposal(null);
+    setBusy(true); setError(null); setTruth(null); setTree([]); setSelectedPath(""); setSafeUrl(null); setPreview(""); setMatches([]); setPrEvidence(null); setInspectResult(null); setProposal(null);
     try {
       const nextTruth = await readRepositoryRef(repository, ref);
       setTruth(nextTruth);
@@ -78,10 +80,15 @@ function RepositorySurface({ workspaceId }: Readonly<{ workspaceId: string | nul
   useEffect(() => { void refresh(); }, []);
 
   const openFile = async (path: string) => {
-    setSelectedPath(path); setPreview(""); setError(null);
+    setSelectedPath(path); setSafeUrl(null); setPreview(""); setError(null);
+    if (!resolvedSha) { setError("missing_exact_sha"); return; }
     try {
-      const result = await readRepositoryFile(repository, ref, path);
+      const [result, navigation] = await Promise.all([
+        readRepositoryFile(repository, ref, path),
+        readSafeGithubUrl(repository, resolvedSha, path)
+      ]);
       setPreview(typeof result.payload.text === "string" ? result.payload.text : "");
+      setSafeUrl(typeof navigation.payload.url === "string" ? navigation.payload.url : null);
     } catch (cause) { setError(errorText(cause)); }
   };
 
@@ -134,7 +141,7 @@ function RepositorySurface({ workspaceId }: Readonly<{ workspaceId: string | nul
       <div className="final-fusion__source-list">{tree.length ? tree.map((entry) => entry.path ? <button type="button" className="final-fusion__disclosure-row" key={entry.path} onClick={() => entry.type === "file" ? void openFile(entry.path!) : undefined} disabled={entry.type !== "file"}><span>›</span><strong>{entry.path}</strong><em>{entry.type ?? "unknown"}{typeof entry.size === "number" ? ` · ${entry.size} B` : ""}</em></button> : null) : <div className="final-fusion__source-empty"><strong>No current tree evidence</strong></div>}</div>
     </Panel>
     <Panel title="File / search / PR evidence" status="READ only">
-      <div className="final-fusion__toolbar-line"><span>Selected path · {selectedPath || "None"}</span>{selectedPath && truth?.resolved_sha ? <a href={`https://github.com/${repository}/blob/${truth.resolved_sha}/${encodeURI(selectedPath)}`} target="_blank" rel="noreferrer">Open exact GitHub path</a> : null}</div>
+      <div className="final-fusion__toolbar-line"><span>Selected path · {selectedPath || "None"}</span>{safeUrl ? <a href={safeUrl} target="_blank" rel="noreferrer">Open server-validated GitHub path</a> : null}</div>
       <pre className="final-fusion__searchbox">{preview || "Select a file for bounded UTF-8 preview."}</pre>
       <div className="final-fusion__toolbar-line"><input aria-label="Literal repository search" value={literal} onChange={(event) => setLiteral(event.target.value)} placeholder="Literal search" maxLength={512}/><button type="button" onClick={() => void runSearch()} disabled={!literal.trim()}>Search</button></div>
       <div className="final-fusion__source-list">{matches.map((match, index) => <div className="final-fusion__disclosure-row" key={`${match.path}:${match.offset}:${index}`}><span>›</span><strong>{match.path ?? "Unknown"}</strong><em>line {match.line ?? "?"}</em></div>)}</div>
