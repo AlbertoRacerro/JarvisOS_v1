@@ -55,6 +55,7 @@ Once fresh exact `master` shows 112 as `merged`, `docs/POST_112_PARALLEL_DELIVER
 - **Knowledge:** `113 -> 114 -> 115`, then `121` when its hard dependencies are merged and its own readiness authorizes implementation.
 - **Development:** `116 -> 117`, then `122` when its hard dependencies are merged and its own readiness authorizes implementation.
 - **Coding acceleration:** `118 -> 119 -> 120 -> 123 -> fresh Hermes V1 re-derivation/release gate`.
+- **Maintainer-scheduled bridge:** `140` may advance under demonstrated post-112 controlled-parallel disjointness while `113` is parked on accepted human/browser evidence; `114` may not start until both `113` and `140` are merged and mechanically reconciled.
 - **Provider/settings:** `124` is an independent owner when its dependencies and readiness are satisfied and may be scheduled post-112 without blocking unrelated lanes.
 - **Separately gated:** `125` and `126` are not automatically parallelized.
 - **Later engineering/Process:** `102`, then `103 -> 104 -> 105 -> 106 -> 107 -> 108 -> 109 -> 093 -> 110`, subject to each row's then-current dependencies/readiness and fresh authority.
@@ -72,9 +73,10 @@ The queue is binding but not immutable. If a slice proves non-implementable with
 1. `100c FINAL-PRODUCT-DIRECTION-AUTHORITY-0` completed its definition/queue re-derivation through PR #416; it is planning authority only and has no runtime implementation identity.
 2. `111 JARVIS-CONTEXT-ACTION-FOUNDATION-1` is merged through kernel/full spec/readiness PRs #418/#419/#422 and implementation PR #425. Preserve the common exact-context/capability boundary and the existing AI execution/policy spine.
 3. `112 PROJECT-KNOWLEDGE-CORE-1` is merged through implementation PR #432 after definition PR #428, full-spec PR #429, and readiness PR #430.
-4. Schedule remaining READY work by the canonical post-112 lanes above, not by one global sequence. Dependencies and lane ownership decide eligibility.
-5. `102` and then `103 -> 104 -> 105 -> 106 -> 107 -> 108 -> 109 -> 093 -> 110` remain later engineering/Process work according to dependencies/current authority. BLUECAD remains preserved; Process topology/solver implementation cannot be fabricated by frontend state.
-6. `101` is superseded by 112; 055 is superseded as a standalone Project view; 064 and 069 remain trigger-deferred. Keep 066–068 and 080 frozen and 062 blocked/deferred.
+4. While `113` is parked on its accepted exact-head human/browser evidence gate, `140` may advance through its normal lifecycle under the post-112 controlled-parallel profile; `114` remains held until both `113` and `140` are merged and mechanically reconciled.
+5. Schedule other READY work by the canonical post-112 lanes above, not by one global sequence. Dependencies and lane ownership decide eligibility.
+6. `102` and then `103 -> 104 -> 105 -> 106 -> 107 -> 108 -> 109 -> 093 -> 110` remain later engineering/Process work according to dependencies/current authority. BLUECAD remains preserved; Process topology/solver implementation cannot be fabricated by frontend state.
+7. `101` is superseded by 112; 055 is superseded as a standalone Project view; 064 and 069 remain trigger-deferred. Keep 066–068 and 080 frozen and 062 blocked/deferred.
 
 ## Registry
 | Spec | Status | Implementation PR | Name | Depends on | Description |
@@ -236,6 +238,7 @@ The queue is binding but not immutable. If a slice proves non-implementable with
 | 137 | merged | [#507](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/507) | AE002-GENERIC-NETWORK-COVERAGE-1 | 128, 134 | Extend the existing deterministic AE002 AST gate to concrete generic Python network-dispatch families with alias/from-import and constructor-bound coverage while preserving accepted owners/exact exceptions; no runtime egress behavior change. |
 | 138 | merged | [#512](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/512) | PYTHON-RUNNER-HASHSEED-DETERMINISM-1 | 130, 137 | Bounded post-134 F6 repair: pin `PYTHONHASHSEED=0` in the existing isolated production Python-runner child environment and prove stable hash-dependent output across independent real runner subprocesses; no generic determinism or sandbox expansion. |
 | 139 | merged | [#517](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/517) | RUNNER-STRANDED-RECOVERY-1 | 138 | Planning/full-spec/readiness authority merged through PR #515; bounded post-134 F8 repair: prove live-child versus abandoned execution before idempotent stranded-running recovery, preserve evidence, and avoid generic lease/heartbeat/process-supervisor expansion. |
+| 140 | planned | — | CODING-FRONTEND-INTEGRATION-1 | 091, 100f, 100g, 111, 118, 119, 120, 123 | Wire existing Coding/operator frontend surfaces to accepted server-owned repository, runtime, pipeline, and Jarvis Coding READ/PROPOSE contracts without adding browser GitHub/provider/filesystem credentials, direct mutation/execute/merge authority, a second store/workflow, or unrelated redesign. |
 
 ## Superseded planning aliases and resolved collisions
 
