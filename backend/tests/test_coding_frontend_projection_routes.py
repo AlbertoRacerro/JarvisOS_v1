@@ -34,6 +34,8 @@ class FakeRepositoryTruthService:
             payload["url"] = f"https://github.com/{REPOSITORY}/blob/{SHA}/README.md"
         if name == "pull_request_truth":
             payload["head_sha"] = SHA
+        if name == "file_preview":
+            payload["text"] = "bounded file evidence"
         return _result(name, payload=payload)
 
     def repository_ref_truth(self, repository: str, ref: str) -> RepositoryTruthResult:
@@ -146,6 +148,36 @@ def test_repository_projection_routes_delegate_exact_inputs(monkeypatch) -> None
         (REPOSITORY,),
         {"commit_sha": SHA, "pr_number": None, "path": "README.md"},
     ) in service.calls
+
+
+def test_coding_context_preview_binds_exact_file_evidence(monkeypatch) -> None:
+    client, service = _client(monkeypatch)
+    payload = {
+        "workspace_id": "ws-140",
+        "repository": REPOSITORY,
+        "base_ref": "master",
+        "base_sha": SHA,
+        "target_paths": ["README.md"],
+    }
+    with client:
+        response = client.post("/api/coding/actions/context-preview", json=payload)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["state"] == "current"
+    assert body["base_sha"] == SHA
+    assert body["target_paths"] == ["README.md"]
+    assert body["context_digest"].startswith("sha256:")
+    assert body["added_context_refs"] == [
+        {
+            "workspace_id": "ws-140",
+            "owner": "coding",
+            "kind": "repository-file",
+            "id": "README.md",
+            "version": SHA,
+        }
+    ]
+    assert ("file_preview", (REPOSITORY, SHA, "README.md"), {}) in service.calls
 
 
 def test_repository_projection_routes_preserve_fail_closed_error_classes(monkeypatch) -> None:
