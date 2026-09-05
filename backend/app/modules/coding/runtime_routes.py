@@ -8,6 +8,7 @@ from app.core.config import get_settings
 from app.modules.ai.jarvis_context import (
     PRODUCTION_CAPABILITY_REGISTRY,
     JarvisContextAdapterRegistry,
+    JarvisContextError,
     build_jarvis_context_preview,
 )
 from app.modules.ai.jarvis_context_models import (
@@ -337,22 +338,25 @@ def coding_context_preview(payload: CodingInspectRequest) -> dict[str, object]:
         )
         for path in payload.target_paths
     ]
-    preview = build_jarvis_context_preview(
-        JarvisContextRequest(
-            workspace_id=payload.workspace_id,
-            route=JarvisRouteDescriptor(
-                route_id="coding-repository",
-                canonical_path="/coding/repository",
+    try:
+        preview = build_jarvis_context_preview(
+            JarvisContextRequest(
+                workspace_id=payload.workspace_id,
+                route=JarvisRouteDescriptor(
+                    route_id="coding-repository",
+                    canonical_path="/coding/repository",
+                ),
+                added_context_refs=refs,
             ),
-            added_context_refs=refs,
-        ),
-        registry=_coding_context_registry(
-            truth,
-            payload.repository,
-            expected_sha=payload.base_sha,
-            allowed_paths=payload.target_paths,
-        ),
-    )
+            registry=_coding_context_registry(
+                truth,
+                payload.repository,
+                expected_sha=payload.base_sha,
+                allowed_paths=payload.target_paths,
+            ),
+        )
+    except JarvisContextError:
+        return {"state": "refused", "reason": "missing_evidence"}
     requested_refs = [ref.model_dump(exclude_none=True, mode="json") for ref in refs]
     included_refs = [source.get("ref") for source in preview.context_sources_manifest]
     if not preview.dispatchable or included_refs != requested_refs:
