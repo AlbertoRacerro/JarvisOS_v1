@@ -32,6 +32,17 @@ export type CodingActionResult = Readonly<{
   [key: string]: unknown;
 }>;
 
+export type CodingContextPreview = Readonly<{
+  state: string;
+  reason?: string;
+  repository?: string;
+  base_sha?: string;
+  target_paths?: string[];
+  added_context_refs?: unknown[];
+  context_digest?: string;
+  context_sources_manifest?: unknown[];
+}>;
+
 export class CodingRequestError extends Error {
   constructor(readonly status: number, readonly code: string) {
     super(`Coding request failed: ${code}`);
@@ -101,13 +112,15 @@ export function readPipelineState(repository: string, prNumber: number, specId: 
   return requestJson(`/api/coding/pipeline-state?${query({ repository, pr_number: prNumber, spec_id: specId })}`);
 }
 
-export function inspectCodingTarget(payload: {
+type ExactCodingTarget = {
   workspace_id: string;
   repository: string;
   base_ref: string;
   base_sha: string;
   target_paths: string[];
-}): Promise<CodingActionResult> {
+};
+
+export function inspectCodingTarget(payload: ExactCodingTarget): Promise<CodingActionResult> {
   return requestJson("/api/coding/actions/inspect", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -115,12 +128,15 @@ export function inspectCodingTarget(payload: {
   });
 }
 
-export function suggestCodingModification(payload: {
-  workspace_id: string;
-  repository: string;
-  base_ref: string;
-  base_sha: string;
-  target_paths: string[];
+export function previewCodingContext(payload: ExactCodingTarget): Promise<CodingContextPreview> {
+  return requestJson("/api/coding/actions/context-preview", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+}
+
+export function suggestCodingModification(payload: ExactCodingTarget & {
   intent: string;
   added_context_refs?: unknown[];
   expected_context_digest?: string | null;
