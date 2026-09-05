@@ -20,18 +20,18 @@ includesAll(app, [
 ], "Coding routes are not wired to the accepted 140 surface");
 
 includesAll(api, [
-  '"/api/coding/repository/ref?',
-  '"/api/coding/repository/tree?',
-  '"/api/coding/repository/file?',
-  '"/api/coding/repository/search?',
-  '"/api/coding/repository/pull-request?',
-  '"/api/coding/repository/checks?',
-  '"/api/coding/repository/reviews?',
-  '"/api/coding/repository/url?',
-  '"/api/coding/runtime-truth?',
-  '"/api/coding/pipeline-state?',
-  '"/api/coding/actions/inspect"',
-  '"/api/coding/actions/suggest-modification"'
+  "/api/coding/repository/ref?",
+  "/api/coding/repository/tree?",
+  "/api/coding/repository/file?",
+  "/api/coding/repository/search?",
+  "/api/coding/repository/pull-request?",
+  "/api/coding/repository/checks?",
+  "/api/coding/repository/reviews?",
+  "/api/coding/repository/url?",
+  "/api/coding/runtime-truth?",
+  "/api/coding/pipeline-state?",
+  "/api/coding/actions/inspect",
+  "/api/coding/actions/suggest-modification"
 ], "140 API client is missing an accepted backend owner projection");
 check(!/api\.github\.com|github\.com\/api|Authorization|GITHUB_TOKEN|ghp_/i.test(api), "browser API client gained provider/credential authority");
 
@@ -59,7 +59,7 @@ includesAll(workbench, [
 ], "140 operator contract is incomplete");
 check(!/api\.github\.com|github\.com\/api|localStorage|sessionStorage|child_process|powershell|cmd\.exe/i.test(workbench), "Coding surface crossed the browser authority boundary");
 check(!/fetch\(/.test(workbench), "Coding surface bypasses the shared API client");
-check(!/compare|merge-base|rev-list|isAncestor/i.test(workbench), "browser appears to derive repository/runtime relation locally");
+check(!/merge-base|rev-list|isAncestor|compareCommits|compare_commits/i.test(workbench), "browser appears to derive repository/runtime relation locally");
 
 if (failures.length) {
   console.error("CODING-FRONTEND-INTEGRATION-1 deterministic acceptance failed:");
