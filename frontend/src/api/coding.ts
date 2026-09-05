@@ -73,6 +73,10 @@ export function readRepositoryFile(repository: string, ref: string, path: string
   return requestJson(`/api/coding/repository/file?${query({ repository, ref, path })}`);
 }
 
+export function readSafeGithubUrl(repository: string, commitSha: string, path?: string): Promise<RepositoryTruthResult> {
+  return requestJson(`/api/coding/repository/url?${query({ repository, commit_sha: commitSha, path })}`);
+}
+
 export function searchRepository(repository: string, ref: string, literal: string): Promise<RepositoryTruthResult> {
   return requestJson(`/api/coding/repository/search?${query({ repository, ref, literal })}`);
 }
