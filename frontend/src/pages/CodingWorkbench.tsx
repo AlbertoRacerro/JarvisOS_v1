@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import {
   CODING_REPOSITORY,
@@ -72,6 +72,7 @@ function RepositorySurface({ workspaceId }: Readonly<{ workspaceId: string | nul
   const [ref] = useState(CODING_TARGET_REF);
   const [truth, setTruth] = useState<RepositoryTruthResult | null>(null);
   const [tree, setTree] = useState<TreeEntry[]>([]);
+  const [treePath, setTreePath] = useState("");
   const [selectedPath, setSelectedPath] = useState("");
   const [safeUrl, setSafeUrl] = useState<string | null>(null);
   const [preview, setPreview] = useState("");
@@ -104,6 +105,7 @@ function RepositorySurface({ workspaceId }: Readonly<{ workspaceId: string | nul
 
   const refresh = async () => {
     setBusy(true); setError(null); setTruth(null); setTree([]); clearSelectedEvidence();
+    setTreePath("");
     try {
       const nextTruth = await readRepositoryRef(repository, ref);
       setTruth(nextTruth);
@@ -135,6 +137,21 @@ function RepositorySurface({ workspaceId }: Readonly<{ workspaceId: string | nul
       setSafeUrl(typeof navigation.payload.url === "string" ? navigation.payload.url : null);
       setPartial((current) => ({ ...current, file: result.partial }));
     } catch (cause) { setError(errorText(cause)); }
+  };
+
+  const openDirectory = async (path: string) => {
+    if (!resolvedSha) { setError("missing_exact_sha"); return; }
+    setTree([]); setError(null);
+    setPartial((current) => ({ ...current, tree: false }));
+    try {
+      const result = await readRepositoryTree(repository, resolvedSha, path);
+      const entries = result.payload.entries;
+      setTree(Array.isArray(entries) ? entries as TreeEntry[] : []);
+      setTreePath(path);
+      setPartial((current) => ({ ...current, tree: result.partial }));
+    } catch (cause) {
+      setError(errorText(cause));
+    }
   };
 
   const runSearch = async () => {
@@ -210,7 +227,11 @@ function RepositorySurface({ workspaceId }: Readonly<{ workspaceId: string | nul
       <div className="final-fusion__toolbar-line"><span>Server-owned 118 repository truth</span><button type="button" onClick={() => void refresh()} disabled={busy}>Refresh exact truth</button></div>
       {partialLabel(partial) ? <div className="final-fusion__source-empty" role="status"><strong>{partialLabel(partial)}</strong><span>Truncated evidence is not presented as complete.</span></div> : null}
       {error ? <div className="final-fusion__source-empty" role="status"><strong>Repository read refused / unavailable</strong><span>{error}</span></div> : null}
-      <div className="final-fusion__source-list">{tree.length ? tree.map((entry) => entry.path ? <button type="button" className="final-fusion__disclosure-row" key={entry.path} onClick={() => entry.type === "file" ? void openFile(entry.path!) : undefined} disabled={entry.type !== "file"}><span>›</span><strong>{entry.path}</strong><em>{entry.type ?? "unknown"}{typeof entry.size === "number" ? ` · ${entry.size} B` : ""}</em></button> : null) : <div className="final-fusion__source-empty"><strong>No current tree evidence</strong></div>}</div>
+      <div className="final-fusion__toolbar-line">
+        <span>Tree path · {treePath || "Root"}</span>
+        <div><button type="button" onClick={() => void openDirectory("")} disabled={!resolvedSha || !treePath}>Root</button><button type="button" onClick={() => void openDirectory(treePath.split("/").slice(0, -1).join("/"))} disabled={!resolvedSha || !treePath}>Up</button></div>
+      </div>
+      <div className="final-fusion__source-list">{tree.length ? tree.map((entry) => entry.path ? <button type="button" className="final-fusion__disclosure-row" key={entry.path} onClick={() => entry.type === "file" ? void openFile(entry.path!) : entry.type === "dir" ? void openDirectory(entry.path!) : undefined} disabled={entry.type !== "file" && entry.type !== "dir"}><span>›</span><strong>{entry.path}</strong><em>{entry.type ?? "unknown"}{typeof entry.size === "number" ? ` · ${entry.size} B` : ""}</em></button> : null) : <div className="final-fusion__source-empty"><strong>No current tree evidence</strong></div>}</div>
     </Panel>
     <Panel title="File / search / PR evidence" status={anyPartial ? "PARTIAL · READ only" : "READ only"}>
       <div className="final-fusion__toolbar-line"><span>Selected path · {selectedPath || "None"}</span>{safeUrl ? <a href={safeUrl} target="_blank" rel="noreferrer">Open server-validated GitHub path</a> : null}</div>
@@ -238,6 +259,7 @@ function RuntimeSurface() {
   const [pipeline, setPipeline] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const pipelineRequestGeneration = useRef(0);
 
   const refresh = async () => {
     setLoading(true); setError(null); setRuntime(null);
@@ -248,10 +270,22 @@ function RuntimeSurface() {
   const loadPipeline = async () => {
     const prNumber = Number(prInput);
     if (!Number.isInteger(prNumber) || prNumber <= 0 || !specId.trim()) { setError("invalid_pipeline_selection"); return; }
+    const requestGeneration = ++pipelineRequestGeneration.current;
     setPipeline(null); setError(null);
-    try { setPipeline(await readPipelineState(CODING_REPOSITORY, prNumber, specId.trim())); } catch (cause) { setError(errorText(cause)); }
+    try {
+      const result = await readPipelineState(CODING_REPOSITORY, prNumber, specId.trim());
+      if (pipelineRequestGeneration.current === requestGeneration) setPipeline(result);
+    } catch (cause) {
+      if (pipelineRequestGeneration.current === requestGeneration) setError(errorText(cause));
+    }
   };
 
+  const invalidatePipelineSelection = () => {
+    pipelineRequestGeneration.current += 1;
+    setPipeline(null);
+  };
+
+  const startup: Record<string, unknown> = runtime?.startup ?? {};
   const live: Record<string, unknown> = runtime?.live ?? {};
   const remote: Record<string, unknown> = runtime?.remote ?? {};
   const localSha = exactSha(live.git_sha);
@@ -261,14 +295,22 @@ function RuntimeSurface() {
   return <div className="final-fusion__workbench final-fusion__workbench--coding" data-testid="coding-runtime-surface">
     <Panel title="Runtime" status={loading ? "Loading" : error ? "Read error" : runtime?.observer_status ?? "Unknown"}>
       <div className="final-fusion__repo-status"><div><strong>JarvisOS runtime identity</strong><span>{CODING_REPOSITORY} · target {CODING_TARGET_REF}</span></div><span className={relation === "unknown" ? "final-fusion__unknown" : ""}>{relation}</span></div>
-      <section className="final-fusion__compare"><div className="final-fusion__version-card"><small>Local current · actually executed</small><strong>LOCAL · {localSha}</strong><code>{String(live.branch ?? live.head_state ?? "Unknown")}</code><p>Dirty state · {String(live.dirty_state ?? "unknown")}</p></div><div className="final-fusion__delta">→<span>{relation}</span></div><div className="final-fusion__version-card is-remote"><small>Remote target · server observed</small><strong>REMOTE · {remoteSha}</strong><code>{String(remote.requested_ref ?? CODING_TARGET_REF)}</code><p>Remote status · {runtime?.remote_status ?? "unknown"}</p></div></section>
+      <section className="final-fusion__compare"><div className="final-fusion__version-card"><small>Local current · actually executed</small><strong>LOCAL · {localSha}</strong><code>{String(live.branch ?? live.head_state ?? "Unknown")}</code><p>Root identity · {String(live.root_identity ?? "unknown")}</p><p>Observed at · {String(live.observed_at ?? "unknown")}</p><p>Provenance · {String(live.provenance ?? "unknown")}</p><p>Failure identity · {String(live.failure_code ?? "none")}</p><p>Dirty state · {String(live.dirty_state ?? "unknown")}</p></div><div className="final-fusion__delta">→<span>{relation}</span></div><div className="final-fusion__version-card is-remote"><small>Remote target · server observed</small><strong>REMOTE · {remoteSha}</strong><code>{String(remote.requested_ref ?? CODING_TARGET_REF)}</code><p>Observed at · {String(remote.observed_at ?? "unknown")}</p><p>Remote status · {runtime?.remote_status ?? "unknown"}</p></div></section>
+      <div className="final-fusion__source-empty">
+        <strong>Process startup identity · {exactSha(startup.git_sha)}</strong>
+        <span>Root identity · {String(startup.root_identity ?? "unknown")}</span>
+        <span>Observed at · {String(startup.observed_at ?? "unknown")}</span>
+        <span>Ref · {String(startup.branch ?? startup.head_state ?? "Unknown")}</span>
+        <span>Provenance · {String(startup.provenance ?? "unknown")}</span>
+        <span>Failure identity · {String(startup.failure_code ?? "none")}</span>
+      </div>
       <div className="final-fusion__context-note">Alignment is rendered exactly from 119. The browser performs no SHA ancestry or cleanliness inference.</div>
       {runtime?.reason ? <div className="final-fusion__source-empty" role="status"><strong>Runtime relation reason · {runtime.reason}</strong><span>Worktree changed since start · {runtime.worktree_changed_since_start ? "yes" : "no"}</span></div> : null}
       {error ? <div className="final-fusion__source-empty" role="status"><strong>Runtime truth unavailable</strong><span>{error}</span></div> : null}
       <button type="button" onClick={() => void refresh()} disabled={loading}>Refresh runtime truth</button>
     </Panel>
     <Panel title="Development pipeline" status={pipeline ? "120 server projection" : "Unselected"}>
-      <div className="final-fusion__toolbar-line"><input aria-label="Pipeline PR number" inputMode="numeric" value={prInput} onChange={(event) => { setPrInput(event.target.value); setPipeline(null); }} placeholder="PR number"/><input aria-label="Pipeline spec id" value={specId} onChange={(event) => { setSpecId(event.target.value); setPipeline(null); }} placeholder="Spec id"/><button type="button" onClick={() => void loadPipeline()} disabled={!prInput || !specId.trim()}>Load pipeline state</button></div>
+      <div className="final-fusion__toolbar-line"><input aria-label="Pipeline PR number" inputMode="numeric" value={prInput} onChange={(event) => { setPrInput(event.target.value); invalidatePipelineSelection(); }} placeholder="PR number"/><input aria-label="Pipeline spec id" value={specId} onChange={(event) => { setSpecId(event.target.value); invalidatePipelineSelection(); }} placeholder="Spec id"/><button type="button" onClick={() => void loadPipeline()} disabled={!prInput || !specId.trim()}>Load pipeline state</button></div>
       {pipeline ? <pre className="final-fusion__searchbox">{JSON.stringify(pipeline, null, 2)}</pre> : <div className="final-fusion__source-empty"><strong>No pipeline selection</strong><span>No synthetic stages are shown.</span></div>}
     </Panel>
   </div>;
