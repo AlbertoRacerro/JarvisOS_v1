@@ -10,7 +10,8 @@
     "test:100f": "node tests/100f-final-operator-frontend-fusion.mjs && node tests/100f-visual-conformance.mjs",
     "test:100g": "node tests/100g-final-operator-ui-repair.mjs",
     "test:112": "node tests/112-project-knowledge-lifecycle.mjs",
-    "build": "npm run test:058d && npm run test:100 && npm run test:100f && npm run test:100g && npm run test:112 && node tests/100-eyebrow-contrast.mjs && tsc && vite build",
+    "test:140": "node tests/140-coding-frontend-integration.mjs",
+    "build": "npm run test:058d && npm run test:100 && npm run test:100f && npm run test:100g && npm run test:112 && npm run test:140 && node tests/100-eyebrow-contrast.mjs && tsc && vite build",
     "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {
