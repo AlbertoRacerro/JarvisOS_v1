@@ -40,14 +40,15 @@ The browser MUST NOT receive credential values, masked previews derived from cre
 
 Credential status is provider-scoped and secret-free. The server resolves `provider_id` through the canonical provider registry and resolves its existing credential reference through the accepted secret boundary.
 
-The projection must distinguish at least:
+The projection MUST preserve the accepted credential owner's independent status axes rather than collapse them into one convenience label. For a credential-bearing provider it exposes bounded typed fields equivalent to:
 
-- `not_required` for providers without an API-key reference;
-- `configured_environment` when the effective secret comes from environment;
-- `configured_secure_persisted` only where the existing secure-persistence owner actually supports the credential;
-- `absent` when no credential is available;
-- `corrupted` / `unavailable` where the secure-storage owner exposes those states;
-- `unknown` when truthful state cannot be determined.
+- `effective_source`: `not_required | environment | secure_persisted | absent | invalid | unknown`;
+- `persisted_state`: `not_supported | present | absent | corrupted | unavailable | unknown`;
+- `reason_code`: a bounded owner-derived reason when one is needed, including invalid-environment and persisted-storage failure reasons without raw exception text.
+
+These axes are intentionally independent. For Scaleway, a valid environment credential may coexist with a corrupted or unavailable persisted store; an invalid `SCALEWAY_API_KEY` may coexist with a usable persisted credential while the environment override still prevents truthful use of that persisted value as the effective credential. The projection MUST preserve those combinations instead of hiding persistence damage or treating an invalid environment override as merely absent/configured.
+
+Providers without an API-key reference use `effective_source=not_required` and `persisted_state=not_supported`. Environment-only providers use `persisted_state=not_supported`; they may report environment/absent/invalid/unknown effective state as exposed by the accepted resolver. `configured_environment` or `configured_secure_persisted` may be presentation labels derived from these server-returned axes, but are not replacement truth fields.
 
 No response, event, log, analytics payload, browser state, error body, or Jarvis context may contain the credential value or a preview derived from it.
 
@@ -56,6 +57,8 @@ No response, event, log, analytics payload, browser state, error body, or Jarvis
 Credential mutation is capability-based and fail-closed.
 
 On this derivation head, only `scaleway` may expose Settings credential replace/delete because only Scaleway has accepted secure-persisted mutation support in 082. The server derives that capability from the accepted credential owner and canonical provider identity; the browser must not infer editability from `api_key_ref` or provider name.
+
+Capability projection must be operation-specific enough that Settings cannot conflate replace and delete semantics. At minimum the server returns separate replace/delete availability plus bounded owner-derived blocking reasons. In particular, an environment override may block persisted replacement while persisted delete/cleanup remains valid; corrupted/unavailable persisted-state outcomes may affect replace and delete differently. The browser renders the returned capability and does not synthesize a generic `credential_mutable` boolean.
 
 For `deepseek`, `glm`, and `kimi` on this head, Settings may show credential presence/status and environment-managed state, but no persisted save/replace/delete control is usable. 124 MUST NOT create generic file/key storage, mutate process environment, edit `.env`, or broaden `ScalewaySecretStore` into a multi-provider secret database.
 
@@ -89,7 +92,7 @@ The frontend must not derive a new usability/health truth from partial inputs. D
 
 Read-side V0 is frozen to one bounded projection on the existing AI router: `GET /ai/provider-settings` (consumed by the existing frontend API client as `/ai/provider-settings`). It returns provider catalogue plus secret-free credential/status/capability facts sourced from existing owners. It MUST NOT persist a provider snapshot as truth.
 
-The response model must be typed in the existing AI model boundary and include, per provider, enough information to render canonical provider identity, enabled/network state, credential requirement/state, credential mutation capability, and accepted status/blocking facts without exposing raw `api_key_ref` or secret material.
+The response model must be typed in the existing AI model boundary and include, per provider, enough information to render canonical provider identity, enabled/network state, credential requirement, independent credential status axes, operation-specific credential mutation capability, and accepted status/blocking facts without exposing raw `api_key_ref` or secret material.
 
 Credential mutation remains on the existing 082 Scaleway endpoints. No generic credential mutation endpoint is added by V0.
 
@@ -118,12 +121,14 @@ Async provider selection, catalogue/status refresh, and credential mutation/relo
 | Case | Required result |
 | --- | --- |
 | provider catalogue loads | identities/capabilities come from canonical server registry; no frontend provider-truth copy |
-| local/synthetic provider | credential `not_required`; no credential mutation affordance |
-| Scaleway environment key present | environment-managed status; persisted mutation cannot be shown as changing effective key |
-| Scaleway secure-persisted key present | presence shown without value/preview; replace/delete through 082 only |
-| Scaleway persisted store corrupted/unavailable | explicit corrupted/unavailable state; no false configured/healthy state |
-| DeepSeek/GLM/Kimi env key present | configured/environment-managed; no persisted save/delete affordance |
-| DeepSeek/GLM/Kimi env key absent | absent; no generic secret store or `.env` mutation offered |
+| local/synthetic provider | `effective_source=not_required`, `persisted_state=not_supported`; no credential mutation affordance |
+| Scaleway valid environment key + healthy persisted store | `effective_source=environment`; persisted state independently truthful; replace may be blocked while delete capability remains owner-derived |
+| Scaleway valid environment key + corrupted/unavailable persisted store | environment remains effective while `persisted_state=corrupted/unavailable`; persistence damage remains visible |
+| Scaleway invalid environment key + usable persisted credential | invalid environment override/reason remains explicit; persisted credential state remains independently visible and is not misreported as effective |
+| Scaleway secure-persisted key effective | `effective_source=secure_persisted`, `persisted_state=present`; presence shown without value/preview; replace/delete through 082 only |
+| Scaleway persisted store corrupted/unavailable without usable environment override | explicit persisted failure plus truthful effective/reason state; no false configured/healthy state |
+| DeepSeek/GLM/Kimi env key present | environment-managed effective state; `persisted_state=not_supported`; no persisted save/delete affordance |
+| DeepSeek/GLM/Kimi env key absent/invalid | absent or invalid effective state as owner reports; `persisted_state=not_supported`; no generic secret store or `.env` mutation offered |
 | unknown provider ID | fail closed; no status/mutation cross-binding |
 | provider selection changes during async read | stale response ignored; new provider remains authoritative |
 | mutation response/reload ambiguous | explicit `uncertain`; no auto-retry or optimistic configured state |
@@ -140,11 +145,11 @@ Async provider selection, catalogue/status refresh, and credential mutation/relo
 Readiness must freeze exact test paths. Implementation evidence must prove at least:
 
 1. provider catalogue delegates to the canonical provider registry and does not invent unknown providers;
-2. credential status for no-key, environment-backed, Scaleway persisted, corrupted, unavailable, and absent states is secret-free;
+2. credential projection preserves independent `effective_source`, `persisted_state`, and bounded reason semantics for no-key, environment-backed, Scaleway persisted, corrupted, unavailable, absent, and invalid-environment combinations;
 3. API serialization contains neither credential values nor masked previews derived from them;
-4. only accepted persisted-mutation capability is exposed; on this head only Scaleway qualifies;
+4. only accepted persisted-mutation capability is exposed; on this head only Scaleway qualifies, with replace/delete availability proved independently where 082 semantics differ;
 5. provider-scoped UI cannot redirect mutation to arbitrary env vars, secret IDs, providers, or paths;
-6. environment override remains authoritative and visible;
+6. environment override remains authoritative and visible without hiding independent persisted-store damage;
 7. ambiguous mutation is not automatically retried and results in canonical reload/`uncertain` behavior;
 8. async provider/catalogue/status/mutation responses cannot cross-bind or overwrite newer provider identity/state;
 9. policy/budget/usage/status projections consume canonical owners without second calculations or health truth;
@@ -156,7 +161,7 @@ Because this changes credential/provider operator behavior, final implementation
 
 ## Security and failure modes
 
-Implementation must fail closed against secret disclosure; accidental genericization of Scaleway persistence; browser-to-provider egress; provider A responses/mutations binding to provider B; arbitrary env/path/secret-ID injection; retry/optimism after ambiguous mutation; environment override mislabeled as persisted state; partial status rendered healthy; frontend provider/model/price/budget drift; duplicated usage/budget calculations; stale green status; accidental generalization or silent invocation of the DeepSeek smoke path; unmetered probes; and credentials entering Jarvis context/model evidence.
+Implementation must fail closed against secret disclosure; accidental genericization of Scaleway persistence; browser-to-provider egress; provider A responses/mutations binding to provider B; arbitrary env/path/secret-ID injection; retry/optimism after ambiguous mutation; environment override mislabeled as persisted state; collapsed credential axes hiding persisted corruption or invalid environment override; replace/delete capability conflation; partial status rendered healthy; frontend provider/model/price/budget drift; duplicated usage/budget calculations; stale green status; accidental generalization or silent invocation of the DeepSeek smoke path; unmetered probes; and credentials entering Jarvis context/model evidence.
 
 ## Non-goals
 
@@ -179,7 +184,7 @@ Implementation must fail closed against secret disclosure; accidental genericiza
 
 124 remains `planned` after this full spec. A separate readiness decision must re-read then-current master and freeze exact implementation files/routes/tests plus browser-proof requirements. It must verify that no intervening change altered provider credential persistence, DeepSeek smoke/provider-test authority, provider registry semantics, Settings ownership, or policy/budget/accounting contracts.
 
-Readiness may move 124 to `ready` only if implementation remains a bounded projection over existing authorities and deterministic evidence can prove secret redaction, provider identity binding, stale/ambiguous mutation behavior, canonical delegation, absence of direct browser/provider egress, and non-generalization of the existing DeepSeek smoke.
+Readiness may move 124 to `ready` only if implementation remains a bounded projection over existing authorities and deterministic evidence can prove secret redaction, provider identity binding, independent credential status axes, operation-specific mutation capability, stale/ambiguous mutation behavior, canonical delegation, absence of direct browser/provider egress, and non-generalization of the existing DeepSeek smoke.
 
 If readiness discovers that generic persisted credentials, generic live provider tests, new adapters/storage, or new policy/accounting authority are required, it must stop and derive separate prerequisite authority rather than widen 124.
 
