@@ -84,6 +84,17 @@ function exactSha(value: unknown): string {
   return typeof value === "string" && /^[0-9a-f]{40}$/.test(value) ? value : "Unknown";
 }
 
+function canonicalPrNumber(value: string): number | null {
+  if (!/^[1-9][0-9]*$/.test(value)) return null;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) ? parsed : null;
+}
+
+function canonicalSpecId(value: string): string | null {
+  if (!/^[0-9]{3}[a-z]?$/.test(value)) return null;
+  return Number(value.slice(0, 3)) > 0 ? value : null;
+}
+
 function partialLabel(partial: PartialEvidence): string | null {
   const labels = Object.entries(partial).filter(([, value]) => value).map(([key]) => key);
   return labels.length ? `Partial evidence · ${labels.join(", ")}` : null;
@@ -239,8 +250,8 @@ function RepositorySurface({ workspaceId }: Readonly<{ workspaceId: string | nul
   };
 
   const loadPr = async () => {
-    const prNumber = Number(prInput);
-    if (!Number.isInteger(prNumber) || prNumber <= 0) { setRepositoryError("pr", "invalid_pr_number"); return; }
+    const prNumber = canonicalPrNumber(prInput);
+    if (prNumber === null) { setRepositoryError("pr", "invalid_pr_number"); return; }
     const requestGeneration = ++prEvidenceGeneration.current;
     setPrEvidence(null); setRepositoryError("pr", null);
     setPartial((current) => ({ ...current, pr: false, checks: false, reviews: false }));
@@ -382,12 +393,13 @@ function RuntimeSurface() {
   useEffect(() => { void refresh(); }, []);
 
   const loadPipeline = async () => {
-    const prNumber = Number(prInput);
-    if (!Number.isInteger(prNumber) || prNumber <= 0 || !specId.trim()) { setPipelineError("invalid_pipeline_selection"); return; }
+    const prNumber = canonicalPrNumber(prInput);
+    const requestSpecId = canonicalSpecId(specId);
+    if (prNumber === null || requestSpecId === null) { setPipelineError("invalid_pipeline_selection"); return; }
     const requestGeneration = ++pipelineRequestGeneration.current;
     setPipeline(null); setPipelineError(null);
     try {
-      const result = await readPipelineState(CODING_REPOSITORY, prNumber, specId.trim());
+      const result = await readPipelineState(CODING_REPOSITORY, prNumber, requestSpecId);
       if (pipelineRequestGeneration.current === requestGeneration) setPipeline(result);
     } catch (cause) {
       if (pipelineRequestGeneration.current === requestGeneration) setPipelineError(errorText(cause));
@@ -425,7 +437,7 @@ function RuntimeSurface() {
       <button type="button" onClick={() => void refresh()} disabled={loading}>Refresh runtime truth</button>
     </Panel>
     <Panel title="Development pipeline" status={pipelineError ? "Projection error" : pipeline ? "120 server projection" : "Unselected"}>
-      <div className="final-fusion__toolbar-line"><input aria-label="Pipeline PR number" inputMode="numeric" value={prInput} onChange={(event) => { setPrInput(event.target.value); invalidatePipelineSelection(); }} placeholder="PR number"/><input aria-label="Pipeline spec id" value={specId} onChange={(event) => { setSpecId(event.target.value); invalidatePipelineSelection(); }} placeholder="Spec id"/><button type="button" onClick={() => void loadPipeline()} disabled={!prInput || !specId.trim()}>Load pipeline state</button></div>
+      <div className="final-fusion__toolbar-line"><input aria-label="Pipeline PR number" inputMode="numeric" value={prInput} onChange={(event) => { setPrInput(event.target.value); invalidatePipelineSelection(); }} placeholder="PR number"/><input aria-label="Pipeline spec id" value={specId} onChange={(event) => { setSpecId(event.target.value); invalidatePipelineSelection(); }} placeholder="Spec id"/><button type="button" onClick={() => void loadPipeline()} disabled={!prInput || !specId}>Load pipeline state</button></div>
       {pipelineError ? <div className="final-fusion__source-empty" role="status"><strong>Pipeline projection refused / unavailable</strong><span>{pipelineError}</span></div> : null}
       {pipeline ? <pre className="final-fusion__searchbox">{JSON.stringify(pipeline, null, 2)}</pre> : <div className="final-fusion__source-empty"><strong>No pipeline selection</strong><span>No synthetic stages are shown.</span></div>}
     </Panel>
