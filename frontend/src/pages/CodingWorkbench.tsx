@@ -5,6 +5,7 @@ import {
   CODING_TARGET_REF,
   CodingRequestError,
   inspectCodingTarget,
+  previewCodingContext,
   readChecks,
   readPipelineState,
   readPullRequest,
@@ -17,6 +18,7 @@ import {
   searchRepository,
   suggestCodingModification,
   type CodingActionResult,
+  type CodingContextPreview,
   type RepositoryTruthResult,
   type RuntimeTruth
 } from "../api/coding";
@@ -28,6 +30,24 @@ type Props = Readonly<{
 
 type TreeEntry = Readonly<{ path?: string; type?: string; sha?: string | null; size?: number | null }>;
 type SearchMatch = Readonly<{ path?: string; line?: number; offset?: number }>;
+
+type PartialEvidence = Readonly<{
+  tree: boolean;
+  file: boolean;
+  search: boolean;
+  pr: boolean;
+  checks: boolean;
+  reviews: boolean;
+}>;
+
+const EMPTY_PARTIAL: PartialEvidence = {
+  tree: false,
+  file: false,
+  search: false,
+  pr: false,
+  checks: false,
+  reviews: false
+};
 
 function Panel({ title, status, children }: Readonly<{ title: string; status?: string; children: ReactNode }>) {
   return <section className="final-fusion__panel" aria-label={title}><header className="final-fusion__panel-head"><h2>{title}</h2>{status ? <span>{status}</span> : null}</header>{children}</section>;
@@ -42,6 +62,11 @@ function exactSha(value: unknown): string {
   return typeof value === "string" && /^[0-9a-f]{40}$/.test(value) ? value : "Unknown";
 }
 
+function partialLabel(partial: PartialEvidence): string | null {
+  const labels = Object.entries(partial).filter(([, value]) => value).map(([key]) => key);
+  return labels.length ? `Partial evidence · ${labels.join(", ")}` : null;
+}
+
 function RepositorySurface({ workspaceId }: Readonly<{ workspaceId: string | null }>) {
   const [repository] = useState(CODING_REPOSITORY);
   const [ref] = useState(CODING_TARGET_REF);
@@ -54,22 +79,40 @@ function RepositorySurface({ workspaceId }: Readonly<{ workspaceId: string | nul
   const [matches, setMatches] = useState<SearchMatch[]>([]);
   const [prInput, setPrInput] = useState("");
   const [prEvidence, setPrEvidence] = useState<Record<string, unknown> | null>(null);
+  const [partial, setPartial] = useState<PartialEvidence>(EMPTY_PARTIAL);
   const [inspectResult, setInspectResult] = useState<CodingActionResult | null>(null);
+  const [contextBinding, setContextBinding] = useState<CodingContextPreview | null>(null);
   const [intent, setIntent] = useState("");
   const [proposal, setProposal] = useState<CodingActionResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const resolvedSha = truth?.resolved_sha ?? null;
+  const anyPartial = truth?.partial || Object.values(partial).some(Boolean);
+
+  const clearSelectedEvidence = () => {
+    setSelectedPath("");
+    setSafeUrl(null);
+    setPreview("");
+    setMatches([]);
+    setPrEvidence(null);
+    setPartial(EMPTY_PARTIAL);
+    setInspectResult(null);
+    setContextBinding(null);
+    setProposal(null);
+  };
 
   const refresh = async () => {
-    setBusy(true); setError(null); setTruth(null); setTree([]); setSelectedPath(""); setSafeUrl(null); setPreview(""); setMatches([]); setPrEvidence(null); setInspectResult(null); setProposal(null);
+    setBusy(true); setError(null); setTruth(null); setTree([]); clearSelectedEvidence();
     try {
       const nextTruth = await readRepositoryRef(repository, ref);
       setTruth(nextTruth);
-      const nextTree = await readRepositoryTree(repository, ref);
+      const exactRef = nextTruth.resolved_sha;
+      if (!exactRef || !/^[0-9a-f]{40}$/.test(exactRef)) throw new Error("missing_exact_sha");
+      const nextTree = await readRepositoryTree(repository, exactRef);
       const entries = nextTree.payload.entries;
       setTree(Array.isArray(entries) ? entries as TreeEntry[] : []);
+      setPartial((current) => ({ ...current, tree: nextTree.partial }));
     } catch (cause) {
       setError(errorText(cause));
     } finally {
@@ -80,24 +123,27 @@ function RepositorySurface({ workspaceId }: Readonly<{ workspaceId: string | nul
   useEffect(() => { void refresh(); }, []);
 
   const openFile = async (path: string) => {
-    setSelectedPath(path); setSafeUrl(null); setPreview(""); setError(null);
+    setSelectedPath(path); setSafeUrl(null); setPreview(""); setContextBinding(null); setProposal(null); setError(null);
+    setPartial((current) => ({ ...current, file: false }));
     if (!resolvedSha) { setError("missing_exact_sha"); return; }
     try {
       const [result, navigation] = await Promise.all([
-        readRepositoryFile(repository, ref, path),
+        readRepositoryFile(repository, resolvedSha, path),
         readSafeGithubUrl(repository, resolvedSha, path)
       ]);
       setPreview(typeof result.payload.text === "string" ? result.payload.text : "");
       setSafeUrl(typeof navigation.payload.url === "string" ? navigation.payload.url : null);
+      setPartial((current) => ({ ...current, file: result.partial }));
     } catch (cause) { setError(errorText(cause)); }
   };
 
   const runSearch = async () => {
-    if (!literal.trim()) return;
-    setMatches([]); setError(null);
+    if (!literal.trim() || !resolvedSha) return;
+    setMatches([]); setError(null); setPartial((current) => ({ ...current, search: false }));
     try {
-      const result = await searchRepository(repository, ref, literal.trim());
+      const result = await searchRepository(repository, resolvedSha, literal.trim());
       setMatches(Array.isArray(result.payload.matches) ? result.payload.matches as SearchMatch[] : []);
+      setPartial((current) => ({ ...current, search: result.partial }));
     } catch (cause) { setError(errorText(cause)); }
   };
 
@@ -105,6 +151,7 @@ function RepositorySurface({ workspaceId }: Readonly<{ workspaceId: string | nul
     const prNumber = Number(prInput);
     if (!Number.isInteger(prNumber) || prNumber <= 0) { setError("invalid_pr_number"); return; }
     setPrEvidence(null); setError(null);
+    setPartial((current) => ({ ...current, pr: false, checks: false, reviews: false }));
     try {
       const pr = await readPullRequest(repository, prNumber);
       const headSha = exactSha(pr.payload.head_sha);
@@ -114,6 +161,7 @@ function RepositorySurface({ workspaceId }: Readonly<{ workspaceId: string | nul
         readReviews(repository, prNumber, headSha)
       ]);
       setPrEvidence({ pr: pr.payload, checks: checks.payload, reviews: reviews.payload });
+      setPartial((current) => ({ ...current, pr: pr.partial, checks: checks.partial, reviews: reviews.partial }));
     } catch (cause) { setError(errorText(cause)); }
   };
 
@@ -125,32 +173,57 @@ function RepositorySurface({ workspaceId }: Readonly<{ workspaceId: string | nul
     } catch (cause) { setError(errorText(cause)); }
   };
 
+  const addContext = async () => {
+    if (!workspaceId || !resolvedSha || !selectedPath || partial.file) return;
+    setContextBinding(null); setProposal(null); setError(null);
+    try {
+      const next = await previewCodingContext({ workspace_id: workspaceId, repository, base_ref: ref, base_sha: resolvedSha, target_paths: [selectedPath] });
+      if (next.state !== "current" || !next.context_digest || !next.added_context_refs?.length) {
+        setError(next.reason ?? "context_preview_refused");
+        return;
+      }
+      setContextBinding(next);
+    } catch (cause) { setError(errorText(cause)); }
+  };
+
   const suggest = async () => {
     if (!workspaceId || !resolvedSha || !selectedPath || !intent.trim()) return;
     setProposal(null); setError(null);
     try {
-      setProposal(await suggestCodingModification({ workspace_id: workspaceId, repository, base_ref: ref, base_sha: resolvedSha, target_paths: [selectedPath], intent: intent.trim(), expected_checks: [] }));
+      setProposal(await suggestCodingModification({
+        workspace_id: workspaceId,
+        repository,
+        base_ref: ref,
+        base_sha: resolvedSha,
+        target_paths: [selectedPath],
+        intent: intent.trim(),
+        added_context_refs: contextBinding?.added_context_refs,
+        expected_context_digest: contextBinding?.context_digest ?? null,
+        expected_checks: []
+      }));
     } catch (cause) { setError(errorText(cause)); }
   };
 
   return <div className="final-fusion__workbench final-fusion__workbench--coding" data-testid="coding-repository-surface">
-    <Panel title="Repository" status={busy ? "Loading" : error ? "Read error" : truth?.partial ? "Partial" : truth ? "Exact READ" : "Unknown"}>
+    <Panel title="Repository" status={busy ? "Loading" : error ? "Read error" : anyPartial ? "Partial" : truth ? "Exact READ" : "Unknown"}>
       <div className="final-fusion__repo-status"><div><strong>{repository}</strong><span>requested ref · {ref}</span></div><span className={resolvedSha ? "" : "final-fusion__unknown"}>{resolvedSha ?? "Unknown"}</span></div>
       <div className="final-fusion__toolbar-line"><span>Server-owned 118 repository truth</span><button type="button" onClick={() => void refresh()} disabled={busy}>Refresh exact truth</button></div>
+      {partialLabel(partial) ? <div className="final-fusion__source-empty" role="status"><strong>{partialLabel(partial)}</strong><span>Truncated evidence is not presented as complete.</span></div> : null}
       {error ? <div className="final-fusion__source-empty" role="status"><strong>Repository read refused / unavailable</strong><span>{error}</span></div> : null}
       <div className="final-fusion__source-list">{tree.length ? tree.map((entry) => entry.path ? <button type="button" className="final-fusion__disclosure-row" key={entry.path} onClick={() => entry.type === "file" ? void openFile(entry.path!) : undefined} disabled={entry.type !== "file"}><span>›</span><strong>{entry.path}</strong><em>{entry.type ?? "unknown"}{typeof entry.size === "number" ? ` · ${entry.size} B` : ""}</em></button> : null) : <div className="final-fusion__source-empty"><strong>No current tree evidence</strong></div>}</div>
     </Panel>
-    <Panel title="File / search / PR evidence" status="READ only">
+    <Panel title="File / search / PR evidence" status={anyPartial ? "PARTIAL · READ only" : "READ only"}>
       <div className="final-fusion__toolbar-line"><span>Selected path · {selectedPath || "None"}</span>{safeUrl ? <a href={safeUrl} target="_blank" rel="noreferrer">Open server-validated GitHub path</a> : null}</div>
       <pre className="final-fusion__searchbox">{preview || "Select a file for bounded UTF-8 preview."}</pre>
-      <div className="final-fusion__toolbar-line"><input aria-label="Literal repository search" value={literal} onChange={(event) => setLiteral(event.target.value)} placeholder="Literal search" maxLength={512}/><button type="button" onClick={() => void runSearch()} disabled={!literal.trim()}>Search</button></div>
+      <div className="final-fusion__toolbar-line"><input aria-label="Literal repository search" value={literal} onChange={(event) => setLiteral(event.target.value)} placeholder="Literal search" maxLength={512}/><button type="button" onClick={() => void runSearch()} disabled={!literal.trim() || !resolvedSha}>Search</button></div>
       <div className="final-fusion__source-list">{matches.map((match, index) => <div className="final-fusion__disclosure-row" key={`${match.path}:${match.offset}:${index}`}><span>›</span><strong>{match.path ?? "Unknown"}</strong><em>line {match.line ?? "?"}</em></div>)}</div>
       <div className="final-fusion__toolbar-line"><input aria-label="Pull request number" inputMode="numeric" value={prInput} onChange={(event) => setPrInput(event.target.value)} placeholder="PR number"/><button type="button" onClick={() => void loadPr()} disabled={!prInput}>Load PR evidence</button></div>
       {prEvidence ? <pre className="final-fusion__searchbox">{JSON.stringify(prEvidence, null, 2)}</pre> : null}
     </Panel>
-    <Panel title="Jarvis Coding" status="READ / PROPOSE only">
-      <div className="final-fusion__context-note">Repository browsing is context-neutral. These explicit actions are exact-base 123 operations; they do not commit, apply, execute, push, create a PR, merge, or mutate STATUS.</div>
+    <Panel title="Jarvis Coding" status="READ / CONTEXT / PROPOSE only">
+      <div className="final-fusion__context-note">Repository browsing is context-neutral. These explicit actions are exact-base 111/123 operations; they do not commit, apply, execute, push, create a PR, merge, or mutate STATUS.</div>
       <div className="final-fusion__toolbar-line"><button type="button" onClick={() => void inspect()} disabled={!workspaceId || !resolvedSha || !selectedPath}>Inspect selected exact file</button><span>{inspectResult ? `${inspectResult.state}${inspectResult.reason ? ` · ${inspectResult.reason}` : ""}` : "No explicit Coding inspection yet"}</span></div>
+      <div className="final-fusion__toolbar-line"><button type="button" onClick={() => void addContext()} disabled={!workspaceId || !resolvedSha || !selectedPath || partial.file}>Add selected exact file to proposal context</button><span>{contextBinding?.context_digest ? `Context bound · ${contextBinding.context_digest}` : "Browsing has not entered Jarvis context"}</span></div>
       <textarea aria-label="Suggest modification intent" rows={4} maxLength={4000} value={intent} onChange={(event) => setIntent(event.target.value)} placeholder="Describe a bounded proposal for the selected path" />
       <button type="button" onClick={() => void suggest()} disabled={!workspaceId || !resolvedSha || !selectedPath || !intent.trim()}>Suggest modification</button>
       {proposal ? <pre className="final-fusion__searchbox">{JSON.stringify(proposal, null, 2)}</pre> : null}
@@ -190,6 +263,7 @@ function RuntimeSurface() {
       <div className="final-fusion__repo-status"><div><strong>JarvisOS runtime identity</strong><span>{CODING_REPOSITORY} · target {CODING_TARGET_REF}</span></div><span className={relation === "unknown" ? "final-fusion__unknown" : ""}>{relation}</span></div>
       <section className="final-fusion__compare"><div className="final-fusion__version-card"><small>Local current · actually executed</small><strong>LOCAL · {localSha}</strong><code>{String(live.branch ?? live.head_state ?? "Unknown")}</code><p>Dirty state · {String(live.dirty_state ?? "unknown")}</p></div><div className="final-fusion__delta">→<span>{relation}</span></div><div className="final-fusion__version-card is-remote"><small>Remote target · server observed</small><strong>REMOTE · {remoteSha}</strong><code>{String(remote.requested_ref ?? CODING_TARGET_REF)}</code><p>Remote status · {runtime?.remote_status ?? "unknown"}</p></div></section>
       <div className="final-fusion__context-note">Alignment is rendered exactly from 119. The browser performs no SHA ancestry or cleanliness inference.</div>
+      {runtime?.reason ? <div className="final-fusion__source-empty" role="status"><strong>Runtime relation reason · {runtime.reason}</strong><span>Worktree changed since start · {runtime.worktree_changed_since_start ? "yes" : "no"}</span></div> : null}
       {error ? <div className="final-fusion__source-empty" role="status"><strong>Runtime truth unavailable</strong><span>{error}</span></div> : null}
       <button type="button" onClick={() => void refresh()} disabled={loading}>Refresh runtime truth</button>
     </Panel>
