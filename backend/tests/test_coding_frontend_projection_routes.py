@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -178,6 +180,31 @@ def test_coding_context_preview_binds_exact_file_evidence(monkeypatch) -> None:
         }
     ]
     assert ("file_preview", (REPOSITORY, SHA, "README.md"), {}) in service.calls
+
+
+def test_coding_context_preview_refuses_budget_dropped_requested_evidence(monkeypatch) -> None:
+    client, _service = _client(monkeypatch)
+    monkeypatch.setattr(
+        runtime_routes,
+        "build_jarvis_context_preview",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            dispatchable=True,
+            context_sources_manifest=[],
+            context_digest="sha256:dropped",
+        ),
+    )
+    payload = {
+        "workspace_id": "ws-140",
+        "repository": REPOSITORY,
+        "base_ref": "master",
+        "base_sha": SHA,
+        "target_paths": ["README.md"],
+    }
+    with client:
+        response = client.post("/api/coding/actions/context-preview", json=payload)
+
+    assert response.status_code == 200
+    assert response.json() == {"state": "refused", "reason": "missing_evidence"}
 
 
 def test_repository_projection_routes_preserve_fail_closed_error_classes(monkeypatch) -> None:

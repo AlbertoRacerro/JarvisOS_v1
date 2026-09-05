@@ -88,12 +88,16 @@ function RepositorySurface({ workspaceId }: Readonly<{ workspaceId: string | nul
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileReadGeneration = useRef(0);
+  const prEvidenceGeneration = useRef(0);
+  const proposalGeneration = useRef(0);
 
   const resolvedSha = truth?.resolved_sha ?? null;
   const anyPartial = truth?.partial || Object.values(partial).some(Boolean);
 
   const clearSelectedEvidence = () => {
     fileReadGeneration.current += 1;
+    prEvidenceGeneration.current += 1;
+    proposalGeneration.current += 1;
     setSelectedPath("");
     setSafeUrl(null);
     setPreview("");
@@ -128,6 +132,7 @@ function RepositorySurface({ workspaceId }: Readonly<{ workspaceId: string | nul
 
   const openFile = async (path: string) => {
     const requestGeneration = ++fileReadGeneration.current;
+    proposalGeneration.current += 1;
     setSelectedPath(path); setSafeUrl(null); setPreview(""); setContextBinding(null); setProposal(null); setError(null);
     setPartial((current) => ({ ...current, file: false }));
     const requestSha = resolvedSha;
@@ -174,19 +179,24 @@ function RepositorySurface({ workspaceId }: Readonly<{ workspaceId: string | nul
   const loadPr = async () => {
     const prNumber = Number(prInput);
     if (!Number.isInteger(prNumber) || prNumber <= 0) { setError("invalid_pr_number"); return; }
+    const requestGeneration = ++prEvidenceGeneration.current;
     setPrEvidence(null); setError(null);
     setPartial((current) => ({ ...current, pr: false, checks: false, reviews: false }));
     try {
       const pr = await readPullRequest(repository, prNumber);
+      if (prEvidenceGeneration.current !== requestGeneration) return;
       const headSha = exactSha(pr.payload.head_sha);
       if (headSha === "Unknown") throw new Error("missing_pr_head_sha");
       const [checks, reviews] = await Promise.all([
         readChecks(repository, prNumber, headSha),
         readReviews(repository, prNumber, headSha)
       ]);
+      if (prEvidenceGeneration.current !== requestGeneration) return;
       setPrEvidence({ pr: pr.payload, checks: checks.payload, reviews: reviews.payload });
       setPartial((current) => ({ ...current, pr: pr.partial, checks: checks.partial, reviews: reviews.partial }));
-    } catch (cause) { setError(errorText(cause)); }
+    } catch (cause) {
+      if (prEvidenceGeneration.current === requestGeneration) setError(errorText(cause));
+    }
   };
 
   const inspect = async () => {
@@ -199,6 +209,7 @@ function RepositorySurface({ workspaceId }: Readonly<{ workspaceId: string | nul
 
   const addContext = async () => {
     if (!workspaceId || !resolvedSha || !selectedPath || partial.file) return;
+    proposalGeneration.current += 1;
     setContextBinding(null); setProposal(null); setError(null);
     try {
       const next = await previewCodingContext({ workspace_id: workspaceId, repository, base_ref: ref, base_sha: resolvedSha, target_paths: [selectedPath] });
@@ -211,21 +222,30 @@ function RepositorySurface({ workspaceId }: Readonly<{ workspaceId: string | nul
   };
 
   const suggest = async () => {
-    if (!workspaceId || !resolvedSha || !selectedPath || !intent.trim()) return;
+    const requestSha = resolvedSha;
+    const requestPath = selectedPath;
+    const requestIntent = intent.trim();
+    const requestContextDigest = contextBinding?.context_digest ?? null;
+    if (!workspaceId || !requestSha || !requestPath || !requestIntent) return;
+    const requestGeneration = ++proposalGeneration.current;
     setProposal(null); setError(null);
     try {
-      setProposal(await suggestCodingModification({
+      const result = await suggestCodingModification({
         workspace_id: workspaceId,
         repository,
         base_ref: ref,
-        base_sha: resolvedSha,
-        target_paths: [selectedPath],
-        intent: intent.trim(),
+        base_sha: requestSha,
+        target_paths: [requestPath],
+        intent: requestIntent,
         added_context_refs: contextBinding?.added_context_refs,
-        expected_context_digest: contextBinding?.context_digest ?? null,
+        expected_context_digest: requestContextDigest,
         expected_checks: []
-      }));
-    } catch (cause) { setError(errorText(cause)); }
+      });
+      if (proposalGeneration.current !== requestGeneration) return;
+      setProposal(result);
+    } catch (cause) {
+      if (proposalGeneration.current === requestGeneration) setError(errorText(cause));
+    }
   };
 
   return <div className="final-fusion__workbench final-fusion__workbench--coding" data-testid="coding-repository-surface">
@@ -245,14 +265,14 @@ function RepositorySurface({ workspaceId }: Readonly<{ workspaceId: string | nul
       <pre className="final-fusion__searchbox">{preview || "Select a file for bounded UTF-8 preview."}</pre>
       <div className="final-fusion__toolbar-line"><input aria-label="Literal repository search" value={literal} onChange={(event) => setLiteral(event.target.value)} placeholder="Literal search" maxLength={512}/><button type="button" onClick={() => void runSearch()} disabled={!literal.trim() || !resolvedSha}>Search</button></div>
       <div className="final-fusion__source-list">{matches.map((match, index) => <div className="final-fusion__disclosure-row" key={`${match.path}:${match.offset}:${index}`}><span>›</span><strong>{match.path ?? "Unknown"}</strong><em>line {match.line ?? "?"}</em></div>)}</div>
-      <div className="final-fusion__toolbar-line"><input aria-label="Pull request number" inputMode="numeric" value={prInput} onChange={(event) => setPrInput(event.target.value)} placeholder="PR number"/><button type="button" onClick={() => void loadPr()} disabled={!prInput}>Load PR evidence</button></div>
+      <div className="final-fusion__toolbar-line"><input aria-label="Pull request number" inputMode="numeric" value={prInput} onChange={(event) => { prEvidenceGeneration.current += 1; setPrInput(event.target.value); setPrEvidence(null); setPartial((current) => ({ ...current, pr: false, checks: false, reviews: false })); }} placeholder="PR number"/><button type="button" onClick={() => void loadPr()} disabled={!prInput}>Load PR evidence</button></div>
       {prEvidence ? <pre className="final-fusion__searchbox">{JSON.stringify(prEvidence, null, 2)}</pre> : null}
     </Panel>
     <Panel title="Jarvis Coding" status="READ / CONTEXT / PROPOSE only">
       <div className="final-fusion__context-note">Repository browsing is context-neutral. These explicit actions are exact-base 111/123 operations; they do not commit, apply, execute, push, create a PR, merge, or mutate STATUS.</div>
       <div className="final-fusion__toolbar-line"><button type="button" onClick={() => void inspect()} disabled={!workspaceId || !resolvedSha || !selectedPath}>Inspect selected exact file</button><span>{inspectResult ? `${inspectResult.state}${inspectResult.reason ? ` · ${inspectResult.reason}` : ""}` : "No explicit Coding inspection yet"}</span></div>
       <div className="final-fusion__toolbar-line"><button type="button" onClick={() => void addContext()} disabled={!workspaceId || !resolvedSha || !selectedPath || partial.file}>Add selected exact file to proposal context</button><span>{contextBinding?.context_digest ? `Context bound · ${contextBinding.context_digest}` : "Browsing has not entered Jarvis context"}</span></div>
-      <textarea aria-label="Suggest modification intent" rows={4} maxLength={4000} value={intent} onChange={(event) => setIntent(event.target.value)} placeholder="Describe a bounded proposal for the selected path" />
+      <textarea aria-label="Suggest modification intent" rows={4} maxLength={4000} value={intent} onChange={(event) => { proposalGeneration.current += 1; setProposal(null); setIntent(event.target.value); }} placeholder="Describe a bounded proposal for the selected path" />
       <button type="button" onClick={() => void suggest()} disabled={!workspaceId || !resolvedSha || !selectedPath || !intent.trim()}>Suggest modification</button>
       {proposal ? <pre className="final-fusion__searchbox">{JSON.stringify(proposal, null, 2)}</pre> : null}
     </Panel>

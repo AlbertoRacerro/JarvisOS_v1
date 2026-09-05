@@ -353,14 +353,16 @@ def coding_context_preview(payload: CodingInspectRequest) -> dict[str, object]:
             allowed_paths=payload.target_paths,
         ),
     )
-    if not preview.dispatchable:
+    requested_refs = [ref.model_dump(exclude_none=True, mode="json") for ref in refs]
+    included_refs = [source.get("ref") for source in preview.context_sources_manifest]
+    if not preview.dispatchable or included_refs != requested_refs:
         return {"state": "refused", "reason": "missing_evidence"}
     return {
         "state": "current",
         "repository": inspected["repository"],
         "base_sha": inspected["base_sha"],
         "target_paths": inspected["target_paths"],
-        "added_context_refs": [ref.model_dump(exclude_none=True, mode="json") for ref in refs],
+        "added_context_refs": requested_refs,
         "context_digest": preview.context_digest,
         "context_sources_manifest": preview.context_sources_manifest,
     }
