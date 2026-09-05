@@ -102,6 +102,10 @@ includesAll(workbench, [
   "READ / CONTEXT / PROPOSE only",
   "they do not commit, apply, execute, push, create a PR, merge, or mutate STATUS"
 ], "140 operator contract is incomplete");
+check(
+  /if \(next\.state !== "current"[\s\S]*?return;\s*}\s*proposalGeneration\.current \+= 1;\s*setProposal\(null\);\s*setContextBinding\(next\);/.test(workbench),
+  "context binding completion does not invalidate in-flight proposals"
+);
 check(!/api\.github\.com|github\.com\/api|localStorage|sessionStorage|child_process|powershell|cmd\.exe/i.test(workbench), "Coding surface crossed the browser authority boundary");
 check(!/fetch\(/.test(workbench), "Coding surface bypasses the shared API client");
 check(!/merge-base|rev-list|isAncestor|compareCommits|compare_commits/i.test(workbench), "browser appears to derive repository/runtime relation locally");
