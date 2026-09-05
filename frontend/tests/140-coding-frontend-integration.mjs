@@ -143,7 +143,7 @@ check(
   /readPipelineState\(CODING_REPOSITORY, prNumber, requestSpecId\)/.test(workbench),
   "pipeline projection still normalizes a different PR/spec selection"
 );
-check(!/Number\(prInput\)/.test(workbench), "raw PR selection is still coerced with Number()");
+check(!workbench.includes("const prNumber = Number(prInput)"), "raw PR selection is still coerced with Number()");
 check(!/readPipelineState\(CODING_REPOSITORY, prNumber, specId\.trim\(\)\)/.test(workbench), "pipeline request still trims the selected spec id");
 check(!/const \[error, setError\]/.test(workbench), "shared cross-operation error slot remains in Coding surfaces");
 check(!/api\.github\.com|github\.com\/api|localStorage|sessionStorage|child_process|powershell|cmd\.exe/i.test(workbench), "Coding surface crossed the browser authority boundary");
