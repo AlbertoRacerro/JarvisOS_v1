@@ -31,6 +31,7 @@ includesAll(api, [
   "/api/coding/runtime-truth?",
   "/api/coding/pipeline-state?",
   "/api/coding/actions/inspect",
+  "/api/coding/actions/context-preview",
   "/api/coding/actions/suggest-modification"
 ], "140 API client is missing an accepted backend owner projection");
 check(!/api\.github\.com|github\.com\/api|Authorization|GITHUB_TOKEN|ghp_/i.test(api), "browser API client gained provider/credential authority");
@@ -46,15 +47,21 @@ includesAll(workbench, [
   "readReviews",
   "readSafeGithubUrl",
   "Open server-validated GitHub path",
+  "Partial evidence",
+  "Truncated evidence is not presented as complete.",
   "readRuntimeTruth",
   'relation = runtime?.alignment ?? "unknown"',
   "The browser performs no SHA ancestry or cleanliness inference.",
   "readPipelineState",
   "No synthetic stages are shown.",
   "inspectCodingTarget",
+  "previewCodingContext",
+  "Add selected exact file to proposal context",
+  "context_digest",
+  "added_context_refs",
   "suggestCodingModification",
   "Repository browsing is context-neutral.",
-  "READ / PROPOSE only",
+  "READ / CONTEXT / PROPOSE only",
   "they do not commit, apply, execute, push, create a PR, merge, or mutate STATUS"
 ], "140 operator contract is incomplete");
 check(!/api\.github\.com|github\.com\/api|localStorage|sessionStorage|child_process|powershell|cmd\.exe/i.test(workbench), "Coding surface crossed the browser authority boundary");
