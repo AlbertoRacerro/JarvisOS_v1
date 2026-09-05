@@ -80,6 +80,13 @@ includesAll(workbench, [
   "contextPreviewGeneration.current += 1",
   "inspectGeneration.current += 1",
   "searchGeneration.current += 1",
+  "repositoryErrors",
+  "setRepositoryError",
+  "File preview refused / unavailable",
+  "Repository search refused / unavailable",
+  "PR evidence refused / unavailable",
+  "Context insertion refused / unavailable",
+  "Proposal refused / unavailable",
   "readRuntimeTruth",
   'relation = runtime?.alignment ?? "unknown"',
   "Process startup identity",
@@ -88,6 +95,9 @@ includesAll(workbench, [
   "Provenance",
   "Failure identity",
   "The browser performs no SHA ancestry or cleanliness inference.",
+  "runtimeError",
+  "pipelineError",
+  "Pipeline projection refused / unavailable",
   "readPipelineState",
   "pipelineRequestGeneration",
   "invalidatePipelineSelection",
@@ -106,6 +116,21 @@ check(
   /if \(next\.state !== "current"[\s\S]*?return;\s*}\s*proposalGeneration\.current \+= 1;\s*setProposal\(null\);\s*setContextBinding\(next\);/.test(workbench),
   "context binding completion does not invalidate in-flight proposals"
 );
+check(
+  /setMatches\(\[\]\); setRepositoryError\("search", null\)/.test(workbench) &&
+  /setPrEvidence\(null\); setRepositoryError\("pr", null\)/.test(workbench) &&
+  /setContextBinding\(null\); setProposal\(null\);\s*setRepositoryErrors\(\(current\) => \(\{ \.\.\.current, context: null, proposal: null \}\)\)/.test(workbench),
+  "repository operations do not preserve independent refusal ownership"
+);
+check(
+  /const \[runtimeError, setRuntimeError\]/.test(workbench) &&
+  /const \[pipelineError, setPipelineError\]/.test(workbench) &&
+  /setPipelineError\(errorText\(cause\)\)/.test(workbench) &&
+  /setPipelineError\(null\);\s*};/.test(workbench) &&
+  /status=\{pipelineError \? "Projection error"/.test(workbench),
+  "runtime and pipeline refusal states are not independently owned/rendered"
+);
+check(!/const \[error, setError\]/.test(workbench), "shared cross-operation error slot remains in Coding surfaces");
 check(!/api\.github\.com|github\.com\/api|localStorage|sessionStorage|child_process|powershell|cmd\.exe/i.test(workbench), "Coding surface crossed the browser authority boundary");
 check(!/fetch\(/.test(workbench), "Coding surface bypasses the shared API client");
 check(!/merge-base|rev-list|isAncestor|compareCommits|compare_commits/i.test(workbench), "browser appears to derive repository/runtime relation locally");
