@@ -3,6 +3,7 @@
 Status: canonical operational process
 Effective date: 2026-08-05
 Amended: 2026-08-31 — ChatGPT direct implementation default and non-blocking optional model helpers
+Amended: 2026-09-05 — human-blocker failover and bounded causal-sibling review batching
 
 This document defines JarvisOS repository delivery, external model collaboration, exact-head evidence, finding closure, merge/reconciliation, and the controlled post-112 delivery exception. It governs repository-development actors only; it does not broaden JarvisOS runtime authority, provider policy, credentials, budgets, egress, schemas, or product behavior.
 
@@ -163,6 +164,18 @@ Otherwise choose the least-cost reversible route, use independent critique where
 A merge is blocked by current P0/P1; a P2 that materially affects required correctness, accessibility, inspectability, or regression risk; violated spec requirements; unresolved substantial review findings; or a missing required gate.
 
 A merge is not automatically blocked by every P2, any P3, stylistic preference, theoretical refactor, premature generalization, or future improvement. Continue correction while it materially reduces risk; stop when work becomes marginal polish or over-engineering.
+
+### 10A. Human-blocker failover and causal-sibling review batching
+
+A genuine human-only blocker freezes **only the blocked front**. Preserve the accepted gate exactly; never waive, weaken, reinterpret, fake, or fabricate the missing human evidence/action. Re-read fresh `STATUS.md`, relevant dependencies, active PRs, accepted spec/readiness evidence, and the post-112 profile when active; then scan the remaining canonical queue and immediately advance the highest-priority lawful work that does not depend on the blocked front and is sufficiently disjoint in file, store, schema, migration, and authority boundaries. `planned` work may advance only through its lawful planning/readiness lifecycle; it is never implementation authority. Shared mutation remains serialized by the global writer mutex, exact SHA/CAS remains correctness, and no second queue, store, workflow owner, or authority surface is created.
+
+Re-scan the queue after every material transition. If the missing human evidence/action arrives later, consume it at the next safe writer point only after exact-head revalidation of the blocked front and its affected gates.
+
+Only when an explicit fresh queue scan proves that **no lawful independent work exists** may a scheduler escalate the human blocker on every wake-up with a conspicuous repeated-🚨 Slack message that identifies the exact blocked slice/PR, exact blocker, and exact human action required. Ordinary CI/review waits, global-writer mutex contention, and PARKed P2/P3 findings do not trigger this alarm.
+
+When any semantic reviewer finds a P0/P1, before finalizing the verdict it performs **exactly one bounded causal-sibling sweep** of the same failure family and directly adjacent accepted-scope paths, then reports all P0/P1 plus useful P2 siblings together in one consolidated verdict. The sweep must not recurse or broaden into unrelated architecture, cleanup, or future scope. If a P0/P1 verdict does not show that bounded family sweep, request one same-head, family-limited follow-up before mutating unless immediate safety urgency requires repair. If that reviewer cannot provide a consumable follow-up, the coordinator performs exactly one bounded sweep of the same causal/failure family itself and may then repair the consolidated same-family P0/P1 set; the mutated head still requires fresh independent semantic review before merge. When safely possible, repair the consolidated same-family P0/P1 set in one bounded mutation with the minimum causal sibling tests. P2/P3 retain the impact classification in this section: a material blocking P2 must be fixed, while findings explicitly classified PARK do not delay an otherwise valid merge absent later elevation.
+
+Any head mutation invalidates affected exact-head review evidence as usual. Required independent semantic review remains independent; self-review never substitutes for it.
 
 ## 11. Planning compression, focused gates, and read-only prework
 

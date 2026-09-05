@@ -8,6 +8,7 @@ Maintainer hardening-priority amendment: 2026-08-30
 Delivery-efficiency amendment: 2026-08-31
 Affected-domain master gating amendment: 2026-08-31
 Direct-implementation role amendment: 2026-08-31
+Human-blocker and review-batching amendment: 2026-09-05
 
 This document defines the minimum controlled-parallel delivery exception to the repository's normal serial execution rule. It changes repository-development mechanics only. It does not change JarvisOS runtime authority, provider policy, product architecture, credentials, egress, schemas, or model-promotion rules.
 
@@ -120,6 +121,12 @@ Codex is used only when there is a concrete material advantage or unresolved hig
 
 Deterministic repo/runtime evidence and accepted authority outrank all model claims.
 
+### 3A. Bounded causal-sibling semantic review
+
+Every semantic review request for a material PR must instruct the reviewer: `If you find any P0/P1, before finalizing perform one bounded causal-sibling sweep of the same failure family/directly adjacent accepted-scope paths and report all P0/P1 plus useful P2 siblings together in this same verdict. Do not broaden beyond that family.`
+
+If a reviewer reports a P0/P1 without evidence of that bounded family sweep, request exactly one same-head follow-up limited to the same causal/failure family before mutating, unless immediate safety urgency requires repair. If that reviewer cannot provide a consumable follow-up, the coordinator performs exactly one bounded sweep of the same causal/failure family itself and may then repair the consolidated same-family P0/P1 set; the mutated head still requires fresh independent semantic review before merge. Do not recursively expand review scope. When safely possible, repair the consolidated same-family P0/P1 set in one bounded mutation with minimum causal sibling tests. P2/P3 retain the canonical impact classification: a material blocking P2 must be fixed, while findings explicitly classified PARK do not delay an otherwise valid merge absent later elevation. A head mutation invalidates affected review evidence and restarts exact-head review requirements as usual.
+
 ## 4. Work-stealing cycle
 
 A ChatGPT lock holder must:
@@ -138,6 +145,18 @@ A ChatGPT lock holder must:
 The coordinator must **not sleep or poll merely to consume runtime**. This does not permit abandoning ordinary active CI/review prematurely: use useful non-conflicting work between checks and consume terminal evidence promptly. When insufficient wall-clock budget remains for a complete safe mutation plus verification, record the exact next action and exit cleanly.
 
 A `PR Attention Evidence` artifact is advisory and exact-head-bound. It may eliminate repeated mechanical collection, but it may not establish semantic PASS, queue/readiness state, review/approval authority, or merge permission. If the artifact predates terminal required gates, the writer may refresh/recollect gate state once when terminal rather than repeatedly polling it.
+
+### 4A. Human-blocker failover and no-independent-work escalation
+
+A genuine human-only blocker freezes only the affected front. Never weaken, waive, reinterpret, fake, or fabricate the accepted human gate. Re-read fresh `STATUS.md`, dependencies, active PRs, accepted spec/readiness evidence, and this profile; explicitly scan the rest of the canonical queue; and immediately advance the highest-priority lawful independent work whose file, store, schema, migration, and authority boundaries are sufficiently disjoint from the blocked front. `planned` rows may advance only through planning/readiness authority, never implementation. The global writer mutex, exact SHA/CAS, shared-owner serialization, and one-registry/no-second-authority rules remain mandatory.
+
+Re-scan after every material transition. Human evidence that arrives later is consumed at the next safe writer point only after exact-head revalidation of the blocked front and affected gates.
+
+Only when an explicit fresh scan proves **no lawful independent queue work exists** may every scheduler wake-up emit a conspicuous Slack escalation in this form:
+
+`🚨🚨🚨🚨🚨🚨 JARVISOS HUMAN BLOCKER 🚨🚨🚨🚨🚨🚨 | <slice/PR> | <exact blocker> | NO INDEPENDENT QUEUE WORK EXISTS → HUMAN ACTION: <exact action>`
+
+Ordinary CI/review waits, global writer-mutex contention, and PARKed P2/P3 findings do not trigger siren escalation.
 
 ## 5. Canonical post-112 lanes
 
