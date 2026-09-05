@@ -90,6 +90,8 @@ function RepositorySurface({ workspaceId }: Readonly<{ workspaceId: string | nul
   const fileReadGeneration = useRef(0);
   const prEvidenceGeneration = useRef(0);
   const proposalGeneration = useRef(0);
+  const contextPreviewGeneration = useRef(0);
+  const inspectGeneration = useRef(0);
 
   const resolvedSha = truth?.resolved_sha ?? null;
   const anyPartial = truth?.partial || Object.values(partial).some(Boolean);
@@ -98,6 +100,8 @@ function RepositorySurface({ workspaceId }: Readonly<{ workspaceId: string | nul
     fileReadGeneration.current += 1;
     prEvidenceGeneration.current += 1;
     proposalGeneration.current += 1;
+    contextPreviewGeneration.current += 1;
+    inspectGeneration.current += 1;
     setSelectedPath("");
     setSafeUrl(null);
     setPreview("");
@@ -129,11 +133,21 @@ function RepositorySurface({ workspaceId }: Readonly<{ workspaceId: string | nul
   };
 
   useEffect(() => { void refresh(); }, []);
+  useEffect(() => {
+    contextPreviewGeneration.current += 1;
+    inspectGeneration.current += 1;
+    proposalGeneration.current += 1;
+    setInspectResult(null);
+    setContextBinding(null);
+    setProposal(null);
+  }, [workspaceId]);
 
   const openFile = async (path: string) => {
     const requestGeneration = ++fileReadGeneration.current;
     proposalGeneration.current += 1;
-    setSelectedPath(path); setSafeUrl(null); setPreview(""); setContextBinding(null); setProposal(null); setError(null);
+    contextPreviewGeneration.current += 1;
+    inspectGeneration.current += 1;
+    setSelectedPath(path); setSafeUrl(null); setPreview(""); setContextBinding(null); setInspectResult(null); setProposal(null); setError(null);
     setPartial((current) => ({ ...current, file: false }));
     const requestSha = resolvedSha;
     if (!requestSha) { setError("missing_exact_sha"); return; }
@@ -200,25 +214,40 @@ function RepositorySurface({ workspaceId }: Readonly<{ workspaceId: string | nul
   };
 
   const inspect = async () => {
-    if (!workspaceId || !resolvedSha || !selectedPath) return;
+    const requestWorkspaceId = workspaceId;
+    const requestSha = resolvedSha;
+    const requestPath = selectedPath;
+    if (!requestWorkspaceId || !requestSha || !requestPath) return;
+    const requestGeneration = ++inspectGeneration.current;
     setInspectResult(null); setError(null);
     try {
-      setInspectResult(await inspectCodingTarget({ workspace_id: workspaceId, repository, base_ref: ref, base_sha: resolvedSha, target_paths: [selectedPath] }));
-    } catch (cause) { setError(errorText(cause)); }
+      const result = await inspectCodingTarget({ workspace_id: requestWorkspaceId, repository, base_ref: ref, base_sha: requestSha, target_paths: [requestPath] });
+      if (inspectGeneration.current !== requestGeneration) return;
+      setInspectResult(result);
+    } catch (cause) {
+      if (inspectGeneration.current === requestGeneration) setError(errorText(cause));
+    }
   };
 
   const addContext = async () => {
-    if (!workspaceId || !resolvedSha || !selectedPath || partial.file) return;
+    const requestWorkspaceId = workspaceId;
+    const requestSha = resolvedSha;
+    const requestPath = selectedPath;
+    if (!requestWorkspaceId || !requestSha || !requestPath || partial.file) return;
+    const requestGeneration = ++contextPreviewGeneration.current;
     proposalGeneration.current += 1;
     setContextBinding(null); setProposal(null); setError(null);
     try {
-      const next = await previewCodingContext({ workspace_id: workspaceId, repository, base_ref: ref, base_sha: resolvedSha, target_paths: [selectedPath] });
+      const next = await previewCodingContext({ workspace_id: requestWorkspaceId, repository, base_ref: ref, base_sha: requestSha, target_paths: [requestPath] });
+      if (contextPreviewGeneration.current !== requestGeneration) return;
       if (next.state !== "current" || !next.context_digest || !next.added_context_refs?.length) {
         setError(next.reason ?? "context_preview_refused");
         return;
       }
       setContextBinding(next);
-    } catch (cause) { setError(errorText(cause)); }
+    } catch (cause) {
+      if (contextPreviewGeneration.current === requestGeneration) setError(errorText(cause));
+    }
   };
 
   const suggest = async () => {
