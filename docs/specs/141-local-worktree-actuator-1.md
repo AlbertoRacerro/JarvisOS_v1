@@ -96,6 +96,20 @@ The worker MUST validate:
 
 Lexical prefix checks are insufficient. For every write target, the worker resolves canonical filesystem identity beneath the assigned worktree and refuses path traversal or indirection escape. Windows implementation MUST inspect path components/file handles and reject symlink/junction/mount/reparse-point escape; POSIX implementation MUST reject symlink escape using `lstat`/no-follow semantics or an equivalently deterministic primitive. Case/normalization aliases that cannot be proven inside the assigned root fail closed.
 
+### Sensitive repository paths
+
+Worktree containment and a non-default branch are not sufficient authority for repository control-plane or secret-bearing paths. Before **every** implementer write, `stage_paths`, `commit`, and `push_branch`, the worker applies one server-owned sensitive-path policy that the model/client cannot modify.
+
+At minimum the policy refuses:
+
+- `.github/**`, including workflows, Actions, security/review/merge automation, and repository control-plane configuration;
+- `AGENTS.md` and every `CODEOWNERS` location recognized by GitHub;
+- the running 141 worker's policy/profile/registry/control scripts and any shared Git-mutation safety owner used by 141;
+- existing 022/079 repository-delivery control scripts/policy files whose mutation would change their authority boundary;
+- environment/secret/token/key/credential/private-key-like paths covered by the canonical repository sensitive-path classifier used by existing delivery lanes.
+
+The worker MUST evaluate the complete normalized changed-path set appropriate to the operation, not only caller-supplied paths. `stage_paths` evaluates every requested path; `commit` evaluates the complete staged diff; `push_branch` independently evaluates the delta reachable in `intended_local_commit` relative to the admitted remote/base state so a sensitive change already present in a local commit cannot bypass the write/stage/commit checks. Any denied path returns `SENSITIVE_PATH_REFUSED` before credential acquisition or network mutation. A sensitive-path refusal never stages, commits, or pushes anything.
+
 A dirty/persistent worktree is bound to exactly one `worker_id`; another worker cannot claim it from registry metadata alone.
 
 ## Writer serialization and crash recovery
@@ -172,7 +186,7 @@ There is no generic `git(args)` capability.
 
 ### Commit contract
 
-`commit` requires implementer capability, writer lock, correct registered branch/HEAD, explicit current status, and a non-empty staged diff. It refuses default/protected branch binding and reviewer mode. Commit author identity comes from maintainer-owned worker configuration, not model-provided Git config. Message is a bounded UTF-8 field with control characters rejected; it is passed as an argv/data field, never through a shell. Hooks are disabled through the trusted Git boundary. The result includes exact local commit SHA and bounded changed-path summary.
+`commit` requires implementer capability, writer lock, correct registered branch/HEAD, explicit current status, and a non-empty staged diff. It refuses default/protected branch binding, reviewer mode, and any staged diff containing a server-owned sensitive path. Commit author identity comes from maintainer-owned worker configuration, not model-provided Git config. Message is a bounded UTF-8 field with control characters rejected; it is passed as an argv/data field, never through a shell. Hooks are disabled through the trusted Git boundary. The result includes exact local commit SHA and bounded changed-path summary.
 
 The local commit and worktree remain discoverable after the requesting model session disappears.
 
@@ -185,12 +199,13 @@ Admission order is deterministic:
 1. implementer capability + writer lock;
 2. registered worker/repository/worktree/branch identity matches request;
 3. branch is non-default/non-protected and local HEAD exactly equals `intended_local_commit`;
-4. worktree/Git config/remote/credential boundaries validate;
-5. remote head is read fresh from the registered HTTPS remote;
-6. fresh remote head MUST equal the supplied 40-char `expected_remote_head`; otherwise return `STALE_REMOTE_HEAD` with no push;
-7. execute an ordinary same-branch non-force push; no `--force`, `--force-with-lease`, `+refspec`, deletion refspec, merge, or default-branch refspec exists in the API or implementation;
-8. re-read remote head;
-9. report `REMOTE_VERIFIED` only when remote head exactly equals `intended_local_commit`.
+4. complete intended commit delta passes the server-owned sensitive-path refusal policy;
+5. worktree/Git config/remote/credential boundaries validate;
+6. remote head is read fresh from the registered HTTPS remote;
+7. fresh remote head MUST equal the supplied 40-char `expected_remote_head`; otherwise return `STALE_REMOTE_HEAD` with no push;
+8. execute an ordinary same-branch non-force push; no `--force`, `--force-with-lease`, `+refspec`, deletion refspec, merge, or default-branch refspec exists in the API or implementation;
+9. re-read remote head;
+10. report `REMOTE_VERIFIED` only when remote head exactly equals `intended_local_commit`.
 
 A normal Git non-fast-forward rejection remains a refusal even if the pre-read matched; this closes the read→push race without using force semantics.
 
@@ -206,7 +221,7 @@ Timeout/disconnect/process loss after a possible push is `PUSH_RESULT_UNKNOWN`, 
 
 At minimum the worker uses stable typed outcomes rather than prose-only errors:
 
-`OK`, `REMOTE_VERIFIED`, `WORKER_OFFLINE`, `CAPABILITY_UNAVAILABLE`, `LOCAL_CREDENTIAL_UNAVAILABLE`, `REVIEWER_READ_ONLY`, `WORKTREE_BUSY`, `WORKTREE_IDENTITY_MISMATCH`, `PATH_ESCAPE`, `DIRTY_STATE_MISMATCH`, `PROTECTED_BRANCH`, `GIT_CONFIG_UNSAFE`, `REMOTE_IDENTITY_MISMATCH`, `STALE_REMOTE_HEAD`, `PUSH_REJECTED`, `PUSH_RESULT_UNKNOWN`, `SECRET_REDACTED`, `INTERNAL_ERROR`.
+`OK`, `REMOTE_VERIFIED`, `WORKER_OFFLINE`, `CAPABILITY_UNAVAILABLE`, `LOCAL_CREDENTIAL_UNAVAILABLE`, `REVIEWER_READ_ONLY`, `WORKTREE_BUSY`, `WORKTREE_IDENTITY_MISMATCH`, `PATH_ESCAPE`, `SENSITIVE_PATH_REFUSED`, `DIRTY_STATE_MISMATCH`, `PROTECTED_BRANCH`, `GIT_CONFIG_UNSAFE`, `REMOTE_IDENTITY_MISMATCH`, `STALE_REMOTE_HEAD`, `PUSH_REJECTED`, `PUSH_RESULT_UNKNOWN`, `SECRET_REDACTED`, `INTERNAL_ERROR`.
 
 Unknown/unclassified authority failures fail closed and emit a redacted audit record.
 
@@ -234,14 +249,15 @@ Audit is development evidence, not STATUS/lifecycle authority and not an authori
 141 structurally excludes:
 
 1. merge, auto-merge, push to default/protected branch, force push, force-with-lease, remote branch deletion;
-2. arbitrary shell, generic PTY, unrestricted subprocess/argv, or process-supervisor authority;
-3. arbitrary filesystem outside registered actuator roots/worktrees;
-4. self-update, restart, rollback, service replacement, installer update;
-5. browser/desktop/mouse/keyboard/screen capture/general computer use;
-6. provider credentials, model routing, egress, budget, promotion, product database/service/domain authority;
-7. raw GitHub/Git credentials in model context, ordinary API response, audit, fixture, logs, or frontend state;
-8. model-driven worker enrollment, repository registration, capability grant, credential-helper selection, or policy mutation;
-9. Hermes ownership of JarvisOS policy, credentials, capability admission, audit, repository, database, or exact-head decisions.
+2. model-driven write/stage/commit/push of server-owned sensitive repository paths, including workflow/CI, agent-policy/CODEOWNERS, repository-delivery control-plane, and secret-like paths;
+3. arbitrary shell, generic PTY, unrestricted subprocess/argv, or process-supervisor authority;
+4. arbitrary filesystem outside registered actuator roots/worktrees;
+5. self-update, restart, rollback, service replacement, installer update;
+6. browser/desktop/mouse/keyboard/screen capture/general computer use;
+7. provider credentials, model routing, egress, budget, promotion, product database/service/domain authority;
+8. raw GitHub/Git credentials in model context, ordinary API response, audit, fixture, logs, or frontend state;
+9. model-driven worker enrollment, repository registration, capability grant, credential-helper selection, or policy mutation;
+10. Hermes ownership of JarvisOS policy, credentials, capability admission, audit, repository, database, or exact-head decisions.
 
 125 SAFE-SELF-UPDATE-1 and 126 LOCAL-TERMINAL-PTY-1 remain separately gated and cannot be implemented through 141.
 
@@ -264,7 +280,8 @@ Readiness must map each item below to an exact automated test or an explicit hos
 - case/normalization ambiguous escape refuses;
 - reviewer write/stage/commit/push refuses;
 - second writer on same worktree refuses deterministically;
-- interrupted writer recovery preserves dirty state rather than discarding it.
+- interrupted writer recovery preserves dirty state rather than discarding it;
+- `.github/**`, `AGENTS.md`, recognized `CODEOWNERS`, 022/079/141 control-plane paths, and env/secret/token/key/credential-like paths refuse with `SENSITIVE_PATH_REFUSED` before stage/commit/push; a pre-existing intended local commit containing such a delta is independently refused at push admission with no credential/network mutation.
 
 ### Command/Git safety
 
