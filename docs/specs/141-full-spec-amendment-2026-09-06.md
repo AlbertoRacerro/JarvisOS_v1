@@ -30,16 +30,16 @@ Required deterministic tests include: stale pre-read refusal; race `expected=A`,
 
 ### 1A. Raw Git-history trust boundary: replacement/graft metadata is refused
 
-Fast-forward proof and sensitive-delta inspection MUST NOT trust a synthetic local history. Before any write, stage, commit, credential admission, or network mutation, the worker/shared-delivery primitive must resolve the verified repository common Git directory and refuse if either of these mechanisms is present:
+Fast-forward proof and sensitive-delta inspection MUST NOT trust a synthetic local history. Before any request-addressable worktree write, stage, commit, credential admission, or network mutation, the worker/shared-delivery primitive must resolve the verified repository common Git directory and refuse if either of these mechanisms is present:
 
-- any `refs/replace/**` entry in the repository/common Git directory;
+- any logical ref in the `refs/replace/**` namespace, regardless of whether the repository stores refs as loose files, packed refs, or another supported ref backend;
 - legacy graft metadata at `info/grafts`.
 
-Presence of either returns typed `GIT_HISTORY_REPLACEMENT_REFUSED` and launches no credentialed push. The worker must not delete, rewrite, or normalize this metadata as a side effect.
+Replace-ref detection must enumerate the logical namespace through the isolated trusted Git boundary, not infer absence from a missing loose `refs/replace` directory. Presence of either mechanism returns typed `GIT_HISTORY_REPLACEMENT_REFUSED` and launches no credentialed push. The worker must not delete, rewrite, or normalize this metadata as a side effect.
 
 Every ancestry, merge-base, revision walk, and commit-delta operation that participates in admission or postcondition checking must additionally run with replacement objects disabled (for example `--no-replace-objects` / `GIT_NO_REPLACE_OBJECTS=1`) against the verified Git directory/common directory. Explicit graft refusal remains mandatory because disabling replace objects is not treated as proof that legacy graft semantics are absent.
 
-Required deterministic hostile tests include: an unrelated intended commit made to appear descendant through `refs/replace`; the same failure family through `info/grafts`; both must refuse before credentials/network mutation, and the raw object graph must remain unchanged. A synthetic-history mechanism must never make a non-fast-forward commit eligible for the fixed lease transport.
+Required deterministic hostile tests include: an unrelated intended commit made to appear descendant through a logical `refs/replace` ref in every supported ref representation exercised by the implementation; the same failure family through `info/grafts`; all must refuse before credentials/network mutation, and the raw object graph must remain unchanged. A synthetic-history mechanism must never make a non-fast-forward commit eligible for the fixed lease transport.
 
 ## 2. Named validation profiles: no mutable-worktree code execution in 141 MVP
 
@@ -63,20 +63,22 @@ For every 141 worker/model request, `.github/**` remains server-owned sensitive 
 
 Required regression coverage must exercise the actual workflow commit/push owner and prove that factoring the shared primitive neither weakens 079 semantics nor leaves a second independent ordinary-push safety implementation.
 
-## 4. Git administrative paths: refuse before every actuator filesystem write
+## 4. Git administrative paths: refuse before every request-addressable worktree write
 
 Worktree containment alone is not a sufficient write boundary because the main worktree contains a `.git` administrative directory and a linked worktree contains a `.git` administrative pointer. The actuator must therefore resolve and protect Git administrative identity independently of ordinary repository-path/sensitive-path checks.
 
-Before **every** actuator-requested filesystem mutation — including create/replace/delete/rename, stage preparation, worktree lifecycle mutation, or any helper that can write bytes — the server must reject:
+Before every **request-addressable worktree filesystem mutation** — including any structured create/replace/delete/rename or other path-bearing implementer write — the server must reject a caller-selected target that is or resolves into:
 
 - the worktree `.git` entry itself, whether directory or pointer file, and every descendant when it is a directory;
-- the resolved per-worktree Git directory and the resolved common Git directory, including `refs`, `objects`, `config`, `hooks`, `info/grafts`, `worktrees`, logs, index/HEAD administrative state, and any other administrative descendant;
-- any symlink/junction/reparse/case-normalization or path-alias route that resolves into those administrative locations.
+- the resolved per-worktree Git directory or resolved common Git directory, including `refs`, `objects`, `config`, `hooks`, `info/grafts`, `worktrees`, logs, index/HEAD administrative state, and any other administrative descendant;
+- any symlink/junction/reparse/case-normalization or path-alias route into those administrative locations.
 
-The refusal is typed `GIT_ADMIN_PATH_REFUSED`, occurs before the first target-byte mutation, and is independent of later stage/commit/push validation. No request may rewrite the linked-worktree `.git` pointer or mutate Git administrative metadata merely because it lexically lies beneath an allowed worktree root.
+The refusal is typed `GIT_ADMIN_PATH_REFUSED`, occurs before the first caller-selected target byte changes, and is independent of later stage/commit/push validation. No request may rewrite the linked-worktree `.git` pointer or directly mutate Git administrative metadata merely because it lexically lies beneath an allowed worktree root.
 
-Required deterministic tests cover both a main worktree and a linked worktree: attempts against `.git/config`, refs/objects, `info/grafts`, the linked-worktree `.git` pointer, and an alias/resolved path into the common directory must refuse with no target bytes changed. This guard composes with, and does not weaken, the sensitive-path baseline or the raw-history checks in section 1A.
+This guard does not forbid the worker's trusted isolated `GitRunner` from performing the unavoidable Git-administrative side effects of an already-admitted typed operation such as `worktree_create`, stage, or commit. Those operations expose no caller-selected administrative path or generic Git arguments and remain subject to repository identity, configuration isolation, hooks/process refusal, sensitive-path policy, raw-history checks, role/branch admission, and their operation-specific postconditions. A model/client cannot convert that internal Git behavior into a direct administrative-write capability.
+
+Required deterministic tests cover both a main worktree and a linked worktree: caller-addressable attempts against `.git/config`, refs/objects, `info/grafts`, the linked-worktree `.git` pointer, and an alias/resolved path into the common directory must refuse with no target bytes changed. Focused typed-Git regression tests must separately prove that valid worktree/stage/commit operations still function through `GitRunner` without exposing an administrative target surface. This guard composes with, and does not weaken, the sensitive-path baseline or the raw-history checks in section 1A.
 
 ## Refreeze result
 
-With these bounded replacements, the 141 full-spec and readiness contracts are no longer mutually exclusive: expected-head safety is atomic without granting history-rewrite authority; ancestry/delta admission cannot be forged through Git replacement/graft metadata; Git administrative state is protected before every filesystem write; mutable worktree code is refused rather than falsely treated as sandboxed; and the real 079 push owner is included for compatibility while remaining inaccessible to the 141 actuator. No other scope or authority is broadened.
+With these bounded replacements, the 141 full-spec and readiness contracts are no longer mutually exclusive: expected-head safety is atomic without granting history-rewrite authority; ancestry/delta admission cannot be forged through Git replacement/graft metadata including non-loose ref representations; Git administrative state is protected from request-addressable writes while typed Git operations retain only their unavoidable server-owned internal effects; mutable worktree code is refused rather than falsely treated as sandboxed; and the real 079 push owner is included for compatibility while remaining inaccessible to the 141 actuator. No other scope or authority is broadened.
