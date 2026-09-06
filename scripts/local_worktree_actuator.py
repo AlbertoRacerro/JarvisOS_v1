@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Spec-141 local worktree actuator core.
 
-This module is deliberately a local development-plane primitive, not a JarvisOS
-product service.  It persists worker/worktree identity, enforces capability and
-filesystem boundaries, and delegates network Git mutation to repository_delivery.
-Transport activation is host-local and cannot make cloud lanes depend on a host.
+This module is a local development-plane primitive, not a JarvisOS product
+service. It persists worker/worktree identity, enforces role/filesystem/Git
+boundaries, and delegates every network Git mutation to repository_delivery.
+Worker absence never disables cloud/GitHub lanes.
 """
 
 from __future__ import annotations
@@ -12,7 +12,6 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import shutil
 import tempfile
 import time
 import uuid
@@ -29,6 +28,7 @@ try:  # package-style imports in tests
         RemotePolicy,
         RepositoryDelivery,
         assert_safe_paths,
+        windows_gcm_runner,
     )
 except ImportError:  # direct `python scripts/local_worktree_actuator.py`
     from repository_delivery import (  # type: ignore[no-redef]
@@ -38,12 +38,13 @@ except ImportError:  # direct `python scripts/local_worktree_actuator.py`
         RemotePolicy,
         RepositoryDelivery,
         assert_safe_paths,
+        windows_gcm_runner,
     )
 
 STATE_SCHEMA = 1
 AUDIT_MAX_BYTES = 10 * 1024 * 1024
 AUDIT_ROTATIONS = 5
-SHA_RE_LENGTH = 40
+MAX_WRITE_BYTES = 2 * 1024 * 1024
 
 
 class Capability(StrEnum):
@@ -84,6 +85,7 @@ class RepositoryRegistration:
     repo: str
     common_git_dir: str
     default_branch: str = "master"
+    worktree_root: str = ""
 
 
 @dataclass(frozen=True)
@@ -123,7 +125,14 @@ class NamedProfile:
 class WorkerState:
     """Small OS-user-private durable state with atomic registry replacement."""
 
-    def __init__(self, root: Path, *, worker_id: str | None = None) -> None:
+    def __init__(
+        self,
+        root: Path,
+        *,
+        worker_id: str | None = None,
+        commit_author_name: str | None = None,
+        commit_author_email: str | None = None,
+    ) -> None:
         self.root = root.resolve()
         self.root.mkdir(parents=True, exist_ok=True)
         self.registry_path = self.root / "registry.json"
@@ -139,11 +148,26 @@ class WorkerState:
             if payload.get("schema") != STATE_SCHEMA or not isinstance(payload.get("worker_id"), str):
                 raise ActuatorRefusal(ActuatorCode.INTERNAL_ERROR, "worker identity state is corrupt")
             self.worker_id = str(payload["worker_id"])
+            self.commit_author_name = str(payload.get("commit_author_name", ""))
+            self.commit_author_email = str(payload.get("commit_author_email", ""))
         else:
             self.worker_id = worker_id or str(uuid.uuid4())
-            self._atomic_json(self.worker_path, {"schema": STATE_SCHEMA, "worker_id": self.worker_id})
+            self.commit_author_name = (commit_author_name or "").strip()
+            self.commit_author_email = (commit_author_email or "").strip()
+            self._atomic_json(
+                self.worker_path,
+                {
+                    "schema": STATE_SCHEMA,
+                    "worker_id": self.worker_id,
+                    "commit_author_name": self.commit_author_name,
+                    "commit_author_email": self.commit_author_email,
+                },
+            )
         if not self.registry_path.exists():
-            self._atomic_json(self.registry_path, {"schema": STATE_SCHEMA, "repositories": {}, "worktrees": {}})
+            self._atomic_json(
+                self.registry_path,
+                {"schema": STATE_SCHEMA, "repositories": {}, "worktrees": {}},
+            )
 
     def _ensure_private_root(self) -> None:
         if self.root.is_symlink():
@@ -152,25 +176,39 @@ class WorkerState:
             try:
                 self.root.chmod(0o700)
             except OSError as exc:
-                raise ActuatorRefusal(ActuatorCode.INTERNAL_ERROR, "cannot secure worker state root") from exc
+                raise ActuatorRefusal(
+                    ActuatorCode.INTERNAL_ERROR,
+                    "cannot secure worker state root",
+                ) from exc
             if self.root.stat().st_mode & 0o077:
-                raise ActuatorRefusal(ActuatorCode.INTERNAL_ERROR, "worker state root is not private")
+                raise ActuatorRefusal(
+                    ActuatorCode.INTERNAL_ERROR,
+                    "worker state root is not private",
+                )
 
     @staticmethod
     def _read_json(path: Path) -> dict[str, Any]:
         try:
             payload = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
-            raise ActuatorRefusal(ActuatorCode.INTERNAL_ERROR, f"invalid state file: {path.name}") from exc
+            raise ActuatorRefusal(
+                ActuatorCode.INTERNAL_ERROR,
+                f"invalid state file: {path.name}",
+            ) from exc
         if not isinstance(payload, dict):
-            raise ActuatorRefusal(ActuatorCode.INTERNAL_ERROR, f"invalid state object: {path.name}")
+            raise ActuatorRefusal(
+                ActuatorCode.INTERNAL_ERROR,
+                f"invalid state object: {path.name}",
+            )
         return payload
 
     def registry(self) -> dict[str, Any]:
         payload = self._read_json(self.registry_path)
         if payload.get("schema") != STATE_SCHEMA:
             raise ActuatorRefusal(ActuatorCode.INTERNAL_ERROR, "unsupported registry schema")
-        if not isinstance(payload.get("repositories"), dict) or not isinstance(payload.get("worktrees"), dict):
+        if not isinstance(payload.get("repositories"), dict) or not isinstance(
+            payload.get("worktrees"), dict
+        ):
             raise ActuatorRefusal(ActuatorCode.INTERNAL_ERROR, "registry shape is invalid")
         return payload
 
@@ -195,8 +233,7 @@ class WorkerState:
     def _rotate_audit(self) -> None:
         if not self.audit_path.exists() or self.audit_path.stat().st_size < AUDIT_MAX_BYTES:
             return
-        oldest = self.root / f"audit.jsonl.{AUDIT_ROTATIONS}"
-        oldest.unlink(missing_ok=True)
+        (self.root / f"audit.jsonl.{AUDIT_ROTATIONS}").unlink(missing_ok=True)
         for number in range(AUDIT_ROTATIONS - 1, 0, -1):
             src = self.root / f"audit.jsonl.{number}"
             dst = self.root / f"audit.jsonl.{number + 1}"
@@ -206,17 +243,31 @@ class WorkerState:
 
     def audit(self, record: dict[str, Any]) -> None:
         self._rotate_audit()
-        forbidden = {"token", "secret", "authorization", "credential", "environment", "prompt", "content"}
+        forbidden = {
+            "token",
+            "secret",
+            "authorization",
+            "credential",
+            "environment",
+            "prompt",
+            "content",
+        }
         if any(key.lower() in forbidden for key in record):
-            raise ActuatorRefusal(ActuatorCode.INTERNAL_ERROR, "audit record contains forbidden field")
+            raise ActuatorRefusal(
+                ActuatorCode.INTERNAL_ERROR,
+                "audit record contains forbidden field",
+            )
         previous_digest = ""
         if self.audit_path.exists() and self.audit_path.stat().st_size:
             try:
                 last = self.audit_path.read_text(encoding="utf-8").splitlines()[-1]
                 previous = json.loads(last)
                 previous_digest = str(previous.get("record_digest", ""))
-            except (OSError, json.JSONDecodeError, IndexError):
-                raise ActuatorRefusal(ActuatorCode.INTERNAL_ERROR, "audit chain is unreadable")
+            except (OSError, json.JSONDecodeError, IndexError) as exc:
+                raise ActuatorRefusal(
+                    ActuatorCode.INTERNAL_ERROR,
+                    "audit chain is unreadable",
+                ) from exc
         body = dict(record)
         body["previous_digest"] = previous_digest
         canonical = json.dumps(body, sort_keys=True, separators=(",", ":")).encode()
@@ -233,93 +284,291 @@ class LocalWorktreeActuator:
         self.online = online
         self.profiles: dict[str, NamedProfile] = {
             "worker-registry-integrity": NamedProfile(
-                "worker-registry-integrity", worker_owned=True, executes_worktree_content=False
+                "worker-registry-integrity",
+                worker_owned=True,
+                executes_worktree_content=False,
             )
         }
 
     def _require_online(self) -> None:
         if not self.online:
-            raise ActuatorRefusal(ActuatorCode.WORKER_OFFLINE, "this local worker is offline")
+            raise ActuatorRefusal(
+                ActuatorCode.WORKER_OFFLINE,
+                "this local worker is offline",
+            )
 
     @staticmethod
     def _require_role(ctx: RequestContext, *, write: bool = False) -> None:
         if write and ctx.capability != Capability.IMPLEMENTER:
-            raise ActuatorRefusal(ActuatorCode.REVIEWER_READ_ONLY, "write capability requires implementer")
-        if not write and ctx.capability not in {Capability.OBSERVER, Capability.REVIEWER, Capability.IMPLEMENTER}:
-            raise ActuatorRefusal(ActuatorCode.CAPABILITY_UNAVAILABLE, "capability unavailable")
+            raise ActuatorRefusal(
+                ActuatorCode.REVIEWER_READ_ONLY,
+                "write capability requires implementer",
+            )
+        if not write and ctx.capability not in {
+            Capability.OBSERVER,
+            Capability.REVIEWER,
+            Capability.IMPLEMENTER,
+        }:
+            raise ActuatorRefusal(
+                ActuatorCode.CAPABILITY_UNAVAILABLE,
+                "capability unavailable",
+            )
 
-    def _audit(self, ctx: RequestContext, operation: str, result: str, **fields: Any) -> None:
-        record = {
-            "schema": STATE_SCHEMA,
-            "timestamp": int(time.time()),
-            "request_id": ctx.request_id,
-            "principal_id": ctx.principal_id,
-            "session_id": ctx.session_id,
-            "worker_id": self.state.worker_id,
-            "capability": ctx.capability.value,
-            "operation": operation,
-            "result": result,
-            **fields,
+    def _audit(
+        self,
+        ctx: RequestContext,
+        operation: str,
+        result: str,
+        **fields: Any,
+    ) -> None:
+        self.state.audit(
+            {
+                "schema": STATE_SCHEMA,
+                "timestamp": int(time.time()),
+                "request_id": ctx.request_id,
+                "principal_id": ctx.principal_id,
+                "session_id": ctx.session_id,
+                "worker_id": self.state.worker_id,
+                "capability": ctx.capability.value,
+                "operation": operation,
+                "result": result,
+                **fields,
+            }
+        )
+
+    def dispatch(self, ctx: RequestContext, operation: str, **kwargs: Any) -> Any:
+        """Single model/request boundary with uniform refusal auditing.
+
+        The host-local IPC adapter may expose only this operation table. It cannot
+        invent method names, argv, filesystem roots, credentials, or capabilities.
+        """
+
+        operations = {
+            "health": self.health,
+            "worktree_inspect": self.worktree_inspect,
+            "git_status": self.git_status,
+            "git_diff": self.git_diff,
+            "run_named_profile": self.run_named_profile,
+            "write_text": self.write_text,
+            "stage_paths": self.stage_paths,
+            "commit": self.commit,
+            "push_branch": self.push_branch,
         }
-        self.state.audit(record)
+        target = operations.get(operation)
+        if target is None:
+            refusal = ActuatorRefusal(
+                ActuatorCode.CAPABILITY_UNAVAILABLE,
+                "operation is not exposed by the worker protocol",
+            )
+            self._audit(ctx, operation, refusal.code.value)
+            raise refusal
+        try:
+            return target(ctx, **kwargs)
+        except (ActuatorRefusal, DeliveryRefusal) as exc:
+            code = exc.code.value if hasattr(exc.code, "value") else str(exc.code)
+            self._audit(ctx, operation, code)
+            raise
 
     def health(self, ctx: RequestContext) -> WorkerHealth:
         self._require_role(ctx)
         registry = self.state.registry()
-        status = "online" if self.online else "offline"
         return WorkerHealth(
             self.state.worker_id,
-            status,
+            "online" if self.online else "offline",
             tuple(cap.value for cap in Capability),
             tuple(sorted(registry["repositories"])),
             tuple(sorted(registry["worktrees"])),
         )
 
     def enroll_repository(self, registration: RepositoryRegistration) -> None:
-        """Maintainer activation API; deliberately not request-context addressable."""
+        """Maintainer activation API; not request-context addressable."""
+
         root = Path(registration.root).resolve()
         common = Path(registration.common_git_dir).resolve()
-        if root.is_symlink() or not root.exists() or not common.exists():
-            raise ActuatorRefusal(ActuatorCode.WORKTREE_IDENTITY_MISMATCH, "repository identity cannot be proven")
+        worktree_root = Path(registration.worktree_root or registration.root).resolve()
+        if (
+            root.is_symlink()
+            or not root.exists()
+            or not common.exists()
+            or worktree_root.is_symlink()
+            or not worktree_root.exists()
+        ):
+            raise ActuatorRefusal(
+                ActuatorCode.WORKTREE_IDENTITY_MISMATCH,
+                "repository identity cannot be proven",
+            )
         payload = self.state.registry()
         repositories = dict(payload["repositories"])
-        repositories[registration.repository_id] = asdict(registration)
+        normalized = asdict(registration)
+        normalized["worktree_root"] = str(worktree_root)
+        repositories[registration.repository_id] = normalized
         payload["repositories"] = repositories
         self.state.replace_registry(payload)
 
     def attach_worktree(self, registration: WorktreeRegistration) -> None:
-        """Maintainer/implementation activation; a caller cannot steal another worker's tree."""
+        """Maintainer activation; another worker cannot steal persistent state."""
+
         if registration.worker_id != self.state.worker_id:
-            raise ActuatorRefusal(ActuatorCode.WORKTREE_IDENTITY_MISMATCH, "worktree belongs to another worker")
+            raise ActuatorRefusal(
+                ActuatorCode.WORKTREE_IDENTITY_MISMATCH,
+                "worktree belongs to another worker",
+            )
         payload = self.state.registry()
-        if registration.repository_id not in payload["repositories"]:
-            raise ActuatorRefusal(ActuatorCode.WORKTREE_IDENTITY_MISMATCH, "repository is not registered")
+        raw_repo = payload["repositories"].get(registration.repository_id)
+        if not isinstance(raw_repo, dict):
+            raise ActuatorRefusal(
+                ActuatorCode.WORKTREE_IDENTITY_MISMATCH,
+                "repository is not registered",
+            )
         path = Path(registration.path).resolve()
-        if not path.exists() or path.is_symlink():
-            raise ActuatorRefusal(ActuatorCode.WORKTREE_IDENTITY_MISMATCH, "worktree path is not durable")
+        allowed_root = Path(str(raw_repo["worktree_root"])).resolve()
+        if (
+            not path.exists()
+            or path.is_symlink()
+            or not self._is_within(path, allowed_root)
+        ):
+            raise ActuatorRefusal(
+                ActuatorCode.WORKTREE_IDENTITY_MISMATCH,
+                "worktree path is outside the registered actuator root",
+            )
         worktrees = dict(payload["worktrees"])
         existing = worktrees.get(registration.worktree_id)
         if existing and existing.get("worker_id") != self.state.worker_id:
-            raise ActuatorRefusal(ActuatorCode.WORKTREE_IDENTITY_MISMATCH, "dirty worktree migration refused")
+            raise ActuatorRefusal(
+                ActuatorCode.WORKTREE_IDENTITY_MISMATCH,
+                "dirty worktree migration refused",
+            )
         worktrees[registration.worktree_id] = asdict(registration)
         payload["worktrees"] = worktrees
         self.state.replace_registry(payload)
 
-    def _lookup(self, repository_id: str, worktree_id: str) -> tuple[RepositoryRegistration, WorktreeRegistration]:
+    def worktree_create(
+        self,
+        ctx: RequestContext,
+        repository_id: str,
+        *,
+        source_sha: str,
+        branch: str,
+        directory_name: str,
+    ) -> WorktreeRegistration:
+        """Create an exact-ref linked worktree under the enrolled actuator root."""
+
+        self._require_online()
+        self._require_role(ctx, write=True)
+        payload = self.state.registry()
+        raw_repo = payload["repositories"].get(repository_id)
+        if not isinstance(raw_repo, dict):
+            raise ActuatorRefusal(
+                ActuatorCode.WORKTREE_IDENTITY_MISMATCH,
+                "repository is not registered",
+            )
+        repo = RepositoryRegistration(**raw_repo)
+        if Path(directory_name).name != directory_name or directory_name in {"", ".", ".."}:
+            raise ActuatorRefusal(ActuatorCode.PATH_ESCAPE, "worktree directory name is invalid")
+        source_root = Path(repo.root).resolve()
+        target_root = Path(repo.worktree_root or repo.root).resolve()
+        target = (target_root / directory_name).resolve()
+        if not self._is_within(target, target_root) or target.exists():
+            raise ActuatorRefusal(
+                ActuatorCode.PATH_ESCAPE,
+                "worktree target must be a new child of the enrolled actuator root",
+            )
+        runner = GitRunner(trusted_hooks_dir=self.state.hooks_dir)
+        delivery = RepositoryDelivery(
+            source_root,
+            default_branch=repo.default_branch,
+            remote_policy=RemotePolicy(repo.remote_host, repo.owner, repo.repo),
+            runner=runner,
+        )
+        delivery.assert_branch_allowed(branch)
+        delivery.assert_safe_config()
+        delivery.assert_raw_history()
+        resolved = delivery._git(["rev-parse", "--verify", f"{source_sha}^{{commit}}"], check=False)
+        if resolved.returncode != 0 or resolved.stdout.strip().lower() != source_sha.lower():
+            raise ActuatorRefusal(
+                ActuatorCode.WORKTREE_IDENTITY_MISMATCH,
+                "source ref does not resolve to the requested exact SHA",
+            )
+        existing = delivery._git(["show-ref", "--verify", f"refs/heads/{branch}"], check=False)
+        if existing.returncode == 0:
+            raise ActuatorRefusal(
+                ActuatorCode.WORKTREE_IDENTITY_MISMATCH,
+                "local branch already exists",
+            )
+        delivery._git(["worktree", "add", "-b", branch, str(target), source_sha])
+        created = RepositoryDelivery(
+            target,
+            default_branch=repo.default_branch,
+            remote_policy=RemotePolicy(repo.remote_host, repo.owner, repo.repo),
+            runner=runner,
+        )
+        if created.common_git_dir() != Path(repo.common_git_dir).resolve():
+            raise ActuatorRefusal(
+                ActuatorCode.WORKTREE_IDENTITY_MISMATCH,
+                "created worktree has wrong common Git directory",
+            )
+        if created._git(["rev-parse", "HEAD"]).stdout.strip().lower() != source_sha.lower():
+            raise ActuatorRefusal(
+                ActuatorCode.WORKTREE_IDENTITY_MISMATCH,
+                "created worktree HEAD differs from exact source SHA",
+            )
+        registration = WorktreeRegistration(
+            worktree_id=str(uuid.uuid4()),
+            repository_id=repository_id,
+            path=str(target),
+            branch=branch,
+            worker_id=self.state.worker_id,
+            durable_commit=source_sha.lower(),
+        )
+        self.attach_worktree(registration)
+        self._audit(
+            ctx,
+            "worktree_create",
+            ActuatorCode.OK.value,
+            repository_id=repository_id,
+            worktree_id=registration.worktree_id,
+            sha_after=source_sha.lower(),
+        )
+        return registration
+
+    def _lookup(
+        self,
+        repository_id: str,
+        worktree_id: str,
+    ) -> tuple[RepositoryRegistration, WorktreeRegistration]:
         payload = self.state.registry()
         raw_repo = payload["repositories"].get(repository_id)
         raw_tree = payload["worktrees"].get(worktree_id)
         if not isinstance(raw_repo, dict) or not isinstance(raw_tree, dict):
-            raise ActuatorRefusal(ActuatorCode.WORKTREE_IDENTITY_MISMATCH, "repository/worktree is not registered")
+            raise ActuatorRefusal(
+                ActuatorCode.WORKTREE_IDENTITY_MISMATCH,
+                "repository/worktree is not registered",
+            )
         repo = RepositoryRegistration(**raw_repo)
         tree = WorktreeRegistration(**raw_tree)
         if tree.repository_id != repository_id or tree.worker_id != self.state.worker_id:
-            raise ActuatorRefusal(ActuatorCode.WORKTREE_IDENTITY_MISMATCH, "worktree binding mismatch")
+            raise ActuatorRefusal(
+                ActuatorCode.WORKTREE_IDENTITY_MISMATCH,
+                "worktree binding mismatch",
+            )
         return repo, tree
 
-    def _delivery(self, repo: RepositoryRegistration, tree: WorktreeRegistration) -> RepositoryDelivery:
+    def _delivery(
+        self,
+        repo: RepositoryRegistration,
+        tree: WorktreeRegistration,
+        *,
+        credentialed: bool = False,
+    ) -> RepositoryDelivery:
         worktree = Path(tree.path).resolve()
-        runner = GitRunner(trusted_hooks_dir=self.state.hooks_dir)
+        try:
+            runner = (
+                windows_gcm_runner(trusted_hooks_dir=self.state.hooks_dir)
+                if credentialed
+                else GitRunner(trusted_hooks_dir=self.state.hooks_dir)
+            )
+        except DeliveryRefusal as exc:
+            raise ActuatorRefusal(exc.code, str(exc)) from exc
         delivery = RepositoryDelivery(
             worktree,
             default_branch=repo.default_branch,
@@ -328,17 +577,48 @@ class LocalWorktreeActuator:
         )
         common = delivery.common_git_dir()
         if common != Path(repo.common_git_dir).resolve():
-            raise ActuatorRefusal(ActuatorCode.WORKTREE_IDENTITY_MISMATCH, "Git common-dir identity changed")
+            raise ActuatorRefusal(
+                ActuatorCode.WORKTREE_IDENTITY_MISMATCH,
+                "Git common-dir identity changed",
+            )
         branch = delivery._git(["symbolic-ref", "--short", "HEAD"], check=False)
         if branch.returncode != 0 or branch.stdout.strip() != tree.branch:
-            raise ActuatorRefusal(ActuatorCode.WORKTREE_IDENTITY_MISMATCH, "branch binding changed")
+            raise ActuatorRefusal(
+                ActuatorCode.WORKTREE_IDENTITY_MISMATCH,
+                "branch binding changed",
+            )
         return delivery
 
-    def _git_admin_roots(self, delivery: RepositoryDelivery, tree: WorktreeRegistration) -> tuple[Path, ...]:
+    def worktree_inspect(
+        self,
+        ctx: RequestContext,
+        repository_id: str,
+        worktree_id: str,
+    ) -> dict[str, str]:
+        self._require_online()
+        self._require_role(ctx)
+        repo, tree = self._lookup(repository_id, worktree_id)
+        delivery = self._delivery(repo, tree)
+        return {
+            "worktree_id": tree.worktree_id,
+            "repository_id": tree.repository_id,
+            "branch": tree.branch,
+            "head_sha": delivery._git(["rev-parse", "HEAD"]).stdout.strip().lower(),
+            "durable_commit": tree.durable_commit,
+        }
+
+    def _git_admin_roots(
+        self,
+        delivery: RepositoryDelivery,
+        tree: WorktreeRegistration,
+    ) -> tuple[Path, ...]:
         worktree = Path(tree.path).resolve()
         common = delivery.common_git_dir()
-        git_dir_text = delivery._git(["rev-parse", "--path-format=absolute", "--git-dir"]).stdout.strip()
-        git_dir = Path(git_dir_text).resolve()
+        git_dir = Path(
+            delivery._git(
+                ["rev-parse", "--path-format=absolute", "--git-dir"]
+            ).stdout.strip()
+        ).resolve()
         return (worktree / ".git", git_dir, common)
 
     @staticmethod
@@ -361,11 +641,13 @@ class LocalWorktreeActuator:
         repo, tree = self._lookup(repository_id, worktree_id)
         delivery = self._delivery(repo, tree)
         root = Path(tree.path).resolve()
-        if Path(relative_path).is_absolute() or ".." in Path(relative_path).parts:
-            raise ActuatorRefusal(ActuatorCode.PATH_ESCAPE, "absolute/traversal target refused")
-        lexical = root / relative_path
-        # Resolve the deepest existing ancestor to catch symlink/junction indirection
-        # without requiring the final file to exist.
+        requested = Path(relative_path)
+        if requested.is_absolute() or ".." in requested.parts:
+            raise ActuatorRefusal(
+                ActuatorCode.PATH_ESCAPE,
+                "absolute/traversal target refused",
+            )
+        lexical = root / requested
         ancestor = lexical
         suffix: list[str] = []
         while not ancestor.exists() and ancestor != root:
@@ -375,16 +657,75 @@ class LocalWorktreeActuator:
         for part in reversed(suffix):
             resolved = resolved / part
         if not self._is_within(resolved, root):
-            raise ActuatorRefusal(ActuatorCode.PATH_ESCAPE, "resolved target leaves assigned worktree")
+            raise ActuatorRefusal(
+                ActuatorCode.PATH_ESCAPE,
+                "resolved target leaves assigned worktree",
+            )
         for admin in self._git_admin_roots(delivery, tree):
             admin_resolved = admin.resolve() if admin.exists() else admin
             if resolved == admin_resolved or self._is_within(resolved, admin_resolved):
-                raise ActuatorRefusal(ActuatorCode.GIT_ADMIN_PATH_REFUSED, "Git administrative target refused")
+                raise ActuatorRefusal(
+                    ActuatorCode.GIT_ADMIN_PATH_REFUSED,
+                    "Git administrative target refused",
+                )
         try:
             assert_safe_paths([relative_path])
         except DeliveryRefusal as exc:
             raise ActuatorRefusal(exc.code, str(exc)) from exc
         return resolved
+
+    def write_text(
+        self,
+        ctx: RequestContext,
+        repository_id: str,
+        worktree_id: str,
+        relative_path: str,
+        text: str,
+    ) -> str:
+        """Bounded structured UTF-8 write inside the assigned worktree only."""
+
+        self._require_writer(worktree_id)
+        encoded = text.encode("utf-8")
+        if len(encoded) > MAX_WRITE_BYTES or "\x00" in text:
+            raise ActuatorRefusal(
+                ActuatorCode.CAPABILITY_UNAVAILABLE,
+                "write payload exceeds bounded UTF-8 file surface",
+            )
+        target = self.validate_write_target(
+            ctx,
+            repository_id,
+            worktree_id,
+            relative_path,
+        )
+        target.parent.mkdir(parents=True, exist_ok=True)
+        # Revalidate the parent immediately before atomic replacement. This is a
+        # model-path containment guard, not an OS sandbox against another local
+        # administrator racing the maintainer process.
+        parent = target.parent.resolve()
+        root = Path(self._lookup(repository_id, worktree_id)[1].path).resolve()
+        if not self._is_within(parent, root):
+            raise ActuatorRefusal(ActuatorCode.PATH_ESCAPE, "write parent escaped")
+        fd, temp_name = tempfile.mkstemp(prefix=f".{target.name}.", dir=parent)
+        temp = Path(temp_name)
+        try:
+            with os.fdopen(fd, "wb") as handle:
+                handle.write(encoded)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temp, target)
+        finally:
+            temp.unlink(missing_ok=True)
+        digest = hashlib.sha256(encoded).hexdigest()
+        self._audit(
+            ctx,
+            "write_text",
+            ActuatorCode.OK.value,
+            repository_id=repository_id,
+            worktree_id=worktree_id,
+            path_digest=hashlib.sha256(relative_path.encode()).hexdigest(),
+            result_digest=digest,
+        )
+        return digest
 
     def run_named_profile(
         self,
@@ -399,33 +740,51 @@ class LocalWorktreeActuator:
         self._lookup(repository_id, worktree_id)
         profile = self.profiles.get(profile_name)
         if profile is None:
-            raise ActuatorRefusal(ActuatorCode.UNKNOWN_PROFILE, "unknown server-owned profile")
+            raise ActuatorRefusal(
+                ActuatorCode.UNKNOWN_PROFILE,
+                "unknown server-owned profile",
+            )
         if not profile.worker_owned or profile.executes_worktree_content:
             raise ActuatorRefusal(
                 ActuatorCode.LOCAL_TEST_PROFILE_REQUIRES_ISOLATION,
                 "mutable worktree execution requires separately authorized isolation",
             )
-        # MVP worker-owned validation is intentionally in-process and reads only
-        # the worker-private registry. No child process or repository import occurs.
+        # Worker-owned validation is intentionally in-process and reads only the
+        # worker-private registry. No child process or repository import occurs.
         self.state.registry()
-        self._audit(ctx, "named_profile", ActuatorCode.OK.value, profile=profile_name)
+        self._audit(
+            ctx,
+            "named_profile",
+            ActuatorCode.OK.value,
+            profile=profile_name,
+        )
         return ActuatorCode.OK.value
 
-    def git_status(self, ctx: RequestContext, repository_id: str, worktree_id: str) -> str:
+    def git_status(
+        self,
+        ctx: RequestContext,
+        repository_id: str,
+        worktree_id: str,
+    ) -> str:
         self._require_online()
         self._require_role(ctx)
         repo, tree = self._lookup(repository_id, worktree_id)
-        delivery = self._delivery(repo, tree)
-        completed = delivery._git(["status", "--porcelain=v1", "--untracked-files=all"])
-        return completed.stdout
+        return self._delivery(repo, tree)._git(
+            ["status", "--porcelain=v1", "--untracked-files=all"]
+        ).stdout
 
-    def git_diff(self, ctx: RequestContext, repository_id: str, worktree_id: str) -> str:
+    def git_diff(
+        self,
+        ctx: RequestContext,
+        repository_id: str,
+        worktree_id: str,
+    ) -> str:
         self._require_online()
         self._require_role(ctx)
         repo, tree = self._lookup(repository_id, worktree_id)
-        delivery = self._delivery(repo, tree)
-        completed = delivery._git(["diff", "--no-ext-diff", "--no-textconv", "--"])
-        return completed.stdout
+        return self._delivery(repo, tree)._git(
+            ["diff", "--no-ext-diff", "--no-textconv", "--"]
+        ).stdout
 
     def _lock_path(self, worktree_id: str) -> Path:
         safe = hashlib.sha256(worktree_id.encode()).hexdigest()
@@ -438,16 +797,30 @@ class LocalWorktreeActuator:
         try:
             fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
         except FileExistsError as exc:
-            raise ActuatorRefusal(ActuatorCode.WORKTREE_BUSY, "worktree writer already active") from exc
+            raise ActuatorRefusal(
+                ActuatorCode.WORKTREE_BUSY,
+                "worktree writer already active",
+            ) from exc
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            handle.write(json.dumps({"request_id": ctx.request_id, "session_id": ctx.session_id}) + "\n")
+            handle.write(
+                json.dumps(
+                    {
+                        "request_id": ctx.request_id,
+                        "session_id": ctx.session_id,
+                    }
+                )
+                + "\n"
+            )
 
     def release_writer(self, worktree_id: str) -> None:
         self._lock_path(worktree_id).unlink(missing_ok=True)
 
     def _require_writer(self, worktree_id: str) -> None:
         if not self._lock_path(worktree_id).exists():
-            raise ActuatorRefusal(ActuatorCode.WORKTREE_BUSY, "writer lock required")
+            raise ActuatorRefusal(
+                ActuatorCode.WORKTREE_BUSY,
+                "writer lock required",
+            )
 
     def stage_paths(
         self,
@@ -466,9 +839,18 @@ class LocalWorktreeActuator:
             self.validate_write_target(ctx, repository_id, worktree_id, path)
         delivery.assert_raw_history()
         delivery._git(["add", "--", *normalized])
-        staged = delivery._git(["diff", "--cached", "--name-only", "--no-renames"]).stdout.splitlines()
+        staged = delivery._git(
+            ["diff", "--cached", "--name-only", "--no-renames"]
+        ).stdout.splitlines()
         assert_safe_paths(staged)
-        self._audit(ctx, "stage_paths", ActuatorCode.OK.value, repository_id=repository_id, worktree_id=worktree_id, path_count=len(normalized))
+        self._audit(
+            ctx,
+            "stage_paths",
+            ActuatorCode.OK.value,
+            repository_id=repository_id,
+            worktree_id=worktree_id,
+            path_count=len(normalized),
+        )
 
     def commit(
         self,
@@ -480,25 +862,59 @@ class LocalWorktreeActuator:
         self._require_online()
         self._require_role(ctx, write=True)
         self._require_writer(worktree_id)
-        if not message or len(message) > 500 or any(ord(ch) < 32 and ch not in "\t" for ch in message):
-            raise ActuatorRefusal(ActuatorCode.INTERNAL_ERROR, "commit message is invalid")
+        if not message or len(message) > 500 or any(
+            ord(ch) < 32 and ch not in "\t" for ch in message
+        ):
+            raise ActuatorRefusal(
+                ActuatorCode.INTERNAL_ERROR,
+                "commit message is invalid",
+            )
+        if not self.state.commit_author_name or not self.state.commit_author_email:
+            raise ActuatorRefusal(
+                ActuatorCode.CAPABILITY_UNAVAILABLE,
+                "maintainer-owned commit author is not activated",
+            )
         repo, tree = self._lookup(repository_id, worktree_id)
         delivery = self._delivery(repo, tree)
         delivery.assert_branch_allowed(tree.branch)
         delivery.assert_safe_config()
         delivery.assert_raw_history()
-        staged = delivery._git(["diff", "--cached", "--name-only", "--no-renames"]).stdout.splitlines()
+        staged = delivery._git(
+            ["diff", "--cached", "--name-only", "--no-renames"]
+        ).stdout.splitlines()
         if not staged:
-            raise ActuatorRefusal(ActuatorCode.INTERNAL_ERROR, "staged diff is empty")
+            raise ActuatorRefusal(
+                ActuatorCode.INTERNAL_ERROR,
+                "staged diff is empty",
+            )
         assert_safe_paths(staged)
-        delivery._git(["commit", "-m", message, "--no-verify"])
+        delivery._git(
+            [
+                "-c",
+                f"user.name={self.state.commit_author_name}",
+                "-c",
+                f"user.email={self.state.commit_author_email}",
+                "commit",
+                "-m",
+                message,
+                "--no-verify",
+            ]
+        )
         sha = delivery._git(["rev-parse", "HEAD"]).stdout.strip().lower()
         payload = self.state.registry()
         raw = dict(payload["worktrees"][worktree_id])
         raw["durable_commit"] = sha
         payload["worktrees"][worktree_id] = raw
         self.state.replace_registry(payload)
-        self._audit(ctx, "commit", ActuatorCode.OK.value, repository_id=repository_id, worktree_id=worktree_id, sha_after=sha, path_count=len(staged))
+        self._audit(
+            ctx,
+            "commit",
+            ActuatorCode.OK.value,
+            repository_id=repository_id,
+            worktree_id=worktree_id,
+            sha_after=sha,
+            path_count=len(staged),
+        )
         return sha
 
     def push_branch(
@@ -514,7 +930,7 @@ class LocalWorktreeActuator:
         self._require_role(ctx, write=True)
         self._require_writer(worktree_id)
         repo, tree = self._lookup(repository_id, worktree_id)
-        delivery = self._delivery(repo, tree)
+        delivery = self._delivery(repo, tree, credentialed=True)
         try:
             result = delivery.guarded_push(
                 branch=tree.branch,
@@ -522,19 +938,22 @@ class LocalWorktreeActuator:
                 expected_remote_head=expected_remote_head,
             )
         except DeliveryRefusal as exc:
-            self._audit(ctx, "push_branch", exc.code.value, repository_id=repository_id, worktree_id=worktree_id, expected_remote_sha=expected_remote_head)
             raise ActuatorRefusal(exc.code, str(exc)) from exc
-        self._audit(ctx, "push_branch", result.code.value, repository_id=repository_id, worktree_id=worktree_id, expected_remote_sha=expected_remote_head, sha_after=result.remote_head, path_count=len(result.changed_paths))
+        self._audit(
+            ctx,
+            "push_branch",
+            result.code.value,
+            repository_id=repository_id,
+            worktree_id=worktree_id,
+            expected_remote_sha=expected_remote_head,
+            sha_after=result.remote_head,
+            path_count=len(result.changed_paths),
+        )
         return result.remote_head
 
 
 def zero_worker_cloud_capabilities() -> dict[str, bool]:
-    """Explicit availability projection used by orchestration/tests.
-
-    This function has no dependency on worker state by design: worker absence may
-    disable local capabilities only, never GitHub/API, Actions, cloud review, or
-    separately authorized browser proof.
-    """
+    """Availability projection with no dependency on any worker process/state."""
 
     return {
         "github_api": True,
