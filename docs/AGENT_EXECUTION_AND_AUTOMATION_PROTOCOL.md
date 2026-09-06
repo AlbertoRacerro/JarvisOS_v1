@@ -4,6 +4,7 @@ Status: canonical operational process
 Effective date: 2026-08-05
 Amended: 2026-08-31 — ChatGPT direct implementation default and non-blocking optional model helpers
 Amended: 2026-09-05 — human-blocker failover and bounded causal-sibling review batching
+Amended: 2026-09-06 — semantic-review race and bounded degraded quorum
 
 This document defines JarvisOS repository delivery, external model collaboration, exact-head evidence, finding closure, merge/reconciliation, and the controlled post-112 delivery exception. It governs repository-development actors only; it does not broaden JarvisOS runtime authority, provider policy, credentials, budgets, egress, schemas, or product behavior.
 
@@ -111,13 +112,30 @@ ChatGPT reviews exact diff, scope, semantics, invariants, and test evidence. A g
 
 ChatGPT repairs directly by default. If a useful external candidate is already terminal, ChatGPT may consume and minimally repair it rather than discard it, but no external candidate or repair hop is required before direct progress continues.
 
-### Claude — independent terminal reviewer
+### Claude — independent semantic reviewer
 
-Claude is an independent terminal reviewer when independent review is required by the accepted slice/policy or materially useful for risk reduction. Claude is reviewer, not a required implementation hop.
+Claude is requested immediately on a frozen exact head when independent semantic review is required by the accepted slice/policy or materially useful for risk reduction. Claude is reviewer, not a required implementation hop.
 
-### Codex — scarce specialist/high-risk reserve
+### Codex — scarce specialist/high-risk reserve and latency fallback
 
-Codex is used only where a concrete material advantage or unresolved high-risk need justifies it. Do not spend Codex routinely on docs/planning/reconciliation, small PRs, ordinary UI polish, CI watching, or duplicate review. Do not ask Claude and Codex the same generic question on one immutable head without a material unresolved reason.
+Codex remains a scarce specialist/high-risk reserve. Request it concurrently with Claude only when the exact diff has a concrete material-risk reason — for example repository authority, security/credential/egress, merge/verification mechanics, destructive behavior, or another unresolved high-risk boundary — or another concrete material advantage justifies duplicate diversity. For ordinary material work without that condition, do not spend Codex routinely: if Claude has not produced a consumable exact-head verdict by the next scheduled coordinating-builder wake, Codex becomes the default current-head fallback and is requested then unless a current-head Codex request/result already exists.
+
+### Semantic-review race and bounded degraded quorum
+
+When semantic review is required on a frozen exact head:
+
+1. the active ChatGPT coordinator immediately performs a severe adversarial exact-head review of the diff, accepted scope, relevant invariants/owners, tests, and failure modes;
+2. Claude is requested immediately on that exact head;
+3. Codex is requested concurrently only under the high-risk/material-advantage condition above; otherwise it is automatically requested at the first subsequent scheduled coordinating-builder wake if Claude still has no consumable exact-head verdict;
+4. the normal semantic-review gate is satisfied by the first consumable exact-head PASS from either Claude or Codex plus at least one exact-head ChatGPT builder PASS, provided no unresolved P0/P1, blocking P2, substantial reviewer disagreement, or violated accepted-scope requirement remains;
+5. an external PASS alone is insufficient, and a single builder review/wake can never self-certify a material change;
+6. if a later external P0/P1 or blocking P2 arrives before merge, consume it and reopen the gate;
+7. the maintainer explicitly authorizes a bounded degraded-quorum latency fallback only where the governing accepted slice/policy requires semantic review but does **not** explicitly require an independent reviewer. If the exact head is unchanged, both Claude and Codex have been requested, neither has produced a consumable verdict, and two subsequent scheduled Builder A/B/C/D wake-ups have occurred after the first current-head external request, external latency stops blocking and two separately persisted severe exact-head Builder PASS verdicts may satisfy the degraded semantic-review gate only when each verdict was produced and persisted during its own qualifying wake. A later wake may not backfill or retroactively claim the earlier qualifying PASS. If the accepted slice/policy requires `independent semantic review`, `independent exact-head review`, or equivalent independent-review evidence, degraded quorum is ineligible and a consumable independent reviewer PASS remains mandatory;
+8. the two wake-bound builder verdicts must be severe adversarial exact-head reviews, not workflow-green assertions; any disagreement, P0/P1, blocking P2, or failed acceptance criterion prevents degraded quorum;
+9. where practical, the later qualifying wake forms its initial verdict before reading the earlier builder verdict to reduce anchoring;
+10. degraded quorum is valid only from **durable exact-head repository-native evidence** inspectable by a later coordinator at merge time. That evidence must bind the unchanged exact head and record: the Claude and Codex request identifiers/timestamps; the two qualifying subsequent scheduled builder-wake markers; and one severe exact-head Builder PASS verdict produced and persisted during each corresponding qualifying wake. PR comments/reviews or another already-canonical repo-native coordination surface may carry this evidence. This fallback is temporal corroboration only: it does not claim authenticated reviewer identity, reviewer diversity, non-mutator provenance, or independent-review evidence. Automation titles, private chat state, scheduler memory, retroactively backfilled verdicts, or unverifiable model claims do not establish any prerequisite. If any required fact cannot be reconstructed deterministically from durable evidence, degraded quorum is unavailable and the semantic gate remains open.
+
+Semantic review never substitutes for evidence whose truth depends on execution or environment. Required deterministic tests/CI, exact-head registry checks, browser/Playwright proof, hardware/local-host activation, live integration evidence, human-controlled actions/credentials, and exact remote-head/CAS/post-mutation verification remain mandatory. Head mutation invalidates affected review/proof evidence.
 
 ### Evidence precedence
 
@@ -173,9 +191,9 @@ Re-scan the queue after every material transition. If the missing human evidence
 
 Only when an explicit fresh queue scan proves that **no lawful independent work exists** may a scheduler escalate the human blocker on every wake-up with a conspicuous repeated-🚨 Slack message that identifies the exact blocked slice/PR, exact blocker, and exact human action required. Ordinary CI/review waits, global-writer mutex contention, and PARKed P2/P3 findings do not trigger this alarm.
 
-When any semantic reviewer finds a P0/P1, before finalizing the verdict it performs **exactly one bounded causal-sibling sweep** of the same failure family and directly adjacent accepted-scope paths, then reports all P0/P1 plus useful P2 siblings together in one consolidated verdict. The sweep must not recurse or broaden into unrelated architecture, cleanup, or future scope. If a P0/P1 verdict does not show that bounded family sweep, request one same-head, family-limited follow-up before mutating unless immediate safety urgency requires repair. If that reviewer cannot provide a consumable follow-up, the coordinator performs exactly one bounded sweep of the same causal/failure family itself and may then repair the consolidated same-family P0/P1 set; the mutated head still requires fresh independent semantic review before merge. When safely possible, repair the consolidated same-family P0/P1 set in one bounded mutation with the minimum causal sibling tests. P2/P3 retain the impact classification in this section: a material blocking P2 must be fixed, while findings explicitly classified PARK do not delay an otherwise valid merge absent later elevation.
+When any semantic reviewer finds a P0/P1, before finalizing the verdict it performs **exactly one bounded causal-sibling sweep** of the same failure family and directly adjacent accepted-scope paths, then reports all P0/P1 plus useful P2 siblings together in one consolidated verdict. The sweep must not recurse or broaden into unrelated architecture, cleanup, or future scope. If a P0/P1 verdict does not show that bounded family sweep, request one same-head, family-limited follow-up before mutating unless immediate safety urgency requires repair. If that reviewer cannot provide a consumable follow-up, the coordinator performs exactly one bounded sweep of the same causal/failure family itself and may then repair the consolidated same-family P0/P1 set; the mutated head still requires fresh semantic review under section 6 before merge. When safely possible, repair the consolidated same-family P0/P1 set in one bounded mutation with the minimum causal sibling tests. P2/P3 retain the impact classification in this section: a material blocking P2 must be fixed, while findings explicitly classified PARK do not delay an otherwise valid merge absent later elevation.
 
-Any head mutation invalidates affected exact-head review evidence as usual. Required independent semantic review remains independent; self-review never substitutes for it.
+Any head mutation invalidates affected exact-head review evidence as usual. The semantic-review gate is satisfied only by the exact-head race/quorum rules in section 6; one builder review/wake never self-certifies.
 
 ## 11. Planning compression, focused gates, and read-only prework
 
@@ -198,10 +216,11 @@ Merge only when all hold on one exact head:
 1. authorized diff and scope;
 2. acceptance criteria satisfied;
 3. required deterministic gates and proofs terminal and green;
-4. no P0, P1, or blocking P2;
-5. no unresolved substantial review finding;
-6. no secret, spending, dependency, schema, provider, or authority conflict;
-7. registry state and implementation-PR association correct.
+4. the required semantic-review gate in section 6 is satisfied on that exact head;
+5. no P0, P1, or blocking P2;
+6. no unresolved substantial review finding;
+7. no secret, spending, dependency, schema, provider, or authority conflict;
+8. registry state and implementation-PR association correct.
 
 Use `expected_head_sha`. Never enable auto-merge. After merge, verify PR state, resulting commit, fresh `master`, and registry reconciliation.
 
