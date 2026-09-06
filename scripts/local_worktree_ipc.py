@@ -40,6 +40,7 @@ except ImportError:  # direct script-style import
     from repository_delivery import DeliveryRefusal  # type: ignore[no-redef]
 
 MAX_REQUEST_BYTES = 256 * 1024
+MAX_RESPONSE_BYTES = 512 * 1024
 IPC_KEY_BYTES = 32
 IPC_KEY_FILE = "ipc-auth.bin"
 IPC_PROTOCOL = "jarvisos-local-worktree-v1"
@@ -109,15 +110,35 @@ def ipc_authkey(state: WorkerState) -> bytes:
     return data
 
 
+def _decode_json_payload(payload: bytes, *, limit: int, label: str) -> Any:
+    if len(payload) > limit:
+        raise IPCRefusal(f"{label} exceeds bounded IPC payload")
+    try:
+        text = payload.decode("utf-8")
+        return json.loads(text)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise IPCRefusal(f"{label} is not valid UTF-8 JSON") from exc
+
+
+def _encode_json_payload(value: Any, *, limit: int, label: str) -> bytes:
+    try:
+        payload = json.dumps(
+            value,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode("utf-8")
+    except (TypeError, ValueError) as exc:
+        raise IPCRefusal(f"{label} is not JSON serializable") from exc
+    if len(payload) > limit:
+        raise IPCRefusal(f"{label} exceeds bounded IPC payload")
+    return payload
+
+
 def parse_request(raw: Any) -> tuple[RequestContext, str, dict[str, Any]]:
     """Validate the complete bounded request before actuator dispatch."""
 
-    try:
-        encoded = json.dumps(raw, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    except (TypeError, ValueError) as exc:
-        raise IPCRefusal("request is not canonical JSON data") from exc
-    if len(encoded) > MAX_REQUEST_BYTES:
-        raise IPCRefusal("request exceeds bounded IPC payload")
+    _encode_json_payload(raw, limit=MAX_REQUEST_BYTES, label="request")
     if not isinstance(raw, dict) or set(raw) != {"protocol", "context", "operation", "arguments"}:
         raise IPCRefusal("request envelope is invalid")
     if raw["protocol"] != IPC_PROTOCOL:
@@ -170,17 +191,28 @@ class LocalIPCServer:
             connection = listener.accept()
             try:
                 try:
-                    ctx, operation, arguments = parse_request(connection.recv())
+                    raw = _decode_json_payload(
+                        connection.recv_bytes(MAX_REQUEST_BYTES + 1),
+                        limit=MAX_REQUEST_BYTES,
+                        label="request",
+                    )
+                    ctx, operation, arguments = parse_request(raw)
                     result = self.actuator.dispatch(ctx, operation, **arguments)
                     response = {"ok": True, "result": _jsonable(result)}
-                except (IPCRefusal, ActuatorRefusal, DeliveryRefusal, TypeError) as exc:
+                except (IPCRefusal, ActuatorRefusal, DeliveryRefusal, TypeError, OSError) as exc:
                     code = getattr(getattr(exc, "code", None), "value", None)
                     response = {
                         "ok": False,
                         "code": code or "IPC_REFUSED",
                         "message": str(exc),
                     }
-                connection.send(response)
+                connection.send_bytes(
+                    _encode_json_payload(
+                        response,
+                        limit=MAX_RESPONSE_BYTES,
+                        label="response",
+                    )
+                )
             finally:
                 connection.close()
         finally:
@@ -195,8 +227,14 @@ def request_once(state: WorkerState, request: dict[str, Any]) -> dict[str, Any]:
     address, family = endpoint_for(state)
     connection = Client(address, family=family, authkey=ipc_authkey(state))
     try:
-        connection.send(request)
-        response = connection.recv()
+        connection.send_bytes(
+            _encode_json_payload(request, limit=MAX_REQUEST_BYTES, label="request")
+        )
+        response = _decode_json_payload(
+            connection.recv_bytes(MAX_RESPONSE_BYTES + 1),
+            limit=MAX_RESPONSE_BYTES,
+            label="response",
+        )
     finally:
         connection.close()
     if not isinstance(response, dict):
