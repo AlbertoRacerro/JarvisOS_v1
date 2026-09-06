@@ -1,23 +1,41 @@
 from __future__ import annotations
 
+import importlib.util
 import inspect
 import os
+import sys
 from pathlib import Path
 
 import pytest
 
-from scripts.local_worktree_actuator import Capability, WorkerState
-from scripts.local_worktree_ipc import (
-    IPC_PROTOCOL,
-    IPCRefusal,
-    LocalIPCServer,
-    _decode_json_payload,
-    _encode_json_payload,
-    endpoint_for,
-    ipc_authkey,
-    parse_request,
-    request_once,
-)
+ROOT = Path(__file__).resolve().parents[2]
+
+
+def load_script(name: str):
+    path = ROOT / "scripts" / f"{name}.py"
+    spec = importlib.util.spec_from_file_location(name, path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+repository_delivery = load_script("repository_delivery")
+actuator = load_script("local_worktree_actuator")
+ipc = load_script("local_worktree_ipc")
+
+Capability = actuator.Capability
+WorkerState = actuator.WorkerState
+IPC_PROTOCOL = ipc.IPC_PROTOCOL
+IPCRefusal = ipc.IPCRefusal
+LocalIPCServer = ipc.LocalIPCServer
+_decode_json_payload = ipc._decode_json_payload
+_encode_json_payload = ipc._encode_json_payload
+endpoint_for = ipc.endpoint_for
+ipc_authkey = ipc.ipc_authkey
+parse_request = ipc.parse_request
+request_once = ipc.request_once
 
 
 def _request() -> dict[str, object]:
