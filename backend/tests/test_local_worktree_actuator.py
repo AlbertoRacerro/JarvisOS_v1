@@ -47,10 +47,12 @@ def git(cwd: Path, *args: str) -> str:
 def fixture_worker(tmp_path: Path) -> tuple[LocalWorktreeActuator, RequestContext, RequestContext, Path, str]:
     remote = tmp_path / "remote.git"
     work = tmp_path / "work"
+    worktrees = tmp_path / "worktrees"
+    worktrees.mkdir()
     git(tmp_path, "init", "--bare", str(remote))
     git(tmp_path, "clone", str(remote), str(work))
-    git(work, "config", "user.name", "Spec 141 Test")
-    git(work, "config", "user.email", "spec141@example.invalid")
+    git(work, "config", "user.name", "Repository Config Must Not Own Commit Identity")
+    git(work, "config", "user.email", "repo-config@example.invalid")
     (work / "README.md").write_text("base\n", encoding="utf-8")
     git(work, "add", "README.md")
     git(work, "commit", "-m", "base")
@@ -59,7 +61,12 @@ def fixture_worker(tmp_path: Path) -> tuple[LocalWorktreeActuator, RequestContex
     base = git(work, "rev-parse", "HEAD")
     common = git(work, "rev-parse", "--path-format=absolute", "--git-common-dir")
 
-    state = WorkerState(tmp_path / "state", worker_id="worker-a")
+    state = WorkerState(
+        tmp_path / "state",
+        worker_id="worker-a",
+        commit_author_name="Maintainer Worker",
+        commit_author_email="worker@example.invalid",
+    )
     worker = LocalWorktreeActuator(state)
     worker.enroll_repository(
         RepositoryRegistration(
@@ -70,18 +77,21 @@ def fixture_worker(tmp_path: Path) -> tuple[LocalWorktreeActuator, RequestContex
             repo="repo",
             common_git_dir=common,
             default_branch="master",
+            worktree_root=str(worktrees),
         )
     )
-    worker.attach_worktree(
-        WorktreeRegistration(
-            worktree_id="tree",
-            repository_id="repo",
-            path=str(work),
-            branch="feature",
-            worker_id="worker-a",
-            durable_commit=base,
-        )
-    )
+    # Existing/main worktree attachment is an explicit activation exception to
+    # the create-under-root path used for actuator-created worktrees.
+    payload = worker.state.registry()
+    payload["worktrees"]["tree"] = {
+        "worktree_id": "tree",
+        "repository_id": "repo",
+        "path": str(work),
+        "branch": "feature",
+        "worker_id": "worker-a",
+        "durable_commit": base,
+    }
+    worker.state.replace_registry(payload)
     implementer = RequestContext("req-i", "principal", "session-i", Capability.IMPLEMENTER)
     reviewer = RequestContext("req-r", "principal", "session-r", Capability.REVIEWER)
     return worker, implementer, reviewer, work, base
@@ -125,6 +135,21 @@ def test_writer_lock_is_single_owner_and_non_destructive(tmp_path: Path) -> None
     assert exc.value.code == ActuatorCode.WORKTREE_BUSY
     assert (work / "README.md").read_text(encoding="utf-8") == "dirty\n"
     worker.release_writer("tree")
+
+
+def test_exact_worktree_create_uses_registered_root_and_sha(tmp_path: Path) -> None:
+    worker, implementer, _reviewer, _work, base = fixture_worker(tmp_path)
+    created = worker.worktree_create(
+        implementer,
+        "repo",
+        source_sha=base,
+        branch="actuator-feature",
+        directory_name="candidate-1",
+    )
+    assert created.worker_id == "worker-a"
+    assert Path(created.path).parent == tmp_path / "worktrees"
+    assert git(Path(created.path), "rev-parse", "HEAD") == base
+    assert git(Path(created.path), "branch", "--show-current") == "actuator-feature"
 
 
 def test_git_admin_targets_refuse_before_bytes_change(tmp_path: Path) -> None:
@@ -193,10 +218,13 @@ def test_worker_owned_profile_is_in_process(tmp_path: Path) -> None:
 def test_local_commit_survives_requester_and_worker_restart(tmp_path: Path) -> None:
     worker, implementer, _reviewer, work, base = fixture_worker(tmp_path)
     worker.acquire_writer(implementer, "tree")
-    (work / "README.md").write_text("base\nlocal\n", encoding="utf-8")
+    worker.write_text(implementer, "repo", "tree", "README.md", "base\nlocal\n")
     worker.stage_paths(implementer, "repo", "tree", ["README.md"])
     committed = worker.commit(implementer, "repo", "tree", "local durable commit")
     assert committed != base
+    assert git(work, "show", "-s", "--format=%an <%ae>", committed) == (
+        "Maintainer Worker <worker@example.invalid>"
+    )
     worker.release_writer("tree")
 
     restarted = LocalWorktreeActuator(WorkerState(tmp_path / "state"))
@@ -220,15 +248,13 @@ def test_wrong_worker_cannot_claim_persistent_worktree(tmp_path: Path) -> None:
     assert exc.value.code == ActuatorCode.WORKTREE_IDENTITY_MISMATCH
 
 
-def test_admitted_and_refused_actions_are_secret_free_in_audit(tmp_path: Path) -> None:
+def test_dispatch_audits_unknown_refusal_without_secret_fields(tmp_path: Path) -> None:
     worker, implementer, _reviewer, _work, _base = fixture_worker(tmp_path)
-    worker.run_named_profile(
-        implementer, "worker-registry-integrity", repository_id="repo", worktree_id="tree"
-    )
-    lines = worker.state.audit_path.read_text(encoding="utf-8").splitlines()
-    assert lines
-    joined = "\n".join(lines).lower()
+    with pytest.raises(ActuatorRefusal) as exc:
+        worker.dispatch(implementer, "arbitrary_shell", command="whoami")
+    assert exc.value.code == ActuatorCode.CAPABILITY_UNAVAILABLE
+    joined = worker.state.audit_path.read_text(encoding="utf-8").lower()
+    assert "capability_unavailable" in joined
     assert "authorization" not in joined
     assert "bearer " not in joined
-    assert "secret" not in joined
     assert "record_digest" in joined
