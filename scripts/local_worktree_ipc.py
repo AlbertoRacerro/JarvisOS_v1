@@ -18,7 +18,7 @@ from dataclasses import asdict, is_dataclass
 from enum import Enum
 from multiprocessing.connection import Client, Listener
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 try:
     from scripts.local_worktree_actuator import (
@@ -44,6 +44,11 @@ MAX_RESPONSE_BYTES = 512 * 1024
 IPC_KEY_BYTES = 32
 IPC_KEY_FILE = "ipc-auth.bin"
 IPC_PROTOCOL = "jarvisos-local-worktree-v1"
+
+# Maintainer activation may provide a fixed verifier that inspects the actual
+# Listener/named-pipe security descriptor. It is deliberately not request/IPC
+# addressable. Returning anything except literal True fails activation closed.
+WindowsBoundaryVerifier = Callable[[Any, "WorkerState", str], bool]
 
 
 class IPCRefusal(RuntimeError):
@@ -179,6 +184,7 @@ class LocalIPCServer:
         actuator: LocalWorktreeActuator,
         *,
         admitted_capabilities: dict[tuple[str, str], Capability] | None = None,
+        windows_boundary_verifier: WindowsBoundaryVerifier | None = None,
     ) -> None:
         self.actuator = actuator
         self.address, self.family = endpoint_for(actuator.state)
@@ -186,6 +192,7 @@ class LocalIPCServer:
         # Maintainer activation owns this mapping. It is never populated or
         # modified from request arguments, so a caller cannot self-promote.
         self._admitted_capabilities = dict(admitted_capabilities or {})
+        self._windows_boundary_verifier = windows_boundary_verifier
 
     def _admit_context(self, requested: RequestContext) -> RequestContext:
         capability = self._admitted_capabilities.get(
@@ -200,6 +207,21 @@ class LocalIPCServer:
             capability,
         )
 
+    def _verify_transport_boundary(self, listener: Any) -> None:
+        if self.family != "AF_PIPE":
+            return
+        verifier = self._windows_boundary_verifier
+        if verifier is None:
+            raise IPCRefusal(
+                "Windows IPC activation requires current-user named-pipe ACL verification"
+            )
+        try:
+            verified = verifier(listener, self.actuator.state, self.address)
+        except Exception as exc:  # activation verifier must fail closed
+            raise IPCRefusal("Windows current-user IPC boundary verification failed") from exc
+        if verified is not True:
+            raise IPCRefusal("Windows current-user IPC boundary is not verified")
+
     def serve_once(self) -> None:
         """Serve exactly one request; lifecycle/restart ownership stays external."""
 
@@ -207,6 +229,11 @@ class LocalIPCServer:
             Path(self.address).unlink(missing_ok=True)
         listener = Listener(self.address, family=self.family, authkey=self.authkey)
         try:
+            # Critical ordering: on Windows inspect/prove the *actual created*
+            # named-pipe boundary before accepting any peer. A host without a
+            # maintainer-owned verifier has no Windows local-worker capability;
+            # cloud/GitHub lanes remain independent and usable.
+            self._verify_transport_boundary(listener)
             if self.family == "AF_UNIX":
                 Path(self.address).chmod(0o600)
             connection = listener.accept()
@@ -268,6 +295,7 @@ __all__ = [
     "IPC_PROTOCOL",
     "IPCRefusal",
     "LocalIPCServer",
+    "WindowsBoundaryVerifier",
     "endpoint_for",
     "ipc_authkey",
     "parse_request",
