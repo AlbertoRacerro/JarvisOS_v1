@@ -11,6 +11,7 @@ const expectedHead = process.env.PROOF_EXPECTED_HEAD_SHA;
 const resolvedHead = process.env.PROOF_RESOLVED_HEAD_SHA;
 const checkedOutHead = process.env.PROOF_CHECKED_OUT_HEAD_SHA;
 const controllerSha = process.env.PROOF_CONTROLLER_SHA;
+const prBaseSha = process.env.PROOF_PR_BASE_SHA;
 const repository = process.env.PROOF_REPOSITORY;
 const prNumber = process.env.PROOF_PR_NUMBER;
 const runId = process.env.GITHUB_RUN_ID ?? "unknown";
@@ -18,7 +19,7 @@ const seedScript = process.env.PROOF_SEED_SCRIPT;
 const proofPython = process.env.PROOF_PYTHON;
 const candidateUser = process.env.PROOF_CANDIDATE_USER;
 
-if (!scenario || !artifactDir || !expectedHead || !resolvedHead || !checkedOutHead || !controllerSha || !repository) {
+if (!scenario || !artifactDir || !expectedHead || !resolvedHead || !checkedOutHead || !controllerSha || !prBaseSha || !repository) {
   throw new Error("missing required proof identity environment");
 }
 if (expectedHead !== resolvedHead || expectedHead !== checkedOutHead) {
@@ -99,33 +100,19 @@ const prove113 = async () => {
   await screenshot("exact-version-b");
 };
 
-const proveGenericRoute = async (route) => {
-  const response = await page.goto(`${baseUrl}${route}`, { waitUntil: "networkidle", timeout: 30_000 });
-  record(`${route}:http`, Boolean(response) && response.status() < 500, `status=${response?.status() ?? "none"}`);
-  record(`${route}:spa-path`, new URL(page.url()).pathname === route, `url=${page.url()}`);
-  const body = (await page.locator("body").innerText()).trim();
-  record(`${route}:rendered`, body.length > 20, `body_length=${body.length}`);
-  const lower = body.toLowerCase();
-  if (route === "/settings/ai") {
-    record("124:surface-identity", lower.includes("ai") || lower.includes("provider"), "settings surface must identify AI/provider state");
-    record("124:no-password-field", (await page.locator('input[type="password"]').count()) === 0, "generic provider projection must not expose browser-held secret fields");
-  } else if (route === "/coding/repository") {
-    record("140:repository-surface", lower.includes("repository") || lower.includes("commit"), "repository surface identity missing");
-  } else if (route === "/coding/runtime") {
-    record("140:runtime-surface", lower.includes("runtime"), "runtime surface identity missing");
-    const forbidden = ["git push", "merge pull request", "provider key"];
-    record("140:no-browser-authority", forbidden.every((label) => !lower.includes(label)), "coding surface exposed forbidden browser mutation authority");
-  }
-  await screenshot(route.replaceAll("/", "_") || "root");
-};
-
 let verdict = "PASS";
 let failure = null;
 try {
   if (scenario === "113-memory-models") {
     await prove113();
   } else {
-    for (const route of routes[scenario]) await proveGenericRoute(route);
+    verdict = "REFUSED";
+    failure = `${scenario} trusted candidate-specific browser assertions are not ready; no PASS emitted`;
+    assertions.push({
+      name: `${scenario}:refused-not-ready`,
+      pass: true,
+      detail: "trusted candidate-specific assertions must exist before this scenario can produce browser-proof PASS",
+    });
   }
 } catch (error) {
   verdict = "FAIL";
@@ -135,6 +122,14 @@ try {
   await context.tracing.stop({ path: trace });
   artifacts.push(trace);
   await browser.close();
+}
+
+const backendLog = join(artifactDir, "backend.log");
+try {
+  await readFile(backendLog);
+  artifacts.push(backendLog);
+} catch (error) {
+  if (error?.code !== "ENOENT") throw error;
 }
 
 const digests = {};
@@ -147,13 +142,14 @@ const manifest = {
   schema: "jarvisos.exact-head-browser-proof.v1",
   repository,
   pr_number: prNumber ? Number(prNumber) : null,
+  pr_base_sha: prBaseSha,
   expected_head_sha: expectedHead,
   resolved_pr_head_sha: resolvedHead,
   checked_out_head_sha: checkedOutHead,
   controller_sha: controllerSha,
   workflow_run_id: runId,
   scenario,
-  seed_version: scenario === "113-memory-models" ? "113-workspace-then-two-exact-versions-v1" : "isolated-empty-v1",
+  seed_version: scenario === "113-memory-models" ? "113-workspace-then-two-exact-versions-v1" : "not-run-refused-v1",
   browser: "chromium",
   playwright_version: "1.55.0",
   started_at: startedAt,

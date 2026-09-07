@@ -70,6 +70,7 @@ jobs:
             -H "X-GitHub-Api-Version: 2022-11-28" \
             "$api")"
           resolved="$(python -c 'import json,sys; print(json.load(sys.stdin)["head"]["sha"])' <<<"$response")"
+          base_sha="$(python -c 'import json,sys; print(json.load(sys.stdin)["base"]["sha"])' <<<"$response")"
           head_repo="$(python -c 'import json,sys; print(json.load(sys.stdin)["head"]["repo"]["full_name"])' <<<"$response")"
           state="$(python -c 'import json,sys; print(json.load(sys.stdin)["state"])' <<<"$response")"
           test "$head_repo" = "$GITHUB_REPOSITORY" || {
@@ -80,11 +81,16 @@ jobs:
             echo "PR is not open." >&2
             exit 1
           }
+          [[ "$base_sha" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "Fresh PR base SHA is not an exact lowercase 40-hex SHA." >&2
+            exit 1
+          }
           test "$resolved" = "${{ inputs.expected_head_sha }}" || {
             echo "Fresh PR head does not match expected_head_sha." >&2
             exit 1
           }
           echo "sha=$resolved" >> "$GITHUB_OUTPUT"
+          echo "base_sha=$base_sha" >> "$GITHUB_OUTPUT"
 
       - name: Checkout exact candidate system under test
         uses: actions/checkout@v4
@@ -246,6 +252,7 @@ jobs:
           PROOF_RESOLVED_HEAD_SHA: ${{ steps.pr.outputs.sha }}
           PROOF_CHECKED_OUT_HEAD_SHA: ${{ steps.candidate.outputs.sha }}
           PROOF_CONTROLLER_SHA: ${{ steps.controller.outputs.sha }}
+          PROOF_PR_BASE_SHA: ${{ steps.pr.outputs.base_sha }}
           PROOF_REPOSITORY: ${{ github.repository }}
           PROOF_PR_NUMBER: ${{ inputs.pr_number }}
         run: node run.mjs
@@ -257,6 +264,70 @@ jobs:
           if test -f "$PROOF_DIR/backend.pid"; then
             kill "$(cat "$PROOF_DIR/backend.pid")" 2>/dev/null || true
           fi
+
+      - name: Create fallback failure manifest
+        if: always()
+        shell: bash
+        env:
+          PROOF_REPOSITORY: ${{ github.repository }}
+          PROOF_PR_NUMBER: ${{ inputs.pr_number }}
+          PROOF_SCENARIO: ${{ inputs.scenario }}
+          PROOF_EXPECTED_HEAD_SHA: ${{ inputs.expected_head_sha }}
+          PROOF_RESOLVED_HEAD_SHA: ${{ steps.pr.outputs.sha }}
+          PROOF_CHECKED_OUT_HEAD_SHA: ${{ steps.candidate.outputs.sha }}
+          PROOF_CONTROLLER_SHA: ${{ steps.controller.outputs.sha }}
+          PROOF_PR_BASE_SHA: ${{ steps.pr.outputs.base_sha }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$PROOF_DIR"
+          test -f "$PROOF_DIR/manifest.json" && exit 0
+          python3 - <<'PY'
+          from __future__ import annotations
+
+          import hashlib
+          import json
+          import os
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          proof_dir = Path(os.environ["PROOF_DIR"])
+          artifacts: dict[str, str] = {}
+          backend_log = proof_dir / "backend.log"
+          if backend_log.is_file():
+              artifacts[backend_log.name] = hashlib.sha256(backend_log.read_bytes()).hexdigest()
+
+          def optional(name: str) -> str | None:
+              value = os.environ.get(name, "").strip()
+              return value or None
+
+          pr_number = optional("PROOF_PR_NUMBER")
+          manifest = {
+              "schema": "jarvisos.exact-head-browser-proof.v1",
+              "repository": optional("PROOF_REPOSITORY"),
+              "pr_number": int(pr_number) if pr_number and pr_number.isdigit() else None,
+              "pr_base_sha": optional("PROOF_PR_BASE_SHA"),
+              "expected_head_sha": optional("PROOF_EXPECTED_HEAD_SHA"),
+              "resolved_pr_head_sha": optional("PROOF_RESOLVED_HEAD_SHA"),
+              "checked_out_head_sha": optional("PROOF_CHECKED_OUT_HEAD_SHA"),
+              "controller_sha": optional("PROOF_CONTROLLER_SHA"),
+              "workflow_run_id": os.environ.get("GITHUB_RUN_ID", "unknown"),
+              "scenario": optional("PROOF_SCENARIO"),
+              "seed_version": "workflow-fallback-v1",
+              "browser": "chromium",
+              "playwright_version": "1.55.0",
+              "started_at": None,
+              "ended_at": datetime.now(timezone.utc).isoformat(),
+              "assertions": [{
+                  "name": "workflow:fallback-manifest",
+                  "pass": False,
+                  "detail": "proof workflow failed before the trusted controller emitted manifest.json",
+              }],
+              "artifacts": artifacts,
+              "verdict": "FAIL",
+              "failure": "proof workflow failed before the trusted controller emitted manifest.json",
+          }
+          (proof_dir / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+          PY
 
       - name: Upload exact-head proof artifacts
         if: always()
