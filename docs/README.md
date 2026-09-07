@@ -28,7 +28,7 @@ A README is an onboarding/navigation document. It is not an independent roadmap,
 | `specs/README.md` | Spec registry/lifecycle conventions; not a competing builder prompt |
 | `DECISIONS.md` | Durable architecture decisions |
 | `ARCHITECTURE.md` | Current stable architecture, subject to code/decision/current-state freshness checks |
-| `GITHUB_CONNECTOR_COMPATIBILITY.md` | Temporary transport-only workaround while its activation predicate remains true; no independent governance authority |
+| `GITHUB_CONNECTOR_COMPATIBILITY.md` | Superseded/inactive transport tombstone retained only for provenance; no current authority |
 | `RUNBOOKS.md` | Operational commands |
 | `UI_START.md` | UI startup |
 | `LOCAL_AI_EVALUATION_EVIDENCE.md` | Local model capability evidence/boundaries |
