@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import subprocess
 import sys
 import threading
@@ -164,10 +165,10 @@ def test_physical_worktree_owner_and_guard_are_shared_across_workers(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv(
-        "JARVISOS_LOCAL_WORKTREE_HOST_STATE_ROOT",
-        str(tmp_path / "host-state"),
-    )
+    if os.name == "nt":
+        monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "host-state"))
+    else:
+        monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "host-state"))
     remote = tmp_path / "remote.git"
     work = tmp_path / "work"
     _git(tmp_path, "init", "--bare", str(remote))
