@@ -1,6 +1,6 @@
 # Work-item specs
 
-Each `NNN-<slug>.md` defines one accepted implementation slice. [`STATUS.md`](STATUS.md) is the sole live work-state/roadmap authority; individual specs define accepted outcome, scope, acceptance criteria, required evidence, and non-goals. Legacy `Status:` prose inside specs is not authoritative.
+Each `NNN-<slug>.md` defines one accepted implementation slice. [`STATUS.md`](STATUS.md) is the sole live repository registry for spec state, hard dependencies, roadmap rows, and implementation-PR association; individual specs define accepted outcome, scope, acceptance criteria, required evidence, and non-goals. An explicit current maintainer scheduling directive may order already-authorized work without changing registry authority. Legacy `Status:` prose inside specs is not authoritative.
 
 This file contains **spec registry/lifecycle mechanics only**. Frontier-agent philosophy and review/merge policy live in `../../AGENTS.md` and `../AGENT_EXECUTION_AND_AUTOMATION_PROTOCOL.md`. Post-112 concurrency mechanics live only in `../POST_112_PARALLEL_DELIVERY_PROFILE.md`.
 
@@ -16,7 +16,7 @@ For repository work, use current exact GitHub state rather than cached handoffs:
 6. Run the deterministic gates required by `AGENTS.md`, `python scripts/check_spec_status.py --self-test`, and the selected slice. Use proportional review/proof from the execution protocol plus any stronger explicit requirement in the accepted active contract.
 7. Merge only under exact-head/CAS rules; GitHub deferred auto-merge is prohibited. Verify fresh `master` and perform only necessary mechanical registry/README reconciliation.
 
-Do not encode permanent scheduling order in this file. Current priority comes from fresh `STATUS.md`, dependencies, and explicit maintainer scheduling directives. A scheduling preference never overrides a hard dependency or creates implementation authority.
+Do not encode permanent scheduling order in this file. Current scheduling comes from fresh registry/dependency truth plus explicit maintainer scheduling directives. A scheduling preference never overrides a hard dependency or creates implementation authority.
 
 ## Scope and review boundary
 
