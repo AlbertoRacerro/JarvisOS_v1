@@ -124,6 +124,12 @@ try {
   await browser.close();
 }
 
+const failedAssertions = assertions.filter((item) => item.pass === false);
+if (verdict === "PASS" && failedAssertions.length > 0) {
+  verdict = "FAIL";
+  failure = failure ?? `browser emitted ${failedAssertions.length} failed asynchronous assertion(s)`;
+}
+
 const backendLog = join(artifactDir, "backend.log");
 try {
   await readFile(backendLog);
@@ -161,4 +167,4 @@ const manifest = {
 };
 await writeFile(join(artifactDir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
 
-if (verdict !== "PASS" || assertions.some((item) => item.pass === false)) process.exitCode = 1;
+if (verdict !== "PASS" || failedAssertions.length > 0) process.exitCode = 1;
