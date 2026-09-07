@@ -8,7 +8,7 @@ This document turns the principles in `AGENTS.md` into a compact operating contr
 
 Its purpose is to make a frontier model **more autonomous, not more scripted**. It defines the evidence and authority that must remain true while leaving implementation strategy to the acting model.
 
-`docs/specs/STATUS.md` remains the sole live authority for spec state, dependencies, priority, and implementation-PR association. The active accepted spec/readiness defines the current slice's outcome, scope, non-goals, and special evidence requirements.
+`docs/specs/STATUS.md` remains the sole live repository authority for spec state, hard dependencies, and implementation-PR association. An explicit current maintainer scheduling directive may order already-authorized work without changing those facts, readiness, accepted scope, or implementation authority. The active accepted spec/readiness defines the current slice's outcome, scope, non-goals, and special evidence requirements.
 
 ## 1. Generic Frontier Builder Contract
 
