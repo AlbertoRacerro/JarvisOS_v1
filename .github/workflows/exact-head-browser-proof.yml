@@ -240,14 +240,14 @@ jobs:
         env:
           GITHUB_TOKEN: ''
           GH_TOKEN: ''
-          JARVISOS_DATA_ROOT: ${{ runner.temp }}/jarvis-proof-data
+          JARVISOS_DATA_ROOT: /tmp/jarvis-proof-data
           PYTHONPATH: ${{ github.workspace }}/candidate/backend
-          PROOF_PYTHON: ${{ runner.temp }}/jarvis-candidate-venv/bin/python
+          PROOF_PYTHON: /tmp/jarvis-candidate-venv/bin/python
           PROOF_CANDIDATE_USER: jarviscandidate
           PROOF_SEED_SCRIPT: ${{ github.workspace }}/controller/.github/browser-proof/seed_113.py
           PROOF_SCENARIO: ${{ inputs.scenario }}
           PROOF_BASE_URL: http://127.0.0.1:8000
-          PROOF_ARTIFACT_DIR: ${{ runner.temp }}/jarvis-browser-proof
+          PROOF_ARTIFACT_DIR: /tmp/jarvis-browser-proof
           PROOF_EXPECTED_HEAD_SHA: ${{ inputs.expected_head_sha }}
           PROOF_RESOLVED_HEAD_SHA: ${{ steps.pr.outputs.sha }}
           PROOF_CHECKED_OUT_HEAD_SHA: ${{ steps.candidate.outputs.sha }}
@@ -334,6 +334,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: exact-head-browser-proof-${{ inputs.pr_number }}-${{ inputs.scenario }}-${{ inputs.expected_head_sha }}
-          path: ${{ runner.temp }}/jarvis-browser-proof
+          path: /tmp/jarvis-browser-proof
           if-no-files-found: error
           retention-days: 14
