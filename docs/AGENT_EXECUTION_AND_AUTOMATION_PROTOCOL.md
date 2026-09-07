@@ -153,9 +153,9 @@ Default evidence: relevant deterministic tests + one severe exact-head Frontier 
 
 Examples: credentials, security boundaries, Git/repository mutation authority, migrations/data destruction, egress/budget controls, self-update, privileged execution.
 
-Use strong deterministic tests/proofs and independent frontier critique when practicable or explicitly required. Prefer a **race among qualified peers**, not a serial chain. The first qualified independent PASS plus coordinator acceptance is enough unless the active contract specifically requires more.
+Use strong deterministic tests/proofs and independent frontier critique when practicable or explicitly required. Prefer a **race among qualified peers**, not a serial vendor chain. The first qualified independent PASS plus coordinator acceptance is enough unless the active contract specifically requires more.
 
-External-service/model latency must not become an indefinite blocker. If independent review is not explicitly required by the active accepted contract, the coordinator may use another qualified same-class peer/session or the repository's bounded degraded quorum after the canonical wait. If the active accepted contract explicitly requires independent-review evidence, that evidence remains a real gate until the contract is amended by proper authority.
+External-service/model latency must not become an indefinite blocker when independence is not itself an accepted requirement. The coordinator may choose another qualified peer/session or, for a slice whose risk tier does not require independence, rely on the coordinator review plus the required deterministic/environment evidence. If the active accepted contract explicitly requires independent-review evidence, that evidence remains a real gate until the contract is properly amended; do not call self-corroboration "independent".
 
 Model names are implementation choices. Do not encode “Claude first”, “Codex second”, or equivalent vendor ordering as permanent policy.
 
@@ -214,6 +214,8 @@ Immediately before merge, verify only the conditions that can invalidate the mer
 - truthful `STATUS.md`/PR association;
 - no unresolved scope/authority conflict;
 - exact-head/CAS/mergeability conditions.
+
+Merge authority does not grant authority to weaken or modify branch protection, repository rulesets, or required-check settings; those controls remain separately permissioned as stated in `AGENTS.md`.
 
 Never enable deferred GitHub auto-merge. Perform and verify the merge explicitly.
 
