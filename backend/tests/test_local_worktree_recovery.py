@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -52,6 +53,41 @@ def test_recovery_is_not_exposed_and_its_source_is_immutable(tmp_path: Path) -> 
         actuator.dispatch(_ctx("request-a", "session-a"), "recover_interrupted_writer")
     assert exc_info.value.code == actuator_mod.ActuatorCode.CAPABILITY_UNAVAILABLE
     assert repository_delivery.is_sensitive_path(".github/local_worktree_recovery.py")
+
+
+def test_inspect_revalidates_lease_around_read_only_git_state(tmp_path: Path) -> None:
+    state = actuator_mod.WorkerState(tmp_path / "state", worker_id="worker")
+    actuator = actuator_mod.LocalWorktreeActuator(state)
+    owner = _ctx("request-a", "session-a")
+    worktree_id = "worktree-1"
+    actuator.acquire_writer(owner, worktree_id)
+
+    calls: list[tuple[str, ...]] = []
+
+    class FakeDelivery:
+        def _git(self, args):
+            calls.append(tuple(args))
+            if args == ["rev-parse", "HEAD"]:
+                return SimpleNamespace(stdout="a" * 40 + "\n")
+            if args == ["status", "--porcelain=v1", "--untracked-files=all"]:
+                return SimpleNamespace(stdout=" M preserved-dirty.txt\n")
+            raise AssertionError(args)
+
+    tree = SimpleNamespace(durable_commit="c" * 40)
+    actuator._lookup = lambda repository_id, current_worktree_id: (object(), tree)  # type: ignore[method-assign]
+    actuator._delivery = lambda repo, current_tree: FakeDelivery()  # type: ignore[method-assign]
+
+    inspection = recovery_mod.InterruptedWriterRecovery(actuator).inspect(
+        "repo-1",
+        worktree_id,
+    )
+    assert inspection.head_sha == "a" * 40
+    assert inspection.durable_commit == "c" * 40
+    assert calls == [
+        ("rev-parse", "HEAD"),
+        ("status", "--porcelain=v1", "--untracked-files=all"),
+    ]
+    assert actuator._lock_path(worktree_id).exists()
 
 
 def test_exact_owner_generation_recovery_allows_new_writer(tmp_path: Path) -> None:
