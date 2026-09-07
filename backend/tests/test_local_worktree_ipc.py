@@ -26,6 +26,7 @@ actuator = load_script("local_worktree_actuator")
 ipc = load_script("local_worktree_ipc")
 
 Capability = actuator.Capability
+RequestContext = actuator.RequestContext
 WorkerState = actuator.WorkerState
 IPC_PROTOCOL = ipc.IPC_PROTOCOL
 IPCRefusal = ipc.IPCRefusal
@@ -86,6 +87,38 @@ def test_request_shape_is_closed() -> None:
     request["context"]["capability"] = "root"
     with pytest.raises(IPCRefusal, match="capability"):
         parse_request(request)
+
+
+def test_server_owned_capability_blocks_client_self_promotion(tmp_path: Path) -> None:
+    state = WorkerState(tmp_path / "worker", worker_id="worker-test")
+
+    class StubActuator:
+        def __init__(self, worker_state: WorkerState) -> None:
+            self.state = worker_state
+
+    server = LocalIPCServer(
+        StubActuator(state),  # type: ignore[arg-type]
+        admitted_capabilities={
+            ("principal-1", "session-1"): Capability.REVIEWER,
+        },
+    )
+    requested = RequestContext(
+        "req-1",
+        "principal-1",
+        "session-1",
+        Capability.IMPLEMENTER,
+    )
+    admitted = server._admit_context(requested)
+    assert admitted.capability is Capability.REVIEWER
+
+    unregistered = RequestContext(
+        "req-2",
+        "principal-2",
+        "session-2",
+        Capability.IMPLEMENTER,
+    )
+    with pytest.raises(IPCRefusal, match="server-owned capability"):
+        server._admit_context(unregistered)
 
 
 def test_endpoint_and_auth_state_are_local_and_private(tmp_path: Path) -> None:
