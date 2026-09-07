@@ -303,8 +303,9 @@ def _self_test_materialized_push_reports_final_sha() -> None:
 
 def _self_test_shared_push_owner() -> None:
     source = Path(__file__).read_text(encoding="utf-8")
-    assert 'run_git(["push"' not in source
-    assert ".guarded_push(" in source
+    push_owner = source.split("def push_current_head(", 1)[1].split("\ndef _self_test_pair(", 1)[0]
+    assert 'run_git(["push"' not in push_owner
+    assert ".guarded_push(" in push_owner
 
 
 def self_test() -> None:
