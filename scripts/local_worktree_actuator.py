@@ -1,22 +1,24 @@
 #!/usr/bin/env python3
-"""Spec-141 local worktree actuator with operation-held writer serialization.
+"""Spec-141 local worktree actuator with host-shared worktree ownership guards.
 
 The implementation core is stored under the immutable `.github/` control path.
-This compatibility module preserves the public actuator API while adding the
-stable cross-process guard required to bind writer-owner validation to each
-authority-bearing side effect. The durable lease remains interruption metadata;
-the OS guard is the serialization primitive and is never unlinked.
+This compatibility module preserves the public actuator API while binding a
+physical persistent worktree to one worker and serializing authority-bearing
+operations with a stable cross-process guard shared by every worker on the host.
+The durable lease remains interruption metadata; the OS guard is the live
+serialization primitive and is never unlinked.
 """
 
 from __future__ import annotations
 
 import hashlib
 import importlib.util
+import json
 import os
 import sys
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Callable, Iterator
+from typing import Any, Callable, Iterator
 
 _CORE_PATH = Path(__file__).resolve().parents[1] / ".github" / "local_worktree_actuator_core.py"
 _SPEC = importlib.util.spec_from_file_location("_jarvis_local_worktree_actuator_core", _CORE_PATH)
@@ -49,9 +51,51 @@ if not isinstance(_control_paths, set):
     raise RuntimeError("repository delivery control-path policy is unavailable")
 _control_paths.add("backend/tests/test_worktree_writer_guard.py")
 
+_HOST_STATE_OVERRIDE = "JARVISOS_LOCAL_WORKTREE_HOST_STATE_ROOT"
+
 
 class WriterGuardBusy(RuntimeError):
     """Raised when another process owns a worktree operation guard."""
+
+
+def _secure_private_directory(path: Path) -> Path:
+    path = path.resolve()
+    path.mkdir(parents=True, exist_ok=True)
+    if path.is_symlink():
+        raise ActuatorRefusal(ActuatorCode.PATH_ESCAPE, "host state root may not be a symlink")
+    if os.name != "nt":
+        try:
+            path.chmod(0o700)
+        except OSError as exc:
+            raise ActuatorRefusal(
+                ActuatorCode.INTERNAL_ERROR,
+                "cannot secure host worktree state root",
+            ) from exc
+        if path.stat().st_mode & 0o077:
+            raise ActuatorRefusal(
+                ActuatorCode.INTERNAL_ERROR,
+                "host worktree state root is not private",
+            )
+    return path
+
+
+def _host_state_root() -> Path:
+    override = os.environ.get(_HOST_STATE_OVERRIDE, "").strip()
+    if override:
+        return _secure_private_directory(Path(override))
+    if os.name == "nt":
+        local_app_data = os.environ.get("LOCALAPPDATA", "").strip()
+        if not local_app_data:
+            raise ActuatorRefusal(
+                ActuatorCode.INTERNAL_ERROR,
+                "LOCALAPPDATA is required for host worktree ownership state",
+            )
+        return _secure_private_directory(
+            Path(local_app_data) / "JarvisOS" / "local-worktree-actuator-host"
+        )
+    xdg_state = os.environ.get("XDG_STATE_HOME", "").strip()
+    base = Path(xdg_state) if xdg_state else Path.home() / ".local" / "state"
+    return _secure_private_directory(base / "jarvisos" / "local-worktree-actuator-host")
 
 
 @contextmanager
@@ -105,13 +149,122 @@ def _exclusive_writer_guard(
 
 
 class LocalWorktreeActuator(_core.LocalWorktreeActuator):
-    """Core actuator with per-worktree check-and-act serialization."""
+    """Core actuator with host-shared physical-worktree ownership and serialization."""
+
+    @staticmethod
+    def _identity_path(path: Path) -> str:
+        return os.path.normcase(str(path.resolve()))
+
+    def _physical_binding(self, worktree_id: str) -> tuple[str, dict[str, str]] | None:
+        payload = self.state.registry()
+        raw_tree = payload["worktrees"].get(worktree_id)
+        if not isinstance(raw_tree, dict):
+            return None
+        repository_id = raw_tree.get("repository_id")
+        raw_repo = payload["repositories"].get(repository_id)
+        if not isinstance(repository_id, str) or not isinstance(raw_repo, dict):
+            raise ActuatorRefusal(
+                ActuatorCode.WORKTREE_IDENTITY_MISMATCH,
+                "registered physical worktree identity is incomplete",
+            )
+        repo = RepositoryRegistration(**raw_repo)
+        tree = WorktreeRegistration(**raw_tree)
+        if tree.worker_id != self.state.worker_id:
+            raise ActuatorRefusal(
+                ActuatorCode.WORKTREE_IDENTITY_MISMATCH,
+                "worktree belongs to another worker",
+            )
+        delivery = self._delivery(repo, tree)
+        common_git_dir = self._identity_path(delivery.common_git_dir())
+        worktree_path = self._identity_path(Path(tree.path))
+        material = json.dumps(
+            {
+                "common_git_dir": common_git_dir,
+                "worktree_path": worktree_path,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode()
+        key = hashlib.sha256(material).hexdigest()
+        return key, {
+            "schema": str(STATE_SCHEMA),
+            "worker_id": self.state.worker_id,
+            "repository_id": repository_id,
+            "worktree_id": worktree_id,
+            "common_git_dir": common_git_dir,
+            "worktree_path": worktree_path,
+        }
+
+    def _ownership_path(self, identity: str) -> Path:
+        root = _host_state_root() / "ownership"
+        root.mkdir(parents=True, exist_ok=True)
+        if os.name != "nt":
+            root.chmod(0o700)
+        return root / f"{identity}.json"
+
+    def _claim_physical_worktree(self, worktree_id: str) -> None:
+        binding = self._physical_binding(worktree_id)
+        if binding is None:
+            return
+        identity, expected = binding
+        path = self._ownership_path(identity)
+        encoded = json.dumps(expected, sort_keys=True, separators=(",", ":")) + "\n"
+        try:
+            fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        except FileExistsError:
+            if path.is_symlink():
+                raise ActuatorRefusal(
+                    ActuatorCode.WORKTREE_IDENTITY_MISMATCH,
+                    "physical worktree ownership record is not trustworthy",
+                )
+            try:
+                existing: Any = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                raise ActuatorRefusal(
+                    ActuatorCode.WORKTREE_IDENTITY_MISMATCH,
+                    "physical worktree ownership record is corrupt",
+                ) from exc
+            if existing != expected:
+                raise ActuatorRefusal(
+                    ActuatorCode.WORKTREE_IDENTITY_MISMATCH,
+                    "physical persistent worktree belongs to another worker",
+                )
+            return
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(encoded)
+            handle.flush()
+            os.fsync(handle.fileno())
+
+    def attach_worktree(self, registration: WorktreeRegistration) -> None:
+        before = self.state.registry()["worktrees"].get(registration.worktree_id)
+        super().attach_worktree(registration)
+        try:
+            self._claim_physical_worktree(registration.worktree_id)
+        except BaseException:
+            if before is None:
+                payload = self.state.registry()
+                current = payload["worktrees"].get(registration.worktree_id)
+                if current == _core.asdict(registration):
+                    payload["worktrees"].pop(registration.worktree_id, None)
+                    self.state.replace_registry(payload)
+            raise
 
     def _guard_path(self, worktree_id: str) -> Path:
-        safe = hashlib.sha256(worktree_id.encode()).hexdigest()
-        return self.state.locks_dir / f"{safe}.guard"
+        binding = self._physical_binding(worktree_id)
+        if binding is None:
+            safe = hashlib.sha256(
+                f"{self.state.worker_id}\0{worktree_id}".encode()
+            ).hexdigest()
+        else:
+            safe = binding[0]
+        root = _host_state_root() / "guards"
+        root.mkdir(parents=True, exist_ok=True)
+        if os.name != "nt":
+            root.chmod(0o700)
+        return root / f"{safe}.guard"
 
     def _writer_guard(self, worktree_id: str):
+        self._claim_physical_worktree(worktree_id)
         return _exclusive_writer_guard(
             self._guard_path(worktree_id),
             busy_error=lambda: ActuatorRefusal(
