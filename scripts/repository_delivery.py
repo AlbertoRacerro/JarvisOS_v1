@@ -37,6 +37,7 @@ CONTROL_PATHS = {
     "scripts/local_worktree_actuator.py",
     "scripts/local_worktree_ipc.py",
     "backend/tests/test_repository_delivery.py",
+    "backend/tests/test_repository_delivery_config_escape.py",
     "backend/tests/test_local_worktree_actuator.py",
     "backend/tests/test_local_worktree_ipc.py",
 }
@@ -45,6 +46,7 @@ UNSAFE_CONFIG_KEYS = {
     "core.fsmonitor",
     "core.hookspath",
     "core.sshcommand",
+    "core.worktree",
     "gpg.program",
     "sequence.editor",
 }
@@ -55,6 +57,8 @@ UNSAFE_CONFIG_PREFIXES = (
     "filter.",
     "http.",
     "https.",
+    "include.",
+    "includeif.",
     "merge.",
     "mergetool.",
     "url.",
