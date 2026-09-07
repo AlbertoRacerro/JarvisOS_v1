@@ -106,6 +106,9 @@ def test_write_holds_guard_across_owner_check_and_side_effect(
 ) -> None:
     state = WorkerState(tmp_path / "state")
     actuator = LocalWorktreeActuator(state)
+    guard = tmp_path / "operation.guard"
+    monkeypatch.setattr(actuator, "_verify_physical_worktree", lambda _worktree_id: None)
+    monkeypatch.setattr(actuator, "_guard_path", lambda _worktree_id: guard)
     owner = _ctx("owner-request", "owner-session")
     successor = _ctx("successor-request", "successor-session")
     worktree_id = "wt-concurrency"
@@ -159,6 +162,14 @@ def test_write_holds_guard_across_owner_check_and_side_effect(
     with pytest.raises(ActuatorRefusal) as stale:
         actuator.write_text(owner, "repo", worktree_id, "file.txt", "stale")
     assert stale.value.code == ActuatorCode.WORKTREE_BUSY
+
+
+def test_unregistered_worktree_cannot_acquire_writer(tmp_path: Path) -> None:
+    actuator = LocalWorktreeActuator(WorkerState(tmp_path / "state"))
+    with pytest.raises(ActuatorRefusal) as exc:
+        actuator.acquire_writer(_ctx("future-request", "future-session"), "future-tree")
+    assert exc.value.code == ActuatorCode.WORKTREE_IDENTITY_MISMATCH
+    assert not actuator._lock_path("future-tree").exists()
 
 
 def test_physical_worktree_owner_and_guard_are_shared_across_workers(
