@@ -345,10 +345,13 @@ class LocalWorktreeActuator:
 
         operations = {
             "health": self.health,
+            "worktree_create": self.worktree_create,
             "worktree_inspect": self.worktree_inspect,
             "git_status": self.git_status,
             "git_diff": self.git_diff,
             "run_named_profile": self.run_named_profile,
+            "acquire_writer": self.acquire_writer,
+            "release_writer": self.release_writer,
             "write_text": self.write_text,
             "stage_paths": self.stage_paths,
             "commit": self.commit,
@@ -684,7 +687,7 @@ class LocalWorktreeActuator:
     ) -> str:
         """Bounded structured UTF-8 write inside the assigned worktree only."""
 
-        self._require_writer(worktree_id)
+        self._require_writer(ctx, worktree_id)
         encoded = text.encode("utf-8")
         if len(encoded) > MAX_WRITE_BYTES or "\x00" in text:
             raise ActuatorRefusal(
@@ -807,20 +810,59 @@ class LocalWorktreeActuator:
                     {
                         "request_id": ctx.request_id,
                         "session_id": ctx.session_id,
-                    }
+                    },
+                    sort_keys=True,
+                    separators=(",", ":"),
                 )
                 + "\n"
             )
+            handle.flush()
+            os.fsync(handle.fileno())
+        self._audit(
+            ctx,
+            "acquire_writer",
+            ActuatorCode.OK.value,
+            worktree_id=worktree_id,
+        )
 
-    def release_writer(self, worktree_id: str) -> None:
-        self._lock_path(worktree_id).unlink(missing_ok=True)
-
-    def _require_writer(self, worktree_id: str) -> None:
-        if not self._lock_path(worktree_id).exists():
+    def _require_writer(self, ctx: RequestContext, worktree_id: str) -> None:
+        lock = self._lock_path(worktree_id)
+        try:
+            payload = json.loads(lock.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
             raise ActuatorRefusal(
                 ActuatorCode.WORKTREE_BUSY,
-                "writer lock required",
+                "writer lease missing or malformed",
+            ) from exc
+        if (
+            not isinstance(payload, dict)
+            or set(payload) != {"request_id", "session_id"}
+            or payload.get("request_id") != ctx.request_id
+            or payload.get("session_id") != ctx.session_id
+        ):
+            raise ActuatorRefusal(
+                ActuatorCode.WORKTREE_BUSY,
+                "writer lease belongs to another request/session",
             )
+
+    def release_writer(self, ctx: RequestContext, worktree_id: str) -> None:
+        self._require_online()
+        self._require_role(ctx, write=True)
+        self._require_writer(ctx, worktree_id)
+        lock = self._lock_path(worktree_id)
+        try:
+            lock.unlink()
+        except OSError as exc:
+            raise ActuatorRefusal(
+                ActuatorCode.WORKTREE_BUSY,
+                "writer lease could not be released",
+            ) from exc
+        self._audit(
+            ctx,
+            "release_writer",
+            ActuatorCode.OK.value,
+            worktree_id=worktree_id,
+        )
 
     def stage_paths(
         self,
@@ -831,7 +873,7 @@ class LocalWorktreeActuator:
     ) -> None:
         self._require_online()
         self._require_role(ctx, write=True)
-        self._require_writer(worktree_id)
+        self._require_writer(ctx, worktree_id)
         repo, tree = self._lookup(repository_id, worktree_id)
         delivery = self._delivery(repo, tree)
         normalized = assert_safe_paths(paths)
@@ -861,7 +903,7 @@ class LocalWorktreeActuator:
     ) -> str:
         self._require_online()
         self._require_role(ctx, write=True)
-        self._require_writer(worktree_id)
+        self._require_writer(ctx, worktree_id)
         if not message or len(message) > 500 or any(
             ord(ch) < 32 and ch not in "\t" for ch in message
         ):
@@ -928,7 +970,7 @@ class LocalWorktreeActuator:
     ) -> str:
         self._require_online()
         self._require_role(ctx, write=True)
-        self._require_writer(worktree_id)
+        self._require_writer(ctx, worktree_id)
         repo, tree = self._lookup(repository_id, worktree_id)
         delivery = self._delivery(repo, tree, credentialed=True)
         try:
