@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import inspect
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -51,6 +52,19 @@ def _request() -> dict[str, object]:
         "operation": "worker_health",
         "arguments": {},
     }
+
+
+def _git(cwd: Path, *args: str) -> str:
+    completed = subprocess.run(
+        ["git", *args],
+        cwd=cwd,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if completed.returncode != 0:
+        raise AssertionError(completed.stderr or completed.stdout)
+    return completed.stdout.strip()
 
 
 def test_request_codec_is_bounded_json_and_rejects_pickle_bytes() -> None:
@@ -119,6 +133,18 @@ def test_server_owned_capability_blocks_client_self_promotion(tmp_path: Path) ->
     )
     with pytest.raises(IPCRefusal, match="server-owned capability"):
         server._admit_context(unregistered)
+
+
+def test_worktree_scoped_executable_git_config_refuses(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init")
+    _git(repo, "config", "extensions.worktreeConfig", "true")
+    _git(repo, "config", "--worktree", "core.fsmonitor", "malicious-helper")
+    delivery = repository_delivery.RepositoryDelivery(repo)
+    with pytest.raises(repository_delivery.DeliveryRefusal) as exc:
+        delivery.assert_safe_config()
+    assert exc.value.code == repository_delivery.DeliveryCode.GIT_CONFIG_UNSAFE
 
 
 def test_endpoint_and_auth_state_are_local_and_private(tmp_path: Path) -> None:
