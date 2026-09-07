@@ -8,7 +8,7 @@ Current repository-development authority is intentionally narrow:
 
 1. `AGENTS.md` — stable AI engineering constitution;
 2. `docs/AGENT_EXECUTION_AND_AUTOMATION_PROTOCOL.md` — Generic Frontier Builder Contract and delivery mechanics;
-3. `docs/specs/STATUS.md` — sole live spec state, dependencies, priority, and implementation-PR association;
+3. `docs/specs/STATUS.md` — sole live repository authority for spec state, hard dependencies, and implementation-PR association; an explicit current maintainer scheduling directive may order already-authorized work without changing that authority;
 4. the active accepted spec/readiness — current slice outcome, scope, non-goals, and special evidence;
 5. `docs/POST_112_PARALLEL_DELIVERY_PROFILE.md` — post-112 concurrency mechanics only, when relevant;
 6. fresh exact Git/PR/runtime/test/proof evidence.
