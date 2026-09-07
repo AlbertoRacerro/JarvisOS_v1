@@ -243,6 +243,12 @@ Tests run offline unless an accepted test explicitly requires another environmen
 
 Maintainer/reviewer-owned conformance tests matching `backend/tests/**/test_*_conformance.py` are frozen evidence: do not add, modify, delete, skip, silence, or relabel them unless the current accepted work explicitly assigns that exact conformance-test change. A failing required gate is evidence to diagnose, not an obstacle to edit away.
 
+Current persistence uses additive SQLite schema changes in `backend/app/core/schema.py`; do not introduce Alembic or another migration framework unless an accepted architecture change explicitly replaces that owner.
+
+Windows-only launcher scripts must not be materially changed from Linux-only evidence unless the active slice provides a verifiable cross-platform path or relevant Windows proof. Otherwise PARK the launcher change rather than pretending Linux CI proves it.
+
+Concrete valuable out-of-scope improvements that should survive the current slice go to `docs/FUTURE_IMPROVEMENTS.md` as PARK items with no implementation authority. Do not let PARK delay a valid merge.
+
 Useful repository-development defaults:
 
 - fresh remote evidence before shared mutation;
