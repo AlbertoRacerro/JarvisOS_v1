@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import sys
 from pathlib import Path
 
 import pytest
@@ -12,12 +13,14 @@ def _load(name: str, relative: str):
     spec = importlib.util.spec_from_file_location(name, ROOT / relative)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
     spec.loader.exec_module(module)
     return module
 
 
-actuator_mod = _load("local_worktree_actuator_recovery_test", "scripts/local_worktree_actuator.py")
-recovery_mod = _load("local_worktree_recovery_test", "scripts/local_worktree_recovery.py")
+_load("repository_delivery", "scripts/repository_delivery.py")
+actuator_mod = _load("local_worktree_actuator", "scripts/local_worktree_actuator.py")
+recovery_mod = _load("local_worktree_recovery", "scripts/local_worktree_recovery.py")
 
 
 def _ctx(request_id: str, session_id: str):
@@ -81,7 +84,7 @@ def test_exact_owner_generation_recovery_preserves_state_and_allows_new_writer(
         )
     assert exc_info.value.code == actuator_mod.ActuatorCode.WORKTREE_BUSY
     assert lock.exists()
-    assert lock.read_text(encoding="utf-8").find("request-a") >= 0
+    assert "request-a" in lock.read_text(encoding="utf-8")
 
     result = recovery.recover(
         "repo-1",
