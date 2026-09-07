@@ -35,9 +35,25 @@ def _ctx(request_id: str, session_id: str):
     )
 
 
-def test_live_writer_still_refuses_second_writer(tmp_path: Path) -> None:
+def _admit_writer_identity(
+    actuator,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Isolate recovery tests from the separately-covered physical-owner gate."""
+
+    guard = tmp_path / "writer.guard"
+    monkeypatch.setattr(actuator, "_verify_physical_worktree", lambda _worktree_id: None)
+    monkeypatch.setattr(actuator, "_guard_path", lambda _worktree_id: guard)
+
+
+def test_live_writer_still_refuses_second_writer(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     state = actuator_mod.WorkerState(tmp_path / "state", worker_id="worker")
     actuator = actuator_mod.LocalWorktreeActuator(state)
+    _admit_writer_identity(actuator, tmp_path, monkeypatch)
     owner = _ctx("request-a", "session-a")
     other = _ctx("request-b", "session-b")
 
@@ -57,9 +73,13 @@ def test_recovery_is_not_exposed_and_its_source_is_immutable(tmp_path: Path) -> 
     assert repository_delivery.is_sensitive_path(".github/local_worktree_recovery.py")
 
 
-def test_inspect_revalidates_lease_around_read_only_git_state(tmp_path: Path) -> None:
+def test_inspect_revalidates_lease_around_read_only_git_state(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     state = actuator_mod.WorkerState(tmp_path / "state", worker_id="worker")
     actuator = actuator_mod.LocalWorktreeActuator(state)
+    _admit_writer_identity(actuator, tmp_path, monkeypatch)
     owner = _ctx("request-a", "session-a")
     worktree_id = "worktree-1"
     actuator.acquire_writer(owner, worktree_id)
@@ -92,9 +112,13 @@ def test_inspect_revalidates_lease_around_read_only_git_state(tmp_path: Path) ->
     assert actuator._lock_path(worktree_id).exists()
 
 
-def test_exact_owner_generation_recovery_allows_new_writer(tmp_path: Path) -> None:
+def test_exact_owner_generation_recovery_allows_new_writer(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     state = actuator_mod.WorkerState(tmp_path / "state", worker_id="worker")
     actuator = actuator_mod.LocalWorktreeActuator(state)
+    _admit_writer_identity(actuator, tmp_path, monkeypatch)
     owner = _ctx("request-a", "session-a")
     successor = _ctx("request-b", "session-b")
     worktree_id = "worktree-1"
@@ -163,9 +187,13 @@ def test_exact_owner_generation_recovery_allows_new_writer(tmp_path: Path) -> No
         assert "session-a" not in serialized
 
 
-def test_release_reacquire_invalidates_stale_generation(tmp_path: Path) -> None:
+def test_release_reacquire_invalidates_stale_generation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     state = actuator_mod.WorkerState(tmp_path / "state", worker_id="worker")
     actuator = actuator_mod.LocalWorktreeActuator(state)
+    _admit_writer_identity(actuator, tmp_path, monkeypatch)
     owner = _ctx("request-a", "session-a")
     worktree_id = "worktree-1"
     actuator.acquire_writer(owner, worktree_id)
@@ -200,9 +228,13 @@ def test_release_reacquire_invalidates_stale_generation(tmp_path: Path) -> None:
     assert lock.exists()
 
 
-def test_recovery_guard_blocks_release_and_successor_until_unlink_commit(tmp_path: Path) -> None:
+def test_recovery_guard_blocks_release_and_successor_until_unlink_commit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     state = actuator_mod.WorkerState(tmp_path / "state", worker_id="worker")
     actuator = actuator_mod.LocalWorktreeActuator(state)
+    _admit_writer_identity(actuator, tmp_path, monkeypatch)
     owner = _ctx("request-a", "session-a")
     successor = _ctx("request-b", "session-b")
     worktree_id = "worktree-1"
