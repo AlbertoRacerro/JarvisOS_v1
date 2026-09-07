@@ -15,12 +15,14 @@ The capability must let a frontier coordinator prove accepted visible/runtime be
 For a supported scenario, one GitHub-hosted proof run must:
 
 1. receive or resolve an explicit repository, PR, expected PR-head SHA, and scenario identity;
-2. check out exactly that candidate SHA and fail closed if the checked-out SHA differs;
+2. verify the requested PR/head relationship against fresh GitHub truth, then check out exactly that candidate SHA and fail closed if the checked-out SHA differs;
 3. start the required JarvisOS backend/frontend from that exact tree with isolated proof-only data;
 4. run a real Chromium browser through Playwright;
 5. execute the scenario assertions against the rendered application and supporting same-runtime API identity where required;
 6. emit durable machine-readable proof plus human-inspectable screenshots/trace/logs;
 7. bind every produced artifact to the exact candidate head so any material head mutation invalidates the evidence rather than silently carrying it forward.
+
+The proof controller is not candidate-owned evidence. Workflow/control logic, scenario assertions, verdict generation, and manifest construction must execute from a trusted merged 142 owner (normally the default-branch workflow/harness or an equivalently immutable trusted checkout) while the candidate source is checked out separately as the system under test. Candidate-controlled files may provide application behavior and test data only where explicitly allowed; they must not be able to weaken assertions, rewrite the final verdict, or redefine what constitutes PASS.
 
 ## Initial beta-critical scenarios
 
@@ -49,9 +51,11 @@ Every successful or failed scenario must emit one manifest that is sufficient to
 - repository identity;
 - PR number when applicable;
 - expected head SHA;
+- fresh GitHub-resolved PR head SHA;
 - checked-out head SHA;
 - base SHA or base ref when relevant;
 - workflow/run identity;
+- trusted proof-controller source identity;
 - scenario identity and proof-data seed/version;
 - browser and Playwright versions;
 - backend/frontend version or exact source identity where available;
@@ -61,7 +65,7 @@ Every successful or failed scenario must emit one manifest that is sufficient to
 - digests for proof artifacts where practical;
 - final proof verdict.
 
-A proof whose checked-out SHA differs from the requested exact head is invalid even if all UI assertions pass.
+A proof whose fresh PR head or checked-out SHA differs from the requested exact head is invalid even if all UI assertions pass. A proof whose assertion/verdict controller is candidate-controlled is also invalid.
 
 ## Isolation and authority
 
@@ -70,6 +74,8 @@ A proof whose checked-out SHA differs from the requested exact head is invalid e
 - Use isolated proof-only runtime data. It must not depend on or mutate a maintainer data root.
 - No personal-PC, desktop-control, local browser, or maintainer-presence dependency.
 - No provider credentials, provider live calls, arbitrary external-service credentials, or browser-side GitHub credentials.
+- The trusted proof job must use least privilege, must not expose repository/provider secrets to candidate code, and must not persist checkout credentials into the candidate worktree. Candidate execution occurs only in the ephemeral GitHub-hosted runner with a bounded job timeout.
+- The candidate PR/head relationship is checked from fresh GitHub truth before candidate execution and the local checkout identity is checked again before any PASS can be emitted.
 - Browser proof is evidence only. It grants no product mutation, Git push, PR merge, STATUS mutation, provider execution, or external side-effect authority.
 - Static source inspection, source-string tests, API-only checks, mocked DOM assertions, or fake screenshots cannot substitute for a required real-browser scenario.
 - Normal deterministic CI and semantic review remain separate gates; 142 does not replace them.
@@ -87,13 +93,13 @@ The frontier coordinator may choose the smallest maintainable GitHub Actions/Pla
 142 is complete when repository evidence proves all of the following on the merged implementation:
 
 1. a standard GitHub-hosted runner can perform a real Chromium proof from an explicit exact candidate SHA;
-2. wrong/stale checkout identity is refused before a PASS can be emitted;
+2. requested PR/head mismatch, wrong checkout identity, and candidate-controlled proof-controller substitution are refused before a PASS can be emitted;
 3. isolated proof-only JarvisOS runtime startup is deterministic enough for the supported scenarios;
 4. 113, 124 and 140 scenario entry points exist and produce scenario-bound manifests/artifacts, with scenarios allowed to refuse when the corresponding candidate is not semantically ready;
 5. screenshots plus Playwright trace/relevant logs are retained as workflow artifacts on failure and success where useful;
-6. the manifest binds proof to repository/PR/head/scenario/run identity and assertion results;
+6. the manifest binds proof to repository/PR/head/scenario/run identity, trusted proof-controller identity, and assertion results;
 7. zero local workers and zero maintainer PC interaction are required;
-8. no paid runner, provider credential/live provider call, personal secret, browser-side GitHub authority, or fake/static substitute proof is introduced;
+8. no paid runner, provider credential/live provider call, personal secret, persisted candidate checkout credential, browser-side GitHub authority, or fake/static substitute proof is introduced;
 9. at least one real exact-head beta-critical scenario is exercised end to end through the new capability before or immediately after merge, demonstrating that the capability can replace the previous maintainer-local proof path.
 
 ## Non-goals
