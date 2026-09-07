@@ -51,8 +51,6 @@ if not isinstance(_control_paths, set):
     raise RuntimeError("repository delivery control-path policy is unavailable")
 _control_paths.add("backend/tests/test_worktree_writer_guard.py")
 
-_HOST_STATE_OVERRIDE = "JARVISOS_LOCAL_WORKTREE_HOST_STATE_ROOT"
-
 
 class WriterGuardBusy(RuntimeError):
     """Raised when another process owns a worktree operation guard."""
@@ -81,9 +79,6 @@ def _secure_private_directory(path: Path) -> Path:
 
 
 def _host_state_root() -> Path:
-    override = os.environ.get(_HOST_STATE_OVERRIDE, "").strip()
-    if override:
-        return _secure_private_directory(Path(override))
     if os.name == "nt":
         local_app_data = os.environ.get("LOCALAPPDATA", "").strip()
         if not local_app_data:
@@ -197,10 +192,7 @@ class LocalWorktreeActuator(_core.LocalWorktreeActuator):
         }
 
     def _ownership_path(self, identity: str) -> Path:
-        root = _host_state_root() / "ownership"
-        root.mkdir(parents=True, exist_ok=True)
-        if os.name != "nt":
-            root.chmod(0o700)
+        root = _secure_private_directory(_host_state_root() / "ownership")
         return root / f"{identity}.json"
 
     @staticmethod
@@ -284,10 +276,7 @@ class LocalWorktreeActuator(_core.LocalWorktreeActuator):
             ).hexdigest()
         else:
             safe = binding[0]
-        root = _host_state_root() / "guards"
-        root.mkdir(parents=True, exist_ok=True)
-        if os.name != "nt":
-            root.chmod(0o700)
+        root = _secure_private_directory(_host_state_root() / "guards")
         return root / f"{safe}.guard"
 
     def _writer_guard(self, worktree_id: str):
