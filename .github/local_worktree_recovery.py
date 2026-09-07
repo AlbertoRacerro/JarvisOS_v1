@@ -14,11 +14,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
 try:
     from scripts.local_worktree_actuator import (
+        STATE_SCHEMA,
         ActuatorCode,
         ActuatorRefusal,
         LocalWorktreeActuator,
@@ -26,6 +28,7 @@ try:
     )
 except ImportError:  # direct script import from a repository checkout
     from local_worktree_actuator import (  # type: ignore[no-redef]
+        STATE_SCHEMA,
         ActuatorCode,
         ActuatorRefusal,
         LocalWorktreeActuator,
@@ -175,7 +178,8 @@ class InterruptedWriterRecovery:
             f"{expected_request_id}\0{expected_session_id}".encode("utf-8")
         ).hexdigest()
         audit_common = {
-            "schema": 1,
+            "schema": STATE_SCHEMA,
+            "timestamp": int(time.time()),
             "worker_id": self.actuator.state.worker_id,
             "repository_id": repository_id,
             "worktree_id": worktree_id,
@@ -190,7 +194,7 @@ class InterruptedWriterRecovery:
             {
                 **audit_common,
                 "operation": "recover_interrupted_writer_intent",
-                "result": ActuatorCode.OK.value,
+                "result": "INTENT",
             }
         )
 
@@ -211,6 +215,7 @@ class InterruptedWriterRecovery:
         self.actuator.state.audit(
             {
                 **audit_common,
+                "timestamp": int(time.time()),
                 "operation": "recover_interrupted_writer_complete",
                 "result": ActuatorCode.OK.value,
             }
