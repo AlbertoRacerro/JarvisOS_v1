@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 import subprocess
 import sys
 import threading
@@ -9,23 +10,29 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
-
-import scripts.local_worktree_actuator as actuator_module
-from scripts.local_worktree_actuator import (
-    ActuatorCode,
-    ActuatorRefusal,
-    Capability,
-    LocalWorktreeActuator,
-    RequestContext,
-    WriterGuardBusy,
-    WorkerState,
-    _exclusive_writer_guard,
-)
 
 
-def _ctx(request: str, session: str) -> RequestContext:
+def _load(name: str, relative: str):
+    spec = importlib.util.spec_from_file_location(name, ROOT / relative)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+actuator_module = _load("local_worktree_actuator_guard_test", "scripts/local_worktree_actuator.py")
+ActuatorCode = actuator_module.ActuatorCode
+ActuatorRefusal = actuator_module.ActuatorRefusal
+Capability = actuator_module.Capability
+LocalWorktreeActuator = actuator_module.LocalWorktreeActuator
+RequestContext = actuator_module.RequestContext
+WriterGuardBusy = actuator_module.WriterGuardBusy
+WorkerState = actuator_module.WorkerState
+_exclusive_writer_guard = actuator_module._exclusive_writer_guard
+
+
+def _ctx(request: str, session: str):
     return RequestContext(request, "principal", session, Capability.IMPLEMENTER)
 
 
