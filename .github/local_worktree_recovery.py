@@ -152,13 +152,27 @@ class InterruptedWriterRecovery:
         expected_session_id: str,
         expected_lease_generation: str,
     ) -> RecoveryInspection:
-        """Clear one interrupted lease after exact-owner/generation reinspection.
+        """Clear one interrupted lease under the shared OS writer guard."""
 
-        The caller is maintainer control-plane code, not a model request. The
-        generation binds owner bytes and the concrete file instance, so a
-        release/reacquire invalidates stale recovery evidence even for the same
-        request/session identifiers.
-        """
+        with self.actuator._writer_guard(worktree_id):
+            return self._recover_locked(
+                repository_id,
+                worktree_id,
+                expected_request_id=expected_request_id,
+                expected_session_id=expected_session_id,
+                expected_lease_generation=expected_lease_generation,
+            )
+
+    def _recover_locked(
+        self,
+        repository_id: str,
+        worktree_id: str,
+        *,
+        expected_request_id: str,
+        expected_session_id: str,
+        expected_lease_generation: str,
+    ) -> RecoveryInspection:
+        """Recovery body; caller holds the per-worktree operation guard."""
 
         lock = self.actuator._lock_path(worktree_id)
         inspection = self.inspect(repository_id, worktree_id)
