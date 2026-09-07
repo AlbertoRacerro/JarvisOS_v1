@@ -59,24 +59,25 @@ class WriterGuardBusy(RuntimeError):
 
 
 def _secure_private_directory(path: Path) -> Path:
-    path = path.resolve()
-    path.mkdir(parents=True, exist_ok=True)
-    if path.is_symlink():
+    candidate = path.expanduser()
+    if candidate.exists() and candidate.is_symlink():
         raise ActuatorRefusal(ActuatorCode.PATH_ESCAPE, "host state root may not be a symlink")
+    candidate.mkdir(parents=True, exist_ok=True)
+    resolved = candidate.resolve()
     if os.name != "nt":
         try:
-            path.chmod(0o700)
+            resolved.chmod(0o700)
         except OSError as exc:
             raise ActuatorRefusal(
                 ActuatorCode.INTERNAL_ERROR,
                 "cannot secure host worktree state root",
             ) from exc
-        if path.stat().st_mode & 0o077:
+        if resolved.stat().st_mode & 0o077:
             raise ActuatorRefusal(
                 ActuatorCode.INTERNAL_ERROR,
                 "host worktree state root is not private",
             )
-    return path
+    return resolved
 
 
 def _host_state_root() -> Path:
@@ -202,29 +203,43 @@ class LocalWorktreeActuator(_core.LocalWorktreeActuator):
             root.chmod(0o700)
         return root / f"{identity}.json"
 
+    @staticmethod
+    def _read_ownership(path: Path) -> dict[str, Any]:
+        if path.is_symlink():
+            raise ActuatorRefusal(
+                ActuatorCode.WORKTREE_IDENTITY_MISMATCH,
+                "physical worktree ownership record is not trustworthy",
+            )
+        try:
+            existing = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ActuatorRefusal(
+                ActuatorCode.WORKTREE_IDENTITY_MISMATCH,
+                "physical worktree ownership record is corrupt",
+            ) from exc
+        if not isinstance(existing, dict):
+            raise ActuatorRefusal(
+                ActuatorCode.WORKTREE_IDENTITY_MISMATCH,
+                "physical worktree ownership record has invalid shape",
+            )
+        return existing
+
     def _claim_physical_worktree(self, worktree_id: str) -> None:
+        """Maintainer activation helper; request paths only verify this durable claim."""
+
         binding = self._physical_binding(worktree_id)
         if binding is None:
-            return
+            raise ActuatorRefusal(
+                ActuatorCode.WORKTREE_IDENTITY_MISMATCH,
+                "physical worktree is not registered",
+            )
         identity, expected = binding
         path = self._ownership_path(identity)
         encoded = json.dumps(expected, sort_keys=True, separators=(",", ":")) + "\n"
         try:
             fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
         except FileExistsError:
-            if path.is_symlink():
-                raise ActuatorRefusal(
-                    ActuatorCode.WORKTREE_IDENTITY_MISMATCH,
-                    "physical worktree ownership record is not trustworthy",
-                )
-            try:
-                existing: Any = json.loads(path.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError) as exc:
-                raise ActuatorRefusal(
-                    ActuatorCode.WORKTREE_IDENTITY_MISMATCH,
-                    "physical worktree ownership record is corrupt",
-                ) from exc
-            if existing != expected:
+            if self._read_ownership(path) != expected:
                 raise ActuatorRefusal(
                     ActuatorCode.WORKTREE_IDENTITY_MISMATCH,
                     "physical persistent worktree belongs to another worker",
@@ -234,6 +249,18 @@ class LocalWorktreeActuator(_core.LocalWorktreeActuator):
             handle.write(encoded)
             handle.flush()
             os.fsync(handle.fileno())
+
+    def _verify_physical_worktree(self, worktree_id: str) -> None:
+        binding = self._physical_binding(worktree_id)
+        if binding is None:
+            return
+        identity, expected = binding
+        path = self._ownership_path(identity)
+        if not path.exists() or self._read_ownership(path) != expected:
+            raise ActuatorRefusal(
+                ActuatorCode.WORKTREE_IDENTITY_MISMATCH,
+                "physical persistent worktree ownership is not admitted for this worker",
+            )
 
     def attach_worktree(self, registration: WorktreeRegistration) -> None:
         before = self.state.registry()["worktrees"].get(registration.worktree_id)
@@ -264,7 +291,7 @@ class LocalWorktreeActuator(_core.LocalWorktreeActuator):
         return root / f"{safe}.guard"
 
     def _writer_guard(self, worktree_id: str):
-        self._claim_physical_worktree(worktree_id)
+        self._verify_physical_worktree(worktree_id)
         return _exclusive_writer_guard(
             self._guard_path(worktree_id),
             busy_error=lambda: ActuatorRefusal(
