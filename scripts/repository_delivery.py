@@ -35,8 +35,10 @@ CONTROL_PATHS = {
     "scripts/daily_development_continuation.py",
     "scripts/repository_delivery.py",
     "scripts/local_worktree_actuator.py",
+    "scripts/local_worktree_ipc.py",
     "backend/tests/test_repository_delivery.py",
     "backend/tests/test_local_worktree_actuator.py",
+    "backend/tests/test_local_worktree_ipc.py",
 }
 UNSAFE_CONFIG_KEYS = {
     "core.hookspath",
@@ -120,6 +122,21 @@ class WindowsGCMAdapter:
             "approved Git Credential Manager executable was not found",
         )
 
+    def config_value(self) -> str:
+        """Return the exact validated executable as the only credential helper."""
+
+        executable = Path(self.executable).resolve()
+        if not executable.is_absolute() or not executable.is_file():
+            raise DeliveryRefusal(
+                DeliveryCode.LOCAL_CREDENTIAL_UNAVAILABLE,
+                "validated Git Credential Manager executable is unavailable",
+            )
+        # Git credential helpers accept an absolute executable path. Quoting is
+        # part of the config value so Windows paths containing spaces stay one
+        # server-selected command; no request-controlled shell fragment is used.
+        value = str(executable).replace("\\", "/").replace('"', '\\"')
+        return f'"{value}"'
+
 
 class GitRunner:
     """Run server-owned Git argv with scrubbed config/environment and no shell."""
@@ -157,11 +174,12 @@ class GitRunner:
         if self.trusted_hooks_dir is not None:
             argv.extend(["-c", f"core.hooksPath={self.trusted_hooks_dir}"])
         # Clear any helper inherited through command-specific configuration, then
-        # add only the server-selected GCM helper when local credentialed Git is
-        # explicitly requested.
+        # add only the exact server-selected GCM executable when local credentialed
+        # Git is explicitly requested. Never re-resolve a helper name after
+        # discovery validated a concrete executable.
         argv.extend(["-c", "credential.helper="])
         if self.credential_adapter is not None:
-            argv.extend(["-c", f"credential.helper={self.credential_adapter.helper_name}"])
+            argv.extend(["-c", f"credential.helper={self.credential_adapter.config_value()}"])
         for item in self.server_owned_config:
             argv.extend(["-c", item])
         return argv
