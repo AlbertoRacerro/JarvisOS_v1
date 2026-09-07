@@ -68,11 +68,11 @@ Use the narrowest authoritative source for the question:
 2. this file for stable product and engineering invariants;
 3. `docs/AGENT_EXECUTION_AND_AUTOMATION_PROTOCOL.md` for repository-delivery mechanics and the Generic Frontier Builder Contract;
 4. `docs/POST_112_PARALLEL_DELIVERY_PROFILE.md` for post-112 concurrency mechanics only;
-5. `docs/specs/STATUS.md` as the sole live authority for spec state, dependencies, priority, and implementation-PR association;
+5. `docs/specs/STATUS.md` as the sole live repository authority for spec state, hard dependencies, and implementation-PR association; an explicit current maintainer scheduling directive may order already-authorized work but cannot alter those facts or create implementation authority;
 6. the selected accepted spec/readiness for the current slice's outcome, scope, non-goals, and required evidence;
 7. `docs/DECISIONS.md` for durable architecture decisions.
 
-README text, chat handoffs, automation prompts, old comments, strategy documents, branch names, and model summaries are context, not independent authority.
+README text, chat handoffs, automation prompts, old comments, strategy documents, branch names, and model summaries are context, not independent authority. A current explicit maintainer scheduling directive is an ordering instruction only, not a competing source of product/spec authority.
 
 Resolve fresh exact SHAs for authority-bearing implementation, review, proof, and merge decisions. A changed head invalidates only the evidence materially affected by that change; do not mechanically rerun unrelated evidence without a causal reason.
 
