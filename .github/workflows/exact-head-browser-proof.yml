@@ -33,9 +33,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
-      PROOF_DIR: ${{ runner.temp }}/jarvis-browser-proof
-      PROOF_DATA_ROOT: ${{ runner.temp }}/jarvis-proof-data
-      CANDIDATE_VENV: ${{ runner.temp }}/jarvis-candidate-venv
+      PROOF_DIR: /tmp/jarvis-browser-proof
+      PROOF_DATA_ROOT: /tmp/jarvis-proof-data
+      CANDIDATE_VENV: /tmp/jarvis-candidate-venv
       CANDIDATE_USER: jarviscandidate
     steps:
       - name: Require trusted default-branch dispatch
