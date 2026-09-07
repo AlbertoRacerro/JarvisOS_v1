@@ -136,7 +136,7 @@ def _encode_json_payload(value: Any, *, limit: int, label: str) -> bytes:
 
 
 def parse_request(raw: Any) -> tuple[RequestContext, str, dict[str, Any]]:
-    """Validate the complete bounded request before actuator dispatch."""
+    """Validate the bounded wire request; capability remains only requested metadata."""
 
     _encode_json_payload(raw, limit=MAX_REQUEST_BYTES, label="request")
     if not isinstance(raw, dict) or set(raw) != {"protocol", "context", "operation", "arguments"}:
@@ -154,7 +154,7 @@ def parse_request(raw: Any) -> tuple[RequestContext, str, dict[str, Any]]:
     if not all(isinstance(context[key], str) and context[key] for key in context):
         raise IPCRefusal("request context fields must be non-empty strings")
     try:
-        capability = Capability(context["capability"])
+        requested_capability = Capability(context["capability"])
     except ValueError as exc:
         raise IPCRefusal("unknown capability") from exc
     operation = raw["operation"]
@@ -166,7 +166,7 @@ def parse_request(raw: Any) -> tuple[RequestContext, str, dict[str, Any]]:
             context["request_id"],
             context["principal_id"],
             context["session_id"],
-            capability,
+            requested_capability,
         ),
         operation,
         arguments,
@@ -174,10 +174,31 @@ def parse_request(raw: Any) -> tuple[RequestContext, str, dict[str, Any]]:
 
 
 class LocalIPCServer:
-    def __init__(self, actuator: LocalWorktreeActuator) -> None:
+    def __init__(
+        self,
+        actuator: LocalWorktreeActuator,
+        *,
+        admitted_capabilities: dict[tuple[str, str], Capability] | None = None,
+    ) -> None:
         self.actuator = actuator
         self.address, self.family = endpoint_for(actuator.state)
         self.authkey = ipc_authkey(actuator.state)
+        # Maintainer activation owns this mapping. It is never populated or
+        # modified from request arguments, so a caller cannot self-promote.
+        self._admitted_capabilities = dict(admitted_capabilities or {})
+
+    def _admit_context(self, requested: RequestContext) -> RequestContext:
+        capability = self._admitted_capabilities.get(
+            (requested.principal_id, requested.session_id)
+        )
+        if capability is None:
+            raise IPCRefusal("principal/session has no server-owned capability admission")
+        return RequestContext(
+            requested.request_id,
+            requested.principal_id,
+            requested.session_id,
+            capability,
+        )
 
     def serve_once(self) -> None:
         """Serve exactly one request; lifecycle/restart ownership stays external."""
@@ -196,7 +217,8 @@ class LocalIPCServer:
                         limit=MAX_REQUEST_BYTES,
                         label="request",
                     )
-                    ctx, operation, arguments = parse_request(raw)
+                    requested_ctx, operation, arguments = parse_request(raw)
+                    ctx = self._admit_context(requested_ctx)
                     result = self.actuator.dispatch(ctx, operation, **arguments)
                     response = {"ok": True, "result": _jsonable(result)}
                 except (IPCRefusal, ActuatorRefusal, DeliveryRefusal, TypeError, OSError) as exc:
