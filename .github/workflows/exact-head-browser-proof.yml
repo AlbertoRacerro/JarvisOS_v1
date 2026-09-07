@@ -34,8 +34,7 @@ jobs:
     timeout-minutes: 25
     env:
       PROOF_DIR: ${{ runner.temp }}/jarvis-browser-proof
-      CANDIDATE_DIR: ${{ runner.temp }}/jarvis-candidate
-      CONTROLLER_DIR: ${{ runner.temp }}/jarvis-proof-controller
+      PROOF_DATA_ROOT: ${{ runner.temp }}/jarvis-proof-data
     steps:
       - name: Require trusted default-branch dispatch
         shell: bash
@@ -167,13 +166,28 @@ jobs:
           npm --prefix candidate/frontend ci --ignore-scripts --no-audit --no-fund
           npm --prefix candidate/frontend run build
 
+      - name: Prepare isolated proof data
+        shell: bash
+        env:
+          GITHUB_TOKEN: ''
+          GH_TOKEN: ''
+          JARVISOS_DATA_ROOT: ${{ runner.temp }}/jarvis-proof-data
+          PYTHONPATH: ${{ github.workspace }}/candidate/backend
+        run: |
+          set -euo pipefail
+          rm -rf "$PROOF_DATA_ROOT"
+          mkdir -p "$PROOF_DATA_ROOT"
+          if test "${{ inputs.scenario }}" = "113-memory-models"; then
+            python controller/.github/browser-proof/seed_113.py workspace
+          fi
+
       - name: Start isolated candidate runtime
         shell: bash
         env:
           GITHUB_TOKEN: ''
           GH_TOKEN: ''
           JARVISOS_DATA_ROOT: ${{ runner.temp }}/jarvis-proof-data
-          PYTHONPATH: ${{ runner.temp }}/jarvis-candidate/backend
+          PYTHONPATH: ${{ github.workspace }}/candidate/backend
         run: |
           set -euo pipefail
           mkdir -p "$PROOF_DIR" "$JARVISOS_DATA_ROOT"
@@ -197,6 +211,9 @@ jobs:
         env:
           GITHUB_TOKEN: ''
           GH_TOKEN: ''
+          JARVISOS_DATA_ROOT: ${{ runner.temp }}/jarvis-proof-data
+          PYTHONPATH: ${{ github.workspace }}/candidate/backend
+          PROOF_SEED_SCRIPT: ${{ github.workspace }}/controller/.github/browser-proof/seed_113.py
           PROOF_SCENARIO: ${{ inputs.scenario }}
           PROOF_BASE_URL: http://127.0.0.1:8000
           PROOF_ARTIFACT_DIR: ${{ runner.temp }}/jarvis-browser-proof
