@@ -18,7 +18,7 @@ def _load(name: str, relative: str):
     return module
 
 
-_load("repository_delivery", "scripts/repository_delivery.py")
+repository_delivery = _load("repository_delivery", "scripts/repository_delivery.py")
 actuator_mod = _load("local_worktree_actuator", "scripts/local_worktree_actuator.py")
 recovery_mod = _load("local_worktree_recovery", ".github/local_worktree_recovery.py")
 
@@ -44,18 +44,17 @@ def test_live_writer_still_refuses_second_writer(tmp_path: Path) -> None:
     assert exc_info.value.code == actuator_mod.ActuatorCode.WORKTREE_BUSY
 
 
-def test_recovery_is_not_exposed_by_model_dispatch(tmp_path: Path) -> None:
+def test_recovery_is_not_exposed_and_its_source_is_immutable(tmp_path: Path) -> None:
     state = actuator_mod.WorkerState(tmp_path / "state", worker_id="worker")
     actuator = actuator_mod.LocalWorktreeActuator(state)
 
     with pytest.raises(actuator_mod.ActuatorRefusal) as exc_info:
         actuator.dispatch(_ctx("request-a", "session-a"), "recover_interrupted_writer")
     assert exc_info.value.code == actuator_mod.ActuatorCode.CAPABILITY_UNAVAILABLE
+    assert repository_delivery.is_sensitive_path(".github/local_worktree_recovery.py")
 
 
-def test_exact_owner_generation_recovery_preserves_state_and_allows_new_writer(
-    tmp_path: Path,
-) -> None:
+def test_exact_owner_generation_recovery_allows_new_writer(tmp_path: Path) -> None:
     state = actuator_mod.WorkerState(tmp_path / "state", worker_id="worker")
     actuator = actuator_mod.LocalWorktreeActuator(state)
     owner = _ctx("request-a", "session-a")
@@ -65,9 +64,10 @@ def test_exact_owner_generation_recovery_preserves_state_and_allows_new_writer(
 
     recovery = recovery_mod.InterruptedWriterRecovery(actuator)
     lock = actuator._lock_path(worktree_id)
-    lease_digest = recovery_mod.hashlib.sha256(lock.read_bytes()).hexdigest()
+    lease = recovery._lease_state(lock)
     snapshot = recovery_mod.RecoveryInspection(
-        lease_digest=lease_digest,
+        lease_digest=lease.digest,
+        lease_generation=lease.generation,
         head_sha="a" * 40,
         status_digest="b" * 64,
         durable_commit="c" * 40,
@@ -80,7 +80,7 @@ def test_exact_owner_generation_recovery_preserves_state_and_allows_new_writer(
             worktree_id,
             expected_request_id="wrong-request",
             expected_session_id="session-a",
-            expected_lease_digest=lease_digest,
+            expected_lease_generation=lease.generation,
         )
     assert exc_info.value.code == actuator_mod.ActuatorCode.WORKTREE_BUSY
     assert lock.exists()
@@ -91,7 +91,7 @@ def test_exact_owner_generation_recovery_preserves_state_and_allows_new_writer(
         worktree_id,
         expected_request_id="request-a",
         expected_session_id="session-a",
-        expected_lease_digest=lease_digest,
+        expected_lease_generation=lease.generation,
     )
     assert result == snapshot
     assert not lock.exists()
@@ -100,12 +100,13 @@ def test_exact_owner_generation_recovery_preserves_state_and_allows_new_writer(
     actuator._require_writer(successor, worktree_id)
 
     audit = state.audit_path.read_text(encoding="utf-8")
-    assert "recover_interrupted_writer" in audit
+    assert "recover_interrupted_writer_intent" in audit
+    assert "recover_interrupted_writer_complete" in audit
     assert "request-a" not in audit
     assert "session-a" not in audit
 
 
-def test_stale_generation_cannot_clear_newer_lease(tmp_path: Path) -> None:
+def test_release_reacquire_invalidates_stale_generation(tmp_path: Path) -> None:
     state = actuator_mod.WorkerState(tmp_path / "state", worker_id="worker")
     actuator = actuator_mod.LocalWorktreeActuator(state)
     owner = _ctx("request-a", "session-a")
@@ -114,14 +115,21 @@ def test_stale_generation_cannot_clear_newer_lease(tmp_path: Path) -> None:
 
     recovery = recovery_mod.InterruptedWriterRecovery(actuator)
     lock = actuator._lock_path(worktree_id)
-    current_digest = recovery_mod.hashlib.sha256(lock.read_bytes()).hexdigest()
-    snapshot = recovery_mod.RecoveryInspection(
-        lease_digest=current_digest,
+    old_lease = recovery._lease_state(lock)
+
+    actuator.release_writer(owner, worktree_id)
+    actuator.acquire_writer(owner, worktree_id)
+    new_lease = recovery._lease_state(lock)
+    assert new_lease.generation != old_lease.generation
+
+    stale_snapshot = recovery_mod.RecoveryInspection(
+        lease_digest=old_lease.digest,
+        lease_generation=old_lease.generation,
         head_sha="a" * 40,
         status_digest="b" * 64,
         durable_commit="c" * 40,
     )
-    recovery.inspect = lambda repository_id, current_worktree_id: snapshot  # type: ignore[method-assign]
+    recovery.inspect = lambda repository_id, current_worktree_id: stale_snapshot  # type: ignore[method-assign]
 
     with pytest.raises(actuator_mod.ActuatorRefusal) as exc_info:
         recovery.recover(
@@ -129,7 +137,7 @@ def test_stale_generation_cannot_clear_newer_lease(tmp_path: Path) -> None:
             worktree_id,
             expected_request_id="request-a",
             expected_session_id="session-a",
-            expected_lease_digest="0" * 64,
+            expected_lease_generation=old_lease.generation,
         )
     assert exc_info.value.code == actuator_mod.ActuatorCode.WORKTREE_BUSY
     assert lock.exists()
