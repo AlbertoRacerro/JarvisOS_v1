@@ -20,7 +20,7 @@ def _load(name: str, relative: str):
 
 _load("repository_delivery", "scripts/repository_delivery.py")
 actuator_mod = _load("local_worktree_actuator", "scripts/local_worktree_actuator.py")
-recovery_mod = _load("local_worktree_recovery", "scripts/local_worktree_recovery.py")
+recovery_mod = _load("local_worktree_recovery", ".github/local_worktree_recovery.py")
 
 
 def _ctx(request_id: str, session_id: str):
