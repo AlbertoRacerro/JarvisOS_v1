@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import sys
+import threading
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -197,3 +198,70 @@ def test_release_reacquire_invalidates_stale_generation(tmp_path: Path) -> None:
         )
     assert exc_info.value.code == actuator_mod.ActuatorCode.WORKTREE_BUSY
     assert lock.exists()
+
+
+def test_recovery_guard_blocks_release_and_successor_until_unlink_commit(tmp_path: Path) -> None:
+    state = actuator_mod.WorkerState(tmp_path / "state", worker_id="worker")
+    actuator = actuator_mod.LocalWorktreeActuator(state)
+    owner = _ctx("request-a", "session-a")
+    successor = _ctx("request-b", "session-b")
+    worktree_id = "worktree-1"
+    actuator.acquire_writer(owner, worktree_id)
+
+    recovery = recovery_mod.InterruptedWriterRecovery(actuator)
+    lock = actuator._lock_path(worktree_id)
+    lease = recovery._lease_state(lock)
+    snapshot = recovery_mod.RecoveryInspection(
+        lease_digest=lease.digest,
+        lease_generation=lease.generation,
+        head_sha="a" * 40,
+        status_digest="b" * 64,
+        durable_commit="c" * 40,
+    )
+    entered = threading.Event()
+    proceed = threading.Event()
+    results: list[object] = []
+    failures: list[BaseException] = []
+
+    def blocked_inspect(repository_id: str, current_worktree_id: str):
+        entered.set()
+        assert proceed.wait(timeout=10)
+        return snapshot
+
+    recovery.inspect = blocked_inspect  # type: ignore[method-assign]
+
+    def run_recovery() -> None:
+        try:
+            results.append(
+                recovery.recover(
+                    "repo-1",
+                    worktree_id,
+                    expected_request_id="request-a",
+                    expected_session_id="session-a",
+                    expected_lease_generation=lease.generation,
+                )
+            )
+        except BaseException as exc:  # pragma: no cover - assertion below reports it
+            failures.append(exc)
+
+    thread = threading.Thread(target=run_recovery)
+    thread.start()
+    assert entered.wait(timeout=10)
+
+    with pytest.raises(actuator_mod.ActuatorRefusal) as release_busy:
+        actuator.release_writer(owner, worktree_id)
+    assert release_busy.value.code == actuator_mod.ActuatorCode.WORKTREE_BUSY
+
+    with pytest.raises(actuator_mod.ActuatorRefusal) as acquire_busy:
+        actuator.acquire_writer(successor, worktree_id)
+    assert acquire_busy.value.code == actuator_mod.ActuatorCode.WORKTREE_BUSY
+
+    proceed.set()
+    thread.join(timeout=10)
+    assert not thread.is_alive()
+    assert failures == []
+    assert results == [snapshot]
+    assert not lock.exists()
+
+    actuator.acquire_writer(successor, worktree_id)
+    actuator._require_writer(successor, worktree_id)
