@@ -41,14 +41,24 @@ CONTROL_PATHS = {
     "backend/tests/test_local_worktree_ipc.py",
 }
 UNSAFE_CONFIG_KEYS = {
+    "core.editor",
+    "core.fsmonitor",
     "core.hookspath",
     "core.sshcommand",
-    "http.proxy",
-    "https.proxy",
-    "credential.helper",
-    "credential.usehttppath",
+    "gpg.program",
+    "sequence.editor",
 }
-UNSAFE_CONFIG_PREFIXES = ("url.", "filter.")
+UNSAFE_CONFIG_PREFIXES = (
+    "credential.",
+    "diff.",
+    "difftool.",
+    "filter.",
+    "http.",
+    "https.",
+    "merge.",
+    "mergetool.",
+    "url.",
+)
 
 
 class DeliveryCode(StrEnum):
@@ -293,16 +303,42 @@ class RepositoryDelivery:
             raise DeliveryRefusal(DeliveryCode.PROTECTED_BRANCH, "invalid branch")
         return branch
 
-    def assert_safe_config(self) -> None:
-        completed = self._git(["config", "--local", "--null", "--list"], check=False)
-        if completed.returncode != 0:
-            raise DeliveryRefusal(DeliveryCode.GIT_CONFIG_UNSAFE, "local Git config unreadable")
-        for entry in completed.stdout.split("\0"):
+    @staticmethod
+    def _config_key(entry: str) -> str:
+        return entry.split("\n", 1)[0].split("=", 1)[0].strip().lower()
+
+    def _assert_config_entries_safe(self, output: str) -> None:
+        for entry in output.split("\0"):
             if not entry:
                 continue
-            key = entry.split("\n", 1)[0].split("=", 1)[0].strip().lower()
+            key = self._config_key(entry)
             if key in UNSAFE_CONFIG_KEYS or key.startswith(UNSAFE_CONFIG_PREFIXES):
                 raise DeliveryRefusal(DeliveryCode.GIT_CONFIG_UNSAFE, f"unsafe Git config: {key}")
+
+    def assert_safe_config(self) -> None:
+        local = self._git(["config", "--local", "--null", "--list"], check=False)
+        if local.returncode != 0:
+            raise DeliveryRefusal(DeliveryCode.GIT_CONFIG_UNSAFE, "local Git config unreadable")
+        self._assert_config_entries_safe(local.stdout)
+
+        worktree_enabled = self._git(
+            ["config", "--local", "--bool", "--get", "extensions.worktreeConfig"],
+            check=False,
+        )
+        if worktree_enabled.returncode == 0 and worktree_enabled.stdout.strip().lower() in {
+            "true",
+            "yes",
+            "on",
+            "1",
+        }:
+            worktree = self._git(["config", "--worktree", "--null", "--list"], check=False)
+            if worktree.returncode != 0:
+                raise DeliveryRefusal(
+                    DeliveryCode.GIT_CONFIG_UNSAFE,
+                    "worktree Git config unreadable",
+                )
+            self._assert_config_entries_safe(worktree.stdout)
+
         pushurl = self._git(["config", "--get", f"remote.{self.remote}.pushurl"], check=False)
         if pushurl.returncode == 0 and pushurl.stdout.strip():
             raise DeliveryRefusal(DeliveryCode.GIT_CONFIG_UNSAFE, "remote pushurl override refused")
