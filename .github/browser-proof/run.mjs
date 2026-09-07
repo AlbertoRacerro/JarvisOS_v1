@@ -15,6 +15,8 @@ const repository = process.env.PROOF_REPOSITORY;
 const prNumber = process.env.PROOF_PR_NUMBER;
 const runId = process.env.GITHUB_RUN_ID ?? "unknown";
 const seedScript = process.env.PROOF_SEED_SCRIPT;
+const proofPython = process.env.PROOF_PYTHON;
+const candidateUser = process.env.PROOF_CANDIDATE_USER;
 
 if (!scenario || !artifactDir || !expectedHead || !resolvedHead || !checkedOutHead || !controllerSha || !repository) {
   throw new Error("missing required proof identity environment");
@@ -63,10 +65,15 @@ const prove113 = async () => {
   record("113:empty-state", true, "workspace-only seed renders explicit no-exact-version state");
   await screenshot("empty");
 
-  if (!seedScript) throw new Error("113 proof requires trusted seed script");
-  const seeded = spawnSync("python", [seedScript, "versions"], {
+  if (!seedScript || !proofPython || !candidateUser) throw new Error("113 proof requires bounded unprivileged seed identity");
+  const seedEnv = [
+    "GITHUB_TOKEN=",
+    "GH_TOKEN=",
+    `JARVISOS_DATA_ROOT=${process.env.JARVISOS_DATA_ROOT ?? ""}`,
+    `PYTHONPATH=${process.env.PYTHONPATH ?? ""}`,
+  ];
+  const seeded = spawnSync("sudo", ["-u", candidateUser, "-H", "env", ...seedEnv, proofPython, seedScript, "versions"], {
     encoding: "utf8",
-    env: process.env,
   });
   record("113:trusted-version-seed", seeded.status === 0, seeded.stderr || seeded.stdout || `status=${seeded.status}`);
 
