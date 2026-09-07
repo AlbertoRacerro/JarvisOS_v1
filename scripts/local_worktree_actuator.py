@@ -245,7 +245,10 @@ class LocalWorktreeActuator(_core.LocalWorktreeActuator):
     def _verify_physical_worktree(self, worktree_id: str) -> None:
         binding = self._physical_binding(worktree_id)
         if binding is None:
-            return
+            raise ActuatorRefusal(
+                ActuatorCode.WORKTREE_IDENTITY_MISMATCH,
+                "writer authority requires a registered physical worktree",
+            )
         identity, expected = binding
         path = self._ownership_path(identity)
         if not path.exists() or self._read_ownership(path) != expected:
