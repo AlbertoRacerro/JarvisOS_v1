@@ -141,6 +141,8 @@ Detailed mutex/disjointness mechanics live only in `docs/POST_112_PARALLEL_DELIV
 
 The assigned Frontier Coordinator owns ordinary technical decisions and the technical merge decision within accepted authority.
 
+Technical merge authority does **not** imply authority to modify branch-protection, repository rulesets, required-check settings, or other repository-administration controls. Those remain separately capability/permission controlled.
+
 Do not wait for maintainer confirmation between normal planning, readiness, implementation, repair, evidence, merge, or reconciliation steps.
 
 Contact the maintainer outside a requested status/final report only when:
@@ -196,6 +198,12 @@ Do not create another competing governance authority surface.
 
 An accepted specification may deliberately create a narrower exception to these defaults. Its explicit boundary wins for that slice only. A narrow exception never silently grants broader authority elsewhere.
 
+## Durable special cases
+
+**Spec 079 scheduled continuation** is a narrow repository-development automation exception, not product AI execution. It remains implementation-only within its accepted spec: no queue-selection, review, merge, default-branch, generic credential, self-expansion, or unrelated product authority is implied by its provider use. Its implementation must continue to respect the accepted 079 evidence/ownership boundary.
+
+**Idea intake trigger.** When the maintainer proposes, links, uploads, or discusses an external project/source that could materially improve JarvisOS, BLUECAD, or BlueRev, read `docs/IDEA_INTAKE_AND_CANDIDATE_INTEGRATIONS.md` before claiming novelty/overlap/value and update that register during the same substantive audit when new evidence or disposition is produced. Preserve provenance, mechanisms, caveats, and rejected/superseded conclusions so later frontier sessions do not repeat weak audits.
+
 ## Repo map
 
 | Path | Purpose |
@@ -233,6 +241,8 @@ Also run specification-specific checks that causally cover changed behavior. Do 
 
 Tests run offline unless an accepted test explicitly requires another environment. Never require a live paid provider for ordinary deterministic CI.
 
+Maintainer/reviewer-owned conformance tests matching `backend/tests/**/test_*_conformance.py` are frozen evidence: do not add, modify, delete, skip, silence, or relabel them unless the current accepted work explicitly assigns that exact conformance-test change. A failing required gate is evidence to diagnose, not an obstacle to edit away.
+
 Useful repository-development defaults:
 
 - fresh remote evidence before shared mutation;
@@ -251,8 +261,10 @@ Useful repository-development defaults:
 - Do not duplicate review findings already durably recorded on the current head.
 - Do not add speculative abstractions, defensive layers, tests, or failure machinery with no accepted requirement or demonstrated risk.
 - Do not let semantic review stand in for required execution/browser/hardware/CAS evidence.
+- Do not infer branch-protection/ruleset authority from merge authority.
 - Do not weaken secrets, credential custody, authority boundaries, or hard product invariants to gain speed.
 - Do not fabricate evidence or infer remote delivery from a local claim.
+- Do not silence, skip, relabel, or edit required evidence merely to turn a red gate green.
 - Do not continue polishing after accepted outcome and required evidence are complete.
 
 ## Completion rule
