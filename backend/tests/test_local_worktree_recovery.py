@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -135,11 +136,30 @@ def test_exact_owner_generation_recovery_allows_new_writer(tmp_path: Path) -> No
     actuator.acquire_writer(successor, worktree_id)
     actuator._require_writer(successor, worktree_id)
 
-    audit = state.audit_path.read_text(encoding="utf-8")
-    assert "recover_interrupted_writer_intent" in audit
-    assert "recover_interrupted_writer_complete" in audit
-    assert "request-a" not in audit
-    assert "session-a" not in audit
+    audit_rows = [
+        json.loads(line)
+        for line in state.audit_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    recovery_rows = [
+        row
+        for row in audit_rows
+        if row.get("operation")
+        in {
+            "recover_interrupted_writer_intent",
+            "recover_interrupted_writer_complete",
+        }
+    ]
+    assert [row["operation"] for row in recovery_rows] == [
+        "recover_interrupted_writer_intent",
+        "recover_interrupted_writer_complete",
+    ]
+    for row in recovery_rows:
+        assert "request_id" not in row
+        assert "session_id" not in row
+        serialized = json.dumps(row, sort_keys=True)
+        assert "request-a" not in serialized
+        assert "session-a" not in serialized
 
 
 def test_release_reacquire_invalidates_stale_generation(tmp_path: Path) -> None:
