@@ -8,7 +8,7 @@ Read, from fresh exact Git state:
 
 1. `AGENTS.md` — stable JarvisOS engineering constitution;
 2. `docs/AGENT_EXECUTION_AND_AUTOMATION_PROTOCOL.md` — Generic Frontier Builder Contract and delivery mechanics;
-3. `docs/specs/STATUS.md` — sole live work-state/priority authority;
+3. `docs/specs/STATUS.md` — sole live repository authority for spec state, hard dependencies, and implementation-PR association; an explicit current maintainer scheduling directive may order already-authorized work without changing that authority;
 4. `docs/specs/README.md` plus the active accepted spec/readiness;
 5. the active PR exact head, diff, required checks/reviews/proofs.
 
