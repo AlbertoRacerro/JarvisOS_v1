@@ -1,229 +1,259 @@
 # Agent execution and automation protocol
 
-Status: canonical operational process
+Status: canonical repository-development process
 Effective date: 2026-08-05
-Amended: 2026-08-31 — ChatGPT direct implementation default and non-blocking optional model helpers
+Amended: 2026-09-07 — frontier autonomy, convergence-first delivery, capability-based roles
 
-This document defines JarvisOS repository delivery, external model collaboration, exact-head evidence, finding closure, merge/reconciliation, and the controlled post-112 delivery exception. It governs repository-development actors only; it does not broaden JarvisOS runtime authority, provider policy, credentials, budgets, egress, schemas, or product behavior.
+This document turns the principles in `AGENTS.md` into a compact operating contract for repository-development agents.
 
-`AGENTS.md` remains authoritative for hard invariants, safety boundaries, general conduct, the exhaustive maintainer-interruption classes, and accepted specification-specific exceptions. `docs/specs/STATUS.md` remains the sole live authority for spec state, dependencies, queue order, and implementation-PR association. `docs/POST_112_PARALLEL_DELIVERY_PROFILE.md` is the subordinate canonical mechanics profile after its activation gate.
+Its purpose is to make a frontier model **more autonomous, not more scripted**. It defines the evidence and authority that must remain true while leaving implementation strategy to the acting model.
 
-Spec 079 remains narrower than this protocol. Its repository-internal scheduled continuation is implementation-only and cannot review, repair findings, merge, select a new spec, or advance the queue. Nothing in this document broadens 079.
+`docs/specs/STATUS.md` remains the sole live repository authority for spec state, hard dependencies, and implementation-PR association. An explicit current maintainer scheduling directive may order already-authorized work without changing those facts, readiness, accepted scope, or implementation authority. The active accepted spec/readiness defines the current slice's outcome, scope, non-goals, and special evidence requirements.
 
-## 1. Minimal startup sequence
+## 1. Generic Frontier Builder Contract
 
-A coordinating ChatGPT session starts from exact Git state by reading:
+Every high-capability JarvisOS builder/scheduler should operate from this contract. Automation prompts should reference it rather than copy its policy text.
 
-1. `AGENTS.md`;
-2. this document;
-3. `docs/specs/STATUS.md`;
-4. `docs/specs/README.md`;
-5. the selected spec and readiness record;
-6. the active PR body, exact head, diff, workflows, reviews, and unresolved threads;
-7. after 112 is merged, `docs/POST_112_PARALLEL_DELIVERY_PROFILE.md` before opening or resuming multiple lanes.
+> You are a Frontier Engineering Coordinator for JarvisOS. Drive the current canonical goal to a usable, verified, merged result as quickly as safely possible. Start from fresh GitHub state and read the minimum authoritative context needed: `AGENTS.md`, this protocol, `docs/specs/STATUS.md`, the active accepted spec/readiness and active PR/evidence; after 112, also read the parallel-delivery profile when concurrency matters. Infer the engineering method yourself. Preserve hard invariants and deterministic authority boundaries. Make safe reversible assumptions and proceed without asking the maintainer for ordinary engineering choices. Use tools, frontier peers, constrained workers, CI, local workers, browser proof, and research when they improve throughput or materially reduce risk. Keep shared authority-bearing writes serialized. Recover existing work before creating new work. Batch related findings, repair the causal family once, verify, freeze, obtain only the evidence proportionate to risk, and converge. Do not invent scope, blockers, gates, abstractions, governance, or infrastructure. When acceptance and required evidence are sufficient, merge with exact-head/CAS verification, reconcile, and continue to the next authorized goal. Ask the maintainer only for the interruption classes in `AGENTS.md`.
 
-A continuation handoff should normally contain only repository, exact `master` SHA, active PR, exact PR-head SHA, and maintainer decisions not yet recorded canonically. Do not copy queue/spec/process text into every chat handoff.
+That is the generic builder prompt. Scheduler-specific prompts may add only operational metadata such as repository, scheduler slot, current maintainer scheduling override, and how to acquire the shared writer mutex. They must not fork the engineering constitution.
 
-## 2. Authority by question
+## 2. Minimal startup
 
-1. Current code, runtime behavior, deterministic tests, and exact-head evidence describe actual behavior.
-2. `AGENTS.md` defines hard invariants, safety boundaries, general conduct, and accepted narrow exceptions.
-3. This protocol defines repository-development delivery mechanics.
-4. After its activation gate, `docs/POST_112_PARALLEL_DELIVERY_PROFILE.md` defines the narrower controlled-parallel mechanics.
-5. `docs/specs/STATUS.md` is the sole live authority for spec state, dependencies, queue order, and implementation-PR association.
-6. The selected spec and readiness record define slice scope, acceptance criteria, tests, and non-goals.
-7. `docs/DECISIONS.md` records durable architecture decisions.
-8. `docs/ARCHITECTURE.md` is descriptive only where consistent with current code, accepted decisions, and live spec state.
-9. README files, strategy packs, milestone reports, model summaries, and chat handoffs are not independent runtime, roadmap, or merge authority.
+A Frontier Coordinator normally reads, in this order:
 
-When sources conflict, use runtime evidence for behavior, `STATUS.md` for work state, the active spec for slice scope, accepted ADRs for durable architecture, and the narrower accepted spec for an exception. Fix stale canonical prose in a bounded docs change; do not resolve by plausibility alone.
+1. fresh exact `master`;
+2. `AGENTS.md`;
+3. this protocol;
+4. `docs/specs/STATUS.md`;
+5. the active accepted spec/readiness;
+6. the active PR exact head, relevant diff/checks/reviews/proofs;
+7. `docs/POST_112_PARALLEL_DELIVERY_PROFILE.md` only when post-112 concurrency mechanics are relevant.
 
-## 3. Exact-SHA and freshness rule
+Do not preload the whole repository or every historical governance document by default. Read more only when the current decision requires it.
 
-Branch names such as `master`, `latest`, or `current head` are not sufficient evidence.
+A chat handoff should normally contain only facts not reconstructible from GitHub, plus pointers to the active repo/PR. Do not duplicate canonical process text in handoffs.
 
-Every implementation, review, acceptance decision, audit, lane-ownership decision, and merge decision records the full 40-character SHA examined. When a PR head changes, earlier CI and reviews remain evidence only for the old head and must be revalidated where affected. No merge relies on a gate from another head.
+## 3. Capability-based repository roles
 
-After one post-112 lane merges, every remaining lane resolves fresh `master` and revalidates ancestry-, shared-owner-, dependency-, or gate-sensitive conclusions before its own merge.
+Roles are determined by capability and granted authority, not vendor/model name.
 
-## 4. Delivery states
+### Frontier Coordinator
 
-- `REMOTE_VERIFIED`: branch advanced; complete files are readable from GitHub; diff is authorized; evidence belongs to that exact head.
-- `LOCAL_ONLY`: work exists only in an agent checkout, temporary filesystem, or unpushed commit.
-- `DECLARED_NOT_VERIFIED`: an agent claims a result without independently verified remote evidence.
-- `DELIVERY_FAILURE`: work was claimed or completed but no recoverable remote delivery exists.
-- `BLOCKED`: no authorized practical route remains without maintainer action or prohibited risk.
+A sufficiently capable reasoning/coding model with the tools needed to own an engineering front. It may plan, architect, implement, repair, review, delegate, integrate, merge, and reconcile within granted authority.
 
-A local commit SHA, task link, model report, or green workflow claim is not delivery by itself.
+### Frontier Peer
 
-## 5. Serial execution through 112; controlled lanes after 112
+Another sufficiently capable model/session used for genuinely independent critique, disjoint implementation, research, or specialist work. It may receive broader reasoning scope than a constrained worker but still owns only the deterministic capabilities actually granted.
 
-Until fresh exact `master` shows `112 PROJECT-KNOWLEDGE-CORE-1` as `merged`:
+### Constrained Worker
 
-- follow `STATUS.md` serially;
-- finish, verify, and merge the first authorized runtime slice before opening the next runtime front;
-- use one implementation branch and one implementation PR per spec;
-- allow one writer at a time on the active PR;
-- do not create concurrent implementations over the same files or authority boundary;
-- a failover writer uses an exact-head guard; stale writers stop;
-- a maintainer-requested docs/governance reconciliation may temporarily become the active front.
+A lower-trust, lower-capability, local, cheap, experimental, or deliberately restricted agent. It receives narrow tools/paths/operations and may be proposal-only. The control plane, not the prompt, enforces its authority.
 
-This rule is absolute through 112. Presence of the post-112 profile is not pre-112 implementation authority.
+No model is permanently assigned one of these roles by brand. A future model can replace the current coordinator or reviewer without rewriting governance.
 
-After exact `master` shows 112 merged, `docs/POST_112_PARALLEL_DELIVERY_PROFILE.md` becomes the canonical scheduling exception. Only demonstrated-disjoint lanes may run concurrently; `STATUS.md`, readiness, hard dependencies, exact-head gates, and one-writer-per-PR remain binding.
+## 4. Core execution loop
 
-## 6. Normative repository-development role split
+The coordinator continuously performs:
 
-This is the only current live external-model collaboration policy for normal repository delivery:
+**orient → choose highest-value authorized action → execute → verify → repair/converge → merge/reconcile → continue**.
 
-### ChatGPT — default direct implementer / Tech Lead / Architect / Maintainer
+Operational defaults:
 
-ChatGPT owns:
+- recover unfinished work before opening duplicates;
+- prefer direct implementation when capable;
+- delegate only when delegation is throughput-positive, risk-reducing, or genuinely disjoint;
+- consume terminal evidence promptly;
+- use waits for useful non-conflicting work rather than treating ordinary CI/review latency as a blocker;
+- do not sleep/poll merely to consume runtime;
+- do not stop after an intermediate lifecycle artifact if the next authorized step is actionable.
 
-- fresh repo/context reading;
-- architecture and ownership decisions;
-- definition, full spec, and readiness;
-- direct implementation and repair of authorized READY work by default;
-- acceptance criteria, scope, non-goals, invariants, and required checks;
-- semantic review of exact diffs and candidate evidence;
-- integration, shared authority, `STATUS.md`, exact-head merge, and registry reconciliation.
+## 5. Exact-state and delivery truth
 
-ChatGPT does not delegate governance/spec/queue authority to coding models and does not require an external candidate before implementing or repairing work it can safely complete itself.
+Use full exact SHAs for authority-bearing implementation, review, proof, and merge decisions.
 
-### External/model workers — optional proposal-only helpers
+Useful delivery states remain:
 
-GLM, Codex, Claude, or another model worker may be used only when fresh authority permits a genuinely bounded/disjoint task and delegation has a concrete throughput or risk-reduction advantage. A helper packet must include, as applicable:
+- `REMOTE_VERIFIED`: durable remote branch/head/files are verified on GitHub;
+- `LOCAL_ONLY`: work exists only in a local/ephemeral checkout;
+- `DECLARED_NOT_VERIFIED`: a model claims a result without independent durable evidence;
+- `DELIVERY_FAILURE`: useful work was produced but no recoverable durable delivery exists;
+- `BLOCKED`: no authorized practicable route remains without maintainer action or prohibited risk.
 
-- exact target SHA and exact base SHA;
-- allowed paths/boundaries;
-- a bounded set of preloaded authority/context files;
-- required behavior;
-- explicit non-goals;
-- acceptance tests/checks;
-- any path, tool, exploration, or authority restrictions.
+A local commit SHA or workflow statement is not remote delivery by itself.
 
-External/model workers produce proposal-only candidate evidence or patches. They own no GitHub write, merge, shared-authority, queue, spec, architecture, provider, credential, policy, or promotion decision. Delegation must not duplicate the active implementation, replace direct progress that ChatGPT can safely make, or become a session wait/stop condition.
+A head mutation invalidates the evidence whose conclusion depends on the mutated content. Reuse unaffected evidence; do not blindly rerun everything.
 
-### ChatGPT acceptance and repair
+## 6. Planning and readiness — compress by default
 
-ChatGPT reviews exact diff, scope, semantics, invariants, and test evidence. A green worker workflow alone is not semantic PASS.
+Specifications are acceptance contracts. Planning should stop when the coordinator has enough clarity to implement safely and verify the accepted outcome.
 
-ChatGPT repairs directly by default. If a useful external candidate is already terminal, ChatGPT may consume and minimally repair it rather than discard it, but no external candidate or repair hop is required before direct progress continues.
+`planned` remains non-implementation authority. Before product implementation, the live canonical state must truthfully grant readiness.
 
-### Claude — independent terminal reviewer
+Definition/full-spec/readiness may share one planning PR when:
 
-Claude is an independent terminal reviewer when independent review is required by the accepted slice/policy or materially useful for risk reduction. Claude is reviewer, not a required implementation hop.
+- the goal and boundaries are clear;
+- no unresolved architectural choice benefits from a separate checkpoint;
+- no irreversible/destructive/security-sensitive decision needs staged scrutiny;
+- deterministic registry rules can represent the transition truthfully.
 
-### Codex — scarce specialist/high-risk reserve
+Separate them when doing so materially reduces uncertainty or irreversible risk, not because a historical template had three stages.
 
-Codex is used only where a concrete material advantage or unresolved high-risk need justifies it. Do not spend Codex routinely on docs/planning/reconciliation, small PRs, ordinary UI polish, CI watching, or duplicate review. Do not ask Claude and Codex the same generic question on one immutable head without a material unresolved reason.
+A planning document should not prescribe implementation details unless the mechanism itself is part of the accepted contract.
 
-### Evidence precedence
+## 7. Findings and convergence
 
-Deterministic repository/runtime evidence and accepted authority outrank every model claim. Workflow green does not establish semantic correctness. Head mutation invalidates head-specific acceptance/review evidence where the changed content matters.
+Severity is impact-based:
 
-## 7. Post-112 scheduler and lane mechanics
+- `P0`: secret exposure, material data loss/destruction, catastrophic authority/safety failure;
+- `P1`: accepted criterion fails, main workflow is unusable, or material regression/authority failure exists;
+- `P2`: real weakness whose current-slice materiality must be assessed;
+- `P3`: polish, optional refinement, or future improvement.
 
-After 112 merges, scheduler identities are generic ChatGPT compute slots. Integration/Knowledge/Development/Coding are logical responsibilities acquired dynamically under the post-112 profile, not permanent automation identities.
+P0/P1 block. A P2 blocks only when it materially affects accepted correctness, security, usability, evidence, or regression risk.
 
-Only one ChatGPT coordinator/writer may own GitHub/shared-authority mutation at a time. Optional external/model helpers may execute concurrently only on demonstrably disjoint exact-head tasks/lanes and remain proposal-only. Shared boundaries remain Integration-owned.
+### One repair wave per causal family
 
-The coordinator consumes terminal evidence, advances immediately actionable work directly, and may launch bounded optional helper work when useful. Active non-terminal CI/checks/reviews are normal in-session waits: the coordinator uses that interval for useful non-conflicting work and re-checks them at a reasonable cadence until terminal when the session remains active. External/model-worker availability or completion never blocks direct work that can otherwise proceed. The coordinator does not sleep or poll merely to consume runtime, but it also does not treat an ordinary active CI/review wait as an automatic session exit while useful in-session progress or timely terminal consumption remains possible.
+When a reviewer finds a P0/P1:
 
-## 8. Spec 079 boundary
+1. perform one bounded sweep of the same causal/failure family and directly adjacent accepted-scope paths;
+2. consolidate all same-family P0/P1 and useful P2 evidence;
+3. repair the family in one coherent wave when safe;
+4. add the minimum causal tests/proof;
+5. do not recursively expand into unrelated architecture.
 
-A job running under spec 079 must ignore any broader capability described here and remain inside 079's accepted implementation-only boundary:
+While a repair wave is active, other builders should not restate already-recorded findings. They may add only concrete non-duplicative evidence.
 
-- reconstruct authority from exact PR-head repository state;
-- produce only an untrusted local patch artifact;
-- use the separately bounded no-secret actuator for permitted deterministic validation and non-forced same-branch push;
-- no review, review-repair, merge, labels, new-spec selection, queue advancement, settings/secrets mutation, or provider dispatch beyond 079's accepted path;
-- no broadening from this protocol or from post-112 external scheduling.
+### Frozen head
 
-Spec 080, while frozen/planned, grants no live review/repair automation authority.
+Treat a head as final-review candidate only when:
 
-## 9. Maintainer interruption boundary
+- accepted implementation is complete;
+- all known P0/P1/blocking P2 from the declared wave are closed or disproved;
+- relevant focused/deterministic gates support freeze;
+- registry/PR state is truthful.
 
-The four interruption classes in `AGENTS.md` are exhaustive:
+After freeze, do not mutate for nonblocking polish or speculative robustness. If a new material defect is found, unfreeze, repair it, and review the affected new head.
 
-1. real spending is required or a budget limit is at risk;
-2. a required credential, account, repository, or organization does not exist;
-3. a security issue, secret exposure, or material data-loss risk exists;
-4. an obstacle has no two practicable safe routes forward.
+## 8. Proportional review policy
 
-Otherwise choose the least-cost reversible route, use independent critique where valuable, record the decision, and proceed within accepted spec authority.
+Review is a risk-control tool, not a ritual.
 
-## 10. Finding severity and engineering closure
+### Tier 0 — mechanical/trivial
 
-- `P0`: safety, secret exposure, data loss, destructive authority failure, or catastrophic behavior.
-- `P1`: required acceptance criterion fails, main workflow is unusable, or a material regression exists.
-- `P2`: real defect or weakness whose current-slice impact must be assessed.
-- `P3`: optional refinement, polish, or future improvement.
+Examples: truthful registry reconciliation, typo/docs bookkeeping, generated metadata with deterministic owner.
 
-A merge is blocked by current P0/P1; a P2 that materially affects required correctness, accessibility, inspectability, or regression risk; violated spec requirements; unresolved substantial review findings; or a missing required gate.
+Default evidence: exact diff + relevant deterministic checks. No external model review unless the active contract explicitly requires it.
 
-A merge is not automatically blocked by every P2, any P3, stylistic preference, theoretical refactor, premature generalization, or future improvement. Continue correction while it materially reduces risk; stop when work becomes marginal polish or over-engineering.
+### Tier 1 — ordinary material engineering
 
-## 11. Planning compression, focused gates, and read-only prework
+Default evidence: relevant deterministic tests + one severe exact-head Frontier Coordinator review. Add a Frontier Peer when the active spec explicitly requires independent review or there is concrete value from diverse critique.
 
-Detailed eligibility rules live in `docs/POST_112_PARALLEL_DELIVERY_PROFILE.md` and apply only after its activation gate unless a narrower accepted spec already authorizes the same behavior.
+### Tier 2 — high-risk authority/security/destructive work
 
-After activation:
+Examples: credentials, security boundaries, Git/repository mutation authority, migrations/data destruction, egress/budget controls, self-update, privileged execution.
 
-- low-risk additive/reversible slices may combine definition, full specification, and readiness evidence into one planning PR only when exact-master inventory, scope, acceptance criteria, non-goals, failure modes, test plan, and an independently inspectable readiness decision remain explicit;
-- high-risk security, credential, egress, PTY, self-update, delicate migration, Hermes isolation/model-call closure, Process/solver/evaluator, destructive, or hard-to-reverse ownership work retains the full separate lifecycle;
-- moving heads use focused deterministic tests; frozen candidate heads satisfy every required merge gate;
-- browser proof is required for visible frontend/layout/interaction deltas or explicit spec requirements, not by ceremony for docs/backend-only changes;
-- read-only ownership/source/dependency/threat-model research may happen early only without premature implementation authority and must be revalidated on fresh exact `master` before promotion.
+Use strong deterministic tests/proofs and independent frontier critique when practicable or explicitly required. Prefer a **race among qualified peers**, not a serial vendor chain. The first qualified independent PASS plus coordinator acceptance is enough unless the active contract specifically requires more.
 
-A `planned` row remains non-implementable regardless of planning compression or prework.
+External-service/model latency must not become an indefinite blocker when independence is not itself an accepted requirement. The coordinator may choose another qualified peer/session or, for a slice whose risk tier does not require independence, rely on the coordinator review plus the required deterministic/environment evidence. If the active accepted contract explicitly requires independent-review evidence, that evidence remains a real gate until the contract is properly amended; do not call self-corroboration "independent".
 
-## 12. Merge gate and reconciliation
+Model names are implementation choices. Do not encode “Claude first”, “Codex second”, or equivalent vendor ordering as permanent policy.
 
-Merge only when all hold on one exact head:
+### Environment evidence is separate
 
-1. authorized diff and scope;
-2. acceptance criteria satisfied;
-3. required deterministic gates and proofs terminal and green;
-4. no P0, P1, or blocking P2;
-5. no unresolved substantial review finding;
-6. no secret, spending, dependency, schema, provider, or authority conflict;
-7. registry state and implementation-PR association correct.
+No semantic review can replace required:
 
-Use `expected_head_sha`. Never enable auto-merge. After merge, verify PR state, resulting commit, fresh `master`, and registry reconciliation.
+- CI/tests;
+- exact-head registry checks;
+- real-browser/Playwright proof;
+- local-host/hardware activation evidence;
+- live integration evidence;
+- human-controlled credential/action existence;
+- remote-head/CAS/post-mutation verification.
 
-After post-112 activation, the single ChatGPT Integration writer serializes shared mutations and merges. Remaining lanes refresh `master` and affected evidence after each merge.
+## 9. Multi-agent execution
 
-Avoid separate PRs, comments, checkpoints, screenshot passes, or repeated gates that add no authority, evidence, or risk reduction.
+Use multiple agents according to expected value.
 
-## 13. Documentation drift review
+Good uses:
 
-At definition, readiness, implementation completion, and major queue transitions, compare touched claims across `README.md`, `AGENTS.md`, this protocol, the post-112 profile when relevant, `docs/README.md`, `docs/ARCHITECTURE.md`, `docs/DECISIONS.md`, `docs/specs/README.md`, and `docs/specs/STATUS.md`.
+- disjoint implementation worktrees;
+- independent adversarial review;
+- specialist/security analysis;
+- research/source audit;
+- browser/environment proof;
+- bounded test/failure diagnosis.
 
-Distinguish onboarding, process, live state, durable architecture, future design, and history. Correct stale canonical claims in the smallest bounded docs change. Do not copy the live queue into another policy document.
+Bad uses:
 
-## 14. Historical / non-normative provenance
+- passing the same ticket through multiple models with no new information;
+- duplicate reviews of the same known finding;
+- creating helper work because a helper exists;
+- waiting for an external model when the coordinator can safely continue directly.
 
-Earlier external checkpoint/builder/watchdog and time-bounded frontend-sprint arrangements were delivery mechanisms used during prior phases. They are historical provenance only and are not live instructions, role definitions, scheduler identities, or authority sources.
+Only one shared GitHub/shared-authority writer operates at a time under the post-112 mutex. Isolated read-only analysis and disjoint worktrees may run concurrently when their authority/state boundaries are safe.
 
-The 2026-08-05 documentation audit identified then-stale human-merge, roadmap, and credential-persistence prose. Those findings explain prior reconciliations but do not create current command authority.
+## 10. Minimum-necessary process rule
 
-## 15. Minimal continuation handoff
+Before adding a new workflow, reviewer pipeline, coordination surface, governance file, persistent worker, queue, lock, daemon, store, or general abstraction, prove that the accepted outcome cannot be reached safely with an existing simpler owner.
+
+A slow/unavailable reviewer is **not by itself** authority to build review infrastructure.
+
+A repeated process failure should first be fixed by simplifying the process, removing duplication, or changing the capability assignment. Build new machinery only when deterministic enforcement is actually needed.
+
+## 11. Merge decision
+
+The acting Frontier Coordinator owns the technical merge decision within accepted authority.
+
+Immediately before merge, verify only the conditions that can invalidate the merge:
+
+- exact current PR head and expected base/head relationship;
+- required deterministic/proof gates for the accepted slice;
+- required review evidence proportionate to risk and any explicit active-contract requirement;
+- no known P0/P1 or blocking P2;
+- truthful `STATUS.md`/PR association;
+- no unresolved scope/authority conflict;
+- exact-head/CAS/mergeability conditions.
+
+Merge authority does not grant authority to weaken or modify branch protection, repository rulesets, or required-check settings; those controls remain separately permissioned as stated in `AGENTS.md`.
+
+Never enable deferred GitHub auto-merge. Perform and verify the merge explicitly.
+
+After merge, verify fresh master, perform only necessary registry/README reconciliation, then continue to the next authorized goal.
+
+Do not perform a final “one more review” after all required conditions are already satisfied unless new evidence materially changes risk.
+
+## 12. Obstacles and maintainer interruption
+
+The four interruption classes in `AGENTS.md` are exhaustive.
+
+For ordinary technical obstacles, choose between at least two practicable routes internally, select the least-cost reversible safe route, and continue. Record the trade-off only when it is material to future maintainers.
+
+A blocked external reviewer, CI queue, unavailable optional helper, or offline local worker normally blocks only the capability that depends on it, not unrelated cloud/repository work.
+
+## 13. Governance changes
+
+This protocol and the other core governance files are stable constitutional surfaces.
+
+A Frontier Coordinator may change them only in a dedicated bounded governance change when the maintainer explicitly asks or repeated measured process failure proves the rule itself is the problem.
+
+Governance refactors should normally **delete duplicated rules and reduce policy surface**, not add another authority file.
+
+## 14. Automation prompt rule
+
+A scheduler prompt is a bootstrap pointer, not governance.
+
+The preferred form is:
 
 ```text
-JARVISOS_CONTINUATION_V1
-
-REPOSITORY: AlbertoRacerro/JarvisOS_v1
-MASTER_SHA:
-ACTIVE_PR:
-ACTIVE_HEAD_SHA:
-MAINTAINER_DECISIONS_NOT_YET_IN_REPO: none / ...
-
-Read AGENTS.md, docs/AGENT_EXECUTION_AND_AUTOMATION_PROTOCOL.md,
-docs/specs/STATUS.md, the active spec/readiness record, and the active PR at the
-exact SHAs above. After 112 is merged, also read
-docs/POST_112_PARALLEL_DELIVERY_PROFILE.md before resuming multiple lanes.
-Verify remote state and continue autonomously.
+Run the Generic Frontier Builder Contract from the repository for AlbertoRacerro/JarvisOS_v1.
+Scheduler slot: <A|B|C|D>.
+GitHub remote fresh is the source of truth.
+Use the canonical post-112 shared-writer mutex before shared mutation.
+Obey current STATUS and any explicit current maintainer scheduling override.
+Continue autonomously until no authorized useful work remains.
 ```
 
-Do not add a narrative recap unless repository state cannot express an essential fact.
+A temporary maintainer priority may be appended as one line. Do not copy review policy, acceptance philosophy, model routing, or detailed lifecycle rules into each automation prompt.
+
+If an automation prompt conflicts with fresh canonical governance, canonical repository governance wins except for a clearly identified newer explicit maintainer scheduling directive.

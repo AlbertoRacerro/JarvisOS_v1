@@ -1,82 +1,65 @@
 # Spec status and roadmap
 
-This file is the single live source of truth for JarvisOS spec state and near-term
-roadmap. Individual spec files define scope, acceptance criteria, tests, and
-non-goals; their legacy `Status:` lines are not authoritative.
+Status: **canonical live registry**
 
-Update this table whenever work starts, a PR opens, a dependency changes, a PR
-merges, or a spec is cancelled. GitHub PR diffs are the authoritative list of
-files created or modified by a spec; this registry intentionally does not copy
-those file lists into a second place.
+This file is the single live repository registry for JarvisOS spec state, hard
+dependencies, near-term roadmap rows, and implementation-PR association. It is
+**not** a builder prompt, model-role policy, review policy, concurrency policy, or
+permanent scheduling queue.
 
-The `Implementation PR` column records implementation PRs only. A PR that merely
-creates or revises a spec does not occupy that column and does not move the spec
-to `in_review`; link such planning evidence in the description only when useful.
+Current scheduling among already-authorized work may also be selected by an
+explicit maintainer scheduling directive as allowed by
+`docs/POST_112_PARALLEL_DELIVERY_PROFILE.md`. A scheduling directive never
+changes spec state, dependencies, readiness, accepted scope, or implementation
+authority.
 
-Rows marked `planned` are roadmap outlines, not implementation contracts. They
-must pass the normal backlog row → kernel/definition → full spec → readiness →
-implementation ladder before a coding implementer may act on them.
+Use these canonical surfaces for other questions:
+
+- `AGENTS.md` — stable engineering constitution and hard invariants;
+- `docs/AGENT_EXECUTION_AND_AUTOMATION_PROTOCOL.md` — Generic Frontier Builder
+  Contract, review/evidence and delivery mechanics;
+- `docs/POST_112_PARALLEL_DELIVERY_PROFILE.md` — concurrency/shared-writer
+  mechanics only when applicable;
+- the active accepted spec/readiness — slice outcome, scope, non-goals and
+  stronger evidence requirements;
+- fresh exact Git/PR/runtime/test/proof evidence — current implementation truth.
+
+Historical operating-regime, model-specific role, lane-order, and current-priority
+prose previously carried above this registry was superseded on 2026-09-07 and is
+preserved only in Git history. Do not reconstruct current builder instructions
+from it.
+
+Individual spec files define scope, acceptance criteria, tests, and non-goals;
+their legacy `Status:` lines are not authoritative. GitHub PR diffs are the
+authoritative list of files created or modified by a spec; this registry does not
+copy those file lists into a second place.
+
+Rows marked `planned` are roadmap outlines, not implementation contracts.
+Product implementation requires an explicit truthful `ready` state and satisfied
+hard dependencies. Planning artifacts may be compressed or separated according
+to `AGENTS.md` and the execution protocol; this registry does not impose a
+ceremonial definition/full-spec/readiness PR count.
 
 ## Status values
 
-- `planned`: the work is identified, but the spec is not ready to implement.
-- `blocked`: the spec exists but a dependency or decision prevents work.
-- `ready`: the spec is complete and may be started.
-- `in_progress`: implementation is active and no PR is open yet.
-- `in_review`: an implementation PR is open; CI/review/merge decision is pending.
+- `planned`: the work is identified, but implementation is not authorized.
+- `blocked`: an explicit dependency or maintainer decision prevents work.
+- `ready`: the accepted contract is ready and implementation may start when hard dependencies are merged.
+- `in_progress`: implementation is active and no implementation PR is open yet.
+- `in_review`: an implementation PR is open; required evidence/review/merge decision is pending.
 - `merged`: the implementation PR is merged into `master`.
-- `cancelled`: the work will not be implemented or has been superseded.
+- `cancelled`: the work will not be implemented under this identity or has been superseded.
 
 ## Update rules
 
-1. Before starting implementation, confirm the row is `ready` and all hard dependencies are `merged`.
-2. Set the row to `in_progress` when a branch or implementation session starts.
-3. Set it to `in_review` and add the implementation PR number as soon as that PR exists.
-4. The merge owner sets it to `merged` immediately after merge.
-5. Use `blocked` with an explicit dependency or blocker; do not hide blockers in prose elsewhere.
-6. Do not duplicate live spec state in README files, individual spec prose, strategy documents, or chat handoffs.
-7. CI runs `python scripts/check_spec_status.py --event "$GITHUB_EVENT_PATH"` on pull requests. A spec implementation PR fails if its row is absent, not `in_review`, missing the current PR number, or has an unmerged hard dependency.
-
-## Repository operating regime — reconciled 2026-08-28
-
-- Serial implementation is absolute through `112 PROJECT-KNOWLEDGE-CORE-1`.
-- The assigned ChatGPT merge owner uses exact-head guards after required deterministic evidence is green and no current material finding remains unresolved.
-- A `planned` row is never implementation authority.
-- Every slice still follows the normal backlog row → kernel/definition → full spec → readiness → implementation → exact-head gates/review → merge → registry-reconciliation lifecycle; permitted post-112 planning compression changes ceremony, not authority.
-- New infrastructure, credentials, state stores, or broader scope must pass the minimum-necessary test.
-- Independently removable specifications remain separate.
-
-`111 JARVIS-CONTEXT-ACTION-FOUNDATION-1` is merged through implementation PR #425. `112 PROJECT-KNOWLEDGE-CORE-1` is merged through implementation PR #432 after merged definition PR #428, full-spec PR #429, and readiness PR #430. The post-112 controlled-parallel profile is active for rows whose live dependencies/readiness and disjointness permit it.
-
-Once fresh exact `master` shows 112 as `merged`, `docs/POST_112_PARALLEL_DELIVERY_PROFILE.md` becomes the canonical delivery exception. Remaining work is then dependency/lane-based rather than one global linear implementation writer, while one global ChatGPT coordinator/writer continues to own shared authority and merge sequencing.
-
-### Canonical post-112 lanes
-
-- **Knowledge:** `113 -> 114 -> 115`, then `121` when its hard dependencies are merged and its own readiness authorizes implementation.
-- **Development:** `116 -> 117`, then `122` when its hard dependencies are merged and its own readiness authorizes implementation.
-- **Coding acceleration:** `118 -> 119 -> 120 -> 123 -> fresh Hermes V1 re-derivation/release gate`.
-- **Maintainer-scheduled bridge:** `140` may advance under demonstrated post-112 controlled-parallel disjointness while `113` is parked on accepted human/browser evidence; `114` may not start until both `113` and `140` are merged and mechanically reconciled.
-- **Provider/settings:** `124` is an independent owner when its dependencies and readiness are satisfied and may be scheduled post-112 without blocking unrelated lanes.
-- **Separately gated:** `125` and `126` are not automatically parallelized.
-- **Later engineering/Process:** `102`, then `103 -> 104 -> 105 -> 106 -> 107 -> 108 -> 109 -> 093 -> 110`, subject to each row's then-current dependencies/readiness and fresh authority.
-
-Old 066–068 and 080 remain frozen. After 123, Hermes requires fresh derivation from then-current exact `master`; legacy Hermes specs are not direct implementation authority. Any fresh Hermes release must preserve JarvisOS-owned context, policy, credentials, sensitivity, egress, budget, ledger, promotion, repository, database, service, and domain authority.
-
-Historical sequential queue prose predating this reconciliation is non-normative provenance only. `STATUS.md` rows, dependencies, accepted spec/readiness artifacts, and the activated post-112 profile are the live authority.
-
-The maintainer completed the 062 frontend design decision on 2026-08-17: no permanent `Was this useful?` grading control belongs in normal Jarvis chat. Existing 062 backend/evaluation evidence remains valid; a future frontend grade surface is deferred to a separately re-derived Evaluation/Audit interaction and does not block the operator-workstation queue.
-
-The queue is binding but not immutable. If a slice proves non-implementable within its accepted boundary, or a prerequisite proves insufficient, a later definition-only authority spec may re-derive remaining work. Re-derivation must preserve already merged slices, record the stop reason and reached state, retain the 066–068 freeze until explicitly lifted, and explicitly identify any product decision it changes. Silent abandonment or substitution is not authorized.
-
-## Current priority and drafting order
-
-1. `100c FINAL-PRODUCT-DIRECTION-AUTHORITY-0` completed its definition/queue re-derivation through PR #416; it is planning authority only and has no runtime implementation identity.
-2. `111 JARVIS-CONTEXT-ACTION-FOUNDATION-1` is merged through kernel/full spec/readiness PRs #418/#419/#422 and implementation PR #425. Preserve the common exact-context/capability boundary and the existing AI execution/policy spine.
-3. `112 PROJECT-KNOWLEDGE-CORE-1` is merged through implementation PR #432 after definition PR #428, full-spec PR #429, and readiness PR #430.
-4. While `113` is parked on its accepted exact-head human/browser evidence gate, `140` may advance through its normal lifecycle under the post-112 controlled-parallel profile; `114` remains held until both `113` and `140` are merged and mechanically reconciled.
-5. Schedule other READY work by the canonical post-112 lanes above, not by one global sequence. Dependencies and lane ownership decide eligibility.
-6. `102` and then `103 -> 104 -> 105 -> 106 -> 107 -> 108 -> 109 -> 093 -> 110` remain later engineering/Process work according to dependencies/current authority. BLUECAD remains preserved; Process topology/solver implementation cannot be fabricated by frontend state.
-7. `101` is superseded by 112; 055 is superseded as a standalone Project view; 064 and 069 remain trigger-deferred. Keep 066–068 and 080 frozen and 062 blocked/deferred.
+1. `planned` never authorizes product implementation; readiness must be explicit.
+2. Before starting implementation, confirm the row is `ready` and all hard dependencies are `merged`.
+3. Set the row to `in_progress` when an authorized implementation branch/session starts without an open PR.
+4. Set it to `in_review` and add the implementation PR number as soon as that PR exists.
+5. After verified merge, set the row to `merged` and retain the implementation PR link.
+6. Use `blocked` only for a real explicit dependency/decision blocker; ordinary technical work is not automatically a blocker.
+7. Do not duplicate live spec state in README files, individual spec prose, strategy documents, chat handoffs, or scheduler prompts.
+8. CI runs `python scripts/check_spec_status.py --event "$GITHUB_EVENT_PATH"` on pull requests. A spec implementation PR fails if its row is absent, not `in_review`, missing the current PR number, or has an unmerged hard dependency.
 
 ## Registry
 | Spec | Status | Implementation PR | Name | Depends on | Description |
@@ -210,7 +193,7 @@ The queue is binding but not immutable. If a slice proves non-implementable with
 | 110 | planned | — | MULTIFIDELITY-ENGINEERING-1 | 108, 109 | Add decision-driven fidelity escalation from analytical/reduced-order evaluators to CFD/FEM/specialist tools only when needed, carrying exact qualification/validity evidence and allowing high-fidelity results to feed back into the same study. |
 | 111 | merged | [#425](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/425) | JARVIS-CONTEXT-ACTION-FOUNDATION-1 | 040, 042, 059b, 061a, 061b, 090, 091, 097 | Kernel/full spec/readiness merged through PRs #418, #419 and #422; implementation PR #425 merged the stable workspace/route/exact-ref context and generic capability/action contracts over the current AI execution/policy spine, explicit removable context, inspected preview/digest/provenance and fail-closed stale refs, with no page business logic, Hermes runtime, second orchestration store or domain COMMIT/EXECUTE. |
 | 112 | merged | [#432](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/432) | PROJECT-KNOWLEDGE-CORE-1 | 001, 035, 040, 042, 050, 051, 071b, 098, 111 | Definition PR #428, full-spec PR #429, readiness PR #430, and implementation PR #432 are merged. The bounded canonical Project Basis write/change-set/working-revision, deterministic impact/revalidation and atomic reconciliation over existing engineering-record ownership are now runtime authority; no second project/model store and no 113+ scope. |
-| 113 | ready | — | MODEL-DOSSIER-1 | 050, 051, 077, 112 | Planning/full-spec/readiness authority merged through PR #433; read-only exact model/version/revision dossier over existing modeling/run/evidence/artifact/source owners with bounded disclosures and no canonical model writes. |
+| 113 | in_review | [#548](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/548) | MODEL-DOSSIER-1 | 050, 051, 077, 112 | Planning/full-spec/readiness authority merged through PR #433; read-only exact model/version/revision dossier over existing modeling/run/evidence/artifact/source owners with bounded disclosures and no canonical model writes. |
 | 114 | planned | — | LITERATURE-KNOWLEDGE-1 | 040, 042, 112 | Structured source/document/import/claim/datum/citation/location/used-by provenance bridged to existing file/source authority, with bounded safe preview/open; research/extraction stays proposal-only. |
 | 115 | planned | — | PROJECT-SEARCH-1 | 112, 113, 114 | Literal/structured project search returning exact owner/type/version/provenance as a read projection only; semantic retrieval remains trigger-deferred. |
 | 116 | planned | — | ROADMAP-CALENDAR-1 | 111 | Stable Roadmap work-item identity with deterministic gates plus separate real Calendar time-allocation entities and exact time-zone/link semantics; no Board store. |
@@ -221,7 +204,7 @@ The queue is binding but not immutable. If a slice proves non-implementable with
 | 121 | planned | — | JARVIS-PROJECT-KNOWLEDGE-ACTIONS-1 | 111, 112, 113, 114, 115 | Explicit exact context refs and stale-safe CONTEXT/PROPOSE actions over Project Basis, Models and Literature; domain COMMIT remains with Project Knowledge owners. |
 | 122 | planned | — | JARVIS-DEVELOPMENT-ACTIONS-1 | 111, 116, 117 | Explicit Development context basket and scheduling/reconciliation/Roadmap/promotion proposals; browsing remains context-neutral and acceptance stays domain-owned. |
 | 123 | merged | [#546](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/546) | JARVIS-CODING-ACTIONS-1 | 111, 118, 119, 120 | Inspect/explain/context and Suggest modification as proposal/diff/plan only through accepted server-side development authority; no direct file mutation. |
-| 124 | planned | — | PROVIDER-SETTINGS-GENERIC-1 | 015, 018, 021, 059b, 061a, 082, 094, 111 | Provider/integration-scoped credential/config/status/test/catalogue/usage/budget/system projections over existing secure storage/provider/egress/policy owners; no model-scoped keys or Hermes claim. |
+| 124 | in_review | [#559](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/559) | PROVIDER-SETTINGS-GENERIC-1 | 015, 018, 021, 059b, 061a, 082, 094, 111 | Provider/integration-scoped credential/config/status/test/catalogue/usage/budget/system projections over existing secure storage/provider/egress/policy owners; no model-scoped keys or Hermes claim. |
 | 125 | planned | — | SAFE-SELF-UPDATE-1 | 119, 120 | Guarded exact-target update/restart/rollback authority with dirty refusal, state preservation, migration/build/smoke/health and known-good rollback evidence; separate from observation and PTY. |
 | 126 | planned | — | LOCAL-TERMINAL-PTY-1 | 118, 119, 123 | Security-gated typed local PTY/session authority with validated cwd, scrubbed environment, secret-safe/redacted display boundary and explicit high-risk confirmation; remains unavailable until full security/readiness proof. |
 | 127 | merged | [#466](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/466) | CANONICAL-WRITE-PATH-1 | 040, 098, 112 | Inventory every legacy modeling mutation surface and either delegate authoritative Project Basis/model writes through accepted canonical owners/CAS/reconciliation or reject caller-supplied authority explicitly; Requirement PATCH direct-write closure is mandatory unless separately superseded, while run/evidence ownership must be classified rather than silently absorbed. |
@@ -239,6 +222,8 @@ The queue is binding but not immutable. If a slice proves non-implementable with
 | 138 | merged | [#512](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/512) | PYTHON-RUNNER-HASHSEED-DETERMINISM-1 | 130, 137 | Bounded post-134 F6 repair: pin `PYTHONHASHSEED=0` in the existing isolated production Python-runner child environment and prove stable hash-dependent output across independent real runner subprocesses; no generic determinism or sandbox expansion. |
 | 139 | merged | [#517](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/517) | RUNNER-STRANDED-RECOVERY-1 | 138 | Planning/full-spec/readiness authority merged through PR #515; bounded post-134 F8 repair: prove live-child versus abandoned execution before idempotent stranded-running recovery, preserve evidence, and avoid generic lease/heartbeat/process-supervisor expansion. |
 | 140 | in_review | [#552](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/552) | CODING-FRONTEND-INTEGRATION-1 | 091, 100f, 100g, 111, 118, 119, 120, 123 | Wire existing Coding/operator frontend surfaces to accepted server-owned repository, runtime, pipeline, and Jarvis Coding READ/PROPOSE contracts without adding browser GitHub/provider/filesystem credentials, direct mutation/execute/merge authority, a second store/workflow, or unrelated redesign. |
+| 141 | in_review | [#564](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/564) | LOCAL-WORKTREE-ACTUATOR-1 | 118, 119, 120, 123 | Trusted optional local worktree actuator for persistent exact-head repository work, bounded non-executing validation profiles, local commit and atomic expected-head CAS guarded fast-forward same-branch push with OS-owned credentials and audit, while refusing merge/history-rewrite/default-branch/PTY/arbitrary-filesystem/self-update/desktop authority. |
+| 142 | merged | [#571](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/571) | EXACT-HEAD-BROWSER-PROOF-1 | 083 | GitHub-hosted exact-head real Chromium/Playwright proof for beta-critical UI candidates with trusted proof control, isolated proof data, fresh PR/head verification and durable head-bound artifacts; no personal-PC/self-hosted/provider-credential/paid/fake proof authority. |
 
 ## Superseded planning aliases and resolved collisions
 
