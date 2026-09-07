@@ -471,9 +471,14 @@ jobs:
             -m "Jarvis-Tree: $tree_sha" \
             -m "Jarvis-Run: $GITHUB_RUN_ID" \
             -m "Jarvis-OIDC: $commit_oidc_token"
-          git -c http.extraheader="AUTHORIZATION: basic $auth" push origin \
-            "HEAD:refs/heads/$HEAD_REF"
-          echo "output_head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          intended=$(git rev-parse HEAD)
+          python scripts/repository_delivery.py ci-guarded-push \
+            --repo-root . \
+            --remote origin \
+            --branch "$HEAD_REF" \
+            --intended "$intended" \
+            --expected "$EXPECTED_HEAD"
+          echo "output_head=$intended" >> "$GITHUB_OUTPUT"
 
   record-marker:
     needs: [plan, validate, push]
