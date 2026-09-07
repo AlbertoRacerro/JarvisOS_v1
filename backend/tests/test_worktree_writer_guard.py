@@ -26,7 +26,9 @@ ActuatorCode = actuator_module.ActuatorCode
 ActuatorRefusal = actuator_module.ActuatorRefusal
 Capability = actuator_module.Capability
 LocalWorktreeActuator = actuator_module.LocalWorktreeActuator
+RepositoryRegistration = actuator_module.RepositoryRegistration
 RequestContext = actuator_module.RequestContext
+WorktreeRegistration = actuator_module.WorktreeRegistration
 WriterGuardBusy = actuator_module.WriterGuardBusy
 WorkerState = actuator_module.WorkerState
 _exclusive_writer_guard = actuator_module._exclusive_writer_guard
@@ -34,6 +36,15 @@ _exclusive_writer_guard = actuator_module._exclusive_writer_guard
 
 def _ctx(request: str, session: str):
     return RequestContext(request, "principal", session, Capability.IMPLEMENTER)
+
+
+def _git(cwd: Path, *args: str) -> str:
+    completed = subprocess.run(
+        ["git", *args], cwd=cwd, text=True, capture_output=True, check=False
+    )
+    if completed.returncode != 0:
+        raise AssertionError(completed.stderr or completed.stdout)
+    return completed.stdout.strip()
 
 
 def test_writer_guard_is_stable_and_non_reentrant(tmp_path: Path) -> None:
@@ -147,3 +158,90 @@ def test_write_holds_guard_across_owner_check_and_side_effect(
     with pytest.raises(ActuatorRefusal) as stale:
         actuator.write_text(owner, "repo", worktree_id, "file.txt", "stale")
     assert stale.value.code == ActuatorCode.WORKTREE_BUSY
+
+
+def test_physical_worktree_owner_and_guard_are_shared_across_workers(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(
+        "JARVISOS_LOCAL_WORKTREE_HOST_STATE_ROOT",
+        str(tmp_path / "host-state"),
+    )
+    remote = tmp_path / "remote.git"
+    work = tmp_path / "work"
+    _git(tmp_path, "init", "--bare", str(remote))
+    _git(tmp_path, "clone", str(remote), str(work))
+    _git(work, "config", "user.name", "Test User")
+    _git(work, "config", "user.email", "test@example.invalid")
+    (work / "README.md").write_text("base\n", encoding="utf-8")
+    _git(work, "add", "README.md")
+    _git(work, "commit", "-m", "base")
+    _git(work, "branch", "-M", "feature")
+    common = _git(work, "rev-parse", "--path-format=absolute", "--git-common-dir")
+    head = _git(work, "rev-parse", "HEAD")
+
+    def make_worker(worker_id: str, state_name: str) -> LocalWorktreeActuator:
+        worker = LocalWorktreeActuator(WorkerState(tmp_path / state_name, worker_id=worker_id))
+        worker.enroll_repository(
+            RepositoryRegistration(
+                repository_id="repo",
+                root=str(work),
+                remote_host="github.com",
+                owner="owner",
+                repo="repo",
+                common_git_dir=common,
+                default_branch="master",
+                worktree_root=str(tmp_path),
+            )
+        )
+        return worker
+
+    worker_a = make_worker("worker-a", "state-a")
+    worker_b = make_worker("worker-b", "state-b")
+    tree_a = WorktreeRegistration(
+        worktree_id="tree-a",
+        repository_id="repo",
+        path=str(work),
+        branch="feature",
+        worker_id="worker-a",
+        durable_commit=head,
+    )
+    worker_a.attach_worktree(tree_a)
+
+    tree_b = WorktreeRegistration(
+        worktree_id="tree-b",
+        repository_id="repo",
+        path=str(work),
+        branch="feature",
+        worker_id="worker-b",
+        durable_commit=head,
+    )
+    with pytest.raises(ActuatorRefusal) as claim:
+        worker_b.attach_worktree(tree_b)
+    assert claim.value.code == ActuatorCode.WORKTREE_IDENTITY_MISMATCH
+    assert "tree-b" not in worker_b.state.registry()["worktrees"]
+    assert (work / "README.md").read_text(encoding="utf-8") == "base\n"
+
+    # Even hostile/legacy duplicate registry metadata resolves to one physical
+    # guard, so separate WorkerState roots cannot create independent OS locks.
+    payload = worker_b.state.registry()
+    payload["worktrees"]["tree-b"] = {
+        "worktree_id": "tree-b",
+        "repository_id": "repo",
+        "path": str(work),
+        "branch": "feature",
+        "worker_id": "worker-b",
+        "durable_commit": head,
+    }
+    worker_b.state.replace_registry(payload)
+    guard_a = worker_a._guard_path("tree-a")
+    guard_b = worker_b._guard_path("tree-b")
+    assert guard_a == guard_b
+    with _exclusive_writer_guard(guard_a):
+        with pytest.raises(WriterGuardBusy):
+            with _exclusive_writer_guard(guard_b):
+                pass
+    with pytest.raises(ActuatorRefusal) as stale_claim:
+        worker_b.acquire_writer(_ctx("b-request", "b-session"), "tree-b")
+    assert stale_claim.value.code == ActuatorCode.WORKTREE_IDENTITY_MISMATCH
