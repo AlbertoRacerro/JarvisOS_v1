@@ -17,8 +17,10 @@ spec.loader.exec_module(repository_delivery)
 
 DeliveryCode = repository_delivery.DeliveryCode
 DeliveryRefusal = repository_delivery.DeliveryRefusal
+GitRunner = repository_delivery.GitRunner
 RemotePolicy = repository_delivery.RemotePolicy
 RepositoryDelivery = repository_delivery.RepositoryDelivery
+WindowsGCMAdapter = repository_delivery.WindowsGCMAdapter
 is_sensitive_path = repository_delivery.is_sensitive_path
 
 
@@ -63,6 +65,8 @@ def test_sensitive_path_baseline_and_source_code_carveout() -> None:
         ".env.local",
         "private/token.txt",
         "scripts/repository_delivery.py",
+        "scripts/local_worktree_ipc.py",
+        "backend/tests/test_local_worktree_ipc.py",
     ]:
         assert is_sensitive_path(path), path
     for path in [
@@ -71,6 +75,23 @@ def test_sensitive_path_baseline_and_source_code_carveout() -> None:
         "backend/tests/test_normal.py",
     ]:
         assert not is_sensitive_path(path), path
+
+
+def test_gcm_runner_pins_validated_executable_not_helper_name(tmp_path: Path) -> None:
+    helper = tmp_path / "Git Credential Manager" / "git-credential-manager.exe"
+    helper.parent.mkdir()
+    helper.write_bytes(b"test")
+    adapter = WindowsGCMAdapter(helper_name="manager", executable=str(helper))
+    prefix = GitRunner(credential_adapter=adapter)._prefix()
+    helper_configs = [
+        prefix[index + 1]
+        for index, value in enumerate(prefix[:-1])
+        if value == "-c" and prefix[index + 1].startswith("credential.helper=")
+    ]
+    assert helper_configs[0] == "credential.helper="
+    expected = str(helper.resolve()).replace("\\", "/")
+    assert helper_configs[1] == f'credential.helper="{expected}"'
+    assert "credential.helper=manager" not in prefix
 
 
 def test_absent_remote_branch_refuses_without_creation(tmp_path: Path) -> None:
