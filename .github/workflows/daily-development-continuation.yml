@@ -420,6 +420,7 @@ jobs:
           ACTIVE_PR: ${{ needs.plan.outputs.pr_number }}
         run: |
           cp scripts/daily_development_continuation.py "$RUNNER_TEMP/trusted-continuation-validator.py"
+          cp scripts/repository_delivery.py "$RUNNER_TEMP/trusted-repository-delivery.py"
           git show HEAD:docs/specs/STATUS.md > "$RUNNER_TEMP/status-before.md"
           git apply --index --whitespace=error-all "$RUNNER_TEMP/continuation/continuation.patch"
           git diff --cached --no-renames --name-only -z > "$RUNNER_TEMP/changed-files.z"
@@ -472,7 +473,7 @@ jobs:
             -m "Jarvis-Run: $GITHUB_RUN_ID" \
             -m "Jarvis-OIDC: $commit_oidc_token"
           intended=$(git rev-parse HEAD)
-          python scripts/repository_delivery.py ci-guarded-push \
+          python -I -S "$RUNNER_TEMP/trusted-repository-delivery.py" ci-guarded-push \
             --repo-root . \
             --remote origin \
             --branch "$HEAD_REF" \
