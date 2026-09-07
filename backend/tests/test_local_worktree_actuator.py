@@ -92,6 +92,7 @@ def fixture_worker(tmp_path: Path) -> tuple[LocalWorktreeActuator, RequestContex
         "durable_commit": base,
     }
     worker.state.replace_registry(payload)
+    worker._claim_physical_worktree("tree")
     implementer = RequestContext("req-i", "principal", "session-i", Capability.IMPLEMENTER)
     reviewer = RequestContext("req-r", "principal", "session-r", Capability.REVIEWER)
     return worker, implementer, reviewer, work, base
