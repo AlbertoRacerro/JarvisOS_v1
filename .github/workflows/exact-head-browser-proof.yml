@@ -35,6 +35,8 @@ jobs:
     env:
       PROOF_DIR: ${{ runner.temp }}/jarvis-browser-proof
       PROOF_DATA_ROOT: ${{ runner.temp }}/jarvis-proof-data
+      CANDIDATE_VENV: ${{ runner.temp }}/jarvis-candidate-venv
+      CANDIDATE_USER: jarviscandidate
     steps:
       - name: Require trusted default-branch dispatch
         shell: bash
@@ -52,26 +54,6 @@ jobs:
             echo "pr_number must be a positive integer." >&2
             exit 1
           }
-
-      - name: Checkout trusted proof controller
-        uses: actions/checkout@v4
-        with:
-          ref: master
-          path: controller
-          persist-credentials: false
-          fetch-depth: 1
-
-      - name: Freeze trusted controller identity
-        id: controller
-        shell: bash
-        run: |
-          set -euo pipefail
-          controller_sha="$(git -C controller rev-parse HEAD)"
-          test "$controller_sha" = "$GITHUB_SHA" || {
-            echo "Default-branch controller SHA drifted from workflow identity." >&2
-            exit 1
-          }
-          echo "sha=$controller_sha" >> "$GITHUB_OUTPUT"
 
       - name: Resolve fresh PR head
         id: pr
@@ -147,6 +129,55 @@ jobs:
           cache: npm
           cache-dependency-path: candidate/frontend/package-lock.json
 
+      - name: Create unprivileged candidate boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo useradd --create-home --shell /usr/sbin/nologin "$CANDIDATE_USER"
+          sudo chown -R "$CANDIDATE_USER:$CANDIDATE_USER" candidate
+          sudo -u "$CANDIDATE_USER" -H python -m venv "$CANDIDATE_VENV"
+          mkdir -p "$PROOF_DATA_ROOT"
+          sudo chown -R "$CANDIDATE_USER:$CANDIDATE_USER" "$PROOF_DATA_ROOT" "$CANDIDATE_VENV"
+
+      - name: Install candidate dependencies and build UI as unprivileged user
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo -u "$CANDIDATE_USER" -H env GITHUB_TOKEN= GH_TOKEN= \
+            "$CANDIDATE_VENV/bin/python" -m pip install --disable-pip-version-check -r candidate/backend/requirements.txt
+          sudo -u "$CANDIDATE_USER" -H env GITHUB_TOKEN= GH_TOKEN= \
+            npm --prefix candidate/frontend ci --ignore-scripts --no-audit --no-fund
+          sudo -u "$CANDIDATE_USER" -H env GITHUB_TOKEN= GH_TOKEN= \
+            npm --prefix candidate/frontend run build
+
+      - name: Checkout trusted proof controller after candidate build
+        uses: actions/checkout@v4
+        with:
+          ref: master
+          path: controller
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Freeze trusted controller identity and ownership
+        id: controller
+        shell: bash
+        run: |
+          set -euo pipefail
+          controller_sha="$(git -C controller rev-parse HEAD)"
+          test "$controller_sha" = "$GITHUB_SHA" || {
+            echo "Default-branch controller SHA drifted from workflow identity." >&2
+            exit 1
+          }
+          test "$(stat -c '%U' controller/.github/browser-proof/run.mjs)" != "$CANDIDATE_USER" || {
+            echo "Trusted controller is candidate-owned." >&2
+            exit 1
+          }
+          if sudo -u "$CANDIDATE_USER" test -w controller/.github/browser-proof/run.mjs; then
+            echo "Candidate user can mutate trusted proof controller." >&2
+            exit 1
+          fi
+          echo "sha=$controller_sha" >> "$GITHUB_OUTPUT"
+
       - name: Install trusted Playwright controller
         working-directory: controller/.github/browser-proof
         shell: bash
@@ -155,47 +186,25 @@ jobs:
           npm install --ignore-scripts --no-audit --no-fund
           npx playwright install --with-deps chromium
 
-      - name: Install candidate dependencies and build UI
-        shell: bash
-        env:
-          GITHUB_TOKEN: ''
-          GH_TOKEN: ''
-        run: |
-          set -euo pipefail
-          python -m pip install --disable-pip-version-check -r candidate/backend/requirements.txt
-          npm --prefix candidate/frontend ci --ignore-scripts --no-audit --no-fund
-          npm --prefix candidate/frontend run build
-
       - name: Prepare isolated proof data
         shell: bash
-        env:
-          GITHUB_TOKEN: ''
-          GH_TOKEN: ''
-          JARVISOS_DATA_ROOT: ${{ runner.temp }}/jarvis-proof-data
-          PYTHONPATH: ${{ github.workspace }}/candidate/backend
         run: |
           set -euo pipefail
-          rm -rf "$PROOF_DATA_ROOT"
-          mkdir -p "$PROOF_DATA_ROOT"
           if test "${{ inputs.scenario }}" = "113-memory-models"; then
-            python controller/.github/browser-proof/seed_113.py workspace
+            sudo -u "$CANDIDATE_USER" -H env GITHUB_TOKEN= GH_TOKEN= \
+              JARVISOS_DATA_ROOT="$PROOF_DATA_ROOT" PYTHONPATH="$GITHUB_WORKSPACE/candidate/backend" \
+              "$CANDIDATE_VENV/bin/python" controller/.github/browser-proof/seed_113.py workspace
           fi
 
-      - name: Start isolated candidate runtime
+      - name: Start isolated candidate runtime as unprivileged user
         shell: bash
-        env:
-          GITHUB_TOKEN: ''
-          GH_TOKEN: ''
-          JARVISOS_DATA_ROOT: ${{ runner.temp }}/jarvis-proof-data
-          PYTHONPATH: ${{ github.workspace }}/candidate/backend
         run: |
           set -euo pipefail
-          mkdir -p "$PROOF_DIR" "$JARVISOS_DATA_ROOT"
-          (
-            cd candidate/backend
-            python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 >"$PROOF_DIR/backend.log" 2>&1 &
-            echo $! > "$PROOF_DIR/backend.pid"
-          )
+          sudo -u "$CANDIDATE_USER" -H env GITHUB_TOKEN= GH_TOKEN= \
+            JARVISOS_DATA_ROOT="$PROOF_DATA_ROOT" PYTHONPATH="$GITHUB_WORKSPACE/candidate/backend" \
+            "$CANDIDATE_VENV/bin/python" -m uvicorn app.main:app --app-dir candidate/backend \
+            --host 127.0.0.1 --port 8000 >"$PROOF_DIR/backend.log" 2>&1 &
+          echo $! > "$PROOF_DIR/backend.pid"
           for attempt in $(seq 1 60); do
             if curl --fail --silent http://127.0.0.1:8000/health >/dev/null; then
               exit 0
@@ -205,6 +214,20 @@ jobs:
           cat "$PROOF_DIR/backend.log" >&2 || true
           exit 1
 
+      - name: Recheck trusted controller before verdict
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C controller rev-parse HEAD)" = "${{ steps.controller.outputs.sha }}"
+          test -z "$(git -C controller status --porcelain -- .github/browser-proof .github/workflows/exact-head-browser-proof.yml)" || {
+            echo "Trusted proof controller changed after candidate runtime started." >&2
+            exit 1
+          }
+          if sudo -u "$CANDIDATE_USER" test -w controller/.github/browser-proof/run.mjs; then
+            echo "Candidate user acquired write access to trusted proof controller." >&2
+            exit 1
+          fi
+
       - name: Run trusted real-Chromium proof
         working-directory: controller/.github/browser-proof
         shell: bash
@@ -213,6 +236,8 @@ jobs:
           GH_TOKEN: ''
           JARVISOS_DATA_ROOT: ${{ runner.temp }}/jarvis-proof-data
           PYTHONPATH: ${{ github.workspace }}/candidate/backend
+          PROOF_PYTHON: ${{ runner.temp }}/jarvis-candidate-venv/bin/python
+          PROOF_CANDIDATE_USER: jarviscandidate
           PROOF_SEED_SCRIPT: ${{ github.workspace }}/controller/.github/browser-proof/seed_113.py
           PROOF_SCENARIO: ${{ inputs.scenario }}
           PROOF_BASE_URL: http://127.0.0.1:8000
