@@ -134,7 +134,45 @@ def test_writer_lock_is_single_owner_and_non_destructive(tmp_path: Path) -> None
         )
     assert exc.value.code == ActuatorCode.WORKTREE_BUSY
     assert (work / "README.md").read_text(encoding="utf-8") == "dirty\n"
-    worker.release_writer("tree")
+    worker.release_writer(implementer, "tree")
+
+
+def test_writer_lease_rejects_cross_session_mutation_and_release(tmp_path: Path) -> None:
+    worker, owner, _reviewer, work, base = fixture_worker(tmp_path)
+    intruder = RequestContext("req-x", "principal", "session-x", Capability.IMPLEMENTER)
+    worker.acquire_writer(owner, "tree")
+
+    for operation in (
+        lambda: worker.write_text(intruder, "repo", "tree", "README.md", "intruder\n"),
+        lambda: worker.stage_paths(intruder, "repo", "tree", ["README.md"]),
+        lambda: worker.commit(intruder, "repo", "tree", "intruder commit"),
+        lambda: worker.push_branch(
+            intruder,
+            "repo",
+            "tree",
+            intended_local_commit=base,
+            expected_remote_head=base,
+        ),
+        lambda: worker.release_writer(intruder, "tree"),
+    ):
+        with pytest.raises(ActuatorRefusal) as exc:
+            operation()
+        assert exc.value.code == ActuatorCode.WORKTREE_BUSY
+
+    assert (work / "README.md").read_text(encoding="utf-8") == "base\n"
+    worker.write_text(owner, "repo", "tree", "README.md", "base\nowner\n")
+    worker.stage_paths(owner, "repo", "tree", ["README.md"])
+    committed = worker.commit(owner, "repo", "tree", "owner commit")
+    assert committed != base
+    worker.release_writer(owner, "tree")
+
+
+def test_malformed_writer_lease_fails_closed(tmp_path: Path) -> None:
+    worker, implementer, _reviewer, _work, _base = fixture_worker(tmp_path)
+    worker._lock_path("tree").write_text("not-json\n", encoding="utf-8")
+    with pytest.raises(ActuatorRefusal) as exc:
+        worker.write_text(implementer, "repo", "tree", "README.md", "blocked\n")
+    assert exc.value.code == ActuatorCode.WORKTREE_BUSY
 
 
 def test_exact_worktree_create_uses_registered_root_and_sha(tmp_path: Path) -> None:
@@ -171,6 +209,10 @@ def test_path_escape_and_sensitive_paths_refuse(tmp_path: Path) -> None:
     with pytest.raises(ActuatorRefusal) as exc:
         worker.validate_write_target(implementer, "repo", "tree", ".github/workflows/ci.yml")
     assert exc.value.code == repository_delivery.DeliveryCode.SENSITIVE_PATH_REFUSED
+    for protected in ["scripts/local_worktree_ipc.py", "backend/tests/test_local_worktree_ipc.py"]:
+        with pytest.raises(ActuatorRefusal) as exc:
+            worker.validate_write_target(implementer, "repo", "tree", protected)
+        assert exc.value.code == repository_delivery.DeliveryCode.SENSITIVE_PATH_REFUSED
 
 
 def test_symlink_escape_refuses_when_supported(tmp_path: Path) -> None:
@@ -225,7 +267,7 @@ def test_local_commit_survives_requester_and_worker_restart(tmp_path: Path) -> N
     assert git(work, "show", "-s", "--format=%an <%ae>", committed) == (
         "Maintainer Worker <worker@example.invalid>"
     )
-    worker.release_writer("tree")
+    worker.release_writer(implementer, "tree")
 
     restarted = LocalWorktreeActuator(WorkerState(tmp_path / "state"))
     registry = restarted.state.registry()
@@ -246,6 +288,20 @@ def test_wrong_worker_cannot_claim_persistent_worktree(tmp_path: Path) -> None:
             )
         )
     assert exc.value.code == ActuatorCode.WORKTREE_IDENTITY_MISMATCH
+
+
+def test_dispatch_exposes_only_bounded_durable_lifecycle(tmp_path: Path) -> None:
+    worker, implementer, _reviewer, _work, base = fixture_worker(tmp_path)
+    created = worker.dispatch(
+        implementer,
+        "worktree_create",
+        repository_id="repo",
+        source_sha=base,
+        branch="ipc-feature",
+        directory_name="ipc-candidate",
+    )
+    worker.dispatch(implementer, "acquire_writer", worktree_id=created.worktree_id)
+    worker.dispatch(implementer, "release_writer", worktree_id=created.worktree_id)
 
 
 def test_dispatch_audits_unknown_refusal_without_secret_fields(tmp_path: Path) -> None:
