@@ -1,11 +1,14 @@
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { createReadStream } from "node:fs";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { createServer, request as httpRequest } from "node:http";
+import { extname, join, resolve, sep } from "node:path";
 import { chromium } from "playwright";
 
 const scenario = process.env.PROOF_SCENARIO;
-const baseUrl = process.env.PROOF_BASE_URL ?? "http://127.0.0.1:8000";
+const backendBaseUrl = process.env.PROOF_BASE_URL ?? "http://127.0.0.1:8000";
+const uiBaseUrl = process.env.PROOF_UI_BASE_URL ?? "http://127.0.0.1:4173";
 const artifactDir = process.env.PROOF_ARTIFACT_DIR;
 const expectedHead = process.env.PROOF_EXPECTED_HEAD_SHA;
 const resolvedHead = process.env.PROOF_RESOLVED_HEAD_SHA;
@@ -18,6 +21,7 @@ const runId = process.env.GITHUB_RUN_ID ?? "unknown";
 const seedScript = process.env.PROOF_SEED_SCRIPT;
 const proofPython = process.env.PROOF_PYTHON;
 const candidateUser = process.env.PROOF_CANDIDATE_USER;
+const candidateDist = resolve(process.cwd(), "../../../candidate/frontend/dist");
 
 if (!scenario || !artifactDir || !expectedHead || !resolvedHead || !checkedOutHead || !controllerSha || !prBaseSha || !repository) {
   throw new Error("missing required proof identity environment");
@@ -25,6 +29,95 @@ if (!scenario || !artifactDir || !expectedHead || !resolvedHead || !checkedOutHe
 if (expectedHead !== resolvedHead || expectedHead !== checkedOutHead) {
   throw new Error("exact-head identity mismatch before browser execution");
 }
+
+const uiOrigin = new URL(uiBaseUrl);
+const backendOrigin = new URL(backendBaseUrl);
+if (uiOrigin.protocol !== "http:" || uiOrigin.hostname !== "127.0.0.1" || uiOrigin.pathname !== "/") {
+  throw new Error("trusted UI proof origin must be an http://127.0.0.1 root URL");
+}
+if (backendOrigin.protocol !== "http:" || backendOrigin.hostname !== "127.0.0.1") {
+  throw new Error("candidate backend proof origin must remain loopback-only");
+}
+
+await stat(join(candidateDist, "index.html"));
+
+const mime = {
+  ".css": "text/css; charset=utf-8",
+  ".html": "text/html; charset=utf-8",
+  ".js": "text/javascript; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".map": "application/json; charset=utf-8",
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+  ".woff": "font/woff",
+  ".woff2": "font/woff2",
+};
+
+const uiServer = createServer(async (req, res) => {
+  try {
+    const incoming = new URL(req.url ?? "/", uiOrigin);
+    if (incoming.pathname === "/api" || incoming.pathname.startsWith("/api/")) {
+      const upstream = new URL(`${incoming.pathname}${incoming.search}`, backendOrigin);
+      const headers = { ...req.headers, host: upstream.host };
+      const proxy = httpRequest(upstream, { method: req.method, headers }, (upstreamResponse) => {
+        res.writeHead(upstreamResponse.statusCode ?? 502, upstreamResponse.headers);
+        upstreamResponse.pipe(res);
+      });
+      proxy.on("error", (error) => {
+        if (!res.headersSent) res.writeHead(502, { "content-type": "text/plain; charset=utf-8" });
+        res.end(`proof API proxy failed: ${error.message}`);
+      });
+      req.pipe(proxy);
+      return;
+    }
+
+    let pathname;
+    try {
+      pathname = decodeURIComponent(incoming.pathname);
+    } catch {
+      res.writeHead(400, { "content-type": "text/plain; charset=utf-8" });
+      res.end("invalid URL encoding");
+      return;
+    }
+
+    const requested = resolve(candidateDist, `.${pathname}`);
+    if (requested !== candidateDist && !requested.startsWith(`${candidateDist}${sep}`)) {
+      res.writeHead(400, { "content-type": "text/plain; charset=utf-8" });
+      res.end("invalid static path");
+      return;
+    }
+
+    let file = requested;
+    try {
+      const info = await stat(file);
+      if (!info.isFile()) file = join(candidateDist, "index.html");
+    } catch {
+      file = join(candidateDist, "index.html");
+    }
+
+    const contentType = mime[extname(file).toLowerCase()] ?? "application/octet-stream";
+    res.writeHead(200, {
+      "content-type": contentType,
+      "cache-control": "no-store",
+      "x-content-type-options": "nosniff",
+    });
+    createReadStream(file).pipe(res);
+  } catch (error) {
+    if (!res.headersSent) res.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
+    res.end(`trusted proof UI server failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+});
+
+await new Promise((resolveListen, rejectListen) => {
+  uiServer.once("error", rejectListen);
+  uiServer.listen(Number(uiOrigin.port || 80), uiOrigin.hostname, () => {
+    uiServer.off("error", rejectListen);
+    resolveListen();
+  });
+});
 
 await mkdir(artifactDir, { recursive: true });
 const startedAt = new Date().toISOString();
@@ -59,7 +152,7 @@ const screenshot = async (name) => {
 
 const prove113 = async () => {
   const route = "/memory/models";
-  const response = await page.goto(`${baseUrl}${route}`, { waitUntil: "networkidle", timeout: 30_000 });
+  const response = await page.goto(`${uiBaseUrl}${route}`, { waitUntil: "networkidle", timeout: 30_000 });
   record("113:http", Boolean(response) && response.status() < 500, `status=${response?.status() ?? "none"}`);
   record("113:spa-path", new URL(page.url()).pathname === route, `url=${page.url()}`);
   await page.getByText("No exact model versions", { exact: true }).waitFor({ state: "visible" });
@@ -122,6 +215,7 @@ try {
   await context.tracing.stop({ path: trace });
   artifacts.push(trace);
   await browser.close();
+  await new Promise((resolveClose) => uiServer.close(resolveClose));
 }
 
 const failedAssertions = assertions.filter((item) => item.pass === false);
