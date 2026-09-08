@@ -57,6 +57,16 @@ const screenshot = async (name) => {
   artifacts.push(path);
 };
 
+const assertNoCodingMutationButtons = async (prefix) => {
+  const forbidden = /^(commit|apply|execute|push|merge|create pr|create pull request|update|restart)(\b|\s)/i;
+  const labels = await page.getByRole("button").allTextContents();
+  record(
+    `${prefix}:no-direct-mutation-buttons`,
+    labels.every((label) => !forbidden.test(label.trim())),
+    `button-labels=${JSON.stringify(labels)}`,
+  );
+};
+
 const prove113 = async () => {
   const route = "/memory/models";
   const response = await page.goto(`${baseUrl}${route}`, { waitUntil: "networkidle", timeout: 30_000 });
@@ -100,11 +110,37 @@ const prove113 = async () => {
   await screenshot("exact-version-b");
 };
 
+const prove140 = async () => {
+  const repositoryRoute = "/coding/repository";
+  const repositoryResponse = await page.goto(`${baseUrl}${repositoryRoute}`, { waitUntil: "networkidle", timeout: 30_000 });
+  record("140:repository-http", Boolean(repositoryResponse) && repositoryResponse.status() < 500, `status=${repositoryResponse?.status() ?? "none"}`);
+  record("140:repository-spa-path", new URL(page.url()).pathname === repositoryRoute, `url=${page.url()}`);
+  await page.getByTestId("coding-repository-surface").waitFor({ state: "visible" });
+  await page.getByText("Server-owned 118 repository truth", { exact: true }).waitFor({ state: "visible" });
+  await page.getByText("Repository browsing is context-neutral. These explicit actions are exact-base 111/123 operations; they do not commit, apply, execute, push, create a PR, merge, or mutate STATUS.", { exact: true }).waitFor({ state: "visible" });
+  record("140:repository-surface", true, "real Coding Repository workbench renders accepted server-owned 118 and explicit 111/123 authority boundary");
+  await assertNoCodingMutationButtons("140:repository");
+  await screenshot("repository");
+
+  const runtimeRoute = "/coding/runtime";
+  const runtimeResponse = await page.goto(`${baseUrl}${runtimeRoute}`, { waitUntil: "networkidle", timeout: 30_000 });
+  record("140:runtime-http", Boolean(runtimeResponse) && runtimeResponse.status() < 500, `status=${runtimeResponse?.status() ?? "none"}`);
+  record("140:runtime-spa-path", new URL(page.url()).pathname === runtimeRoute, `url=${page.url()}`);
+  await page.getByTestId("coding-runtime-surface").waitFor({ state: "visible" });
+  await page.getByText("Alignment is rendered exactly from 119. The browser performs no SHA ancestry or cleanliness inference.", { exact: true }).waitFor({ state: "visible" });
+  await page.getByRole("heading", { name: "Development pipeline", exact: true }).waitFor({ state: "visible" });
+  record("140:runtime-surface", true, "real Coding Runtime workbench renders server-owned 119 relation and 120 pipeline projection surface");
+  await assertNoCodingMutationButtons("140:runtime");
+  await screenshot("runtime");
+};
+
 let verdict = "PASS";
 let failure = null;
 try {
   if (scenario === "113-memory-models") {
     await prove113();
+  } else if (scenario === "140-coding") {
+    await prove140();
   } else {
     verdict = "REFUSED";
     failure = `${scenario} trusted candidate-specific browser assertions are not ready; no PASS emitted`;
@@ -155,7 +191,7 @@ const manifest = {
   controller_sha: controllerSha,
   workflow_run_id: runId,
   scenario,
-  seed_version: scenario === "113-memory-models" ? "113-workspace-then-two-exact-versions-v1" : "not-run-refused-v1",
+  seed_version: scenario === "113-memory-models" ? "113-workspace-then-two-exact-versions-v1" : scenario === "140-coding" ? "140-production-routes-no-static-substitute-v1" : "not-run-refused-v1",
   browser: "chromium",
   playwright_version: "1.55.0",
   started_at: startedAt,
