@@ -46,6 +46,8 @@ type RepositoryErrors = Readonly<{
   file: string | null;
   search: string | null;
   pr: string | null;
+  checks: string | null;
+  reviews: string | null;
   inspect: string | null;
   context: string | null;
   proposal: string | null;
@@ -66,6 +68,8 @@ const EMPTY_REPOSITORY_ERRORS: RepositoryErrors = {
   file: null,
   search: null,
   pr: null,
+  checks: null,
+  reviews: null,
   inspect: null,
   context: null,
   proposal: null
@@ -132,7 +136,7 @@ function RepositorySurface({ workspaceId }: Readonly<{ workspaceId: string | nul
   const resolvedSha = truth?.resolved_sha ?? null;
   const anyPartial = truth?.partial || Object.values(partial).some(Boolean);
   const repositoryReadError = repositoryErrors.repository ?? repositoryErrors.tree;
-  const evidenceError = repositoryErrors.file ?? repositoryErrors.search ?? repositoryErrors.pr;
+  const evidenceError = repositoryErrors.file ?? repositoryErrors.search ?? repositoryErrors.pr ?? repositoryErrors.checks ?? repositoryErrors.reviews;
   const jarvisError = repositoryErrors.inspect ?? repositoryErrors.context ?? repositoryErrors.proposal;
   const setRepositoryError = (key: keyof RepositoryErrors, value: string | null) => {
     setRepositoryErrors((current) => ({ ...current, [key]: value }));
@@ -253,20 +257,33 @@ function RepositorySurface({ workspaceId }: Readonly<{ workspaceId: string | nul
     const prNumber = canonicalPrNumber(prInput);
     if (prNumber === null) { setRepositoryError("pr", "invalid_pr_number"); return; }
     const requestGeneration = ++prEvidenceGeneration.current;
-    setPrEvidence(null); setRepositoryError("pr", null);
+    setPrEvidence(null);
+    setRepositoryErrors((current) => ({ ...current, pr: null, checks: null, reviews: null }));
     setPartial((current) => ({ ...current, pr: false, checks: false, reviews: false }));
     try {
       const pr = await readPullRequest(repository, prNumber);
       if (prEvidenceGeneration.current !== requestGeneration) return;
       const headSha = exactSha(pr.payload.head_sha);
       if (headSha === "Unknown") throw new Error("missing_pr_head_sha");
-      const [checks, reviews] = await Promise.all([
+      setPrEvidence({ pr: pr.payload });
+      setPartial((current) => ({ ...current, pr: pr.partial }));
+      const [checks, reviews] = await Promise.allSettled([
         readChecks(repository, prNumber, headSha),
         readReviews(repository, prNumber, headSha)
       ]);
       if (prEvidenceGeneration.current !== requestGeneration) return;
-      setPrEvidence({ pr: pr.payload, checks: checks.payload, reviews: reviews.payload });
-      setPartial((current) => ({ ...current, pr: pr.partial, checks: checks.partial, reviews: reviews.partial }));
+      if (checks.status === "fulfilled") {
+        setPrEvidence((current) => ({ ...(current ?? {}), checks: checks.value.payload }));
+        setPartial((current) => ({ ...current, checks: checks.value.partial }));
+      } else {
+        setRepositoryError("checks", errorText(checks.reason));
+      }
+      if (reviews.status === "fulfilled") {
+        setPrEvidence((current) => ({ ...(current ?? {}), reviews: reviews.value.payload }));
+        setPartial((current) => ({ ...current, reviews: reviews.value.partial }));
+      } else {
+        setRepositoryError("reviews", errorText(reviews.reason));
+      }
     } catch (cause) {
       if (prEvidenceGeneration.current === requestGeneration) setRepositoryError("pr", errorText(cause));
     }
@@ -358,8 +375,10 @@ function RepositorySurface({ workspaceId }: Readonly<{ workspaceId: string | nul
       <div className="final-fusion__toolbar-line"><input aria-label="Literal repository search" value={literal} onChange={(event) => { searchGeneration.current += 1; setLiteral(event.target.value); setMatches([]); setRepositoryError("search", null); setPartial((current) => ({ ...current, search: false })); }} placeholder="Literal search" maxLength={512}/><button type="button" onClick={() => void runSearch()} disabled={!literal.trim() || !resolvedSha}>Search</button></div>
       {repositoryErrors.search ? <div className="final-fusion__source-empty" role="status"><strong>Repository search refused / unavailable</strong><span>{repositoryErrors.search}</span></div> : null}
       <div className="final-fusion__source-list">{matches.map((match, index) => <div className="final-fusion__disclosure-row" key={`${match.path}:${match.offset}:${index}`}><span>›</span><strong>{match.path ?? "Unknown"}</strong><em>line {match.line ?? "?"}</em></div>)}</div>
-      <div className="final-fusion__toolbar-line"><input aria-label="Pull request number" inputMode="numeric" value={prInput} onChange={(event) => { prEvidenceGeneration.current += 1; setPrInput(event.target.value); setPrEvidence(null); setRepositoryError("pr", null); setPartial((current) => ({ ...current, pr: false, checks: false, reviews: false })); }} placeholder="PR number"/><button type="button" onClick={() => void loadPr()} disabled={!prInput}>Load PR evidence</button></div>
+      <div className="final-fusion__toolbar-line"><input aria-label="Pull request number" inputMode="numeric" value={prInput} onChange={(event) => { prEvidenceGeneration.current += 1; setPrInput(event.target.value); setPrEvidence(null); setRepositoryErrors((current) => ({ ...current, pr: null, checks: null, reviews: null })); setPartial((current) => ({ ...current, pr: false, checks: false, reviews: false })); }} placeholder="PR number"/><button type="button" onClick={() => void loadPr()} disabled={!prInput}>Load PR evidence</button></div>
       {repositoryErrors.pr ? <div className="final-fusion__source-empty" role="status"><strong>PR evidence refused / unavailable</strong><span>{repositoryErrors.pr}</span></div> : null}
+      {repositoryErrors.checks ? <div className="final-fusion__source-empty" role="status"><strong>Checks evidence refused / unavailable</strong><span>{repositoryErrors.checks}</span></div> : null}
+      {repositoryErrors.reviews ? <div className="final-fusion__source-empty" role="status"><strong>Reviews evidence refused / unavailable</strong><span>{repositoryErrors.reviews}</span></div> : null}
       {prEvidence ? <pre className="final-fusion__searchbox">{JSON.stringify(prEvidence, null, 2)}</pre> : null}
     </Panel>
     <Panel title="Jarvis Coding" status={jarvisError ? "Action refused" : "READ / CONTEXT / PROPOSE only"}>
