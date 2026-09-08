@@ -770,11 +770,13 @@ def _trigger_ids(
 def _is_bluecad_structural_packet(material: EgressPacketMaterial) -> bool:
     if material.task_kind != "bluecad_cad_repair":
         return False
-    matches = [
-        item.get("evidence_lineage")
-        for item in material.included_manifest
-        if isinstance(item, dict) and isinstance(item.get("evidence_lineage"), dict)
-    ]
+    matches: list[dict[str, object]] = []
+    for item in material.included_manifest:
+        if not isinstance(item, dict):
+            continue
+        evidence_lineage = item.get("evidence_lineage")
+        if isinstance(evidence_lineage, dict):
+            matches.append(evidence_lineage)
     return (
         len(matches) == 1
         and matches[0].get("schema_version") == "bluecad_evidence_lineage_v0_1"
