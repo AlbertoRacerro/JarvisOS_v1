@@ -3,6 +3,8 @@ import sqlite3
 from fastapi import APIRouter, HTTPException, Query
 
 from app.core.errors import WORKSPACE_NOT_FOUND_MESSAGE, workspace_not_found_http_error
+from app.modules.modeling.dossier_models import ModelDossierDetail, ModelDossierIndexItem
+from app.modules.modeling.model_dossier import get_model_dossier, list_model_dossier_index
 from app.modules.modeling.models import (
     AssumptionCreate,
     AssumptionRead,
@@ -92,6 +94,22 @@ def get_model_spec_endpoint(model_spec_id: str) -> ModelSpecRead:
     if model_spec is None:
         raise HTTPException(status_code=404, detail="Model spec not found.")
     return model_spec
+
+
+@router.get("/workspaces/{workspace_id}/model-dossiers", response_model=list[ModelDossierIndexItem])
+def list_model_dossiers_endpoint(workspace_id: str) -> list[ModelDossierIndexItem]:
+    try:
+        return list_model_dossier_index(workspace_id)
+    except ValueError as exc:
+        raise _domain_error(exc) from exc
+
+
+@router.get("/workspaces/{workspace_id}/model-dossiers/{model_version_id}", response_model=ModelDossierDetail)
+def get_model_dossier_endpoint(workspace_id: str, model_version_id: str) -> ModelDossierDetail:
+    dossier = get_model_dossier(workspace_id, model_version_id)
+    if dossier is None:
+        raise HTTPException(status_code=404, detail="Model version dossier not found.")
+    return dossier
 
 
 @router.post("/workspaces/{workspace_id}/assumptions", response_model=AssumptionRead, status_code=201)
