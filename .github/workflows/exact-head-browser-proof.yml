@@ -209,6 +209,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          sudo -u "$CANDIDATE_USER" -H env GITHUB_TOKEN= GH_TOKEN= \
+            JARVISOS_DATA_ROOT="$PROOF_DATA_ROOT" PYTHONPATH="$GITHUB_WORKSPACE/candidate/backend" \
+            "$CANDIDATE_VENV/bin/python" -c 'from app.core.database import initialize_database; info = initialize_database(); assert info.ready and info.initialized'
           if test "${{ inputs.scenario }}" = "113-memory-models"; then
             sudo -u "$CANDIDATE_USER" -H env GITHUB_TOKEN= GH_TOKEN= \
               JARVISOS_DATA_ROOT="$PROOF_DATA_ROOT" PYTHONPATH="$GITHUB_WORKSPACE/candidate/backend" \
