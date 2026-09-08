@@ -1,0 +1,243 @@
+name: repair-124-one-shot
+
+on:
+  push:
+    branches:
+      - impl/124-provider-settings-generic
+    paths:
+      - .github/workflows/repair-124-one-shot.yml
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: impl/124-provider-settings-generic
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Apply bounded 124 repair
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          egress_path = Path('backend/app/modules/ai/egress_persistence.py')
+          text = egress_path.read_text(encoding='utf-8')
+
+          old = '''        if not provider.enabled:\n            blocking_reason = "provider_disabled"\n        elif not provider.requires_network:\n            blocking_reason = None\n        else:\n            blocking_reason = _hard_blocking_reason(\n                connection,\n                material=_AvailabilityMaterial(provider_id=provider_id),\n                projection=_AvailabilityProjectionInputs(),\n                registry=registry,\n                snapshot=snapshot,\n            )\n'''
+          new = '''        if not provider.enabled:\n            blocking_reason = "provider_disabled"\n        else:\n            blocking_reason = _hard_blocking_reason(\n                connection,\n                material=_AvailabilityMaterial(provider_id=provider_id),\n                projection=_AvailabilityProjectionInputs(),\n                registry=registry,\n                snapshot=snapshot,\n            )\n'''
+          assert text.count(old) == 1, 'availability caller shape drifted'
+          text = text.replace(old, new)
+
+          old = '''    if settings["policy_mode"] == AIPolicyMode.DISABLED.value:\n        return "ai_policy_disabled"\n    if not bool(settings["paid_ai_enabled"]):\n        return "paid_ai_disabled"\n'''
+          new = '''    if settings["policy_mode"] == AIPolicyMode.DISABLED.value:\n        return "ai_policy_disabled"\n\n    provider = registry.providers[material.provider_id]\n    if not provider.requires_network:\n        return None\n\n    if not bool(settings["paid_ai_enabled"]):\n        return "paid_ai_disabled"\n'''
+          assert text.count(old) == 1, 'policy/non-network blocker shape drifted'
+          text = text.replace(old, new)
+
+          old = '''    provider = registry.providers[material.provider_id]\n    try:\n        credential = resolve_secret_ref(provider.api_key_ref)\n'''
+          new = '''    try:\n        credential = resolve_secret_ref(provider.api_key_ref)\n'''
+          assert text.count(old) == 1, 'provider lookup shape drifted'
+          text = text.replace(old, new)
+
+          old = '''    global_actual = snapshot.global_actual_cost_usd\n    if not isinstance(material, _AvailabilityMaterial):\n        configured_global_spend = float(settings["api_spend_month_to_date_usd"])\n        global_actual = max(configured_global_spend, global_actual)\n    if (\n        global_actual\n        + snapshot.global_reserved_cost_usd\n        + projection.projected_cost_upper_usd\n        > monthly_budget\n    ):\n        return "global_monthly_cost_cap_exceeded"\n'''
+          new = '''    is_availability_projection = isinstance(material, _AvailabilityMaterial)\n    configured_global_spend = float(settings["api_spend_month_to_date_usd"])\n    global_actual = max(configured_global_spend, snapshot.global_actual_cost_usd)\n    projected_global_cost = (\n        global_actual\n        + snapshot.global_reserved_cost_usd\n        + projection.projected_cost_upper_usd\n    )\n    if projected_global_cost > monthly_budget or (\n        is_availability_projection and projected_global_cost >= monthly_budget\n    ):\n        return "global_monthly_cost_cap_exceeded"\n'''
+          assert text.count(old) == 1, 'global budget blocker shape drifted'
+          text = text.replace(old, new)
+
+          old = '''        if projected_scaleway_tokens > monthly_cap:\n            return "scaleway_monthly_token_cap_exceeded"\n        if projected_scaleway_tokens > hard_stop_cap:\n            return "scaleway_hard_stop_token_cap_exceeded"\n'''
+          new = '''        if projected_scaleway_tokens > monthly_cap or (\n            is_availability_projection and projected_scaleway_tokens >= monthly_cap\n        ):\n            return "scaleway_monthly_token_cap_exceeded"\n        if projected_scaleway_tokens > hard_stop_cap or (\n            is_availability_projection and projected_scaleway_tokens >= hard_stop_cap\n        ):\n            return "scaleway_hard_stop_token_cap_exceeded"\n'''
+          assert text.count(old) == 1, 'scaleway cap blocker shape drifted'
+          text = text.replace(old, new)
+
+          old = '''    if (\n        provider.monthly_token_cap > 0\n        and projected_provider_tokens > provider.monthly_token_cap\n    ):\n        return "provider_monthly_token_cap_exceeded"\n'''
+          new = '''    if provider.monthly_token_cap > 0 and (\n        projected_provider_tokens > provider.monthly_token_cap\n        or (\n            is_availability_projection\n            and projected_provider_tokens >= provider.monthly_token_cap\n        )\n    ):\n        return "provider_monthly_token_cap_exceeded"\n'''
+          assert text.count(old) == 1, 'provider token blocker shape drifted'
+          text = text.replace(old, new)
+
+          old = '''    if (\n        provider.monthly_cost_cap_usd > 0\n        and projected_provider_cost > provider.monthly_cost_cap_usd\n    ):\n        return "provider_monthly_cost_cap_exceeded"\n'''
+          new = '''    if provider.monthly_cost_cap_usd > 0 and (\n        projected_provider_cost > provider.monthly_cost_cap_usd\n        or (\n            is_availability_projection\n            and projected_provider_cost >= provider.monthly_cost_cap_usd\n        )\n    ):\n        return "provider_monthly_cost_cap_exceeded"\n'''
+          assert text.count(old) == 1, 'provider cost blocker shape drifted'
+          text = text.replace(old, new)
+          egress_path.write_text(text, encoding='utf-8')
+
+          test_path = Path('backend/tests/test_provider_settings.py')
+          tests = test_path.read_text(encoding='utf-8')
+          marker = 'def test_read_availability_honors_configured_spend_floor_124('
+          assert marker not in tests, 'bounded 124 repair tests already present'
+          tests += r'''
+
+
+def _set_availability_settings_124(**values: object) -> None:
+    from app.core.database import open_sqlite_connection
+
+    allowed = {
+        "policy_mode",
+        "paid_ai_enabled",
+        "monthly_api_budget_usd",
+        "api_spend_month_to_date_usd",
+        "provider_mode",
+        "scaleway_enabled",
+        "scaleway_monthly_token_cap",
+        "scaleway_hard_stop_token_cap",
+        "scaleway_input_tokens_month_to_date",
+        "scaleway_output_tokens_month_to_date",
+    }
+    assert values and set(values) <= allowed
+    assignments = ", ".join(f"{name} = ?" for name in values)
+    with open_sqlite_connection() as connection:
+        connection.execute(
+            f"UPDATE ai_settings SET {assignments} WHERE id = 'default'",
+            tuple(values.values()),
+        )
+        connection.commit()
+
+
+def test_unknown_provider_availability_fails_closed_124(client: TestClient) -> None:
+    from app.modules.ai.egress_persistence import project_egress_availability
+
+    projection = project_egress_availability("definitely-unknown-provider")
+    assert projection.available is False
+    assert projection.blocking_reason == "provider_unknown"
+
+
+def test_read_availability_honors_configured_spend_floor_124(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.modules.ai import egress_persistence
+
+    _set_availability_settings_124(
+        policy_mode="FAST_DEV",
+        paid_ai_enabled=1,
+        monthly_api_budget_usd=5.0,
+        api_spend_month_to_date_usd=5.0,
+    )
+    monkeypatch.setattr(
+        egress_persistence,
+        "resolve_secret_ref",
+        lambda ref: SimpleNamespace(key_present=True),
+    )
+    monkeypatch.setattr(
+        egress_persistence,
+        "_budget_snapshot",
+        lambda *args, **kwargs: _snapshot(global_actual=1.25),
+    )
+
+    projection = egress_persistence.project_egress_availability("deepseek")
+    assert projection.global_actual_cost_usd == 1.25
+    assert projection.available is False
+    assert projection.blocking_reason == "global_monthly_cost_cap_exceeded"
+
+
+def test_read_availability_blocks_exact_provider_caps_124(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.modules.ai import egress_persistence
+    from app.modules.ai.provider_registry import load_default_provider_registry
+
+    _set_availability_settings_124(
+        policy_mode="FAST_DEV",
+        paid_ai_enabled=1,
+        monthly_api_budget_usd=1000.0,
+        api_spend_month_to_date_usd=0.0,
+    )
+    monkeypatch.setattr(
+        egress_persistence,
+        "resolve_secret_ref",
+        lambda ref: SimpleNamespace(key_present=True),
+    )
+    provider = load_default_provider_registry().providers["deepseek"]
+
+    monkeypatch.setattr(
+        egress_persistence,
+        "_budget_snapshot",
+        lambda *args, **kwargs: _snapshot(provider_tokens=provider.monthly_token_cap),
+    )
+    token_projection = egress_persistence.project_egress_availability("deepseek")
+    assert token_projection.blocking_reason == "provider_monthly_token_cap_exceeded"
+
+    monkeypatch.setattr(
+        egress_persistence,
+        "_budget_snapshot",
+        lambda *args, **kwargs: _snapshot(provider_cost=provider.monthly_cost_cap_usd),
+    )
+    cost_projection = egress_persistence.project_egress_availability("deepseek")
+    assert cost_projection.blocking_reason == "provider_monthly_cost_cap_exceeded"
+
+
+def test_read_availability_blocks_exact_scaleway_caps_124(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.modules.ai import egress_persistence
+
+    _set_availability_settings_124(
+        policy_mode="FAST_DEV",
+        paid_ai_enabled=1,
+        monthly_api_budget_usd=1000.0,
+        api_spend_month_to_date_usd=0.0,
+        provider_mode="scaleway",
+        scaleway_enabled=1,
+        scaleway_monthly_token_cap=10,
+        scaleway_hard_stop_token_cap=20,
+        scaleway_input_tokens_month_to_date=0,
+        scaleway_output_tokens_month_to_date=0,
+    )
+    monkeypatch.setattr(
+        egress_persistence,
+        "resolve_secret_ref",
+        lambda ref: SimpleNamespace(key_present=True),
+    )
+    monkeypatch.setattr(
+        egress_persistence,
+        "_budget_snapshot",
+        lambda *args, **kwargs: _snapshot(provider_tokens=10),
+    )
+    monthly_projection = egress_persistence.project_egress_availability("scaleway")
+    assert monthly_projection.blocking_reason == "scaleway_monthly_token_cap_exceeded"
+
+    _set_availability_settings_124(
+        scaleway_monthly_token_cap=20,
+        scaleway_hard_stop_token_cap=10,
+    )
+    hard_stop_projection = egress_persistence.project_egress_availability("scaleway")
+    assert hard_stop_projection.blocking_reason == "scaleway_hard_stop_token_cap_exceeded"
+
+
+def test_disabled_policy_blocks_credential_free_providers_124(client: TestClient) -> None:
+    from app.modules.ai.egress_persistence import project_egress_availability
+
+    _set_availability_settings_124(policy_mode="DISABLED")
+    for provider_id in ("fake", "local_ollama"):
+        projection = project_egress_availability(provider_id)
+        assert projection.available is False
+        assert projection.blocking_reason == "ai_policy_disabled"
+'''
+          test_path.write_text(tests, encoding='utf-8')
+          PY
+      - name: Install backend test dependencies
+        run: python -m pip install -r backend/requirements.txt
+      - name: Run focused 124 tests
+        working-directory: backend
+        run: python -m pytest -q tests/test_provider_settings.py
+      - name: Run focused Ruff
+        working-directory: backend
+        run: python -m ruff check app/modules/ai/egress_persistence.py tests/test_provider_settings.py
+      - name: Commit durable repair and self-remove workflow
+        shell: bash
+        run: |
+          git rm .github/workflows/repair-124-one-shot.yml
+          git config user.name "jarvisos-frontier-builder"
+          git config user.email "actions@users.noreply.github.com"
+          git add backend/app/modules/ai/egress_persistence.py backend/tests/test_provider_settings.py
+          git diff --cached --check
+          git commit -m "fix(spec-124): align read availability blockers"
+          git push origin HEAD:impl/124-provider-settings-generic
