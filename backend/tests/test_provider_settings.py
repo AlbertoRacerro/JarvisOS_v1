@@ -425,3 +425,152 @@ def test_provider_settings_read_never_expires_reservations_or_dispatches_provide
 
     response = client.get("/ai/provider-settings")
     assert response.status_code == 200
+
+
+
+def _set_availability_settings_124(**values: object) -> None:
+    from app.core.database import open_sqlite_connection
+
+    allowed = {
+        "policy_mode",
+        "paid_ai_enabled",
+        "monthly_api_budget_usd",
+        "api_spend_month_to_date_usd",
+        "provider_mode",
+        "scaleway_enabled",
+        "scaleway_monthly_token_cap",
+        "scaleway_hard_stop_token_cap",
+        "scaleway_input_tokens_month_to_date",
+        "scaleway_output_tokens_month_to_date",
+    }
+    assert values and set(values) <= allowed
+    assignments = ", ".join(f"{name} = ?" for name in values)
+    with open_sqlite_connection() as connection:
+        connection.execute(
+            f"UPDATE ai_settings SET {assignments} WHERE id = 'default'",
+            tuple(values.values()),
+        )
+        connection.commit()
+
+
+def test_unknown_provider_availability_fails_closed_124(client: TestClient) -> None:
+    from app.modules.ai.egress_persistence import project_egress_availability
+
+    projection = project_egress_availability("definitely-unknown-provider")
+    assert projection.available is False
+    assert projection.blocking_reason == "provider_unknown"
+
+
+def test_read_availability_honors_configured_spend_floor_124(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.modules.ai import egress_persistence
+
+    _set_availability_settings_124(
+        policy_mode="FAST_DEV",
+        paid_ai_enabled=1,
+        monthly_api_budget_usd=5.0,
+        api_spend_month_to_date_usd=5.0,
+    )
+    monkeypatch.setattr(
+        egress_persistence,
+        "resolve_secret_ref",
+        lambda ref: SimpleNamespace(key_present=True),
+    )
+    monkeypatch.setattr(
+        egress_persistence,
+        "_budget_snapshot",
+        lambda *args, **kwargs: _snapshot(global_actual=1.25),
+    )
+
+    projection = egress_persistence.project_egress_availability("deepseek")
+    assert projection.global_actual_cost_usd == 1.25
+    assert projection.available is False
+    assert projection.blocking_reason == "global_monthly_cost_cap_exceeded"
+
+
+def test_read_availability_blocks_exact_provider_caps_124(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.modules.ai import egress_persistence
+    from app.modules.ai.provider_registry import load_default_provider_registry
+
+    _set_availability_settings_124(
+        policy_mode="FAST_DEV",
+        paid_ai_enabled=1,
+        monthly_api_budget_usd=1000.0,
+        api_spend_month_to_date_usd=0.0,
+    )
+    monkeypatch.setattr(
+        egress_persistence,
+        "resolve_secret_ref",
+        lambda ref: SimpleNamespace(key_present=True),
+    )
+    provider = load_default_provider_registry().providers["deepseek"]
+
+    monkeypatch.setattr(
+        egress_persistence,
+        "_budget_snapshot",
+        lambda *args, **kwargs: _snapshot(provider_tokens=provider.monthly_token_cap),
+    )
+    token_projection = egress_persistence.project_egress_availability("deepseek")
+    assert token_projection.blocking_reason == "provider_monthly_token_cap_exceeded"
+
+    monkeypatch.setattr(
+        egress_persistence,
+        "_budget_snapshot",
+        lambda *args, **kwargs: _snapshot(provider_cost=provider.monthly_cost_cap_usd),
+    )
+    cost_projection = egress_persistence.project_egress_availability("deepseek")
+    assert cost_projection.blocking_reason == "provider_monthly_cost_cap_exceeded"
+
+
+def test_read_availability_blocks_exact_scaleway_caps_124(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.modules.ai import egress_persistence
+
+    _set_availability_settings_124(
+        policy_mode="FAST_DEV",
+        paid_ai_enabled=1,
+        monthly_api_budget_usd=1000.0,
+        api_spend_month_to_date_usd=0.0,
+        provider_mode="scaleway",
+        scaleway_enabled=1,
+        scaleway_monthly_token_cap=10,
+        scaleway_hard_stop_token_cap=20,
+        scaleway_input_tokens_month_to_date=0,
+        scaleway_output_tokens_month_to_date=0,
+    )
+    monkeypatch.setattr(
+        egress_persistence,
+        "resolve_secret_ref",
+        lambda ref: SimpleNamespace(key_present=True),
+    )
+    monkeypatch.setattr(
+        egress_persistence,
+        "_budget_snapshot",
+        lambda *args, **kwargs: _snapshot(provider_tokens=10),
+    )
+    monthly_projection = egress_persistence.project_egress_availability("scaleway")
+    assert monthly_projection.blocking_reason == "scaleway_monthly_token_cap_exceeded"
+
+    _set_availability_settings_124(
+        scaleway_monthly_token_cap=20,
+        scaleway_hard_stop_token_cap=10,
+    )
+    hard_stop_projection = egress_persistence.project_egress_availability("scaleway")
+    assert hard_stop_projection.blocking_reason == "scaleway_hard_stop_token_cap_exceeded"
+
+
+def test_disabled_policy_blocks_credential_free_providers_124(client: TestClient) -> None:
+    from app.modules.ai.egress_persistence import project_egress_availability
+
+    _set_availability_settings_124(policy_mode="DISABLED")
+    for provider_id in ("fake", "local_ollama"):
+        projection = project_egress_availability(provider_id)
+        assert projection.available is False
+        assert projection.blocking_reason == "ai_policy_disabled"

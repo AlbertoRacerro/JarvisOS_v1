@@ -174,8 +174,6 @@ def project_egress_availability(
 
         if not provider.enabled:
             blocking_reason = "provider_disabled"
-        elif not provider.requires_network:
-            blocking_reason = None
         else:
             blocking_reason = _hard_blocking_reason(
                 connection,
@@ -643,6 +641,11 @@ def _hard_blocking_reason(
         return "missing_ai_settings"
     if settings["policy_mode"] == AIPolicyMode.DISABLED.value:
         return "ai_policy_disabled"
+
+    provider = registry.providers[material.provider_id]
+    if not provider.requires_network:
+        return None
+
     if not bool(settings["paid_ai_enabled"]):
         return "paid_ai_disabled"
     monthly_budget = float(settings["monthly_api_budget_usd"])
@@ -655,7 +658,6 @@ def _hard_blocking_reason(
         if not bool(settings["scaleway_enabled"]):
             return "scaleway_disabled"
 
-    provider = registry.providers[material.provider_id]
     try:
         credential = resolve_secret_ref(provider.api_key_ref)
     except ValueError:
@@ -663,15 +665,16 @@ def _hard_blocking_reason(
     if not credential.key_present:
         return "provider_credentials_missing"
 
-    global_actual = snapshot.global_actual_cost_usd
-    if not isinstance(material, _AvailabilityMaterial):
-        configured_global_spend = float(settings["api_spend_month_to_date_usd"])
-        global_actual = max(configured_global_spend, global_actual)
-    if (
+    is_availability_projection = isinstance(material, _AvailabilityMaterial)
+    configured_global_spend = float(settings["api_spend_month_to_date_usd"])
+    global_actual = max(configured_global_spend, snapshot.global_actual_cost_usd)
+    projected_global_cost = (
         global_actual
         + snapshot.global_reserved_cost_usd
         + projection.projected_cost_upper_usd
-        > monthly_budget
+    )
+    if projected_global_cost > monthly_budget or (
+        is_availability_projection and projected_global_cost >= monthly_budget
     ):
         return "global_monthly_cost_cap_exceeded"
     projected_provider_tokens = (
@@ -691,13 +694,20 @@ def _hard_blocking_reason(
             settings["scaleway_input_tokens_month_to_date"]
         ) + int(settings["scaleway_output_tokens_month_to_date"])
         projected_scaleway_tokens = legacy_tokens + projected_provider_tokens
-        if projected_scaleway_tokens > monthly_cap:
+        if projected_scaleway_tokens > monthly_cap or (
+            is_availability_projection and projected_scaleway_tokens >= monthly_cap
+        ):
             return "scaleway_monthly_token_cap_exceeded"
-        if projected_scaleway_tokens > hard_stop_cap:
+        if projected_scaleway_tokens > hard_stop_cap or (
+            is_availability_projection and projected_scaleway_tokens >= hard_stop_cap
+        ):
             return "scaleway_hard_stop_token_cap_exceeded"
-    if (
-        provider.monthly_token_cap > 0
-        and projected_provider_tokens > provider.monthly_token_cap
+    if provider.monthly_token_cap > 0 and (
+        projected_provider_tokens > provider.monthly_token_cap
+        or (
+            is_availability_projection
+            and projected_provider_tokens >= provider.monthly_token_cap
+        )
     ):
         return "provider_monthly_token_cap_exceeded"
     projected_provider_cost = (
@@ -705,9 +715,12 @@ def _hard_blocking_reason(
         + snapshot.provider_reserved_cost_usd
         + projection.projected_cost_upper_usd
     )
-    if (
-        provider.monthly_cost_cap_usd > 0
-        and projected_provider_cost > provider.monthly_cost_cap_usd
+    if provider.monthly_cost_cap_usd > 0 and (
+        projected_provider_cost > provider.monthly_cost_cap_usd
+        or (
+            is_availability_projection
+            and projected_provider_cost >= provider.monthly_cost_cap_usd
+        )
     ):
         return "provider_monthly_cost_cap_exceeded"
     return None
