@@ -141,6 +141,19 @@ jobs:
           set -euo pipefail
           sudo useradd --create-home --shell /usr/sbin/nologin "$CANDIDATE_USER"
           sudo chown -R "$CANDIDATE_USER:$CANDIDATE_USER" candidate
+          # GitHub-hosted workspaces can be owner-only at an ancestor. Grant only this
+          # candidate user execute/traverse access; never read/write access to the
+          # trusted workspace root itself.
+          workspace_ancestor="$GITHUB_WORKSPACE"
+          while test "$workspace_ancestor" != "/"; do
+            sudo setfacl -m "u:${CANDIDATE_USER}:--x" "$workspace_ancestor"
+            workspace_ancestor="$(dirname "$workspace_ancestor")"
+          done
+          sudo -u "$CANDIDATE_USER" test -r "$GITHUB_WORKSPACE/candidate/backend/requirements.txt"
+          if sudo -u "$CANDIDATE_USER" test -w "$GITHUB_WORKSPACE"; then
+            echo "Candidate user unexpectedly has write access to trusted workspace root." >&2
+            exit 1
+          fi
           sudo -u "$CANDIDATE_USER" -H env PATH="$PATH" python -m venv "$CANDIDATE_VENV"
           mkdir -p "$PROOF_DATA_ROOT"
           sudo chown -R "$CANDIDATE_USER:$CANDIDATE_USER" "$PROOF_DATA_ROOT" "$CANDIDATE_VENV"
