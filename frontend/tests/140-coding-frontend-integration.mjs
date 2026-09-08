@@ -84,6 +84,9 @@ includesAll(workbench, [
   "canonicalSpecId",
   "repositoryErrors",
   "setRepositoryError",
+  "Promise.allSettled",
+  "Checks evidence refused / unavailable",
+  "Reviews evidence refused / unavailable",
   "File preview refused / unavailable",
   "Repository search refused / unavailable",
   "PR evidence refused / unavailable",
@@ -120,9 +123,17 @@ check(
 );
 check(
   /setMatches\(\[\]\); setRepositoryError\("search", null\)/.test(workbench) &&
-  /setPrEvidence\(null\); setRepositoryError\("pr", null\)/.test(workbench) &&
+  /setPrEvidence\(null\);\s*setRepositoryErrors\(\(current\) => \(\{ \.\.\.current, pr: null, checks: null, reviews: null \}\)\)/.test(workbench) &&
   /setContextBinding\(null\); setProposal\(null\);\s*setRepositoryErrors\(\(current\) => \(\{ \.\.\.current, context: null, proposal: null \}\)\)/.test(workbench),
   "repository operations do not preserve independent refusal ownership"
+);
+check(
+  /setPrEvidence\(\{ pr: pr\.payload \}\);[\s\S]*?Promise\.allSettled\([\s\S]*?checks\.status === "fulfilled"[\s\S]*?reviews\.status === "fulfilled"/.test(workbench) &&
+  /checks: checks\.value\.partial/.test(workbench) &&
+  /reviews: reviews\.value\.partial/.test(workbench) &&
+  /setRepositoryError\("checks", errorText\(checks\.reason\)\)/.test(workbench) &&
+  /setRepositoryError\("reviews", errorText\(reviews\.reason\)\)/.test(workbench),
+  "PR evidence fan-out does not preserve successful sibling evidence and explicit failures"
 );
 check(
   /const \[runtimeError, setRuntimeError\]/.test(workbench) &&
