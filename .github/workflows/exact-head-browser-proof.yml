@@ -141,7 +141,7 @@ jobs:
           set -euo pipefail
           sudo useradd --create-home --shell /usr/sbin/nologin "$CANDIDATE_USER"
           sudo chown -R "$CANDIDATE_USER:$CANDIDATE_USER" candidate
-          sudo -u "$CANDIDATE_USER" -H python -m venv "$CANDIDATE_VENV"
+          sudo -u "$CANDIDATE_USER" -H env PATH="$PATH" python -m venv "$CANDIDATE_VENV"
           mkdir -p "$PROOF_DATA_ROOT"
           sudo chown -R "$CANDIDATE_USER:$CANDIDATE_USER" "$PROOF_DATA_ROOT" "$CANDIDATE_VENV"
 
@@ -149,12 +149,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sudo -u "$CANDIDATE_USER" -H env GITHUB_TOKEN= GH_TOKEN= \
-            "$CANDIDATE_VENV/bin/python" -m pip install --disable-pip-version-check -r candidate/backend/requirements.txt
-          sudo -u "$CANDIDATE_USER" -H env GITHUB_TOKEN= GH_TOKEN= \
-            npm --prefix candidate/frontend ci --ignore-scripts --no-audit --no-fund
-          sudo -u "$CANDIDATE_USER" -H env GITHUB_TOKEN= GH_TOKEN= \
-            npm --prefix candidate/frontend run build
+          sudo -u "$CANDIDATE_USER" -H env PATH="$PATH" GITHUB_TOKEN= GH_TOKEN= \
+            "$CANDIDATE_VENV/bin/python" -m pip install --disable-pip-version-check -r "$GITHUB_WORKSPACE/candidate/backend/requirements.txt"
+          sudo -u "$CANDIDATE_USER" -H env PATH="$PATH" GITHUB_TOKEN= GH_TOKEN= \
+            npm --prefix "$GITHUB_WORKSPACE/candidate/frontend" ci --ignore-scripts --no-audit --no-fund
+          sudo -u "$CANDIDATE_USER" -H env PATH="$PATH" GITHUB_TOKEN= GH_TOKEN= \
+            npm --prefix "$GITHUB_WORKSPACE/candidate/frontend" run build
 
       - name: Checkout trusted proof controller after candidate build
         uses: actions/checkout@v4
