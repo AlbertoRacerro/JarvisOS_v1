@@ -110,12 +110,36 @@ def _safe_extensionless_path(path: str) -> bool:
     return bool(final_segment) and not Path(final_segment).suffix
 
 
+def _validate_client_route_exceptions(paths: Collection[str]) -> frozenset[str]:
+    validated: set[str] = set()
+    for path in paths:
+        if (
+            not isinstance(path, str)
+            or not path.startswith("/")
+            or path == "/"
+            or "//" in path
+            or not _safe_extensionless_path(path)
+        ):
+            raise ValueError(f"invalid exact SPA client-route exception: {path!r}")
+        validated.add(path)
+    return frozenset(validated)
+
+
 class SpaStaticFiles(StaticFiles):
     """Serve a built SPA without converting API or asset misses into HTML 200s."""
 
-    def __init__(self, *, directory: Path, reserved_roots: Collection[str]) -> None:
+    def __init__(
+        self,
+        *,
+        directory: Path,
+        reserved_roots: Collection[str],
+        reserved_root_client_routes: Collection[str] = (),
+    ) -> None:
         super().__init__(directory=directory, html=True, check_dir=True)
         self._reserved_roots = frozenset(reserved_roots) | _STATIC_ASSET_ROOTS
+        self._reserved_root_client_routes = _validate_client_route_exceptions(
+            reserved_root_client_routes
+        )
 
     def _index_path(self) -> str | None:
         full_path, stat_result = self.lookup_path("index.html")
@@ -132,7 +156,12 @@ class SpaStaticFiles(StaticFiles):
         if not _accepts_html(scope) or not _safe_extensionless_path(path):
             return False
         first = next((segment for segment in path.split("/") if segment), "")
-        return bool(first) and first not in self._reserved_roots and self._index_path() is not None
+        reserved_root_allowed = original_path in self._reserved_root_client_routes
+        return (
+            bool(first)
+            and (first not in self._reserved_roots or reserved_root_allowed)
+            and self._index_path() is not None
+        )
 
     def _index_response(self) -> FileResponse:
         index_path = self._index_path()

@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.core.spa_static import SpaStaticFiles, _safe_extensionless_path, derive_reserved_roots
-from app.main import create_app
+from app.main import _SPA_RESERVED_ROOT_CLIENT_ROUTES, create_app
 
 INDEX_MARKER = "jarvisos-spa-index-marker"
 
@@ -26,8 +26,24 @@ def _build_client(tmp_path: Path) -> TestClient:
     def api_value() -> dict[str, int]:
         return {"value": 1}
 
-    reserved_roots = derive_reserved_roots(app.routes)
-    app.mount("/", SpaStaticFiles(directory=tmp_path, reserved_roots=reserved_roots), name="frontend")
+    @app.get("/memory/api-value")
+    def memory_api_value() -> dict[str, int]:
+        return {"memory": 1}
+
+    @app.get("/coding/api-value")
+    def coding_api_value() -> dict[str, int]:
+        return {"coding": 1}
+
+    reserved_roots = derive_reserved_roots(app.routes) | frozenset({"settings"})
+    app.mount(
+        "/",
+        SpaStaticFiles(
+            directory=tmp_path,
+            reserved_roots=reserved_roots,
+            reserved_root_client_routes=_SPA_RESERVED_ROOT_CLIENT_ROUTES,
+        ),
+        name="frontend",
+    )
     return TestClient(app, raise_server_exceptions=False)
 
 
@@ -76,6 +92,52 @@ def test_html_navigation_routes_fall_back_to_index(tmp_path: Path) -> None:
     head = client.head("/design/model", headers={"accept": "text/html"})
     assert head.status_code == 200
     assert head.content == b""
+
+
+def test_exact_reserved_root_client_routes_fall_back_without_broadening(tmp_path: Path) -> None:
+    client = _build_client(tmp_path)
+
+    for path in ("/memory/models", "/settings/ai", "/coding/repository", "/coding/runtime"):
+        response = client.get(path, headers={"accept": "text/html"})
+        assert response.status_code == 200
+        assert INDEX_MARKER in response.text
+        assert "text/html" in response.headers["content-type"]
+
+    head = client.head("/memory/models", headers={"accept": "text/html"})
+    assert head.status_code == 200
+    assert head.content == b""
+
+    for path in (
+        "/memory/unknown",
+        "/memory/models/unknown",
+        "/coding/unknown",
+        "/settings/unknown",
+        "/memory//models",
+    ):
+        response = client.get(path, headers={"accept": "text/html"})
+        assert response.status_code == 404
+        assert INDEX_MARKER not in response.text
+
+    non_html = client.get("/memory/models", headers={"accept": "application/json"})
+    assert non_html.status_code == 404
+    assert INDEX_MARKER not in non_html.text
+
+    for method in ("post", "put", "delete"):
+        response = getattr(client, method)("/memory/models", headers={"accept": "text/html"})
+        assert response.status_code in {404, 405}
+        assert INDEX_MARKER not in response.text
+
+
+def test_invalid_exact_client_route_exception_is_rejected(tmp_path: Path) -> None:
+    (tmp_path / "index.html").write_text(INDEX_MARKER, encoding="utf-8")
+
+    for path in ("memory/models", "/", "/memory//models", "/memory/../models", "/assets/app.js"):
+        with pytest.raises(ValueError):
+            SpaStaticFiles(
+                directory=tmp_path,
+                reserved_roots={"memory"},
+                reserved_root_client_routes={path},
+            )
 
 
 def test_missing_assets_and_non_html_requests_remain_404(tmp_path: Path) -> None:
@@ -133,7 +195,17 @@ def test_registered_and_unknown_api_paths_never_receive_index(tmp_path: Path) ->
     assert api_value.status_code == 200
     assert api_value.json() == {"value": 1}
 
-    for path in ("/health/missing", "/api/missing"):
+    memory_api = client.get("/memory/api-value", headers={"accept": "text/html"})
+    assert memory_api.status_code == 200
+    assert memory_api.json() == {"memory": 1}
+    assert "application/json" in memory_api.headers["content-type"]
+
+    coding_api = client.get("/coding/api-value", headers={"accept": "text/html"})
+    assert coding_api.status_code == 200
+    assert coding_api.json() == {"coding": 1}
+    assert "application/json" in coding_api.headers["content-type"]
+
+    for path in ("/health/missing", "/api/missing", "/memory/missing", "/coding/missing"):
         response = client.get(path, headers={"accept": "text/html"})
         assert response.status_code == 404
         assert INDEX_MARKER not in response.text
@@ -212,3 +284,13 @@ def test_create_app_without_frontend_build_has_no_frontend_mount(monkeypatch, tm
     application = create_app()
 
     assert all(getattr(route, "name", None) != "frontend" for route in application.routes)
+
+
+def test_create_app_wires_only_the_bounded_exact_client_routes(monkeypatch, tmp_path: Path) -> None:
+    (tmp_path / "index.html").write_text(INDEX_MARKER, encoding="utf-8")
+    monkeypatch.setattr("app.main._frontend_dist_path", lambda: tmp_path)
+
+    application = create_app()
+    frontend_mount = next(route for route in application.routes if getattr(route, "name", None) == "frontend")
+
+    assert frontend_mount.app._reserved_root_client_routes == _SPA_RESERVED_ROOT_CLIENT_ROUTES

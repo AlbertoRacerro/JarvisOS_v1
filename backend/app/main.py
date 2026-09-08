@@ -36,6 +36,14 @@ from app.modules.secrets.routes import router as secrets_router
 from app.modules.workspaces.routes import router as workspaces_router
 
 RUNNER_RECOVERY_RECHECK_SECONDS = 0.25
+_SPA_RESERVED_ROOT_CLIENT_ROUTES = frozenset(
+    {
+        "/memory/models",
+        "/settings/ai",
+        "/coding/repository",
+        "/coding/runtime",
+    }
+)
 
 
 async def _reconcile_after_live_owners_exit(
@@ -139,7 +147,11 @@ def create_app() -> FastAPI:
         reserved_roots = derive_reserved_roots(app.routes)
         app.mount(
             "/",
-            SpaStaticFiles(directory=frontend_dist, reserved_roots=reserved_roots),
+            SpaStaticFiles(
+                directory=frontend_dist,
+                reserved_roots=reserved_roots,
+                reserved_root_client_routes=_SPA_RESERVED_ROOT_CLIENT_ROUTES,
+            ),
             name="frontend",
         )
 
