@@ -1,8 +1,8 @@
-name: Exact-head browser proof command
+name: Exact-head browser proof trigger
 
 on:
-  issue_comment:
-    types: [created]
+  pull_request_target:
+    types: [labeled]
 
 permissions:
   actions: write
@@ -11,35 +11,32 @@ permissions:
 
 jobs:
   dispatch:
-    if: ${{ github.event.issue.pull_request != null }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
-      COMMENT_BODY: ${{ github.event.comment.body }}
-      AUTHOR_ASSOCIATION: ${{ github.event.comment.author_association }}
-      PR_NUMBER: ${{ github.event.issue.number }}
+      LABEL_NAME: ${{ github.event.label.name }}
+      EVENT_ACTOR: ${{ github.actor }}
+      REPOSITORY_OWNER: ${{ github.repository_owner }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
       GH_TOKEN: ${{ github.token }}
     steps:
-      - name: Authorize exact browser-proof command
+      - name: Authorize exact browser-proof label
         id: command
         shell: bash
         run: |
           set -euo pipefail
 
-          case "$AUTHOR_ASSOCIATION" in
-            OWNER|MEMBER|COLLABORATOR) ;;
-            *)
-              echo "Browser proof commands require repository write authority." >&2
-              exit 1
-              ;;
-          esac
+          test "$EVENT_ACTOR" = "$REPOSITORY_OWNER" || {
+            echo "Browser proof labels must be applied by the repository owner." >&2
+            exit 1
+          }
 
-          case "$COMMENT_BODY" in
-            "/browser-proof 113-memory-models") scenario="113-memory-models" ;;
-            "/browser-proof 124-settings-ai") scenario="124-settings-ai" ;;
-            "/browser-proof 140-coding") scenario="140-coding" ;;
+          case "$LABEL_NAME" in
+            "browser-proof:113") scenario="113-memory-models" ;;
+            "browser-proof:124") scenario="124-settings-ai" ;;
+            "browser-proof:140") scenario="140-coding" ;;
             *)
-              echo "Comment is not an exact supported browser-proof command; no dispatch." >&2
+              echo "Label is not an exact supported browser-proof trigger; no dispatch." >&2
               exit 1
               ;;
           esac
@@ -56,7 +53,7 @@ jobs:
           state="$(python -c 'import json,sys; print(json.load(sys.stdin)["state"])' <<<"$response")"
 
           test "$head_repo" = "$GITHUB_REPOSITORY" || {
-            echo "142 comment trigger supports same-repository PR heads only." >&2
+            echo "142 label trigger supports same-repository PR heads only." >&2
             exit 1
           }
           test "$state" = "open" || {
