@@ -1,4 +1,4 @@
-name: diag-124-mypy-one-shot
+name: repair-124-typing-one-shot
 
 on:
   push:
@@ -8,21 +8,49 @@ on:
       - .github/workflows/diag-124-mypy-one-shot.yml
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  diagnose:
+  repair:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
           ref: impl/124-provider-settings-generic
-          persist-credentials: false
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: pip install -r backend/requirements.txt -r backend/requirements-dev.txt
-      - name: Exact mypy diagnostics
+      - name: Apply narrow typing repair
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('backend/app/modules/ai/egress_persistence.py')
+          text = path.read_text(encoding='utf-8')
+          old = '''def _is_bluecad_structural_packet(material: EgressPacketMaterial) -> bool:\n    if material.task_kind != "bluecad_cad_repair":\n        return False\n    matches = [\n        item.get("evidence_lineage")\n        for item in material.included_manifest\n        if isinstance(item, dict) and isinstance(item.get("evidence_lineage"), dict)\n    ]\n    return (\n        len(matches) == 1\n        and matches[0].get("schema_version") == "bluecad_evidence_lineage_v0_1"\n    )\n'''
+          new = '''def _is_bluecad_structural_packet(material: EgressPacketMaterial) -> bool:\n    if material.task_kind != "bluecad_cad_repair":\n        return False\n    matches: list[dict[str, object]] = []\n    for item in material.included_manifest:\n        if not isinstance(item, dict):\n            continue\n        evidence_lineage = item.get("evidence_lineage")\n        if isinstance(evidence_lineage, dict):\n            matches.append(evidence_lineage)\n    return (\n        len(matches) == 1\n        and matches[0].get("schema_version") == "bluecad_evidence_lineage_v0_1"\n    )\n'''
+          assert text.count(old) == 1, 'bluecad structural predicate shape drifted'
+          path.write_text(text.replace(old, new), encoding='utf-8')
+          PY
+      - name: Install backend dependencies
+        run: pip install -r backend/requirements.txt -r backend/requirements-dev.txt
+      - name: Exact typecheck debt ratchet
+        run: |
+          git fetch --no-tags --depth=1 origin 90f23e006a197bb14a5df73fba7edaeadaea3383
+          cd backend
+          python ../scripts/check_typecheck_ratchet.py --base-sha 90f23e006a197bb14a5df73fba7edaeadaea3383
+      - name: Focused 124 regression tests
         working-directory: backend
-        run: python -m mypy app --no-pretty --no-error-summary --show-error-codes
+        run: python -m pytest -q tests/test_provider_settings.py
+      - name: Focused Ruff
+        working-directory: backend
+        run: python -m ruff check app/modules/ai/egress_persistence.py tests/test_provider_settings.py
+      - name: Commit and push narrow repair
+        run: |
+          git config user.name "jarvisos-frontier-builder"
+          git config user.email "actions@users.noreply.github.com"
+          git add backend/app/modules/ai/egress_persistence.py
+          git diff --cached --check
+          git commit -m "fix(spec-124): preserve typed structural lineage check"
+          git push origin HEAD:impl/124-provider-settings-generic
