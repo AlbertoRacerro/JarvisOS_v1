@@ -154,15 +154,6 @@ def project_egress_availability(
     now_dt = _normalized_now(now)
     now_iso = now_dt.isoformat()
 
-    if provider is None:
-        return EgressAvailabilityProjection(
-            available=False,
-            blocking_reason="provider_unknown",
-            global_actual_cost_usd=0.0,
-            global_reserved_cost_usd=0.0,
-            budget_exhausted=False,
-        )
-
     with open_sqlite_connection() as connection:
         snapshot = _budget_snapshot(
             connection,
@@ -171,6 +162,15 @@ def project_egress_availability(
             now_iso=now_iso,
         )
         global_actual = snapshot.global_actual_cost_usd
+
+        if provider is None:
+            return EgressAvailabilityProjection(
+                available=False,
+                blocking_reason="provider_unknown",
+                global_actual_cost_usd=global_actual,
+                global_reserved_cost_usd=snapshot.global_reserved_cost_usd,
+                budget_exhausted=False,
+            )
 
         if not provider.enabled:
             blocking_reason = "provider_disabled"
