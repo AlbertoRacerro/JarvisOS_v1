@@ -453,12 +453,30 @@ def _set_availability_settings_124(**values: object) -> None:
         connection.commit()
 
 
-def test_unknown_provider_availability_fails_closed_124(client: TestClient) -> None:
-    from app.modules.ai.egress_persistence import project_egress_availability
+def test_unknown_provider_availability_fails_closed_124(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.modules.ai import egress_persistence
 
-    projection = project_egress_availability("definitely-unknown-provider")
+    _set_availability_settings_124(
+        monthly_api_budget_usd=5.0,
+        api_spend_month_to_date_usd=4.0,
+    )
+    monkeypatch.setattr(
+        egress_persistence,
+        "_budget_snapshot",
+        lambda *args, **kwargs: _snapshot(global_actual=2.0, global_reserved=1.0),
+    )
+
+    projection = egress_persistence.project_egress_availability(
+        "definitely-unknown-provider"
+    )
     assert projection.available is False
     assert projection.blocking_reason == "provider_unknown"
+    assert projection.global_actual_cost_usd == 2.0
+    assert projection.global_reserved_cost_usd == 1.0
+    assert projection.budget_exhausted is True
 
 
 def test_read_availability_honors_configured_spend_floor_124(
@@ -488,6 +506,7 @@ def test_read_availability_honors_configured_spend_floor_124(
     assert projection.global_actual_cost_usd == 1.25
     assert projection.available is False
     assert projection.blocking_reason == "global_monthly_cost_cap_exceeded"
+    assert projection.budget_exhausted is True
 
 
 def test_read_availability_blocks_exact_provider_caps_124(
@@ -569,8 +588,13 @@ def test_read_availability_blocks_exact_scaleway_caps_124(
 def test_disabled_policy_blocks_credential_free_providers_124(client: TestClient) -> None:
     from app.modules.ai.egress_persistence import project_egress_availability
 
-    _set_availability_settings_124(policy_mode="DISABLED")
+    _set_availability_settings_124(
+        policy_mode="DISABLED",
+        monthly_api_budget_usd=5.0,
+        api_spend_month_to_date_usd=5.0,
+    )
     for provider_id in ("fake", "local_ollama"):
         projection = project_egress_availability(provider_id)
         assert projection.available is False
         assert projection.blocking_reason == "ai_policy_disabled"
+        assert projection.budget_exhausted is True

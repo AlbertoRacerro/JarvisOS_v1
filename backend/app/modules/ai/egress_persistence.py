@@ -136,6 +136,29 @@ _BUDGET_BLOCKING_REASONS = frozenset(
 )
 
 
+def _global_budget_exhausted(
+    connection: sqlite3.Connection,
+    *,
+    snapshot: _BudgetSnapshot,
+) -> bool:
+    """Project the independent global-budget axis without changing deny precedence."""
+
+    settings = connection.execute(
+        """
+        SELECT monthly_api_budget_usd, api_spend_month_to_date_usd
+        FROM ai_settings WHERE id = 'default'
+        """
+    ).fetchone()
+    if settings is None:
+        return False
+    monthly_budget = float(settings["monthly_api_budget_usd"])
+    if monthly_budget <= 0:
+        return True
+    configured_global_spend = float(settings["api_spend_month_to_date_usd"])
+    global_actual = max(configured_global_spend, snapshot.global_actual_cost_usd)
+    return global_actual + snapshot.global_reserved_cost_usd >= monthly_budget
+
+
 def project_egress_availability(
     provider_id: str,
     *,
@@ -162,6 +185,10 @@ def project_egress_availability(
             now_iso=now_iso,
         )
         global_actual = snapshot.global_actual_cost_usd
+        global_budget_exhausted = _global_budget_exhausted(
+            connection,
+            snapshot=snapshot,
+        )
 
         if provider is None:
             return EgressAvailabilityProjection(
@@ -169,7 +196,7 @@ def project_egress_availability(
                 blocking_reason="provider_unknown",
                 global_actual_cost_usd=global_actual,
                 global_reserved_cost_usd=snapshot.global_reserved_cost_usd,
-                budget_exhausted=False,
+                budget_exhausted=global_budget_exhausted,
             )
 
         if not provider.enabled:
@@ -188,7 +215,9 @@ def project_egress_availability(
         blocking_reason=blocking_reason,
         global_actual_cost_usd=global_actual,
         global_reserved_cost_usd=snapshot.global_reserved_cost_usd,
-        budget_exhausted=blocking_reason in _BUDGET_BLOCKING_REASONS,
+        budget_exhausted=(
+            global_budget_exhausted or blocking_reason in _BUDGET_BLOCKING_REASONS
+        ),
     )
 
 
