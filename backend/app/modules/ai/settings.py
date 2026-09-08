@@ -165,19 +165,14 @@ def record_scaleway_token_usage(*, input_tokens: int, output_tokens: int) -> AIS
 
 def project_canonical_ai_status(status: AIStatusRead) -> AIStatusRead:
     """Overlay canonical owner-derived egress/accounting truth on status."""
-    settings = get_ai_settings()
     registry = load_default_provider_registry()
-    provider_id = (
-        status.provider_id
-        if status.provider_id in registry.providers
-        else settings.default_ai_provider
-    )
-    provider = registry.providers[provider_id]
+    provider_id = status.provider_id
+    provider = registry.providers.get(provider_id)
     projection = project_egress_availability(provider_id, registry=registry)
     update: dict[str, object] = {
         "spend_month_to_date_usd": projection.global_actual_cost_usd,
     }
-    if provider.requires_network:
+    if provider is None or provider.requires_network:
         update.update(
             external_calls_allowed=projection.available,
             blocking_reason=projection.blocking_reason,
