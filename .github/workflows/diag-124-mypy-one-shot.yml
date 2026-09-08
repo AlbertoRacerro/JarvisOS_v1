@@ -1,0 +1,28 @@
+name: diag-124-mypy-one-shot
+
+on:
+  push:
+    branches:
+      - impl/124-provider-settings-generic
+    paths:
+      - .github/workflows/diag-124-mypy-one-shot.yml
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: impl/124-provider-settings-generic
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r backend/requirements.txt -r backend/requirements-dev.txt
+      - name: Exact mypy diagnostics
+        working-directory: backend
+        run: python -m mypy app --no-pretty --no-error-summary --show-error-codes
