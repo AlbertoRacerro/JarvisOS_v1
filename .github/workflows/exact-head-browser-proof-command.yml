@@ -11,6 +11,11 @@ permissions:
 
 jobs:
   dispatch:
+    if: >-
+      github.actor == github.repository_owner &&
+      (github.event.label.name == 'browser-proof:113' ||
+       github.event.label.name == 'browser-proof:124' ||
+       github.event.label.name == 'browser-proof:140')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
@@ -36,7 +41,7 @@ jobs:
             "browser-proof:124") scenario="124-settings-ai" ;;
             "browser-proof:140") scenario="140-coding" ;;
             *)
-              echo "Label is not an exact supported browser-proof trigger; no dispatch." >&2
+              echo "Unsupported browser-proof label reached the authorized job." >&2
               exit 1
               ;;
           esac
