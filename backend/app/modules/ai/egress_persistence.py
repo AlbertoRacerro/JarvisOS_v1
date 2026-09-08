@@ -101,6 +101,99 @@ class _BudgetSnapshot:
     today_reserved_cost_usd: float
 
 
+@dataclass(frozen=True)
+class EgressAvailabilityProjection:
+    available: bool
+    blocking_reason: str | None
+    global_actual_cost_usd: float
+    global_reserved_cost_usd: float
+    budget_exhausted: bool
+
+
+@dataclass(frozen=True)
+class _AvailabilityMaterial:
+    provider_id: str
+
+
+@dataclass(frozen=True)
+class _AvailabilityProjectionInputs:
+    projected_cost_upper_usd: float = 0.0
+    projected_input_tokens: int = 0
+    projected_output_tokens: int = 0
+
+
+_BUDGET_BLOCKING_REASONS = frozenset(
+    {
+        "monthly_budget_zero",
+        "global_monthly_cost_cap_exceeded",
+        "provider_monthly_token_cap_exceeded",
+        "provider_monthly_cost_cap_exceeded",
+        "scaleway_monthly_token_cap_zero",
+        "scaleway_hard_stop_token_cap_zero",
+        "scaleway_monthly_token_cap_exceeded",
+        "scaleway_hard_stop_token_cap_exceeded",
+    }
+)
+
+
+def project_egress_availability(
+    provider_id: str,
+    *,
+    registry: ProviderRegistry | None = None,
+    now: datetime | None = None,
+) -> EgressAvailabilityProjection:
+    """Read the canonical next-attempt blocking/accounting truth without mutation.
+
+    This intentionally does not expire or reconcile reservations, persist packets,
+    decisions, attempts or reservations, or dispatch a provider. Active/in-flight
+    reservations are counted exactly as stored by the execution owner.
+    """
+
+    registry = registry or load_default_provider_registry()
+    provider = registry.providers.get(provider_id)
+    now_dt = _normalized_now(now)
+    now_iso = now_dt.isoformat()
+
+    if provider is None:
+        return EgressAvailabilityProjection(
+            available=False,
+            blocking_reason="provider_unknown",
+            global_actual_cost_usd=0.0,
+            global_reserved_cost_usd=0.0,
+            budget_exhausted=False,
+        )
+
+    with open_sqlite_connection() as connection:
+        snapshot = _budget_snapshot(
+            connection,
+            provider_id=provider_id,
+            now_dt=now_dt,
+            now_iso=now_iso,
+        )
+        global_actual = snapshot.global_actual_cost_usd
+
+        if not provider.enabled:
+            blocking_reason = "provider_disabled"
+        elif not provider.requires_network:
+            blocking_reason = None
+        else:
+            blocking_reason = _hard_blocking_reason(
+                connection,
+                material=_AvailabilityMaterial(provider_id=provider_id),
+                projection=_AvailabilityProjectionInputs(),
+                registry=registry,
+                snapshot=snapshot,
+            )
+
+    return EgressAvailabilityProjection(
+        available=blocking_reason is None,
+        blocking_reason=blocking_reason,
+        global_actual_cost_usd=global_actual,
+        global_reserved_cost_usd=snapshot.global_reserved_cost_usd,
+        budget_exhausted=blocking_reason in _BUDGET_BLOCKING_REASONS,
+    )
+
+
 def prepare_egress_attempt(
     material: EgressPacketMaterial,
     *,
@@ -529,8 +622,8 @@ def _insert_reservation(
 def _hard_blocking_reason(
     connection: sqlite3.Connection,
     *,
-    material: EgressPacketMaterial,
-    projection: EgressPacketProjection,
+    material: EgressPacketMaterial | _AvailabilityMaterial,
+    projection: EgressPacketProjection | _AvailabilityProjectionInputs,
     registry: ProviderRegistry,
     snapshot: _BudgetSnapshot,
 ) -> str | None:
@@ -570,8 +663,10 @@ def _hard_blocking_reason(
     if not credential.key_present:
         return "provider_credentials_missing"
 
-    configured_global_spend = float(settings["api_spend_month_to_date_usd"])
-    global_actual = max(configured_global_spend, snapshot.global_actual_cost_usd)
+    global_actual = snapshot.global_actual_cost_usd
+    if not isinstance(material, _AvailabilityMaterial):
+        configured_global_spend = float(settings["api_spend_month_to_date_usd"])
+        global_actual = max(configured_global_spend, global_actual)
     if (
         global_actual
         + snapshot.global_reserved_cost_usd

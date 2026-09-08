@@ -1,9 +1,25 @@
 import sqlite3
+from typing import Literal
 
 from app.core.database import open_sqlite_connection
 from app.modules.ai.contracts import AIPolicyMode
-from app.modules.ai.models import AISettingsRead, AISettingsUpdate
+from app.modules.ai.egress_persistence import project_egress_availability
+from app.modules.ai.models import (
+    AISettingsRead,
+    AISettingsUpdate,
+    AIStatusRead,
+    ProviderCredentialCapabilities,
+    ProviderCredentialStatus,
+    ProviderSettingsProvider,
+    ProviderSettingsRead,
+)
+from app.modules.ai.provider_registry import ProviderConfig, ProviderRegistry, load_default_provider_registry
 from app.modules.events.service import utc_now
+from app.modules.secrets.service import (
+    read_scaleway_secret_mutation_capabilities,
+    read_scaleway_secret_status,
+    resolve_provider_secret_ref,
+)
 
 SETTINGS_ID = "default"
 
@@ -145,3 +161,141 @@ def record_scaleway_token_usage(*, input_tokens: int, output_tokens: int) -> AIS
         )
         connection.commit()
     return get_ai_settings()
+
+
+def project_canonical_ai_status(status: AIStatusRead) -> AIStatusRead:
+    """Overlay canonical owner-derived egress/accounting truth on status."""
+    settings = get_ai_settings()
+    registry = load_default_provider_registry()
+    provider_id = (
+        status.provider_id
+        if status.provider_id in registry.providers
+        else settings.default_ai_provider
+    )
+    provider = registry.providers[provider_id]
+    projection = project_egress_availability(provider_id, registry=registry)
+    update: dict[str, object] = {
+        "spend_month_to_date_usd": projection.global_actual_cost_usd,
+    }
+    if provider.requires_network:
+        update.update(
+            external_calls_allowed=projection.available,
+            blocking_reason=projection.blocking_reason,
+            budget_status=(
+                "monthly_budget_exhausted"
+                if projection.budget_exhausted
+                else "within_budget"
+            ),
+        )
+    return status.model_copy(update=update)
+
+
+def get_provider_settings(status: AIStatusRead) -> ProviderSettingsRead:
+    """Project canonical provider/settings truth without exposing credential material."""
+    status = project_canonical_ai_status(status)
+    registry = load_default_provider_registry()
+    settings = get_ai_settings()
+    providers = [
+        _provider_settings_entry(provider, registry=registry)
+        for provider in sorted(registry.providers.values(), key=lambda item: item.provider_id)
+    ]
+    return ProviderSettingsRead(
+        providers=providers,
+        default_provider_id=settings.default_ai_provider,
+        policy_mode=settings.policy_mode,
+        external_calls_allowed=status.external_calls_allowed,
+        blocking_reason=status.blocking_reason,
+        monthly_api_budget_usd=settings.monthly_api_budget_usd,
+        spend_month_to_date_usd=status.spend_month_to_date_usd,
+    )
+
+
+def _provider_settings_entry(
+    provider: ProviderConfig,
+    *,
+    registry: ProviderRegistry,
+) -> ProviderSettingsProvider:
+    credential, capabilities = _credential_projection(provider)
+    projection = project_egress_availability(provider.provider_id, registry=registry)
+    return ProviderSettingsProvider(
+        provider_id=provider.provider_id,
+        kind=provider.kind,
+        enabled=provider.enabled,
+        requires_network=provider.requires_network,
+        execution_class=str(provider.execution_class),
+        monthly_token_cap=provider.monthly_token_cap,
+        monthly_cost_cap_usd=provider.monthly_cost_cap_usd,
+        external_calls_allowed=projection.available,
+        blocking_reason=projection.blocking_reason,
+        credential=credential,
+        credential_capabilities=capabilities,
+    )
+
+
+def _credential_projection(
+    provider: ProviderConfig,
+) -> tuple[ProviderCredentialStatus, ProviderCredentialCapabilities]:
+    if provider.api_key_ref is None:
+        return (
+            ProviderCredentialStatus(
+                key_present=False,
+                effective_source="not_required",
+                persisted_state="not_supported",
+                reason_code="credential_not_required",
+            ),
+            ProviderCredentialCapabilities(),
+        )
+
+    if provider.provider_id == "scaleway":
+        owner_status = read_scaleway_secret_status()
+        owner_capabilities = read_scaleway_secret_mutation_capabilities()
+        return (
+            ProviderCredentialStatus(
+                key_present=owner_status.key_present,
+                effective_source=_scaleway_effective_source(owner_status),
+                persisted_state=owner_status.persisted_state,
+                reason_code=owner_status.reason_code,
+            ),
+            ProviderCredentialCapabilities(
+                replace_persisted=owner_capabilities.replace_persisted,
+                delete_persisted=owner_capabilities.delete_persisted,
+            ),
+        )
+
+    try:
+        owner_secret = resolve_provider_secret_ref(provider.api_key_ref)
+    except ValueError:
+        return (
+            ProviderCredentialStatus(
+                key_present=False,
+                effective_source="unknown",
+                persisted_state="not_supported",
+                reason_code="credential_reference_unsupported",
+            ),
+            ProviderCredentialCapabilities(),
+        )
+
+    return (
+        ProviderCredentialStatus(
+            key_present=owner_secret.key_present,
+            effective_source="environment" if owner_secret.key_present else "absent",
+            persisted_state="not_supported",
+            reason_code=None if owner_secret.key_present else "credential_environment_missing",
+        ),
+        ProviderCredentialCapabilities(),
+    )
+
+
+def _scaleway_effective_source(owner_status: object) -> Literal[
+    "environment", "secure_persisted", "absent", "invalid", "unknown"
+]:
+    effective_source = getattr(owner_status, "effective_source", "none")
+    if effective_source == "environment":
+        return "environment"
+    if effective_source == "secure_persisted":
+        return "secure_persisted"
+    if getattr(owner_status, "reason_code", None) == "secret_environment_invalid":
+        return "invalid"
+    if getattr(owner_status, "persisted_state", None) == "unavailable":
+        return "unknown"
+    return "absent"

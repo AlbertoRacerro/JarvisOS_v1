@@ -35,7 +35,13 @@ from app.modules.ai.models import (
     SupervisorPublicTestRequest,
     SupervisorPublicTestResponse,
 )
-from app.modules.ai.settings import ensure_ai_settings, update_ai_settings
+from app.modules.ai.settings import (
+    ProviderSettingsRead,
+    ensure_ai_settings,
+    get_provider_settings,
+    project_canonical_ai_status,
+    update_ai_settings,
+)
 from app.modules.ai.thread_routes import router as thread_router
 
 router = APIRouter(prefix="/ai", tags=["ai"])
@@ -58,7 +64,22 @@ def update_ai_settings_endpoint(payload: AISettingsUpdate) -> AISettingsRead:
 @router.get("/status", response_model=AIStatusRead)
 def read_ai_status() -> AIStatusRead:
     ensure_ai_settings()
-    return AIGateway().status()
+    status = project_canonical_ai_status(AIGateway().status())
+    update: dict[str, object] = {}
+    if status.budget_status == "within_budget":
+        update["budget_status"] = "available"
+    if (
+        status.provider_id == "scaleway"
+        and status.blocking_reason == "provider_credentials_missing"
+    ):
+        update["blocking_reason"] = "scaleway_api_key_missing"
+    return status.model_copy(update=update) if update else status
+
+
+@router.get("/provider-settings", response_model=ProviderSettingsRead)
+def read_ai_provider_settings() -> ProviderSettingsRead:
+    ensure_ai_settings()
+    return get_provider_settings(AIGateway().status())
 
 
 @router.post("/modeling/draft", response_model=ModelingDraftResponse)

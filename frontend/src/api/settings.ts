@@ -15,6 +15,42 @@ export type SettingsSecretStatus = {
   reason_code?: string | null;
 };
 
+export type ProviderCredentialStatus = {
+  key_present: boolean;
+  effective_source: "environment" | "secure_persisted" | "absent" | "invalid" | "unknown" | "not_required";
+  persisted_state: "absent" | "usable" | "corrupted" | "unavailable" | "not_supported";
+  reason_code?: string | null;
+};
+
+export type ProviderCredentialCapabilities = {
+  replace_persisted: boolean;
+  delete_persisted: boolean;
+};
+
+export type ProviderSettingsEntry = {
+  provider_id: string;
+  kind: string;
+  enabled: boolean;
+  requires_network: boolean;
+  execution_class: string;
+  monthly_token_cap: number;
+  monthly_cost_cap_usd: number;
+  external_calls_allowed: boolean;
+  blocking_reason?: string | null;
+  credential: ProviderCredentialStatus;
+  credential_capabilities: ProviderCredentialCapabilities;
+};
+
+export type ProviderSettings = {
+  providers: ProviderSettingsEntry[];
+  default_provider_id: string;
+  policy_mode: string;
+  external_calls_allowed: boolean;
+  blocking_reason?: string | null;
+  monthly_api_budget_usd: number;
+  spend_month_to_date_usd: number;
+};
+
 export class SettingsApiError extends Error {
   readonly status: number;
   readonly code: string | null;
@@ -73,6 +109,10 @@ export function loadAISettings(): Promise<AISettings> {
 
 export function loadAIStatus(): Promise<AIStatus> {
   return requestJson<AIStatus>("/ai/status");
+}
+
+export function loadProviderSettings(): Promise<ProviderSettings> {
+  return requestJson<ProviderSettings>("/ai/provider-settings");
 }
 
 export function loadSecretStatus(): Promise<SettingsSecretStatus> {
