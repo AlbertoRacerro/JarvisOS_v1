@@ -57,6 +57,12 @@ const screenshot = async (name) => {
   artifacts.push(path);
 };
 
+const openTechnicalDetails = async (details) => {
+  if (!(await details.evaluate((node) => node.open))) {
+    await details.getByText("Technical details", { exact: true }).click();
+  }
+};
+
 const assertNoCodingMutationButtons = async (prefix) => {
   const forbidden = /^(commit|apply|execute|push|merge|create pr|create pull request|update|restart)(\b|\s)/i;
   const labels = await page.getByRole("button").allTextContents();
@@ -98,14 +104,14 @@ const prove113 = async () => {
   const dossier = page.getByRole("region", { name: "Version dossier" });
   await versionA.click();
   record("113:select-a", await versionA.getAttribute("aria-pressed") === "true", "Version A remains the selected exact dossier");
-  await dossier.locator("details").first().getByText("Technical details", { exact: true }).click();
+  await openTechnicalDetails(dossier.locator("details").first());
   await dossier.getByText("proof-version-a", { exact: true }).waitFor({ state: "visible" });
   record("113:select-a-exact-identity", true, "Version A exact identity is available through the real Technical details disclosure");
 
   await versionB.click();
   record("113:select-b", await versionB.getAttribute("aria-pressed") === "true", "Version B remains the selected exact dossier");
   record("113:a-deselected", await versionA.getAttribute("aria-pressed") === "false", "Version A is no longer the selected dossier");
-  await dossier.locator("details").first().getByText("Technical details", { exact: true }).click();
+  await openTechnicalDetails(dossier.locator("details").first());
   await dossier.getByText("proof-version-b", { exact: true }).waitFor({ state: "visible" });
   record("113:select-b-exact-identity", true, "Version B exact identity is available through the real Technical details disclosure");
 
@@ -135,9 +141,12 @@ const prove124 = async () => {
   await credentialCard.getByRole("heading", { name: "Scaleway credential", exact: true }).waitFor({ state: "visible" });
   const credentialSummary = credentialCard.locator(".settings-card__summary");
   await credentialSummary.waitFor({ state: "visible" });
-  record("124:credential-human-summary", (await credentialSummary.innerText()).trim().length > 0, "credential state has a readable primary summary");
+  const credentialSummaryText = (await credentialSummary.innerText()).trim();
+  const semanticCredentialSummary = /^(Credential not required|Environment active|Environment credential invalid|Credential state unavailable|Secure persisted|Environment credential unavailable|No effective credential)(\b| ·)/.test(credentialSummaryText);
+  const rawCredentialOnly = /^(secure_persisted|absent|checking|unknown|invalid|not_supported|not_required)$/i.test(credentialSummaryText) || credentialSummaryText.includes("_");
+  record("124:credential-human-summary", semanticCredentialSummary && !rawCredentialOnly, `summary=${JSON.stringify(credentialSummaryText)}`);
   const credentialDetails = credentialCard.locator("details").first();
-  await credentialDetails.getByText("Technical details", { exact: true }).click();
+  await openTechnicalDetails(credentialDetails);
   await credentialDetails.getByText(/^Effective source code · /).waitFor({ state: "visible" });
   await credentialDetails.getByText(/^Persisted state code · /).waitFor({ state: "visible" });
   record("124:credential-technical-disclosure", true, "canonical credential codes are available only after a real disclosure interaction");
@@ -169,7 +178,7 @@ const prove140 = async () => {
   await repositorySurface.getByText("Server-owned 118 repository truth", { exact: true }).waitFor({ state: "visible" });
   await repositorySurface.getByText("Repository browsing is context-neutral. These explicit actions are exact-base 111/123 operations; they do not commit, apply, execute, push, create a PR, merge, or mutate STATUS.", { exact: true }).waitFor({ state: "visible" });
   const repositoryDetails = repositorySurface.locator("details").first();
-  await repositoryDetails.getByText("Technical details", { exact: true }).click();
+  await openTechnicalDetails(repositoryDetails);
   await repositoryDetails.getByText(/^Resolved commit · [0-9a-f]{40}$/).waitFor({ state: "visible" });
   record("140:repository-disclosure", true, "repository machine identity is available through a real Technical details interaction");
   record("140:repository-surface", true, "real Coding Repository workbench renders accepted server-owned 118 and explicit 111/123 authority boundary");
@@ -184,12 +193,42 @@ const prove140 = async () => {
   await runtimeSurface.waitFor({ state: "visible" });
   const semanticSummary = runtimeSurface.locator(".final-fusion__summary-strip").first();
   await semanticSummary.waitFor({ state: "visible" });
-  const semanticText = await semanticSummary.innerText();
-  record("140:runtime-semantic-summary", semanticText.includes("Ahead ·") && semanticText.includes("Behind ·") && semanticText.includes("Changed files ·"), `summary=${JSON.stringify(semanticText)}`);
+  const semanticSpans = await semanticSummary.locator("span").allTextContents();
+  const semanticValues = Object.fromEntries(semanticSpans.map((value) => {
+    const match = value.trim().match(/^(Ahead|Behind|Changed files) · ([0-9]+)$/);
+    return match ? [match[1], Number(match[2])] : [value.trim(), null];
+  }));
+  record(
+    "140:runtime-semantic-summary",
+    Number.isInteger(semanticValues.Ahead) && Number.isInteger(semanticValues.Behind) && Number.isInteger(semanticValues["Changed files"]),
+    `summary=${JSON.stringify(semanticSpans)}`,
+  );
   const runtimeDetails = runtimeSurface.locator("details").first();
-  await runtimeDetails.getByText("Technical details", { exact: true }).click();
-  await runtimeDetails.getByText(/^Local commit · /).waitFor({ state: "visible" });
-  record("140:runtime-disclosure", true, "runtime exact identity is available through a real Technical details interaction");
+  await openTechnicalDetails(runtimeDetails);
+  const localCommitText = await runtimeDetails.getByText(/^Local commit · /).innerText();
+  const displayedLocalSha = localCommitText.replace(/^Local commit · /, "").trim();
+  record("140:runtime-exact-local-commit", displayedLocalSha === expectedHead, `displayed=${displayedLocalSha} expected=${expectedHead}`);
+  const rawDeltaText = await runtimeDetails.locator("pre").first().innerText();
+  const rawDelta = JSON.parse(rawDeltaText);
+  const expectedAhead = Number(rawDelta.ahead_count ?? rawDelta.ahead);
+  const expectedBehind = Number(rawDelta.behind_count ?? rawDelta.behind);
+  const expectedChanged = Number(rawDelta.changed_file_count ?? rawDelta.changed_files);
+  const rawRelation = String(rawDelta.relationship ?? rawDelta.relation ?? "");
+  const renderedRelation = (await runtimeSurface.locator(".final-fusion__delta span").first().innerText()).trim();
+  const expectedRelation = rawRelation.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+  record(
+    "140:runtime-server-semantic-delta",
+    Number.isInteger(expectedAhead)
+      && Number.isInteger(expectedBehind)
+      && Number.isInteger(expectedChanged)
+      && semanticValues.Ahead === expectedAhead
+      && semanticValues.Behind === expectedBehind
+      && semanticValues["Changed files"] === expectedChanged
+      && rawRelation.length > 0
+      && renderedRelation === expectedRelation,
+    `rendered=${JSON.stringify({ relation: renderedRelation, ...semanticValues })} raw=${JSON.stringify(rawDelta)}`,
+  );
+  record("140:runtime-disclosure", true, "runtime exact identity and server-owned semantic delta are verified through a real Technical details interaction");
   await runtimeSurface.getByRole("heading", { name: "Development pipeline", exact: true }).waitFor({ state: "visible" });
   record("140:runtime-surface", true, "real Coding Runtime workbench renders server-owned 119 semantic delta and 120 pipeline projection surface");
   await assertNoCodingMutationButtons("140:runtime");
