@@ -19,6 +19,7 @@ from cloud_delivery_bridge import (  # noqa: E402
     PATCH_OPEN,
     BridgeError,
     Payload,
+    _diff_paths,
     apply_and_verify,
     parse_payload,
 )
@@ -160,6 +161,22 @@ def test_apply_accounts_for_new_untracked_file_before_validation(tmp_path: Path)
     )
     apply_and_verify(repo, payload, patch_file)
     assert target.read_text(encoding="utf-8") == "export const bridgeProof = true;\n"
+
+
+def test_post_apply_inventory_includes_ignored_untracked_files(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    base = _init_repo(repo)
+    ignore = repo / ".gitignore"
+    ignore.write_text("backend/.hidden/\n", encoding="utf-8")
+    _git(repo, "add", ".gitignore")
+    _git(repo, "commit", "-m", "ignore hidden backend payloads")
+    base = _git(repo, "rev-parse", "HEAD").strip()
+
+    hidden = repo / "backend" / ".hidden" / "payload.py"
+    hidden.parent.mkdir(parents=True)
+    hidden.write_text("raise RuntimeError('must never execute')\n", encoding="utf-8")
+
+    assert _diff_paths(repo, base) == ("backend/.hidden/payload.py",)
 
 
 def test_workflow_freezes_payload_before_untrusted_validation_and_separates_writer() -> None:
