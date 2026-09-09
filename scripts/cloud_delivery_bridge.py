@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Cloud-native exact-head delivery bridge for durable model-produced patches.
 
-The payload is untrusted data.  This module parses and admits it, applies it in a
+The payload is untrusted data. This module parses and admits it, applies it in a
 bounded checkout, and delegates the only network Git mutation to the existing
-repository_delivery guarded-push primitive.  It intentionally exposes no generic
+repository_delivery guarded-push primitive. It intentionally exposes no generic
 command, shell, branch-creation, merge, or default-branch authority.
 """
 from __future__ import annotations
@@ -35,6 +35,7 @@ JSON_OPEN = "```json\n"
 JSON_CLOSE = "\n```"
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 BRANCH_RE = re.compile(r"^[A-Za-z0-9._/-]+$")
+PATH_RE = re.compile(r"^[A-Za-z0-9._/+@=-]+$")
 MAX_PATCH_BYTES = 60_000
 MAX_PATHS = 32
 ALLOWED_PROFILES = {"frontend-143", "frontend", "backend", "docs"}
@@ -80,11 +81,18 @@ def _extract_fence(body: str, opening: str, closing: str, *, start: int = 0) -> 
 
 def _assert_unambiguous_paths(paths: tuple[str, ...]) -> None:
     for raw in paths:
-        if not raw or raw.startswith(('/', '\\')) or '\\' in raw:
+        if not raw or not PATH_RE.fullmatch(raw) or raw.startswith(("/", ".git/")):
             raise BridgeError("changed_paths contain an ambiguous path")
-        parts = raw.split('/')
-        if any(part in {'', '.', '..'} for part in parts):
+        parts = raw.split("/")
+        if any(part in {"", ".", ".."} for part in parts):
             raise BridgeError("changed_paths contain an ambiguous path")
+
+
+def _assert_patch_headers(payload: Payload) -> None:
+    headers = [line for line in payload.patch.splitlines() if line.startswith("diff --git ")]
+    expected = [f"diff --git a/{path} b/{path}" for path in payload.changed_paths]
+    if sorted(headers) != sorted(expected) or len(headers) != len(expected):
+        raise BridgeError("patch headers differ from admitted changed_paths")
 
 
 def parse_payload(body: str) -> Payload:
@@ -133,7 +141,9 @@ def parse_payload(body: str) -> Payload:
     denied = set(normalized) & EXTRA_CONTROL_PATHS
     if denied:
         raise BridgeError(f"bridge/control path refused: {sorted(denied)[0]}")
-    return Payload(pr, base_sha, target_ref, patch_sha256, normalized, profile, patch)
+    payload = Payload(pr, base_sha, target_ref, patch_sha256, normalized, profile, patch)
+    _assert_patch_headers(payload)
+    return payload
 
 
 def _api_json(url: str, token: str) -> dict:
@@ -177,7 +187,11 @@ def fetch_and_admit(*, repository: str, pr_number: int, comment_id: int, token: 
 
 
 def _git(repo_root: Path, args: list[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
-    env = {k: v for k, v in os.environ.items() if k not in {"GITHUB_TOKEN", "GH_TOKEN", "GIT_ASKPASS", "SSH_ASKPASS", "GIT_SSH", "GIT_SSH_COMMAND", "GIT_CONFIG", "GIT_CONFIG_GLOBAL", "GIT_CONFIG_SYSTEM"}}
+    blocked = {
+        "GITHUB_TOKEN", "GH_TOKEN", "GIT_ASKPASS", "SSH_ASKPASS", "GIT_SSH",
+        "GIT_SSH_COMMAND", "GIT_CONFIG", "GIT_CONFIG_GLOBAL", "GIT_CONFIG_SYSTEM",
+    }
+    env = {key: value for key, value in os.environ.items() if key not in blocked}
     env["GIT_CONFIG_NOSYSTEM"] = "1"
     env["GIT_CONFIG_GLOBAL"] = os.devnull
     env["GIT_CONFIG_SYSTEM"] = os.devnull
@@ -203,6 +217,19 @@ def _diff_paths(repo_root: Path, base_sha: str) -> tuple[str, ...]:
     return assert_safe_paths([line for line in out.splitlines() if line.strip()])
 
 
+def _assert_safe_modes(repo_root: Path, base_sha: str) -> None:
+    raw = _git(repo_root, ["diff", "--raw", "--no-renames", base_sha, "--"]).stdout
+    for line in raw.splitlines():
+        if not line.startswith(":"):
+            continue
+        fields = line[1:].split(None, 5)
+        if len(fields) < 5:
+            raise BridgeError("unreadable raw diff mode")
+        old_mode, new_mode = fields[0], fields[1]
+        if old_mode in {"120000", "160000"} or new_mode in {"120000", "160000"}:
+            raise BridgeError("symlink/gitlink mode changes are refused")
+
+
 def apply_and_verify(repo_root: Path, payload: Payload, patch_file: Path) -> None:
     head = _git(repo_root, ["rev-parse", "HEAD"]).stdout.strip().lower()
     if head != payload.base_sha:
@@ -212,6 +239,7 @@ def apply_and_verify(repo_root: Path, payload: Payload, patch_file: Path) -> Non
         raise BridgeError("artifact patch digest mismatch")
     if patch_bytes.decode("utf-8") != payload.patch:
         raise BridgeError("artifact patch content mismatch")
+    _assert_patch_headers(payload)
     check = _git(repo_root, ["apply", "--check", "--binary", str(patch_file)], check=False)
     if check.returncode != 0:
         raise BridgeError("patch does not apply cleanly")
@@ -219,9 +247,9 @@ def apply_and_verify(repo_root: Path, payload: Payload, patch_file: Path) -> Non
     actual = _diff_paths(repo_root, payload.base_sha)
     if actual != payload.changed_paths:
         raise BridgeError("applied changed-path set differs from admitted payload")
+    _assert_safe_modes(repo_root, payload.base_sha)
     for path in actual:
-        file_path = repo_root / path
-        if file_path.is_symlink():
+        if (repo_root / path).is_symlink():
             raise BridgeError("symlink changes are refused")
     if _git(repo_root, ["diff", "--check"], check=False).returncode != 0:
         raise BridgeError("applied patch fails git diff --check")
@@ -241,7 +269,10 @@ def write_manifest(payload: Payload, path: Path) -> None:
 
 def load_manifest(path: Path, patch_path: Path) -> Payload:
     data = json.loads(path.read_text(encoding="utf-8"))
-    body = MARKER + "\n" + JSON_OPEN + json.dumps(data) + JSON_CLOSE + "\n" + PATCH_OPEN + patch_path.read_text(encoding="utf-8") + PATCH_CLOSE
+    body = (
+        MARKER + "\n" + JSON_OPEN + json.dumps(data) + JSON_CLOSE + "\n" +
+        PATCH_OPEN + patch_path.read_text(encoding="utf-8") + PATCH_CLOSE
+    )
     return parse_payload(body)
 
 
@@ -262,7 +293,11 @@ def materialize(*, repo_root: Path, payload: Payload, patch_file: Path, token: s
     _git(repo_root, ["config", "user.name", "JarvisOS Cloud Delivery"])
     _git(repo_root, ["config", "user.email", "jarvisos-cloud-delivery@users.noreply.github.com"])
     _git(repo_root, ["add", "--", *payload.changed_paths])
-    staged = tuple(sorted(line for line in _git(repo_root, ["diff", "--cached", "--name-only", "--no-renames"]).stdout.splitlines() if line.strip()))
+    staged = tuple(sorted(
+        line for line in _git(
+            repo_root, ["diff", "--cached", "--name-only", "--no-renames"]
+        ).stdout.splitlines() if line.strip()
+    ))
     if staged != payload.changed_paths:
         raise BridgeError("staged path set differs from admitted payload")
     _git(repo_root, ["commit", "-m", f"materialize durable patch for PR #{payload.pr}"])
@@ -300,10 +335,19 @@ def main() -> int:
     args = parser.parse_args()
     try:
         if args.command == "fetch":
-            payload, _pr = fetch_and_admit(repository=args.repository, pr_number=args.pr, comment_id=args.comment_id, token=args.token)
+            payload, _pr = fetch_and_admit(
+                repository=args.repository,
+                pr_number=args.pr,
+                comment_id=args.comment_id,
+                token=args.token,
+            )
             Path(args.patch_out).write_text(payload.patch, encoding="utf-8")
             write_manifest(payload, Path(args.manifest_out))
-            print(json.dumps({"target_ref": payload.target_ref, "base_sha": payload.base_sha, "profile": payload.validation_profile}))
+            print(json.dumps({
+                "target_ref": payload.target_ref,
+                "base_sha": payload.base_sha,
+                "profile": payload.validation_profile,
+            }))
             return 0
         if args.command == "verify":
             payload = load_manifest(Path(args.manifest), Path(args.patch))
@@ -312,7 +356,13 @@ def main() -> int:
             return 0
         if args.command == "materialize":
             payload = load_manifest(Path(args.manifest), Path(args.patch))
-            final = materialize(repo_root=Path(args.repo_root), payload=payload, patch_file=Path(args.patch), token=args.token, repository=args.repository)
+            final = materialize(
+                repo_root=Path(args.repo_root),
+                payload=payload,
+                patch_file=Path(args.patch),
+                token=args.token,
+                repository=args.repository,
+            )
             print(f"REMOTE_VERIFIED {final}")
             return 0
     except (BridgeError, DeliveryRefusal, OSError, ValueError, json.JSONDecodeError) as exc:
