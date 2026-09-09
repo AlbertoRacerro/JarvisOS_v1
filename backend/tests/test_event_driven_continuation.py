@@ -188,6 +188,38 @@ def test_malformed_zero_payload_request_is_ignored_without_poisoning_valid_reque
     ) == mod.DeliveryRequest(77, HEAD, PAYLOAD_ID, PAYLOAD_SHA256)
 
 
+def test_auto_digest_is_valid_only_for_payload_unchanged_before_owner_attestation() -> None:
+    payload = payload_comment()
+    payload["updated_at"] = "2026-09-09T14:00:00Z"
+    request = owner_comment(delivery_request(payload_sha256="auto"), comment_id=924)
+    request["created_at"] = "2026-09-09T14:01:00Z"
+    comments = [payload, request]
+    assert mod.requested_delivery(
+        comments, repository=REPOSITORY, pr_number=77, head_sha=HEAD
+    ) == mod.DeliveryRequest(77, HEAD, PAYLOAD_ID, PAYLOAD_SHA256)
+
+    payload["updated_at"] = "2026-09-09T14:02:00Z"
+    assert (
+        mod.requested_delivery(comments, repository=REPOSITORY, pr_number=77, head_sha=HEAD)
+        is None
+    )
+
+
+def test_auto_digest_fails_closed_when_comment_timestamps_are_missing_or_equal() -> None:
+    payload = payload_comment()
+    request = owner_comment(delivery_request(payload_sha256="auto"), comment_id=925)
+    assert (
+        mod.requested_delivery([payload, request], repository=REPOSITORY, pr_number=77, head_sha=HEAD)
+        is None
+    )
+    payload["updated_at"] = "2026-09-09T14:01:00Z"
+    request["created_at"] = "2026-09-09T14:01:00Z"
+    assert (
+        mod.requested_delivery([payload, request], repository=REPOSITORY, pr_number=77, head_sha=HEAD)
+        is None
+    )
+
+
 def test_missing_referenced_payload_comment_is_not_actionable() -> None:
     comments = [owner_comment(delivery_request())]
     assert (
