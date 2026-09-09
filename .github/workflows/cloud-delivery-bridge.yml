@@ -11,7 +11,7 @@ on:
         required: true
 
 jobs:
-  validate:
+  admit:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -54,10 +54,39 @@ jobs:
               fh.write(f"profile={data['validation_profile']}\n")
           PY
 
+      - name: Freeze admitted payload before any target code executes
+        uses: actions/upload-artifact@v4
+        with:
+          name: admitted-delivery-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/delivery.patch
+            ${{ runner.temp }}/delivery.json
+          if-no-files-found: error
+          retention-days: 1
+
+  validate:
+    needs: admit
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout trusted bridge owner
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: trusted
+          persist-credentials: false
+
+      - name: Download immutable admitted payload
+        uses: actions/download-artifact@v4
+        with:
+          name: admitted-delivery-${{ github.run_id }}
+          path: ${{ runner.temp }}/delivery
+
       - name: Checkout exact admitted base without persisted credentials
         uses: actions/checkout@v4
         with:
-          ref: ${{ steps.meta.outputs.base_sha }}
+          ref: ${{ needs.admit.outputs.base_sha }}
           path: work
           fetch-depth: 0
           persist-credentials: false
@@ -66,12 +95,12 @@ jobs:
         run: |
           python trusted/scripts/cloud_delivery_bridge.py verify \
             --repo-root work \
-            --patch "$RUNNER_TEMP/delivery.patch" \
-            --manifest "$RUNNER_TEMP/delivery.json"
+            --patch "$RUNNER_TEMP/delivery/delivery.patch" \
+            --manifest "$RUNNER_TEMP/delivery/delivery.json"
 
       - name: Run fixed bounded validation profile
         env:
-          PROFILE: ${{ steps.meta.outputs.profile }}
+          PROFILE: ${{ needs.admit.outputs.profile }}
         run: |
           set -euo pipefail
           case "$PROFILE" in
@@ -102,18 +131,8 @@ jobs:
               ;;
           esac
 
-      - name: Preserve exactly validated payload
-        uses: actions/upload-artifact@v4
-        with:
-          name: admitted-delivery-${{ github.run_id }}
-          path: |
-            ${{ runner.temp }}/delivery.patch
-            ${{ runner.temp }}/delivery.json
-          if-no-files-found: error
-          retention-days: 1
-
   materialize:
-    needs: validate
+    needs: [admit, validate]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -127,7 +146,7 @@ jobs:
           path: trusted
           persist-credentials: false
 
-      - name: Download validated immutable payload
+      - name: Download immutable admitted payload
         uses: actions/download-artifact@v4
         with:
           name: admitted-delivery-${{ github.run_id }}
@@ -136,7 +155,7 @@ jobs:
       - name: Checkout exact expected old head without persisted credentials
         uses: actions/checkout@v4
         with:
-          ref: ${{ needs.validate.outputs.base_sha }}
+          ref: ${{ needs.admit.outputs.base_sha }}
           path: work
           fetch-depth: 0
           persist-credentials: false
