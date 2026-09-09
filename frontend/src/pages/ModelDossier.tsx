@@ -13,12 +13,14 @@ type Props = Readonly<{
   onWorkspaceChange: (workspaceId: string) => void;
 }>;
 
+const plainDisclosureRowStyle = { gridTemplateColumns: "minmax(0, 1fr) auto" } as const;
+
 function Empty({ children }: Readonly<{ children: React.ReactNode }>) {
   return <div className="final-fusion__source-empty">{children}</div>;
 }
 
 function Value({ label, value }: Readonly<{ label: string; value?: string | null }>) {
-  return <div className="final-fusion__disclosure-row"><strong>{label}</strong><em>{value || "Unknown"}</em></div>;
+  return <div className="final-fusion__disclosure-row" style={plainDisclosureRowStyle}><strong>{label}</strong><em>{value || "Unknown"}</em></div>;
 }
 
 function TechnicalDetails({ children }: Readonly<{ children: React.ReactNode }>) {
@@ -99,7 +101,7 @@ export default function ModelDossier({ workspaceId, onWorkspaceChange }: Props) 
       <header className="final-fusion__panel-head"><h2>Model versions</h2><span>Canonical READ</span></header>
       <div className="final-fusion__toolbar-line"><span>Project workspace</span><select aria-label="Project workspace" value={activeWorkspaceId ?? ""} onChange={(event) => onWorkspaceChange(event.target.value)} disabled={!workspaces.length}><option value="">Select workspace…</option>{workspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}</select></div>
       <div className="final-fusion__searchbox">Choose a model by its human title, version and current status. Exact identifiers remain available in Technical details.</div>
-      {loading && !versions.length ? <Empty><strong>Loading model dossiers…</strong></Empty> : error && !versions.length ? <Empty><strong>Backend read failed</strong><span>{error}</span></Empty> : versions.length ? <div className="final-fusion__source-list">{versions.map(({ item, version }) => <button type="button" className="final-fusion__disclosure-row" key={version.model_version_id} onClick={() => setSelectedVersionId(version.model_version_id)} aria-pressed={selectedVersionId === version.model_version_id}><strong>{item.title}</strong><em>{version.version_label || "Unlabelled version"} · {version.status || "Unknown status"}</em></button>)}</div> : <Empty><strong>No model versions</strong><span>The selected workspace exposes no model dossier versions.</span></Empty>}
+      {loading && !versions.length ? <Empty><strong>Loading model dossiers…</strong></Empty> : error && !versions.length ? <Empty><strong>Backend read failed</strong><span>{error}</span></Empty> : versions.length ? <div className="final-fusion__source-list">{versions.map(({ item, version }) => <button type="button" className="final-fusion__disclosure-row" style={plainDisclosureRowStyle} key={version.model_version_id} onClick={() => setSelectedVersionId(version.model_version_id)} aria-pressed={selectedVersionId === version.model_version_id}><strong>{item.title}</strong><em>{version.version_label || "Unlabelled version"} · {version.status || "Unknown status"}</em></button>)}</div> : <Empty><strong>No model versions</strong><span>The selected workspace exposes no model dossier versions.</span></Empty>}
       <div className="final-fusion__lineage-slot">{detail ? `Selected · ${detail.title} · ${detail.identity.version_label || "Unlabelled version"}` : "No model version selected"}</div>
     </section>
 
