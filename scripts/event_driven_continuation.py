@@ -19,6 +19,7 @@ import sys
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 API_ROOT = "https://api.github.com"
@@ -35,7 +36,7 @@ MARKER_RE = re.compile(
 DELIVERY_REQUEST_RE = re.compile(
     r"<!-- jarvis-cloud-delivery:dispatch:v1 pr=(?P<pr>\d+) "
     r"head=(?P<head>[0-9a-f]{40}) payload_comment_id=(?P<payload>\d+) "
-    r"payload_body_sha256=(?P<payload_sha256>[0-9a-f]{64}) -->"
+    r"payload_body_sha256=(?P<payload_sha256>(?:[0-9a-f]{64}|auto)) -->"
 )
 DELIVERY_MARKER_RE = re.compile(
     r"<!-- jarvis-cloud-delivery-dispatched:v1 run=(?P<run>\d+) "
@@ -147,7 +148,7 @@ def already_recorded(request: WakeRequest, comments: list[object]) -> bool:
     return False
 
 
-def _comment_body_by_id(comments: list[object], comment_id: int) -> str | None:
+def _comment_by_id(comments: list[object], comment_id: int) -> dict[str, object] | None:
     for comment in comments:
         if not isinstance(comment, dict):
             raise WakeError("pull-request comment is not an object")
@@ -155,8 +156,20 @@ def _comment_body_by_id(comments: list[object], comment_id: int) -> str | None:
         if not isinstance(body, str) or not isinstance(user, dict):
             raise WakeError("pull-request comment is incomplete")
         if comment.get("id") == comment_id:
-            return body
+            return comment
     return None
+
+
+def _timestamp(value: object) -> datetime | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return None
+    return parsed
 
 
 def requested_delivery(
@@ -176,18 +189,26 @@ def requested_delivery(
         if match is None:
             continue
         payload_comment_id = int(match.group("payload"))
-        payload_body_sha256 = match.group("payload_sha256")
-        if payload_comment_id < 1 or not SHA256_RE.fullmatch(payload_body_sha256):
+        claimed_sha256 = match.group("payload_sha256")
+        if payload_comment_id < 1:
             continue
         if int(match.group("pr")) != pr_number or match.group("head") != head_sha:
             continue
-        payload_body = _comment_body_by_id(comments, payload_comment_id)
-        if payload_body is None:
+        payload_comment = _comment_by_id(comments, payload_comment_id)
+        if payload_comment is None:
+            continue
+        payload_body = payload_comment.get("body")
+        if not isinstance(payload_body, str):
             continue
         actual_sha256 = hashlib.sha256(payload_body.encode("utf-8")).hexdigest()
-        if actual_sha256 != payload_body_sha256:
+        if claimed_sha256 == "auto":
+            payload_updated = _timestamp(payload_comment.get("updated_at"))
+            owner_created = _timestamp(comment.get("created_at"))
+            if payload_updated is None or owner_created is None or payload_updated >= owner_created:
+                continue
+        elif not SHA256_RE.fullmatch(claimed_sha256) or actual_sha256 != claimed_sha256:
             continue
-        latest = DeliveryRequest(pr_number, head_sha, payload_comment_id, payload_body_sha256)
+        latest = DeliveryRequest(pr_number, head_sha, payload_comment_id, actual_sha256)
     return latest
 
 
