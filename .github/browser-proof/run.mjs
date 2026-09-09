@@ -142,14 +142,35 @@ const prove124 = async () => {
   const credentialSummary = credentialCard.locator(".settings-card__summary");
   await credentialSummary.waitFor({ state: "visible" });
   const credentialSummaryText = (await credentialSummary.innerText()).trim();
-  const semanticCredentialSummary = /^(Credential not required|Environment active|Environment credential invalid|Credential state unavailable|Secure persisted|Environment credential unavailable|No effective credential)(\b| ·)/.test(credentialSummaryText);
-  const rawCredentialOnly = /^(secure_persisted|absent|checking|unknown|invalid|not_supported|not_required)$/i.test(credentialSummaryText) || credentialSummaryText.includes("_");
-  record("124:credential-human-summary", semanticCredentialSummary && !rawCredentialOnly, `summary=${JSON.stringify(credentialSummaryText)}`);
   const credentialDetails = credentialCard.locator("details").first();
   await openTechnicalDetails(credentialDetails);
-  await credentialDetails.getByText(/^Effective source code · /).waitFor({ state: "visible" });
-  await credentialDetails.getByText(/^Persisted state code · /).waitFor({ state: "visible" });
-  record("124:credential-technical-disclosure", true, "canonical credential codes are available only after a real disclosure interaction");
+  const effectiveSourceText = await credentialDetails.getByText(/^Effective source code · /).innerText();
+  const persistedStateText = await credentialDetails.getByText(/^Persisted state code · /).innerText();
+  const effectiveSource = effectiveSourceText.replace(/^Effective source code · /, "").trim();
+  const persistedState = persistedStateText.replace(/^Persisted state code · /, "").trim();
+  const sourcePrefixes = {
+    not_required: "Credential not required",
+    environment: "Environment active",
+    invalid: "Environment credential invalid",
+    unknown: "Credential state unavailable",
+    secure_persisted: "Secure persisted",
+  };
+  const expectedPrefix = sourcePrefixes[effectiveSource]
+    ?? (persistedState === "not_supported" ? "Environment credential unavailable" : "No effective credential");
+  const canonicalCredentialCodes = [effectiveSource, persistedState].filter(Boolean);
+  const primaryContainsRawCode = canonicalCredentialCodes.some((code) =>
+    credentialSummaryText.toLowerCase().split(/[^a-z0-9_]+/).includes(code.toLowerCase())
+  );
+  record(
+    "124:credential-human-summary",
+    credentialSummaryText.startsWith(expectedPrefix) && !credentialSummaryText.includes("_") && !primaryContainsRawCode,
+    `summary=${JSON.stringify(credentialSummaryText)} source=${effectiveSource} persisted=${persistedState}`,
+  );
+  record(
+    "124:credential-technical-disclosure",
+    effectiveSource.length > 0 && persistedState.length > 0,
+    `effective_source=${effectiveSource} persisted_state=${persistedState}`,
+  );
   await page.getByRole("heading", { name: "Current usage", exact: true }).waitFor({ state: "visible" });
 
   const passwordInput = page.getByLabel("Replace API key");
@@ -210,10 +231,10 @@ const prove140 = async () => {
   record("140:runtime-exact-local-commit", displayedLocalSha === expectedHead, `displayed=${displayedLocalSha} expected=${expectedHead}`);
   const rawDeltaText = await runtimeDetails.locator("pre").first().innerText();
   const rawDelta = JSON.parse(rawDeltaText);
-  const expectedAhead = Number(rawDelta.ahead_count ?? rawDelta.ahead);
-  const expectedBehind = Number(rawDelta.behind_count ?? rawDelta.behind);
-  const expectedChanged = Number(rawDelta.changed_file_count ?? rawDelta.changed_files);
-  const rawRelation = String(rawDelta.relationship ?? rawDelta.relation ?? "");
+  const expectedAhead = Number(rawDelta.ahead_by);
+  const expectedBehind = Number(rawDelta.behind_by);
+  const expectedChanged = Array.isArray(rawDelta.files) ? rawDelta.files.length : Number.NaN;
+  const rawRelation = String(rawDelta.relation ?? "");
   const renderedRelation = (await runtimeSurface.locator(".final-fusion__delta span").first().innerText()).trim();
   const expectedRelation = rawRelation.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
   record(
@@ -228,7 +249,7 @@ const prove140 = async () => {
       && renderedRelation === expectedRelation,
     `rendered=${JSON.stringify({ relation: renderedRelation, ...semanticValues })} raw=${JSON.stringify(rawDelta)}`,
   );
-  record("140:runtime-disclosure", true, "runtime exact identity and server-owned semantic delta are verified through a real Technical details interaction");
+  record("140:runtime-disclosure", true, "runtime exact identity and canonical server-owned semantic delta are verified through a real Technical details interaction");
   await runtimeSurface.getByRole("heading", { name: "Development pipeline", exact: true }).waitFor({ state: "visible" });
   record("140:runtime-surface", true, "real Coding Runtime workbench renders server-owned 119 semantic delta and 120 pipeline projection surface");
   await assertNoCodingMutationButtons("140:runtime");
