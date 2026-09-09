@@ -12,18 +12,25 @@ function finiteNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-export function runtimeDeltaSummary(value: UnknownRecord) {
+function readableCode(value: string | null | undefined, fallback: string): string {
+  if (!value) return fallback;
+  return value.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+export function runtimeDeltaSummary(value: UnknownRecord, alignment = "unknown", reason: string | null = null) {
   const files = records(value.files).map((file) => ({
     name: String(file.filename ?? file.path ?? "Unnamed file"),
     status: typeof file.status === "string" ? file.status : null
   }));
+  const relation = typeof value.relation === "string" ? value.relation : alignment;
   return {
-    relation: typeof value.relation === "string" ? value.relation : "unknown",
+    relation,
     aheadBy: finiteNumber(value.ahead_by),
     behindBy: finiteNumber(value.behind_by),
     files,
     status: typeof value.status === "string" ? value.status : "unavailable",
-    partial: value.partial === true
+    partial: value.partial === true,
+    explanation: relation === "unknown" && reason ? readableCode(reason, "Runtime relationship unavailable") : null
   };
 }
 
@@ -64,16 +71,21 @@ export function savedPaidAiSummary(paidAiEnabled: boolean, monthlyBudgetUsd: num
     : "Paid AI is disabled in saved settings; no paid external request is permitted.";
 }
 
+function persistedCredentialMeaning(persistedState: string): string {
+  if (persistedState === "usable") return "Stored credential ready";
+  if (persistedState === "corrupted") return "Stored credential damaged";
+  if (persistedState === "unavailable") return "Secure credential store unavailable";
+  if (persistedState === "not_supported") return "Stored credentials not supported";
+  if (persistedState === "absent") return "No stored credential";
+  return "Stored credential state unavailable";
+}
+
 export function credentialMeaning(effectiveSource: string, persistedState: string): string {
-  if (effectiveSource === "not_required") return "No credential is required.";
-  if (effectiveSource === "environment") return "An environment credential is active.";
-  if (effectiveSource === "secure_persisted") return persistedState === "usable"
-    ? "A securely stored credential is ready to use."
-    : "A securely stored credential exists but is not usable.";
-  if (effectiveSource === "invalid") return "The available environment credential is invalid.";
-  if (persistedState === "corrupted") return "The stored credential is damaged and cannot be used.";
-  if (persistedState === "unavailable") return "The secure credential store cannot currently be reached.";
-  if (persistedState === "not_supported") return "This provider does not support stored credentials.";
-  if (persistedState === "absent" || effectiveSource === "absent") return "No credential is configured.";
-  return "Credential availability could not be determined.";
+  const persisted = persistedCredentialMeaning(persistedState);
+  if (effectiveSource === "not_required") return `No credential required · ${persisted}.`;
+  if (effectiveSource === "environment") return `Environment credential active · ${persisted}.`;
+  if (effectiveSource === "secure_persisted") return `Securely stored credential active · ${persisted}.`;
+  if (effectiveSource === "invalid") return `Environment credential invalid · ${persisted}.`;
+  if (effectiveSource === "absent") return `No effective credential · ${persisted}.`;
+  return `Credential availability unknown · ${persisted}.`;
 }
