@@ -29,14 +29,49 @@ jobs:
           path: trusted
           persist-credentials: false
 
-      - name: Fetch and admit durable payload
+      - name: Acquire bounded GitHub records in the workflow plane
+        uses: actions/github-script@v7
         env:
-          GITHUB_TOKEN: ${{ github.token }}
+          ACQUISITION_PATH: ${{ runner.temp }}/acquisition.json
+        with:
+          script: |
+            const fs = require('fs');
+            const prNumber = Number('${{ inputs.pr }}');
+            const commentId = Number('${{ inputs.payload_comment_id }}');
+            if (!Number.isSafeInteger(prNumber) || prNumber < 1) throw new Error('invalid PR input');
+            if (!Number.isSafeInteger(commentId) || commentId < 1) throw new Error('invalid comment input');
+            const comment = await github.rest.issues.getComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: commentId,
+            });
+            const pr = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber,
+            });
+            const record = {
+              comment: {
+                issue_url: comment.data.issue_url,
+                body: comment.data.body ?? '',
+              },
+              pr: {
+                state: pr.data.state,
+                head: {
+                  ref: pr.data.head.ref,
+                  sha: pr.data.head.sha,
+                  repo: { full_name: pr.data.head.repo?.full_name ?? '' },
+                },
+              },
+            };
+            fs.writeFileSync(process.env.ACQUISITION_PATH, JSON.stringify(record), {encoding: 'utf8', mode: 0o600});
+
+      - name: Admit durable payload locally
         run: |
-          python trusted/scripts/cloud_delivery_bridge.py fetch \
+          python trusted/scripts/cloud_delivery_bridge.py admit \
             --repository "$GITHUB_REPOSITORY" \
             --pr '${{ inputs.pr }}' \
-            --comment-id '${{ inputs.payload_comment_id }}' \
+            --acquisition "$RUNNER_TEMP/acquisition.json" \
             --patch-out "$RUNNER_TEMP/delivery.patch" \
             --manifest-out "$RUNNER_TEMP/delivery.json"
 
