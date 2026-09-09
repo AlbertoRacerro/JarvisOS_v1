@@ -72,8 +72,8 @@ const prove113 = async () => {
   const response = await page.goto(`${baseUrl}${route}`, { waitUntil: "networkidle", timeout: 30_000 });
   record("113:http", Boolean(response) && response.status() < 500, `status=${response?.status() ?? "none"}`);
   record("113:spa-path", new URL(page.url()).pathname === route, `url=${page.url()}`);
-  await page.getByText("No exact model versions", { exact: true }).waitFor({ state: "visible" });
-  record("113:empty-state", true, "workspace-only seed renders explicit no-exact-version state");
+  await page.getByText("No model versions", { exact: true }).waitFor({ state: "visible" });
+  record("113:empty-state", true, "workspace-only seed renders explicit no-model-version state");
   await screenshot("empty");
 
   if (!seedScript || !proofPython || !candidateUser) throw new Error("113 proof requires bounded unprivileged seed identity");
@@ -93,16 +93,21 @@ const prove113 = async () => {
   const versionB = page.getByRole("button", { name: /Version B exact/ });
   await versionA.waitFor({ state: "visible" });
   await versionB.waitFor({ state: "visible" });
-  record("113:two-exact-versions", (await versionA.count()) === 1 && (await versionB.count()) === 1, "two exact version choices are distinguishable");
+  record("113:two-exact-versions", (await versionA.count()) === 1 && (await versionB.count()) === 1, "two human-labelled exact version choices are distinguishable");
 
+  const dossier = page.getByRole("region", { name: "Version dossier" });
   await versionA.click();
-  await page.getByText("proof-version-a", { exact: true }).waitFor({ state: "visible" });
-  record("113:select-a-exact-identity", await versionA.getAttribute("aria-pressed") === "true", "Version A selection owns exact proof-version-a dossier identity");
+  record("113:select-a", await versionA.getAttribute("aria-pressed") === "true", "Version A remains the selected exact dossier");
+  await dossier.locator("details").first().getByText("Technical details", { exact: true }).click();
+  await dossier.getByText("proof-version-a", { exact: true }).waitFor({ state: "visible" });
+  record("113:select-a-exact-identity", true, "Version A exact identity is available through the real Technical details disclosure");
 
   await versionB.click();
-  await page.getByText("proof-version-b", { exact: true }).waitFor({ state: "visible" });
-  record("113:select-b-exact-identity", await versionB.getAttribute("aria-pressed") === "true", "Version B selection owns exact proof-version-b dossier identity");
+  record("113:select-b", await versionB.getAttribute("aria-pressed") === "true", "Version B remains the selected exact dossier");
   record("113:a-deselected", await versionA.getAttribute("aria-pressed") === "false", "Version A is no longer the selected dossier");
+  await dossier.locator("details").first().getByText("Technical details", { exact: true }).click();
+  await dossier.getByText("proof-version-b", { exact: true }).waitFor({ state: "visible" });
+  record("113:select-b-exact-identity", true, "Version B exact identity is available through the real Technical details disclosure");
 
   const body = (await page.locator("body").innerText()).toLowerCase();
   const forbidden = ["edit model", "save model", "approve model", "run model", "provider key", "git push", "filesystem"];
@@ -126,9 +131,16 @@ const prove124 = async () => {
     record(`124:provider:${providerId}`, (await row.count()) === 1, `canonical provider row ${providerId} is rendered once`);
   }
 
-  await page.getByRole("heading", { name: "Scaleway credential", exact: true }).waitFor({ state: "visible" });
-  await page.getByText("Effective source", { exact: true }).waitFor({ state: "visible" });
-  await page.getByText("Persisted state", { exact: true }).waitFor({ state: "visible" });
+  const credentialCard = page.locator('[data-provider-credential-owner="scaleway"]');
+  await credentialCard.getByRole("heading", { name: "Scaleway credential", exact: true }).waitFor({ state: "visible" });
+  const credentialSummary = credentialCard.locator(".settings-card__summary");
+  await credentialSummary.waitFor({ state: "visible" });
+  record("124:credential-human-summary", (await credentialSummary.innerText()).trim().length > 0, "credential state has a readable primary summary");
+  const credentialDetails = credentialCard.locator("details").first();
+  await credentialDetails.getByText("Technical details", { exact: true }).click();
+  await credentialDetails.getByText(/^Effective source code · /).waitFor({ state: "visible" });
+  await credentialDetails.getByText(/^Persisted state code · /).waitFor({ state: "visible" });
+  record("124:credential-technical-disclosure", true, "canonical credential codes are available only after a real disclosure interaction");
   await page.getByRole("heading", { name: "Current usage", exact: true }).waitFor({ state: "visible" });
 
   const passwordInput = page.getByLabel("Replace API key");
@@ -152,9 +164,14 @@ const prove140 = async () => {
   const repositoryResponse = await page.goto(`${baseUrl}${repositoryRoute}`, { waitUntil: "networkidle", timeout: 30_000 });
   record("140:repository-http", Boolean(repositoryResponse) && repositoryResponse.status() < 500, `status=${repositoryResponse?.status() ?? "none"}`);
   record("140:repository-spa-path", new URL(page.url()).pathname === repositoryRoute, `url=${page.url()}`);
-  await page.getByTestId("coding-repository-surface").waitFor({ state: "visible" });
-  await page.getByText("Server-owned 118 repository truth", { exact: true }).waitFor({ state: "visible" });
-  await page.getByText("Repository browsing is context-neutral. These explicit actions are exact-base 111/123 operations; they do not commit, apply, execute, push, create a PR, merge, or mutate STATUS.", { exact: true }).waitFor({ state: "visible" });
+  const repositorySurface = page.getByTestId("coding-repository-surface");
+  await repositorySurface.waitFor({ state: "visible" });
+  await repositorySurface.getByText("Server-owned 118 repository truth", { exact: true }).waitFor({ state: "visible" });
+  await repositorySurface.getByText("Repository browsing is context-neutral. These explicit actions are exact-base 111/123 operations; they do not commit, apply, execute, push, create a PR, merge, or mutate STATUS.", { exact: true }).waitFor({ state: "visible" });
+  const repositoryDetails = repositorySurface.locator("details").first();
+  await repositoryDetails.getByText("Technical details", { exact: true }).click();
+  await repositoryDetails.getByText(/^Resolved commit · [0-9a-f]{40}$/).waitFor({ state: "visible" });
+  record("140:repository-disclosure", true, "repository machine identity is available through a real Technical details interaction");
   record("140:repository-surface", true, "real Coding Repository workbench renders accepted server-owned 118 and explicit 111/123 authority boundary");
   await assertNoCodingMutationButtons("140:repository");
   await screenshot("repository");
@@ -163,10 +180,18 @@ const prove140 = async () => {
   const runtimeResponse = await page.goto(`${baseUrl}${runtimeRoute}`, { waitUntil: "networkidle", timeout: 30_000 });
   record("140:runtime-http", Boolean(runtimeResponse) && runtimeResponse.status() < 500, `status=${runtimeResponse?.status() ?? "none"}`);
   record("140:runtime-spa-path", new URL(page.url()).pathname === runtimeRoute, `url=${page.url()}`);
-  await page.getByTestId("coding-runtime-surface").waitFor({ state: "visible" });
-  await page.getByText("Alignment is rendered exactly from 119. The browser performs no SHA ancestry or cleanliness inference.", { exact: true }).waitFor({ state: "visible" });
-  await page.getByRole("heading", { name: "Development pipeline", exact: true }).waitFor({ state: "visible" });
-  record("140:runtime-surface", true, "real Coding Runtime workbench renders server-owned 119 relation and 120 pipeline projection surface");
+  const runtimeSurface = page.getByTestId("coding-runtime-surface");
+  await runtimeSurface.waitFor({ state: "visible" });
+  const semanticSummary = runtimeSurface.locator(".final-fusion__summary-strip").first();
+  await semanticSummary.waitFor({ state: "visible" });
+  const semanticText = await semanticSummary.innerText();
+  record("140:runtime-semantic-summary", semanticText.includes("Ahead ·") && semanticText.includes("Behind ·") && semanticText.includes("Changed files ·"), `summary=${JSON.stringify(semanticText)}`);
+  const runtimeDetails = runtimeSurface.locator("details").first();
+  await runtimeDetails.getByText("Technical details", { exact: true }).click();
+  await runtimeDetails.getByText(/^Local commit · /).waitFor({ state: "visible" });
+  record("140:runtime-disclosure", true, "runtime exact identity is available through a real Technical details interaction");
+  await runtimeSurface.getByRole("heading", { name: "Development pipeline", exact: true }).waitFor({ state: "visible" });
+  record("140:runtime-surface", true, "real Coding Runtime workbench renders server-owned 119 semantic delta and 120 pipeline projection surface");
   await assertNoCodingMutationButtons("140:runtime");
   await screenshot("runtime");
 };
@@ -220,11 +245,11 @@ for (const path of artifacts) {
 }
 
 const seedVersion = scenario === "113-memory-models"
-  ? "113-workspace-then-two-exact-versions-v1"
+  ? "113-workspace-then-two-exact-versions-v2"
   : scenario === "124-settings-ai"
-    ? "124-production-settings-owner-projection-v1"
+    ? "124-production-settings-owner-projection-v2"
     : scenario === "140-coding"
-      ? "140-production-routes-no-static-substitute-v1"
+      ? "140-production-routes-semantic-disclosures-v2"
       : "not-run-refused-v1";
 
 const manifest = {
