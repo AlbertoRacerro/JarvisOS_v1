@@ -222,7 +222,7 @@ jobs:
       - name: Checkout frozen trusted bridge owner
         uses: actions/checkout@v4
         with:
-          ref: ${{ needs.admit.outputs.trusted_sha }}
+          ref: ${{ github.sha }}
           path: trusted
           persist-credentials: false
 
