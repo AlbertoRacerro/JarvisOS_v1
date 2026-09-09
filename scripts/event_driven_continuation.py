@@ -346,7 +346,8 @@ def run(payload: object, *, repository: str, client: GitHubClient) -> str:
 
 def main() -> int:
     event_path = os.getenv("GITHUB_EVENT_PATH", "")
-    repository = os.getenv("GITHUB_REPOSITORY", "")n    token = os.getenv("GITHUB_TOKEN", "")
+    repository = os.getenv("GITHUB_REPOSITORY", "")
+    token = os.getenv("GITHUB_TOKEN", "")
     if not event_path:
         raise WakeError("GITHUB_EVENT_PATH is missing")
     try:
