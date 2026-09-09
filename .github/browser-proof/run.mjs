@@ -131,7 +131,7 @@ const prove124 = async () => {
     const url = new URL(candidate.url());
     return candidate.request().method() === "GET"
       && url.origin === new URL(baseUrl).origin
-      && url.pathname === "/api/ai/provider-settings";
+      && url.pathname === "/ai/provider-settings";
   });
   const response = await page.goto(`${baseUrl}${route}`, { waitUntil: "networkidle", timeout: 30_000 });
   const providerSettingsResponse = await providerSettingsResponsePromise;
