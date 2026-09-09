@@ -171,16 +171,16 @@ def project_canonical_ai_status(status: AIStatusRead) -> AIStatusRead:
     projection = project_egress_availability(provider_id, registry=registry)
     update: dict[str, object] = {
         "spend_month_to_date_usd": projection.global_actual_cost_usd,
+        "budget_status": (
+            "monthly_budget_exhausted"
+            if projection.budget_exhausted
+            else "within_budget"
+        ),
     }
     if provider is None or provider.requires_network:
         update.update(
             external_calls_allowed=projection.available,
             blocking_reason=projection.blocking_reason,
-            budget_status=(
-                "monthly_budget_exhausted"
-                if projection.budget_exhausted
-                else "within_budget"
-            ),
         )
     return status.model_copy(update=update)
 

@@ -536,6 +536,7 @@ def test_read_availability_blocks_exact_provider_caps_124(
     )
     token_projection = egress_persistence.project_egress_availability("deepseek")
     assert token_projection.blocking_reason == "provider_monthly_token_cap_exceeded"
+    assert token_projection.budget_exhausted is False
 
     monkeypatch.setattr(
         egress_persistence,
@@ -544,6 +545,51 @@ def test_read_availability_blocks_exact_provider_caps_124(
     )
     cost_projection = egress_persistence.project_egress_availability("deepseek")
     assert cost_projection.blocking_reason == "provider_monthly_cost_cap_exceeded"
+    assert cost_projection.budget_exhausted is False
+
+
+@pytest.mark.parametrize("provider_id", ("fake", "local_ollama"))
+def test_non_network_status_overlays_independent_global_budget_124(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    provider_id: str,
+) -> None:
+    from app.modules.ai import egress_persistence
+    from app.modules.ai.gateway import AIGateway
+
+    _set_availability_settings_124(
+        policy_mode="FAST_DEV",
+        monthly_api_budget_usd=5.0,
+        api_spend_month_to_date_usd=0.0,
+        provider_mode=provider_id,
+    )
+    baseline = AIGateway().status().model_copy(
+        update={
+            "provider_id": provider_id,
+            "external_calls_allowed": True,
+            "blocking_reason": None,
+            "budget_status": "within_budget",
+        }
+    )
+    monkeypatch.setattr(AIGateway, "status", lambda self: baseline)
+    monkeypatch.setattr(
+        egress_persistence,
+        "_budget_snapshot",
+        lambda *args, **kwargs: _snapshot(global_actual=4.0, global_reserved=1.0),
+    )
+
+    projection = egress_persistence.project_egress_availability(provider_id)
+    assert projection.available is True
+    assert projection.blocking_reason is None
+    assert projection.budget_exhausted is True
+
+    status = client.get("/ai/status")
+    assert status.status_code == 200
+    payload = status.json()
+    assert payload["provider_id"] == provider_id
+    assert payload["external_calls_allowed"] is True
+    assert payload["blocking_reason"] is None
+    assert payload["budget_status"] == "monthly_budget_exhausted"
 
 
 def test_read_availability_blocks_exact_scaleway_caps_124(
@@ -576,6 +622,7 @@ def test_read_availability_blocks_exact_scaleway_caps_124(
     )
     monthly_projection = egress_persistence.project_egress_availability("scaleway")
     assert monthly_projection.blocking_reason == "scaleway_monthly_token_cap_exceeded"
+    assert monthly_projection.budget_exhausted is False
 
     _set_availability_settings_124(
         scaleway_monthly_token_cap=20,
@@ -583,6 +630,7 @@ def test_read_availability_blocks_exact_scaleway_caps_124(
     )
     hard_stop_projection = egress_persistence.project_egress_availability("scaleway")
     assert hard_stop_projection.blocking_reason == "scaleway_hard_stop_token_cap_exceeded"
+    assert hard_stop_projection.budget_exhausted is False
 
 
 def test_disabled_policy_blocks_credential_free_providers_124(client: TestClient) -> None:

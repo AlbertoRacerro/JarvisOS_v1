@@ -122,20 +122,6 @@ class _AvailabilityProjectionInputs:
     projected_output_tokens: int = 0
 
 
-_BUDGET_BLOCKING_REASONS = frozenset(
-    {
-        "monthly_budget_zero",
-        "global_monthly_cost_cap_exceeded",
-        "provider_monthly_token_cap_exceeded",
-        "provider_monthly_cost_cap_exceeded",
-        "scaleway_monthly_token_cap_zero",
-        "scaleway_hard_stop_token_cap_zero",
-        "scaleway_monthly_token_cap_exceeded",
-        "scaleway_hard_stop_token_cap_exceeded",
-    }
-)
-
-
 def _global_budget_exhausted(
     connection: sqlite3.Connection,
     *,
@@ -215,9 +201,7 @@ def project_egress_availability(
         blocking_reason=blocking_reason,
         global_actual_cost_usd=global_actual,
         global_reserved_cost_usd=snapshot.global_reserved_cost_usd,
-        budget_exhausted=(
-            global_budget_exhausted or blocking_reason in _BUDGET_BLOCKING_REASONS
-        ),
+        budget_exhausted=global_budget_exhausted,
     )
 
 
