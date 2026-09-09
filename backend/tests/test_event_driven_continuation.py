@@ -177,6 +177,17 @@ def test_latest_valid_owner_delivery_request_wins() -> None:
     ) == mod.DeliveryRequest(77, HEAD, PAYLOAD_ID, second_sha)
 
 
+def test_malformed_zero_payload_request_is_ignored_without_poisoning_valid_request() -> None:
+    comments = [
+        payload_comment(),
+        owner_comment(delivery_request(payload=0), comment_id=922),
+        owner_comment(delivery_request(), comment_id=923),
+    ]
+    assert mod.requested_delivery(
+        comments, repository=REPOSITORY, pr_number=77, head_sha=HEAD
+    ) == mod.DeliveryRequest(77, HEAD, PAYLOAD_ID, PAYLOAD_SHA256)
+
+
 def test_missing_referenced_payload_comment_is_not_actionable() -> None:
     comments = [owner_comment(delivery_request())]
     assert (
