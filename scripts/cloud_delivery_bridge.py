@@ -39,6 +39,8 @@ MAX_PATCH_BYTES = 60_000
 MAX_PATHS = 32
 ALLOWED_PROFILES = {"frontend-143", "frontend", "backend", "docs"}
 EXTRA_CONTROL_PATHS = {
+    ".gitattributes",
+    ".gitmodules",
     "scripts/cloud_delivery_bridge.py",
     "backend/tests/test_cloud_delivery_bridge.py",
     ".github/workflows/cloud-delivery-bridge.yml",
@@ -76,6 +78,15 @@ def _extract_fence(body: str, opening: str, closing: str, *, start: int = 0) -> 
     return body[begin:end]
 
 
+def _assert_unambiguous_paths(paths: tuple[str, ...]) -> None:
+    for raw in paths:
+        if not raw or raw.startswith(('/', '\\')) or '\\' in raw:
+            raise BridgeError("changed_paths contain an ambiguous path")
+        parts = raw.split('/')
+        if any(part in {'', '.', '..'} for part in parts):
+            raise BridgeError("changed_paths contain an ambiguous path")
+
+
 def parse_payload(body: str) -> Payload:
     if MARKER not in body:
         raise BridgeError("delivery marker missing")
@@ -110,6 +121,7 @@ def parse_payload(body: str) -> Payload:
         raise BridgeError("validation_profile is not admitted")
     if not changed or len(changed) > MAX_PATHS or len(set(changed)) != len(changed):
         raise BridgeError("changed_paths must be a non-empty unique bounded list")
+    _assert_unambiguous_paths(changed)
     patch_bytes = patch.encode("utf-8")
     if len(patch_bytes) > MAX_PATCH_BYTES:
         raise BridgeError("patch exceeds bounded payload size")
