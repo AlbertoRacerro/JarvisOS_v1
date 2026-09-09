@@ -16,6 +16,7 @@ import {
 } from "../api/settings";
 import InlineNotice from "../components/ui/InlineNotice";
 import Surface from "../components/ui/Surface";
+import { credentialMeaning, providerLocation, savedPaidAiSummary } from "../operatorSemantics";
 import {
   ACCENT_OPTIONS,
   ACCENT_PRESETS,
@@ -84,23 +85,7 @@ function displayError(caught: unknown, fallback: string): string {
 }
 
 function credentialSummary(provider: ProviderSettings["providers"][number]): string {
-  if (provider.credential.effective_source === "not_required") return "Credential not required";
-  if (provider.credential.effective_source === "environment") {
-    return `Environment active · persisted ${provider.credential.persisted_state}`;
-  }
-  if (provider.credential.effective_source === "invalid") {
-    return `Environment credential invalid · persisted ${provider.credential.persisted_state}`;
-  }
-  if (provider.credential.effective_source === "unknown") {
-    return `Credential state unavailable · persisted ${provider.credential.persisted_state}`;
-  }
-  if (provider.credential.effective_source === "secure_persisted") {
-    return `Secure persisted · ${provider.credential.persisted_state}`;
-  }
-  if (provider.credential.persisted_state === "not_supported") {
-    return "Environment credential unavailable";
-  }
-  return `No effective credential · persisted ${provider.credential.persisted_state}`;
+  return credentialMeaning(provider.credential.effective_source, provider.credential.persisted_state);
 }
 
 function providerName(providerId: string): string {
@@ -116,7 +101,7 @@ function readableCode(value: string | null | undefined, fallback: string): strin
 }
 
 function capabilitySummary(provider: ProviderSettings["providers"][number]): string {
-  const location = provider.execution_class === "local" ? "Runs locally" : "Uses a network service";
+  const location = providerLocation(provider.requires_network, provider.execution_class);
   return `${location} · ${provider.enabled ? "Available for permitted tasks" : "Disabled"}`;
 }
 
@@ -423,7 +408,8 @@ function Settings() {
         <Surface className="settings-card">
           <h2>AI permission & budget</h2>
           <p className="settings-card__summary">External calls: <strong>{providers?.external_calls_allowed ? "Allowed" : "Blocked"}</strong>{providers?.blocking_reason ? ` — ${readableCode(providers.blocking_reason, "Blocked by policy")}` : ""}</p>
-          <p className="settings-muted">{draft ? (draft.paid_ai_enabled ? `Paid AI may run within the $${draft.monthly_api_budget_usd} monthly limit.` : "Paid AI is disabled; no paid external request is permitted.") : "Checking budget policy."}</p>
+          <p className="settings-muted">{settings ? savedPaidAiSummary(settings.paid_ai_enabled, settings.monthly_api_budget_usd) : "Checking budget policy."}</p>
+          {settings && draft && (draft.paid_ai_enabled !== settings.paid_ai_enabled || draft.monthly_api_budget_usd !== String(settings.monthly_api_budget_usd)) ? <p className="settings-muted">Pending unsaved draft; current permission is unchanged until Save.</p> : null}
           {providers ? <details><summary>Technical details</summary><p>Policy mode · {providers.policy_mode}</p><p>Blocking reason code · {providers.blocking_reason ?? "none"}</p></details> : null}
           {draft && (
             <div className="settings-fields">

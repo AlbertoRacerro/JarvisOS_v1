@@ -22,6 +22,7 @@ import {
   type RepositoryTruthResult,
   type RuntimeTruth
 } from "../api/coding";
+import { pullRequestEvidenceSummary, runtimeDeltaSummary } from "../operatorSemantics";
 
 type Props = Readonly<{
   mode: "repository" | "runtime";
@@ -109,10 +110,6 @@ function humanize(value: unknown, fallback = "Unknown"): string {
   return value.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function count(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
-
 function TechnicalDetails({ children }: Readonly<{ children: ReactNode }>) {
   return <details><summary>Technical details</summary>{children}</details>;
 }
@@ -122,6 +119,10 @@ function RawJson({ value }: Readonly<{ value: unknown }>) {
 }
 
 function EvidenceSummary({ value, label }: Readonly<{ value: Record<string, unknown>; label: string }>) {
+  if ("pr" in value) {
+    const summary = pullRequestEvidenceSummary(value);
+    return <div className="final-fusion__source-empty"><strong>{summary.title || label}</strong><span>{humanize(summary.state)} · Checks: {summary.checks.passing} passing, {summary.checks.failing} failing, {summary.checks.pending} pending, {summary.checks.stale} stale · Reviews: {summary.reviews.approved} approved, {summary.reviews.blocking} blocking, {summary.reviews.stale} stale</span><RawJson value={value} /></div>;
+  }
   const payload = typeof value.payload === "object" && value.payload !== null ? value.payload as Record<string, unknown> : value;
   const state = payload.state ?? payload.status ?? value.state ?? "available";
   const title = payload.title ?? payload.name ?? payload.summary ?? label;
@@ -471,18 +472,16 @@ function RuntimeSurface() {
   const remoteSha = exactSha(remote.resolved_sha);
   const delta: Record<string, unknown> = runtime?.semantic_delta ?? {};
   const relation = runtime?.alignment ?? "unknown";
-  const semanticRelation = String(delta.relationship ?? delta.relation ?? relation);
-  const ahead = count(delta.ahead_count ?? delta.ahead);
-  const behind = count(delta.behind_count ?? delta.behind);
-  const changedFiles = count(delta.changed_file_count ?? delta.changed_files);
+  const semanticDelta = runtimeDeltaSummary(delta);
 
   return <div className="final-fusion__workbench final-fusion__workbench--coding" data-testid="coding-runtime-surface">
     <Panel title="Runtime" status={loading ? "Loading" : runtimeError ? "Read error" : runtime?.observer_status ?? "Unknown"}>
-      <div className="final-fusion__repo-status"><div><strong>JarvisOS runtime identity</strong><span>{CODING_REPOSITORY} · target {CODING_TARGET_REF}</span></div><span className={relation === "unknown" ? "final-fusion__unknown" : ""}>{relation}</span></div>
-      <section className="final-fusion__compare"><div className="final-fusion__version-card"><small>Running workspace</small><strong>{humanize(live.branch ?? live.head_state, "Local runtime")}</strong><p>The process is using the locally observed workspace.</p></div><div className="final-fusion__delta">→<span>{humanize(semanticRelation)}</span></div><div className="final-fusion__version-card is-remote"><small>Tracked target</small><strong>{humanize(remote.requested_ref ?? CODING_TARGET_REF)}</strong><p>{humanize(runtime?.remote_status, "Remote status unknown")}</p></div></section>
-      <div className="final-fusion__summary-strip"><span>Ahead · {ahead ?? "Unknown"}</span><span>Behind · {behind ?? "Unknown"}</span><span>Changed files · {changedFiles ?? "Unknown"}</span><span>Evidence · {humanize(delta.availability ?? delta.status, runtime ? "Available" : "Unknown")}</span></div>
+      <div className="final-fusion__repo-status"><div><strong>JarvisOS runtime identity</strong><span>{CODING_REPOSITORY} · target {CODING_TARGET_REF}</span></div><span className={semanticDelta.relation === "unknown" ? "final-fusion__unknown" : ""}>{humanize(semanticDelta.relation)}</span></div>
+      <section className="final-fusion__compare"><div className="final-fusion__version-card"><small>Running workspace</small><strong>{humanize(live.branch ?? live.head_state, "Local runtime")}</strong><p>The process is using the locally observed workspace.</p></div><div className="final-fusion__delta">→<span>{humanize(semanticDelta.relation)}</span></div><div className="final-fusion__version-card is-remote"><small>Tracked target</small><strong>{humanize(remote.requested_ref ?? CODING_TARGET_REF)}</strong><p>{humanize(runtime?.remote_status, "Remote status unknown")}</p></div></section>
+      <div className="final-fusion__summary-strip"><span>Ahead · {semanticDelta.aheadBy ?? "Unknown"}</span><span>Behind · {semanticDelta.behindBy ?? "Unknown"}</span><span>Changed files shown · {semanticDelta.files.length}</span><span>Evidence · {semanticDelta.partial ? "Partial — file list is truncated" : humanize(semanticDelta.status)}</span></div>
+      {semanticDelta.files.length ? <div className="final-fusion__source-list">{semanticDelta.files.map((file) => <div className="final-fusion__source-empty" key={file.name}><strong>{file.name}</strong><span>{humanize(file.status, "Changed")}</span></div>)}</div> : null}
       <div className="final-fusion__context-note">Relationship and counts come directly from the server-owned 119 semantic delta. The browser performs no SHA ancestry or cleanliness inference.</div>
-      {runtime ? <TechnicalDetails><p>Local commit · {localSha}</p><p>Remote commit · {remoteSha}</p><p>Process startup identity · {exactSha(startup.git_sha)}</p><p>Root identity · {String(live.root_identity ?? startup.root_identity ?? "unknown")}</p><p>Observed at · {String(live.observed_at ?? "unknown")}</p><p>Remote observed at · {String(remote.observed_at ?? "unknown")}</p><p>Startup observed at · {String(startup.observed_at ?? "unknown")}</p><p>Provenance · {String(live.provenance ?? startup.provenance ?? "unknown")}</p><p>Dirty state · {String(live.dirty_state ?? "unknown")}</p><p>Reason · {String(runtime.reason ?? "none")}</p><p>Failure identity · {String(live.failure_code ?? startup.failure_code ?? "none")}</p><RawJson value={delta} /></TechnicalDetails> : null}
+      {runtime ? <TechnicalDetails><p>Runtime alignment code · {relation}</p><p>Local commit · {localSha}</p><p>Remote commit · {remoteSha}</p><p>Process startup identity · {exactSha(startup.git_sha)}</p><p>Root identity · {String(live.root_identity ?? startup.root_identity ?? "unknown")}</p><p>Observed at · {String(live.observed_at ?? "unknown")}</p><p>Remote observed at · {String(remote.observed_at ?? "unknown")}</p><p>Startup observed at · {String(startup.observed_at ?? "unknown")}</p><p>Provenance · {String(live.provenance ?? startup.provenance ?? "unknown")}</p><p>Dirty state · {String(live.dirty_state ?? "unknown")}</p><p>Reason · {String(runtime.reason ?? "none")}</p><p>Failure identity · {String(live.failure_code ?? startup.failure_code ?? "none")}</p><RawJson value={delta} /></TechnicalDetails> : null}
       {runtimeError ? <div className="final-fusion__source-empty" role="status"><strong>Runtime truth unavailable</strong><span>{runtimeError}</span></div> : null}
       <button type="button" onClick={() => void refresh()} disabled={loading}>Refresh runtime truth</button>
     </Panel>

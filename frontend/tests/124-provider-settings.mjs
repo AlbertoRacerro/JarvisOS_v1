@@ -7,6 +7,7 @@ import ts from "typescript";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const apiSource = fs.readFileSync(path.join(root, "src/api/settings.ts"), "utf8");
 const pageSource = fs.readFileSync(path.join(root, "src/pages/Settings.tsx"), "utf8");
+const semanticsSource = fs.readFileSync(path.join(root, "src/operatorSemantics.ts"), "utf8");
 const settingsCss = fs.readFileSync(path.join(root, "src/styles/final-settings.css"), "utf8");
 const shellCss = fs.readFileSync(path.join(root, "src/styles/final-fusion-shell-overrides.css"), "utf8");
 
@@ -101,18 +102,18 @@ assert.equal(deleteBlocked(false, false, { delete_persisted: false }), true);
 
 const summaryMatch = pageSource.match(/function credentialSummary\([\s\S]*?\n}\n\nfunction Settings/);
 assert.ok(summaryMatch, "credentialSummary must remain executable in the Settings projection");
-const summarySource = summaryMatch[0].replace(/\n\nfunction Settings$/, "\nexport { credentialSummary };\n");
+const summarySource = `${semanticsSource}\n${summaryMatch[0].replace(/\n\nfunction Settings$/, "\nexport { credentialSummary };\n")}`;
 const summaryModule = await importModuleSource(ts.transpileModule(summarySource, {
   compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022 }
 }).outputText);
 const notRequired = summaryModule.credentialSummary({
   credential: { effective_source: "not_required", persisted_state: "not_supported", key_present: false }
 });
-assert.equal(notRequired, "Credential not required");
+assert.equal(notRequired, "No credential is required.");
 const persisted = summaryModule.credentialSummary({
   credential: { effective_source: "secure_persisted", persisted_state: "usable", key_present: true }
 });
-assert.match(persisted, /Secure persisted/);
+assert.equal(persisted, "A securely stored credential is ready to use.");
 const invalid = summaryModule.credentialSummary({
   credential: { effective_source: "invalid", persisted_state: "usable", key_present: false }
 });
