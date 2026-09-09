@@ -25,13 +25,15 @@ assert.match(settings, /Provider code · \{provider\.provider_id\}/);
 assert.match(settings, /<details><summary>Technical details<\/summary>/);
 assert.doesNotMatch(settings, /<strong>\{provider\.provider_id\}<\/strong>/);
 
-const runtime = semantics.runtimeDeltaSummary({ relation: "ahead", ahead_by: 3, behind_by: 1, files: [{ filename: "frontend/a.ts", status: "modified" }], status: "available", partial: true });
+const runtime = semantics.runtimeDeltaSummary({ relation: "ahead", ahead_by: 3, behind_by: 1, files: [{ filename: "frontend/a.ts", status: "modified" }], status: "available", partial: true }, "ahead");
 assert.deepEqual(runtime, { relation: "ahead", aheadBy: 3, behindBy: 1, files: [{ name: "frontend/a.ts", status: "modified" }], status: "available", partial: true, explanation: null });
 const aligned = semantics.runtimeDeltaSummary({ status: "unavailable", files: [] }, "aligned", null);
 assert.equal(aligned.relation, "aligned");
 const unknown = semantics.runtimeDeltaSummary({ status: "unavailable", files: [] }, "unknown", "worktree_dirty");
 assert.equal(unknown.relation, "unknown");
 assert.match(unknown.explanation, /Worktree Dirty/);
+const invalidatedDelta = semantics.runtimeDeltaSummary({ relation: "ahead", ahead_by: 4, behind_by: 0, files: [{ filename: "stale.ts", status: "modified" }], status: "available", partial: true }, "unknown", "target_moved");
+assert.deepEqual(invalidatedDelta, { relation: "unknown", aheadBy: null, behindBy: null, files: [], status: "unavailable", partial: false, explanation: "Target Moved" });
 assert.doesNotMatch(semanticsSource, /ahead_count|changed_file_count|execution_class === "local"/);
 
 const evidence = semantics.pullRequestEvidenceSummary({
