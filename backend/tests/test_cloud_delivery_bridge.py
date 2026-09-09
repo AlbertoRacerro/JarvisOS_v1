@@ -190,6 +190,9 @@ def test_workflow_freezes_payload_before_untrusted_validation_and_separates_writ
     assert "npm run" not in admit
     assert "Bind validation strength to admitted paths" in admit
     assert "unsupported changed-path class" in admit
+    assert "INPUT_PR: ${{ inputs.pr }}" in admit
+    assert '--pr "$INPUT_PR"' in admit
+    assert "--pr '${{ inputs.pr }}'" not in admit
     assert "contents: read" in validate
     assert "contents: write" not in validate
     assert "persist-credentials: false" in validate
