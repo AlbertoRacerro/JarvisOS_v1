@@ -104,6 +104,38 @@ function partialLabel(partial: PartialEvidence): string | null {
   return labels.length ? `Partial evidence · ${labels.join(", ")}` : null;
 }
 
+function humanize(value: unknown, fallback = "Unknown"): string {
+  if (typeof value !== "string" || !value.trim()) return fallback;
+  return value.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function count(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function TechnicalDetails({ children }: Readonly<{ children: ReactNode }>) {
+  return <details><summary>Technical details</summary>{children}</details>;
+}
+
+function RawJson({ value }: Readonly<{ value: unknown }>) {
+  return <TechnicalDetails><pre className="final-fusion__searchbox">{JSON.stringify(value, null, 2)}</pre></TechnicalDetails>;
+}
+
+function EvidenceSummary({ value, label }: Readonly<{ value: Record<string, unknown>; label: string }>) {
+  const payload = typeof value.payload === "object" && value.payload !== null ? value.payload as Record<string, unknown> : value;
+  const state = payload.state ?? payload.status ?? value.state ?? "available";
+  const title = payload.title ?? payload.name ?? payload.summary ?? label;
+  const checks = Array.isArray(payload.checks) ? payload.checks.length : null;
+  const reviews = Array.isArray(payload.reviews) ? payload.reviews.length : null;
+  return <div className="final-fusion__source-empty"><strong>{String(title)}</strong><span>{humanize(state)}{checks !== null ? ` · ${checks} checks` : ""}{reviews !== null ? ` · ${reviews} reviews` : ""}</span><RawJson value={value} /></div>;
+}
+
+function PipelineSummary({ value }: Readonly<{ value: Record<string, unknown> }>) {
+  const stages = Array.isArray(value.stages) ? value.stages as Record<string, unknown>[] : [];
+  const state = value.state ?? value.status ?? "available";
+  return <div><div className="final-fusion__source-empty"><strong>Pipeline {humanize(state)}</strong><span>{stages.length ? `${stages.length} reported stages` : "Server projection available"}</span></div>{stages.map((stage, index) => <div className="final-fusion__source-empty" key={String(stage.id ?? stage.name ?? index)}><strong>{String(stage.title ?? stage.name ?? `Stage ${index + 1}`)}</strong><span>{humanize(stage.state ?? stage.status)}{stage.reason ? ` · ${humanize(stage.reason)}` : ""}</span></div>)}<RawJson value={value} /></div>;
+}
+
 function RepositorySurface({ workspaceId }: Readonly<{ workspaceId: string | null }>) {
   const [repository] = useState(CODING_REPOSITORY);
   const [ref] = useState(CODING_TARGET_REF);
@@ -358,7 +390,8 @@ function RepositorySurface({ workspaceId }: Readonly<{ workspaceId: string | nul
 
   return <div className="final-fusion__workbench final-fusion__workbench--coding" data-testid="coding-repository-surface">
     <Panel title="Repository" status={busy ? "Loading" : repositoryReadError ? "Read error" : anyPartial ? "Partial" : truth ? "Exact READ" : "Unknown"}>
-      <div className="final-fusion__repo-status"><div><strong>{repository}</strong><span>requested ref · {ref}</span></div><span className={resolvedSha ? "" : "final-fusion__unknown"}>{resolvedSha ?? "Unknown"}</span></div>
+      <div className="final-fusion__repo-status"><div><strong>{repository}</strong><span>Target branch · {ref}</span></div><span className={resolvedSha ? "" : "final-fusion__unknown"}>{truth ? "Exact repository state available" : "Repository state unknown"}</span></div>
+      {truth ? <TechnicalDetails><p>Requested ref · {ref}</p><p>Resolved commit · {resolvedSha ?? "Unknown"}</p><RawJson value={truth} /></TechnicalDetails> : null}
       <div className="final-fusion__toolbar-line"><span>Server-owned 118 repository truth</span><button type="button" onClick={() => void refresh()} disabled={busy}>Refresh exact truth</button></div>
       {partialLabel(partial) ? <div className="final-fusion__source-empty" role="status"><strong>{partialLabel(partial)}</strong><span>Truncated evidence is not presented as complete.</span></div> : null}
       {repositoryReadError ? <div className="final-fusion__source-empty" role="status"><strong>Repository read refused / unavailable</strong><span>{repositoryReadError}</span></div> : null}
@@ -366,7 +399,7 @@ function RepositorySurface({ workspaceId }: Readonly<{ workspaceId: string | nul
         <span>Tree path · {treePath || "Root"}</span>
         <div><button type="button" onClick={() => void openDirectory("")} disabled={!resolvedSha || !treePath}>Root</button><button type="button" onClick={() => void openDirectory(treePath.split("/").slice(0, -1).join("/"))} disabled={!resolvedSha || !treePath}>Up</button></div>
       </div>
-      <div className="final-fusion__source-list">{tree.length ? tree.map((entry) => entry.path ? <button type="button" className="final-fusion__disclosure-row" key={entry.path} onClick={() => entry.type === "file" ? void openFile(entry.path!) : entry.type === "dir" ? void openDirectory(entry.path!) : undefined} disabled={entry.type !== "file" && entry.type !== "dir"}><span>›</span><strong>{entry.path}</strong><em>{entry.type ?? "unknown"}{typeof entry.size === "number" ? ` · ${entry.size} B` : ""}</em></button> : null) : <div className="final-fusion__source-empty"><strong>No current tree evidence</strong></div>}</div>
+      <div className="final-fusion__source-list">{tree.length ? tree.map((entry) => entry.path ? <button type="button" className="final-fusion__disclosure-row" key={entry.path} onClick={() => entry.type === "file" ? void openFile(entry.path!) : entry.type === "dir" ? void openDirectory(entry.path!) : undefined} disabled={entry.type !== "file" && entry.type !== "dir"}><strong>{entry.path}</strong><em>{entry.type ?? "unknown"}{typeof entry.size === "number" ? ` · ${entry.size} B` : ""}</em></button> : null) : <div className="final-fusion__source-empty"><strong>No current tree evidence</strong></div>}</div>
     </Panel>
     <Panel title="File / search / PR evidence" status={evidenceError ? "Read error" : anyPartial ? "PARTIAL · READ only" : "READ only"}>
       <div className="final-fusion__toolbar-line"><span>Selected path · {selectedPath || "None"}</span>{safeUrl ? <a href={safeUrl} target="_blank" rel="noreferrer">Open server-validated GitHub path</a> : null}</div>
@@ -374,12 +407,12 @@ function RepositorySurface({ workspaceId }: Readonly<{ workspaceId: string | nul
       {repositoryErrors.file ? <div className="final-fusion__source-empty" role="status"><strong>File preview refused / unavailable</strong><span>{repositoryErrors.file}</span></div> : null}
       <div className="final-fusion__toolbar-line"><input aria-label="Literal repository search" value={literal} onChange={(event) => { searchGeneration.current += 1; setLiteral(event.target.value); setMatches([]); setRepositoryError("search", null); setPartial((current) => ({ ...current, search: false })); }} placeholder="Literal search" maxLength={512}/><button type="button" onClick={() => void runSearch()} disabled={!literal.trim() || !resolvedSha}>Search</button></div>
       {repositoryErrors.search ? <div className="final-fusion__source-empty" role="status"><strong>Repository search refused / unavailable</strong><span>{repositoryErrors.search}</span></div> : null}
-      <div className="final-fusion__source-list">{matches.map((match, index) => <div className="final-fusion__disclosure-row" key={`${match.path}:${match.offset}:${index}`}><span>›</span><strong>{match.path ?? "Unknown"}</strong><em>line {match.line ?? "?"}</em></div>)}</div>
+      <div className="final-fusion__source-list">{matches.map((match, index) => <div className="final-fusion__disclosure-row" key={`${match.path}:${match.offset}:${index}`}><strong>{match.path ?? "Unknown"}</strong><em>line {match.line ?? "?"}</em></div>)}</div>
       <div className="final-fusion__toolbar-line"><input aria-label="Pull request number" inputMode="numeric" value={prInput} onChange={(event) => { prEvidenceGeneration.current += 1; setPrInput(event.target.value); setPrEvidence(null); setRepositoryErrors((current) => ({ ...current, pr: null, checks: null, reviews: null })); setPartial((current) => ({ ...current, pr: false, checks: false, reviews: false })); }} placeholder="PR number"/><button type="button" onClick={() => void loadPr()} disabled={!prInput}>Load PR evidence</button></div>
       {repositoryErrors.pr ? <div className="final-fusion__source-empty" role="status"><strong>PR evidence refused / unavailable</strong><span>{repositoryErrors.pr}</span></div> : null}
       {repositoryErrors.checks ? <div className="final-fusion__source-empty" role="status"><strong>Checks evidence refused / unavailable</strong><span>{repositoryErrors.checks}</span></div> : null}
       {repositoryErrors.reviews ? <div className="final-fusion__source-empty" role="status"><strong>Reviews evidence refused / unavailable</strong><span>{repositoryErrors.reviews}</span></div> : null}
-      {prEvidence ? <pre className="final-fusion__searchbox">{JSON.stringify(prEvidence, null, 2)}</pre> : null}
+      {prEvidence ? <EvidenceSummary value={prEvidence} label={`Pull request ${prInput}`} /> : null}
     </Panel>
     <Panel title="Jarvis Coding" status={jarvisError ? "Action refused" : "READ / CONTEXT / PROPOSE only"}>
       <div className="final-fusion__context-note">Repository browsing is context-neutral. These explicit actions are exact-base 111/123 operations; they do not commit, apply, execute, push, create a PR, merge, or mutate STATUS.</div>
@@ -390,7 +423,7 @@ function RepositorySurface({ workspaceId }: Readonly<{ workspaceId: string | nul
       <textarea aria-label="Suggest modification intent" rows={4} maxLength={4000} value={intent} onChange={(event) => { proposalGeneration.current += 1; setProposal(null); setRepositoryError("proposal", null); setIntent(event.target.value); }} placeholder="Describe a bounded proposal for the selected path" />
       <button type="button" onClick={() => void suggest()} disabled={!workspaceId || !resolvedSha || !selectedPath || !intent.trim()}>Suggest modification</button>
       {repositoryErrors.proposal ? <div className="final-fusion__source-empty" role="status"><strong>Proposal refused / unavailable</strong><span>{repositoryErrors.proposal}</span></div> : null}
-      {proposal ? <pre className="final-fusion__searchbox">{JSON.stringify(proposal, null, 2)}</pre> : null}
+      {proposal ? <EvidenceSummary value={proposal} label="Modification proposal" /> : null}
     </Panel>
   </div>;
 }
@@ -436,29 +469,27 @@ function RuntimeSurface() {
   const remote: Record<string, unknown> = runtime?.remote ?? {};
   const localSha = exactSha(live.git_sha);
   const remoteSha = exactSha(remote.resolved_sha);
+  const delta: Record<string, unknown> = runtime?.semantic_delta ?? {};
   const relation = runtime?.alignment ?? "unknown";
+  const semanticRelation = String(delta.relationship ?? delta.relation ?? relation);
+  const ahead = count(delta.ahead_count ?? delta.ahead);
+  const behind = count(delta.behind_count ?? delta.behind);
+  const changedFiles = count(delta.changed_file_count ?? delta.changed_files);
 
   return <div className="final-fusion__workbench final-fusion__workbench--coding" data-testid="coding-runtime-surface">
     <Panel title="Runtime" status={loading ? "Loading" : runtimeError ? "Read error" : runtime?.observer_status ?? "Unknown"}>
       <div className="final-fusion__repo-status"><div><strong>JarvisOS runtime identity</strong><span>{CODING_REPOSITORY} · target {CODING_TARGET_REF}</span></div><span className={relation === "unknown" ? "final-fusion__unknown" : ""}>{relation}</span></div>
-      <section className="final-fusion__compare"><div className="final-fusion__version-card"><small>Local current · actually executed</small><strong>LOCAL · {localSha}</strong><code>{String(live.branch ?? live.head_state ?? "Unknown")}</code><p>Root identity · {String(live.root_identity ?? "unknown")}</p><p>Observed at · {String(live.observed_at ?? "unknown")}</p><p>Provenance · {String(live.provenance ?? "unknown")}</p><p>Failure identity · {String(live.failure_code ?? "none")}</p><p>Dirty state · {String(live.dirty_state ?? "unknown")}</p></div><div className="final-fusion__delta">→<span>{relation}</span></div><div className="final-fusion__version-card is-remote"><small>Remote target · server observed</small><strong>REMOTE · {remoteSha}</strong><code>{String(remote.requested_ref ?? CODING_TARGET_REF)}</code><p>Observed at · {String(remote.observed_at ?? "unknown")}</p><p>Remote status · {runtime?.remote_status ?? "unknown"}</p></div></section>
-      <div className="final-fusion__source-empty">
-        <strong>Process startup identity · {exactSha(startup.git_sha)}</strong>
-        <span>Root identity · {String(startup.root_identity ?? "unknown")}</span>
-        <span>Observed at · {String(startup.observed_at ?? "unknown")}</span>
-        <span>Ref · {String(startup.branch ?? startup.head_state ?? "Unknown")}</span>
-        <span>Provenance · {String(startup.provenance ?? "unknown")}</span>
-        <span>Failure identity · {String(startup.failure_code ?? "none")}</span>
-      </div>
-      <div className="final-fusion__context-note">Alignment is rendered exactly from 119. The browser performs no SHA ancestry or cleanliness inference.</div>
-      {runtime?.reason ? <div className="final-fusion__source-empty" role="status"><strong>Runtime relation reason · {runtime.reason}</strong><span>Worktree changed since start · {runtime.worktree_changed_since_start ? "yes" : "no"}</span></div> : null}
+      <section className="final-fusion__compare"><div className="final-fusion__version-card"><small>Running workspace</small><strong>{humanize(live.branch ?? live.head_state, "Local runtime")}</strong><p>The process is using the locally observed workspace.</p></div><div className="final-fusion__delta">→<span>{humanize(semanticRelation)}</span></div><div className="final-fusion__version-card is-remote"><small>Tracked target</small><strong>{humanize(remote.requested_ref ?? CODING_TARGET_REF)}</strong><p>{humanize(runtime?.remote_status, "Remote status unknown")}</p></div></section>
+      <div className="final-fusion__summary-strip"><span>Ahead · {ahead ?? "Unknown"}</span><span>Behind · {behind ?? "Unknown"}</span><span>Changed files · {changedFiles ?? "Unknown"}</span><span>Evidence · {humanize(delta.availability ?? delta.status, runtime ? "Available" : "Unknown")}</span></div>
+      <div className="final-fusion__context-note">Relationship and counts come directly from the server-owned 119 semantic delta. The browser performs no SHA ancestry or cleanliness inference.</div>
+      {runtime ? <TechnicalDetails><p>Local commit · {localSha}</p><p>Remote commit · {remoteSha}</p><p>Process startup identity · {exactSha(startup.git_sha)}</p><p>Root identity · {String(live.root_identity ?? startup.root_identity ?? "unknown")}</p><p>Observed at · {String(live.observed_at ?? "unknown")}</p><p>Remote observed at · {String(remote.observed_at ?? "unknown")}</p><p>Startup observed at · {String(startup.observed_at ?? "unknown")}</p><p>Provenance · {String(live.provenance ?? startup.provenance ?? "unknown")}</p><p>Dirty state · {String(live.dirty_state ?? "unknown")}</p><p>Reason · {String(runtime.reason ?? "none")}</p><p>Failure identity · {String(live.failure_code ?? startup.failure_code ?? "none")}</p><RawJson value={delta} /></TechnicalDetails> : null}
       {runtimeError ? <div className="final-fusion__source-empty" role="status"><strong>Runtime truth unavailable</strong><span>{runtimeError}</span></div> : null}
       <button type="button" onClick={() => void refresh()} disabled={loading}>Refresh runtime truth</button>
     </Panel>
     <Panel title="Development pipeline" status={pipelineError ? "Projection error" : pipeline ? "120 server projection" : "Unselected"}>
       <div className="final-fusion__toolbar-line"><input aria-label="Pipeline PR number" inputMode="numeric" value={prInput} onChange={(event) => { setPrInput(event.target.value); invalidatePipelineSelection(); }} placeholder="PR number"/><input aria-label="Pipeline spec id" value={specId} onChange={(event) => { setSpecId(event.target.value); invalidatePipelineSelection(); }} placeholder="Spec id"/><button type="button" onClick={() => void loadPipeline()} disabled={!prInput || !specId}>Load pipeline state</button></div>
       {pipelineError ? <div className="final-fusion__source-empty" role="status"><strong>Pipeline projection refused / unavailable</strong><span>{pipelineError}</span></div> : null}
-      {pipeline ? <pre className="final-fusion__searchbox">{JSON.stringify(pipeline, null, 2)}</pre> : <div className="final-fusion__source-empty"><strong>No pipeline selection</strong><span>No synthetic stages are shown.</span></div>}
+      {pipeline ? <PipelineSummary value={pipeline} /> : <div className="final-fusion__source-empty"><strong>No pipeline selection</strong><span>No synthetic stages are shown.</span></div>}
     </Panel>
   </div>;
 }

@@ -103,6 +103,23 @@ function credentialSummary(provider: ProviderSettings["providers"][number]): str
   return `No effective credential · persisted ${provider.credential.persisted_state}`;
 }
 
+function providerName(providerId: string): string {
+  if (providerId === "fake") return "Built-in test provider";
+  if (providerId === "ollama") return "Ollama (local)";
+  if (providerId === "scaleway") return "Scaleway";
+  return providerId.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function readableCode(value: string | null | undefined, fallback: string): string {
+  if (!value) return fallback;
+  return value.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function capabilitySummary(provider: ProviderSettings["providers"][number]): string {
+  const location = provider.execution_class === "local" ? "Runs locally" : "Uses a network service";
+  return `${location} · ${provider.enabled ? "Available for permitted tasks" : "Disabled"}`;
+}
+
 function Settings() {
   const mounted = useRef(true);
   const generation = useRef(0);
@@ -405,7 +422,9 @@ function Settings() {
 
         <Surface className="settings-card">
           <h2>AI permission & budget</h2>
-          <p className="settings-card__summary">External calls: <strong>{providers?.external_calls_allowed ? "Allowed" : "Blocked"}</strong>{providers?.blocking_reason ? ` — ${providers.blocking_reason}` : ""}</p>
+          <p className="settings-card__summary">External calls: <strong>{providers?.external_calls_allowed ? "Allowed" : "Blocked"}</strong>{providers?.blocking_reason ? ` — ${readableCode(providers.blocking_reason, "Blocked by policy")}` : ""}</p>
+          <p className="settings-muted">{draft ? (draft.paid_ai_enabled ? `Paid AI may run within the $${draft.monthly_api_budget_usd} monthly limit.` : "Paid AI is disabled; no paid external request is permitted.") : "Checking budget policy."}</p>
+          {providers ? <details><summary>Technical details</summary><p>Policy mode · {providers.policy_mode}</p><p>Blocking reason code · {providers.blocking_reason ?? "none"}</p></details> : null}
           {draft && (
             <div className="settings-fields">
               <label><span>Monthly API budget <small>USD</small></span><span className="settings-field"><input inputMode="decimal" value={draft.monthly_api_budget_usd} disabled={allMutationsBusy} onChange={(event) => setDraft({ ...draft, monthly_api_budget_usd: event.target.value })} /><button disabled={allMutationsBusy} onClick={() => void save("monthly_api_budget_usd")}>Save</button></span></label>
@@ -420,18 +439,18 @@ function Settings() {
 
         <Surface className="settings-card">
           <h2>Provider catalogue</h2>
-          <p className="settings-card__summary">Canonical registry projection. Credentials are status-only; provider tests remain separate.</p>
+          <p className="settings-card__summary">Available AI capabilities and the permission required to use them. Credentials are shown only as status.</p>
           <div className="settings-fields" data-provider-settings-list>
             {providers?.providers.map((provider) => (
               <div key={provider.provider_id} data-provider-id={provider.provider_id}>
-                <strong>{provider.provider_id}</strong>
-                <p className="settings-muted">{provider.kind} · {provider.execution_class} · {provider.enabled ? "enabled" : "disabled"}</p>
+                <strong>{providerName(provider.provider_id)}</strong>
+                <p className="settings-muted">{capabilitySummary(provider)}</p>
                 <p data-provider-egress-state={provider.external_calls_allowed ? "allowed" : "blocked"}>
                   Provider access: {provider.external_calls_allowed ? "Allowed" : "Blocked"}
-                  {provider.blocking_reason ? ` — ${provider.blocking_reason}` : ""}
+                  {provider.blocking_reason ? ` — ${readableCode(provider.blocking_reason, "Blocked by policy")}` : ""}
                 </p>
                 <p>{credentialSummary(provider)}</p>
-                {provider.credential.reason_code && <small>{provider.credential.reason_code}</small>}
+                <details><summary>Technical details</summary><p>Provider code · {provider.provider_id}</p><p>Kind · {provider.kind}</p><p>Execution class · {provider.execution_class}</p><p>Blocking reason code · {provider.blocking_reason ?? "none"}</p><p>Credential reason code · {provider.credential.reason_code ?? "none"}</p><p>Credential source code · {provider.credential.effective_source}</p><p>Persisted state code · {provider.credential.persisted_state}</p></details>
               </div>
             )) ?? <p>Checking provider registry.</p>}
           </div>
@@ -439,11 +458,8 @@ function Settings() {
 
         <Surface className="settings-card" data-provider-credential-owner="scaleway">
           <h2>Scaleway credential</h2>
-          <dl className="settings-facts">
-            <div><dt>Effective source</dt><dd>{scaleway?.credential.effective_source ?? secret?.effective_source ?? "checking"}</dd></div>
-            <div><dt>Persisted state</dt><dd>{scaleway?.credential.persisted_state ?? secret?.persisted_state ?? "checking"}</dd></div>
-            <div><dt>Storage mode</dt><dd>{secret?.storage_mode ?? "checking"}</dd></div>
-          </dl>
+          <p className="settings-card__summary">{scaleway ? credentialSummary(scaleway) : "Checking credential state."}</p>
+          <details><summary>Technical details</summary><p>Effective source code · {scaleway?.credential.effective_source ?? secret?.effective_source ?? "checking"}</p><p>Persisted state code · {scaleway?.credential.persisted_state ?? secret?.persisted_state ?? "checking"}</p><p>Storage mode · {secret?.storage_mode ?? "checking"}</p><p>Reason code · {scaleway?.credential.reason_code ?? secret?.reason_code ?? "none"}</p></details>
           <form className="settings-secret" onSubmit={replaceCredential}>
             <label>Replace API key<input ref={credentialInputRef} type="password" autoComplete="new-password" value={apiKey} disabled={allMutationsBusy || !scaleway?.credential_capabilities.replace_persisted} onChange={(event) => setApiKey(event.target.value)} /></label>
             <button disabled={allMutationsBusy || !apiKey.trim() || !scaleway?.credential_capabilities.replace_persisted}>Store securely</button>
@@ -465,9 +481,10 @@ function Settings() {
           <dl className="settings-facts">
             <div><dt>Spend this month</dt><dd>${providers?.spend_month_to_date_usd ?? status?.spend_month_to_date_usd ?? 0}</dd></div>
             <div><dt>Scaleway token usage</dt><dd>{status?.usage_total_tokens ?? 0}</dd></div>
-            <div><dt>Budget status</dt><dd>{status?.budget_status ?? "checking"}</dd></div>
-            <div><dt>Default provider</dt><dd>{providers?.default_provider_id ?? status?.provider_id ?? "checking"}</dd></div>
+            <div><dt>Budget status</dt><dd>{readableCode(status?.budget_status, "Checking")}</dd></div>
+            <div><dt>Default provider</dt><dd>{providerName(providers?.default_provider_id ?? status?.provider_id ?? "checking")}</dd></div>
           </dl>
+          <details><summary>Technical details</summary><p>Budget status code · {status?.budget_status ?? "checking"}</p><p>Default provider code · {providers?.default_provider_id ?? status?.provider_id ?? "checking"}</p></details>
         </Surface>
 
         <Surface className="settings-card">
