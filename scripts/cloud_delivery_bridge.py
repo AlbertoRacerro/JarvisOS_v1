@@ -3,8 +3,8 @@
 
 The payload is untrusted data. This module parses and admits it, applies it in a
 bounded checkout, and delegates the only network Git mutation to the existing
-repository_delivery guarded-push primitive. It intentionally exposes no generic
-command, shell, branch-creation, merge, or default-branch authority.
+repository_delivery guarded-push primitive. GitHub API reads are deliberately
+owned by the workflow plane, not by this repository-delivery primitive.
 """
 from __future__ import annotations
 
@@ -15,8 +15,6 @@ import os
 import re
 import subprocess
 import sys
-import urllib.error
-import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -98,7 +96,8 @@ def _assert_patch_headers(payload: Payload) -> None:
 def parse_payload(body: str) -> Payload:
     if MARKER not in body:
         raise BridgeError("delivery marker missing")
-    metadata_text = _extract_fence(body, JSON_OPEN, JSON_CLOSE, start=body.index(MARKER))
+    marker_start = body.index(MARKER)
+    metadata_text = _extract_fence(body, JSON_OPEN, JSON_CLOSE, start=marker_start)
     try:
         metadata = json.loads(metadata_text)
     except json.JSONDecodeError as exc:
@@ -114,7 +113,7 @@ def parse_payload(body: str) -> Payload:
         profile = str(metadata["validation_profile"])
     except (KeyError, TypeError, ValueError) as exc:
         raise BridgeError("payload metadata is incomplete") from exc
-    patch = _extract_fence(body, PATCH_OPEN, PATCH_CLOSE, start=body.index(MARKER))
+    patch = _extract_fence(body, PATCH_OPEN, PATCH_CLOSE, start=marker_start)
     if pr < 1:
         raise BridgeError("invalid PR number")
     if not SHA_RE.fullmatch(base_sha):
@@ -146,33 +145,19 @@ def parse_payload(body: str) -> Payload:
     return payload
 
 
-def _api_json(url: str, token: str) -> dict:
-    req = urllib.request.Request(url)
-    req.add_header("Authorization", f"Bearer {token}")
-    req.add_header("Accept", "application/vnd.github+json")
-    req.add_header("X-GitHub-Api-Version", "2022-11-28")
-    try:
-        with urllib.request.urlopen(req, timeout=30) as response:
-            value = json.loads(response.read().decode("utf-8"))
-    except (urllib.error.URLError, json.JSONDecodeError) as exc:
-        raise BridgeError("GitHub API read failed") from exc
-    if not isinstance(value, dict):
-        raise BridgeError("GitHub API returned unexpected data")
-    return value
-
-
-def fetch_and_admit(*, repository: str, pr_number: int, comment_id: int, token: str) -> tuple[Payload, dict]:
-    if not token or "/" not in repository:
-        raise BridgeError("workflow repository identity/credential unavailable")
-    api = f"https://api.github.com/repos/{repository}"
-    comment = _api_json(f"{api}/issues/comments/{comment_id}", token)
+def admit_acquisition(*, repository: str, pr_number: int, acquisition: dict) -> Payload:
+    if "/" not in repository:
+        raise BridgeError("workflow repository identity unavailable")
+    comment = acquisition.get("comment")
+    pr = acquisition.get("pr")
+    if not isinstance(comment, dict) or not isinstance(pr, dict):
+        raise BridgeError("acquisition record is incomplete")
     issue_url = str(comment.get("issue_url", ""))
     if issue_url.rstrip("/").rsplit("/", 1)[-1] != str(pr_number):
         raise BridgeError("payload comment does not belong to requested PR")
     payload = parse_payload(str(comment.get("body", "")))
     if payload.pr != pr_number:
         raise BridgeError("payload PR binding mismatch")
-    pr = _api_json(f"{api}/pulls/{pr_number}", token)
     if pr.get("state") != "open":
         raise BridgeError("target PR is not open")
     head = pr.get("head") if isinstance(pr.get("head"), dict) else {}
@@ -183,7 +168,7 @@ def fetch_and_admit(*, repository: str, pr_number: int, comment_id: int, token: 
         raise BridgeError("target ref does not match PR head")
     if head.get("sha") != payload.base_sha:
         raise BridgeError("stale remote head")
-    return payload, pr
+    return payload
 
 
 def _git(repo_root: Path, args: list[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -256,22 +241,37 @@ def apply_and_verify(repo_root: Path, payload: Payload, patch_file: Path) -> Non
 
 
 def write_manifest(payload: Payload, path: Path) -> None:
-    path.write_text(json.dumps({
-        "version": 1,
-        "pr": payload.pr,
-        "base_sha": payload.base_sha,
-        "target_ref": payload.target_ref,
-        "patch_sha256": payload.patch_sha256,
-        "changed_paths": list(payload.changed_paths),
-        "validation_profile": payload.validation_profile,
-    }, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "pr": payload.pr,
+                "base_sha": payload.base_sha,
+                "target_ref": payload.target_ref,
+                "patch_sha256": payload.patch_sha256,
+                "changed_paths": list(payload.changed_paths),
+                "validation_profile": payload.validation_profile,
+            },
+            sort_keys=True,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
 
 
 def load_manifest(path: Path, patch_path: Path) -> Payload:
     data = json.loads(path.read_text(encoding="utf-8"))
     body = (
-        MARKER + "\n" + JSON_OPEN + json.dumps(data) + JSON_CLOSE + "\n" +
-        PATCH_OPEN + patch_path.read_text(encoding="utf-8") + PATCH_CLOSE
+        MARKER
+        + "\n"
+        + JSON_OPEN
+        + json.dumps(data)
+        + JSON_CLOSE
+        + "\n"
+        + PATCH_OPEN
+        + patch_path.read_text(encoding="utf-8")
+        + PATCH_CLOSE
     )
     return parse_payload(body)
 
@@ -293,11 +293,15 @@ def materialize(*, repo_root: Path, payload: Payload, patch_file: Path, token: s
     _git(repo_root, ["config", "user.name", "JarvisOS Cloud Delivery"])
     _git(repo_root, ["config", "user.email", "jarvisos-cloud-delivery@users.noreply.github.com"])
     _git(repo_root, ["add", "--", *payload.changed_paths])
-    staged = tuple(sorted(
-        line for line in _git(
-            repo_root, ["diff", "--cached", "--name-only", "--no-renames"]
-        ).stdout.splitlines() if line.strip()
-    ))
+    staged = tuple(
+        sorted(
+            line
+            for line in _git(
+                repo_root, ["diff", "--cached", "--name-only", "--no-renames"]
+            ).stdout.splitlines()
+            if line.strip()
+        )
+    )
     if staged != payload.changed_paths:
         raise BridgeError("staged path set differs from admitted payload")
     _git(repo_root, ["commit", "-m", f"materialize durable patch for PR #{payload.pr}"])
@@ -315,13 +319,12 @@ def materialize(*, repo_root: Path, payload: Payload, patch_file: Path, token: s
 def main() -> int:
     parser = argparse.ArgumentParser(description="JarvisOS cloud-native trusted delivery bridge")
     sub = parser.add_subparsers(dest="command", required=True)
-    fetch = sub.add_parser("fetch")
-    fetch.add_argument("--repository", required=True)
-    fetch.add_argument("--pr", type=int, required=True)
-    fetch.add_argument("--comment-id", type=int, required=True)
-    fetch.add_argument("--token", default=os.environ.get("GITHUB_TOKEN", ""))
-    fetch.add_argument("--patch-out", required=True)
-    fetch.add_argument("--manifest-out", required=True)
+    admit = sub.add_parser("admit")
+    admit.add_argument("--repository", required=True)
+    admit.add_argument("--pr", type=int, required=True)
+    admit.add_argument("--acquisition", required=True)
+    admit.add_argument("--patch-out", required=True)
+    admit.add_argument("--manifest-out", required=True)
     verify = sub.add_parser("verify")
     verify.add_argument("--repo-root", required=True)
     verify.add_argument("--patch", required=True)
@@ -334,20 +337,26 @@ def main() -> int:
     write.add_argument("--token", default=os.environ.get("GITHUB_TOKEN", ""))
     args = parser.parse_args()
     try:
-        if args.command == "fetch":
-            payload, _pr = fetch_and_admit(
+        if args.command == "admit":
+            acquisition = json.loads(Path(args.acquisition).read_text(encoding="utf-8"))
+            if not isinstance(acquisition, dict):
+                raise BridgeError("acquisition record must be a JSON object")
+            payload = admit_acquisition(
                 repository=args.repository,
                 pr_number=args.pr,
-                comment_id=args.comment_id,
-                token=args.token,
+                acquisition=acquisition,
             )
             Path(args.patch_out).write_text(payload.patch, encoding="utf-8")
             write_manifest(payload, Path(args.manifest_out))
-            print(json.dumps({
-                "target_ref": payload.target_ref,
-                "base_sha": payload.base_sha,
-                "profile": payload.validation_profile,
-            }))
+            print(
+                json.dumps(
+                    {
+                        "target_ref": payload.target_ref,
+                        "base_sha": payload.base_sha,
+                        "profile": payload.validation_profile,
+                    }
+                )
+            )
             return 0
         if args.command == "verify":
             payload = load_manifest(Path(args.manifest), Path(args.patch))
