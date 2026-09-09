@@ -79,7 +79,7 @@ jobs:
             --patch-out "$RUNNER_TEMP/delivery.patch" \
             --manifest-out "$RUNNER_TEMP/delivery.json"
 
-      - name: Bind validation strength and protected control paths
+      - name: Bind validation strength to admitted paths
         run: |
           python - <<'PY'
           import json, os
