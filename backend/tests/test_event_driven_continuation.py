@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import sys
 from pathlib import Path
@@ -25,6 +26,9 @@ DAILY_SPEC.loader.exec_module(daily)
 
 REPOSITORY = "AlbertoRacerro/JarvisOS_v1"
 HEAD = "a" * 40
+PAYLOAD_ID = 456
+PAYLOAD_BODY = "<!-- jarvis-cloud-delivery:v1 -->\nimmutable payload bytes"
+PAYLOAD_SHA256 = hashlib.sha256(PAYLOAD_BODY.encode("utf-8")).hexdigest()
 
 
 def event(*, workflow: str = "CI", head: str = HEAD, pulls: list[dict] | None = None) -> dict:
@@ -81,22 +85,36 @@ class FakeClient:
         self.recorded.append((number, body))
 
 
-def bot_comment(body: str) -> dict:
-    return {"body": body, "user": {"login": "github-actions[bot]"}}
+def comment(body: str, *, login: str, comment_id: int) -> dict:
+    return {"id": comment_id, "body": body, "user": {"login": login}}
 
 
-def owner_comment(body: str) -> dict:
-    return {"body": body, "user": {"login": "AlbertoRacerro"}}
+def bot_comment(body: str, *, comment_id: int = 900) -> dict:
+    return comment(body, login="github-actions[bot]", comment_id=comment_id)
 
 
-def other_comment(body: str) -> dict:
-    return {"body": body, "user": {"login": "someone-else"}}
+def owner_comment(body: str, *, comment_id: int = 901) -> dict:
+    return comment(body, login="AlbertoRacerro", comment_id=comment_id)
 
 
-def delivery_request(*, head: str = HEAD, pr: int = 77, payload: int = 456) -> str:
+def other_comment(body: str, *, comment_id: int = 902) -> dict:
+    return comment(body, login="someone-else", comment_id=comment_id)
+
+
+def payload_comment(*, body: str = PAYLOAD_BODY) -> dict:
+    return comment(body, login="model-worker[bot]", comment_id=PAYLOAD_ID)
+
+
+def delivery_request(
+    *,
+    head: str = HEAD,
+    pr: int = 77,
+    payload: int = PAYLOAD_ID,
+    payload_sha256: str = PAYLOAD_SHA256,
+) -> str:
     return (
         f"<!-- jarvis-cloud-delivery:dispatch:v1 pr={pr} head={head} "
-        f"payload_comment_id={payload} -->"
+        f"payload_comment_id={payload} payload_body_sha256={payload_sha256} -->"
     )
 
 
@@ -117,26 +135,28 @@ def test_ci_dispatches_bound_exact_head() -> None:
     assert client.delivery_dispatches == []
 
 
-def test_owner_exact_head_delivery_request_dispatches_fixed_cloud_bridge() -> None:
-    client = FakeClient([pull(), pull()], [owner_comment(delivery_request())])
+def test_owner_exact_head_and_payload_bytes_dispatch_fixed_cloud_bridge() -> None:
+    comments = [payload_comment(), owner_comment(delivery_request())]
+    client = FakeClient([pull(), pull()], comments)
     assert mod.run(event(), repository=REPOSITORY, client=client) == "dispatched"
-    assert client.delivery_dispatches == [mod.DeliveryRequest(77, HEAD, 456)]
+    delivery = mod.DeliveryRequest(77, HEAD, PAYLOAD_ID, PAYLOAD_SHA256)
+    assert client.delivery_dispatches == [delivery]
     assert client.dispatches == [(77, HEAD)]
     assert client.recorded[0] == (
         77,
-        mod.delivery_marker_text(
-            mod.WakeRequest("CI", 123, 2, 77, HEAD),
-            mod.DeliveryRequest(77, HEAD, 456),
-        ),
+        mod.delivery_marker_text(mod.WakeRequest("CI", 123, 2, 77, HEAD), delivery),
     )
 
 
-def test_delivery_request_is_owner_exact_pr_and_exact_head_bound() -> None:
+def test_delivery_request_is_owner_exact_pr_head_and_payload_digest_bound() -> None:
+    changed_body = PAYLOAD_BODY + " edited"
     comments = [
-        other_comment(delivery_request(payload=1)),
-        owner_comment(delivery_request(pr=78, payload=2)),
-        owner_comment(delivery_request(head="b" * 40, payload=3)),
-        owner_comment("prefix " + delivery_request(payload=4)),
+        payload_comment(body=changed_body),
+        other_comment(delivery_request(), comment_id=910),
+        owner_comment(delivery_request(pr=78), comment_id=911),
+        owner_comment(delivery_request(head="b" * 40), comment_id=912),
+        owner_comment("prefix " + delivery_request(), comment_id=913),
+        owner_comment(delivery_request(), comment_id=914),
     ]
     assert (
         mod.requested_delivery(comments, repository=REPOSITORY, pr_number=77, head_sha=HEAD)
@@ -145,19 +165,31 @@ def test_delivery_request_is_owner_exact_pr_and_exact_head_bound() -> None:
 
 
 def test_latest_valid_owner_delivery_request_wins() -> None:
+    second_body = PAYLOAD_BODY + " second"
+    second_sha = hashlib.sha256(second_body.encode("utf-8")).hexdigest()
     comments = [
-        owner_comment(delivery_request(payload=111)),
-        owner_comment(delivery_request(payload=222)),
+        payload_comment(body=second_body),
+        owner_comment(delivery_request(payload_sha256=PAYLOAD_SHA256), comment_id=920),
+        owner_comment(delivery_request(payload_sha256=second_sha), comment_id=921),
     ]
     assert mod.requested_delivery(
         comments, repository=REPOSITORY, pr_number=77, head_sha=HEAD
-    ) == mod.DeliveryRequest(77, HEAD, 222)
+    ) == mod.DeliveryRequest(77, HEAD, PAYLOAD_ID, second_sha)
+
+
+def test_missing_referenced_payload_comment_is_not_actionable() -> None:
+    comments = [owner_comment(delivery_request())]
+    assert (
+        mod.requested_delivery(comments, repository=REPOSITORY, pr_number=77, head_sha=HEAD)
+        is None
+    )
 
 
 def test_duplicate_delivery_dispatch_for_same_ci_attempt_is_collapsed() -> None:
     wake = mod.WakeRequest("CI", 123, 2, 77, HEAD)
-    delivery = mod.DeliveryRequest(77, HEAD, 456)
+    delivery = mod.DeliveryRequest(77, HEAD, PAYLOAD_ID, PAYLOAD_SHA256)
     comments = [
+        payload_comment(),
         owner_comment(delivery_request()),
         bot_comment(mod.delivery_marker_text(wake, delivery)),
     ]
@@ -176,7 +208,8 @@ def test_stale_head_noops_before_dispatch() -> None:
 
 
 def test_head_movement_between_validation_and_dispatch_noops() -> None:
-    client = FakeClient([pull(), pull(head="b" * 40)], [owner_comment(delivery_request())])
+    comments = [payload_comment(), owner_comment(delivery_request())]
+    client = FakeClient([pull(), pull(head="b" * 40)], comments)
     assert mod.run(event(), repository=REPOSITORY, client=client) == "noop:stale_head"
     assert client.dispatches == []
     assert client.delivery_dispatches == []
