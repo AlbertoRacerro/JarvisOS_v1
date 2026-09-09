@@ -193,6 +193,11 @@ def test_workflow_freezes_payload_before_untrusted_validation_and_separates_writ
     assert "INPUT_PR: ${{ inputs.pr }}" in admit
     assert '--pr "$INPUT_PR"' in admit
     assert "--pr '${{ inputs.pr }}'" not in admit
+    assert "payload_body_sha256:" in workflow
+    assert "INPUT_PAYLOAD_BODY_SHA256: ${{ inputs.payload_body_sha256 }}" in admit
+    assert "crypto.createHash('sha256').update(commentBody, 'utf8').digest('hex')" in admit
+    assert "actualBodySha256 !== expectedBodySha256" in admit
+    assert "${{ inputs.payload_body_sha256 }}" not in admit.split("script: |", 1)[1]
     assert "contents: read" in validate
     assert "contents: write" not in validate
     assert "persist-credentials: false" in validate
