@@ -101,6 +101,110 @@ class _BudgetSnapshot:
     today_reserved_cost_usd: float
 
 
+@dataclass(frozen=True)
+class EgressAvailabilityProjection:
+    available: bool
+    blocking_reason: str | None
+    global_actual_cost_usd: float
+    global_reserved_cost_usd: float
+    budget_exhausted: bool
+
+
+@dataclass(frozen=True)
+class _AvailabilityMaterial:
+    provider_id: str
+
+
+@dataclass(frozen=True)
+class _AvailabilityProjectionInputs:
+    projected_cost_upper_usd: float = 0.0
+    projected_input_tokens: int = 0
+    projected_output_tokens: int = 0
+
+
+def _global_budget_exhausted(
+    connection: sqlite3.Connection,
+    *,
+    snapshot: _BudgetSnapshot,
+) -> bool:
+    """Project the independent global-budget axis without changing deny precedence."""
+
+    settings = connection.execute(
+        """
+        SELECT monthly_api_budget_usd, api_spend_month_to_date_usd
+        FROM ai_settings WHERE id = 'default'
+        """
+    ).fetchone()
+    if settings is None:
+        return False
+    monthly_budget = float(settings["monthly_api_budget_usd"])
+    if monthly_budget <= 0:
+        return True
+    configured_global_spend = float(settings["api_spend_month_to_date_usd"])
+    global_actual = max(configured_global_spend, snapshot.global_actual_cost_usd)
+    return global_actual + snapshot.global_reserved_cost_usd >= monthly_budget
+
+
+def project_egress_availability(
+    provider_id: str,
+    *,
+    registry: ProviderRegistry | None = None,
+    now: datetime | None = None,
+) -> EgressAvailabilityProjection:
+    """Read the canonical next-attempt blocking/accounting truth without mutation.
+
+    This intentionally does not expire or reconcile reservations, persist packets,
+    decisions, attempts or reservations, or dispatch a provider. Active/in-flight
+    reservations are counted exactly as stored by the execution owner.
+    """
+
+    registry = registry or load_default_provider_registry()
+    provider = registry.providers.get(provider_id)
+    now_dt = _normalized_now(now)
+    now_iso = now_dt.isoformat()
+
+    with open_sqlite_connection() as connection:
+        snapshot = _budget_snapshot(
+            connection,
+            provider_id=provider_id,
+            now_dt=now_dt,
+            now_iso=now_iso,
+        )
+        global_actual = snapshot.global_actual_cost_usd
+        global_budget_exhausted = _global_budget_exhausted(
+            connection,
+            snapshot=snapshot,
+        )
+
+        if provider is None:
+            return EgressAvailabilityProjection(
+                available=False,
+                blocking_reason="provider_unknown",
+                global_actual_cost_usd=global_actual,
+                global_reserved_cost_usd=snapshot.global_reserved_cost_usd,
+                budget_exhausted=global_budget_exhausted,
+            )
+
+        if not provider.enabled:
+            blocking_reason = "provider_disabled"
+        else:
+            blocking_reason = _hard_blocking_reason(
+                connection,
+                material=_AvailabilityMaterial(provider_id=provider_id),
+                projection=_AvailabilityProjectionInputs(),
+                registry=registry,
+                snapshot=snapshot,
+            )
+
+    return EgressAvailabilityProjection(
+        available=blocking_reason is None,
+        blocking_reason=blocking_reason,
+        global_actual_cost_usd=global_actual,
+        global_reserved_cost_usd=snapshot.global_reserved_cost_usd,
+        budget_exhausted=global_budget_exhausted,
+    )
+
+
 def prepare_egress_attempt(
     material: EgressPacketMaterial,
     *,
@@ -529,8 +633,8 @@ def _insert_reservation(
 def _hard_blocking_reason(
     connection: sqlite3.Connection,
     *,
-    material: EgressPacketMaterial,
-    projection: EgressPacketProjection,
+    material: EgressPacketMaterial | _AvailabilityMaterial,
+    projection: EgressPacketProjection | _AvailabilityProjectionInputs,
     registry: ProviderRegistry,
     snapshot: _BudgetSnapshot,
 ) -> str | None:
@@ -550,6 +654,11 @@ def _hard_blocking_reason(
         return "missing_ai_settings"
     if settings["policy_mode"] == AIPolicyMode.DISABLED.value:
         return "ai_policy_disabled"
+
+    provider = registry.providers[material.provider_id]
+    if not provider.requires_network:
+        return None
+
     if not bool(settings["paid_ai_enabled"]):
         return "paid_ai_disabled"
     monthly_budget = float(settings["monthly_api_budget_usd"])
@@ -562,7 +671,6 @@ def _hard_blocking_reason(
         if not bool(settings["scaleway_enabled"]):
             return "scaleway_disabled"
 
-    provider = registry.providers[material.provider_id]
     try:
         credential = resolve_secret_ref(provider.api_key_ref)
     except ValueError:
@@ -570,13 +678,16 @@ def _hard_blocking_reason(
     if not credential.key_present:
         return "provider_credentials_missing"
 
+    is_availability_projection = isinstance(material, _AvailabilityMaterial)
     configured_global_spend = float(settings["api_spend_month_to_date_usd"])
     global_actual = max(configured_global_spend, snapshot.global_actual_cost_usd)
-    if (
+    projected_global_cost = (
         global_actual
         + snapshot.global_reserved_cost_usd
         + projection.projected_cost_upper_usd
-        > monthly_budget
+    )
+    if projected_global_cost > monthly_budget or (
+        is_availability_projection and projected_global_cost >= monthly_budget
     ):
         return "global_monthly_cost_cap_exceeded"
     projected_provider_tokens = (
@@ -596,13 +707,20 @@ def _hard_blocking_reason(
             settings["scaleway_input_tokens_month_to_date"]
         ) + int(settings["scaleway_output_tokens_month_to_date"])
         projected_scaleway_tokens = legacy_tokens + projected_provider_tokens
-        if projected_scaleway_tokens > monthly_cap:
+        if projected_scaleway_tokens > monthly_cap or (
+            is_availability_projection and projected_scaleway_tokens >= monthly_cap
+        ):
             return "scaleway_monthly_token_cap_exceeded"
-        if projected_scaleway_tokens > hard_stop_cap:
+        if projected_scaleway_tokens > hard_stop_cap or (
+            is_availability_projection and projected_scaleway_tokens >= hard_stop_cap
+        ):
             return "scaleway_hard_stop_token_cap_exceeded"
-    if (
-        provider.monthly_token_cap > 0
-        and projected_provider_tokens > provider.monthly_token_cap
+    if provider.monthly_token_cap > 0 and (
+        projected_provider_tokens > provider.monthly_token_cap
+        or (
+            is_availability_projection
+            and projected_provider_tokens >= provider.monthly_token_cap
+        )
     ):
         return "provider_monthly_token_cap_exceeded"
     projected_provider_cost = (
@@ -610,9 +728,12 @@ def _hard_blocking_reason(
         + snapshot.provider_reserved_cost_usd
         + projection.projected_cost_upper_usd
     )
-    if (
-        provider.monthly_cost_cap_usd > 0
-        and projected_provider_cost > provider.monthly_cost_cap_usd
+    if provider.monthly_cost_cap_usd > 0 and (
+        projected_provider_cost > provider.monthly_cost_cap_usd
+        or (
+            is_availability_projection
+            and projected_provider_cost >= provider.monthly_cost_cap_usd
+        )
     ):
         return "provider_monthly_cost_cap_exceeded"
     return None
@@ -662,11 +783,13 @@ def _trigger_ids(
 def _is_bluecad_structural_packet(material: EgressPacketMaterial) -> bool:
     if material.task_kind != "bluecad_cad_repair":
         return False
-    matches = [
-        item.get("evidence_lineage")
-        for item in material.included_manifest
-        if isinstance(item, dict) and isinstance(item.get("evidence_lineage"), dict)
-    ]
+    matches: list[dict[str, object]] = []
+    for item in material.included_manifest:
+        if not isinstance(item, dict):
+            continue
+        evidence_lineage = item.get("evidence_lineage")
+        if isinstance(evidence_lineage, dict):
+            matches.append(evidence_lineage)
     return (
         len(matches) == 1
         and matches[0].get("schema_version") == "bluecad_evidence_lineage_v0_1"

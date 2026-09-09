@@ -110,6 +110,43 @@ const prove113 = async () => {
   await screenshot("exact-version-b");
 };
 
+const prove124 = async () => {
+  const route = "/settings/ai";
+  const response = await page.goto(`${baseUrl}${route}`, { waitUntil: "networkidle", timeout: 30_000 });
+  record("124:http", Boolean(response) && response.status() < 500, `status=${response?.status() ?? "none"}`);
+  record("124:spa-path", new URL(page.url()).pathname === route, `url=${page.url()}`);
+  await page.getByRole("heading", { name: "Settings", exact: true }).waitFor({ state: "visible" });
+  await page.getByRole("heading", { name: "Provider catalogue", exact: true }).waitFor({ state: "visible" });
+  await page.locator("[data-provider-settings-list]").waitFor({ state: "visible" });
+
+  const providerIds = ["fake", "local_ollama", "scaleway", "deepseek", "glm", "kimi"];
+  for (const providerId of providerIds) {
+    const row = page.locator(`[data-provider-id="${providerId}"]`);
+    await row.waitFor({ state: "visible" });
+    record(`124:provider:${providerId}`, (await row.count()) === 1, `canonical provider row ${providerId} is rendered once`);
+  }
+
+  await page.getByRole("heading", { name: "Scaleway credential", exact: true }).waitFor({ state: "visible" });
+  await page.getByText("Effective source", { exact: true }).waitFor({ state: "visible" });
+  await page.getByText("Persisted state", { exact: true }).waitFor({ state: "visible" });
+  await page.getByRole("heading", { name: "Current usage", exact: true }).waitFor({ state: "visible" });
+
+  const passwordInput = page.getByLabel("Replace API key");
+  record("124:credential-input-empty", (await passwordInput.inputValue()) === "", "credential value is never projected into the browser input");
+
+  const body = await page.locator("body").innerText();
+  const secretVocabulary = ["SCALEWAY_API_KEY", "DEEPSEEK_API_KEY", "GLM_API_KEY", "KIMI_API_KEY", "api_key_ref", "base_url"];
+  record("124:no-secret-reference-leak", secretVocabulary.every((value) => !body.includes(value)), "provider secret refs/base URLs are absent from rendered settings text");
+
+  const buttons = (await page.getByRole("button").allTextContents()).map((label) => label.trim().toLowerCase());
+  const providerExecution = /provider.*(test|smoke|run)|(test|smoke|run).*provider/;
+  record("124:no-provider-execution-affordance", buttons.every((label) => !providerExecution.test(label)), `button-labels=${JSON.stringify(buttons)}`);
+
+  const egressStates = await page.locator("[data-provider-egress-state]").evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-provider-egress-state")));
+  record("124:provider-egress-state", egressStates.length === providerIds.length && egressStates.every((value) => value === "allowed" || value === "blocked"), `states=${JSON.stringify(egressStates)}`);
+  await screenshot("settings-ai");
+};
+
 const prove140 = async () => {
   const repositoryRoute = "/coding/repository";
   const repositoryResponse = await page.goto(`${baseUrl}${repositoryRoute}`, { waitUntil: "networkidle", timeout: 30_000 });
@@ -139,6 +176,8 @@ let failure = null;
 try {
   if (scenario === "113-memory-models") {
     await prove113();
+  } else if (scenario === "124-settings-ai") {
+    await prove124();
   } else if (scenario === "140-coding") {
     await prove140();
   } else {
@@ -180,6 +219,14 @@ for (const path of artifacts) {
   digests[path.split("/").at(-1)] = createHash("sha256").update(bytes).digest("hex");
 }
 
+const seedVersion = scenario === "113-memory-models"
+  ? "113-workspace-then-two-exact-versions-v1"
+  : scenario === "124-settings-ai"
+    ? "124-production-settings-owner-projection-v1"
+    : scenario === "140-coding"
+      ? "140-production-routes-no-static-substitute-v1"
+      : "not-run-refused-v1";
+
 const manifest = {
   schema: "jarvisos.exact-head-browser-proof.v1",
   repository,
@@ -191,7 +238,7 @@ const manifest = {
   controller_sha: controllerSha,
   workflow_run_id: runId,
   scenario,
-  seed_version: scenario === "113-memory-models" ? "113-workspace-then-two-exact-versions-v1" : scenario === "140-coding" ? "140-production-routes-no-static-substitute-v1" : "not-run-refused-v1",
+  seed_version: seedVersion,
   browser: "chromium",
   playwright_version: "1.55.0",
   started_at: startedAt,
