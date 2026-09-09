@@ -109,15 +109,19 @@ const summaryModule = await importModuleSource(ts.transpileModule(summarySource,
 const notRequired = summaryModule.credentialSummary({
   credential: { effective_source: "not_required", persisted_state: "not_supported", key_present: false }
 });
-assert.equal(notRequired, "No credential is required.");
+assert.equal(notRequired, "No credential required · Stored credentials not supported.");
 const persisted = summaryModule.credentialSummary({
   credential: { effective_source: "secure_persisted", persisted_state: "usable", key_present: true }
 });
-assert.equal(persisted, "A securely stored credential is ready to use.");
+assert.equal(persisted, "Securely stored credential active · Stored credential ready.");
 const invalid = summaryModule.credentialSummary({
   credential: { effective_source: "invalid", persisted_state: "usable", key_present: false }
 });
-assert.match(invalid, /invalid/i);
+assert.match(invalid, /Environment credential invalid.*Stored credential ready/);
+const environmentCorrupted = summaryModule.credentialSummary({
+  credential: { effective_source: "environment", persisted_state: "corrupted", key_present: true }
+});
+assert.match(environmentCorrupted, /Environment credential active.*Stored credential damaged/);
 
 const invalidatorMatch = pageSource.match(/const invalidateCanonicalSnapshot = useCallback\(\(\) => \{([\s\S]*?)\n  \}, \[\]\);/);
 assert.ok(invalidatorMatch, "failed canonical snapshots must have one complete invalidation owner");
