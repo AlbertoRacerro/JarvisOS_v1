@@ -131,6 +131,15 @@ function Settings() {
     return stored.preset === "custom" ? stored.customHex ?? DEFAULT_ACCENT_HEX : DEFAULT_ACCENT_HEX;
   });
 
+  const invalidateCanonicalSnapshot = useCallback(() => {
+    setSettings(null);
+    setStatus(null);
+    setProviders(null);
+    setSecret(null);
+    setSystem(null);
+    setDraft(null);
+  }, []);
+
   const loadCanonical = useCallback(async (
     preserveDraft = false,
     savedKey?: EditableKey,
@@ -172,14 +181,14 @@ function Settings() {
       return true;
     } catch (caught) {
       if (mounted.current && owner === generation.current) {
-        setProviders(null);
+        invalidateCanonicalSnapshot();
         if (projectFailure) setError(displayError(caught, "Settings could not be loaded."));
       }
       return false;
     } finally {
       if (mounted.current && owner === generation.current) setLoading(false);
     }
-  }, []);
+  }, [invalidateCanonicalSnapshot]);
 
   useEffect(() => {
     mounted.current = true;
