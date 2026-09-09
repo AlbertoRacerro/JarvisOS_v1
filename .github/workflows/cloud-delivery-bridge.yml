@@ -12,6 +12,7 @@ on:
 
 jobs:
   admit:
+    if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -21,6 +22,7 @@ jobs:
       target_ref: ${{ steps.meta.outputs.target_ref }}
       base_sha: ${{ steps.meta.outputs.base_sha }}
       profile: ${{ steps.meta.outputs.profile }}
+      trusted_sha: ${{ steps.meta.outputs.trusted_sha }}
     steps:
       - name: Checkout trusted bridge owner
         uses: actions/checkout@v4
@@ -33,11 +35,13 @@ jobs:
         uses: actions/github-script@v7
         env:
           ACQUISITION_PATH: ${{ runner.temp }}/acquisition.json
+          INPUT_PR: ${{ inputs.pr }}
+          INPUT_COMMENT_ID: ${{ inputs.payload_comment_id }}
         with:
           script: |
             const fs = require('fs');
-            const prNumber = Number('${{ inputs.pr }}');
-            const commentId = Number('${{ inputs.payload_comment_id }}');
+            const prNumber = Number(process.env.INPUT_PR);
+            const commentId = Number(process.env.INPUT_COMMENT_ID);
             if (!Number.isSafeInteger(prNumber) || prNumber < 1) throw new Error('invalid PR input');
             if (!Number.isSafeInteger(commentId) || commentId < 1) throw new Error('invalid comment input');
             const comment = await github.rest.issues.getComment({
@@ -75,7 +79,7 @@ jobs:
             --patch-out "$RUNNER_TEMP/delivery.patch" \
             --manifest-out "$RUNNER_TEMP/delivery.json"
 
-      - name: Bind validation strength to admitted paths
+      - name: Bind validation strength and protected control paths
         run: |
           python - <<'PY'
           import json, os
@@ -83,6 +87,19 @@ jobs:
           data = json.loads(Path(os.environ["RUNNER_TEMP"]).joinpath("delivery.json").read_text())
           paths = tuple(data["changed_paths"])
           profile = data["validation_profile"]
+          protected_exact = {
+              "AGENTS.md",
+              "docs/AGENT_EXECUTION_AND_AUTOMATION_PROTOCOL.md",
+              "docs/POST_112_PARALLEL_DELIVERY_PROFILE.md",
+          }
+          protected = [
+              p for p in paths
+              if p in protected_exact
+              or p.startswith(".github/")
+              or (p.startswith("backend/tests/") and p.endswith("_conformance.py"))
+          ]
+          if protected:
+              raise SystemExit(f"maintainer/control path refused: {protected[0]}")
           known_prefixes = ("frontend/", "backend/", "scripts/", "docs/")
           unknown = [path for path in paths if not path.startswith(known_prefixes)]
           if unknown:
@@ -114,6 +131,7 @@ jobs:
               fh.write(f"target_ref={data['target_ref']}\n")
               fh.write(f"base_sha={data['base_sha']}\n")
               fh.write(f"profile={data['validation_profile']}\n")
+              fh.write(f"trusted_sha={os.environ['GITHUB_SHA']}\n")
           PY
 
       - name: Freeze admitted payload before any target code executes
@@ -132,10 +150,10 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Checkout trusted bridge owner
+      - name: Checkout frozen trusted bridge owner
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ needs.admit.outputs.trusted_sha }}
           path: trusted
           persist-credentials: false
 
@@ -201,10 +219,10 @@ jobs:
       issues: write
       pull-requests: read
     steps:
-      - name: Checkout trusted bridge owner
+      - name: Checkout frozen trusted bridge owner
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ needs.admit.outputs.trusted_sha }}
           path: trusted
           persist-credentials: false
 
@@ -240,10 +258,15 @@ jobs:
 
       - name: Report durable remote result
         uses: actions/github-script@v7
+        env:
+          INPUT_PR: ${{ inputs.pr }}
+          FINAL_SHA: ${{ steps.write.outputs.final_sha }}
         with:
           script: |
-            const pr = Number('${{ inputs.pr }}');
-            const finalSha = '${{ steps.write.outputs.final_sha }}';
+            const pr = Number(process.env.INPUT_PR);
+            const finalSha = process.env.FINAL_SHA;
+            if (!Number.isSafeInteger(pr) || pr < 1) throw new Error('invalid PR input');
+            if (!/^[0-9a-f]{40}$/.test(finalSha)) throw new Error('invalid final SHA');
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
