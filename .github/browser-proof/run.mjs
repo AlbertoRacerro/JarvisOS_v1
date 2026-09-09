@@ -58,9 +58,13 @@ const screenshot = async (name) => {
 };
 
 const openTechnicalDetails = async (details) => {
-  if (!(await details.evaluate((node) => node.open))) {
-    await details.getByText("Technical details", { exact: true }).click();
+  const summary = details.getByText("Technical details", { exact: true });
+  if (await details.evaluate((node) => node.open)) {
+    await summary.click();
+    if (await details.evaluate((node) => node.open)) throw new Error("Technical details did not close on interaction");
   }
+  await summary.click();
+  if (!(await details.evaluate((node) => node.open))) throw new Error("Technical details did not open on interaction");
 };
 
 const assertNoCodingMutationButtons = async (prefix) => {
@@ -177,13 +181,9 @@ const prove124 = async () => {
         : effectiveSource === "secure_persisted"
           ? `Secure persisted · ${persistedState}`
           : `No effective credential · persisted ${persistedState}`;
-  const canonicalCredentialCodes = [effectiveSource, persistedState];
-  const primaryContainsRawCode = canonicalCredentialCodes.some((code) =>
-    credentialSummaryText.toLowerCase().split(/[^a-z0-9_]+/).includes(code.toLowerCase())
-  );
   record(
     "124:credential-human-summary",
-    credentialSummaryText === expectedSummary && !credentialSummaryText.includes("_") && !primaryContainsRawCode,
+    credentialSummaryText === expectedSummary && !credentialSummaryText.includes("_"),
     `summary=${JSON.stringify(credentialSummaryText)} expected=${JSON.stringify(expectedSummary)}`,
   );
   record(
@@ -211,8 +211,19 @@ const prove124 = async () => {
 
 const prove140 = async () => {
   const repositoryRoute = "/coding/repository";
+  const repositoryTruthResponsePromise = page.waitForResponse((candidate) => {
+    const url = new URL(candidate.url());
+    return candidate.request().method() === "GET"
+      && url.origin === new URL(baseUrl).origin
+      && url.pathname === "/api/coding/repository/ref"
+      && url.searchParams.get("repository") === repository
+      && url.searchParams.get("ref") === "master";
+  });
   const repositoryResponse = await page.goto(`${baseUrl}${repositoryRoute}`, { waitUntil: "networkidle", timeout: 30_000 });
+  const repositoryTruthResponse = await repositoryTruthResponsePromise;
   record("140:repository-http", Boolean(repositoryResponse) && repositoryResponse.status() < 500, `status=${repositoryResponse?.status() ?? "none"}`);
+  record("140:repository-truth-http", repositoryTruthResponse.ok(), `status=${repositoryTruthResponse.status()}`);
+  const repositoryTruth = await repositoryTruthResponse.json();
   record("140:repository-spa-path", new URL(page.url()).pathname === repositoryRoute, `url=${page.url()}`);
   const repositorySurface = page.getByTestId("coding-repository-surface");
   await repositorySurface.waitFor({ state: "visible" });
@@ -220,8 +231,15 @@ const prove140 = async () => {
   await repositorySurface.getByText("Repository browsing is context-neutral. These explicit actions are exact-base 111/123 operations; they do not commit, apply, execute, push, create a PR, merge, or mutate STATUS.", { exact: true }).waitFor({ state: "visible" });
   const repositoryDetails = repositorySurface.locator("details").first();
   await openTechnicalDetails(repositoryDetails);
-  await repositoryDetails.getByText(/^Resolved commit · [0-9a-f]{40}$/).waitFor({ state: "visible" });
-  record("140:repository-disclosure", true, "repository machine identity is available through a real Technical details interaction");
+  const resolvedCommitText = await repositoryDetails.getByText(/^Resolved commit · [0-9a-f]{40}$/).innerText();
+  const displayedResolvedSha = resolvedCommitText.replace(/^Resolved commit · /, "").trim();
+  record(
+    "140:repository-disclosure",
+    typeof repositoryTruth.resolved_sha === "string"
+      && /^[0-9a-f]{40}$/.test(repositoryTruth.resolved_sha)
+      && displayedResolvedSha === repositoryTruth.resolved_sha,
+    `displayed=${displayedResolvedSha} trusted=${repositoryTruth.resolved_sha}`,
+  );
   record("140:repository-surface", true, "real Coding Repository workbench renders accepted server-owned 118 and explicit 111/123 authority boundary");
   await assertNoCodingMutationButtons("140:repository");
   await screenshot("repository");
