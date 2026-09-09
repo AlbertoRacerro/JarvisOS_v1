@@ -18,18 +18,21 @@ function humanizeReasonCode(value: string | null | undefined, fallback: string):
 }
 
 export function runtimeDeltaSummary(value: UnknownRecord, alignment = "unknown", reason: string | null = null) {
-  const files = records(value.files).map((file) => ({
+  const canonicalUnknown = alignment === "unknown";
+  const files = canonicalUnknown ? [] : records(value.files).map((file) => ({
     name: String(file.filename ?? file.path ?? "Unnamed file"),
     status: typeof file.status === "string" ? file.status : null
   }));
-  const relation = typeof value.relation === "string" ? value.relation : alignment;
+  const relation = canonicalUnknown
+    ? "unknown"
+    : typeof value.relation === "string" ? value.relation : alignment;
   return {
     relation,
-    aheadBy: finiteNumber(value.ahead_by),
-    behindBy: finiteNumber(value.behind_by),
+    aheadBy: canonicalUnknown ? null : finiteNumber(value.ahead_by),
+    behindBy: canonicalUnknown ? null : finiteNumber(value.behind_by),
     files,
-    status: typeof value.status === "string" ? value.status : "unavailable",
-    partial: value.partial === true,
+    status: canonicalUnknown ? "unavailable" : typeof value.status === "string" ? value.status : "unavailable",
+    partial: canonicalUnknown ? false : value.partial === true,
     explanation: relation === "unknown" && reason ? humanizeReasonCode(reason, "Runtime relationship unavailable") : null
   };
 }
