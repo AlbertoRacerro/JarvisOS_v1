@@ -1,0 +1,65 @@
+name: Cloud Delivery Bridge Comment Trigger
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+  actions: write
+
+jobs:
+  dispatch:
+    if: >-
+      github.event.issue.pull_request != null &&
+      github.actor == github.repository_owner &&
+      github.event.repository.default_branch == 'master'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Parse owner-only exact dispatch marker and dispatch trusted bridge
+        uses: actions/github-script@v7
+        env:
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        with:
+          script: |
+            const body = process.env.COMMENT_BODY ?? '';
+            const issueNumber = Number(process.env.ISSUE_NUMBER);
+            if (!Number.isSafeInteger(issueNumber) || issueNumber < 1) {
+              throw new Error('invalid issue number');
+            }
+            const match = body.match(/^<!-- jarvis-cloud-delivery:dispatch:v1 pr=(\d+) payload_comment_id=(\d+) -->$/);
+            if (!match) {
+              core.notice('Not a cloud-delivery dispatch marker.');
+              return;
+            }
+            const pr = Number(match[1]);
+            const payloadCommentId = Number(match[2]);
+            if (!Number.isSafeInteger(pr) || pr < 1 || pr !== issueNumber) {
+              throw new Error('dispatch PR must equal the current pull request number');
+            }
+            if (!Number.isSafeInteger(payloadCommentId) || payloadCommentId < 1) {
+              throw new Error('invalid payload comment id');
+            }
+            const pull = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr,
+            });
+            if (pull.data.state !== 'open' || pull.data.head.repo?.full_name !== context.payload.repository.full_name) {
+              throw new Error('dispatch target must be an open same-repository pull request');
+            }
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'cloud-delivery-bridge.yml',
+              ref: 'master',
+              inputs: {
+                pr: String(pr),
+                payload_comment_id: String(payloadCommentId),
+              },
+            });
+            core.notice(`Dispatched cloud delivery bridge for PR #${pr}.`);
