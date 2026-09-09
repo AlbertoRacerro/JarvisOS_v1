@@ -116,6 +116,16 @@ const invalid = summaryModule.credentialSummary({
 });
 assert.match(invalid, /invalid/i);
 
+const invalidatorMatch = pageSource.match(/const invalidateCanonicalSnapshot = useCallback\(\(\) => \{([\s\S]*?)\n  \}, \[\]\);/);
+assert.ok(invalidatorMatch, "failed canonical snapshots must have one complete invalidation owner");
+for (const setter of ["setSettings", "setStatus", "setProviders", "setSecret", "setSystem", "setDraft"]) {
+  assert.match(invalidatorMatch[1], new RegExp(`${setter}\\(null\\)`), `${setter} must be invalidated`);
+}
+const loadFailureMatch = pageSource.match(/catch \(caught\) \{([\s\S]*?)\n      return false;/);
+assert.ok(loadFailureMatch, "loadCanonical failure path must remain inspectable");
+assert.match(loadFailureMatch[1], /mounted\.current && owner === generation\.current/);
+assert.match(loadFailureMatch[1], /invalidateCanonicalSnapshot\(\)/);
+
 assert.match(apiSource, /external_calls_allowed:\s*boolean/);
 assert.match(apiSource, /blocking_reason\?:\s*string\s*\|\s*null/);
 assert.match(pageSource, /data-provider-egress-state=/);
