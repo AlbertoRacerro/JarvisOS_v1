@@ -9,6 +9,7 @@ import "./styles/foundation.css";
 import "./styles/shell.css";
 import "./styles/final-fusion.css";
 import "./styles/final-fusion-canonical-overrides.css";
+import "./styles/operator-semantic-ux.css";
 import "./styles/final-fusion-shell-overrides.css";
 import "./styles/final-workspace-header.css";
 import "./styles/runs.css";
