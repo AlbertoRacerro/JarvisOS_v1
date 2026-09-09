@@ -58,6 +58,7 @@ class FakeClient:
         self.pulls = list(pulls)
         self._comments = list(comments or [])
         self.dispatches: list[tuple[int, str]] = []
+        self.delivery_dispatches: list[mod.DeliveryRequest] = []
         self.recorded: list[tuple[int, str]] = []
 
     def pull(self, number: int) -> dict:
@@ -73,12 +74,30 @@ class FakeClient:
     def dispatch(self, pr_number: int, head_sha: str) -> None:
         self.dispatches.append((pr_number, head_sha))
 
+    def dispatch_delivery(self, delivery: mod.DeliveryRequest) -> None:
+        self.delivery_dispatches.append(delivery)
+
     def record(self, number: int, body: str) -> None:
         self.recorded.append((number, body))
 
 
 def bot_comment(body: str) -> dict:
     return {"body": body, "user": {"login": "github-actions[bot]"}}
+
+
+def owner_comment(body: str) -> dict:
+    return {"body": body, "user": {"login": "AlbertoRacerro"}}
+
+
+def other_comment(body: str) -> dict:
+    return {"body": body, "user": {"login": "someone-else"}}
+
+
+def delivery_request(*, head: str = HEAD, pr: int = 77, payload: int = 456) -> str:
+    return (
+        f"<!-- jarvis-cloud-delivery:dispatch:v1 pr={pr} head={head} "
+        f"payload_comment_id={payload} -->"
+    )
 
 
 def test_parse_terminal_ci_event() -> None:
@@ -95,19 +114,72 @@ def test_ci_dispatches_bound_exact_head() -> None:
     client = FakeClient([pull(), pull()])
     assert mod.run(event(), repository=REPOSITORY, client=client) == "dispatched"
     assert client.dispatches == [(77, HEAD)]
+    assert client.delivery_dispatches == []
+
+
+def test_owner_exact_head_delivery_request_dispatches_fixed_cloud_bridge() -> None:
+    client = FakeClient([pull(), pull()], [owner_comment(delivery_request())])
+    assert mod.run(event(), repository=REPOSITORY, client=client) == "dispatched"
+    assert client.delivery_dispatches == [mod.DeliveryRequest(77, HEAD, 456)]
+    assert client.dispatches == [(77, HEAD)]
+    assert client.recorded[0] == (
+        77,
+        mod.delivery_marker_text(
+            mod.WakeRequest("CI", 123, 2, 77, HEAD),
+            mod.DeliveryRequest(77, HEAD, 456),
+        ),
+    )
+
+
+def test_delivery_request_is_owner_exact_pr_and_exact_head_bound() -> None:
+    comments = [
+        other_comment(delivery_request(payload=1)),
+        owner_comment(delivery_request(pr=78, payload=2)),
+        owner_comment(delivery_request(head="b" * 40, payload=3)),
+        owner_comment("prefix " + delivery_request(payload=4)),
+    ]
+    assert (
+        mod.requested_delivery(comments, repository=REPOSITORY, pr_number=77, head_sha=HEAD)
+        is None
+    )
+
+
+def test_latest_valid_owner_delivery_request_wins() -> None:
+    comments = [
+        owner_comment(delivery_request(payload=111)),
+        owner_comment(delivery_request(payload=222)),
+    ]
+    assert mod.requested_delivery(
+        comments, repository=REPOSITORY, pr_number=77, head_sha=HEAD
+    ) == mod.DeliveryRequest(77, HEAD, 222)
+
+
+def test_duplicate_delivery_dispatch_for_same_ci_attempt_is_collapsed() -> None:
+    wake = mod.WakeRequest("CI", 123, 2, 77, HEAD)
+    delivery = mod.DeliveryRequest(77, HEAD, 456)
+    comments = [
+        owner_comment(delivery_request()),
+        bot_comment(mod.delivery_marker_text(wake, delivery)),
+    ]
+    client = FakeClient([pull(), pull()], comments)
+    assert mod.run(event(), repository=REPOSITORY, client=client) == "dispatched"
+    assert client.delivery_dispatches == []
+    assert client.dispatches == [(77, HEAD)]
 
 
 def test_stale_head_noops_before_dispatch() -> None:
     client = FakeClient([pull(head="b" * 40)])
     assert mod.run(event(), repository=REPOSITORY, client=client) == "noop:stale_head"
     assert client.dispatches == []
+    assert client.delivery_dispatches == []
     assert client.recorded == []
 
 
 def test_head_movement_between_validation_and_dispatch_noops() -> None:
-    client = FakeClient([pull(), pull(head="b" * 40)])
+    client = FakeClient([pull(), pull(head="b" * 40)], [owner_comment(delivery_request())])
     assert mod.run(event(), repository=REPOSITORY, client=client) == "noop:stale_head"
     assert client.dispatches == []
+    assert client.delivery_dispatches == []
     assert client.recorded == []
 
 
