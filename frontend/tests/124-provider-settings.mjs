@@ -7,6 +7,8 @@ import ts from "typescript";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const apiSource = fs.readFileSync(path.join(root, "src/api/settings.ts"), "utf8");
 const pageSource = fs.readFileSync(path.join(root, "src/pages/Settings.tsx"), "utf8");
+const settingsCss = fs.readFileSync(path.join(root, "src/styles/final-settings.css"), "utf8");
+const shellCss = fs.readFileSync(path.join(root, "src/styles/final-fusion-shell-overrides.css"), "utf8");
 
 function compileApiForNode(source) {
   const withoutClientImport = source.replace(
@@ -133,6 +135,9 @@ assert.match(pageSource, /provider\.external_calls_allowed/);
 assert.match(pageSource, /provider\.blocking_reason/);
 assert.match(pageSource, /setProviders\(null\)/);
 assert.match(pageSource, /Scaleway token usage/);
+assert.match(settingsCss, /\.final-settings--ai \.settings-grid > \.settings-card:nth-child\(5\)/);
+assert.match(settingsCss, /\.final-settings--system \.settings-grid > \.settings-card:nth-child\(6\)/);
+assert.match(shellCss, /\.application-shell--final \.shell-main \{[\s\S]*?overflow:\s*auto;/);
 assert.doesNotMatch(apiSource, /localStorage[^\n]*(api|key|secret)/i);
 assert.doesNotMatch(pageSource, /DEEPSEEK_API_KEY|GLM_API_KEY|KIMI_API_KEY|SCALEWAY_API_KEY/);
 
