@@ -47,12 +47,33 @@ The cloud-native bridge is not complete merely because it can run a workflow. It
 
 Use **#589 / spec 143** as the first concrete acceptance case when practical: the already-demonstrated complete durable spec-143 patch should be materializable onto the existing `impl/143-operator-semantic-ux` branch without any maintainer computer participating.
 
+## Post-143 infrastructure objective: generic builder toolbox
+
+After the currently active spec-143 product family and its already-established trusted browser-proof compatibility work, including #589/#594, have converged, the next infrastructure priority is a **bounded tooling-generalization pass** over the browser-proof stack and other infrastructure added in the recent beta-convergence work.
+
+The purpose is not a broad rewrite. It is to ensure that infrastructure intended to be used by builders behaves as a reusable **capability-oriented toolbox**, rather than as one-off implementation logic tied to the spec that first required it.
+
+The target properties are:
+
+1. **Generic capability, task-specific intent.** A tool should expose reusable bounded operations; a spec/task/proof plan should decide how those operations are composed for the current goal.
+2. **Browser proof separation.** The trusted Chromium environment should become a generic policy-bound browser executor. Spec/task-specific verification should be expressed through declarative proof plans or an equivalently bounded data representation, rather than permanent `prove<spec>` control logic and hard-coded presentation strings in the trusted engine.
+3. **No arbitrary model-authored privileged code.** Genericity must not mean executing arbitrary JavaScript, shell, Python, workflow, or equivalent code supplied by the model inside a privileged trusted lane. Use a closed, validated primitive vocabulary where needed.
+4. **Reusable delivery/test/review/evidence primitives.** Audit recent delivery, test, review, browser, evidence and recovery infrastructure for avoidable coupling to one spec, branch, UI surface or payload shape. Refactor only where fresh evidence shows such coupling prevents ordinary future reuse.
+5. **Compatibility, not permanent special cases.** Existing 113/124/140/143 scenarios should serve as migration and regression cases for the generic mechanism, not as permanent architecture-specific branches inside the underlying tool.
+6. **No authority widening for convenience.** Preserve exact-head/CAS, trusted-controller ownership, credential isolation, candidate isolation, sensitive-path controls, fail-closed behavior and all existing security/egress/destructive boundaries.
+7. **Do not generalize already-generic owners unnecessarily.** If an existing primitive is already task-neutral and reusable, leave it alone. Prefer measured evidence over aesthetic abstraction.
+8. **Future-spec usability.** A normal future spec should be able to use the toolbox by selecting/configuring existing safe capabilities and task-specific plans, without requiring a new infrastructure implementation merely because the feature semantics changed.
+
+The coordinator owns the minimum architecture and migration path. The first pass should explicitly inventory recent infrastructure as `GENERIC AS-IS`, `GENERALIZE`, `ABSORB`, or `RETIRE/REPLACE`, with concrete evidence for any mutation.
+
 ## Priority order
 
 1. Keep 124 and 141 as merged canonical foundations; do not reopen them merely to relabel scheduling intent.
-2. Treat the cloud-native trusted delivery bridge as the immediate beta-critical infrastructure front because #589 demonstrates the unresolved delivery bottleneck after 141.
-3. Continue/converge 143 using that bridge as soon as safely usable; do not wait for unrelated roadmap work.
-4. After cloud delivery and 143 converge, simplify measured delivery/bookkeeping duplication, especially stale lifecycle state and repeated recovery ceremony, where fresh evidence justifies it.
+2. Preserve the now-demonstrated cloud-native trusted delivery path and repair only measured defects; do not reopen its architecture without evidence.
+3. Finish and converge the currently active beta-critical 143 product family and the already-established #594 trusted browser-proof compatibility work using the current proof stack where that remains the shortest safe path.
+4. Do **not** delay that 143/#594 closure merely to generalize tooling first.
+5. Immediately after those accepted product/proof obligations converge, perform the bounded tooling-generalization pass described above before starting lower-value infrastructure expansion.
+6. After the generic toolbox pass, continue beta-critical product work using the generalized capabilities, and simplify measured lifecycle/delivery/bookkeeping duplication where fresh evidence justifies it.
 
 This is scheduling/goal authority, not permission to waive dependency, review, exact-head, CI, browser-proof, security or merge gates. The implementation coordinator owns the minimum architecture, spec/readiness corrections and reuse decisions needed to reach the outcome.
 
@@ -73,4 +94,4 @@ A local actuator may be used only as an optional fallback when the maintainer ex
 
 This directive replaces the earlier same-day interpretation that treated 141/local-host delivery as sufficient for the cloud delivery bottleneck.
 
-It remains current until the cloud-native trusted delivery path and the beta-critical 143 path have converged, or until explicitly superseded by a newer maintainer directive. Long-lived generic rules should then be folded into existing canonical governance only where repeated evidence still justifies them.
+It remains current until the cloud-native trusted delivery path, the beta-critical 143/#594 path, and the bounded tooling-generalization pass have converged, or until explicitly superseded by a newer maintainer directive. Long-lived generic rules should then be folded into existing canonical governance only where repeated evidence still justifies them.
