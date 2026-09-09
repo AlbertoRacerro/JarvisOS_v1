@@ -12,7 +12,7 @@ function finiteNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-function readableCode(value: string | null | undefined, fallback: string): string {
+function humanizeReasonCode(value: string | null | undefined, fallback: string): string {
   if (!value) return fallback;
   return value.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
@@ -30,7 +30,7 @@ export function runtimeDeltaSummary(value: UnknownRecord, alignment = "unknown",
     files,
     status: typeof value.status === "string" ? value.status : "unavailable",
     partial: value.partial === true,
-    explanation: relation === "unknown" && reason ? readableCode(reason, "Runtime relationship unavailable") : null
+    explanation: relation === "unknown" && reason ? humanizeReasonCode(reason, "Runtime relationship unavailable") : null
   };
 }
 
