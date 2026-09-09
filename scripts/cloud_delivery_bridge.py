@@ -32,6 +32,7 @@ PATCH_CLOSE = "\n```"
 JSON_OPEN = "```json\n"
 JSON_CLOSE = "\n```"
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 BRANCH_RE = re.compile(r"^[A-Za-z0-9._/-]+$")
 PATH_RE = re.compile(r"^[A-Za-z0-9._/+@=-]+$")
 MAX_PATCH_BYTES = 60_000
@@ -79,11 +80,28 @@ def _extract_fence(body: str, opening: str, closing: str, *, start: int = 0) -> 
 
 def _assert_unambiguous_paths(paths: tuple[str, ...]) -> None:
     for raw in paths:
-        if not raw or not PATH_RE.fullmatch(raw) or raw.startswith(("/", ".git/")):
+        if not raw or not PATH_RE.fullmatch(raw) or raw.startswith("/"):
             raise BridgeError("changed_paths contain an ambiguous path")
         parts = raw.split("/")
-        if any(part in {"", ".", ".."} for part in parts):
+        if any(part in {"", ".", "..", ".git"} for part in parts):
             raise BridgeError("changed_paths contain an ambiguous path")
+
+
+def _admitted_profiles_for_paths(paths: tuple[str, ...]) -> set[str]:
+    known_prefixes = ("frontend/", "backend/", "scripts/", "docs/")
+    unknown = [path for path in paths if not path.startswith(known_prefixes)]
+    if unknown:
+        raise BridgeError(f"unsupported changed-path class: {unknown[0]}")
+    has_frontend = any(path.startswith("frontend/") for path in paths)
+    has_backend = any(path.startswith(("backend/", "scripts/")) for path in paths)
+    if has_frontend and has_backend:
+        raise BridgeError("mixed frontend/backend payload has no admitted fixed profile")
+    if has_frontend:
+        has_143 = "frontend/tests/143-operator-semantic-ux.mjs" in paths
+        return {"frontend-143"} if has_143 else {"frontend", "frontend-143"}
+    if has_backend:
+        return {"backend"}
+    return {"docs"}
 
 
 def _assert_patch_headers(payload: Payload) -> None:
@@ -118,7 +136,7 @@ def parse_payload(body: str) -> Payload:
         raise BridgeError("invalid PR number")
     if not SHA_RE.fullmatch(base_sha):
         raise BridgeError("base_sha must be a full lowercase SHA")
-    if not SHA_RE.fullmatch(patch_sha256):
+    if not SHA256_RE.fullmatch(patch_sha256):
         raise BridgeError("patch_sha256 must be a lowercase sha256")
     if not target_ref or target_ref in {"master", "main"} or target_ref.startswith("refs/"):
         raise BridgeError("protected or invalid target_ref")
@@ -140,6 +158,9 @@ def parse_payload(body: str) -> Payload:
     denied = set(normalized) & EXTRA_CONTROL_PATHS
     if denied:
         raise BridgeError(f"bridge/control path refused: {sorted(denied)[0]}")
+    admitted_profiles = _admitted_profiles_for_paths(normalized)
+    if profile not in admitted_profiles:
+        raise BridgeError("validation_profile is weaker or unrelated for changed_paths")
     payload = Payload(pr, base_sha, target_ref, patch_sha256, normalized, profile, patch)
     _assert_patch_headers(payload)
     return payload
@@ -198,8 +219,11 @@ def _git(repo_root: Path, args: list[str], *, check: bool = True) -> subprocess.
 
 
 def _diff_paths(repo_root: Path, base_sha: str) -> tuple[str, ...]:
-    out = _git(repo_root, ["diff", "--name-only", "--no-renames", base_sha, "--"]).stdout
-    return assert_safe_paths([line for line in out.splitlines() if line.strip()])
+    tracked = _git(repo_root, ["diff", "--name-only", "--no-renames", base_sha, "--"]).stdout
+    untracked = _git(repo_root, ["ls-files", "--others", "--exclude-standard", "--"]).stdout
+    return assert_safe_paths(
+        [line for line in (tracked + untracked).splitlines() if line.strip()]
+    )
 
 
 def _assert_safe_modes(repo_root: Path, base_sha: str) -> None:
