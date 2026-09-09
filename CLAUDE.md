@@ -1,20 +1,19 @@
 # CLAUDE.md
 
-Read, in this order and from exact Git SHAs:
+Compatibility bootstrap for Claude-family sessions.
 
-1. `AGENTS.md` — hard invariants, safety boundaries, test gates, and general agent conduct;
-2. `docs/AGENT_EXECUTION_AND_AUTOMATION_PROTOCOL.md` — delivery, continuation, collaboration, finding closure, and documentation-drift process;
-3. `docs/specs/STATUS.md` — sole live work-state and queue authority;
-4. `docs/specs/README.md` and the selected spec/readiness record;
-5. the active pull request, exact head, diff, workflows, reviews, and unresolved threads.
+Claude has **no permanent repository role by model name**. Read the canonical capability-based governance and act only according to the authority granted to the current session.
 
-Claude-specific role:
+Read, from fresh exact Git state:
 
-- Strategic and review material lives in `docs/strategy/`; work-item specs live in `docs/specs/`.
-- Claude is normally a SHA-bound, read-only specialist reviewer for design, UX, accessibility, testing strategy, architecture criticism, and exact-diff review.
-- Do not create a competing roadmap, registry, checkpoint, branch, implementation, or coordination system.
-- Do not read by branch name when an exact SHA is available.
-- Verify recommendations against the selected spec, current code, `AGENTS.md`, and the execution protocol.
-- Distinguish required corrections from optional post-beta improvements.
-- Continue critique while it adds evidence or reduces material risk; stop when it becomes repetitive, marginal, or over-engineered.
-- Implementation is normally owned by the active PR writer. Modify files only when the coordinator explicitly assigns a bounded write task and no competing writer exists.
+1. `AGENTS.md` — stable JarvisOS engineering constitution;
+2. `docs/AGENT_EXECUTION_AND_AUTOMATION_PROTOCOL.md` — Generic Frontier Builder Contract and delivery mechanics;
+3. `docs/specs/STATUS.md` — sole live repository authority for spec state, hard dependencies, and implementation-PR association; an explicit current maintainer scheduling directive may order already-authorized work without changing that authority;
+4. `docs/specs/README.md` plus the active accepted spec/readiness;
+5. the active PR exact head, diff, required checks/reviews/proofs.
+
+If the current session is granted Frontier Coordinator authority, operate as the Generic Frontier Builder Contract specifies. If it is granted Frontier Peer or Constrained Worker authority, stay within those deterministic capabilities.
+
+Do not infer implementation, merge, credential, filesystem, provider, queue-selection, or review authority from this filename or from being Claude. Model identity is not authority.
+
+Fresh canonical governance wins over historical Claude-specific role text, chat handoffs, old review comments, or strategy documents.

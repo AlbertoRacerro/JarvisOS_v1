@@ -5,11 +5,13 @@ import {
   SettingsApiError,
   loadAISettings,
   loadAIStatus,
+  loadProviderSettings,
   loadSecretStatus,
   loadSystemInfo,
   removeScalewayCredential,
   replaceScalewayCredential,
   saveAISetting,
+  type ProviderSettings,
   type SettingsSecretStatus
 } from "../api/settings";
 import InlineNotice from "../components/ui/InlineNotice";
@@ -44,6 +46,7 @@ type Draft = Record<NumericKey, string> & Record<BooleanKey, boolean>;
 type CanonicalSnapshot = {
   settings: AISettings;
   status: AIStatus;
+  providers: ProviderSettings;
   secret: SettingsSecretStatus;
   system: SystemInfoResponse;
 };
@@ -80,6 +83,26 @@ function displayError(caught: unknown, fallback: string): string {
   return caught instanceof Error ? caught.message : fallback;
 }
 
+function credentialSummary(provider: ProviderSettings["providers"][number]): string {
+  if (provider.credential.effective_source === "not_required") return "Credential not required";
+  if (provider.credential.effective_source === "environment") {
+    return `Environment active · persisted ${provider.credential.persisted_state}`;
+  }
+  if (provider.credential.effective_source === "invalid") {
+    return `Environment credential invalid · persisted ${provider.credential.persisted_state}`;
+  }
+  if (provider.credential.effective_source === "unknown") {
+    return `Credential state unavailable · persisted ${provider.credential.persisted_state}`;
+  }
+  if (provider.credential.effective_source === "secure_persisted") {
+    return `Secure persisted · ${provider.credential.persisted_state}`;
+  }
+  if (provider.credential.persisted_state === "not_supported") {
+    return "Environment credential unavailable";
+  }
+  return `No effective credential · persisted ${provider.credential.persisted_state}`;
+}
+
 function Settings() {
   const mounted = useRef(true);
   const generation = useRef(0);
@@ -89,6 +112,7 @@ function Settings() {
 
   const [settings, setSettings] = useState<AISettings | null>(null);
   const [status, setStatus] = useState<AIStatus | null>(null);
+  const [providers, setProviders] = useState<ProviderSettings | null>(null);
   const [secret, setSecret] = useState<SettingsSecretStatus | null>(null);
   const [system, setSystem] = useState<SystemInfoResponse | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -107,6 +131,15 @@ function Settings() {
     return stored.preset === "custom" ? stored.customHex ?? DEFAULT_ACCENT_HEX : DEFAULT_ACCENT_HEX;
   });
 
+  const invalidateCanonicalSnapshot = useCallback(() => {
+    setSettings(null);
+    setStatus(null);
+    setProviders(null);
+    setSecret(null);
+    setSystem(null);
+    setDraft(null);
+  }, []);
+
   const loadCanonical = useCallback(async (
     preserveDraft = false,
     savedKey?: EditableKey,
@@ -117,9 +150,10 @@ function Settings() {
     if (projectFailure) setError(null);
 
     try {
-      const [nextSettings, nextStatus, nextSecret, nextSystem] = await Promise.all([
+      const [nextSettings, nextStatus, nextProviders, nextSecret, nextSystem] = await Promise.all([
         loadAISettings(),
         loadAIStatus(),
+        loadProviderSettings(),
         loadSecretStatus(),
         loadSystemInfo()
       ]);
@@ -128,11 +162,13 @@ function Settings() {
       const snapshot: CanonicalSnapshot = {
         settings: nextSettings,
         status: nextStatus,
+        providers: nextProviders,
         secret: nextSecret,
         system: nextSystem
       };
       setSettings(snapshot.settings);
       setStatus(snapshot.status);
+      setProviders(snapshot.providers);
       setSecret(snapshot.secret);
       setSystem(snapshot.system);
       setDraft((current) => {
@@ -144,14 +180,15 @@ function Settings() {
       setUncertain(false);
       return true;
     } catch (caught) {
-      if (mounted.current && owner === generation.current && projectFailure) {
-        setError(displayError(caught, "Settings could not be loaded."));
+      if (mounted.current && owner === generation.current) {
+        invalidateCanonicalSnapshot();
+        if (projectFailure) setError(displayError(caught, "Settings could not be loaded."));
       }
       return false;
     } finally {
       if (mounted.current && owner === generation.current) setLoading(false);
     }
-  }, []);
+  }, [invalidateCanonicalSnapshot]);
 
   useEffect(() => {
     mounted.current = true;
@@ -208,15 +245,11 @@ function Settings() {
     setMessage(null);
     try {
       await saveAISetting({ [key]: value });
-      if (await refreshAfterMutation(key)) {
-        setMessage("Saved. Canonical settings reloaded.");
-      }
+      if (await refreshAfterMutation(key)) setMessage("Saved. Canonical settings reloaded.");
     } catch (caught) {
       const failure = displayError(caught, "Settings write failed.");
       const refreshed = await refreshAfterMutation();
-      if (refreshed && mounted.current) {
-        setError(`${failure} Canonical state was reloaded; no retry was attempted.`);
-      }
+      if (refreshed && mounted.current) setError(`${failure} Canonical state was reloaded; no retry was attempted.`);
     } finally {
       if (mounted.current) setSettingsBusy(false);
     }
@@ -224,7 +257,8 @@ function Settings() {
 
   const replaceCredential = async (event: FormEvent) => {
     event.preventDefault();
-    if (credentialBusy || uncertain || !apiKey.trim()) return;
+    const scalewayCapability = providers?.providers.find((provider) => provider.provider_id === "scaleway")?.credential_capabilities;
+    if (credentialBusy || uncertain || !apiKey.trim() || !scalewayCapability?.replace_persisted) return;
 
     const submitted = apiKey;
     setCredentialBusy(true);
@@ -233,16 +267,12 @@ function Settings() {
     try {
       await replaceScalewayCredential(submitted);
       setApiKey("");
-      if (await refreshAfterMutation()) {
-        setMessage("Credential mutation completed. Canonical secure status reloaded.");
-      }
+      if (await refreshAfterMutation()) setMessage("Credential mutation completed. Canonical secure status reloaded.");
     } catch (caught) {
       setApiKey("");
       const failure = displayError(caught, "Credential write failed.");
       const refreshed = await refreshAfterMutation();
-      if (refreshed && mounted.current) {
-        setError(`${failure} Canonical credential state was reloaded; no retry was attempted.`);
-      }
+      if (refreshed && mounted.current) setError(`${failure} Canonical credential state was reloaded; no retry was attempted.`);
     } finally {
       submitted.replace(/./g, "");
       if (mounted.current) setCredentialBusy(false);
@@ -255,7 +285,8 @@ function Settings() {
   };
 
   const removeCredential = async () => {
-    if (credentialBusy || uncertain) return;
+    const scalewayCapability = providers?.providers.find((provider) => provider.provider_id === "scaleway")?.credential_capabilities;
+    if (credentialBusy || uncertain || !scalewayCapability?.delete_persisted) return;
 
     setCredentialBusy(true);
     setError(null);
@@ -270,9 +301,7 @@ function Settings() {
     } catch (caught) {
       const failure = displayError(caught, "Credential delete failed.");
       const refreshed = await refreshAfterMutation();
-      if (refreshed && mounted.current) {
-        setError(`${failure} Canonical credential state was reloaded; no retry was attempted.`);
-      }
+      if (refreshed && mounted.current) setError(`${failure} Canonical credential state was reloaded; no retry was attempted.`);
     } finally {
       if (mounted.current) setCredentialBusy(false);
     }
@@ -315,6 +344,7 @@ function Settings() {
   const customAccentSwatch = normalizeAccentHex(customAccentDraft)
     ?? (accent.preset === "custom" ? accent.customHex : undefined)
     ?? DEFAULT_ACCENT_HEX;
+  const scaleway = providers?.providers.find((provider) => provider.provider_id === "scaleway") ?? null;
 
   return (
     <section className="settings-page" aria-labelledby="settings-title">
@@ -336,10 +366,7 @@ function Settings() {
       <div className="settings-grid">
         <Surface className="settings-card settings-card--visual">
           <div className="settings-visual__heading">
-            <div>
-              <p className="eyebrow">Local visual preference</p>
-              <h2>Appearance & accent</h2>
-            </div>
+            <div><p className="eyebrow">Local visual preference</p><h2>Appearance & accent</h2></div>
             <span className="settings-accent-preview" aria-hidden="true" />
           </div>
           <fieldset className="settings-visual__group">
@@ -367,14 +394,8 @@ function Settings() {
           </fieldset>
           {accent.preset === "custom" && (
             <div className="settings-custom-accent">
-              <label>
-                <span>Custom color</span>
-                <input type="color" value={normalizeAccentHex(customAccentDraft) ?? DEFAULT_ACCENT_HEX} onChange={(event) => updateCustomAccent(event.target.value)} />
-              </label>
-              <label>
-                <span>HEX</span>
-                <input aria-invalid={normalizeAccentHex(customAccentDraft) === null} value={customAccentDraft} maxLength={7} spellCheck={false} onChange={(event) => updateCustomAccent(event.target.value)} />
-              </label>
+              <label><span>Custom color</span><input type="color" value={normalizeAccentHex(customAccentDraft) ?? DEFAULT_ACCENT_HEX} onChange={(event) => updateCustomAccent(event.target.value)} /></label>
+              <label><span>HEX</span><input aria-invalid={normalizeAccentHex(customAccentDraft) === null} value={customAccentDraft} maxLength={7} spellCheck={false} onChange={(event) => updateCustomAccent(event.target.value)} /></label>
               <button className="button-secondary" type="button" onClick={resetAccent}>Reset to Microalgae</button>
               {normalizeAccentHex(customAccentDraft) === null && <small className="settings-accent-error">Use a six-digit HEX value such as #528B68.</small>}
             </div>
@@ -384,79 +405,56 @@ function Settings() {
 
         <Surface className="settings-card">
           <h2>AI permission & budget</h2>
-          <p className="settings-card__summary">
-            External calls: <strong>{status?.external_calls_allowed ? "Allowed" : "Blocked"}</strong>
-            {status?.blocking_reason ? ` — ${status.blocking_reason}` : ""}
-          </p>
+          <p className="settings-card__summary">External calls: <strong>{providers?.external_calls_allowed ? "Allowed" : "Blocked"}</strong>{providers?.blocking_reason ? ` — ${providers.blocking_reason}` : ""}</p>
           {draft && (
             <div className="settings-fields">
-              <label>
-                <span>Monthly API budget <small>USD</small></span>
-                <span className="settings-field">
-                  <input inputMode="decimal" value={draft.monthly_api_budget_usd} disabled={allMutationsBusy} onChange={(event) => setDraft({ ...draft, monthly_api_budget_usd: event.target.value })} />
-                  <button disabled={allMutationsBusy} onClick={() => void save("monthly_api_budget_usd")}>Save</button>
-                </span>
-              </label>
-              <label className="settings-toggle">
-                <span>Paid AI enabled</span>
-                <input type="checkbox" checked={draft.paid_ai_enabled} disabled={allMutationsBusy} onChange={(event) => setDraft({ ...draft, paid_ai_enabled: event.target.checked })} />
-                <button disabled={allMutationsBusy} onClick={() => void save("paid_ai_enabled")}>Save</button>
-              </label>
-              <label className="settings-toggle">
-                <span>Scaleway enabled</span>
-                <input type="checkbox" checked={draft.scaleway_enabled} disabled={allMutationsBusy} onChange={(event) => setDraft({ ...draft, scaleway_enabled: event.target.checked })} />
-                <button disabled={allMutationsBusy} onClick={() => void save("scaleway_enabled")}>Save</button>
-              </label>
-              <label>
-                <span>Monthly token cap</span>
-                <span className="settings-field">
-                  <input inputMode="numeric" value={draft.scaleway_monthly_token_cap} disabled={allMutationsBusy} onChange={(event) => setDraft({ ...draft, scaleway_monthly_token_cap: event.target.value })} />
-                  <button disabled={allMutationsBusy} onClick={() => void save("scaleway_monthly_token_cap")}>Save</button>
-                </span>
-              </label>
-              <label>
-                <span>Hard-stop token cap</span>
-                <span className="settings-field">
-                  <input inputMode="numeric" value={draft.scaleway_hard_stop_token_cap} disabled={allMutationsBusy} onChange={(event) => setDraft({ ...draft, scaleway_hard_stop_token_cap: event.target.value })} />
-                  <button disabled={allMutationsBusy} onClick={() => void save("scaleway_hard_stop_token_cap")}>Save</button>
-                </span>
-              </label>
-              <label>
-                <span>Direct continuations <small>0–16</small></span>
-                <span className="settings-field">
-                  <input inputMode="numeric" value={draft.max_direct_continuations} disabled={allMutationsBusy} onChange={(event) => setDraft({ ...draft, max_direct_continuations: event.target.value })} />
-                  <button disabled={allMutationsBusy} onClick={() => void save("max_direct_continuations")}>Save</button>
-                </span>
-              </label>
+              <label><span>Monthly API budget <small>USD</small></span><span className="settings-field"><input inputMode="decimal" value={draft.monthly_api_budget_usd} disabled={allMutationsBusy} onChange={(event) => setDraft({ ...draft, monthly_api_budget_usd: event.target.value })} /><button disabled={allMutationsBusy} onClick={() => void save("monthly_api_budget_usd")}>Save</button></span></label>
+              <label className="settings-toggle"><span>Paid AI enabled</span><input type="checkbox" checked={draft.paid_ai_enabled} disabled={allMutationsBusy} onChange={(event) => setDraft({ ...draft, paid_ai_enabled: event.target.checked })} /><button disabled={allMutationsBusy} onClick={() => void save("paid_ai_enabled")}>Save</button></label>
+              <label className="settings-toggle"><span>Scaleway enabled</span><input type="checkbox" checked={draft.scaleway_enabled} disabled={allMutationsBusy} onChange={(event) => setDraft({ ...draft, scaleway_enabled: event.target.checked })} /><button disabled={allMutationsBusy} onClick={() => void save("scaleway_enabled")}>Save</button></label>
+              <label><span>Monthly token cap</span><span className="settings-field"><input inputMode="numeric" value={draft.scaleway_monthly_token_cap} disabled={allMutationsBusy} onChange={(event) => setDraft({ ...draft, scaleway_monthly_token_cap: event.target.value })} /><button disabled={allMutationsBusy} onClick={() => void save("scaleway_monthly_token_cap")}>Save</button></span></label>
+              <label><span>Hard-stop token cap</span><span className="settings-field"><input inputMode="numeric" value={draft.scaleway_hard_stop_token_cap} disabled={allMutationsBusy} onChange={(event) => setDraft({ ...draft, scaleway_hard_stop_token_cap: event.target.value })} /><button disabled={allMutationsBusy} onClick={() => void save("scaleway_hard_stop_token_cap")}>Save</button></span></label>
+              <label><span>Direct continuations <small>0–16</small></span><span className="settings-field"><input inputMode="numeric" value={draft.max_direct_continuations} disabled={allMutationsBusy} onChange={(event) => setDraft({ ...draft, max_direct_continuations: event.target.value })} /><button disabled={allMutationsBusy} onClick={() => void save("max_direct_continuations")}>Save</button></span></label>
             </div>
           )}
         </Surface>
 
         <Surface className="settings-card">
+          <h2>Provider catalogue</h2>
+          <p className="settings-card__summary">Canonical registry projection. Credentials are status-only; provider tests remain separate.</p>
+          <div className="settings-fields" data-provider-settings-list>
+            {providers?.providers.map((provider) => (
+              <div key={provider.provider_id} data-provider-id={provider.provider_id}>
+                <strong>{provider.provider_id}</strong>
+                <p className="settings-muted">{provider.kind} · {provider.execution_class} · {provider.enabled ? "enabled" : "disabled"}</p>
+                <p data-provider-egress-state={provider.external_calls_allowed ? "allowed" : "blocked"}>
+                  Provider access: {provider.external_calls_allowed ? "Allowed" : "Blocked"}
+                  {provider.blocking_reason ? ` — ${provider.blocking_reason}` : ""}
+                </p>
+                <p>{credentialSummary(provider)}</p>
+                {provider.credential.reason_code && <small>{provider.credential.reason_code}</small>}
+              </div>
+            )) ?? <p>Checking provider registry.</p>}
+          </div>
+        </Surface>
+
+        <Surface className="settings-card" data-provider-credential-owner="scaleway">
           <h2>Scaleway credential</h2>
           <dl className="settings-facts">
-            <div><dt>Effective source</dt><dd>{secret?.effective_source ?? "checking"}</dd></div>
-            <div><dt>Persisted state</dt><dd>{secret?.persisted_state ?? "checking"}</dd></div>
+            <div><dt>Effective source</dt><dd>{scaleway?.credential.effective_source ?? secret?.effective_source ?? "checking"}</dd></div>
+            <div><dt>Persisted state</dt><dd>{scaleway?.credential.persisted_state ?? secret?.persisted_state ?? "checking"}</dd></div>
             <div><dt>Storage mode</dt><dd>{secret?.storage_mode ?? "checking"}</dd></div>
           </dl>
           <form className="settings-secret" onSubmit={replaceCredential}>
-            <label>
-              Replace API key
-              <input ref={credentialInputRef} type="password" autoComplete="new-password" value={apiKey} disabled={allMutationsBusy || secret?.effective_source === "environment"} onChange={(event) => setApiKey(event.target.value)} />
-            </label>
-            <button disabled={allMutationsBusy || !apiKey.trim() || secret?.effective_source === "environment"}>Store securely</button>
+            <label>Replace API key<input ref={credentialInputRef} type="password" autoComplete="new-password" value={apiKey} disabled={allMutationsBusy || !scaleway?.credential_capabilities.replace_persisted} onChange={(event) => setApiKey(event.target.value)} /></label>
+            <button disabled={allMutationsBusy || !apiKey.trim() || !scaleway?.credential_capabilities.replace_persisted}>Store securely</button>
           </form>
-          {secret?.effective_source === "environment" && (
-            <p className="settings-muted">Environment credentials override persisted credentials and cannot be replaced here.</p>
-          )}
+          {scaleway?.credential.effective_source === "environment" && <p className="settings-muted">Environment credentials override persisted credentials and cannot be replaced here. Persisted damage remains visible independently.</p>}
           {!confirmDelete ? (
-            <button ref={deleteTriggerRef} className="button-secondary" disabled={allMutationsBusy || !secret?.key_present} onClick={() => setConfirmDelete(true)}>
-              Delete persisted credential
-            </button>
+            <button ref={deleteTriggerRef} className="button-secondary" disabled={allMutationsBusy || !scaleway?.credential_capabilities.delete_persisted} onClick={() => setConfirmDelete(true)}>Delete persisted credential</button>
           ) : (
             <div className="settings-confirm" role="group" aria-label="Confirm credential deletion" onKeyDown={(event) => { if (event.key === "Escape") cancelDelete(); }}>
               <span>Delete the persisted credential?</span>
-              <button ref={deleteConfirmRef} disabled={allMutationsBusy} onClick={() => void removeCredential()}>Delete</button>
+              <button ref={deleteConfirmRef} disabled={allMutationsBusy || !scaleway?.credential_capabilities.delete_persisted} onClick={() => void removeCredential()}>Delete</button>
               <button className="button-secondary" disabled={credentialBusy} onClick={cancelDelete}>Cancel</button>
             </div>
           )}
@@ -465,10 +463,10 @@ function Settings() {
         <Surface className="settings-card">
           <h2>Current usage</h2>
           <dl className="settings-facts">
-            <div><dt>Spend this month</dt><dd>${status?.spend_month_to_date_usd ?? 0}</dd></div>
-            <div><dt>Token usage</dt><dd>{status?.usage_total_tokens ?? 0}</dd></div>
+            <div><dt>Spend this month</dt><dd>${providers?.spend_month_to_date_usd ?? status?.spend_month_to_date_usd ?? 0}</dd></div>
+            <div><dt>Scaleway token usage</dt><dd>{status?.usage_total_tokens ?? 0}</dd></div>
             <div><dt>Budget status</dt><dd>{status?.budget_status ?? "checking"}</dd></div>
-            <div><dt>Provider</dt><dd>{status?.provider_id ?? "checking"}</dd></div>
+            <div><dt>Default provider</dt><dd>{providers?.default_provider_id ?? status?.provider_id ?? "checking"}</dd></div>
           </dl>
         </Surface>
 
@@ -482,9 +480,9 @@ function Settings() {
           </dl>
           <details>
             <summary>Advanced diagnostics</summary>
-            <p>Policy: {settings?.policy_mode ?? "checking"}</p>
+            <p>Policy: {providers?.policy_mode ?? settings?.policy_mode ?? "checking"}</p>
             <p>Provider mode: {status?.provider_mode ?? "checking"}</p>
-            <p>Credential reason: {secret?.reason_code ?? "none"}</p>
+            <p>Credential reason: {scaleway?.credential.reason_code ?? secret?.reason_code ?? "none"}</p>
           </details>
         </Surface>
       </div>

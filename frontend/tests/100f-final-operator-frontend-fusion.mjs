@@ -11,6 +11,8 @@ const main = read("src/main.tsx");
 const fusion = read("src/components/fusion/FinalOperatorUnavailableSurface.tsx");
 const readFusion = read("src/components/fusion/FinalOperatorReadSurface.tsx");
 const readApi = read("src/api/client.ts");
+const codingWorkbench = read("src/pages/CodingWorkbench.tsx");
+const codingApi = read("src/api/coding.ts");
 const generatedModeling = read("src/api/generated/modeling.ts");
 const fusionCss = read("src/styles/final-fusion.css");
 const shellOverlay = read("src/styles/final-fusion-shell-overrides.css");
@@ -58,12 +60,14 @@ check(contextNav.includes("ROADMAP_STAGE_ITEMS"), "Roadmap Timeline/Calendar sec
 check(app.includes('route.id === "design-process" || route.id === "design-bluecad"'), "Process/BLUECAD do not reuse the existing stage shell");
 check(app.includes('sidecar: route.primaryNav === "settings" ? undefined : jarvisSidecar'), "Settings must not expose Jarvis sidecar");
 includesAll(app, [
-  'FinalOperatorReadSurface kind="project-basis"', 'FinalOperatorReadSurface kind="models"',
+  'FinalOperatorReadSurface kind="project-basis"', 'ModelDossier workspaceId=',
   'kind="literature"', 'kind="roadmap"', 'kind="calendar"', 'kind="brainstorm"',
-  'kind="repository"', 'FinalOperatorReadSurface kind="runtime"'
+  '<CodingWorkbench mode="repository" workspaceId={workspaceId} />',
+  '<CodingWorkbench mode="runtime" workspaceId={workspaceId} />'
 ], "missing final production surface composition");
 check(app.includes("No server-owned roadmap item store") && app.includes("No server-owned time-allocation calendar"), "Development missing-authority states are not explicit");
-check(app.includes("browser does not call GitHub"), "Repository frontend/GitHub truth boundary is not explicit");
+check(codingWorkbench.includes("Repository browsing is context-neutral.") && codingWorkbench.includes("server-validated GitHub path"), "Repository frontend/GitHub truth boundary is not explicit");
+check(!/api\.github\.com|github\.com\/api|Authorization|GITHUB_TOKEN/i.test(codingApi), "Coding browser API client crossed provider/credential boundary");
 check(!/iframe|srcDoc/.test(app), "static HTML embedding is forbidden");
 check(!/localStorage|sessionStorage|fetch\(|axios|github\.com\/api/i.test(app), "final surface shell gained private truth/API authority");
 

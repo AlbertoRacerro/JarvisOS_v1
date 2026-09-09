@@ -1,5 +1,5 @@
 import json
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -85,6 +85,51 @@ class AIStatusRead(BaseModel):
     blocking_reason: str | None
     default_ai_provider: str
     default_ai_model: str
+
+
+class ProviderCredentialStatus(BaseModel):
+    key_present: bool
+    effective_source: Literal[
+        "environment",
+        "secure_persisted",
+        "absent",
+        "invalid",
+        "unknown",
+        "not_required",
+    ]
+    persisted_state: Literal[
+        "absent", "usable", "corrupted", "unavailable", "not_supported"
+    ]
+    reason_code: str | None = None
+
+
+class ProviderCredentialCapabilities(BaseModel):
+    replace_persisted: bool = False
+    delete_persisted: bool = False
+
+
+class ProviderSettingsProvider(BaseModel):
+    provider_id: str
+    kind: str
+    enabled: bool
+    requires_network: bool
+    execution_class: str
+    monthly_token_cap: int
+    monthly_cost_cap_usd: float
+    external_calls_allowed: bool
+    blocking_reason: str | None = None
+    credential: ProviderCredentialStatus
+    credential_capabilities: ProviderCredentialCapabilities
+
+
+class ProviderSettingsRead(BaseModel):
+    providers: list[ProviderSettingsProvider]
+    default_provider_id: str
+    policy_mode: AIPolicyMode
+    external_calls_allowed: bool
+    blocking_reason: str | None = None
+    monthly_api_budget_usd: float
+    spend_month_to_date_usd: float
 
 
 class ModelingDraftRequest(BaseModel):

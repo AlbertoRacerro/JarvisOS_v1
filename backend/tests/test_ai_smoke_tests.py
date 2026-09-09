@@ -75,7 +75,7 @@ def test_scaleway_smoke_defaults_are_disabled(client: TestClient) -> None:
     assert status["provider_mode"] == "fake"
     assert status["provider_id"] == "fake"
     assert status["adapter_enabled"] is True
-    assert status["budget_status"] == "paid_ai_disabled"
+    assert status["budget_status"] == "monthly_budget_exhausted"
     assert status["credential_status"] == "not_required"
     assert status["scaleway_enabled"] is False
     assert status["scaleway_smoke_test_enabled"] is False

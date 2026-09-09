@@ -1,18 +1,16 @@
 # JarvisOS current context
 
-Live spec status, active PRs, dependencies, and the current roadmap are maintained
-only in [`docs/specs/STATUS.md`](specs/STATUS.md).
+Status: **SUPERSEDED NAVIGATION SHIM — NO CURRENT AUTHORITY**
 
-This file intentionally does not duplicate current work or recently merged state.
-Keeping a second handoff ledger created the same drift problem as the old specs
-README index. New chats and agents should read, in order:
+This file is retained only so old links fail safely. It must not be used as a handoff, roadmap, builder prompt, merge policy, review policy, model-role policy, or current-state source.
 
-1. `AGENTS.md`
-2. `docs/specs/STATUS.md`
-3. `docs/specs/README.md`
-4. the selected spec file
-5. the relevant canonical architecture, decisions, code, tests, and PR evidence
+Current repository-development authority is intentionally narrow:
 
-Runtime code, tests, CI, and merged GitHub state remain stronger evidence than
-roadmap prose. Automated review is advisory, and merge authority remains with CI
-plus the human maintainer.
+1. `AGENTS.md` — stable AI engineering constitution;
+2. `docs/AGENT_EXECUTION_AND_AUTOMATION_PROTOCOL.md` — Generic Frontier Builder Contract and delivery mechanics;
+3. `docs/specs/STATUS.md` — sole live repository authority for spec state, hard dependencies, and implementation-PR association; an explicit current maintainer scheduling directive may order already-authorized work without changing that authority;
+4. the active accepted spec/readiness — current slice outcome, scope, non-goals, and special evidence;
+5. `docs/POST_112_PARALLEL_DELIVERY_PROFILE.md` — post-112 concurrency mechanics only, when relevant;
+6. fresh exact Git/PR/runtime/test/proof evidence.
+
+Historical content previously carried by this file is superseded and preserved only in Git history. Do not reconstruct current instructions from it.

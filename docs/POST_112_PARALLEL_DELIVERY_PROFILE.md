@@ -1,329 +1,181 @@
 # Post-112 controlled parallel delivery profile
 
-Status: canonical operational profile, dormant until activation gate
+Status: canonical concurrency profile
 Authorized: 2026-08-28
-Maintainer acceleration amendment: 2026-08-28
-Final role-split reconciliation: 2026-08-28
-Maintainer hardening-priority amendment: 2026-08-30
-Delivery-efficiency amendment: 2026-08-31
-Affected-domain master gating amendment: 2026-08-31
-Direct-implementation role amendment: 2026-08-31
-Human-blocker and review-batching amendment: 2026-09-05
-Semantic-review race amendment: 2026-09-06
+Refactored: 2026-09-07 — concurrency mechanics only
 
-This document defines the minimum controlled-parallel delivery exception to the repository's normal serial execution rule. It changes repository-development mechanics only. It does not change JarvisOS runtime authority, provider policy, product architecture, credentials, egress, schemas, or model-promotion rules.
+This file defines **only the concurrency and shared-writer mechanics** used after spec 112 is merged.
 
-`docs/specs/STATUS.md` remains the sole live source of truth for work state, dependencies, queue order, and implementation-PR association. This file is not a second roadmap. A future ordering described here becomes executable only when matching live registry authority exists in `STATUS.md`.
+Engineering philosophy, model roles, review policy, lifecycle compression, convergence, merge criteria, and maintainer interruption rules live in `AGENTS.md` and `docs/AGENT_EXECUTION_AND_AUTOMATION_PROTOCOL.md`. Do not duplicate them here.
 
-## 1. Activation gate
+`docs/specs/STATUS.md` remains the sole live authority for work state, dependencies, priority, and implementation-PR association. This file is not a roadmap and contains no permanent spec ordering.
 
-The profile is **dormant** until fresh exact `master` shows `112 PROJECT-KNOWLEDGE-CORE-1` with registry status `merged`.
+## 1. Activation
 
-Before that condition is true:
+This profile is active only when fresh exact `master` shows `112 PROJECT-KNOWLEDGE-CORE-1` as `merged`.
 
-- implementation remains serial through 112;
-- no parallel runtime implementation lane is authorized by this document;
-- no agent may use this document to skip a dependency, start a `planned` spec, or open a second implementation front.
+Before that condition, ordinary serial delivery applies.
 
-At the first coordinating cycle after 112 is merged, ChatGPT re-reads exact `master`, `AGENTS.md`, `docs/AGENT_EXECUTION_AND_AUTOMATION_PROTOCOL.md`, `docs/specs/STATUS.md`, candidate specs/readiness, current PRs/evidence, and current ownership. Activation is automatic only for lanes whose file, store, schema, migration, and authority boundaries are demonstrated to be sufficiently disjoint.
+After activation, parallelism is permitted only where the acting Frontier Coordinator has enough evidence that the concurrent work does not create unsafe shared state/authority races.
 
-If disjointness cannot be proved, only the conflicting slices remain serial. Independent lanes may proceed. Maintainer interruption is required only for the four canonical classes in `AGENTS.md`.
+A conflict serializes only the conflicting work. It does not require unrelated disjoint work to stop.
 
-### 1A. Temporary hardening-first priority — 2026-08-30
+## 2. Scheduler topology
 
-The maintainer has temporarily overridden normal post-112 lane scheduling order to front-load architecture/reliability hardening before the broader 113–126 roadmap resumes. This is a **scheduling priority override only**: it does not convert a `planned` row into implementation authority and it does not invalidate an already accepted readiness decision.
+The normal automation topology is four interchangeable frontier-builder scheduler slots, currently staggered at:
 
-At the time of this amendment, PR #434 is the only active JarvisOS PR. Finish and reconcile that already-started planning work first. Do not resurrect stale branches merely because they predate this amendment.
+- A — `:00`;
+- C — `:15`;
+- B — `:30`;
+- D — `:45`.
 
-After #434 closes cleanly, the first new front is `128 ARCHITECTURE-ENFORCEMENT-GATE-1`, which must complete its normal definition/full-spec/readiness/implementation lifecycle. After 128 is accepted and merged, the next priority is one separately accepted JarvisOS integration slice for `jarvis-pr-attention` V1.11, preserving the tool as read-only, advisory, stateless exact-head evidence only and never as semantic acceptance, approval/comment, merge, queue, persistence, or source-of-truth authority.
+The letters are scheduling slots, not architecture roles and not model identities.
 
-After that integration is accepted, continue hardening in this order:
+Any sufficiently capable model/session may execute a slot if it can read canonical repository state and use the required deterministic capabilities.
 
-`127 -> (129 / 130 / 132 when fresh disjointness permits) -> 131 -> 133 -> 134`
+## 3. Global shared-writer mutex
 
-Until `134 MERGE-AUTHORITY-HARDENING-1` is merged:
+Only one frontier scheduler may own GitHub/shared-authority mutation at a time.
 
-- do not start 113 implementation;
-- do not start new 114–126 planning or implementation fronts;
-- 113 may remain technically `ready`, but that readiness is intentionally held by this scheduling priority;
-- the hardening sequence above overrides the normal Knowledge/Development/Coding/provider lane scheduling priority.
+Before the first shared mutation:
 
-After 134 merges, this temporary hold is lifted automatically. Resume 113 plus 114+ and the other canonical post-112 lanes in controlled parallel according to then-current `STATUS.md`, dependencies, accepted readiness, disjointness, and exact-head evidence.
+1. inspect live A/B/C/D automation titles;
+2. if another enabled builder has `[BUSY <UTC-ISO>]` less than **20 minutes** old, do not perform shared mutation;
+3. otherwise rename only the current slot to `<BASE_TITLE> [BUSY <UTC-ISO>]`;
+4. immediately inspect the topology again;
+5. if another fresh BUSY owner is now present, restore the base title and remain non-writer; otherwise the current slot owns the shared writer lease.
 
-## 2. Scheduler identities, logical locks, and global writer mutex
+A BUSY timestamp at least 20 minutes old is stale coordination evidence and does not prove ownership.
 
-Scheduler identities are generic ChatGPT compute slots. Integration, Knowledge, Development, and Coding are **logical responsibilities acquired dynamically**, not permanent automation identities.
+If a run keeps mutation authority for roughly **10 minutes**, refresh its own BUSY timestamp and immediately re-check before another mutation boundary. A resumed/stalled session never relies on an old title as authority.
 
-The normal post-112 scheduler topology is four interchangeable ChatGPT replicas staggered at `:00`, `:15`, `:30`, and `:45`. They reduce reaction latency; they do **not** authorize concurrent ChatGPT writers.
+Always restore the base title on exit, including failure paths.
 
-Every replica uses the same global ChatGPT writer-mutex protocol through the automation control plane before any GitHub/shared-authority mutation:
+The automation-title lease is anti-race coordination only. **Exact SHA, current remote state, expected-head CAS, and post-mutation verification remain correctness.**
 
-1. read the live automation topology with `automations.peek`;
-2. if any other JarvisOS Roadmap Builder A/B/C/D title is `[BUSY <UTC-ISO>]` and that timestamp is less than **20 minutes** old, do not mutate shared authority;
-3. otherwise rename only itself to its base title plus `[BUSY <UTC-ISO>]`;
-4. immediately re-read the automation topology;
-5. if another fresh A/B/C/D BUSY marker is now present, restore the base title and exit mutation mode; otherwise this replica is the sole ChatGPT coordinator/writer for the run;
-6. before every later mutation boundary, if the replica has held the lease for **10 minutes or more** since the timestamp currently in its title, refresh only its own BUSY timestamp and immediately re-peek; if a competing fresh writer now exists, restore the base title and abort the mutation;
-7. before returning, always restore its base title, including after a failure path.
+## 4. What requires shared serialization
 
-No GitHub/shared-authority mutation occurs before the post-rename re-check. A BUSY marker **20 minutes or older is stale and is not ownership evidence**. A writer that resumes after a stall may not rely on its previous title: before any new mutation it must refresh its own timestamp and re-peek, so a safe takeover that happened during the stall wins. This bounds a crashed/stalled writer's normal throughput penalty while preserving fail-closed exclusion at every mutation boundary.
+Serialize mutations that can collide through common authority or state, including as applicable:
 
-The title lease remains an anti-waste coordination mechanism only. Exact SHA/CAS, current branch/head state, and revalidation remain correctness. The four schedulers may all remain enabled; mutual exclusion is achieved by this peek/mark/re-peek/heartbeat protocol rather than by fixed lane affinity.
+- `STATUS.md` and shared roadmap state;
+- merges and merge sequencing;
+- shared branches/PR heads;
+- common routers/registries;
+- migrations/schema sequencing;
+- common credentials/provider/egress policy;
+- repository-wide workflows/control files;
+- shared frontend/backend integration owners;
+- any path/state a fresh ownership audit shows is common to active fronts.
 
-While one replica owns the writer role:
+The coordinator may make several related shared mutations during one lease when that is the shortest safe path to convergence.
 
-- **only one ChatGPT coordinator/writer may mutate GitHub/shared authority at a time**;
-- the owner temporarily holds Integration responsibilities and may service any currently authorized lane;
-- logical lane ownership is acquired for the current bounded action and released when that action is complete;
-- no two writers may mutate the same PR/head or shared authority concurrently.
+## 5. What may run in parallel
 
-Shared integration boundaries remain Integration-owned, including `STATUS.md`, shared routers/registries, migration/schema sequencing, common Jarvis/AI infrastructure, shared API clients/global frontend integration, root configuration, repository-wide workflows/control files, and any path a fresh ownership audit shows is shared.
+Parallel work is encouraged when it has a real throughput or risk-reduction advantage and the state boundaries are safe.
 
-A domain lane that needs a shared mutation produces a bounded integration request/candidate and does not race the coordinator for the shared file.
+Examples:
 
-## 3. Normative model-role split
+- read-only research and exact-head analysis;
+- independent semantic critique;
+- browser proof that does not mutate source;
+- disjoint implementation in isolated worktrees/branches;
+- focused tests on isolated state;
+- constrained-worker candidate work;
+- planning/readiness analysis for an authorized disjoint front.
 
-The current repository-development pipeline is direct-first:
+Disjointness should be judged by **actual state and authority**, not just filenames. Consider:
 
-`ChatGPT spec/plan/readiness -> ChatGPT direct implementation/repair -> semantic review race when required -> ChatGPT exact-head merge/reconcile`
+- files/modules;
+- database/schema/migrations;
+- durable stores;
+- shared configuration;
+- provider/credential/egress ownership;
+- Git branch/worktree ownership;
+- workflow/control-plane ownership;
+- product/domain invariants.
 
-Optional external/model helpers may contribute bounded proposal-only work in parallel when they have a concrete throughput or risk-reduction advantage. They are never a mandatory implementation hop.
+Do not require a formal disjointness essay when the separation is obvious and reversible. Require stronger evidence only when a collision could produce material corruption, authority bypass, or difficult rollback.
 
-### ChatGPT — default direct implementer / Tech Lead / Architect / Maintainer
+## 6. Writer and non-writer behavior
 
-ChatGPT owns fresh repo/context reading, architecture/ownership, definition/full spec/readiness, direct implementation and repair of authorized READY work by default, scope/non-goals/acceptance criteria, semantic exact-diff review, integration, shared authority, `STATUS.md`, exact-head merge, and reconciliation.
+The writer owns the current bounded shared action and should continue until that action reaches a stable durable state rather than relinquishing the lease after every tiny mutation.
 
-### External/model workers — optional bounded proposal-only helpers
+A non-writer must not race the shared state. It may:
 
-GLM, Codex, Claude, or another model worker may be used only when fresh authority permits a genuinely bounded/disjoint task and delegation has a concrete throughput or risk-reduction advantage. Each helper task receives exact target/base SHA, allowed paths/boundaries, preloaded authority/context, required behavior, non-goals, acceptance tests/checks, and any required tool/authority restrictions.
+- inspect fresh evidence;
+- perform genuinely independent critique;
+- diagnose CI;
+- prepare a non-duplicative workpack;
+- work in a demonstrably disjoint isolated lane;
+- do nothing when additional parallel analysis would only duplicate existing work.
 
-External/model helpers:
+**Doing nothing is better than producing duplicate review noise.** A non-writer is not required to manufacture helper work every wake.
 
-- produce proposal-only candidate patches or evidence;
-- own no GitHub write, merge, queue, spec, architecture, policy, provider, credential, promotion, or shared-authority role;
-- do not duplicate the active implementation;
-- do not replace direct progress that ChatGPT can safely make;
-- do not become a wait or stop condition;
-- may run in parallel only on demonstrably disjoint exact-head tasks/lanes.
+## 7. Isolated worktree/worker principle
 
-A useful already-terminal candidate may be consumed if it remains exact-head relevant; otherwise ChatGPT proceeds directly.
+Where trusted local or cloud workers exist, isolated worktrees may preserve durable work across sessions and allow disjoint implementation.
 
-### ChatGPT acceptance and repair
+A worker's authority is determined by the server/control-plane capability granted to it, not by its model name or prompt claim.
 
-ChatGPT reviews diff, scope, semantics, invariants, and test evidence. Workflow green alone is not semantic PASS. ChatGPT repairs directly by default. If an already-terminal external candidate is materially useful, ChatGPT may minimally repair and integrate it rather than discard it, but no external repair round is required before progress continues.
+A worker going offline removes only capabilities physically dependent on that worker. It must not globally disable GitHub, hosted CI, cloud review, governance, or other independent lanes.
 
-### Claude — independent semantic reviewer
+Dirty/persistent work is not silently migrated between workers. Reconnect/resume revalidates current remote/head state before delivery.
 
-Claude is requested immediately on a frozen exact head when independent semantic review is required or materially useful. Claude is reviewer, not a required implementation hop.
+Detailed local-worker behavior belongs to its accepted implementation/specification, not to this concurrency profile.
 
-### Codex — scarce specialist/high-risk reserve and latency fallback
+## 8. Lane selection
 
-Codex remains a scarce specialist/high-risk reserve. Request it concurrently with Claude only for a concrete high-risk/material-advantage review need such as repository authority, merge/verification mechanics, security/credential/egress, destructive behavior, or another unresolved high-risk boundary. Otherwise do not spend it routinely on planning, docs-only work, reconciliation, ordinary UI polish, small PRs, CI watching, or duplicate review; if Claude still has no consumable exact-head verdict at the next scheduled coordinating-builder wake, request Codex then as the default latency fallback unless a current-head Codex request/result already exists.
+Do not encode a historical fixed lane order here.
 
-Deterministic repo/runtime evidence and accepted authority outrank all model claims.
+At each scheduling decision:
 
-### 3A. Bounded causal-sibling semantic review
+1. read fresh `STATUS.md` and current maintainer scheduling directives;
+2. identify the highest-value authorized work;
+3. continue unfinished work before opening duplicates;
+4. use parallel lanes only where dependencies and state/authority boundaries permit;
+5. serialize only the shared/conflicting portion.
 
-Every semantic review request for a material PR must instruct the reviewer: `If you find any P0/P1, before finalizing perform one bounded causal-sibling sweep of the same failure family/directly adjacent accepted-scope paths and report all P0/P1 plus useful P2 siblings together in this same verdict. Do not broaden beyond that family.`
+A `planned` item is still non-implementation authority. Parallelism does not bypass readiness or hard dependencies.
 
-If a reviewer reports a P0/P1 without evidence of that bounded family sweep, request exactly one same-head follow-up limited to the same causal/failure family before mutating, unless immediate safety urgency requires repair. If that reviewer cannot provide a consumable follow-up, the coordinator performs exactly one bounded sweep of the same causal/failure family itself and may then repair the consolidated same-family P0/P1 set; the mutated head still requires fresh semantic review under section 3B before merge. Do not recursively expand review scope. When safely possible, repair the consolidated same-family P0/P1 set in one bounded mutation with minimum causal sibling tests. P2/P3 retain the canonical impact classification: a material blocking P2 must be fixed, while findings explicitly classified PARK do not delay an otherwise valid merge absent later elevation. A head mutation invalidates affected review evidence and restarts exact-head review requirements as usual.
+Temporary maintainer priorities should live in the current scheduling directive/automation metadata or canonical live planning state, not become permanent sections of this file.
 
-### 3B. Semantic-review race and bounded degraded quorum
+## 9. Review concurrency
 
-For every frozen exact head requiring semantic review:
+Review behavior follows the execution protocol.
 
-1. ChatGPT immediately performs a severe adversarial exact-head review of the diff, accepted scope, relevant invariants/owners, tests, and failure modes.
-2. Claude is requested immediately.
-3. Codex is requested concurrently only when section 3's high-risk/material-advantage condition is met; otherwise, if Claude has no consumable exact-head verdict at the next scheduled coordinating-builder wake, Codex is requested then as the default latency fallback.
-4. The normal semantic gate is satisfied by the first consumable exact-head PASS from Claude or Codex plus at least one exact-head ChatGPT builder PASS, with no unresolved P0/P1, blocking P2, substantial disagreement, or violated acceptance criterion.
-5. If a later external P0/P1 or blocking P2 arrives before merge, consume it and reopen the gate.
-6. The maintainer explicitly authorizes a bounded degraded-quorum latency fallback only where the governing accepted slice/policy requires semantic review but does **not** explicitly require an independent reviewer. If the exact head is unchanged, both Claude and Codex have been requested, neither has produced a consumable verdict, and two subsequent scheduled Builder A/B/C/D wake-ups have occurred after the first current-head external request, external latency ceases to block. One severe exact-head Builder PASS must be produced and persisted during each of those two qualifying wakes; a later wake may not backfill or retroactively claim the earlier PASS. These two wake-bound PASSes may satisfy degraded quorum only for a gate that does not itself require independent-review evidence. If the accepted slice/policy requires `independent semantic review`, `independent exact-head review`, or equivalent, degraded quorum is ineligible and a consumable independent reviewer PASS remains mandatory. Durable exact-head repository-native evidence must record the unchanged head, Claude and Codex request identifiers/timestamps, both qualifying wake markers, and the PASS produced during each corresponding wake. This fallback is temporal corroboration only and does not claim authenticated reviewer identity, reviewer diversity, non-mutator provenance, or independent-review evidence; if any required fact cannot be reconstructed deterministically, degraded quorum is unavailable.
-7. Any reviewer disagreement, P0/P1, blocking P2, or failed acceptance criterion blocks degraded quorum. Where practical, the later qualifying wake forms its initial verdict before reading the earlier wake-bound verdict to reduce anchoring.
+Concurrency-specific rule only:
 
-Semantic review — including degraded quorum — never substitutes for deterministic tests/CI, exact-head registry/status checks, browser/Playwright or other real-environment proof, hardware/local-host activation evidence, live integration evidence required by a spec, human-controlled action/credential existence, or exact remote-head/CAS/post-mutation verification. Head mutation invalidates affected review/proof evidence.
+- independent frontier peers may review a frozen exact head in parallel;
+- a moving repair head should have one primary internal review/workpack rather than four duplicate scheduler reviews;
+- when a material finding causes mutation, affected old-head reviews no longer certify the new head;
+- unrelated evidence remains reusable when its truth was not affected.
 
-## 4. Work-stealing cycle
+The first sufficient qualified review path should be consumed; do not wait for slower duplicate reviewers after the active contract is already satisfied.
 
-A ChatGPT lock holder must:
+## 10. CI and proof waits
 
-1. resolve fresh exact `master`, `STATUS.md`, current PR heads, workflow/review evidence, and relevant terminal/running optional-helper state;
-2. reject stale model/workflow results whose target head is no longer authoritative;
-3. consume already-terminal safe evidence first, using an exact-current-head validated `PR Attention Evidence` manifest/artifact as the first compact **mechanical index** when available;
-4. fetch raw GitHub state wherever semantic review, unresolved findings/threads, missing fields, mutation verification, or a canonical gate requires it; the helper artifact never substitutes for those decisions;
-5. scan all currently authorized lanes rather than assuming a scheduler-specific lane;
-6. advance an immediately actionable lane one bounded step at a time while preserving lane/shared ownership;
-7. implement or repair directly by default; launch an optional bounded external/model helper only when useful, authorized, non-duplicative, and throughput- or risk-reduction-positive;
-8. continue across other ready lanes while there is immediate safe work;
-9. when CI/checks/required review are non-terminal, keep the active session useful with semantic review, failure diagnosis, exact repair preparation, dependency/readiness validation, or disjoint authorized work, and re-check at a reasonable cadence until terminal when session time permits;
-10. exit only when no useful autonomous work remains, the session has insufficient budget for another complete safe action plus verification, or a genuine canonical external/human blocker applies. Optional-helper availability or completion is never by itself an exit condition.
+A running CI/review/proof job is not a reason to create competing source mutations.
 
-The coordinator must **not sleep or poll merely to consume runtime**. This does not permit abandoning ordinary active CI/review prematurely: use useful non-conflicting work between checks and consume terminal evidence promptly. When insufficient wall-clock budget remains for a complete safe mutation plus verification, record the exact next action and exit cleanly.
+During a wait, use available time only for non-conflicting useful work. Do not poll merely to occupy the session, and do not create speculative future scope because the current gate is slow.
 
-A `PR Attention Evidence` artifact is advisory and exact-head-bound. It may eliminate repeated mechanical collection, but it may not establish semantic PASS, queue/readiness state, review/approval authority, or merge permission. If the artifact predates terminal required gates, the writer may refresh/recollect gate state once when terminal rather than repeatedly polling it.
+If the current front is genuinely blocked by environment/human evidence, scan fresh authorized disjoint work as described in the execution protocol. Preserve the blocked gate rather than weakening it.
 
-### 4A. Human-blocker failover and no-independent-work escalation
+## 11. Conflict handling
 
-A genuine human-only blocker freezes only the affected front. Never weaken, waive, reinterpret, fake, or fabricate the accepted human gate. Re-read fresh `STATUS.md`, dependencies, active PRs, accepted spec/readiness evidence, and this profile; explicitly scan the rest of the canonical queue; and immediately advance the highest-priority lawful independent work whose file, store, schema, migration, and authority boundaries are sufficiently disjoint from the blocked front. `planned` rows may advance only through planning/readiness authority, never implementation. The global writer mutex, exact SHA/CAS, shared-owner serialization, and one-registry/no-second-authority rules remain mandatory.
+When concurrent work collides:
 
-Re-scan after every material transition. Human evidence that arrives later is consumed at the next safe writer point only after exact-head revalidation of the blocked front and affected gates.
+1. stop the conflicting mutation path;
+2. determine which work owns the shared boundary from fresh authority/state;
+3. preserve recoverable work where practical;
+4. rebase/rederive the affected lane against current master/head;
+5. keep unrelated lanes running if still independent.
 
-Only when an explicit fresh scan proves **no lawful independent queue work exists** may every scheduler wake-up emit a conspicuous Slack escalation in this form:
+Do not solve a local conflict by creating another queue, store, branch authority, policy file, or coordination framework unless the minimum-necessary test proves it is required.
 
-`🚨🚨🚨🚨🚨🚨 JARVISOS HUMAN BLOCKER 🚨🚨🚨🚨🚨🚨 | <slice/PR> | <exact blocker> | NO INDEPENDENT QUEUE WORK EXISTS → HUMAN ACTION: <exact action>`
+## 12. Success criterion
 
-Ordinary CI/review waits, global writer-mutex contention, and PARKed P2/P3 findings do not trigger siren escalation.
+This profile succeeds when four scheduler slots provide low reaction latency and useful parallel intelligence **without multiplying writers, duplicated reviews, governance surfaces, or head invalidations**.
 
-## 5. Canonical post-112 lanes
+The desired operating model is:
 
-Inside each lane, work remains sequential and normal dependency/readiness rules apply. While section 1A is active, its temporary hardening-first hold overrides the scheduling order in this section without changing the underlying lane definitions.
-
-### Knowledge
-
-`113 MODEL-DOSSIER-1 -> 114 LITERATURE-KNOWLEDGE-1 -> 115 PROJECT-SEARCH-1`
-
-After those foundations, `121 JARVIS-PROJECT-KNOWLEDGE-ACTIONS-1` may proceed only when its own dependencies/readiness are satisfied.
-
-### Development
-
-`116 ROADMAP-CALENDAR-1 -> 117 BRAINSTORM-1`
-
-After those foundations, `122 JARVIS-DEVELOPMENT-ACTIONS-1` may proceed only when its own dependencies/readiness are satisfied.
-
-### Coding acceleration
-
-`118 CODING-REPOSITORY-TRUTH-1 -> 119 CODING-RUNTIME-TRUTH-1 -> 120 DEVELOPMENT-PIPELINE-STATE-1 -> 123 JARVIS-CODING-ACTIONS-1 -> fresh Hermes V1 re-derivation/release gate`
-
-`123` may proceed only when its hard dependencies are merged and its own spec/readiness authorizes implementation.
-
-### Provider/settings owner
-
-`124 PROVIDER-SETTINGS-GENERIC-1` is an independent provider/settings owner once its dependencies and readiness are satisfied. It may be scheduled post-112 without blocking unrelated Knowledge/Development/Coding work when section 1A is not holding those lanes.
-
-### Separately gated later work
-
-`125 SAFE-SELF-UPDATE-1` and `126 LOCAL-TERMINAL-PTY-1` remain separately gated and are not automatically parallelized.
-
-`102 ENGINEERING-EVIDENCE-CONTRACT-1` remains later work. After it is eligible and merged, the engineering/Process sequence is explicitly `103 -> 104 -> 105 -> 106 -> 107 -> 108 -> 109 -> 093 -> 110`, subject to each row's then-current dependencies/readiness and fresh authority. This profile does not pull that sequence forward.
-
-## 6. Hermes V1 re-derivation gate
-
-Legacy 066–068 remain frozen and are not direct implementation authority. Spec 080 also remains frozen/planned unless explicitly re-derived later.
-
-After 123 is actually merged, Hermes requires a **fresh derivation from then-current exact `master`** before implementation. The derivation must use accepted 111/118/119/120/123 contracts, the live AI execution/egress/budget spine, the pinned Hermes identity actually selected, and current evidence.
-
-The first Hermes release must preserve JarvisOS ownership of:
-
-- context and exact refs;
-- policy and provider credentials;
-- sensitivity and egress;
-- budget and usage ledger;
-- proposal/promotion authority;
-- repository/database/service/domain authority.
-
-Hermes remains an untrusted advisory orchestrator/runtime. It must not become a second authority process, receive provider credentials directly, bypass the JarvisOS model gateway, own unrestricted repository/database/data-root access, or invent page-specific parallel action stores.
-
-Suggested code changes remain candidate proposals until accepted development authority validates/applies them. Any temporary external-model harness remains rollback until Hermes parity is evidenced for the work it replaces.
-
-Knowledge and Development do not wait for Hermes when their own lanes are independently ready and section 1A is no longer active.
-
-## 7. Parallel status and merge coordination
-
-After activation, multiple implementation PRs may be active only for demonstrated-disjoint lanes whose normal readiness/dependency authority is already valid.
-
-The single ChatGPT Integration writer:
-
-1. verifies each candidate PR against exact head;
-2. serializes merges to `master` with `expected_head_sha`;
-3. verifies the resulting fresh `master`;
-4. reconciles `STATUS.md`;
-5. requires remaining lanes to refresh `master`, ancestry/conflicts, and affected evidence before their own merge.
-
-A merge in one lane never makes another lane's old evidence current automatically. `STATUS.md` remains the one registry; no per-lane shadow status file is allowed.
-
-## 8. Low-risk planning compression
-
-A single planning PR may combine definition, full specification, and readiness only when all are true:
-
-- slice is additive/reversible;
-- no new security/credential/provider/egress authority;
-- no new durable store or delicate migration sequence;
-- no destructive behavior or hard-to-reverse external effect;
-- no cross-domain ownership boundary is invented/reassigned;
-- exact-master inventory, scope, acceptance criteria, non-goals, failure modes, test plan, and readiness decision remain independently inspectable.
-
-High-risk security/credentials/egress, Hermes isolation/model-call closure, PTY, self-update, delicate migrations, Process/solver/evaluator authority, destructive actions, and hard-to-reverse ownership retain the full lifecycle.
-
-`planned` never becomes implementation authority through compression.
-
-### 8A. Atomic readiness registry transition
-
-A separate `planned -> ready` reconciliation PR is **not required by ceremony** after an accepted readiness decision. A post-112 readiness PR may atomically include both the readiness artifact and that same spec's sole `STATUS.md` transition from `planned` or `blocked` to `ready` when all are true:
-
-- the readiness evidence and decision are explicitly inspectable in that PR;
-- the changed registry row is the same spec and contains no implementation PR association;
-- the deterministic spec-status definition gate accepts the resulting registry;
-- no unrelated registry, dependency, queue, product, schema, provider, or authority change is bundled;
-- the readiness decision itself satisfies the active spec and canonical dependency/ownership rules.
-
-Until that PR merges, remote `STATUS.md` remains non-ready and implementation remains forbidden. After it merges, the readiness decision and registry authority become current atomically, eliminating a redundant follow-up PR without weakening the lifecycle.
-
-This compression does **not** apply to the later `in_review -> merged` transition, which necessarily depends on a verified exact implementation merge and therefore remains a post-merge mechanical reconciliation unless a future canonical mechanism makes that transition atomic without predeclaring success.
-
-## 9. Two-speed deterministic gating and browser proof
-
-While a PR head moves, use focused deterministic tests and minimum relevant gates. On the frozen candidate merge head, run every gate/proof required by repository policy, the active spec, and affected boundaries. Any later head mutation invalidates affected head-specific evidence.
-
-For a classified diff on a pull request or ordinary push to `master` whose deterministic changed-path classifier proves that **every changed repository path is under `docs/`**, CI may use a governance-only terminal fast path and skip dependency installation, architecture/runtime/import gates, backend lint/tests, frontend build, and BLUECAD runtime canaries. The fast path must still run the deterministic registry/spec gate and repository-development governance/anti-authority self-tests that require only the standard-library environment. It fails closed to full CI for an empty/unknown diff, classifier failure, unavailable exact diff endpoints, or any changed path outside the explicitly classifiable domain trees.
-
-For other classified diffs, CI uses only conservative macro-domains and runs the affected domain gates in parallel. Frontend-only changes may skip backend and BLUECAD runtime lanes. Ordinary backend-module changes run backend/static and backend core runtime coverage plus the cheap frontend build while contracts remain manually mirrored. BLUECAD ordinary shards and geometry/property canaries run only when the diff touches the BLUECAD specialist domain, its owned tests, the adjacent engineering integration domain, or a dependency/shared boundary that can affect it indirectly. Shared backend roots, dependency manifests, workflow/control infrastructure, scripts, root configuration, unknown paths, or any path outside the explicitly classifiable domain trees fail closed to full CI rather than relying on source-file-to-test inference.
-
-Parallelization and sharding are scheduling optimizations only. Whenever BLUECAD is selected, the union of ordinary BLUECAD shards and explicitly canary-owned BLUECAD tests must preserve the complete previously required BLUECAD pytest coverage. Core shard ownership remains complete and disjoint whenever backend runtime coverage is selected. A test deliberately owned by a dedicated canary is not repeated in ordinary shards; no other required test may be dropped or multiply owned merely to shorten wall-clock. Independent expensive groups may execute concurrently, but workflow green is invalid evidence if shard ownership or collection loses required selected-domain coverage.
-
-Ordinary pushes to `master` are classified from the exact `before -> after` commit range and therefore rerun only affected macro-domains. This avoids paying unrelated BLUECAD/engineering regressions after an already classified merge while still revalidating the exact resulting master commit. A missing/all-zero base SHA, rewritten/unknown history, shared/control/dependency change, or classifier uncertainty fails closed to the complete suite.
-
-Repository-wide regression remains mandatory but is no longer attached to every merge. The CI workflow exposes `workflow_dispatch` for an explicit full run and executes a scheduled full regression daily. Scheduled/manual runs bypass affected-domain narrowing and run backend core, BLUECAD ordinary shards, BLUECAD canary, frontend build, static/governance gates, and all other full-path checks. Before a major release or renewed BLUECAD/mesh/FEM integration phase, a fresh full regression is required regardless of recent affected-domain results.
-
-This affected-domain policy is evidence economy, not a correctness waiver: unchanged specialist code is not re-proved on every unrelated merge, while dependency/shared changes fail closed and the scheduled/manual full suite detects ecosystem or dependency drift that can arise without a direct BLUECAD source edit.
-
-Browser/screenshot proof is required for visible frontend/layout/interaction deltas or explicit spec requirements. It is not required by ceremony for docs-only/backend-only/schema-only changes with no visible delta.
-
-## 10. Read-only prework
-
-Read-only ownership, dependency, source, threat-model, upstream bakeoff, or future-slice research may happen ahead of implementation when it creates no premature authority and is revalidated against fresh exact `master` before promotion.
-
-Prework may not mutate product/runtime authority, start a `planned` implementation, or be treated as indefinitely fresh evidence.
-
-## 11. Reconciliation economy
-
-Avoid PRs, comments, checkpoint artifacts, screenshot passes, or repeated gates that add no authority, evidence, or risk reduction.
-
-Prefer the atomic readiness transition in section 8A whenever its fail-closed conditions hold. Do not create a second PR merely to copy an already accepted readiness decision into `STATUS.md`.
-
-Post-merge registry reconciliation may be applied mechanically when merge SHA is exact and verified, the transition is deterministic, no new product direction is invented, and `STATUS.md` remains the sole live work-state authority. A docs-only reconciliation should use the section 9 governance fast path rather than rerunning unrelated runtime suites; the resulting master push is reclassified from its exact `before -> after` diff, while scheduled/manual full regression remains the repository-wide safety net.
-
-Do not remove a gate/review/audit that closes a real security, scientific, migration, authority, regression, or acceptance risk merely to reduce elapsed time.
-
-## 12. Conflict fallback
-
-A conflict involving a shared owner, schema/migration sequencing, security/egress authority, cross-lane invariant, or overlapping runtime boundary returns **only the affected slices** to serial execution until resolved.
-
-Independent lanes remain eligible if their own dependencies, readiness, and ownership audits remain green and section 1A is not holding them.
-
-If safe resolution requires one of the four maintainer interruption classes, stop and contact the maintainer. Otherwise ChatGPT chooses the least-cost reversible route within accepted authority.
-
-## 13. Safety invariants preserved
-
-This profile never authorizes:
-
-- implementation of a `planned` row;
-- skipping a hard dependency;
-- two ChatGPT writers on one PR/head or shared authority;
-- stale-head merge evidence;
-- GLM/Claude/Codex to become GitHub, queue, architecture, domain COMMIT/EXECUTE, provider, credential, or promotion authority by inference;
-- frontend direct provider/filesystem/shell/GitHub authority;
-- bypass of egress, budget, credential, secret, or promotion boundaries;
-- direct provider credentials in Hermes;
-- direct implementation of stale 066–068 kernels without fresh re-derivation;
-- automatic activation before 112 is merged.
-
-When this profile conflicts with a narrower accepted specification or a hard invariant in `AGENTS.md`, the narrower/higher authority wins.
+`parallel intelligence + isolated disjoint work; serialized shared authority; exact-state verification; rapid convergence`.

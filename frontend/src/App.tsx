@@ -20,8 +20,10 @@ import LegacyDiagnosticSurface from "./components/shell/LegacyDiagnosticSurface"
 import MigrationPendingSurface from "./components/shell/MigrationPendingSurface";
 import AIDraft from "./pages/AIDraft";
 import AIThreads from "./pages/AIThreads";
+import CodingWorkbench from "./pages/CodingWorkbench";
 import DomainFoundation from "./pages/DomainFoundation";
 import EngineeringData from "./pages/EngineeringData";
+import ModelDossier from "./pages/ModelDossier";
 import RunsWorkbench from "./pages/RunsWorkbench";
 import SystemStatus from "./pages/SystemStatus";
 import { PRIMARY_STAGES, type ShellRegion, type ShellRegionContributions } from "./stages/registry";
@@ -60,7 +62,7 @@ function App() {
         content = <><FinalWorkspaceHeader group="memory" active="project-basis" navigate={navigate} /><FinalOperatorReadSurface kind="project-basis" workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} /><ProjectKnowledgePanel workspaceId={workspaceId} /></>;
         break;
       case "memory-models":
-        content = <><FinalWorkspaceHeader group="memory" active="models" navigate={navigate} /><FinalOperatorReadSurface kind="models" workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} /><ProjectKnowledgePanel workspaceId={workspaceId} readOnly /></>;
+        content = <><FinalWorkspaceHeader group="memory" active="models" navigate={navigate} /><ModelDossier workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} /><ProjectKnowledgePanel workspaceId={workspaceId} readOnly /></>;
         break;
       case "memory-literature":
         content = <><FinalWorkspaceHeader group="memory" active="literature" navigate={navigate} /><FinalOperatorUnavailableSurface kind="literature" title="Literature" description="The approved compact list and inline-preview composition is present, but no bounded literature corpus/read owner exists yet. Reference fixture citations are not production facts." navigate={navigate} /></>;
@@ -75,10 +77,10 @@ function App() {
         content = <><FinalWorkspaceHeader group="development" active="brainstorm" navigate={navigate} /><FinalOperatorUnavailableSurface kind="brainstorm" title="Brainstorm" description="The RAW → discussion/reconciliation → RECONCILED → explicit promotion composition is present, but there is no accepted persistence owner for those records in this frontend-only slice." navigate={navigate} links={[{ href: "/ai-threads", label: "Open existing AI Threads compatibility view" }]} /></>;
         break;
       case "coding-repository":
-        content = <><FinalWorkspaceHeader group="coding" active="repository" navigate={navigate} /><FinalOperatorUnavailableSurface kind="repository" title="Repository" description="Repository Inspector and preview geometry are present, but no accepted frontend-safe repository observer supplies remote repository truth. The browser does not call GitHub or store a GitHub token directly." navigate={navigate} /></>;
+        content = <><FinalWorkspaceHeader group="coding" active="repository" navigate={navigate} /><CodingWorkbench mode="repository" workspaceId={workspaceId} /></>;
         break;
       case "coding-runtime":
-        content = <><FinalWorkspaceHeader group="coding" active="runtime" navigate={navigate} /><FinalOperatorReadSurface kind="runtime" workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} /></>;
+        content = <><FinalWorkspaceHeader group="coding" active="runtime" navigate={navigate} /><CodingWorkbench mode="runtime" workspaceId={workspaceId} /></>;
         break;
       case "settings-appearance":
         content = <FinalSettingsSurface section="appearance" navigate={navigate} />;
