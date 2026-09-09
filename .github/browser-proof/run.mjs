@@ -148,27 +148,47 @@ const prove124 = async () => {
   const persistedStateText = await credentialDetails.getByText(/^Persisted state code · /).innerText();
   const effectiveSource = effectiveSourceText.replace(/^Effective source code · /, "").trim();
   const persistedState = persistedStateText.replace(/^Persisted state code · /, "").trim();
-  const sourcePrefixes = {
-    not_required: "Credential not required",
-    environment: "Environment active",
-    invalid: "Environment credential invalid",
-    unknown: "Credential state unavailable",
-    secure_persisted: "Secure persisted",
-  };
-  const expectedPrefix = sourcePrefixes[effectiveSource]
-    ?? (persistedState === "not_supported" ? "Environment credential unavailable" : "No effective credential");
-  const canonicalCredentialCodes = [effectiveSource, persistedState].filter(Boolean);
+  const validCredentialCombinations = new Set([
+    "environment:absent",
+    "environment:usable",
+    "environment:corrupted",
+    "environment:unavailable",
+    "secure_persisted:usable",
+    "absent:absent",
+    "absent:corrupted",
+    "invalid:absent",
+    "invalid:usable",
+    "invalid:corrupted",
+    "invalid:unavailable",
+    "unknown:unavailable",
+  ]);
+  const credentialCombination = `${effectiveSource}:${persistedState}`;
+  record(
+    "124:credential-canonical-codes",
+    validCredentialCombinations.has(credentialCombination),
+    `effective_source=${effectiveSource} persisted_state=${persistedState}`,
+  );
+  const expectedSummary = effectiveSource === "environment"
+    ? `Environment active · persisted ${persistedState}`
+    : effectiveSource === "invalid"
+      ? `Environment credential invalid · persisted ${persistedState}`
+      : effectiveSource === "unknown"
+        ? `Credential state unavailable · persisted ${persistedState}`
+        : effectiveSource === "secure_persisted"
+          ? `Secure persisted · ${persistedState}`
+          : `No effective credential · persisted ${persistedState}`;
+  const canonicalCredentialCodes = [effectiveSource, persistedState];
   const primaryContainsRawCode = canonicalCredentialCodes.some((code) =>
     credentialSummaryText.toLowerCase().split(/[^a-z0-9_]+/).includes(code.toLowerCase())
   );
   record(
     "124:credential-human-summary",
-    credentialSummaryText.startsWith(expectedPrefix) && !credentialSummaryText.includes("_") && !primaryContainsRawCode,
-    `summary=${JSON.stringify(credentialSummaryText)} source=${effectiveSource} persisted=${persistedState}`,
+    credentialSummaryText === expectedSummary && !credentialSummaryText.includes("_") && !primaryContainsRawCode,
+    `summary=${JSON.stringify(credentialSummaryText)} expected=${JSON.stringify(expectedSummary)}`,
   );
   record(
     "124:credential-technical-disclosure",
-    effectiveSource.length > 0 && persistedState.length > 0,
+    true,
     `effective_source=${effectiveSource} persisted_state=${persistedState}`,
   );
   await page.getByRole("heading", { name: "Current usage", exact: true }).waitFor({ state: "visible" });
@@ -207,8 +227,19 @@ const prove140 = async () => {
   await screenshot("repository");
 
   const runtimeRoute = "/coding/runtime";
+  const runtimeTruthResponsePromise = page.waitForResponse((candidate) => {
+    const url = new URL(candidate.url());
+    return candidate.request().method() === "GET"
+      && url.origin === new URL(baseUrl).origin
+      && url.pathname === "/api/coding/runtime-truth"
+      && url.searchParams.get("repository") === repository
+      && url.searchParams.get("target_ref") === "master";
+  });
   const runtimeResponse = await page.goto(`${baseUrl}${runtimeRoute}`, { waitUntil: "networkidle", timeout: 30_000 });
+  const runtimeTruthResponse = await runtimeTruthResponsePromise;
   record("140:runtime-http", Boolean(runtimeResponse) && runtimeResponse.status() < 500, `status=${runtimeResponse?.status() ?? "none"}`);
+  record("140:runtime-truth-http", runtimeTruthResponse.ok(), `status=${runtimeTruthResponse.status()}`);
+  const runtimeTruth = await runtimeTruthResponse.json();
   record("140:runtime-spa-path", new URL(page.url()).pathname === runtimeRoute, `url=${page.url()}`);
   const runtimeSurface = page.getByTestId("coding-runtime-surface");
   await runtimeSurface.waitFor({ state: "visible" });
@@ -230,24 +261,32 @@ const prove140 = async () => {
   const displayedLocalSha = localCommitText.replace(/^Local commit · /, "").trim();
   record("140:runtime-exact-local-commit", displayedLocalSha === expectedHead, `displayed=${displayedLocalSha} expected=${expectedHead}`);
   const rawDeltaText = await runtimeDetails.locator("pre").first().innerText();
-  const rawDelta = JSON.parse(rawDeltaText);
-  const expectedAhead = Number(rawDelta.ahead_by);
-  const expectedBehind = Number(rawDelta.behind_by);
-  const expectedChanged = Array.isArray(rawDelta.files) ? rawDelta.files.length : Number.NaN;
-  const rawRelation = String(rawDelta.relation ?? "");
+  const disclosedDelta = JSON.parse(rawDeltaText);
+  const trustedDelta = runtimeTruth.semantic_delta;
+  const canonicalRelations = new Set(["ahead", "behind", "diverged", "identical"]);
+  const validTrustedDelta = trustedDelta?.status === "available"
+    && canonicalRelations.has(trustedDelta.relation)
+    && Number.isInteger(trustedDelta.ahead_by)
+    && trustedDelta.ahead_by >= 0
+    && Number.isInteger(trustedDelta.behind_by)
+    && trustedDelta.behind_by >= 0
+    && Array.isArray(trustedDelta.files)
+    && (trustedDelta.relation !== "ahead" || (trustedDelta.ahead_by > 0 && trustedDelta.behind_by === 0))
+    && (trustedDelta.relation !== "behind" || (trustedDelta.ahead_by === 0 && trustedDelta.behind_by > 0))
+    && (trustedDelta.relation !== "diverged" || (trustedDelta.ahead_by > 0 && trustedDelta.behind_by > 0))
+    && (trustedDelta.relation !== "identical" || (trustedDelta.ahead_by === 0 && trustedDelta.behind_by === 0));
+  record("140:runtime-trusted-semantic-delta-schema", validTrustedDelta, `trusted=${JSON.stringify(trustedDelta)}`);
+  const expectedRelation = trustedDelta.relation.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
   const renderedRelation = (await runtimeSurface.locator(".final-fusion__delta span").first().innerText()).trim();
-  const expectedRelation = rawRelation.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
   record(
     "140:runtime-server-semantic-delta",
-    Number.isInteger(expectedAhead)
-      && Number.isInteger(expectedBehind)
-      && Number.isInteger(expectedChanged)
-      && semanticValues.Ahead === expectedAhead
-      && semanticValues.Behind === expectedBehind
-      && semanticValues["Changed files"] === expectedChanged
-      && rawRelation.length > 0
-      && renderedRelation === expectedRelation,
-    `rendered=${JSON.stringify({ relation: renderedRelation, ...semanticValues })} raw=${JSON.stringify(rawDelta)}`,
+    semanticValues.Ahead === trustedDelta.ahead_by
+      && semanticValues.Behind === trustedDelta.behind_by
+      && semanticValues["Changed files"] === trustedDelta.files.length
+      && renderedRelation === expectedRelation
+      && JSON.stringify(disclosedDelta) === JSON.stringify(trustedDelta)
+      && runtimeTruth.live?.sha === displayedLocalSha,
+    `rendered=${JSON.stringify({ relation: renderedRelation, ...semanticValues })} trusted=${JSON.stringify(trustedDelta)} disclosed=${JSON.stringify(disclosedDelta)}`,
   );
   record("140:runtime-disclosure", true, "runtime exact identity and canonical server-owned semantic delta are verified through a real Technical details interaction");
   await runtimeSurface.getByRole("heading", { name: "Development pipeline", exact: true }).waitFor({ state: "visible" });
