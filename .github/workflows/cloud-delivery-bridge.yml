@@ -40,6 +40,29 @@ jobs:
             --patch-out "$RUNNER_TEMP/delivery.patch" \
             --manifest-out "$RUNNER_TEMP/delivery.json"
 
+      - name: Bind validation strength to admitted paths
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          data = json.loads(Path(os.environ["RUNNER_TEMP"]).joinpath("delivery.json").read_text())
+          paths = tuple(data["changed_paths"])
+          profile = data["validation_profile"]
+          has_frontend = any(p.startswith("frontend/") for p in paths)
+          has_backend = any(p.startswith("backend/") or p.startswith("scripts/") for p in paths)
+          has_143 = "frontend/tests/143-operator-semantic-ux.mjs" in paths
+          if has_frontend and has_backend:
+              raise SystemExit("mixed frontend/backend payload has no admitted fixed profile")
+          if has_frontend:
+              admitted = {"frontend-143"} if has_143 else {"frontend", "frontend-143"}
+          elif has_backend:
+              admitted = {"backend"}
+          else:
+              admitted = {"docs"}
+          if profile not in admitted:
+              raise SystemExit(f"validation profile {profile!r} is weaker or unrelated for admitted paths")
+          PY
+
       - name: Export admitted immutable metadata
         id: meta
         run: |
