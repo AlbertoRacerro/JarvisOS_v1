@@ -169,8 +169,12 @@ const prove124 = async () => {
   const credentialSummaryText = (await credentialSummary.innerText()).trim();
   const credentialDetails = credentialCard.locator("details").first();
   await openTechnicalDetails(credentialDetails);
-  const effectiveSourceText = await credentialDetails.getByText(/^Effective source code · /).innerText();
-  const persistedStateText = await credentialDetails.getByText(/^Persisted state code · /).innerText();
+  const effectiveSourceNode = credentialDetails.getByText(/^Effective source code · /);
+  const persistedStateNode = credentialDetails.getByText(/^Persisted state code · /);
+  await effectiveSourceNode.waitFor({ state: "visible" });
+  await persistedStateNode.waitFor({ state: "visible" });
+  const effectiveSourceText = await effectiveSourceNode.innerText();
+  const persistedStateText = await persistedStateNode.innerText();
   const effectiveSource = effectiveSourceText.replace(/^Effective source code · /, "").trim();
   const persistedState = persistedStateText.replace(/^Persisted state code · /, "").trim();
   const validCredentialCombinations = new Set([
@@ -292,9 +296,11 @@ const prove140 = async () => {
     "Changed files": semanticSummary.getByText(/^Changed files(?: shown)? · [0-9]+$/),
   };
   const semanticValues = {};
+  const semanticTexts = {};
   for (const [label, locator] of Object.entries(semanticNodes)) {
     await locator.waitFor({ state: "visible" });
     const value = (await locator.innerText()).trim();
+    semanticTexts[label] = value;
     const match = value.match(/^(?:Ahead|Behind|Changed files(?: shown)?) · ([0-9]+)$/);
     semanticValues[label] = match ? Number(match[1]) : null;
   }
@@ -308,7 +314,9 @@ const prove140 = async () => {
   const localCommitText = await runtimeDetails.getByText(/^Local commit · /).innerText();
   const displayedLocalSha = localCommitText.replace(/^Local commit · /, "").trim();
   record("140:runtime-exact-local-commit", displayedLocalSha === expectedHead, `displayed=${displayedLocalSha} expected=${expectedHead}`);
-  const remoteCommitText = await runtimeDetails.getByText(/^Remote commit · /).innerText();
+  const remoteCommitNode = runtimeDetails.getByText(/^Remote commit · /);
+  await remoteCommitNode.waitFor({ state: "visible" });
+  const remoteCommitText = await remoteCommitNode.innerText();
   const displayedRemoteSha = remoteCommitText.replace(/^Remote commit · /, "").trim();
   const trustedRemoteSha = runtimeTruth.remote?.resolved_sha;
   record(
@@ -329,11 +337,20 @@ const prove140 = async () => {
     && Number.isInteger(trustedDelta.behind_by)
     && trustedDelta.behind_by >= 0
     && Array.isArray(trustedDelta.files)
+    && typeof trustedDelta.partial === "boolean"
     && (trustedDelta.relation !== "ahead" || (trustedDelta.ahead_by > 0 && trustedDelta.behind_by === 0))
     && (trustedDelta.relation !== "behind" || (trustedDelta.ahead_by === 0 && trustedDelta.behind_by > 0))
     && (trustedDelta.relation !== "diverged" || (trustedDelta.ahead_by > 0 && trustedDelta.behind_by > 0))
     && (trustedDelta.relation !== "identical" || (trustedDelta.ahead_by === 0 && trustedDelta.behind_by === 0));
   record("140:runtime-trusted-semantic-delta-schema", validTrustedDelta, `trusted=${JSON.stringify(trustedDelta)}`);
+  const expectedChangedFilesLabel = trustedDelta.partial
+    ? `Changed files shown · ${trustedDelta.files.length}`
+    : `Changed files · ${trustedDelta.files.length}`;
+  record(
+    "140:runtime-changed-files-partial-label",
+    semanticTexts["Changed files"] === expectedChangedFilesLabel,
+    `rendered=${JSON.stringify(semanticTexts["Changed files"])} expected=${JSON.stringify(expectedChangedFilesLabel)}`,
+  );
   const expectedRelation = trustedDelta.relation.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
   const renderedRelationLocator = runtimeSurface.locator(".final-fusion__delta span").first();
   await renderedRelationLocator.waitFor({ state: "visible" });
