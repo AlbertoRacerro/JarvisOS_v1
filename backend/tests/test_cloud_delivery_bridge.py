@@ -14,10 +14,10 @@ if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
 from cloud_delivery_bridge import (  # noqa: E402
-    BridgeError,
     MARKER,
     PATCH_CLOSE,
     PATCH_OPEN,
+    BridgeError,
     Payload,
     apply_and_verify,
     parse_payload,
@@ -75,25 +75,41 @@ def test_payload_refuses_default_ref_control_paths_and_unknown_profiles() -> Non
         parse_payload(_body(patch=patch, validation_profile="arbitrary-shell"))
 
 
+def test_payload_refuses_unknown_path_class_instead_of_docs_fallback() -> None:
+    path = "configs/ai_egress_policy.json"
+    patch = f"diff --git a/{path} b/{path}\n"
+    with pytest.raises(BridgeError, match="unsupported changed-path class"):
+        parse_payload(_body(patch=patch, paths=[path], validation_profile="docs"))
+
+
 def _git(cwd: Path, *args: str) -> str:
     result = subprocess.run(
         ["git", *args], cwd=cwd, text=True, capture_output=True, check=True
     )
-    return result.stdout.strip()
+    return result.stdout
 
 
-def test_apply_verifies_exact_base_and_changed_path_set(tmp_path: Path) -> None:
-    repo = tmp_path / "repo"
+def _init_repo(repo: Path) -> str:
     repo.mkdir()
     _git(repo, "init")
     _git(repo, "config", "user.email", "test@example.invalid")
     _git(repo, "config", "user.name", "Bridge Test")
+    seed = repo / "README.md"
+    seed.write_text("base\n", encoding="utf-8")
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-m", "base")
+    return _git(repo, "rev-parse", "HEAD").strip()
+
+
+def test_apply_verifies_exact_base_and_changed_path_set(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    base = _init_repo(repo)
     target = repo / "frontend" / "src" / "pages" / "Settings.tsx"
     target.parent.mkdir(parents=True)
     target.write_text("before\n", encoding="utf-8")
     _git(repo, "add", ".")
-    _git(repo, "commit", "-m", "base")
-    base = _git(repo, "rev-parse", "HEAD")
+    _git(repo, "commit", "-m", "tracked target")
+    base = _git(repo, "rev-parse", "HEAD").strip()
     target.write_text("after\n", encoding="utf-8")
     patch = _git(repo, "diff", "--binary", "--full-index")
     _git(repo, "checkout", "--", ".")
@@ -119,6 +135,33 @@ def test_apply_verifies_exact_base_and_changed_path_set(tmp_path: Path) -> None:
         apply_and_verify(repo, wrong, patch_file)
 
 
+def test_apply_accounts_for_new_untracked_file_before_validation(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    base = _init_repo(repo)
+    rel = "frontend/tests/143-operator-semantic-ux.mjs"
+    target = repo / rel
+    target.parent.mkdir(parents=True)
+    target.write_text("export const bridgeProof = true;\n", encoding="utf-8")
+    _git(repo, "add", "--intent-to-add", "--", rel)
+    patch = _git(repo, "diff", "--binary", "--full-index", "--", rel)
+    _git(repo, "reset", "--", rel)
+    target.unlink()
+
+    patch_file = tmp_path / "addition.patch"
+    patch_file.write_text(patch, encoding="utf-8")
+    payload = Payload(
+        pr=589,
+        base_sha=base,
+        target_ref="impl/143-operator-semantic-ux",
+        patch_sha256=hashlib.sha256(patch.encode()).hexdigest(),
+        changed_paths=(rel,),
+        validation_profile="frontend-143",
+        patch=patch,
+    )
+    apply_and_verify(repo, payload, patch_file)
+    assert target.read_text(encoding="utf-8") == "export const bridgeProof = true;\n"
+
+
 def test_workflow_freezes_payload_before_untrusted_validation_and_separates_writer() -> None:
     workflow = (ROOT / ".github" / "workflows" / "cloud-delivery-bridge.yml").read_text(
         encoding="utf-8"
@@ -129,6 +172,7 @@ def test_workflow_freezes_payload_before_untrusted_validation_and_separates_writ
     assert "actions/upload-artifact@v4" in admit
     assert "npm run" not in admit
     assert "Bind validation strength to admitted paths" in admit
+    assert "unsupported changed-path class" in admit
     assert "contents: read" in validate
     assert "contents: write" not in validate
     assert "persist-credentials: false" in validate
