@@ -178,7 +178,7 @@ def requested_delivery(
         payload_comment_id = int(match.group("payload"))
         payload_body_sha256 = match.group("payload_sha256")
         if payload_comment_id < 1 or not SHA256_RE.fullmatch(payload_body_sha256):
-            raise WakeError("cloud delivery payload binding is invalid")
+            continue
         if int(match.group("pr")) != pr_number or match.group("head") != head_sha:
             continue
         payload_body = _comment_body_by_id(comments, payload_comment_id)
