@@ -285,7 +285,7 @@ const prove140 = async () => {
       && semanticValues["Changed files"] === trustedDelta.files.length
       && renderedRelation === expectedRelation
       && JSON.stringify(disclosedDelta) === JSON.stringify(trustedDelta)
-      && runtimeTruth.live?.sha === displayedLocalSha,
+      && runtimeTruth.live?.git_sha === displayedLocalSha,
     `rendered=${JSON.stringify({ relation: renderedRelation, ...semanticValues })} trusted=${JSON.stringify(trustedDelta)} disclosed=${JSON.stringify(disclosedDelta)}`,
   );
   record("140:runtime-disclosure", true, "runtime exact identity and canonical server-owned semantic delta are verified through a real Technical details interaction");
