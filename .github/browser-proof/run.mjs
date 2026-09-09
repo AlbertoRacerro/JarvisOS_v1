@@ -127,8 +127,17 @@ const prove113 = async () => {
 
 const prove124 = async () => {
   const route = "/settings/ai";
+  const providerSettingsResponsePromise = page.waitForResponse((candidate) => {
+    const url = new URL(candidate.url());
+    return candidate.request().method() === "GET"
+      && url.origin === new URL(baseUrl).origin
+      && url.pathname === "/api/ai/provider-settings";
+  });
   const response = await page.goto(`${baseUrl}${route}`, { waitUntil: "networkidle", timeout: 30_000 });
+  const providerSettingsResponse = await providerSettingsResponsePromise;
   record("124:http", Boolean(response) && response.status() < 500, `status=${response?.status() ?? "none"}`);
+  record("124:provider-settings-http", providerSettingsResponse.ok(), `status=${providerSettingsResponse.status()}`);
+  const providerSettings = await providerSettingsResponse.json();
   record("124:spa-path", new URL(page.url()).pathname === route, `url=${page.url()}`);
   await page.getByRole("heading", { name: "Settings", exact: true }).waitFor({ state: "visible" });
   await page.getByRole("heading", { name: "Provider catalogue", exact: true }).waitFor({ state: "visible" });
@@ -140,6 +149,18 @@ const prove124 = async () => {
     await row.waitFor({ state: "visible" });
     record(`124:provider:${providerId}`, (await row.count()) === 1, `canonical provider row ${providerId} is rendered once`);
   }
+
+  const serverScaleway = Array.isArray(providerSettings?.providers)
+    ? providerSettings.providers.find((entry) => entry?.provider_id === "scaleway")
+    : null;
+  const serverCredential = serverScaleway?.credential;
+  record(
+    "124:credential-server-shape",
+    Boolean(serverCredential)
+      && typeof serverCredential.effective_source === "string"
+      && typeof serverCredential.persisted_state === "string",
+    `server-credential=${JSON.stringify(serverCredential ?? null)}`,
+  );
 
   const credentialCard = page.locator('[data-provider-credential-owner="scaleway"]');
   await credentialCard.getByRole("heading", { name: "Scaleway credential", exact: true }).waitFor({ state: "visible" });
@@ -169,8 +190,10 @@ const prove124 = async () => {
   const credentialCombination = `${effectiveSource}:${persistedState}`;
   record(
     "124:credential-canonical-codes",
-    validCredentialCombinations.has(credentialCombination),
-    `effective_source=${effectiveSource} persisted_state=${persistedState}`,
+    validCredentialCombinations.has(credentialCombination)
+      && effectiveSource === serverCredential.effective_source
+      && persistedState === serverCredential.persisted_state,
+    `displayed=${credentialCombination} server=${serverCredential.effective_source}:${serverCredential.persisted_state}`,
   );
   const expectedSummary = effectiveSource === "environment"
     ? `Environment active · persisted ${persistedState}`
@@ -263,21 +286,38 @@ const prove140 = async () => {
   await runtimeSurface.waitFor({ state: "visible" });
   const semanticSummary = runtimeSurface.locator(".final-fusion__summary-strip").first();
   await semanticSummary.waitFor({ state: "visible" });
-  const semanticSpans = await semanticSummary.locator("span").allTextContents();
-  const semanticValues = Object.fromEntries(semanticSpans.map((value) => {
-    const match = value.trim().match(/^(Ahead|Behind|Changed files) · ([0-9]+)$/);
-    return match ? [match[1], Number(match[2])] : [value.trim(), null];
-  }));
+  const semanticNodes = {
+    Ahead: semanticSummary.getByText(/^Ahead · [0-9]+$/),
+    Behind: semanticSummary.getByText(/^Behind · [0-9]+$/),
+    "Changed files": semanticSummary.getByText(/^Changed files(?: shown)? · [0-9]+$/),
+  };
+  const semanticValues = {};
+  for (const [label, locator] of Object.entries(semanticNodes)) {
+    await locator.waitFor({ state: "visible" });
+    const value = (await locator.innerText()).trim();
+    const match = value.match(/^(?:Ahead|Behind|Changed files(?: shown)?) · ([0-9]+)$/);
+    semanticValues[label] = match ? Number(match[1]) : null;
+  }
   record(
     "140:runtime-semantic-summary",
     Number.isInteger(semanticValues.Ahead) && Number.isInteger(semanticValues.Behind) && Number.isInteger(semanticValues["Changed files"]),
-    `summary=${JSON.stringify(semanticSpans)}`,
+    `summary=${JSON.stringify(semanticValues)}`,
   );
   const runtimeDetails = runtimeSurface.locator("details").first();
   await openTechnicalDetails(runtimeDetails);
   const localCommitText = await runtimeDetails.getByText(/^Local commit · /).innerText();
   const displayedLocalSha = localCommitText.replace(/^Local commit · /, "").trim();
   record("140:runtime-exact-local-commit", displayedLocalSha === expectedHead, `displayed=${displayedLocalSha} expected=${expectedHead}`);
+  const remoteCommitText = await runtimeDetails.getByText(/^Remote commit · /).innerText();
+  const displayedRemoteSha = remoteCommitText.replace(/^Remote commit · /, "").trim();
+  const trustedRemoteSha = runtimeTruth.remote?.resolved_sha;
+  record(
+    "140:runtime-exact-remote-commit",
+    typeof trustedRemoteSha === "string"
+      && /^[0-9a-f]{40}$/.test(trustedRemoteSha)
+      && displayedRemoteSha === trustedRemoteSha,
+    `displayed=${displayedRemoteSha} trusted=${trustedRemoteSha ?? "missing"}`,
+  );
   const rawDeltaText = await runtimeDetails.locator("pre").first().innerText();
   const disclosedDelta = JSON.parse(rawDeltaText);
   const trustedDelta = runtimeTruth.semantic_delta;
@@ -295,7 +335,9 @@ const prove140 = async () => {
     && (trustedDelta.relation !== "identical" || (trustedDelta.ahead_by === 0 && trustedDelta.behind_by === 0));
   record("140:runtime-trusted-semantic-delta-schema", validTrustedDelta, `trusted=${JSON.stringify(trustedDelta)}`);
   const expectedRelation = trustedDelta.relation.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
-  const renderedRelation = (await runtimeSurface.locator(".final-fusion__delta span").first().innerText()).trim();
+  const renderedRelationLocator = runtimeSurface.locator(".final-fusion__delta span").first();
+  await renderedRelationLocator.waitFor({ state: "visible" });
+  const renderedRelation = (await renderedRelationLocator.innerText()).trim();
   record(
     "140:runtime-server-semantic-delta",
     semanticValues.Ahead === trustedDelta.ahead_by
@@ -303,8 +345,9 @@ const prove140 = async () => {
       && semanticValues["Changed files"] === trustedDelta.files.length
       && renderedRelation === expectedRelation
       && JSON.stringify(disclosedDelta) === JSON.stringify(trustedDelta)
-      && runtimeTruth.live?.git_sha === displayedLocalSha,
-    `rendered=${JSON.stringify({ relation: renderedRelation, ...semanticValues })} trusted=${JSON.stringify(trustedDelta)} disclosed=${JSON.stringify(disclosedDelta)}`,
+      && runtimeTruth.live?.git_sha === displayedLocalSha
+      && trustedRemoteSha === displayedRemoteSha,
+    `rendered=${JSON.stringify({ relation: renderedRelation, ...semanticValues, remote_sha: displayedRemoteSha })} trusted=${JSON.stringify(trustedDelta)} trusted_remote=${trustedRemoteSha ?? "missing"} disclosed=${JSON.stringify(disclosedDelta)}`,
   );
   record("140:runtime-disclosure", true, "runtime exact identity and canonical server-owned semantic delta are verified through a real Technical details interaction");
   await runtimeSurface.getByRole("heading", { name: "Development pipeline", exact: true }).waitFor({ state: "visible" });
