@@ -71,10 +71,12 @@ jobs:
             fs.writeFileSync(process.env.ACQUISITION_PATH, JSON.stringify(record), {encoding: 'utf8', mode: 0o600});
 
       - name: Admit durable payload locally
+        env:
+          INPUT_PR: ${{ inputs.pr }}
         run: |
           python trusted/scripts/cloud_delivery_bridge.py admit \
             --repository "$GITHUB_REPOSITORY" \
-            --pr '${{ inputs.pr }}' \
+            --pr "$INPUT_PR" \
             --acquisition "$RUNNER_TEMP/acquisition.json" \
             --patch-out "$RUNNER_TEMP/delivery.patch" \
             --manifest-out "$RUNNER_TEMP/delivery.json"
