@@ -52,7 +52,8 @@ includesAll(settingsCss, [
   ".final-settings--ai .settings-grid > .settings-card:nth-child(2)",
   ".final-settings--ai .settings-grid > .settings-card:nth-child(3)",
   ".final-settings--ai .settings-grid > .settings-card:nth-child(4)",
-  ".final-settings--system .settings-grid > .settings-card:nth-child(5)",
+  ".final-settings--ai .settings-grid > .settings-card:nth-child(5)",
+  ".final-settings--system .settings-grid > .settings-card:nth-child(6)",
   ".application-shell--final .bluecad-workbench__viewport",
   ".application-shell--final .bluecad-workbench__empty-viewer"
 ], "Settings section filtering or BLUECAD empty viewport composition missing");
