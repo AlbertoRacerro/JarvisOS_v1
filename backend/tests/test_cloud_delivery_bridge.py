@@ -16,6 +16,8 @@ if str(SCRIPTS) not in sys.path:
 from cloud_delivery_bridge import (  # noqa: E402
     BridgeError,
     MARKER,
+    PATCH_CLOSE,
+    PATCH_OPEN,
     Payload,
     apply_and_verify,
     parse_payload,
@@ -35,7 +37,7 @@ def _body(*, patch: str, paths: list[str] | None = None, **overrides: object) ->
     metadata.update(overrides)
     return (
         f"{MARKER}\n```json\n{json.dumps(metadata)}\n```\n"
-        f"```diff\n{patch}\n```"
+        f"{PATCH_OPEN}{patch}{PATCH_CLOSE}"
     )
 
 
@@ -54,6 +56,8 @@ def test_payload_requires_exact_digest_and_normalized_safe_paths() -> None:
         parse_payload(_body(patch=patch, paths=["frontend/../frontend/src/pages/Settings.tsx"]))
     with pytest.raises(BridgeError, match="ambiguous"):
         parse_payload(_body(patch=patch, paths=["frontend\\src\\pages\\Settings.tsx"]))
+    with pytest.raises(BridgeError, match="patch headers"):
+        parse_payload(_body(patch=patch, paths=["frontend/src/pages/Other.tsx"]))
 
 
 def test_payload_refuses_default_ref_control_paths_and_unknown_profiles() -> None:
@@ -111,20 +115,25 @@ def test_apply_verifies_exact_base_and_changed_path_set(tmp_path: Path) -> None:
     wrong = Payload(
         **{**payload.__dict__, "changed_paths": ("frontend/src/pages/Other.tsx",)}
     )
-    with pytest.raises(BridgeError, match="changed-path"):
+    with pytest.raises(BridgeError, match="patch headers"):
         apply_and_verify(repo, wrong, patch_file)
 
 
-def test_workflow_separates_read_only_validation_from_write_materialization() -> None:
+def test_workflow_freezes_payload_before_untrusted_validation_and_separates_writer() -> None:
     workflow = (ROOT / ".github" / "workflows" / "cloud-delivery-bridge.yml").read_text(
         encoding="utf-8"
     )
+    admit = workflow.split("  admit:\n", 1)[1].split("\n  validate:\n", 1)[0]
     validate = workflow.split("  validate:\n", 1)[1].split("\n  materialize:\n", 1)[0]
     write = workflow.split("\n  materialize:\n", 1)[1]
+    assert "actions/upload-artifact@v4" in admit
+    assert "npm run" not in admit
+    assert "Bind validation strength to admitted paths" in admit
     assert "contents: read" in validate
     assert "contents: write" not in validate
     assert "persist-credentials: false" in validate
     assert "npm run test:143" in validate
+    assert "actions/upload-artifact@v4" not in validate
     assert "contents: write" in write
     assert "npm run" not in write
     assert "pytest" not in write
