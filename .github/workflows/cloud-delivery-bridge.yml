@@ -83,6 +83,10 @@ jobs:
           data = json.loads(Path(os.environ["RUNNER_TEMP"]).joinpath("delivery.json").read_text())
           paths = tuple(data["changed_paths"])
           profile = data["validation_profile"]
+          known_prefixes = ("frontend/", "backend/", "scripts/", "docs/")
+          unknown = [path for path in paths if not path.startswith(known_prefixes)]
+          if unknown:
+              raise SystemExit(f"unsupported changed-path class: {unknown[0]}")
           has_frontend = any(p.startswith("frontend/") for p in paths)
           has_backend = any(p.startswith("backend/") or p.startswith("scripts/") for p in paths)
           has_143 = "frontend/tests/143-operator-semantic-ux.mjs" in paths
