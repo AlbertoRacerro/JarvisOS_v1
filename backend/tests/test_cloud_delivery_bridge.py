@@ -50,16 +50,23 @@ def test_payload_requires_exact_digest_and_normalized_safe_paths() -> None:
         parse_payload(_body(patch=patch, patch_sha256="b" * 64))
     with pytest.raises(Exception, match="sensitive"):
         parse_payload(_body(patch=patch, paths=[".github/workflows/ci.yml"]))
-    with pytest.raises(BridgeError, match="normalized"):
+    with pytest.raises(BridgeError, match="ambiguous"):
         parse_payload(_body(patch=patch, paths=["frontend/../frontend/src/pages/Settings.tsx"]))
+    with pytest.raises(BridgeError, match="ambiguous"):
+        parse_payload(_body(patch=patch, paths=["frontend\\src\\pages\\Settings.tsx"]))
 
 
 def test_payload_refuses_default_ref_control_paths_and_unknown_profiles() -> None:
     patch = "diff --git a/README.md b/README.md\n"
     with pytest.raises(BridgeError, match="target_ref"):
         parse_payload(_body(patch=patch, target_ref="master"))
-    with pytest.raises(BridgeError, match="control"):
-        parse_payload(_body(patch=patch, paths=["scripts/cloud_delivery_bridge.py"]))
+    for path in [
+        "scripts/cloud_delivery_bridge.py",
+        ".gitmodules",
+        ".gitattributes",
+    ]:
+        with pytest.raises(BridgeError, match="control"):
+            parse_payload(_body(patch=patch, paths=[path]))
     with pytest.raises(BridgeError, match="validation_profile"):
         parse_payload(_body(patch=patch, validation_profile="arbitrary-shell"))
 
