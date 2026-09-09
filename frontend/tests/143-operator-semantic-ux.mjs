@@ -12,21 +12,26 @@ const semantics = await import(`data:text/javascript;base64,${Buffer.from(compil
 
 assert.match(status, /\| 143 \| in_review \| \[#589\]/);
 assert.match(coding, /runtime\?\.semantic_delta/);
-assert.match(coding, /server-owned 119 semantic delta/);
+assert.match(coding, /server-owned runtime truth/);
 assert.match(coding, /function RawJson/);
 assert.match(coding, /<details><summary>Technical details<\/summary>/);
 assert.doesNotMatch(coding, /<pre className="final-fusion__searchbox">\{JSON\.stringify\(prEvidence/);
 assert.doesNotMatch(coding, /<pre className="final-fusion__searchbox">\{JSON\.stringify\(pipeline/);
 assert.doesNotMatch(coding, /<span>›<\/span>/);
 assert.doesNotMatch(models, /<span>›<\/span>/);
-assert.match(models, /<button type="button" className="final-fusion__disclosure-row"/);
+assert.match(models, /plainDisclosureRowStyle/);
 assert.match(settings, /providerName\(provider\.provider_id\)/);
 assert.match(settings, /Provider code · \{provider\.provider_id\}/);
 assert.match(settings, /<details><summary>Technical details<\/summary>/);
 assert.doesNotMatch(settings, /<strong>\{provider\.provider_id\}<\/strong>/);
 
 const runtime = semantics.runtimeDeltaSummary({ relation: "ahead", ahead_by: 3, behind_by: 1, files: [{ filename: "frontend/a.ts", status: "modified" }], status: "available", partial: true });
-assert.deepEqual(runtime, { relation: "ahead", aheadBy: 3, behindBy: 1, files: [{ name: "frontend/a.ts", status: "modified" }], status: "available", partial: true });
+assert.deepEqual(runtime, { relation: "ahead", aheadBy: 3, behindBy: 1, files: [{ name: "frontend/a.ts", status: "modified" }], status: "available", partial: true, explanation: null });
+const aligned = semantics.runtimeDeltaSummary({ status: "unavailable", files: [] }, "aligned", null);
+assert.equal(aligned.relation, "aligned");
+const unknown = semantics.runtimeDeltaSummary({ status: "unavailable", files: [] }, "unknown", "worktree_dirty");
+assert.equal(unknown.relation, "unknown");
+assert.match(unknown.explanation, /Worktree Dirty/);
 assert.doesNotMatch(semanticsSource, /ahead_count|changed_file_count|execution_class === "local"/);
 
 const evidence = semantics.pullRequestEvidenceSummary({
@@ -44,11 +49,17 @@ assert.equal(semantics.providerLocation(false, "local_compute"), "Runs locally")
 assert.equal(semantics.providerLocation(true, "external_provider"), "Uses a network service");
 assert.match(semantics.savedPaidAiSummary(false, 0), /saved settings/);
 assert.match(settings, /Pending unsaved draft; current permission is unchanged until Save/);
-for (const [source, persisted] of [["secure_persisted", "usable"], ["absent", "absent"], ["unknown", "corrupted"], ["unknown", "unavailable"], ["unknown", "not_supported"]]) {
+const credentialCases = [
+  ["environment", "corrupted", /Environment credential active.*Stored credential damaged/],
+  ["invalid", "usable", /Environment credential invalid.*Stored credential ready/],
+  ["secure_persisted", "usable", /Securely stored credential active.*Stored credential ready/],
+  ["absent", "absent", /No effective credential.*No stored credential/],
+  ["unknown", "unavailable", /Credential availability unknown.*Secure credential store unavailable/]
+];
+for (const [source, persisted, expected] of credentialCases) {
   const meaning = semantics.credentialMeaning(source, persisted);
-  for (const code of ["secure_persisted", "absent", "usable", "corrupted", "unavailable", "not_supported"]) {
-    assert.doesNotMatch(meaning, new RegExp(code));
-  }
+  assert.match(meaning, expected);
+  for (const code of ["secure_persisted", "not_supported"]) assert.doesNotMatch(meaning, new RegExp(code));
 }
 const rawJsonBody = coding.match(/function RawJson[\s\S]*?\n}/)?.[0] ?? "";
 assert.match(rawJsonBody, /<TechnicalDetails>/);
