@@ -220,7 +220,7 @@ def _git(repo_root: Path, args: list[str], *, check: bool = True) -> subprocess.
 
 def _diff_paths(repo_root: Path, base_sha: str) -> tuple[str, ...]:
     tracked = _git(repo_root, ["diff", "--name-only", "--no-renames", base_sha, "--"]).stdout
-    untracked = _git(repo_root, ["ls-files", "--others", "--exclude-standard", "--"]).stdout
+    untracked = _git(repo_root, ["ls-files", "--others", "--"]).stdout
     return assert_safe_paths(
         [line for line in (tracked + untracked).splitlines() if line.strip()]
     )
