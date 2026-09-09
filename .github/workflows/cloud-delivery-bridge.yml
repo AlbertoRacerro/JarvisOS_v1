@@ -1,0 +1,171 @@
+name: Cloud Native Delivery Bridge
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: "Existing same-repository pull request number"
+        required: true
+      payload_comment_id:
+        description: "PR comment containing a complete jarvis-cloud-delivery:v1 payload"
+        required: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    outputs:
+      target_ref: ${{ steps.meta.outputs.target_ref }}
+      base_sha: ${{ steps.meta.outputs.base_sha }}
+      profile: ${{ steps.meta.outputs.profile }}
+    steps:
+      - name: Checkout trusted bridge owner
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: trusted
+          persist-credentials: false
+
+      - name: Fetch and admit durable payload
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python trusted/scripts/cloud_delivery_bridge.py fetch \
+            --repository "$GITHUB_REPOSITORY" \
+            --pr '${{ inputs.pr }}' \
+            --comment-id '${{ inputs.payload_comment_id }}' \
+            --patch-out "$RUNNER_TEMP/delivery.patch" \
+            --manifest-out "$RUNNER_TEMP/delivery.json"
+
+      - name: Export admitted immutable metadata
+        id: meta
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          data = json.loads(Path(os.environ["RUNNER_TEMP"]).joinpath("delivery.json").read_text())
+          out = Path(os.environ["GITHUB_OUTPUT"])
+          with out.open("a", encoding="utf-8") as fh:
+              fh.write(f"target_ref={data['target_ref']}\n")
+              fh.write(f"base_sha={data['base_sha']}\n")
+              fh.write(f"profile={data['validation_profile']}\n")
+          PY
+
+      - name: Checkout exact admitted base without persisted credentials
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.meta.outputs.base_sha }}
+          path: work
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Apply and verify admitted patch
+        run: |
+          python trusted/scripts/cloud_delivery_bridge.py verify \
+            --repo-root work \
+            --patch "$RUNNER_TEMP/delivery.patch" \
+            --manifest "$RUNNER_TEMP/delivery.json"
+
+      - name: Run fixed bounded validation profile
+        env:
+          PROFILE: ${{ steps.meta.outputs.profile }}
+        run: |
+          set -euo pipefail
+          case "$PROFILE" in
+            frontend-143)
+              cd work/frontend
+              npm ci
+              npm run test:113
+              npm run test:124
+              npm run test:140
+              npm run test:143
+              npm run build
+              ;;
+            frontend)
+              cd work/frontend
+              npm ci
+              npm run build
+              ;;
+            backend)
+              cd work/backend
+              python -m pytest -q
+              python -m ruff check app tests
+              ;;
+            docs)
+              ;;
+            *)
+              echo "unreachable validation profile" >&2
+              exit 2
+              ;;
+          esac
+
+      - name: Preserve exactly validated payload
+        uses: actions/upload-artifact@v4
+        with:
+          name: admitted-delivery-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/delivery.patch
+            ${{ runner.temp }}/delivery.json
+          if-no-files-found: error
+          retention-days: 1
+
+  materialize:
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: read
+    steps:
+      - name: Checkout trusted bridge owner
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: trusted
+          persist-credentials: false
+
+      - name: Download validated immutable payload
+        uses: actions/download-artifact@v4
+        with:
+          name: admitted-delivery-${{ github.run_id }}
+          path: ${{ runner.temp }}/delivery
+
+      - name: Checkout exact expected old head without persisted credentials
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate.outputs.base_sha }}
+          path: work
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Revalidate CAS, commit, and guarded-push only the admitted branch
+        id: write
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          result="$(python trusted/scripts/cloud_delivery_bridge.py materialize \
+            --repo-root work \
+            --patch "$RUNNER_TEMP/delivery/delivery.patch" \
+            --manifest "$RUNNER_TEMP/delivery/delivery.json" \
+            --repository "$GITHUB_REPOSITORY")"
+          printf '%s\n' "$result"
+          final_sha="${result#REMOTE_VERIFIED }"
+          test "$final_sha" != "$result"
+          echo "final_sha=$final_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Report durable remote result
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = Number('${{ inputs.pr }}');
+            const finalSha = '${{ steps.write.outputs.final_sha }}';
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr,
+              body: `<!-- jarvis-cloud-delivery:result -->\nCloud delivery materialized and remotely re-read at exact head \`${finalSha}\`. Ordinary CI/review/proof gates remain authoritative.`
+            });
