@@ -11,6 +11,7 @@ downstream control planes reconstruct their own authority from fresh GitHub stat
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -25,6 +26,7 @@ TARGET_WORKFLOW = "daily-development-continuation.yml"
 CLOUD_DELIVERY_WORKFLOW = "cloud-delivery-bridge.yml"
 SUPPORTED_WORKFLOWS = {"CI"}
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 MARKER_RE = re.compile(
     r"<!-- jarvis-e1-wake:v1 workflow=(?P<workflow>[A-Za-z0-9 _.-]+) "
     r"run=(?P<run>\d+) attempt=(?P<attempt>\d+) pr=(?P<pr>\d+) "
@@ -32,12 +34,13 @@ MARKER_RE = re.compile(
 )
 DELIVERY_REQUEST_RE = re.compile(
     r"<!-- jarvis-cloud-delivery:dispatch:v1 pr=(?P<pr>\d+) "
-    r"head=(?P<head>[0-9a-f]{40}) payload_comment_id=(?P<payload>\d+) -->"
+    r"head=(?P<head>[0-9a-f]{40}) payload_comment_id=(?P<payload>\d+) "
+    r"payload_body_sha256=(?P<payload_sha256>[0-9a-f]{64}) -->"
 )
 DELIVERY_MARKER_RE = re.compile(
     r"<!-- jarvis-cloud-delivery-dispatched:v1 run=(?P<run>\d+) "
     r"attempt=(?P<attempt>\d+) pr=(?P<pr>\d+) head=(?P<head>[0-9a-f]{40}) "
-    r"payload_comment_id=(?P<payload>\d+) -->"
+    r"payload_comment_id=(?P<payload>\d+) payload_body_sha256=(?P<payload_sha256>[0-9a-f]{64}) -->"
 )
 MAX_COMMENTS = 1000
 
@@ -60,6 +63,7 @@ class DeliveryRequest:
     pr_number: int
     head_sha: str
     payload_comment_id: int
+    payload_body_sha256: str
 
 
 def parse_event(payload: object) -> WakeRequest | None:
@@ -143,6 +147,18 @@ def already_recorded(request: WakeRequest, comments: list[object]) -> bool:
     return False
 
 
+def _comment_body_by_id(comments: list[object], comment_id: int) -> str | None:
+    for comment in comments:
+        if not isinstance(comment, dict):
+            raise WakeError("pull-request comment is not an object")
+        body, user = comment.get("body"), comment.get("user")
+        if not isinstance(body, str) or not isinstance(user, dict):
+            raise WakeError("pull-request comment is incomplete")
+        if comment.get("id") == comment_id:
+            return body
+    return None
+
+
 def requested_delivery(
     comments: list[object], *, repository: str, pr_number: int, head_sha: str
 ) -> DeliveryRequest | None:
@@ -160,11 +176,18 @@ def requested_delivery(
         if match is None:
             continue
         payload_comment_id = int(match.group("payload"))
-        if payload_comment_id < 1:
-            raise WakeError("cloud delivery payload comment id is invalid")
+        payload_body_sha256 = match.group("payload_sha256")
+        if payload_comment_id < 1 or not SHA256_RE.fullmatch(payload_body_sha256):
+            raise WakeError("cloud delivery payload binding is invalid")
         if int(match.group("pr")) != pr_number or match.group("head") != head_sha:
             continue
-        latest = DeliveryRequest(pr_number, head_sha, payload_comment_id)
+        payload_body = _comment_body_by_id(comments, payload_comment_id)
+        if payload_body is None:
+            continue
+        actual_sha256 = hashlib.sha256(payload_body.encode("utf-8")).hexdigest()
+        if actual_sha256 != payload_body_sha256:
+            continue
+        latest = DeliveryRequest(pr_number, head_sha, payload_comment_id, payload_body_sha256)
     return latest
 
 
@@ -172,7 +195,8 @@ def delivery_marker_text(request: WakeRequest, delivery: DeliveryRequest) -> str
     return (
         f"<!-- jarvis-cloud-delivery-dispatched:v1 run={request.run_id} "
         f"attempt={request.run_attempt} pr={delivery.pr_number} head={delivery.head_sha} "
-        f"payload_comment_id={delivery.payload_comment_id} -->"
+        f"payload_comment_id={delivery.payload_comment_id} "
+        f"payload_body_sha256={delivery.payload_body_sha256} -->"
     )
 
 
@@ -185,6 +209,7 @@ def delivery_already_recorded(
         str(delivery.pr_number),
         delivery.head_sha,
         str(delivery.payload_comment_id),
+        delivery.payload_body_sha256,
     )
     for comment in comments:
         if not isinstance(comment, dict):
@@ -201,6 +226,7 @@ def delivery_already_recorded(
                 match.group("pr"),
                 match.group("head"),
                 match.group("payload"),
+                match.group("payload_sha256"),
             )
             if actual == expected:
                 return True
@@ -273,6 +299,7 @@ class GitHubClient:
                 "inputs": {
                     "pr": str(delivery.pr_number),
                     "payload_comment_id": str(delivery.payload_comment_id),
+                    "payload_body_sha256": delivery.payload_body_sha256,
                 },
             },
         )
@@ -305,14 +332,9 @@ def run(payload: object, *, repository: str, client: GitHubClient) -> str:
     )
     if wake_done and (delivery is None or delivery_done):
         return "noop:duplicate"
-    # Re-read immediately before either dispatch so head movement after comment
-    # inspection cannot wake continuation or trusted delivery for stale evidence.
     pull = client.pull(request.pr_number)
     if not current_pr_matches(request, pull, repository):
         return "noop:stale_head"
-    # At-least-once dispatch comes before the durable marker. If marker creation
-    # later fails, a rerun may dispatch again; both downstream paths independently
-    # reconstruct exact-head/CAS authority, so duplicate wake-ups cannot bypass it.
     if delivery is not None and not delivery_done:
         client.dispatch_delivery(delivery)
         client.record(request.pr_number, delivery_marker_text(request, delivery))
@@ -324,8 +346,7 @@ def run(payload: object, *, repository: str, client: GitHubClient) -> str:
 
 def main() -> int:
     event_path = os.getenv("GITHUB_EVENT_PATH", "")
-    repository = os.getenv("GITHUB_REPOSITORY", "")
-    token = os.getenv("GITHUB_TOKEN", "")
+    repository = os.getenv("GITHUB_REPOSITORY", "")n    token = os.getenv("GITHUB_TOKEN", "")
     if not event_path:
         raise WakeError("GITHUB_EVENT_PATH is missing")
     try:
