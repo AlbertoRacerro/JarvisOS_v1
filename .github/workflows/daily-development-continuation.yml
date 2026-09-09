@@ -420,6 +420,7 @@ jobs:
           ACTIVE_PR: ${{ needs.plan.outputs.pr_number }}
         run: |
           cp scripts/daily_development_continuation.py "$RUNNER_TEMP/trusted-continuation-validator.py"
+          cp scripts/repository_delivery.py "$RUNNER_TEMP/trusted-repository-delivery.py"
           git show HEAD:docs/specs/STATUS.md > "$RUNNER_TEMP/status-before.md"
           git apply --index --whitespace=error-all "$RUNNER_TEMP/continuation/continuation.patch"
           git diff --cached --no-renames --name-only -z > "$RUNNER_TEMP/changed-files.z"
@@ -471,9 +472,14 @@ jobs:
             -m "Jarvis-Tree: $tree_sha" \
             -m "Jarvis-Run: $GITHUB_RUN_ID" \
             -m "Jarvis-OIDC: $commit_oidc_token"
-          git -c http.extraheader="AUTHORIZATION: basic $auth" push origin \
-            "HEAD:refs/heads/$HEAD_REF"
-          echo "output_head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          intended=$(git rev-parse HEAD)
+          python -I -S "$RUNNER_TEMP/trusted-repository-delivery.py" ci-guarded-push \
+            --repo-root . \
+            --remote origin \
+            --branch "$HEAD_REF" \
+            --intended "$intended" \
+            --expected "$EXPECTED_HEAD"
+          echo "output_head=$intended" >> "$GITHUB_OUTPUT"
 
   record-marker:
     needs: [plan, validate, push]
