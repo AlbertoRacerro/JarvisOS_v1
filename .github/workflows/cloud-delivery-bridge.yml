@@ -9,6 +9,9 @@ on:
       payload_comment_id:
         description: "PR comment containing a complete jarvis-cloud-delivery:v1 payload"
         required: true
+      payload_body_sha256:
+        description: "Owner-authorized SHA-256 of the exact payload comment body"
+        required: true
 
 jobs:
   admit:
@@ -37,18 +40,25 @@ jobs:
           ACQUISITION_PATH: ${{ runner.temp }}/acquisition.json
           INPUT_PR: ${{ inputs.pr }}
           INPUT_COMMENT_ID: ${{ inputs.payload_comment_id }}
+          INPUT_PAYLOAD_BODY_SHA256: ${{ inputs.payload_body_sha256 }}
         with:
           script: |
+            const crypto = require('crypto');
             const fs = require('fs');
             const prNumber = Number(process.env.INPUT_PR);
             const commentId = Number(process.env.INPUT_COMMENT_ID);
+            const expectedBodySha256 = process.env.INPUT_PAYLOAD_BODY_SHA256 ?? '';
             if (!Number.isSafeInteger(prNumber) || prNumber < 1) throw new Error('invalid PR input');
             if (!Number.isSafeInteger(commentId) || commentId < 1) throw new Error('invalid comment input');
+            if (!/^[0-9a-f]{64}$/.test(expectedBodySha256)) throw new Error('invalid payload body digest input');
             const comment = await github.rest.issues.getComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               comment_id: commentId,
             });
+            const commentBody = comment.data.body ?? '';
+            const actualBodySha256 = crypto.createHash('sha256').update(commentBody, 'utf8').digest('hex');
+            if (actualBodySha256 !== expectedBodySha256) throw new Error('payload comment body digest mismatch');
             const pr = await github.rest.pulls.get({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -57,7 +67,7 @@ jobs:
             const record = {
               comment: {
                 issue_url: comment.data.issue_url,
-                body: comment.data.body ?? '',
+                body: commentBody,
               },
               pr: {
                 state: pr.data.state,
