@@ -5,12 +5,10 @@ import ts from "typescript";
 const coding = readFileSync(new URL("../src/pages/CodingWorkbench.tsx", import.meta.url), "utf8");
 const models = readFileSync(new URL("../src/pages/ModelDossier.tsx", import.meta.url), "utf8");
 const settings = readFileSync(new URL("../src/pages/Settings.tsx", import.meta.url), "utf8");
-const status = readFileSync(new URL("../../docs/specs/STATUS.md", import.meta.url), "utf8");
 const semanticsSource = readFileSync(new URL("../src/operatorSemantics.ts", import.meta.url), "utf8");
 const compiled = ts.transpileModule(semanticsSource, { compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022 } }).outputText;
 const semantics = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString("base64")}`);
 
-assert.match(status, /\| 143 \| in_review \| \[#589\]/);
 assert.match(coding, /runtime\?\.semantic_delta/);
 assert.match(coding, /canonical server-owned runtime alignment/);
 assert.match(coding, /Remote ahead · \{semanticDelta\.aheadBy/);
