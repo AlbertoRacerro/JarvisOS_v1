@@ -296,8 +296,8 @@ const prove140 = async () => {
   const semanticSummary = runtimeSurface.locator(".final-fusion__summary-strip").first();
   await semanticSummary.waitFor({ state: "visible" });
   const semanticNodes = {
-    Ahead: semanticSummary.getByText(/^Ahead · [0-9]+$/),
-    Behind: semanticSummary.getByText(/^Behind · [0-9]+$/),
+    "Remote ahead": semanticSummary.getByText(/^Remote ahead · [0-9]+$/),
+    "Remote behind": semanticSummary.getByText(/^Remote behind · [0-9]+$/),
     "Changed files": semanticSummary.getByText(/^Changed files(?: shown)? · [0-9]+$/),
   };
   const semanticValues = {};
@@ -306,12 +306,14 @@ const prove140 = async () => {
     await locator.waitFor({ state: "visible" });
     const value = (await locator.innerText()).trim();
     semanticTexts[label] = value;
-    const match = value.match(/^(?:Ahead|Behind|Changed files(?: shown)?) · ([0-9]+)$/);
+    const match = value.match(/^(?:Remote ahead|Remote behind|Changed files(?: shown)?) · ([0-9]+)$/);
     semanticValues[label] = match ? Number(match[1]) : null;
   }
   record(
     "140:runtime-semantic-summary",
-    Number.isInteger(semanticValues.Ahead) && Number.isInteger(semanticValues.Behind) && Number.isInteger(semanticValues["Changed files"]),
+    Number.isInteger(semanticValues["Remote ahead"])
+      && Number.isInteger(semanticValues["Remote behind"])
+      && Number.isInteger(semanticValues["Changed files"]),
     `summary=${JSON.stringify(semanticValues)}`,
   );
   const runtimeDetails = runtimeSurface.locator("details").first();
@@ -373,20 +375,26 @@ const prove140 = async () => {
     semanticTexts["Changed files"] === expectedChangedFilesLabel,
     `rendered=${JSON.stringify(semanticTexts["Changed files"])} expected=${JSON.stringify(expectedChangedFilesLabel)}`,
   );
-  const expectedRelation = trustedDelta.relation.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+  const alignmentMeanings = {
+    aligned: "Local runtime matches remote",
+    local_behind: "Local runtime behind remote",
+    divergent: "Local and remote diverge",
+  };
+  const expectedRelation = alignmentMeanings[runtimeTruth.alignment];
   const renderedRelationLocator = runtimeSurface.locator(".final-fusion__delta span").first();
   await renderedRelationLocator.waitFor({ state: "visible" });
   const renderedRelation = (await renderedRelationLocator.innerText()).trim();
   record(
     "140:runtime-server-semantic-delta",
-    semanticValues.Ahead === trustedDelta.ahead_by
-      && semanticValues.Behind === trustedDelta.behind_by
+    typeof expectedRelation === "string"
+      && semanticValues["Remote ahead"] === trustedDelta.ahead_by
+      && semanticValues["Remote behind"] === trustedDelta.behind_by
       && semanticValues["Changed files"] === trustedDelta.files.length
       && renderedRelation === expectedRelation
       && JSON.stringify(disclosedDelta) === JSON.stringify(trustedDelta)
       && runtimeTruth.live?.git_sha === displayedLocalSha
       && trustedRemoteSha === displayedRemoteSha,
-    `rendered=${JSON.stringify({ relation: renderedRelation, ...semanticValues, remote_sha: displayedRemoteSha })} trusted=${JSON.stringify(trustedDelta)} trusted_remote=${trustedRemoteSha ?? "missing"} disclosed=${JSON.stringify(disclosedDelta)}`,
+    `rendered=${JSON.stringify({ relation: renderedRelation, ...semanticValues, remote_sha: displayedRemoteSha })} alignment=${JSON.stringify(runtimeTruth.alignment)} expected_relation=${JSON.stringify(expectedRelation)} trusted=${JSON.stringify(trustedDelta)} trusted_remote=${trustedRemoteSha ?? "missing"} disclosed=${JSON.stringify(disclosedDelta)}`,
   );
   record("140:runtime-disclosure", true, "runtime exact identity and canonical server-owned semantic delta are verified through a real Technical details interaction");
   await runtimeSurface.getByRole("heading", { name: "Development pipeline", exact: true }).waitFor({ state: "visible" });
