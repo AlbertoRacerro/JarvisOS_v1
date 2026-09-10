@@ -9,7 +9,6 @@ LiteratureState = Literal["raw", "review", "accepted"]
 LiteratureEntryKind = Literal["claim", "datum"]
 LiteratureLocatorKind = Literal["page", "line", "section"]
 LiteratureUsedByKind = Literal["parameter", "assumption", "artifact"]
-LiteratureBackingAvailability = Literal["available", "missing", "ineligible", "unsupported", "unsafe"]
 
 
 class StrictLiteratureModel(BaseModel):
@@ -60,7 +59,7 @@ class LiteratureBackingRead(StrictLiteratureModel):
     filename: str | None
     mime_type: str | None
     sha256: str | None
-    availability: LiteratureBackingAvailability
+    availability: str = Field(pattern="^(available|missing|ineligible|unsupported|unsafe)$")
     content_available: bool
     content_url: str | None
 
