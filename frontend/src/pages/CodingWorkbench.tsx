@@ -121,7 +121,7 @@ function RawJson({ value }: Readonly<{ value: unknown }>) {
 function EvidenceSummary({ value, label }: Readonly<{ value: Record<string, unknown>; label: string }>) {
   if ("pr" in value) {
     const summary = pullRequestEvidenceSummary(value);
-    return <div className="final-fusion__source-empty"><strong>{summary.title || label}</strong><span>{humanize(summary.state)} · Checks: {summary.checks.passing} passing, {summary.checks.failing} failing, {summary.checks.pending} pending, {summary.checks.stale} stale · Reviews: {summary.reviews.approved} approved, {summary.reviews.blocking} blocking, {summary.reviews.stale} stale</span><RawJson value={value} /></div>;
+    return <div className="final-fusion__source-empty"><strong>{summary.title || label}</strong><span>{humanize(summary.state)} · Checks: {summary.checks.passing} passing, {summary.checks.failing} failing, {summary.checks.pending} pending, {summary.checks.stale} stale · Reviews: {summary.reviews.approved} approved, {summary.reviews.changesRequested} changes requested, {summary.reviews.stale} stale</span><RawJson value={value} /></div>;
   }
   const payload = typeof value.payload === "object" && value.payload !== null ? value.payload as Record<string, unknown> : value;
   const state = payload.state ?? payload.status ?? value.state ?? "available";
@@ -133,8 +133,11 @@ function EvidenceSummary({ value, label }: Readonly<{ value: Record<string, unkn
 
 function PipelineSummary({ value }: Readonly<{ value: Record<string, unknown> }>) {
   const stages = Array.isArray(value.stages) ? value.stages as Record<string, unknown>[] : [];
-  const state = value.state ?? value.status ?? "available";
-  return <div><div className="final-fusion__source-empty"><strong>Pipeline {humanize(state)}</strong><span>{stages.length ? `${stages.length} reported stages` : "Server projection available"}</span></div>{stages.map((stage, index) => <div className="final-fusion__source-empty" key={String(stage.id ?? stage.name ?? index)}><strong>{String(stage.title ?? stage.name ?? `Stage ${index + 1}`)}</strong><span>{humanize(stage.state ?? stage.status)}{stage.reason ? ` · ${humanize(stage.reason)}` : ""}</span></div>)}<RawJson value={value} /></div>;
+  const partial = value.partial === true;
+  const warnings = Array.isArray(value.warnings) ? value.warnings : [];
+  const projectionLabel = partial ? "Partial" : "Server projection";
+  const evidenceLabel = `${stages.length} reported stages${warnings.length ? ` · ${warnings.length} warnings` : ""}`;
+  return <div><div className="final-fusion__source-empty"><strong>Pipeline {projectionLabel}</strong><span>{evidenceLabel}</span></div>{stages.map((stage, index) => <div className="final-fusion__source-empty" key={String(stage.id ?? stage.name ?? index)}><strong>{String(stage.title ?? stage.name ?? `Stage ${index + 1}`)}</strong><span>{humanize(stage.state ?? stage.status)}{stage.reason ? ` · ${humanize(stage.reason)}` : ""}</span></div>)}<RawJson value={value} /></div>;
 }
 
 function RepositorySurface({ workspaceId }: Readonly<{ workspaceId: string | null }>) {
