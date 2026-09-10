@@ -117,17 +117,18 @@ const prove113 = async () => {
   record("113:two-exact-versions", (await versionA.count()) === 1 && (await versionB.count()) === 1, "two human-labelled exact version choices are distinguishable");
 
   const dossier = page.getByRole("region", { name: "Version dossier" });
+  const dossierDetails = dossier.locator("details").first();
   await versionA.click();
   record("113:select-a", await versionA.getAttribute("aria-pressed") === "true", "Version A remains the selected exact dossier");
-  await openTechnicalDetails(dossier.locator("details").first());
-  await dossier.getByText("proof-version-a", { exact: true }).waitFor({ state: "visible" });
+  await openTechnicalDetails(dossierDetails);
+  await dossierDetails.getByText("proof-version-a", { exact: true }).waitFor({ state: "visible" });
   record("113:select-a-exact-identity", true, "Version A exact identity is available through the real Technical details disclosure");
 
   await versionB.click();
   record("113:select-b", await versionB.getAttribute("aria-pressed") === "true", "Version B remains the selected exact dossier");
   record("113:a-deselected", await versionA.getAttribute("aria-pressed") === "false", "Version A is no longer the selected dossier");
-  await openTechnicalDetails(dossier.locator("details").first());
-  await dossier.getByText("proof-version-b", { exact: true }).waitFor({ state: "visible" });
+  await openTechnicalDetails(dossierDetails);
+  await dossierDetails.getByText("proof-version-b", { exact: true }).waitFor({ state: "visible" });
   record("113:select-b-exact-identity", true, "Version B exact identity is available through the real Technical details disclosure");
 
   const body = (await page.locator("body").innerText()).toLowerCase();
@@ -220,7 +221,7 @@ const prove124 = async () => {
     absent: "No stored credential",
   };
   const expectedSourceMeaning = sourceMeanings[effectiveSource] ?? "Credential availability unknown";
-  const expectedPersistedMeaning = persistedMeanings[persistedState] ?? "Stored credential state unavailable";
+  const expectedPersistedMeaning = persistedMeanState = persistedMeanings[persistedState] ?? "Stored credential state unavailable";
   const expectedCredentialSummary = `${expectedSourceMeaning} · ${expectedPersistedMeaning}.`;
   record(
     "124:credential-human-summary",
