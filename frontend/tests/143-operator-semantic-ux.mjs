@@ -24,6 +24,11 @@ assert.match(settings, /providerName\(provider\.provider_id\)/);
 assert.match(settings, /Provider code · \{provider\.provider_id\}/);
 assert.match(settings, /<details><summary>Technical details<\/summary>/);
 assert.doesNotMatch(settings, /<strong>\{provider\.provider_id\}<\/strong>/);
+assert.match(coding, /value\.partial === true/);
+assert.match(coding, /Array\.isArray\(value\.warnings\)/);
+assert.doesNotMatch(coding, /const state = value\.state \?\? value\.status \?\? "available"/);
+assert.match(coding, /changes requested/);
+assert.doesNotMatch(coding, /summary\.reviews\.blocking/);
 
 const runtime = semantics.runtimeDeltaSummary({ relation: "ahead", ahead_by: 3, behind_by: 1, files: [{ filename: "frontend/a.ts", status: "modified" }], status: "available", partial: true }, "ahead");
 assert.deepEqual(runtime, { relation: "ahead", aheadBy: 3, behindBy: 1, files: [{ name: "frontend/a.ts", status: "modified" }], status: "available", partial: true, explanation: null });
@@ -44,7 +49,7 @@ const evidence = semantics.pullRequestEvidenceSummary({
 assert.equal(evidence.title, "Semantic repair");
 assert.equal(evidence.state, "closed");
 assert.deepEqual(evidence.checks, { total: 2, passing: 0, failing: 1, pending: 0, stale: 1 });
-assert.deepEqual(evidence.reviews, { total: 2, approved: 0, blocking: 1, stale: 1 });
+assert.deepEqual(evidence.reviews, { total: 2, approved: 0, changesRequested: 1, stale: 1 });
 
 assert.equal(semantics.providerLocation(false, "synthetic"), "Runs without an external service");
 assert.equal(semantics.providerLocation(false, "local_compute"), "Runs locally");
