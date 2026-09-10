@@ -21,6 +21,7 @@ const STEP_KEYS = {
   'assert-value-equals': ['op','name','left','right'],
   'map-value': ['op','name','source','capture','cases'],
   'assert-text-template': ['op','name','locator','template'],
+  'assert-template-in': ['op','name','template','allowed'],
   'assert-text-template-map': ['op','name','locator','source','cases'],
   'assert-json-deep-equals': ['op','name','locator','right'],
   'assert-body-absent': ['op','name','forbidden','caseInsensitive'],
@@ -155,6 +156,10 @@ export function validatePlan(plan) {
       for (const [key, value] of Object.entries(step.cases)) { boundedString(key, `step ${index} case key`, 100); boundedString(value, `step ${index} case value`, 500); }
     } else if (step.op === 'assert-text-template') {
       if (!step.locator) fail(`step ${index} locator required`); validateTemplate(step.template, `step ${index}.template`);
+    } else if (step.op === 'assert-template-in') {
+      validateTemplate(step.template, `step ${index}.template`);
+      if (!Array.isArray(step.allowed) || step.allowed.length < 1 || step.allowed.length > 40) fail(`step ${index} allowed invalid`);
+      for (const item of step.allowed) boundedString(item, `step ${index}.allowed`, 300);
     } else if (step.op === 'assert-text-template-map') {
       if (!step.locator) fail(`step ${index} locator required`); validateValueRef(step.source, `step ${index}.source`);
       if (!isObject(step.cases) || Object.keys(step.cases).length < 1 || Object.keys(step.cases).length > 30) fail(`step ${index} cases invalid`);
@@ -174,6 +179,7 @@ export function validatePlan(plan) {
     } else if (step.op === 'run-fixture') {
       if (!ALLOWED_FIXTURES.has(step.fixture) || step.fixture === 'none') fail(`step ${index} fixture invalid`);
       if (!['versions'].includes(step.phase)) fail(`step ${index} fixture phase invalid`);
+      if (step.fixture !== fixture) fail(`step ${index} fixture does not match plan fixture`);
     } else if (step.op === 'screenshot') {
       if (typeof step.file !== 'string' || !/^[A-Za-z0-9_-]{1,80}$/.test(step.file)) fail(`step ${index} screenshot name invalid`);
     }
