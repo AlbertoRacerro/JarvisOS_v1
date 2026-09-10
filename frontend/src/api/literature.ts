@@ -2,6 +2,7 @@ import { API_BASE_URL } from "./client";
 
 export type LiteratureState = "raw" | "review" | "accepted";
 export type LiteratureEntryKind = "claim" | "datum";
+export type LiteratureBackingAvailability = "available" | "missing" | "ineligible" | "unsupported" | "unsafe";
 
 export type LiteratureUsedBy = {
   kind: "parameter" | "assumption" | "artifact";
@@ -42,9 +43,10 @@ export type LiteratureSource = {
   source_ref: string;
   backing: null | {
     artifact_id: string;
-    filename: string;
+    filename: string | null;
     mime_type: string | null;
     sha256: string | null;
+    availability: LiteratureBackingAvailability;
     content_available: boolean;
     content_url: string | null;
   };
@@ -68,6 +70,6 @@ export async function listLiteratureSources(workspaceId: string): Promise<Litera
 }
 
 export function literatureContentUrl(source: LiteratureSource): string | null {
-  if (!source.backing?.content_available || !source.backing.content_url) return null;
+  if (!source.backing?.content_available || source.backing.availability !== "available" || !source.backing.content_url) return null;
   return `${API_BASE_URL}${source.backing.content_url}`;
 }
