@@ -138,14 +138,8 @@ const prove113 = async () => {
 
 const prove124 = async () => {
   const route = "/settings/ai";
-  const providerSettingsResponsePromise = page.waitForResponse((candidate) => {
-    const url = new URL(candidate.url());
-    return candidate.request().method() === "GET"
-      && url.origin === new URL(baseUrl).origin
-      && url.pathname === "/ai/provider-settings";
-  });
   const response = await page.goto(`${baseUrl}${route}`, { waitUntil: "networkidle", timeout: 30_000 });
-  const providerSettingsResponse = await providerSettingsResponsePromise;
+  const providerSettingsResponse = await context.request.get(`${baseUrl}/ai/provider-settings`);
   record("124:http", Boolean(response) && response.status() < 500, `status=${response?.status() ?? "none"}`);
   record("124:provider-settings-http", providerSettingsResponse.ok(), `status=${providerSettingsResponse.status()}`);
   const providerSettings = await providerSettingsResponse.json();
@@ -227,12 +221,11 @@ const prove124 = async () => {
   };
   const expectedSourceMeaning = sourceMeanings[effectiveSource] ?? "Credential availability unknown";
   const expectedPersistedMeaning = persistedMeanings[persistedState] ?? "Stored credential state unavailable";
+  const expectedCredentialSummary = `${expectedSourceMeaning} · ${expectedPersistedMeaning}.`;
   record(
     "124:credential-human-summary",
-    credentialSummaryText.includes(expectedSourceMeaning)
-      && credentialSummaryText.includes(expectedPersistedMeaning)
-      && !credentialSummaryText.includes("_"),
-    `summary=${JSON.stringify(credentialSummaryText)} expected_source=${JSON.stringify(expectedSourceMeaning)} expected_persisted=${JSON.stringify(expectedPersistedMeaning)}`,
+    credentialSummaryText === expectedCredentialSummary,
+    `summary=${JSON.stringify(credentialSummaryText)} expected=${JSON.stringify(expectedCredentialSummary)}`,
   );
   record(
     "124:credential-technical-disclosure",
@@ -259,16 +252,10 @@ const prove124 = async () => {
 
 const prove140 = async () => {
   const repositoryRoute = "/coding/repository";
-  const repositoryTruthResponsePromise = page.waitForResponse((candidate) => {
-    const url = new URL(candidate.url());
-    return candidate.request().method() === "GET"
-      && url.origin === new URL(baseUrl).origin
-      && url.pathname === "/api/coding/repository/ref"
-      && url.searchParams.get("repository") === repository
-      && url.searchParams.get("ref") === "master";
-  });
   const repositoryResponse = await page.goto(`${baseUrl}${repositoryRoute}`, { waitUntil: "networkidle", timeout: 30_000 });
-  const repositoryTruthResponse = await repositoryTruthResponsePromise;
+  const repositoryTruthResponse = await context.request.get(
+    `${baseUrl}/api/coding/repository/ref?repository=${encodeURIComponent(repository)}&ref=master`,
+  );
   record("140:repository-http", Boolean(repositoryResponse) && repositoryResponse.status() < 500, `status=${repositoryResponse?.status() ?? "none"}`);
   record("140:repository-truth-http", repositoryTruthResponse.ok(), `status=${repositoryTruthResponse.status()}`);
   const repositoryTruth = await repositoryTruthResponse.json();
@@ -295,16 +282,10 @@ const prove140 = async () => {
   await screenshot("repository");
 
   const runtimeRoute = "/coding/runtime";
-  const runtimeTruthResponsePromise = page.waitForResponse((candidate) => {
-    const url = new URL(candidate.url());
-    return candidate.request().method() === "GET"
-      && url.origin === new URL(baseUrl).origin
-      && url.pathname === "/api/coding/runtime-truth"
-      && url.searchParams.get("repository") === repository
-      && url.searchParams.get("target_ref") === "master";
-  });
   const runtimeResponse = await page.goto(`${baseUrl}${runtimeRoute}`, { waitUntil: "networkidle", timeout: 30_000 });
-  const runtimeTruthResponse = await runtimeTruthResponsePromise;
+  const runtimeTruthResponse = await context.request.get(
+    `${baseUrl}/api/coding/runtime-truth?repository=${encodeURIComponent(repository)}&target_ref=master`,
+  );
   record("140:runtime-http", Boolean(runtimeResponse) && runtimeResponse.status() < 500, `status=${runtimeResponse?.status() ?? "none"}`);
   record("140:runtime-truth-http", runtimeTruthResponse.ok(), `status=${runtimeTruthResponse.status()}`);
   const runtimeTruth = await runtimeTruthResponse.json();
@@ -357,13 +338,26 @@ const prove140 = async () => {
   const disclosedDelta = JSON.parse(rawDeltaText);
   const trustedDelta = runtimeTruth.semantic_delta;
   const canonicalRelations = new Set(["ahead", "behind", "diverged", "identical"]);
+  const validTrustedFiles = Array.isArray(trustedDelta?.files)
+    && trustedDelta.files.every((file) => file !== null
+      && typeof file === "object"
+      && !Array.isArray(file)
+      && typeof file.filename === "string"
+      && file.filename.length > 0
+      && typeof file.status === "string"
+      && file.status.length > 0
+      && Number.isInteger(file.additions)
+      && file.additions >= 0
+      && Number.isInteger(file.deletions)
+      && file.deletions >= 0
+      && (file.patch === null || typeof file.patch === "string"));
   const validTrustedDelta = trustedDelta?.status === "available"
     && canonicalRelations.has(trustedDelta.relation)
     && Number.isInteger(trustedDelta.ahead_by)
     && trustedDelta.ahead_by >= 0
     && Number.isInteger(trustedDelta.behind_by)
     && trustedDelta.behind_by >= 0
-    && Array.isArray(trustedDelta.files)
+    && validTrustedFiles
     && typeof trustedDelta.partial === "boolean"
     && (trustedDelta.relation !== "ahead" || (trustedDelta.ahead_by > 0 && trustedDelta.behind_by === 0))
     && (trustedDelta.relation !== "behind" || (trustedDelta.ahead_by === 0 && trustedDelta.behind_by > 0))
