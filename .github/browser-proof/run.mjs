@@ -1,10 +1,13 @@
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
+import { checkJsonContract, inputEmptyResult, jsonPointer, loadTrustedPlan, noButtonLabelMatches } from "./plan-lib.mjs";
 
-const scenario = process.env.PROOF_SCENARIO;
+const here = dirname(fileURLToPath(import.meta.url));
+const planId = process.env.PROOF_PLAN_ID;
 const baseUrl = process.env.PROOF_BASE_URL ?? "http://127.0.0.1:8000";
 const artifactDir = process.env.PROOF_ARTIFACT_DIR;
 const expectedHead = process.env.PROOF_EXPECTED_HEAD_SHA;
@@ -15,473 +18,129 @@ const prBaseSha = process.env.PROOF_PR_BASE_SHA;
 const repository = process.env.PROOF_REPOSITORY;
 const prNumber = process.env.PROOF_PR_NUMBER;
 const runId = process.env.GITHUB_RUN_ID ?? "unknown";
-const seedScript = process.env.PROOF_SEED_SCRIPT;
 const proofPython = process.env.PROOF_PYTHON;
 const candidateUser = process.env.PROOF_CANDIDATE_USER;
 
-if (!scenario || !artifactDir || !expectedHead || !resolvedHead || !checkedOutHead || !controllerSha || !prBaseSha || !repository) {
-  throw new Error("missing required proof identity environment");
-}
-if (expectedHead !== resolvedHead || expectedHead !== checkedOutHead) {
-  throw new Error("exact-head identity mismatch before browser execution");
-}
+if (!planId || !artifactDir || !expectedHead || !resolvedHead || !checkedOutHead || !controllerSha || !prBaseSha || !repository) throw new Error("missing required proof identity environment");
+if (expectedHead !== resolvedHead || expectedHead !== checkedOutHead) throw new Error("exact-head identity mismatch before browser execution");
 
+const plan = await loadTrustedPlan(planId, join(here, "plans"));
+const artifactMode = plan.artifactMode ?? "full";
 await mkdir(artifactDir, { recursive: true });
 const startedAt = new Date().toISOString();
 const assertions = [];
 const artifacts = [];
-const record = (name, pass, detail) => {
-  assertions.push({ name, pass, detail });
-  if (!pass) throw new Error(`${name}: ${detail}`);
-};
-
-const routes = {
-  "113-memory-models": ["/memory/models"],
-  "124-settings-ai": ["/settings/ai"],
-  "140-coding": ["/coding/repository", "/coding/runtime"],
-};
-if (!(scenario in routes)) throw new Error(`unsupported proof scenario: ${scenario}`);
+const captures = new Map();
+const record = (name, pass, detail) => { assertions.push({ name, pass, detail }); if (!pass) throw new Error(`${name}: ${detail}`); };
 
 const browser = await chromium.launch({ headless: true });
 const context = await browser.newContext();
-await context.tracing.start({ screenshots: true, snapshots: true, sources: false });
+const traceEnabled = artifactMode === "full";
+if (traceEnabled) await context.tracing.start({ screenshots: true, snapshots: true, sources: false });
 const page = await context.newPage();
-page.on("pageerror", (error) => assertions.push({ name: "pageerror", pass: false, detail: String(error) }));
-page.on("console", (message) => {
-  if (message.type() === "error") assertions.push({ name: "console-error", pass: false, detail: message.text() });
-});
+page.on("pageerror", (error) => assertions.push({ name: "pageerror", pass: false, detail: artifactMode === "metadata-only" ? "browser page error" : String(error) }));
+page.on("console", (message) => { if (message.type() === "error") assertions.push({ name: "console-error", pass: false, detail: artifactMode === "metadata-only" ? "browser console error" : message.text() }); });
 
-const screenshot = async (name) => {
-  const path = join(artifactDir, `${scenario}-${name}.png`);
-  await page.screenshot({ path, fullPage: true });
-  artifacts.push(path);
+const regexFromTrusted = (value) => new RegExp(value);
+const locatorFromSpec = (spec, root = page) => {
+  if (spec.kind === "role") return root.getByRole(spec.role, { name: spec.regex ? regexFromTrusted(spec.name) : spec.name, exact: spec.exact ?? false });
+  if (spec.kind === "text") return root.getByText(spec.regex ? regexFromTrusted(spec.text) : spec.text, { exact: spec.exact ?? false });
+  if (spec.kind === "label") return root.getByLabel(spec.regex ? regexFromTrusted(spec.text) : spec.text, { exact: spec.exact ?? false });
+  if (spec.kind === "testid") return root.getByTestId(spec.testid);
+  if (spec.kind === "css") return root.locator(spec.selector);
+  if (spec.kind === "within") { const parent = locatorFromSpec(spec.parent, root); const child = locatorFromSpec(spec.child, parent); return spec.first ? child.first() : child; }
+  throw new Error(`unsupported locator kind ${spec.kind}`);
 };
 
 const openTechnicalDetails = async (details) => {
   const summary = details.locator(":scope > summary").filter({ hasText: /^Technical details$/ });
   if ((await summary.count()) !== 1) throw new Error("Technical details requires exactly one native summary control");
-  await summary.waitFor({ state: "visible" });
-  await summary.focus();
-  if (!(await summary.evaluate((node) => node === document.activeElement))) {
-    throw new Error("Technical details summary did not receive keyboard focus");
-  }
-  const initiallyOpen = await details.evaluate((node) => node.open);
-  await summary.press("Enter");
-  const afterEnter = await details.evaluate((node) => node.open);
-  if (afterEnter === initiallyOpen) throw new Error("Technical details did not toggle with Enter");
-  await summary.press("Space");
-  const afterSpace = await details.evaluate((node) => node.open);
-  if (afterSpace === afterEnter) throw new Error("Technical details did not toggle with Space");
-  if (!afterSpace) {
-    await summary.press("Enter");
-    if (!(await details.evaluate((node) => node.open))) throw new Error("Technical details did not finish open");
-  }
+  await summary.waitFor({ state: "visible" }); await summary.focus();
+  if (!(await summary.evaluate((node) => node === document.activeElement))) throw new Error("Technical details summary did not receive keyboard focus");
+  const initiallyOpen = await details.evaluate((node) => node.open); await summary.press("Enter");
+  const afterEnter = await details.evaluate((node) => node.open); if (afterEnter === initiallyOpen) throw new Error("Technical details did not toggle with Enter");
+  await summary.press("Space"); const afterSpace = await details.evaluate((node) => node.open); if (afterSpace === afterEnter) throw new Error("Technical details did not toggle with Space");
+  if (!afterSpace) { await summary.press("Enter"); if (!(await details.evaluate((node) => node.open))) throw new Error("Technical details did not finish open"); }
 };
 
-const assertNoCodingMutationButtons = async (prefix) => {
-  const forbidden = /^(commit|apply|execute|push|merge|create pr|create pull request|update|restart)(\b|\s)/i;
-  const labels = await page.getByRole("button").allTextContents();
-  record(
-    `${prefix}:no-direct-mutation-buttons`,
-    labels.every((label) => !forbidden.test(label.trim())),
-    `button-labels=${JSON.stringify(labels)}`,
-  );
+const valueOf = (ref) => {
+  if ("capture" in ref) { if (!captures.has(ref.capture)) throw new Error(`missing capture ${ref.capture}`); return captures.get(ref.capture); }
+  if ("env" in ref) return ref.env === "expectedHead" ? expectedHead : repository;
+  if ("literal" in ref) return ref.literal;
+  if ("json" in ref) { if (!captures.has(ref.json.source)) throw new Error(`missing JSON source ${ref.json.source}`); const value = jsonPointer(captures.get(ref.json.source), ref.json.pointer); return ref.json.length ? (Array.isArray(value) || typeof value === "string" ? value.length : (() => { throw new Error("length requested for non-sized JSON value"); })()) : value; }
+  throw new Error("unsupported value reference");
 };
 
-const prove113 = async () => {
-  const route = "/memory/models";
-  const response = await page.goto(`${baseUrl}${route}`, { waitUntil: "networkidle", timeout: 30_000 });
-  record("113:http", Boolean(response) && response.status() < 500, `status=${response?.status() ?? "none"}`);
-  record("113:spa-path", new URL(page.url()).pathname === route, `url=${page.url()}`);
-  await page.getByText("No model versions", { exact: true }).waitFor({ state: "visible" });
-  record("113:empty-state", true, "workspace-only seed renders explicit no-model-version state");
-  await screenshot("empty");
+const template = (input) => input.replace(/{{([^}]+)}}/g, (_match, token) => {
+  if (token.startsWith("capture:")) { const name = token.slice("capture:".length); if (!captures.has(name)) throw new Error(`missing capture ${name}`); return String(captures.get(name)); }
+  if (token.startsWith("env:")) { const raw = token.slice("env:".length); const [name, filter = null] = raw.split("|"); let value = name === "expectedHead" ? expectedHead : name === "repository" ? repository : (() => { throw new Error(`unsupported env token ${name}`); })(); if (filter === "urlencode") value = encodeURIComponent(String(value)); else if (filter !== null) throw new Error(`unsupported env template filter ${filter}`); return String(value); }
+  if (token.startsWith("json:")) { const rest = token.slice("json:".length); const firstColon = rest.indexOf(":"); const source = rest.slice(0, firstColon); let pointerAndFilter = rest.slice(firstColon + 1); let filter = null; const pipe = pointerAndFilter.lastIndexOf("|"); if (pipe > -1) { filter = pointerAndFilter.slice(pipe + 1); pointerAndFilter = pointerAndFilter.slice(0, pipe); } if (!captures.has(source)) throw new Error(`missing JSON source ${source}`); let value = jsonPointer(captures.get(source), pointerAndFilter); if (filter === "length") { if (!Array.isArray(value) && typeof value !== "string") throw new Error("length template requested for non-sized value"); value = value.length; } else if (filter === "urlencode") value = encodeURIComponent(String(value)); else if (filter !== null) throw new Error(`unsupported template filter ${filter}`); return String(value); }
+  throw new Error(`unsupported template token ${token}`);
+});
 
-  if (!seedScript || !proofPython || !candidateUser) throw new Error("113 proof requires bounded unprivileged seed identity");
-  const seedEnv = [
-    "GITHUB_TOKEN=",
-    "GH_TOKEN=",
-    `JARVISOS_DATA_ROOT=${process.env.JARVISOS_DATA_ROOT ?? ""}`,
-    `PYTHONPATH=${process.env.PYTHONPATH ?? ""}`,
-  ];
-  const seeded = spawnSync("sudo", ["-u", candidateUser, "-H", "env", ...seedEnv, proofPython, seedScript, "versions"], {
-    encoding: "utf8",
-  });
-  record("113:trusted-version-seed", seeded.status === 0, seeded.stderr || seeded.stdout || `status=${seeded.status}`);
-
-  await page.reload({ waitUntil: "networkidle", timeout: 30_000 });
-  const versionA = page.getByRole("button", { name: /Version A exact/ });
-  const versionB = page.getByRole("button", { name: /Version B exact/ });
-  await versionA.waitFor({ state: "visible" });
-  await versionB.waitFor({ state: "visible" });
-  record("113:two-exact-versions", (await versionA.count()) === 1 && (await versionB.count()) === 1, "two human-labelled exact version choices are distinguishable");
-
-  const dossier = page.getByRole("region", { name: "Version dossier" });
-  const dossierDetails = dossier.locator("details").first();
-  await versionA.click();
-  record("113:select-a", await versionA.getAttribute("aria-pressed") === "true", "Version A remains the selected exact dossier");
-  await openTechnicalDetails(dossierDetails);
-  await dossierDetails.getByText("proof-version-a", { exact: true }).waitFor({ state: "visible" });
-  record("113:select-a-exact-identity", true, "Version A exact identity is available through the real Technical details disclosure");
-
-  await versionB.click();
-  record("113:select-b", await versionB.getAttribute("aria-pressed") === "true", "Version B remains the selected exact dossier");
-  record("113:a-deselected", await versionA.getAttribute("aria-pressed") === "false", "Version A is no longer the selected dossier");
-  await openTechnicalDetails(dossierDetails);
-  await dossierDetails.getByText("proof-version-b", { exact: true }).waitFor({ state: "visible" });
-  record("113:select-b-exact-identity", true, "Version B exact identity is available through the real Technical details disclosure");
-
-  const body = (await page.locator("body").innerText()).toLowerCase();
-  const forbidden = ["edit model", "save model", "approve model", "run model", "provider key", "git push", "filesystem"];
-  record("113:no-mutation-affordance", forbidden.every((label) => !body.includes(label)), "dossier surface exposes no accepted forbidden mutation/provider/filesystem/GitHub affordance");
-  await screenshot("exact-version-b");
+const screenshot = async (name) => {
+  if (artifactMode !== "full") throw new Error("browser screenshot disabled by trusted artifact policy");
+  const path = join(artifactDir, `${planId}-${name}.png`);
+  await page.screenshot({ path, fullPage: true });
+  artifacts.push(path);
 };
+const runFixture = (fixture, phase) => {
+  if (fixture !== "model-version-selection") throw new Error(`unsupported fixture ${fixture}`);
+  if (!proofPython || !candidateUser) throw new Error("fixture requires bounded unprivileged Python identity");
+  const script = join(here, "fixtures", "model_version_selection.py");
+  const seedEnv = ["GITHUB_TOKEN=", "GH_TOKEN=", `JARVISOS_DATA_ROOT=${process.env.JARVISOS_DATA_ROOT ?? ""}`, `PYTHONPATH=${process.env.PYTHONPATH ?? ""}`];
+  const seeded = spawnSync("sudo", ["-u", candidateUser, "-H", "env", ...seedEnv, proofPython, script, phase], { encoding: "utf8" });
+  return { pass: seeded.status === 0, detail: seeded.stderr || seeded.stdout || `status=${seeded.status}` };
+};
+const stepName = (step, index) => step.name ?? `${planId}:${String(index + 1).padStart(3, "0")}:${step.op}`;
 
-const prove124 = async () => {
-  const route = "/settings/ai";
-  const response = await page.goto(`${baseUrl}${route}`, { waitUntil: "networkidle", timeout: 30_000 });
-  const providerSettingsResponse = await context.request.get(`${baseUrl}/ai/provider-settings`);
-  record("124:http", Boolean(response) && response.status() < 500, `status=${response?.status() ?? "none"}`);
-  record("124:provider-settings-http", providerSettingsResponse.ok(), `status=${providerSettingsResponse.status()}`);
-  const providerSettings = await providerSettingsResponse.json();
-  record("124:spa-path", new URL(page.url()).pathname === route, `url=${page.url()}`);
-  await page.getByRole("heading", { name: "Settings", exact: true }).waitFor({ state: "visible" });
-  await page.getByRole("heading", { name: "Provider catalogue", exact: true }).waitFor({ state: "visible" });
-  await page.locator("[data-provider-settings-list]").waitFor({ state: "visible" });
+async function execute(step, index) {
+  const name = stepName(step, index);
+  if (step.op === "navigate") { const route = template(step.route); const response = await page.goto(`${baseUrl}${route}`, { waitUntil: "networkidle", timeout: 30_000 }); record(`${name}:http`, Boolean(response) && response.status() < 500, `status=${response?.status() ?? "none"}`); record(`${name}:path`, new URL(page.url()).pathname === new URL(`${baseUrl}${route}`).pathname, `url=${page.url()}`); }
+  else if (step.op === "reload") { await page.reload({ waitUntil: "networkidle", timeout: 30_000 }); record(name, true, "page reloaded"); }
+  else if (step.op === "assert-visible") { await locatorFromSpec(step.locator).waitFor({ state: "visible" }); record(name, true, "locator visible"); }
+  else if (step.op === "assert-count") { const count = await locatorFromSpec(step.locator).count(); record(name, count === step.equals, `count=${count} expected=${step.equals}`); }
+  else if (step.op === "click") { await locatorFromSpec(step.locator).click(); record(name, true, "clicked trusted locator"); }
+  else if (step.op === "open-technical-details") { await openTechnicalDetails(locatorFromSpec(step.locator)); record(name, true, "keyboard disclosure verified and left open"); }
+  else if (step.op === "assert-attribute") { const value = await locatorFromSpec(step.locator).getAttribute(step.attribute); record(name, value === step.equals, `${step.attribute}=${JSON.stringify(value)} expected=${JSON.stringify(step.equals)}`); }
+  else if (step.op === "assert-input-empty") { const locator = locatorFromSpec(step.locator); await locator.waitFor({ state: "visible" }); const result = inputEmptyResult(await locator.inputValue()); record(name, result.pass, result.detail); }
+  else if (step.op === "same-origin-get") { const path = template(step.path); const response = await context.request.get(`${baseUrl}${path}`); record(`${name}:http`, response.ok(), `status=${response.status()}`); captures.set(step.capture, await response.json()); record(name, true, `captured JSON as ${step.capture}`); }
+  else if (step.op === "capture-text") { const locator = locatorFromSpec(step.locator); await locator.waitFor({ state: "visible" }); let value = (await locator.innerText()).trim(); if (step.stripPrefix !== undefined) { if (!value.startsWith(step.stripPrefix)) throw new Error(`${name}: expected prefix ${step.stripPrefix}`); value = value.slice(step.stripPrefix.length).trim(); } captures.set(step.capture, value); record(name, true, `captured text as ${step.capture}`); }
+  else if (step.op === "capture-attribute") { const locator = locatorFromSpec(step.locator); await locator.waitFor({ state: "visible" }); const value = await locator.getAttribute(step.attribute); captures.set(step.capture, value); record(name, true, `captured ${step.attribute} as ${step.capture}`); }
+  else if (step.op === "capture-json-find") { if (!captures.has(step.source)) throw new Error(`${name}: missing source ${step.source}`); const array = jsonPointer(captures.get(step.source), step.arrayPointer); if (!Array.isArray(array)) throw new Error(`${name}: target is not an array`); const matches = array.filter((item) => item && typeof item === "object" && item[step.field] === step.equals); record(name, matches.length === 1, `matches=${matches.length} field=${step.field} equals=${step.equals}`); captures.set(step.capture, matches[0]); }
+  else if (step.op === "assert-value-equals") { const left = valueOf(step.left); const right = valueOf(step.right); record(name, JSON.stringify(left) === JSON.stringify(right), `left=${JSON.stringify(left)} right=${JSON.stringify(right)}`); }
+  else if (step.op === "map-value") { const source = String(valueOf(step.source)); if (!(source in step.cases)) throw new Error(`${name}: unmapped value ${source}`); captures.set(step.capture, step.cases[source]); record(name, true, `mapped ${source} as ${step.capture}`); }
+  else if (step.op === "assert-text-template") { const expected = template(step.template); const locator = locatorFromSpec(step.locator); await locator.waitFor({ state: "visible" }); const actual = (await locator.innerText()).trim(); record(name, actual === expected, `actual=${JSON.stringify(actual)} expected=${JSON.stringify(expected)}`); }
+  else if (step.op === "assert-template-in") { const value = template(step.template); record(name, step.allowed.includes(value), `value=${JSON.stringify(value)} allowed=${JSON.stringify(step.allowed)}`); }
+  else if (step.op === "assert-text-template-map") { const source = String(valueOf(step.source)); if (!(source in step.cases)) throw new Error(`${name}: unmapped value ${source}`); const expected = template(step.cases[source]); const locator = locatorFromSpec(step.locator); await locator.waitFor({ state: "visible" }); const actual = (await locator.innerText()).trim(); record(name, actual === expected, `actual=${JSON.stringify(actual)} expected=${JSON.stringify(expected)}`); }
+  else if (step.op === "assert-json-deep-equals") { const locator = locatorFromSpec(step.locator); await locator.waitFor({ state: "visible" }); const rendered = JSON.parse(await locator.innerText()); const expected = valueOf(step.right); record(name, JSON.stringify(rendered) === JSON.stringify(expected), `rendered=${JSON.stringify(rendered)} expected=${JSON.stringify(expected)}`); }
+  else if (step.op === "assert-json-contract") { if (!captures.has(step.source)) throw new Error(`${name}: missing source ${step.source}`); const value = jsonPointer(captures.get(step.source), step.pointer); const result = checkJsonContract(value, step.contract); record(name, result.pass, result.detail); }
+  else if (step.op === "assert-body-absent") { let body = await page.locator("body").innerText(); let forbidden = step.forbidden; if (step.caseInsensitive) { body = body.toLowerCase(); forbidden = forbidden.map((item) => item.toLowerCase()); } record(name, forbidden.every((item) => !body.includes(item)), `forbidden=${JSON.stringify(step.forbidden)}`); }
+  else if (step.op === "assert-no-button-label") { const labels = await page.getByRole("button").allTextContents(); record(name, noButtonLabelMatches(labels, step.pattern, step.caseInsensitive ?? false), `checked ${labels.length} button labels`); }
+  else if (step.op === "assert-all-attributes-in") { const locator = locatorFromSpec(step.locator); const count = await locator.count(); const values = await locator.evaluateAll((nodes, attribute) => nodes.map((node) => node.getAttribute(attribute)), step.attribute); record(name, (step.count === undefined || count === step.count) && values.every((value) => step.allowed.includes(value)), `count=${count} values=${JSON.stringify(values)}`); }
+  else if (step.op === "run-fixture") { const result = runFixture(step.fixture, step.phase); record(name, result.pass, result.detail); }
+  else if (step.op === "screenshot") { await screenshot(step.file); record(name, true, `saved ${step.file}`); }
+  else throw new Error(`unsupported operation ${step.op}`);
+}
 
-  const providerIds = ["fake", "local_ollama", "scaleway", "deepseek", "glm", "kimi"];
-  for (const providerId of providerIds) {
-    const row = page.locator(`[data-provider-id="${providerId}"]`);
-    await row.waitFor({ state: "visible" });
-    record(`124:provider:${providerId}`, (await row.count()) === 1, `canonical provider row ${providerId} is rendered once`);
+let verdict = "PASS"; let failure = null;
+try { for (const [index, step] of plan.steps.entries()) await execute(step, index); }
+catch (error) { verdict = "FAIL"; failure = String(error?.stack ?? error); }
+finally {
+  if (traceEnabled) {
+    const trace = join(artifactDir, `${planId}-trace.zip`);
+    await context.tracing.stop({ path: trace });
+    artifacts.push(trace);
   }
-
-  const serverScaleway = Array.isArray(providerSettings?.providers)
-    ? providerSettings.providers.find((entry) => entry?.provider_id === "scaleway")
-    : null;
-  const serverCredential = serverScaleway?.credential;
-  record(
-    "124:credential-server-shape",
-    Boolean(serverCredential)
-      && typeof serverCredential.effective_source === "string"
-      && typeof serverCredential.persisted_state === "string",
-    `server-credential=${JSON.stringify(serverCredential ?? null)}`,
-  );
-
-  const credentialCard = page.locator('[data-provider-credential-owner="scaleway"]');
-  await credentialCard.getByRole("heading", { name: "Scaleway credential", exact: true }).waitFor({ state: "visible" });
-  const credentialSummary = credentialCard.locator(".settings-card__summary");
-  await credentialSummary.waitFor({ state: "visible" });
-  const credentialSummaryText = (await credentialSummary.innerText()).trim();
-  const credentialDetails = credentialCard.locator("details").first();
-  await openTechnicalDetails(credentialDetails);
-  const effectiveSourceNode = credentialDetails.getByText(/^Effective source code · /);
-  const persistedStateNode = credentialDetails.getByText(/^Persisted state code · /);
-  await effectiveSourceNode.waitFor({ state: "visible" });
-  await persistedStateNode.waitFor({ state: "visible" });
-  const effectiveSourceText = await effectiveSourceNode.innerText();
-  const persistedStateText = await persistedStateNode.innerText();
-  const effectiveSource = effectiveSourceText.replace(/^Effective source code · /, "").trim();
-  const persistedState = persistedStateText.replace(/^Persisted state code · /, "").trim();
-  const validCredentialCombinations = new Set([
-    "environment:absent",
-    "environment:usable",
-    "environment:corrupted",
-    "environment:unavailable",
-    "secure_persisted:usable",
-    "absent:absent",
-    "absent:corrupted",
-    "invalid:absent",
-    "invalid:usable",
-    "invalid:corrupted",
-    "invalid:unavailable",
-    "unknown:unavailable",
-  ]);
-  const credentialCombination = `${effectiveSource}:${persistedState}`;
-  record(
-    "124:credential-canonical-codes",
-    validCredentialCombinations.has(credentialCombination)
-      && effectiveSource === serverCredential.effective_source
-      && persistedState === serverCredential.persisted_state,
-    `displayed=${credentialCombination} server=${serverCredential.effective_source}:${serverCredential.persisted_state}`,
-  );
-  const sourceMeanings = {
-    not_required: "No credential required",
-    environment: "Environment credential active",
-    secure_persisted: "Securely stored credential active",
-    invalid: "Environment credential invalid",
-    absent: "No effective credential",
-    unknown: "Credential availability unknown",
-  };
-  const persistedMeanings = {
-    usable: "Stored credential ready",
-    corrupted: "Stored credential damaged",
-    unavailable: "Secure credential store unavailable",
-    not_supported: "Stored credentials not supported",
-    absent: "No stored credential",
-  };
-  const expectedSourceMeaning = sourceMeanings[effectiveSource] ?? "Credential availability unknown";
-  const expectedPersistedMeaning = persistedMeanings[persistedState] ?? "Stored credential state unavailable";
-  const expectedCredentialSummary = `${expectedSourceMeaning} · ${expectedPersistedMeaning}.`;
-  record(
-    "124:credential-human-summary",
-    credentialSummaryText === expectedCredentialSummary,
-    `summary=${JSON.stringify(credentialSummaryText)} expected=${JSON.stringify(expectedCredentialSummary)}`,
-  );
-  record(
-    "124:credential-technical-disclosure",
-    true,
-    `effective_source=${effectiveSource} persisted_state=${persistedState}`,
-  );
-  await page.getByRole("heading", { name: "Current usage", exact: true }).waitFor({ state: "visible" });
-
-  const passwordInput = page.getByLabel("Replace API key");
-  record("124:credential-input-empty", (await passwordInput.inputValue()) === "", "credential value is never projected into the browser input");
-
-  const body = await page.locator("body").innerText();
-  const secretVocabulary = ["SCALEWAY_API_KEY", "DEEPSEEK_API_KEY", "GLM_API_KEY", "KIMI_API_KEY", "api_key_ref", "base_url"];
-  record("124:no-secret-reference-leak", secretVocabulary.every((value) => !body.includes(value)), "provider secret refs/base URLs are absent from rendered settings text");
-
-  const buttons = (await page.getByRole("button").allTextContents()).map((label) => label.trim().toLowerCase());
-  const providerExecution = /provider.*(test|smoke|run)|(test|smoke|run).*provider/;
-  record("124:no-provider-execution-affordance", buttons.every((label) => !providerExecution.test(label)), `button-labels=${JSON.stringify(buttons)}`);
-
-  const egressStates = await page.locator("[data-provider-egress-state]").evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-provider-egress-state")));
-  record("124:provider-egress-state", egressStates.length === providerIds.length && egressStates.every((value) => value === "allowed" || value === "blocked"), `states=${JSON.stringify(egressStates)}`);
-  await screenshot("settings-ai");
-};
-
-const prove140 = async () => {
-  const repositoryRoute = "/coding/repository";
-  const repositoryResponse = await page.goto(`${baseUrl}${repositoryRoute}`, { waitUntil: "networkidle", timeout: 30_000 });
-  const repositoryTruthResponse = await context.request.get(
-    `${baseUrl}/api/coding/repository/ref?repository=${encodeURIComponent(repository)}&ref=master`,
-  );
-  record("140:repository-http", Boolean(repositoryResponse) && repositoryResponse.status() < 500, `status=${repositoryResponse?.status() ?? "none"}`);
-  record("140:repository-truth-http", repositoryTruthResponse.ok(), `status=${repositoryTruthResponse.status()}`);
-  const repositoryTruth = await repositoryTruthResponse.json();
-  record("140:repository-spa-path", new URL(page.url()).pathname === repositoryRoute, `url=${page.url()}`);
-  const repositorySurface = page.getByTestId("coding-repository-surface");
-  await repositorySurface.waitFor({ state: "visible" });
-  await repositorySurface.getByText("Server-owned 118 repository truth", { exact: true }).waitFor({ state: "visible" });
-  await repositorySurface.getByText("Repository browsing is context-neutral. These explicit actions are exact-base 111/123 operations; they do not commit, apply, execute, push, create a PR, merge, or mutate STATUS.", { exact: true }).waitFor({ state: "visible" });
-  const repositoryDetails = repositorySurface.locator("details").first();
-  await openTechnicalDetails(repositoryDetails);
-  const resolvedCommitNode = repositoryDetails.getByText(/^Resolved commit · [0-9a-f]{40}$/);
-  await resolvedCommitNode.waitFor({ state: "visible" });
-  const resolvedCommitText = await resolvedCommitNode.innerText();
-  const displayedResolvedSha = resolvedCommitText.replace(/^Resolved commit · /, "").trim();
-  record(
-    "140:repository-disclosure",
-    typeof repositoryTruth.resolved_sha === "string"
-      && /^[0-9a-f]{40}$/.test(repositoryTruth.resolved_sha)
-      && displayedResolvedSha === repositoryTruth.resolved_sha,
-    `displayed=${displayedResolvedSha} trusted=${repositoryTruth.resolved_sha}`,
-  );
-  record("140:repository-surface", true, "real Coding Repository workbench renders accepted server-owned 118 and explicit 111/123 authority boundary");
-  await assertNoCodingMutationButtons("140:repository");
-  await screenshot("repository");
-
-  const runtimeRoute = "/coding/runtime";
-  const runtimeResponse = await page.goto(`${baseUrl}${runtimeRoute}`, { waitUntil: "networkidle", timeout: 30_000 });
-  const runtimeTruthResponse = await context.request.get(
-    `${baseUrl}/api/coding/runtime-truth?repository=${encodeURIComponent(repository)}&target_ref=master`,
-  );
-  record("140:runtime-http", Boolean(runtimeResponse) && runtimeResponse.status() < 500, `status=${runtimeResponse?.status() ?? "none"}`);
-  record("140:runtime-truth-http", runtimeTruthResponse.ok(), `status=${runtimeTruthResponse.status()}`);
-  const runtimeTruth = await runtimeTruthResponse.json();
-  record("140:runtime-spa-path", new URL(page.url()).pathname === runtimeRoute, `url=${page.url()}`);
-  const runtimeSurface = page.getByTestId("coding-runtime-surface");
-  await runtimeSurface.waitFor({ state: "visible" });
-  const semanticSummary = runtimeSurface.locator(".final-fusion__summary-strip").first();
-  await semanticSummary.waitFor({ state: "visible" });
-  const semanticNodes = {
-    "Remote ahead": semanticSummary.getByText(/^Remote ahead · [0-9]+$/),
-    "Remote behind": semanticSummary.getByText(/^Remote behind · [0-9]+$/),
-    "Changed files": semanticSummary.getByText(/^Changed files(?: shown)? · [0-9]+$/),
-  };
-  const semanticValues = {};
-  const semanticTexts = {};
-  for (const [label, locator] of Object.entries(semanticNodes)) {
-    await locator.waitFor({ state: "visible" });
-    const value = (await locator.innerText()).trim();
-    semanticTexts[label] = value;
-    const match = value.match(/^(?:Remote ahead|Remote behind|Changed files(?: shown)?) · ([0-9]+)$/);
-    semanticValues[label] = match ? Number(match[1]) : null;
-  }
-  record(
-    "140:runtime-semantic-summary",
-    Number.isInteger(semanticValues["Remote ahead"])
-      && Number.isInteger(semanticValues["Remote behind"])
-      && Number.isInteger(semanticValues["Changed files"]),
-    `summary=${JSON.stringify(semanticValues)}`,
-  );
-  const runtimeDetails = runtimeSurface.locator("details").first();
-  await openTechnicalDetails(runtimeDetails);
-  const localCommitNode = runtimeDetails.getByText(/^Local commit · [0-9a-f]{40}$/);
-  await localCommitNode.waitFor({ state: "visible" });
-  const localCommitText = await localCommitNode.innerText();
-  const displayedLocalSha = localCommitText.replace(/^Local commit · /, "").trim();
-  record("140:runtime-exact-local-commit", displayedLocalSha === expectedHead, `displayed=${displayedLocalSha} expected=${expectedHead}`);
-  const remoteCommitNode = runtimeDetails.getByText(/^Remote commit · /);
-  await remoteCommitNode.waitFor({ state: "visible" });
-  const remoteCommitText = await remoteCommitNode.innerText();
-  const displayedRemoteSha = remoteCommitText.replace(/^Remote commit · /, "").trim();
-  const trustedRemoteSha = runtimeTruth.remote?.resolved_sha;
-  record(
-    "140:runtime-exact-remote-commit",
-    typeof trustedRemoteSha === "string"
-      && /^[0-9a-f]{40}$/.test(trustedRemoteSha)
-      && displayedRemoteSha === trustedRemoteSha,
-    `displayed=${displayedRemoteSha} trusted=${trustedRemoteSha ?? "missing"}`,
-  );
-  const rawDeltaDetails = runtimeDetails.locator("details").first();
-  await openTechnicalDetails(rawDeltaDetails);
-  const rawDeltaNode = rawDeltaDetails.locator("pre").first();
-  await rawDeltaNode.waitFor({ state: "visible" });
-  const rawDeltaText = await rawDeltaNode.innerText();
-  const disclosedDelta = JSON.parse(rawDeltaText);
-  const trustedDelta = runtimeTruth.semantic_delta;
-  const canonicalRelations = new Set(["ahead", "behind", "diverged", "identical"]);
-  const validTrustedFiles = Array.isArray(trustedDelta?.files)
-    && trustedDelta.files.every((file) => file !== null
-      && typeof file === "object"
-      && !Array.isArray(file)
-      && typeof file.filename === "string"
-      && file.filename.length > 0
-      && typeof file.status === "string"
-      && file.status.length > 0
-      && Number.isInteger(file.additions)
-      && file.additions >= 0
-      && Number.isInteger(file.deletions)
-      && file.deletions >= 0
-      && (file.patch === null || typeof file.patch === "string"));
-  const validTrustedDelta = trustedDelta?.status === "available"
-    && canonicalRelations.has(trustedDelta.relation)
-    && Number.isInteger(trustedDelta.ahead_by)
-    && trustedDelta.ahead_by >= 0
-    && Number.isInteger(trustedDelta.behind_by)
-    && trustedDelta.behind_by >= 0
-    && validTrustedFiles
-    && typeof trustedDelta.partial === "boolean"
-    && (trustedDelta.relation !== "ahead" || (trustedDelta.ahead_by > 0 && trustedDelta.behind_by === 0))
-    && (trustedDelta.relation !== "behind" || (trustedDelta.ahead_by === 0 && trustedDelta.behind_by > 0))
-    && (trustedDelta.relation !== "diverged" || (trustedDelta.ahead_by > 0 && trustedDelta.behind_by > 0))
-    && (trustedDelta.relation !== "identical" || (trustedDelta.ahead_by === 0 && trustedDelta.behind_by === 0));
-  record("140:runtime-trusted-semantic-delta-schema", validTrustedDelta, `trusted=${JSON.stringify(trustedDelta)}`);
-  const expectedChangedFilesLabel = trustedDelta.partial
-    ? `Changed files shown · ${trustedDelta.files.length}`
-    : `Changed files · ${trustedDelta.files.length}`;
-  record(
-    "140:runtime-changed-files-partial-label",
-    semanticTexts["Changed files"] === expectedChangedFilesLabel,
-    `rendered=${JSON.stringify(semanticTexts["Changed files"])} expected=${JSON.stringify(expectedChangedFilesLabel)}`,
-  );
-  const alignmentMeanings = {
-    aligned: "Local runtime matches remote",
-    local_behind: "Local runtime behind remote",
-    divergent: "Local and remote diverge",
-  };
-  const expectedRelation = alignmentMeanings[runtimeTruth.alignment];
-  const renderedRelationLocator = runtimeSurface.locator(".final-fusion__delta span").first();
-  await renderedRelationLocator.waitFor({ state: "visible" });
-  const renderedRelation = (await renderedRelationLocator.innerText()).trim();
-  record(
-    "140:runtime-server-semantic-delta",
-    typeof expectedRelation === "string"
-      && semanticValues["Remote ahead"] === trustedDelta.ahead_by
-      && semanticValues["Remote behind"] === trustedDelta.behind_by
-      && semanticValues["Changed files"] === trustedDelta.files.length
-      && renderedRelation === expectedRelation
-      && JSON.stringify(disclosedDelta) === JSON.stringify(trustedDelta)
-      && runtimeTruth.live?.git_sha === displayedLocalSha
-      && trustedRemoteSha === displayedRemoteSha,
-    `rendered=${JSON.stringify({ relation: renderedRelation, ...semanticValues, remote_sha: displayedRemoteSha })} alignment=${JSON.stringify(runtimeTruth.alignment)} expected_relation=${JSON.stringify(expectedRelation)} trusted=${JSON.stringify(trustedDelta)} trusted_remote=${trustedRemoteSha ?? "missing"} disclosed=${JSON.stringify(disclosedDelta)}`,
-  );
-  record("140:runtime-disclosure", true, "runtime exact identity and canonical server-owned semantic delta are verified through a real Technical details interaction");
-  await runtimeSurface.getByRole("heading", { name: "Development pipeline", exact: true }).waitFor({ state: "visible" });
-  record("140:runtime-surface", true, "real Coding Runtime workbench renders server-owned 119 semantic delta and 120 pipeline projection surface");
-  await assertNoCodingMutationButtons("140:runtime");
-  await screenshot("runtime");
-};
-
-let verdict = "PASS";
-let failure = null;
-try {
-  if (scenario === "113-memory-models") {
-    await prove113();
-  } else if (scenario === "124-settings-ai") {
-    await prove124();
-  } else if (scenario === "140-coding") {
-    await prove140();
-  } else {
-    verdict = "REFUSED";
-    failure = `${scenario} trusted candidate-specific browser assertions are not ready; no PASS emitted`;
-    assertions.push({
-      name: `${scenario}:refused-not-ready`,
-      pass: true,
-      detail: "trusted candidate-specific assertions must exist before this scenario can produce browser-proof PASS",
-    });
-  }
-} catch (error) {
-  verdict = "FAIL";
-  failure = String(error?.stack ?? error);
-} finally {
-  const trace = join(artifactDir, `${scenario}-trace.zip`);
-  await context.tracing.stop({ path: trace });
-  artifacts.push(trace);
   await browser.close();
 }
-
 const failedAssertions = assertions.filter((item) => item.pass === false);
-if (verdict === "PASS" && failedAssertions.length > 0) {
-  verdict = "FAIL";
-  failure = failure ?? `browser emitted ${failedAssertions.length} failed asynchronous assertion(s)`;
-}
-
+if (verdict === "PASS" && failedAssertions.length > 0) { verdict = "FAIL"; failure = failure ?? `browser emitted ${failedAssertions.length} failed asynchronous assertion(s)`; }
 const backendLog = join(artifactDir, "backend.log");
-try {
-  await readFile(backendLog);
-  artifacts.push(backendLog);
-} catch (error) {
-  if (error?.code !== "ENOENT") throw error;
-}
-
+if (artifactMode === "metadata-only") await rm(backendLog, { force:true });
+else try { await readFile(backendLog); artifacts.push(backendLog); } catch (error) { if (error?.code !== "ENOENT") throw error; }
 const digests = {};
-for (const path of artifacts) {
-  const bytes = await readFile(path);
-  digests[path.split("/").at(-1)] = createHash("sha256").update(bytes).digest("hex");
-}
-
-const seedVersion = scenario === "113-memory-models"
-  ? "113-workspace-then-two-exact-versions-v2"
-  : scenario === "124-settings-ai"
-    ? "124-production-settings-owner-projection-v2"
-    : scenario === "140-coding"
-      ? "140-production-routes-semantic-disclosures-v2"
-      : "not-run-refused-v1";
-
-const manifest = {
-  schema: "jarvisos.exact-head-browser-proof.v1",
-  repository,
-  pr_number: prNumber ? Number(prNumber) : null,
-  pr_base_sha: prBaseSha,
-  expected_head_sha: expectedHead,
-  resolved_pr_head_sha: resolvedHead,
-  checked_out_head_sha: checkedOutHead,
-  controller_sha: controllerSha,
-  workflow_run_id: runId,
-  scenario,
-  seed_version: seedVersion,
-  browser: "chromium",
-  playwright_version: "1.55.0",
-  started_at: startedAt,
-  ended_at: new Date().toISOString(),
-  assertions,
-  artifacts: digests,
-  verdict,
-  failure,
-};
+for (const path of artifacts) digests[path.split("/").at(-1)] = createHash("sha256").update(await readFile(path)).digest("hex");
+const manifest = { schema:"jarvisos.exact-head-browser-proof.v1", repository, pr_number:prNumber ? Number(prNumber) : null, pr_base_sha:prBaseSha, expected_head_sha:expectedHead, resolved_pr_head_sha:resolvedHead, checked_out_head_sha:checkedOutHead, controller_sha:controllerSha, workflow_run_id:runId, plan_id:planId, artifact_mode:artifactMode, browser:"chromium", playwright_version:"1.55.0", started_at:startedAt, ended_at:new Date().toISOString(), assertions, artifacts:digests, verdict, failure };
 await writeFile(join(artifactDir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
-
 if (verdict !== "PASS" || failedAssertions.length > 0) process.exitCode = 1;

@@ -20,7 +20,7 @@ def seed_workspace() -> None:
                 (id, name, slug, description, status, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (WORKSPACE_ID, "Browser Proof Workspace", "browser-proof", "142 isolated proof data", "active", NOW, NOW),
+            (WORKSPACE_ID, "Browser Proof Workspace", "browser-proof", "isolated browser proof data", "active", NOW, NOW),
         )
         connection.execute("DELETE FROM model_versions WHERE workspace_id = ?", (WORKSPACE_ID,))
         connection.execute("DELETE FROM model_specs WHERE workspace_id = ?", (WORKSPACE_ID,))
@@ -38,20 +38,11 @@ def seed_versions() -> None:
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                MODEL_SPEC_ID,
-                WORKSPACE_ID,
-                "Exact version browser proof",
+                MODEL_SPEC_ID, WORKSPACE_ID, "Exact version browser proof",
                 "Does the browser preserve exact model-version identity?",
-                "Isolated proof-only dossier",
-                "active",
-                "validated",
-                "Proof assumption summary",
-                "Proof input summary",
-                "Proof output summary",
-                None,
-                1,
-                NOW,
-                NOW,
+                "Isolated proof-only dossier", "active", "validated",
+                "Proof assumption summary", "Proof input summary", "Proof output summary",
+                None, 1, NOW, NOW,
             ),
         )
         rows = [
@@ -66,17 +57,7 @@ def seed_versions() -> None:
                      input_contract_payload, input_contract_sha256, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (
-                    version_id,
-                    WORKSPACE_ID,
-                    MODEL_SPEC_ID,
-                    label,
-                    "batch_growth_v0",
-                    "active",
-                    "{}",
-                    digest,
-                    created_at,
-                ),
+                (version_id, WORKSPACE_ID, MODEL_SPEC_ID, label, "batch_growth_v0", "active", "{}", digest, created_at),
             )
         connection.commit()
 
