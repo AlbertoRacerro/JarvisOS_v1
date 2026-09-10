@@ -19,6 +19,7 @@ from app.modules.memory.literature_models import (
 
 MAX_LITERATURE_PAGE_SIZE = 100
 MAX_ENTRIES_PER_SOURCE = 100
+MAX_LOCATOR_TEXT_BYTES = 2_000_000
 ALLOWED_PREVIEW_MIME_TYPES = frozenset(
     {
         "application/pdf",
@@ -26,6 +27,8 @@ ALLOWED_PREVIEW_MIME_TYPES = frozenset(
         "text/markdown",
     }
 )
+ALLOWED_LITERATURE_ARTIFACT_TYPES = frozenset({"literature_source"})
+CURRENT_ARTIFACT_STATUS = "registered"
 
 
 @dataclass(frozen=True)
@@ -59,8 +62,8 @@ def _source_row(connection, workspace_id: str, source_id: str):
     return row
 
 
-def _artifact_row(connection, workspace_id: str, artifact_id: str):
-    row = connection.execute(
+def _artifact_row_or_none(connection, workspace_id: str, artifact_id: str):
+    return connection.execute(
         """
         SELECT id, workspace_id, filename, stored_path, artifact_type, mime_type, sha256, status
         FROM artifacts
@@ -68,15 +71,31 @@ def _artifact_row(connection, workspace_id: str, artifact_id: str):
         """,
         (artifact_id, workspace_id),
     ).fetchone()
+
+
+def _artifact_row(connection, workspace_id: str, artifact_id: str):
+    row = _artifact_row_or_none(connection, workspace_id, artifact_id)
     if row is None:
         raise LiteratureError("literature_artifact_not_found", "Backing artifact not found.", status_code=404)
     return row
 
 
-def _content_path(row) -> Path | None:
+def _artifact_is_literature_eligible(row) -> bool:
+    return (
+        str(row["artifact_type"] or "") in ALLOWED_LITERATURE_ARTIFACT_TYPES
+        and str(row["status"] or "") == CURRENT_ARTIFACT_STATUS
+    )
+
+
+def _content_state(row) -> tuple[str, Path | None]:
+    if not _artifact_is_literature_eligible(row):
+        return "ineligible", None
+    if str(row["mime_type"] or "") not in ALLOWED_PREVIEW_MIME_TYPES:
+        return "unsupported", None
     try:
-        data_root = build_paths().data_root.resolve()
-        secrets_root = build_paths().secrets_dir.resolve()
+        paths = build_paths()
+        data_root = paths.data_root.resolve()
+        secrets_root = paths.secrets_dir.resolve()
         path = Path(str(row["stored_path"])).resolve()
         path.relative_to(data_root)
         try:
@@ -84,23 +103,32 @@ def _content_path(row) -> Path | None:
         except ValueError:
             pass
         else:
-            return None
+            return "unsafe", None
     except (OSError, RuntimeError, ValueError):
-        return None
-    if str(row["mime_type"] or "") not in ALLOWED_PREVIEW_MIME_TYPES:
-        return None
+        return "unsafe", None
     if not path.exists() or not path.is_file():
-        return None
-    return path
+        return "missing", None
+    return "available", path
 
 
-def _backing_read(workspace_id: str, source_id: str, artifact_row) -> LiteratureBackingRead:
-    path = _content_path(artifact_row)
+def _backing_read(workspace_id: str, source_id: str, artifact_id: str, artifact_row) -> LiteratureBackingRead:
+    if artifact_row is None:
+        return LiteratureBackingRead(
+            artifact_id=artifact_id,
+            filename=None,
+            mime_type=None,
+            sha256=None,
+            availability="missing",
+            content_available=False,
+            content_url=None,
+        )
+    availability, path = _content_state(artifact_row)
     return LiteratureBackingRead(
         artifact_id=str(artifact_row["id"]),
         filename=str(artifact_row["filename"]),
         mime_type=str(artifact_row["mime_type"]) if artifact_row["mime_type"] is not None else None,
         sha256=str(artifact_row["sha256"]) if artifact_row["sha256"] is not None else None,
+        availability=availability,
         content_available=path is not None,
         content_url=(
             f"/workspaces/{workspace_id}/literature/sources/{source_id}/content"
@@ -169,8 +197,9 @@ def _source_read(connection, row) -> LiteratureSourceRead:
     source_id = str(row["id"])
     artifact = None
     if row["artifact_id"] is not None:
-        artifact_row = _artifact_row(connection, workspace_id, str(row["artifact_id"]))
-        artifact = _backing_read(workspace_id, source_id, artifact_row)
+        artifact_id = str(row["artifact_id"])
+        artifact_row = _artifact_row_or_none(connection, workspace_id, artifact_id)
+        artifact = _backing_read(workspace_id, source_id, artifact_id, artifact_row)
     entry_rows = connection.execute(
         """
         SELECT * FROM literature_entries
@@ -236,9 +265,14 @@ def create_literature_source(workspace_id: str, payload: LiteratureSourceCreate)
     now = utc_now()
     with open_sqlite_connection() as connection:
         _require_workspace(connection, workspace_id)
-        artifact_row = None
         if payload.artifact_id is not None:
             artifact_row = _artifact_row(connection, workspace_id, payload.artifact_id)
+            if not _artifact_is_literature_eligible(artifact_row):
+                raise LiteratureError(
+                    "literature_artifact_ineligible",
+                    "Backing artifact is not an eligible current Literature source.",
+                    status_code=409,
+                )
             existing = connection.execute(
                 "SELECT * FROM literature_sources WHERE workspace_id = ? AND artifact_id = ?",
                 (workspace_id, payload.artifact_id),
@@ -292,6 +326,62 @@ def create_literature_source(workspace_id: str, payload: LiteratureSourceCreate)
         return _source_read(connection, row)
 
 
+def _validate_locator(connection, workspace_id: str, source_row, payload: LiteratureEntryCreate) -> None:
+    if payload.locator_kind is None:
+        return
+    if source_row["artifact_id"] is None:
+        raise LiteratureError(
+            "literature_locator_unverifiable",
+            "Exact locator cannot be verified without a registered backing artifact.",
+            status_code=422,
+        )
+    artifact = _artifact_row_or_none(connection, workspace_id, str(source_row["artifact_id"]))
+    if artifact is None or not _artifact_is_literature_eligible(artifact):
+        raise LiteratureError(
+            "literature_locator_unverifiable",
+            "Exact locator cannot be verified against the current backing artifact.",
+            status_code=422,
+        )
+    availability, path = _content_state(artifact)
+    if availability != "available" or path is None:
+        raise LiteratureError(
+            "literature_locator_unverifiable",
+            "Exact locator cannot be verified against unavailable backing content.",
+            status_code=422,
+        )
+    mime_type = str(artifact["mime_type"] or "")
+    if payload.locator_kind != "line" or mime_type not in {"text/plain", "text/markdown"}:
+        raise LiteratureError(
+            "literature_locator_unsupported",
+            "Exact locator verification is unsupported for this backing format.",
+            status_code=422,
+        )
+    try:
+        if path.stat().st_size > MAX_LOCATOR_TEXT_BYTES:
+            raise LiteratureError(
+                "literature_locator_unsupported",
+                "Backing text is too large for bounded locator verification.",
+                status_code=422,
+            )
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except LiteratureError:
+        raise
+    except (OSError, UnicodeError) as exc:
+        raise LiteratureError(
+            "literature_locator_unverifiable",
+            "Backing text could not be read for locator verification.",
+            status_code=422,
+        ) from exc
+    start = int(payload.locator_start or 0)
+    end = int(payload.locator_end if payload.locator_end is not None else start)
+    if start < 1 or end > len(lines):
+        raise LiteratureError(
+            "literature_locator_out_of_range",
+            "Literature locator is outside the backing document range.",
+            status_code=422,
+        )
+
+
 def create_literature_entry(
     workspace_id: str,
     source_id: str,
@@ -300,7 +390,8 @@ def create_literature_entry(
     now = utc_now()
     with open_sqlite_connection() as connection:
         _require_workspace(connection, workspace_id)
-        _source_row(connection, workspace_id, source_id)
+        source = _source_row(connection, workspace_id, source_id)
+        _validate_locator(connection, workspace_id, source, payload)
         if payload.request_key is not None:
             existing = connection.execute(
                 "SELECT * FROM literature_entries WHERE source_id = ? AND request_key = ?",
@@ -359,9 +450,15 @@ def resolve_literature_content(workspace_id: str, source_id: str) -> LiteratureC
                 "This literature source has no registered backing artifact.",
                 status_code=404,
             )
-        artifact = _artifact_row(connection, workspace_id, str(source["artifact_id"]))
-        path = _content_path(artifact)
-        if path is None:
+        artifact = _artifact_row_or_none(connection, workspace_id, str(source["artifact_id"]))
+        if artifact is None:
+            raise LiteratureError(
+                "literature_content_unavailable",
+                "Backing content is unavailable for safe preview.",
+                status_code=404,
+            )
+        availability, path = _content_state(artifact)
+        if availability != "available" or path is None:
             raise LiteratureError(
                 "literature_content_unavailable",
                 "Backing content is unavailable for safe preview.",
