@@ -57,6 +57,27 @@ const screenshot = async (name) => {
   artifacts.push(path);
 };
 
+const openTechnicalDetails = async (details) => {
+  const summary = details.locator(":scope > summary").filter({ hasText: /^Technical details$/ });
+  if ((await summary.count()) !== 1) throw new Error("Technical details requires exactly one native summary control");
+  await summary.waitFor({ state: "visible" });
+  await summary.focus();
+  if (!(await summary.evaluate((node) => node === document.activeElement))) {
+    throw new Error("Technical details summary did not receive keyboard focus");
+  }
+  const initiallyOpen = await details.evaluate((node) => node.open);
+  await summary.press("Enter");
+  const afterEnter = await details.evaluate((node) => node.open);
+  if (afterEnter === initiallyOpen) throw new Error("Technical details did not toggle with Enter");
+  await summary.press("Space");
+  const afterSpace = await details.evaluate((node) => node.open);
+  if (afterSpace === afterEnter) throw new Error("Technical details did not toggle with Space");
+  if (!afterSpace) {
+    await summary.press("Enter");
+    if (!(await details.evaluate((node) => node.open))) throw new Error("Technical details did not finish open");
+  }
+};
+
 const assertNoCodingMutationButtons = async (prefix) => {
   const forbidden = /^(commit|apply|execute|push|merge|create pr|create pull request|update|restart)(\b|\s)/i;
   const labels = await page.getByRole("button").allTextContents();
@@ -72,8 +93,8 @@ const prove113 = async () => {
   const response = await page.goto(`${baseUrl}${route}`, { waitUntil: "networkidle", timeout: 30_000 });
   record("113:http", Boolean(response) && response.status() < 500, `status=${response?.status() ?? "none"}`);
   record("113:spa-path", new URL(page.url()).pathname === route, `url=${page.url()}`);
-  await page.getByText("No exact model versions", { exact: true }).waitFor({ state: "visible" });
-  record("113:empty-state", true, "workspace-only seed renders explicit no-exact-version state");
+  await page.getByText("No model versions", { exact: true }).waitFor({ state: "visible" });
+  record("113:empty-state", true, "workspace-only seed renders explicit no-model-version state");
   await screenshot("empty");
 
   if (!seedScript || !proofPython || !candidateUser) throw new Error("113 proof requires bounded unprivileged seed identity");
@@ -93,16 +114,21 @@ const prove113 = async () => {
   const versionB = page.getByRole("button", { name: /Version B exact/ });
   await versionA.waitFor({ state: "visible" });
   await versionB.waitFor({ state: "visible" });
-  record("113:two-exact-versions", (await versionA.count()) === 1 && (await versionB.count()) === 1, "two exact version choices are distinguishable");
+  record("113:two-exact-versions", (await versionA.count()) === 1 && (await versionB.count()) === 1, "two human-labelled exact version choices are distinguishable");
 
+  const dossier = page.getByRole("region", { name: "Version dossier" });
   await versionA.click();
-  await page.getByText("proof-version-a", { exact: true }).waitFor({ state: "visible" });
-  record("113:select-a-exact-identity", await versionA.getAttribute("aria-pressed") === "true", "Version A selection owns exact proof-version-a dossier identity");
+  record("113:select-a", await versionA.getAttribute("aria-pressed") === "true", "Version A remains the selected exact dossier");
+  await openTechnicalDetails(dossier.locator("details").first());
+  await dossier.getByText("proof-version-a", { exact: true }).waitFor({ state: "visible" });
+  record("113:select-a-exact-identity", true, "Version A exact identity is available through the real Technical details disclosure");
 
   await versionB.click();
-  await page.getByText("proof-version-b", { exact: true }).waitFor({ state: "visible" });
-  record("113:select-b-exact-identity", await versionB.getAttribute("aria-pressed") === "true", "Version B selection owns exact proof-version-b dossier identity");
+  record("113:select-b", await versionB.getAttribute("aria-pressed") === "true", "Version B remains the selected exact dossier");
   record("113:a-deselected", await versionA.getAttribute("aria-pressed") === "false", "Version A is no longer the selected dossier");
+  await openTechnicalDetails(dossier.locator("details").first());
+  await dossier.getByText("proof-version-b", { exact: true }).waitFor({ state: "visible" });
+  record("113:select-b-exact-identity", true, "Version B exact identity is available through the real Technical details disclosure");
 
   const body = (await page.locator("body").innerText()).toLowerCase();
   const forbidden = ["edit model", "save model", "approve model", "run model", "provider key", "git push", "filesystem"];
@@ -113,7 +139,10 @@ const prove113 = async () => {
 const prove124 = async () => {
   const route = "/settings/ai";
   const response = await page.goto(`${baseUrl}${route}`, { waitUntil: "networkidle", timeout: 30_000 });
+  const providerSettingsResponse = await context.request.get(`${baseUrl}/ai/provider-settings`);
   record("124:http", Boolean(response) && response.status() < 500, `status=${response?.status() ?? "none"}`);
+  record("124:provider-settings-http", providerSettingsResponse.ok(), `status=${providerSettingsResponse.status()}`);
+  const providerSettings = await providerSettingsResponse.json();
   record("124:spa-path", new URL(page.url()).pathname === route, `url=${page.url()}`);
   await page.getByRole("heading", { name: "Settings", exact: true }).waitFor({ state: "visible" });
   await page.getByRole("heading", { name: "Provider catalogue", exact: true }).waitFor({ state: "visible" });
@@ -126,9 +155,83 @@ const prove124 = async () => {
     record(`124:provider:${providerId}`, (await row.count()) === 1, `canonical provider row ${providerId} is rendered once`);
   }
 
-  await page.getByRole("heading", { name: "Scaleway credential", exact: true }).waitFor({ state: "visible" });
-  await page.getByText("Effective source", { exact: true }).waitFor({ state: "visible" });
-  await page.getByText("Persisted state", { exact: true }).waitFor({ state: "visible" });
+  const serverScaleway = Array.isArray(providerSettings?.providers)
+    ? providerSettings.providers.find((entry) => entry?.provider_id === "scaleway")
+    : null;
+  const serverCredential = serverScaleway?.credential;
+  record(
+    "124:credential-server-shape",
+    Boolean(serverCredential)
+      && typeof serverCredential.effective_source === "string"
+      && typeof serverCredential.persisted_state === "string",
+    `server-credential=${JSON.stringify(serverCredential ?? null)}`,
+  );
+
+  const credentialCard = page.locator('[data-provider-credential-owner="scaleway"]');
+  await credentialCard.getByRole("heading", { name: "Scaleway credential", exact: true }).waitFor({ state: "visible" });
+  const credentialSummary = credentialCard.locator(".settings-card__summary");
+  await credentialSummary.waitFor({ state: "visible" });
+  const credentialSummaryText = (await credentialSummary.innerText()).trim();
+  const credentialDetails = credentialCard.locator("details").first();
+  await openTechnicalDetails(credentialDetails);
+  const effectiveSourceNode = credentialDetails.getByText(/^Effective source code · /);
+  const persistedStateNode = credentialDetails.getByText(/^Persisted state code · /);
+  await effectiveSourceNode.waitFor({ state: "visible" });
+  await persistedStateNode.waitFor({ state: "visible" });
+  const effectiveSourceText = await effectiveSourceNode.innerText();
+  const persistedStateText = await persistedStateNode.innerText();
+  const effectiveSource = effectiveSourceText.replace(/^Effective source code · /, "").trim();
+  const persistedState = persistedStateText.replace(/^Persisted state code · /, "").trim();
+  const validCredentialCombinations = new Set([
+    "environment:absent",
+    "environment:usable",
+    "environment:corrupted",
+    "environment:unavailable",
+    "secure_persisted:usable",
+    "absent:absent",
+    "absent:corrupted",
+    "invalid:absent",
+    "invalid:usable",
+    "invalid:corrupted",
+    "invalid:unavailable",
+    "unknown:unavailable",
+  ]);
+  const credentialCombination = `${effectiveSource}:${persistedState}`;
+  record(
+    "124:credential-canonical-codes",
+    validCredentialCombinations.has(credentialCombination)
+      && effectiveSource === serverCredential.effective_source
+      && persistedState === serverCredential.persisted_state,
+    `displayed=${credentialCombination} server=${serverCredential.effective_source}:${serverCredential.persisted_state}`,
+  );
+  const sourceMeanings = {
+    not_required: "No credential required",
+    environment: "Environment credential active",
+    secure_persisted: "Securely stored credential active",
+    invalid: "Environment credential invalid",
+    absent: "No effective credential",
+    unknown: "Credential availability unknown",
+  };
+  const persistedMeanings = {
+    usable: "Stored credential ready",
+    corrupted: "Stored credential damaged",
+    unavailable: "Secure credential store unavailable",
+    not_supported: "Stored credentials not supported",
+    absent: "No stored credential",
+  };
+  const expectedSourceMeaning = sourceMeanings[effectiveSource] ?? "Credential availability unknown";
+  const expectedPersistedMeaning = persistedMeanings[persistedState] ?? "Stored credential state unavailable";
+  const expectedCredentialSummary = `${expectedSourceMeaning} · ${expectedPersistedMeaning}.`;
+  record(
+    "124:credential-human-summary",
+    credentialSummaryText === expectedCredentialSummary,
+    `summary=${JSON.stringify(credentialSummaryText)} expected=${JSON.stringify(expectedCredentialSummary)}`,
+  );
+  record(
+    "124:credential-technical-disclosure",
+    true,
+    `effective_source=${effectiveSource} persisted_state=${persistedState}`,
+  );
   await page.getByRole("heading", { name: "Current usage", exact: true }).waitFor({ state: "visible" });
 
   const passwordInput = page.getByLabel("Replace API key");
@@ -150,23 +253,143 @@ const prove124 = async () => {
 const prove140 = async () => {
   const repositoryRoute = "/coding/repository";
   const repositoryResponse = await page.goto(`${baseUrl}${repositoryRoute}`, { waitUntil: "networkidle", timeout: 30_000 });
+  const repositoryTruthResponse = await context.request.get(
+    `${baseUrl}/api/coding/repository/ref?repository=${encodeURIComponent(repository)}&ref=master`,
+  );
   record("140:repository-http", Boolean(repositoryResponse) && repositoryResponse.status() < 500, `status=${repositoryResponse?.status() ?? "none"}`);
+  record("140:repository-truth-http", repositoryTruthResponse.ok(), `status=${repositoryTruthResponse.status()}`);
+  const repositoryTruth = await repositoryTruthResponse.json();
   record("140:repository-spa-path", new URL(page.url()).pathname === repositoryRoute, `url=${page.url()}`);
-  await page.getByTestId("coding-repository-surface").waitFor({ state: "visible" });
-  await page.getByText("Server-owned 118 repository truth", { exact: true }).waitFor({ state: "visible" });
-  await page.getByText("Repository browsing is context-neutral. These explicit actions are exact-base 111/123 operations; they do not commit, apply, execute, push, create a PR, merge, or mutate STATUS.", { exact: true }).waitFor({ state: "visible" });
+  const repositorySurface = page.getByTestId("coding-repository-surface");
+  await repositorySurface.waitFor({ state: "visible" });
+  await repositorySurface.getByText("Server-owned 118 repository truth", { exact: true }).waitFor({ state: "visible" });
+  await repositorySurface.getByText("Repository browsing is context-neutral. These explicit actions are exact-base 111/123 operations; they do not commit, apply, execute, push, create a PR, merge, or mutate STATUS.", { exact: true }).waitFor({ state: "visible" });
+  const repositoryDetails = repositorySurface.locator("details").first();
+  await openTechnicalDetails(repositoryDetails);
+  const resolvedCommitNode = repositoryDetails.getByText(/^Resolved commit · [0-9a-f]{40}$/);
+  await resolvedCommitNode.waitFor({ state: "visible" });
+  const resolvedCommitText = await resolvedCommitNode.innerText();
+  const displayedResolvedSha = resolvedCommitText.replace(/^Resolved commit · /, "").trim();
+  record(
+    "140:repository-disclosure",
+    typeof repositoryTruth.resolved_sha === "string"
+      && /^[0-9a-f]{40}$/.test(repositoryTruth.resolved_sha)
+      && displayedResolvedSha === repositoryTruth.resolved_sha,
+    `displayed=${displayedResolvedSha} trusted=${repositoryTruth.resolved_sha}`,
+  );
   record("140:repository-surface", true, "real Coding Repository workbench renders accepted server-owned 118 and explicit 111/123 authority boundary");
   await assertNoCodingMutationButtons("140:repository");
   await screenshot("repository");
 
   const runtimeRoute = "/coding/runtime";
   const runtimeResponse = await page.goto(`${baseUrl}${runtimeRoute}`, { waitUntil: "networkidle", timeout: 30_000 });
+  const runtimeTruthResponse = await context.request.get(
+    `${baseUrl}/api/coding/runtime-truth?repository=${encodeURIComponent(repository)}&target_ref=master`,
+  );
   record("140:runtime-http", Boolean(runtimeResponse) && runtimeResponse.status() < 500, `status=${runtimeResponse?.status() ?? "none"}`);
+  record("140:runtime-truth-http", runtimeTruthResponse.ok(), `status=${runtimeTruthResponse.status()}`);
+  const runtimeTruth = await runtimeTruthResponse.json();
   record("140:runtime-spa-path", new URL(page.url()).pathname === runtimeRoute, `url=${page.url()}`);
-  await page.getByTestId("coding-runtime-surface").waitFor({ state: "visible" });
-  await page.getByText("Alignment is rendered exactly from 119. The browser performs no SHA ancestry or cleanliness inference.", { exact: true }).waitFor({ state: "visible" });
-  await page.getByRole("heading", { name: "Development pipeline", exact: true }).waitFor({ state: "visible" });
-  record("140:runtime-surface", true, "real Coding Runtime workbench renders server-owned 119 relation and 120 pipeline projection surface");
+  const runtimeSurface = page.getByTestId("coding-runtime-surface");
+  await runtimeSurface.waitFor({ state: "visible" });
+  const semanticSummary = runtimeSurface.locator(".final-fusion__summary-strip").first();
+  await semanticSummary.waitFor({ state: "visible" });
+  const semanticNodes = {
+    Ahead: semanticSummary.getByText(/^Ahead · [0-9]+$/),
+    Behind: semanticSummary.getByText(/^Behind · [0-9]+$/),
+    "Changed files": semanticSummary.getByText(/^Changed files(?: shown)? · [0-9]+$/),
+  };
+  const semanticValues = {};
+  const semanticTexts = {};
+  for (const [label, locator] of Object.entries(semanticNodes)) {
+    await locator.waitFor({ state: "visible" });
+    const value = (await locator.innerText()).trim();
+    semanticTexts[label] = value;
+    const match = value.match(/^(?:Ahead|Behind|Changed files(?: shown)?) · ([0-9]+)$/);
+    semanticValues[label] = match ? Number(match[1]) : null;
+  }
+  record(
+    "140:runtime-semantic-summary",
+    Number.isInteger(semanticValues.Ahead) && Number.isInteger(semanticValues.Behind) && Number.isInteger(semanticValues["Changed files"]),
+    `summary=${JSON.stringify(semanticValues)}`,
+  );
+  const runtimeDetails = runtimeSurface.locator("details").first();
+  await openTechnicalDetails(runtimeDetails);
+  const localCommitNode = runtimeDetails.getByText(/^Local commit · [0-9a-f]{40}$/);
+  await localCommitNode.waitFor({ state: "visible" });
+  const localCommitText = await localCommitNode.innerText();
+  const displayedLocalSha = localCommitText.replace(/^Local commit · /, "").trim();
+  record("140:runtime-exact-local-commit", displayedLocalSha === expectedHead, `displayed=${displayedLocalSha} expected=${expectedHead}`);
+  const remoteCommitNode = runtimeDetails.getByText(/^Remote commit · /);
+  await remoteCommitNode.waitFor({ state: "visible" });
+  const remoteCommitText = await remoteCommitNode.innerText();
+  const displayedRemoteSha = remoteCommitText.replace(/^Remote commit · /, "").trim();
+  const trustedRemoteSha = runtimeTruth.remote?.resolved_sha;
+  record(
+    "140:runtime-exact-remote-commit",
+    typeof trustedRemoteSha === "string"
+      && /^[0-9a-f]{40}$/.test(trustedRemoteSha)
+      && displayedRemoteSha === trustedRemoteSha,
+    `displayed=${displayedRemoteSha} trusted=${trustedRemoteSha ?? "missing"}`,
+  );
+  const rawDeltaNode = runtimeDetails.locator("pre").first();
+  await rawDeltaNode.waitFor({ state: "visible" });
+  const rawDeltaText = await rawDeltaNode.innerText();
+  const disclosedDelta = JSON.parse(rawDeltaText);
+  const trustedDelta = runtimeTruth.semantic_delta;
+  const canonicalRelations = new Set(["ahead", "behind", "diverged", "identical"]);
+  const validTrustedFiles = Array.isArray(trustedDelta?.files)
+    && trustedDelta.files.every((file) => file !== null
+      && typeof file === "object"
+      && !Array.isArray(file)
+      && typeof file.filename === "string"
+      && file.filename.length > 0
+      && typeof file.status === "string"
+      && file.status.length > 0
+      && Number.isInteger(file.additions)
+      && file.additions >= 0
+      && Number.isInteger(file.deletions)
+      && file.deletions >= 0
+      && (file.patch === null || typeof file.patch === "string"));
+  const validTrustedDelta = trustedDelta?.status === "available"
+    && canonicalRelations.has(trustedDelta.relation)
+    && Number.isInteger(trustedDelta.ahead_by)
+    && trustedDelta.ahead_by >= 0
+    && Number.isInteger(trustedDelta.behind_by)
+    && trustedDelta.behind_by >= 0
+    && validTrustedFiles
+    && typeof trustedDelta.partial === "boolean"
+    && (trustedDelta.relation !== "ahead" || (trustedDelta.ahead_by > 0 && trustedDelta.behind_by === 0))
+    && (trustedDelta.relation !== "behind" || (trustedDelta.ahead_by === 0 && trustedDelta.behind_by > 0))
+    && (trustedDelta.relation !== "diverged" || (trustedDelta.ahead_by > 0 && trustedDelta.behind_by > 0))
+    && (trustedDelta.relation !== "identical" || (trustedDelta.ahead_by === 0 && trustedDelta.behind_by === 0));
+  record("140:runtime-trusted-semantic-delta-schema", validTrustedDelta, `trusted=${JSON.stringify(trustedDelta)}`);
+  const expectedChangedFilesLabel = trustedDelta.partial
+    ? `Changed files shown · ${trustedDelta.files.length}`
+    : `Changed files · ${trustedDelta.files.length}`;
+  record(
+    "140:runtime-changed-files-partial-label",
+    semanticTexts["Changed files"] === expectedChangedFilesLabel,
+    `rendered=${JSON.stringify(semanticTexts["Changed files"])} expected=${JSON.stringify(expectedChangedFilesLabel)}`,
+  );
+  const expectedRelation = trustedDelta.relation.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+  const renderedRelationLocator = runtimeSurface.locator(".final-fusion__delta span").first();
+  await renderedRelationLocator.waitFor({ state: "visible" });
+  const renderedRelation = (await renderedRelationLocator.innerText()).trim();
+  record(
+    "140:runtime-server-semantic-delta",
+    semanticValues.Ahead === trustedDelta.ahead_by
+      && semanticValues.Behind === trustedDelta.behind_by
+      && semanticValues["Changed files"] === trustedDelta.files.length
+      && renderedRelation === expectedRelation
+      && JSON.stringify(disclosedDelta) === JSON.stringify(trustedDelta)
+      && runtimeTruth.live?.git_sha === displayedLocalSha
+      && trustedRemoteSha === displayedRemoteSha,
+    `rendered=${JSON.stringify({ relation: renderedRelation, ...semanticValues, remote_sha: displayedRemoteSha })} trusted=${JSON.stringify(trustedDelta)} trusted_remote=${trustedRemoteSha ?? "missing"} disclosed=${JSON.stringify(disclosedDelta)}`,
+  );
+  record("140:runtime-disclosure", true, "runtime exact identity and canonical server-owned semantic delta are verified through a real Technical details interaction");
+  await runtimeSurface.getByRole("heading", { name: "Development pipeline", exact: true }).waitFor({ state: "visible" });
+  record("140:runtime-surface", true, "real Coding Runtime workbench renders server-owned 119 semantic delta and 120 pipeline projection surface");
   await assertNoCodingMutationButtons("140:runtime");
   await screenshot("runtime");
 };
@@ -220,11 +443,11 @@ for (const path of artifacts) {
 }
 
 const seedVersion = scenario === "113-memory-models"
-  ? "113-workspace-then-two-exact-versions-v1"
+  ? "113-workspace-then-two-exact-versions-v2"
   : scenario === "124-settings-ai"
-    ? "124-production-settings-owner-projection-v1"
+    ? "124-production-settings-owner-projection-v2"
     : scenario === "140-coding"
-      ? "140-production-routes-no-static-substitute-v1"
+      ? "140-production-routes-semantic-disclosures-v2"
       : "not-run-refused-v1";
 
 const manifest = {
