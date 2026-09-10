@@ -40,7 +40,7 @@ class LiteratureEntryCreate(StrictLiteratureModel):
     request_key: str | None = Field(default=None, min_length=1, max_length=128)
 
     @model_validator(mode="after")
-    def validate_semantics(self) -> "LiteratureEntryCreate":
+    def validate_semantics(self) -> LiteratureEntryCreate:
         if self.entry_kind == "claim" and not (self.statement or "").strip():
             raise ValueError("claim entries require a non-empty statement")
         if self.entry_kind == "datum" and self.value_number is None and not (self.value_text or "").strip():
