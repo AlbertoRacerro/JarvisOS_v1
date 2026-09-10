@@ -66,7 +66,7 @@ function App() {
         content = <><FinalWorkspaceHeader group="memory" active="models" navigate={navigate} /><ModelDossier workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} /><ProjectKnowledgePanel workspaceId={workspaceId} readOnly /></>;
         break;
       case "memory-literature":
-        content = <><FinalWorkspaceHeader group="memory" active="literature" navigate={navigate} /><LiteratureKnowledge workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} /></>;
+        content = <><FinalWorkspaceHeader group="memory" active="literature" navigate={navigate} /><LiteratureKnowledge kind="literature" workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} /></>;
         break;
       case "development-roadmap-timeline":
         content = <><FinalWorkspaceHeader group="development" active="roadmap" navigate={navigate} /><FinalOperatorUnavailableSurface kind="roadmap" title="Roadmap · Timeline" description="No server-owned roadmap item store currently supplies truthful workstream or execution-status items. Timeline geometry and Execution status remain visible without fabricated bars or counts." navigate={navigate} /></>;
