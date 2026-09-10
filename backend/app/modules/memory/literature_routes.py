@@ -78,4 +78,9 @@ def get_literature_source_content_endpoint(workspace_id: str, source_id: str) ->
         content = resolve_literature_content(workspace_id, source_id)
     except LiteratureError as exc:
         raise _literature_error(exc) from exc
-    return FileResponse(content.path, media_type=content.media_type, filename=content.filename)
+    return FileResponse(
+        content.path,
+        media_type=content.media_type,
+        filename=content.filename,
+        content_disposition_type="inline",
+    )
