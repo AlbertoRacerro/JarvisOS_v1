@@ -258,6 +258,7 @@ jobs:
                       raise SystemExit("only P0/P1 findings may BLOCK")
                   blocking += 1
               elif severity in {"P0", "P1"}:
+                  # A material P0/P1 cannot be silently demoted to PARK.
                   raise SystemExit("P0/P1 findings must BLOCK")
               if not isinstance(finding.get("summary"), str) or not finding["summary"].strip():
                   raise SystemExit("finding summary must be non-empty")
