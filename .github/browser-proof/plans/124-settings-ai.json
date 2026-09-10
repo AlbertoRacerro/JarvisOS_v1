@@ -1,8 +1,8 @@
 {
-  "schema":"jarvisos.browser-proof-plan.v1",
-  "id":"124-settings-ai",
-  "fixture":"none",
-  "steps":[
+  "schema": "jarvisos.browser-proof-plan.v1",
+  "id": "124-settings-ai",
+  "fixture": "none",
+  "steps": [
     {"op":"navigate","name":"124:settings-ai","route":"/settings/ai"},
     {"op":"same-origin-get","name":"124:provider-settings","path":"/ai/provider-settings","capture":"providerSettings"},
     {"op":"assert-visible","name":"124:settings-heading","locator":{"kind":"role","role":"heading","name":"Settings","exact":true}},
@@ -27,11 +27,10 @@
     {"op":"map-value","name":"124:map-persisted-meaning","source":{"capture":"persistedState"},"capture":"persistedMeaning","cases":{"usable":"Stored credential ready","corrupted":"Stored credential damaged","unavailable":"Secure credential store unavailable","not_supported":"Stored credentials not supported","absent":"No stored credential"}},
     {"op":"assert-text-template","name":"124:credential-human-summary","locator":{"kind":"within","parent":{"kind":"css","selector":"[data-provider-credential-owner=\"scaleway\"]"},"child":{"kind":"css","selector":".settings-card__summary"}},"template":"{{capture:sourceMeaning}} · {{capture:persistedMeaning}}."},
     {"op":"assert-visible","name":"124:current-usage","locator":{"kind":"role","role":"heading","name":"Current usage","exact":true}},
-    {"op":"capture-attribute","name":"124:credential-input-capture","locator":{"kind":"label","text":"Replace API key","exact":true},"attribute":"value","capture":"credentialInput"},
-    {"op":"assert-value-equals","name":"124:credential-input-empty","left":{"capture":"credentialInput"},"right":{"literal":""}},
+    {"op":"assert-input-empty","name":"124:credential-input-empty","locator":{"kind":"label","text":"Replace API key","exact":true}},
     {"op":"assert-body-absent","name":"124:no-secret-reference-leak","forbidden":["SCALEWAY_API_KEY","DEEPSEEK_API_KEY","GLM_API_KEY","KIMI_API_KEY","api_key_ref","base_url"]},
-    {"op":"assert-no-button-label","name":"124:no-provider-execution-affordance","pattern":"provider.*(test|smoke|run)|(test|smoke|run).*provider"},
-    {"op":"assert-all-attributes-in","name":"124:provider-egress-state","locator":{"kind":"css","selector":"[data-provider-egress-state]"},"attribute":"data-provider-egress-state","allowed":["allowed","blocked"],"count":6},
-    {"op":"screenshot","name":"124:settings-ai-screenshot","file":"settings-ai"}
-  ]
+    {"op":"assert-no-button-label","name":"124:no-provider-execution-affordance","pattern":"provider.*(test|smoke|run)|(test|smoke|run).*provider","caseInsensitive":true},
+    {"op":"assert-all-attributes-in","name":"124:provider-egress-state","locator":{"kind":"css","selector":"[data-provider-egress-state]"},"attribute":"data-provider-egress-state","allowed":["allowed","blocked"],"count":6}
+  ],
+  "artifactMode": "metadata-only"
 }

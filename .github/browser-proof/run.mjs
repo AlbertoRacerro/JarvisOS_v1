@@ -4,7 +4,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
-import { jsonPointer, loadTrustedPlan } from "./plan-lib.mjs";
+import { checkJsonContract, inputEmptyResult, jsonPointer, loadTrustedPlan, noButtonLabelMatches } from "./plan-lib.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const planId = process.env.PROOF_PLAN_ID;
@@ -25,6 +25,7 @@ if (!planId || !artifactDir || !expectedHead || !resolvedHead || !checkedOutHead
 if (expectedHead !== resolvedHead || expectedHead !== checkedOutHead) throw new Error("exact-head identity mismatch before browser execution");
 
 const plan = await loadTrustedPlan(planId, join(here, "plans"));
+const artifactMode = plan.artifactMode ?? "full";
 await mkdir(artifactDir, { recursive: true });
 const startedAt = new Date().toISOString();
 const assertions = [];
@@ -34,7 +35,8 @@ const record = (name, pass, detail) => { assertions.push({ name, pass, detail })
 
 const browser = await chromium.launch({ headless: true });
 const context = await browser.newContext();
-await context.tracing.start({ screenshots: true, snapshots: true, sources: false });
+const traceEnabled = artifactMode === "full";
+if (traceEnabled) await context.tracing.start({ screenshots: true, snapshots: true, sources: false });
 const page = await context.newPage();
 page.on("pageerror", (error) => assertions.push({ name: "pageerror", pass: false, detail: String(error) }));
 page.on("console", (message) => { if (message.type() === "error") assertions.push({ name: "console-error", pass: false, detail: message.text() }); });
@@ -76,7 +78,12 @@ const template = (input) => input.replace(/{{([^}]+)}}/g, (_match, token) => {
   throw new Error(`unsupported template token ${token}`);
 });
 
-const screenshot = async (name) => { const path = join(artifactDir, `${planId}-${name}.png`); await page.screenshot({ path, fullPage: true }); artifacts.push(path); };
+const screenshot = async (name) => {
+  if (artifactMode !== "full") throw new Error("browser screenshot disabled by trusted artifact policy");
+  const path = join(artifactDir, `${planId}-${name}.png`);
+  await page.screenshot({ path, fullPage: true });
+  artifacts.push(path);
+};
 const runFixture = (fixture, phase) => {
   if (fixture !== "model-version-selection") throw new Error(`unsupported fixture ${fixture}`);
   if (!proofPython || !candidateUser) throw new Error("fixture requires bounded unprivileged Python identity");
@@ -96,9 +103,10 @@ async function execute(step, index) {
   else if (step.op === "click") { await locatorFromSpec(step.locator).click(); record(name, true, "clicked trusted locator"); }
   else if (step.op === "open-technical-details") { await openTechnicalDetails(locatorFromSpec(step.locator)); record(name, true, "keyboard disclosure verified and left open"); }
   else if (step.op === "assert-attribute") { const value = await locatorFromSpec(step.locator).getAttribute(step.attribute); record(name, value === step.equals, `${step.attribute}=${JSON.stringify(value)} expected=${JSON.stringify(step.equals)}`); }
+  else if (step.op === "assert-input-empty") { const locator = locatorFromSpec(step.locator); await locator.waitFor({ state: "visible" }); const result = inputEmptyResult(await locator.inputValue()); record(name, result.pass, result.detail); }
   else if (step.op === "same-origin-get") { const path = template(step.path); const response = await context.request.get(`${baseUrl}${path}`); record(`${name}:http`, response.ok(), `status=${response.status()}`); captures.set(step.capture, await response.json()); record(name, true, `captured JSON as ${step.capture}`); }
   else if (step.op === "capture-text") { const locator = locatorFromSpec(step.locator); await locator.waitFor({ state: "visible" }); let value = (await locator.innerText()).trim(); if (step.stripPrefix !== undefined) { if (!value.startsWith(step.stripPrefix)) throw new Error(`${name}: expected prefix ${step.stripPrefix}`); value = value.slice(step.stripPrefix.length).trim(); } captures.set(step.capture, value); record(name, true, `captured text as ${step.capture}`); }
-  else if (step.op === "capture-attribute") { const locator = locatorFromSpec(step.locator); await locator.waitFor({ state: "visible" }); const value = step.attribute === "value" ? await locator.inputValue() : await locator.getAttribute(step.attribute); captures.set(step.capture, value); record(name, true, `captured ${step.attribute} as ${step.capture}`); }
+  else if (step.op === "capture-attribute") { const locator = locatorFromSpec(step.locator); await locator.waitFor({ state: "visible" }); const value = await locator.getAttribute(step.attribute); captures.set(step.capture, value); record(name, true, `captured ${step.attribute} as ${step.capture}`); }
   else if (step.op === "capture-json-find") { if (!captures.has(step.source)) throw new Error(`${name}: missing source ${step.source}`); const array = jsonPointer(captures.get(step.source), step.arrayPointer); if (!Array.isArray(array)) throw new Error(`${name}: target is not an array`); const matches = array.filter((item) => item && typeof item === "object" && item[step.field] === step.equals); record(name, matches.length === 1, `matches=${matches.length} field=${step.field} equals=${step.equals}`); captures.set(step.capture, matches[0]); }
   else if (step.op === "assert-value-equals") { const left = valueOf(step.left); const right = valueOf(step.right); record(name, JSON.stringify(left) === JSON.stringify(right), `left=${JSON.stringify(left)} right=${JSON.stringify(right)}`); }
   else if (step.op === "map-value") { const source = String(valueOf(step.source)); if (!(source in step.cases)) throw new Error(`${name}: unmapped value ${source}`); captures.set(step.capture, step.cases[source]); record(name, true, `mapped ${source} as ${step.capture}`); }
@@ -106,9 +114,10 @@ async function execute(step, index) {
   else if (step.op === "assert-template-in") { const value = template(step.template); record(name, step.allowed.includes(value), `value=${JSON.stringify(value)} allowed=${JSON.stringify(step.allowed)}`); }
   else if (step.op === "assert-text-template-map") { const source = String(valueOf(step.source)); if (!(source in step.cases)) throw new Error(`${name}: unmapped value ${source}`); const expected = template(step.cases[source]); const locator = locatorFromSpec(step.locator); await locator.waitFor({ state: "visible" }); const actual = (await locator.innerText()).trim(); record(name, actual === expected, `actual=${JSON.stringify(actual)} expected=${JSON.stringify(expected)}`); }
   else if (step.op === "assert-json-deep-equals") { const locator = locatorFromSpec(step.locator); await locator.waitFor({ state: "visible" }); const rendered = JSON.parse(await locator.innerText()); const expected = valueOf(step.right); record(name, JSON.stringify(rendered) === JSON.stringify(expected), `rendered=${JSON.stringify(rendered)} expected=${JSON.stringify(expected)}`); }
+  else if (step.op === "assert-json-contract") { if (!captures.has(step.source)) throw new Error(`${name}: missing source ${step.source}`); const value = jsonPointer(captures.get(step.source), step.pointer); const result = checkJsonContract(value, step.contract); record(name, result.pass, result.detail); }
   else if (step.op === "assert-body-absent") { let body = await page.locator("body").innerText(); let forbidden = step.forbidden; if (step.caseInsensitive) { body = body.toLowerCase(); forbidden = forbidden.map((item) => item.toLowerCase()); } record(name, forbidden.every((item) => !body.includes(item)), `forbidden=${JSON.stringify(step.forbidden)}`); }
-  else if (step.op === "assert-no-button-label") { const labels = await page.getByRole("button").allTextContents(); const re = regexFromTrusted(step.pattern); record(name, labels.every((label) => !re.test(label.trim())), `button-labels=${JSON.stringify(labels)}`); }
-  else if (step.op === "assert-all-attributes-in") { const locator = locatorFromSpec(step.locator); const count = await locator.count(); const values = step.attribute === "value" ? await locator.evaluateAll((nodes) => nodes.map((node) => node.value)) : await locator.evaluateAll((nodes, attribute) => nodes.map((node) => node.getAttribute(attribute)), step.attribute); record(name, (step.count === undefined || count === step.count) && values.every((value) => step.allowed.includes(value)), `count=${count} values=${JSON.stringify(values)}`); }
+  else if (step.op === "assert-no-button-label") { const labels = await page.getByRole("button").allTextContents(); record(name, noButtonLabelMatches(labels, step.pattern, step.caseInsensitive ?? false), `checked ${labels.length} button labels`); }
+  else if (step.op === "assert-all-attributes-in") { const locator = locatorFromSpec(step.locator); const count = await locator.count(); const values = await locator.evaluateAll((nodes, attribute) => nodes.map((node) => node.getAttribute(attribute)), step.attribute); record(name, (step.count === undefined || count === step.count) && values.every((value) => step.allowed.includes(value)), `count=${count} values=${JSON.stringify(values)}`); }
   else if (step.op === "run-fixture") { const result = runFixture(step.fixture, step.phase); record(name, result.pass, result.detail); }
   else if (step.op === "screenshot") { await screenshot(step.file); record(name, true, `saved ${step.file}`); }
   else throw new Error(`unsupported operation ${step.op}`);
@@ -117,13 +126,20 @@ async function execute(step, index) {
 let verdict = "PASS"; let failure = null;
 try { for (const [index, step] of plan.steps.entries()) await execute(step, index); }
 catch (error) { verdict = "FAIL"; failure = String(error?.stack ?? error); }
-finally { const trace = join(artifactDir, `${planId}-trace.zip`); await context.tracing.stop({ path: trace }); artifacts.push(trace); await browser.close(); }
+finally {
+  if (traceEnabled) {
+    const trace = join(artifactDir, `${planId}-trace.zip`);
+    await context.tracing.stop({ path: trace });
+    artifacts.push(trace);
+  }
+  await browser.close();
+}
 const failedAssertions = assertions.filter((item) => item.pass === false);
 if (verdict === "PASS" && failedAssertions.length > 0) { verdict = "FAIL"; failure = failure ?? `browser emitted ${failedAssertions.length} failed asynchronous assertion(s)`; }
 const backendLog = join(artifactDir, "backend.log");
 try { await readFile(backendLog); artifacts.push(backendLog); } catch (error) { if (error?.code !== "ENOENT") throw error; }
 const digests = {};
 for (const path of artifacts) digests[path.split("/").at(-1)] = createHash("sha256").update(await readFile(path)).digest("hex");
-const manifest = { schema:"jarvisos.exact-head-browser-proof.v1", repository, pr_number:prNumber ? Number(prNumber) : null, pr_base_sha:prBaseSha, expected_head_sha:expectedHead, resolved_pr_head_sha:resolvedHead, checked_out_head_sha:checkedOutHead, controller_sha:controllerSha, workflow_run_id:runId, plan_id:planId, browser:"chromium", playwright_version:"1.55.0", started_at:startedAt, ended_at:new Date().toISOString(), assertions, artifacts:digests, verdict, failure };
+const manifest = { schema:"jarvisos.exact-head-browser-proof.v1", repository, pr_number:prNumber ? Number(prNumber) : null, pr_base_sha:prBaseSha, expected_head_sha:expectedHead, resolved_pr_head_sha:resolvedHead, checked_out_head_sha:checkedOutHead, controller_sha:controllerSha, workflow_run_id:runId, plan_id:planId, artifact_mode:artifactMode, browser:"chromium", playwright_version:"1.55.0", started_at:startedAt, ended_at:new Date().toISOString(), assertions, artifacts:digests, verdict, failure };
 await writeFile(join(artifactDir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
 if (verdict !== "PASS" || failedAssertions.length > 0) process.exitCode = 1;

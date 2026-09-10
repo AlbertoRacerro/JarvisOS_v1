@@ -5,7 +5,11 @@ export const PLAN_SCHEMA = 'jarvisos.browser-proof-plan.v1';
 export const PLAN_ID_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
 export const ALLOWED_FIXTURES = new Set(['none', 'model-version-selection']);
 export const ALLOWED_ROLES = new Set(['button', 'heading', 'region', 'textbox', 'link']);
-export const ALLOWED_ATTRIBUTES = new Set(['aria-pressed', 'data-provider-egress-state', 'value']);
+export const ALLOWED_ATTRIBUTES = new Set(['aria-pressed', 'data-provider-egress-state']);
+export const ARTIFACT_MODES = new Set(['full', 'metadata-only']);
+const JSON_TYPES = new Set(['string', 'integer', 'boolean', 'array', 'object', 'nullable-string']);
+const CONDITION_OPS = new Set(['equals', 'gt']);
+
 const STEP_KEYS = {
   'navigate': ['op','name','route'],
   'reload': ['op','name'],
@@ -14,6 +18,7 @@ const STEP_KEYS = {
   'click': ['op','name','locator'],
   'open-technical-details': ['op','name','locator'],
   'assert-attribute': ['op','name','locator','attribute','equals'],
+  'assert-input-empty': ['op','name','locator'],
   'same-origin-get': ['op','name','path','capture'],
   'capture-text': ['op','name','locator','capture','stripPrefix'],
   'capture-attribute': ['op','name','locator','attribute','capture'],
@@ -24,8 +29,9 @@ const STEP_KEYS = {
   'assert-template-in': ['op','name','template','allowed'],
   'assert-text-template-map': ['op','name','locator','source','cases'],
   'assert-json-deep-equals': ['op','name','locator','right'],
+  'assert-json-contract': ['op','name','source','pointer','contract'],
   'assert-body-absent': ['op','name','forbidden','caseInsensitive'],
-  'assert-no-button-label': ['op','name','pattern'],
+  'assert-no-button-label': ['op','name','pattern','caseInsensitive'],
   'assert-all-attributes-in': ['op','name','locator','attribute','allowed','count'],
   'run-fixture': ['op','name','fixture','phase'],
   'screenshot': ['op','name','file'],
@@ -36,6 +42,9 @@ const isObject = (value) => value !== null && typeof value === 'object' && !Arra
 const fail = (message) => { throw new Error(`invalid proof plan: ${message}`); };
 const boundedString = (value, name, max = 500) => {
   if (typeof value !== 'string' || value.length === 0 || value.length > max) fail(`${name} must be a non-empty string <= ${max}`);
+};
+const safeField = (value, name) => {
+  if (typeof value !== 'string' || !/^[A-Za-z_][A-Za-z0-9_-]{0,63}$/.test(value)) fail(`${name} must be a safe field name`);
 };
 
 export function validatePlanId(planId) {
@@ -115,13 +124,123 @@ function validateTemplate(template, name) {
   }
 }
 
+function validateFieldRule(rule, name, depth = 0) {
+  if (!isObject(rule) || depth > 2) fail(`${name} invalid`);
+  for (const key of Object.keys(rule)) if (!['type','equals','in','min','fields'].includes(key)) fail(`${name} unknown key ${key}`);
+  if (!JSON_TYPES.has(rule.type)) fail(`${name}.type invalid`);
+  if ('equals' in rule && !['string','number','boolean'].includes(typeof rule.equals) && rule.equals !== null) fail(`${name}.equals invalid`);
+  if ('in' in rule) {
+    if (!Array.isArray(rule.in) || rule.in.length < 1 || rule.in.length > 20) fail(`${name}.in invalid`);
+    for (const value of rule.in) if (!['string','number','boolean'].includes(typeof value) && value !== null) fail(`${name}.in value invalid`);
+  }
+  if ('min' in rule && (rule.type !== 'integer' || !Number.isInteger(rule.min))) fail(`${name}.min requires integer type`);
+  if ('fields' in rule) {
+    if (rule.type !== 'object' && rule.type !== 'array') fail(`${name}.fields requires object or array type`);
+    validateFields(rule.fields, `${name}.fields`, depth + 1);
+  }
+}
+
+function validateFields(fields, name, depth = 0) {
+  if (!isObject(fields) || Object.keys(fields).length < 1 || Object.keys(fields).length > 30 || depth > 2) fail(`${name} invalid`);
+  for (const [field, rule] of Object.entries(fields)) {
+    safeField(field, `${name} field`);
+    validateFieldRule(rule, `${name}.${field}`, depth);
+  }
+}
+
+function validateContract(contract, name) {
+  if (!isObject(contract)) fail(`${name} must be object`);
+  for (const key of Object.keys(contract)) if (!['fields','conditions'].includes(key)) fail(`${name} unknown key ${key}`);
+  validateFields(contract.fields, `${name}.fields`);
+  if ('conditions' in contract) {
+    if (!Array.isArray(contract.conditions) || contract.conditions.length > 20) fail(`${name}.conditions invalid`);
+    for (const [index, condition] of contract.conditions.entries()) {
+      if (!isObject(condition)) fail(`${name}.conditions[${index}] invalid`);
+      for (const key of Object.keys(condition)) if (!['when','then'].includes(key)) fail(`${name}.conditions[${index}] unknown key ${key}`);
+      if (!isObject(condition.when)) fail(`${name}.conditions[${index}].when invalid`);
+      for (const key of Object.keys(condition.when)) if (!['field','equals'].includes(key)) fail(`${name}.conditions[${index}].when unknown key ${key}`);
+      safeField(condition.when.field, `${name}.conditions[${index}].when.field`);
+      if (!Object.prototype.hasOwnProperty.call(contract.fields, condition.when.field)) fail(`${name}.conditions[${index}] selector field not declared`);
+      if (!['string','number','boolean'].includes(typeof condition.when.equals) && condition.when.equals !== null) fail(`${name}.conditions[${index}].when.equals invalid`);
+      if (!Array.isArray(condition.then) || condition.then.length < 1 || condition.then.length > 10) fail(`${name}.conditions[${index}].then invalid`);
+      for (const [j, assertion] of condition.then.entries()) {
+        if (!isObject(assertion)) fail(`${name}.conditions[${index}].then[${j}] invalid`);
+        for (const key of Object.keys(assertion)) if (!['field','op','value'].includes(key)) fail(`${name}.conditions[${index}].then[${j}] unknown key ${key}`);
+        safeField(assertion.field, `${name}.conditions[${index}].then[${j}].field`);
+        if (!Object.prototype.hasOwnProperty.call(contract.fields, assertion.field)) fail(`${name}.conditions[${index}].then[${j}] field not declared`);
+        if (!CONDITION_OPS.has(assertion.op)) fail(`${name}.conditions[${index}].then[${j}].op invalid`);
+        if (!['string','number','boolean'].includes(typeof assertion.value) && assertion.value !== null) fail(`${name}.conditions[${index}].then[${j}].value invalid`);
+      }
+    }
+  }
+}
+
+const typePasses = (value, type) => {
+  if (type === 'string') return typeof value === 'string';
+  if (type === 'integer') return Number.isInteger(value);
+  if (type === 'boolean') return typeof value === 'boolean';
+  if (type === 'array') return Array.isArray(value);
+  if (type === 'object') return isObject(value);
+  if (type === 'nullable-string') return value === null || typeof value === 'string';
+  return false;
+};
+
+function checkFields(value, fields, path = '$') {
+  if (!isObject(value)) return { pass:false, detail:`${path} must be object` };
+  for (const [field, rule] of Object.entries(fields)) {
+    if (!Object.prototype.hasOwnProperty.call(value, field)) return { pass:false, detail:`${path}.${field} missing` };
+    const actual = value[field];
+    if (!typePasses(actual, rule.type)) return { pass:false, detail:`${path}.${field} type mismatch` };
+    if ('equals' in rule && actual !== rule.equals) return { pass:false, detail:`${path}.${field} equality mismatch` };
+    if ('in' in rule && !rule.in.includes(actual)) return { pass:false, detail:`${path}.${field} outside allowed set` };
+    if ('min' in rule && actual < rule.min) return { pass:false, detail:`${path}.${field} below minimum` };
+    if ('fields' in rule) {
+      if (rule.type === 'object') {
+        const nested = checkFields(actual, rule.fields, `${path}.${field}`);
+        if (!nested.pass) return nested;
+      } else {
+        for (let i = 0; i < actual.length; i += 1) {
+          const nested = checkFields(actual[i], rule.fields, `${path}.${field}[${i}]`);
+          if (!nested.pass) return nested;
+        }
+      }
+    }
+  }
+  return { pass:true, detail:'contract fields valid' };
+}
+
+export function checkJsonContract(value, contract) {
+  const fields = checkFields(value, contract.fields);
+  if (!fields.pass) return fields;
+  for (const condition of contract.conditions ?? []) {
+    if (value[condition.when.field] !== condition.when.equals) continue;
+    for (const assertion of condition.then) {
+      const actual = value[assertion.field];
+      const pass = assertion.op === 'equals' ? actual === assertion.value : typeof actual === 'number' && actual > assertion.value;
+      if (!pass) return { pass:false, detail:`conditional ${assertion.field} ${assertion.op} failed` };
+    }
+  }
+  return { pass:true, detail:'JSON contract satisfied' };
+}
+
+export function inputEmptyResult(value) {
+  return value === '' ? { pass:true, detail:'input empty' } : { pass:false, detail:'input non-empty' };
+}
+
+export function noButtonLabelMatches(labels, pattern, caseInsensitive = false) {
+  const re = new RegExp(pattern, caseInsensitive ? 'i' : '');
+  return labels.every((label) => !re.test(String(label).trim()));
+}
+
 export function validatePlan(plan) {
   if (!isObject(plan)) fail('root must be an object');
-  for (const key of Object.keys(plan)) if (!['schema','id','fixture','steps'].includes(key)) fail(`unknown root key ${key}`);
+  for (const key of Object.keys(plan)) if (!['schema','id','fixture','artifactMode','steps'].includes(key)) fail(`unknown root key ${key}`);
   if (plan.schema !== PLAN_SCHEMA) fail('unknown schema');
   validatePlanId(plan.id);
   const fixture = plan.fixture ?? 'none';
   if (!ALLOWED_FIXTURES.has(fixture)) fail(`unknown fixture ${fixture}`);
+  const artifactMode = plan.artifactMode ?? 'full';
+  if (!ARTIFACT_MODES.has(artifactMode)) fail(`unknown artifact mode ${artifactMode}`);
   if (!Array.isArray(plan.steps) || plan.steps.length < 1 || plan.steps.length > 200) fail('steps must contain 1..200 entries');
   for (const [index, step] of plan.steps.entries()) {
     if (!isObject(step)) fail(`step ${index} must be object`);
@@ -133,7 +252,7 @@ export function validatePlan(plan) {
       if (typeof step.route !== 'string' || !/^\/[A-Za-z0-9_./?=&%:-]*$/.test(step.route) || step.route.length > 300) fail(`step ${index} unsafe route`);
     } else if (step.op === 'assert-count') {
       if (!step.locator || !Number.isInteger(step.equals) || step.equals < 0 || step.equals > 1000) fail(`step ${index} invalid count`);
-    } else if (['assert-visible','click','open-technical-details'].includes(step.op)) {
+    } else if (['assert-visible','click','open-technical-details','assert-input-empty'].includes(step.op)) {
       if (!step.locator) fail(`step ${index} locator required`);
     } else if (step.op === 'assert-attribute') {
       if (!step.locator || !ALLOWED_ATTRIBUTES.has(step.attribute) || typeof step.equals !== 'string') fail(`step ${index} invalid attribute assertion`);
@@ -166,12 +285,17 @@ export function validatePlan(plan) {
       for (const [key, value] of Object.entries(step.cases)) { boundedString(key, `step ${index} case key`, 100); validateTemplate(value, `step ${index} case value`); }
     } else if (step.op === 'assert-json-deep-equals') {
       if (!step.locator) fail(`step ${index} locator required`); validateValueRef(step.right, `step ${index}.right`);
+    } else if (step.op === 'assert-json-contract') {
+      boundedString(step.source, `step ${index}.source`, 64);
+      if (typeof step.pointer !== 'string' || !step.pointer.startsWith('/') || step.pointer.length > 300) fail(`step ${index} pointer invalid`);
+      validateContract(step.contract, `step ${index}.contract`);
     } else if (step.op === 'assert-body-absent') {
       if (!Array.isArray(step.forbidden) || step.forbidden.length < 1 || step.forbidden.length > 40) fail(`step ${index} forbidden invalid`);
       for (const item of step.forbidden) boundedString(item, `step ${index}.forbidden`, 120);
       if ('caseInsensitive' in step && typeof step.caseInsensitive !== 'boolean') fail(`step ${index} caseInsensitive invalid`);
     } else if (step.op === 'assert-no-button-label') {
       boundedString(step.pattern, `step ${index}.pattern`, 300);
+      if ('caseInsensitive' in step && typeof step.caseInsensitive !== 'boolean') fail(`step ${index} caseInsensitive invalid`);
     } else if (step.op === 'assert-all-attributes-in') {
       if (!step.locator || !ALLOWED_ATTRIBUTES.has(step.attribute) || !Array.isArray(step.allowed) || step.allowed.length < 1 || step.allowed.length > 20) fail(`step ${index} attribute set invalid`);
       for (const item of step.allowed) boundedString(item, `step ${index}.allowed`, 120);
@@ -181,6 +305,7 @@ export function validatePlan(plan) {
       if (!['versions'].includes(step.phase)) fail(`step ${index} fixture phase invalid`);
       if (step.fixture !== fixture) fail(`step ${index} fixture does not match plan fixture`);
     } else if (step.op === 'screenshot') {
+      if (artifactMode !== 'full') fail(`step ${index} screenshot requires full artifact mode`);
       if (typeof step.file !== 'string' || !/^[A-Za-z0-9_-]{1,80}$/.test(step.file)) fail(`step ${index} screenshot name invalid`);
     }
   }

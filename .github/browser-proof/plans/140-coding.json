@@ -1,8 +1,8 @@
 {
-  "schema":"jarvisos.browser-proof-plan.v1",
-  "id":"140-coding",
-  "fixture":"none",
-  "steps":[
+  "schema": "jarvisos.browser-proof-plan.v1",
+  "id": "140-coding",
+  "fixture": "none",
+  "steps": [
     {"op":"navigate","name":"140:repository","route":"/coding/repository"},
     {"op":"same-origin-get","name":"140:repository-truth","path":"/api/coding/repository/ref?repository={{env:repository|urlencode}}&ref=master","capture":"repositoryTruth"},
     {"op":"assert-visible","name":"140:repository-surface","locator":{"kind":"testid","testid":"coding-repository-surface"}},
@@ -11,10 +11,11 @@
     {"op":"open-technical-details","name":"140:repository-disclosure-open","locator":{"kind":"within","parent":{"kind":"testid","testid":"coding-repository-surface"},"child":{"kind":"css","selector":"details"},"first":true}},
     {"op":"capture-text","name":"140:resolved-commit-capture","locator":{"kind":"within","parent":{"kind":"within","parent":{"kind":"testid","testid":"coding-repository-surface"},"child":{"kind":"css","selector":"details"},"first":true},"child":{"kind":"text","text":"^Resolved commit · [0-9a-f]{40}$","regex":true}},"capture":"resolvedCommit","stripPrefix":"Resolved commit · "},
     {"op":"assert-value-equals","name":"140:repository-disclosure","left":{"capture":"resolvedCommit"},"right":{"json":{"source":"repositoryTruth","pointer":"/resolved_sha"}}},
-    {"op":"assert-no-button-label","name":"140:repository-no-direct-mutation-buttons","pattern":"^(commit|apply|execute|push|merge|create pr|create pull request|update|restart)(\\b|\\s)"},
+    {"op":"assert-no-button-label","name":"140:repository-no-direct-mutation-buttons","pattern":"^(commit|apply|execute|push|merge|create pr|create pull request|update|restart)(\\b|\\s)","caseInsensitive":true},
     {"op":"screenshot","name":"140:repository-screenshot","file":"repository"},
     {"op":"navigate","name":"140:runtime","route":"/coding/runtime"},
     {"op":"same-origin-get","name":"140:runtime-truth","path":"/api/coding/runtime-truth?repository={{env:repository|urlencode}}&target_ref=master","capture":"runtimeTruth"},
+    {"op":"assert-json-contract","name":"140:runtime-trusted-semantic-delta-schema","source":"runtimeTruth","pointer":"/semantic_delta","contract":{"fields":{"status":{"type":"string","equals":"available"},"relation":{"type":"string","in":["ahead","behind","diverged","identical"]},"ahead_by":{"type":"integer","min":0},"behind_by":{"type":"integer","min":0},"partial":{"type":"boolean"},"files":{"type":"array","fields":{"filename":{"type":"string"},"status":{"type":"string"},"additions":{"type":"integer","min":0},"deletions":{"type":"integer","min":0},"patch":{"type":"nullable-string"}}}},"conditions":[{"when":{"field":"relation","equals":"ahead"},"then":[{"field":"ahead_by","op":"gt","value":0},{"field":"behind_by","op":"equals","value":0}]},{"when":{"field":"relation","equals":"behind"},"then":[{"field":"behind_by","op":"gt","value":0},{"field":"ahead_by","op":"equals","value":0}]},{"when":{"field":"relation","equals":"diverged"},"then":[{"field":"ahead_by","op":"gt","value":0},{"field":"behind_by","op":"gt","value":0}]},{"when":{"field":"relation","equals":"identical"},"then":[{"field":"ahead_by","op":"equals","value":0},{"field":"behind_by","op":"equals","value":0}]}]}},
     {"op":"assert-visible","name":"140:runtime-surface","locator":{"kind":"testid","testid":"coding-runtime-surface"}},
     {"op":"assert-text-template","name":"140:remote-ahead-summary","locator":{"kind":"within","parent":{"kind":"testid","testid":"coding-runtime-surface"},"child":{"kind":"text","text":"^Remote ahead · [0-9]+$","regex":true}},"template":"Remote ahead · {{json:runtimeTruth:/semantic_delta/ahead_by}}"},
     {"op":"assert-text-template","name":"140:remote-behind-summary","locator":{"kind":"within","parent":{"kind":"testid","testid":"coding-runtime-surface"},"child":{"kind":"text","text":"^Remote behind · [0-9]+$","regex":true}},"template":"Remote behind · {{json:runtimeTruth:/semantic_delta/behind_by}}"},
@@ -31,7 +32,7 @@
     {"op":"open-technical-details","name":"140:raw-delta-disclosure-open","locator":{"kind":"within","parent":{"kind":"within","parent":{"kind":"testid","testid":"coding-runtime-surface"},"child":{"kind":"css","selector":"details"},"first":true},"child":{"kind":"css","selector":"details"},"first":true}},
     {"op":"assert-json-deep-equals","name":"140:raw-semantic-delta-server-match","locator":{"kind":"within","parent":{"kind":"within","parent":{"kind":"within","parent":{"kind":"testid","testid":"coding-runtime-surface"},"child":{"kind":"css","selector":"details"},"first":true},"child":{"kind":"css","selector":"details"},"first":true},"child":{"kind":"css","selector":"pre"},"first":true},"right":{"json":{"source":"runtimeTruth","pointer":"/semantic_delta"}}},
     {"op":"assert-visible","name":"140:development-pipeline","locator":{"kind":"within","parent":{"kind":"testid","testid":"coding-runtime-surface"},"child":{"kind":"role","role":"heading","name":"Development pipeline","exact":true}}},
-    {"op":"assert-no-button-label","name":"140:runtime-no-direct-mutation-buttons","pattern":"^(commit|apply|execute|push|merge|create pr|create pull request|update|restart)(\\b|\\s)"},
+    {"op":"assert-no-button-label","name":"140:runtime-no-direct-mutation-buttons","pattern":"^(commit|apply|execute|push|merge|create pr|create pull request|update|restart)(\\b|\\s)","caseInsensitive":true},
     {"op":"screenshot","name":"140:runtime-screenshot","file":"runtime"}
   ]
 }
