@@ -17,7 +17,7 @@ This contract re-derives the 100c `FV-B06` / `FV-F05` obligations from fresh run
 At the re-derivation base:
 
 - `frontend/src/App.tsx` deliberately renders `memory-literature` through `FinalOperatorUnavailableSurface` and states that no bounded literature corpus/read owner exists yet. This is the actual product gap.
-- `backend/app/modules/files` already owns registered file/artifact metadata and carries `source_ref`; it remains the owner of stored file bytes/path-safe file access rather than being copied into a literature blob store.
+- `backend/app/modules/files` owns registered artifact metadata, including workspace identity, stored-path metadata and `source_ref`, but it does **not** expose a generic artifact-content serving endpoint. The proven content-serving boundary on fresh master is BLUECAD-specific (`/workspaces/{id}/bluecad/artifacts/{artifact_id}/content`) and its BLUECAD role restrictions are not Literature authority.
 - Memory/modeling records already carry `source_ref` provenance fields. Those existing fields remain downstream provenance links; 114 must not create parallel Parameter/Requirement/model truth.
 - The 100c queue requires structured Source -> Document/import -> Claim/Datum -> Citation/location/context -> Used-by provenance, bridged to existing file/source authority.
 - The approved operator capability matrix requires compact source/file rows, inline multi-expand, extracted knowledge with exact provenance, bounded preview, real full-source open, and proposal-only web-finding promotion.
@@ -27,22 +27,24 @@ At the re-derivation base:
 114 may introduce **one literature-domain owner** for literature-specific identity and provenance that existing generic owners do not represent. It may persist only the minimum structured metadata needed to identify and relate:
 
 - a literature source;
-- an imported/registered document reference owned by the existing file boundary;
+- an imported/registered document reference owned by the existing artifact/file metadata boundary;
 - a claim or extracted datum;
 - an exact citation/location/context inside that source;
 - explicit links showing where that literature item is used by existing project/model records.
 
 Implementation may choose the minimum normalized representation after inspecting current SQLite/schema owners, but it must satisfy all of the following:
 
-1. file bytes and safe file serving remain with the existing file owner;
-2. Project Basis, Parameters, Requirements, modeling versions/runs and other engineering records remain with their existing canonical owners;
-3. literature records never become an alternate canonical engineering-value store;
-4. `source_ref` interoperability is explicit and stable rather than heuristic text matching;
-5. used-by links either derive from exact existing provenance refs or are stored as typed references whose targets are validated; no copied downstream record bodies;
-6. workspace ownership is enforced on every read/write/link boundary;
-7. deletion/supersession cannot leave a literature item appearing authoritative after its backing source/document is unavailable.
+1. registered artifact identity/path metadata remains with the existing files owner; 114 must not copy file bytes or create a second files table;
+2. because fresh master has no generic artifact-content serving route, 114 may add only the smallest bounded source-content read seam needed for Literature preview/open, preferably by factoring a reusable path-resolution/read primitive under the existing files owner and keeping Literature-specific eligibility in the Literature layer; it must not reuse BLUECAD-specific authority as if it were generic;
+3. any source-content seam validates workspace ownership, registered artifact identity, allowed Literature preview MIME/kind, data-root containment, missing/stale backing files, and returns no `stored_path` or arbitrary filesystem path;
+4. Project Basis, Parameters, Requirements, modeling versions/runs and other engineering records remain with their existing canonical owners;
+5. literature records never become an alternate canonical engineering-value store;
+6. `source_ref` interoperability is explicit and stable rather than heuristic text matching;
+7. used-by links either derive from exact existing provenance refs or are stored as typed references whose targets are validated; no copied downstream record bodies;
+8. workspace ownership is enforced on every read/write/link boundary;
+9. deletion/supersession cannot leave a literature item appearing authoritative after its backing source/document is unavailable.
 
-A new generic vector database, document vault, crawler, second files table, second proposal store, or second search index fails the minimum-necessary test for this slice.
+A new generic vector database, document vault, crawler, second files table, second proposal store, second search index, arbitrary filesystem browser, or arbitrary URL fetcher fails the minimum-necessary test for this slice.
 
 ## Required read model
 
@@ -80,9 +82,9 @@ Required behavior:
 - multiple literature rows may remain expanded simultaneously;
 - expanded content shows extracted knowledge and provenance without raw machine payload becoming the primary presentation;
 - opening/expanding a row does not add it to Jarvis context;
-- supported source preview is bounded and uses the real existing file/source read boundary;
+- supported source preview is bounded and uses the validated 114 source-content read seam over registered artifact identity, never the BLUECAD-specific route by accident;
 - unsupported or unavailable preview is explicit;
-- `Open full source` targets only a validated real source/file location and preserves Memory navigation state;
+- `Open full source` targets only a validated real registered source location and preserves Memory navigation state;
 - empty, loading, malformed, stale and unavailable states remain distinguishable;
 - reference HTML fixture values are never production data.
 
@@ -96,6 +98,7 @@ Implementation and tests must cover at least:
 - dangling or wrong-kind `source_ref` / target refs;
 - missing backing file after metadata exists;
 - unsupported MIME/preview type;
+- path traversal, out-of-data-root stored paths, and accidental reuse of BLUECAD-only content authority;
 - invalid/out-of-range page or text locator;
 - malformed extracted datum (including value/unit mismatch or non-finite numeric values where numeric data is represented);
 - unbounded list/claim expansion;
@@ -111,7 +114,7 @@ Implementation and tests must cover at least:
 
 1. A workspace with real imported literature can list sources/documents from server-owned state with bounded reads.
 2. At least one source can expose a claim or datum carrying exact source provenance/location and a real used-by relationship without duplicating the downstream canonical record.
-3. Supported preview/open uses the real file/source boundary; missing/unsupported content fails truthfully.
+3. Supported preview/open uses the bounded validated 114 source-content seam over existing registered artifact identity; missing/unsupported/out-of-root content fails truthfully and no filesystem path leaks to the frontend.
 4. The approved compact-list + inline-multi-expand Literature composition is activated with real data, including empty/error/unavailable states and no fixture substitution.
 5. Merely browsing/opening literature does not mutate Jarvis context, Project Basis, Parameters, Requirements, models, runs or proposals.
 6. AI/web/extraction output remains proposal-only until the existing owning promotion path accepts it.
@@ -128,7 +131,7 @@ Implementation and tests must cover at least:
 - autonomous literature research/crawling;
 - arbitrary remote URL fetching;
 - OCR or LLM extraction as a required baseline capability;
-- replacing existing file/artifact/source serving;
+- replacing existing artifact registration/metadata ownership or BLUECAD's domain-specific content eligibility;
 - replacing MemoryStore, Project Knowledge, Parameter/Requirement/model owners;
 - generic bibliography/reference-manager product scope;
 - hidden promotion from literature evidence to canonical engineering truth;
