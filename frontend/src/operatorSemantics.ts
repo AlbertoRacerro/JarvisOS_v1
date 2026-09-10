@@ -17,23 +17,29 @@ function humanizeReasonCode(value: string | null | undefined, fallback: string):
   return value.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+function runtimeRelationship(alignment: string): string | null {
+  if (alignment === "aligned") return "Local runtime matches remote";
+  if (alignment === "local_behind") return "Local runtime behind remote";
+  if (alignment === "divergent") return "Local and remote diverge";
+  return null;
+}
+
 export function runtimeDeltaSummary(value: UnknownRecord, alignment = "unknown", reason: string | null = null) {
-  const canonicalUnknown = alignment === "unknown";
+  const relationship = runtimeRelationship(alignment);
+  const canonicalUnknown = relationship === null;
   const files = canonicalUnknown ? [] : records(value.files).map((file) => ({
     name: String(file.filename ?? file.path ?? "Unnamed file"),
     status: typeof file.status === "string" ? file.status : null
   }));
-  const relation = canonicalUnknown
-    ? "unknown"
-    : typeof value.relation === "string" ? value.relation : alignment;
   return {
-    relation,
+    relation: canonicalUnknown ? "unknown" : alignment,
+    relationship: relationship ?? "Runtime relationship unavailable",
     aheadBy: canonicalUnknown ? null : finiteNumber(value.ahead_by),
     behindBy: canonicalUnknown ? null : finiteNumber(value.behind_by),
     files,
     status: canonicalUnknown ? "unavailable" : typeof value.status === "string" ? value.status : "unavailable",
     partial: canonicalUnknown ? false : value.partial === true,
-    explanation: relation === "unknown" && reason ? humanizeReasonCode(reason, "Runtime relationship unavailable") : null
+    explanation: canonicalUnknown && reason ? humanizeReasonCode(reason, "Runtime relationship unavailable") : null
   };
 }
 
