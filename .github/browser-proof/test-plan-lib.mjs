@@ -49,6 +49,8 @@ const p140 = plans.get('140-coding');
 const contractStep = p140.steps.find((s) => s.name === '140:runtime-trusted-semantic-delta-schema');
 assert(contractStep && contractStep.op === 'assert-json-contract');
 const contract = contractStep.contract;
+assert.equal(contract.fields.files.fields.filename.minLength, 1);
+assert.equal(contract.fields.files.fields.status.minLength, 1);
 const good = {
   status:'available', relation:'ahead', ahead_by:2, behind_by:0, partial:false,
   files:[{filename:'x.py',status:'modified',additions:2,deletions:1,patch:null}],
@@ -61,6 +63,8 @@ for (const bad of [
   {...good, ahead_by:0},
   {...good, behind_by:1},
   {...good, partial:'false'},
+  {...good, files:[{filename:'',status:'modified',additions:1,deletions:0,patch:null}]},
+  {...good, files:[{filename:'x.py',status:'',additions:1,deletions:0,patch:null}]},
   {...good, files:[{filename:'x.py',status:'modified',additions:-1,deletions:0,patch:null}]},
   {...good, files:[{filename:'x.py',status:'modified',additions:1,deletions:0,patch:7}]},
   {...good, relation:'behind', ahead_by:0, behind_by:0},
@@ -83,5 +87,8 @@ assert.throws(() => validatePlan({...base, fixture:'none', steps:[{op:'run-fixtu
 assert.throws(() => validatePlan({...base, steps:[{op:'capture-attribute', name:'secret', locator:{kind:'label',text:'Key'}, attribute:'value', capture:'x'}]}));
 assert.throws(() => validatePlan({...base, steps:[{op:'assert-no-button-label', name:'bad', pattern:'x', caseInsensitive:'yes'}]}));
 assert.throws(() => validatePlan({...base, steps:[{op:'assert-json-contract', name:'bad', source:'x', pointer:'/x', contract:{fields:{x:{type:'function'}}}}]}));
+assert.throws(() => validatePlan({...base, steps:[{op:'assert-json-contract', name:'bad', source:'x', pointer:'/x', contract:{fields:{x:{type:'integer',minLength:1}}}}]}));
+assert.throws(() => validatePlan({...base, steps:[{op:'assert-json-contract', name:'bad', source:'x', pointer:'/x', contract:{fields:{x:{type:'string',minLength:-1}}}}]}));
+assert.throws(() => validatePlan({...base, steps:[{op:'assert-json-contract', name:'bad', source:'x', pointer:'/x', contract:{fields:{x:{type:'string',minLength:10001}}}}]}));
 assert.throws(() => validatePlan({...base, steps:[{op:'assert-json-contract', name:'bad', source:'x', pointer:'/x', contract:{fields:{x:{type:'integer'}},conditions:[{when:{field:'x',equals:1},then:[{field:'x',op:'eval',value:1}]}]}}]}));
 console.log('browser-proof plan validation, secret safety and compatibility PASS');
