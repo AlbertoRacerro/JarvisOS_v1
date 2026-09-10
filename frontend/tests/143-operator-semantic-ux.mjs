@@ -12,7 +12,12 @@ const semantics = await import(`data:text/javascript;base64,${Buffer.from(compil
 
 assert.match(status, /\| 143 \| in_review \| \[#589\]/);
 assert.match(coding, /runtime\?\.semantic_delta/);
-assert.match(coding, /server-owned runtime truth/);
+assert.match(coding, /canonical server-owned runtime alignment/);
+assert.match(coding, /Remote ahead · \{semanticDelta\.aheadBy/);
+assert.match(coding, /Remote behind · \{semanticDelta\.behindBy/);
+assert.doesNotMatch(coding, /<span>Ahead · \{semanticDelta\.aheadBy/);
+assert.doesNotMatch(coding, /<span>Behind · \{semanticDelta\.behindBy/);
+assert.match(coding, /semanticDelta\.relationship/);
 assert.match(coding, /function RawJson/);
 assert.match(coding, /<details><summary>Technical details<\/summary>/);
 assert.doesNotMatch(coding, /<pre className="final-fusion__searchbox">\{JSON\.stringify\(prEvidence/);
@@ -30,15 +35,20 @@ assert.doesNotMatch(coding, /const state = value\.state \?\? value\.status \?\? 
 assert.match(coding, /changes requested/);
 assert.doesNotMatch(coding, /summary\.reviews\.blocking/);
 
-const runtime = semantics.runtimeDeltaSummary({ relation: "ahead", ahead_by: 3, behind_by: 1, files: [{ filename: "frontend/a.ts", status: "modified" }], status: "available", partial: true }, "ahead");
-assert.deepEqual(runtime, { relation: "ahead", aheadBy: 3, behindBy: 1, files: [{ name: "frontend/a.ts", status: "modified" }], status: "available", partial: true, explanation: null });
-const aligned = semantics.runtimeDeltaSummary({ status: "unavailable", files: [] }, "aligned", null);
+const runtime = semantics.runtimeDeltaSummary({ relation: "ahead", ahead_by: 3, behind_by: 1, files: [{ filename: "frontend/a.ts", status: "modified" }], status: "available", partial: true }, "local_behind");
+assert.deepEqual(runtime, { relation: "local_behind", relationship: "Local runtime behind remote", aheadBy: 3, behindBy: 1, files: [{ name: "frontend/a.ts", status: "modified" }], status: "available", partial: true, explanation: null });
+const aligned = semantics.runtimeDeltaSummary({ relation: "divergent", status: "unavailable", files: [] }, "aligned", null);
 assert.equal(aligned.relation, "aligned");
+assert.equal(aligned.relationship, "Local runtime matches remote");
+const divergent = semantics.runtimeDeltaSummary({ relation: "ahead", ahead_by: 1, behind_by: 1, files: [] }, "divergent", null);
+assert.equal(divergent.relation, "divergent");
+assert.equal(divergent.relationship, "Local and remote diverge");
 const unknown = semantics.runtimeDeltaSummary({ status: "unavailable", files: [] }, "unknown", "worktree_dirty");
 assert.equal(unknown.relation, "unknown");
+assert.equal(unknown.relationship, "Runtime relationship unavailable");
 assert.match(unknown.explanation, /Worktree Dirty/);
 const invalidatedDelta = semantics.runtimeDeltaSummary({ relation: "ahead", ahead_by: 4, behind_by: 0, files: [{ filename: "stale.ts", status: "modified" }], status: "available", partial: true }, "unknown", "target_moved");
-assert.deepEqual(invalidatedDelta, { relation: "unknown", aheadBy: null, behindBy: null, files: [], status: "unavailable", partial: false, explanation: "Target Moved" });
+assert.deepEqual(invalidatedDelta, { relation: "unknown", relationship: "Runtime relationship unavailable", aheadBy: null, behindBy: null, files: [], status: "unavailable", partial: false, explanation: "Target Moved" });
 assert.doesNotMatch(semanticsSource, /ahead_count|changed_file_count|execution_class === "local"/);
 
 const evidence = semantics.pullRequestEvidenceSummary({
