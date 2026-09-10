@@ -221,7 +221,7 @@ const prove124 = async () => {
     absent: "No stored credential",
   };
   const expectedSourceMeaning = sourceMeanings[effectiveSource] ?? "Credential availability unknown";
-  const expectedPersistedMeaning = persistedMeanState = persistedMeanings[persistedState] ?? "Stored credential state unavailable";
+  const expectedPersistedMeaning = persistedMeanings[persistedState] ?? "Stored credential state unavailable";
   const expectedCredentialSummary = `${expectedSourceMeaning} · ${expectedPersistedMeaning}.`;
   record(
     "124:credential-human-summary",
