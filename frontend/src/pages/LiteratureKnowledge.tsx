@@ -29,21 +29,30 @@ function entryValue(entry: LiteratureEntry): string {
   return entry.value_text ?? "Datum unavailable";
 }
 
+function sourceStateLabel(source: LiteratureSource): string {
+  if (source.backing && source.backing.availability !== "available") {
+    return `${source.state} · backing ${source.backing.availability}`;
+  }
+  return source.state;
+}
+
 function SourceDisclosure({ source }: Readonly<{ source: LiteratureSource }>) {
   const contentUrl = literatureContentUrl(source);
-  return <details className="final-fusion__disclosure" data-source-id={source.id}>
+  const backingUnavailable = source.backing && source.backing.availability !== "available";
+  return <details className="final-fusion__disclosure" data-source-id={source.id} data-backing-availability={source.backing?.availability ?? "none"}>
     <summary className="final-fusion__disclosure-row">
       <span><strong>{source.title}</strong><small>{source.source_kind}{source.published_year ? ` · ${source.published_year}` : ""}</small></span>
-      <em>{source.state}</em>
+      <em>{sourceStateLabel(source)}</em>
     </summary>
     <div className="final-fusion__disclosure-body">
       <div className="final-fusion__detail-grid">
         <div>
           <h3>Source</h3>
+          {backingUnavailable ? <p role="status"><strong>Backing unavailable.</strong> Curation state is retained, but this source is not current usable evidence until its registered backing is restored.</p> : null}
           <p>{source.citation || "Citation metadata not recorded."}</p>
           <p>{source.publisher || "Publisher not recorded."}</p>
           <small>{source.source_ref}</small>
-          {source.backing ? <p>{source.backing.filename} · {source.backing.mime_type || "unknown MIME"}</p> : <p>No backing artifact registered.</p>}
+          {source.backing ? <p>{source.backing.filename || "Backing file metadata unavailable"} · {source.backing.mime_type || "unknown MIME"}</p> : <p>No backing artifact registered.</p>}
           {contentUrl ? <a className="final-fusion__link" href={contentUrl} target="_blank" rel="noreferrer">Open source</a> : <p>Safe preview unavailable.</p>}
         </div>
         <div>
