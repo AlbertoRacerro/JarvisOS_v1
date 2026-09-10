@@ -9,6 +9,7 @@ LiteratureState = Literal["raw", "review", "accepted"]
 LiteratureEntryKind = Literal["claim", "datum"]
 LiteratureLocatorKind = Literal["page", "line", "section"]
 LiteratureUsedByKind = Literal["parameter", "assumption", "artifact"]
+LiteratureBackingAvailability = Literal["available", "missing", "ineligible", "unsupported", "unsafe"]
 
 
 class StrictLiteratureModel(BaseModel):
@@ -34,8 +35,8 @@ class LiteratureEntryCreate(StrictLiteratureModel):
     unit: str | None = Field(default=None, max_length=128)
     status: LiteratureState = "raw"
     locator_kind: LiteratureLocatorKind | None = None
-    locator_start: int | None = Field(default=None, ge=0)
-    locator_end: int | None = Field(default=None, ge=0)
+    locator_start: int | None = Field(default=None, ge=1)
+    locator_end: int | None = Field(default=None, ge=1)
     context_text: str | None = Field(default=None, max_length=12000)
     request_key: str | None = Field(default=None, min_length=1, max_length=128)
 
@@ -47,6 +48,8 @@ class LiteratureEntryCreate(StrictLiteratureModel):
             raise ValueError("datum entries require value_number or value_text")
         if self.locator_kind is None and (self.locator_start is not None or self.locator_end is not None):
             raise ValueError("locator offsets require locator_kind")
+        if self.locator_kind is not None and self.locator_start is None:
+            raise ValueError("locator_kind requires locator_start")
         if self.locator_end is not None and self.locator_start is not None and self.locator_end < self.locator_start:
             raise ValueError("locator_end must be greater than or equal to locator_start")
         return self
@@ -54,9 +57,10 @@ class LiteratureEntryCreate(StrictLiteratureModel):
 
 class LiteratureBackingRead(StrictLiteratureModel):
     artifact_id: str
-    filename: str
+    filename: str | None
     mime_type: str | None
     sha256: str | None
+    availability: LiteratureBackingAvailability
     content_available: bool
     content_url: str | None
 
