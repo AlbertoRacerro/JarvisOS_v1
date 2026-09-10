@@ -126,7 +126,7 @@ function validateTemplate(template, name) {
 
 function validateFieldRule(rule, name, depth = 0) {
   if (!isObject(rule) || depth > 2) fail(`${name} invalid`);
-  for (const key of Object.keys(rule)) if (!['type','equals','in','min','fields'].includes(key)) fail(`${name} unknown key ${key}`);
+  for (const key of Object.keys(rule)) if (!['type','equals','in','min','minLength','fields'].includes(key)) fail(`${name} unknown key ${key}`);
   if (!JSON_TYPES.has(rule.type)) fail(`${name}.type invalid`);
   if ('equals' in rule && !['string','number','boolean'].includes(typeof rule.equals) && rule.equals !== null) fail(`${name}.equals invalid`);
   if ('in' in rule) {
@@ -134,6 +134,7 @@ function validateFieldRule(rule, name, depth = 0) {
     for (const value of rule.in) if (!['string','number','boolean'].includes(typeof value) && value !== null) fail(`${name}.in value invalid`);
   }
   if ('min' in rule && (rule.type !== 'integer' || !Number.isInteger(rule.min))) fail(`${name}.min requires integer type`);
+  if ('minLength' in rule && (!['string','nullable-string'].includes(rule.type) || !Number.isInteger(rule.minLength) || rule.minLength < 0 || rule.minLength > 10000)) fail(`${name}.minLength requires string-like type and bounded non-negative integer`);
   if ('fields' in rule) {
     if (rule.type !== 'object' && rule.type !== 'array') fail(`${name}.fields requires object or array type`);
     validateFields(rule.fields, `${name}.fields`, depth + 1);
@@ -194,6 +195,7 @@ function checkFields(value, fields, path = '$') {
     if ('equals' in rule && actual !== rule.equals) return { pass:false, detail:`${path}.${field} equality mismatch` };
     if ('in' in rule && !rule.in.includes(actual)) return { pass:false, detail:`${path}.${field} outside allowed set` };
     if ('min' in rule && actual < rule.min) return { pass:false, detail:`${path}.${field} below minimum` };
+    if ('minLength' in rule && actual !== null && actual.length < rule.minLength) return { pass:false, detail:`${path}.${field} below minimum length` };
     if ('fields' in rule) {
       if (rule.type === 'object') {
         const nested = checkFields(actual, rule.fields, `${path}.${field}`);
