@@ -56,7 +56,7 @@ export function pullRequestEvidenceSummary(value: UnknownRecord) {
     reviews: {
       total: reviews.length,
       approved: reviewCount((item) => String(item.state).toUpperCase() === "APPROVED" && item.stale !== true),
-      blocking: reviewCount((item) => String(item.state).toUpperCase() === "CHANGES_REQUESTED" && item.stale !== true),
+      changesRequested: reviewCount((item) => String(item.state).toUpperCase() === "CHANGES_REQUESTED" && item.stale !== true),
       stale: reviewCount((item) => item.stale === true)
     }
   };
