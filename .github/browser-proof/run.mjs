@@ -335,7 +335,9 @@ const prove140 = async () => {
       && displayedRemoteSha === trustedRemoteSha,
     `displayed=${displayedRemoteSha} trusted=${trustedRemoteSha ?? "missing"}`,
   );
-  const rawDeltaNode = runtimeDetails.locator("pre").first();
+  const rawDeltaDetails = runtimeDetails.locator("details").first();
+  await openTechnicalDetails(rawDeltaDetails);
+  const rawDeltaNode = rawDeltaDetails.locator("pre").first();
   await rawDeltaNode.waitFor({ state: "visible" });
   const rawDeltaText = await rawDeltaNode.innerText();
   const disclosedDelta = JSON.parse(rawDeltaText);
