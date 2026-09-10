@@ -58,13 +58,24 @@ const screenshot = async (name) => {
 };
 
 const openTechnicalDetails = async (details) => {
-  const summary = details.getByText("Technical details", { exact: true });
-  if (await details.evaluate((node) => node.open)) {
-    await summary.click();
-    if (await details.evaluate((node) => node.open)) throw new Error("Technical details did not close on interaction");
+  const summary = details.locator(":scope > summary").filter({ hasText: /^Technical details$/ });
+  if ((await summary.count()) !== 1) throw new Error("Technical details requires exactly one native summary control");
+  await summary.waitFor({ state: "visible" });
+  await summary.focus();
+  if (!(await summary.evaluate((node) => node === document.activeElement))) {
+    throw new Error("Technical details summary did not receive keyboard focus");
   }
-  await summary.click();
-  if (!(await details.evaluate((node) => node.open))) throw new Error("Technical details did not open on interaction");
+  const initiallyOpen = await details.evaluate((node) => node.open);
+  await summary.press("Enter");
+  const afterEnter = await details.evaluate((node) => node.open);
+  if (afterEnter === initiallyOpen) throw new Error("Technical details did not toggle with Enter");
+  await summary.press("Space");
+  const afterSpace = await details.evaluate((node) => node.open);
+  if (afterSpace === afterEnter) throw new Error("Technical details did not toggle with Space");
+  if (!afterSpace) {
+    await summary.press("Enter");
+    if (!(await details.evaluate((node) => node.open))) throw new Error("Technical details did not finish open");
+  }
 };
 
 const assertNoCodingMutationButtons = async (prefix) => {
@@ -199,19 +210,29 @@ const prove124 = async () => {
       && persistedState === serverCredential.persisted_state,
     `displayed=${credentialCombination} server=${serverCredential.effective_source}:${serverCredential.persisted_state}`,
   );
-  const expectedSummary = effectiveSource === "environment"
-    ? `Environment active · persisted ${persistedState}`
-    : effectiveSource === "invalid"
-      ? `Environment credential invalid · persisted ${persistedState}`
-      : effectiveSource === "unknown"
-        ? `Credential state unavailable · persisted ${persistedState}`
-        : effectiveSource === "secure_persisted"
-          ? `Secure persisted · ${persistedState}`
-          : `No effective credential · persisted ${persistedState}`;
+  const sourceMeanings = {
+    not_required: "No credential required",
+    environment: "Environment credential active",
+    secure_persisted: "Securely stored credential active",
+    invalid: "Environment credential invalid",
+    absent: "No effective credential",
+    unknown: "Credential availability unknown",
+  };
+  const persistedMeanings = {
+    usable: "Stored credential ready",
+    corrupted: "Stored credential damaged",
+    unavailable: "Secure credential store unavailable",
+    not_supported: "Stored credentials not supported",
+    absent: "No stored credential",
+  };
+  const expectedSourceMeaning = sourceMeanings[effectiveSource] ?? "Credential availability unknown";
+  const expectedPersistedMeaning = persistedMeanings[persistedState] ?? "Stored credential state unavailable";
   record(
     "124:credential-human-summary",
-    credentialSummaryText === expectedSummary && !credentialSummaryText.includes("_"),
-    `summary=${JSON.stringify(credentialSummaryText)} expected=${JSON.stringify(expectedSummary)}`,
+    credentialSummaryText.includes(expectedSourceMeaning)
+      && credentialSummaryText.includes(expectedPersistedMeaning)
+      && !credentialSummaryText.includes("_"),
+    `summary=${JSON.stringify(credentialSummaryText)} expected_source=${JSON.stringify(expectedSourceMeaning)} expected_persisted=${JSON.stringify(expectedPersistedMeaning)}`,
   );
   record(
     "124:credential-technical-disclosure",
@@ -258,7 +279,9 @@ const prove140 = async () => {
   await repositorySurface.getByText("Repository browsing is context-neutral. These explicit actions are exact-base 111/123 operations; they do not commit, apply, execute, push, create a PR, merge, or mutate STATUS.", { exact: true }).waitFor({ state: "visible" });
   const repositoryDetails = repositorySurface.locator("details").first();
   await openTechnicalDetails(repositoryDetails);
-  const resolvedCommitText = await repositoryDetails.getByText(/^Resolved commit · [0-9a-f]{40}$/).innerText();
+  const resolvedCommitNode = repositoryDetails.getByText(/^Resolved commit · [0-9a-f]{40}$/);
+  await resolvedCommitNode.waitFor({ state: "visible" });
+  const resolvedCommitText = await resolvedCommitNode.innerText();
   const displayedResolvedSha = resolvedCommitText.replace(/^Resolved commit · /, "").trim();
   record(
     "140:repository-disclosure",
@@ -311,7 +334,9 @@ const prove140 = async () => {
   );
   const runtimeDetails = runtimeSurface.locator("details").first();
   await openTechnicalDetails(runtimeDetails);
-  const localCommitText = await runtimeDetails.getByText(/^Local commit · /).innerText();
+  const localCommitNode = runtimeDetails.getByText(/^Local commit · [0-9a-f]{40}$/);
+  await localCommitNode.waitFor({ state: "visible" });
+  const localCommitText = await localCommitNode.innerText();
   const displayedLocalSha = localCommitText.replace(/^Local commit · /, "").trim();
   record("140:runtime-exact-local-commit", displayedLocalSha === expectedHead, `displayed=${displayedLocalSha} expected=${expectedHead}`);
   const remoteCommitNode = runtimeDetails.getByText(/^Remote commit · /);
@@ -326,7 +351,9 @@ const prove140 = async () => {
       && displayedRemoteSha === trustedRemoteSha,
     `displayed=${displayedRemoteSha} trusted=${trustedRemoteSha ?? "missing"}`,
   );
-  const rawDeltaText = await runtimeDetails.locator("pre").first().innerText();
+  const rawDeltaNode = runtimeDetails.locator("pre").first();
+  await rawDeltaNode.waitFor({ state: "visible" });
+  const rawDeltaText = await rawDeltaNode.innerText();
   const disclosedDelta = JSON.parse(rawDeltaText);
   const trustedDelta = runtimeTruth.semantic_delta;
   const canonicalRelations = new Set(["ahead", "behind", "diverged", "identical"]);
