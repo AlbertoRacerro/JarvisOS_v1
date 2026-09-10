@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
@@ -38,8 +38,8 @@ const context = await browser.newContext();
 const traceEnabled = artifactMode === "full";
 if (traceEnabled) await context.tracing.start({ screenshots: true, snapshots: true, sources: false });
 const page = await context.newPage();
-page.on("pageerror", (error) => assertions.push({ name: "pageerror", pass: false, detail: String(error) }));
-page.on("console", (message) => { if (message.type() === "error") assertions.push({ name: "console-error", pass: false, detail: message.text() }); });
+page.on("pageerror", (error) => assertions.push({ name: "pageerror", pass: false, detail: artifactMode === "metadata-only" ? "browser page error" : String(error) }));
+page.on("console", (message) => { if (message.type() === "error") assertions.push({ name: "console-error", pass: false, detail: artifactMode === "metadata-only" ? "browser console error" : message.text() }); });
 
 const regexFromTrusted = (value) => new RegExp(value);
 const locatorFromSpec = (spec, root = page) => {
@@ -137,7 +137,8 @@ finally {
 const failedAssertions = assertions.filter((item) => item.pass === false);
 if (verdict === "PASS" && failedAssertions.length > 0) { verdict = "FAIL"; failure = failure ?? `browser emitted ${failedAssertions.length} failed asynchronous assertion(s)`; }
 const backendLog = join(artifactDir, "backend.log");
-try { await readFile(backendLog); artifacts.push(backendLog); } catch (error) { if (error?.code !== "ENOENT") throw error; }
+if (artifactMode === "metadata-only") await rm(backendLog, { force:true });
+else try { await readFile(backendLog); artifacts.push(backendLog); } catch (error) { if (error?.code !== "ENOENT") throw error; }
 const digests = {};
 for (const path of artifacts) digests[path.split("/").at(-1)] = createHash("sha256").update(await readFile(path)).digest("hex");
 const manifest = { schema:"jarvisos.exact-head-browser-proof.v1", repository, pr_number:prNumber ? Number(prNumber) : null, pr_base_sha:prBaseSha, expected_head_sha:expectedHead, resolved_pr_head_sha:resolvedHead, checked_out_head_sha:checkedOutHead, controller_sha:controllerSha, workflow_run_id:runId, plan_id:planId, artifact_mode:artifactMode, browser:"chromium", playwright_version:"1.55.0", started_at:startedAt, ended_at:new Date().toISOString(), assertions, artifacts:digests, verdict, failure };
