@@ -9,6 +9,7 @@ import {
 } from "../api/literature";
 
 type Props = Readonly<{
+  kind: "literature";
   workspaceId: string | null;
   onWorkspaceChange: (workspaceId: string) => void;
 }>;
