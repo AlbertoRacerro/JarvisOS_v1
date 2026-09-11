@@ -19,6 +19,7 @@ PROJECT_SEARCH_KINDS: tuple[ProjectSearchKind, ...] = (
 _KIND_ORDER = {kind: index for index, kind in enumerate(PROJECT_SEARCH_KINDS)}
 _TIER_ORDER = {"exact": 0, "prefix": 1, "contains": 2}
 _MAX_OWNER_ITEMS = 100
+_MAX_MODELING_SCAN_ITEMS = _MAX_OWNER_ITEMS + 1
 _MODELING_KINDS = ("requirement", "parameter", "assumption", "decision")
 _MODELING_STATUSES = {
     "requirement": ["draft", "active", "retired"],
@@ -26,6 +27,10 @@ _MODELING_STATUSES = {
     "assumption": ["proposed", "accepted", "rejected", "superseded"],
     "decision": ["draft", "proposed", "accepted", "rejected", "superseded", "active", "retired"],
 }
+
+
+class ProjectSearchCapacityError(RuntimeError):
+    pass
 
 
 def _nonempty(values: Iterable[str | None]) -> list[str]:
@@ -69,12 +74,15 @@ def _modeling_results(workspace_id: str, query: str, kinds: list[str]) -> list[P
         kinds=kinds,
         statuses_by_kind={kind: _MODELING_STATUSES[kind] for kind in kinds},
         ids=None,
-        query=query,
-        max_items_per_kind=_MAX_OWNER_ITEMS,
+        query=None,
+        max_items_per_kind=_MAX_MODELING_SCAN_ITEMS,
     )
     results: list[ProjectSearchResult] = []
     for kind in kinds:
-        for record in selected[kind]:
+        records = selected[kind]
+        if len(records) > _MAX_OWNER_ITEMS:
+            raise ProjectSearchCapacityError(f"Project Basis search exceeds bounded {kind} scan capacity.")
+        for record in records:
             if kind == "requirement":
                 fields = {
                     "statement": record.statement,
