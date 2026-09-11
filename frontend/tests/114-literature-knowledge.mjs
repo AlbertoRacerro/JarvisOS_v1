@@ -8,7 +8,7 @@ const [app, api, page] = await Promise.all([
 ]);
 
 assert.match(app, /case "memory-literature"/);
-assert.match(app, /<LiteratureKnowledge workspaceId=/);
+assert.match(app, /<LiteratureKnowledge\s+kind="literature"\s+workspaceId=/);
 assert.match(api, /\/literature\/sources/);
 
 assert.match(page, /Loading literature…/);
