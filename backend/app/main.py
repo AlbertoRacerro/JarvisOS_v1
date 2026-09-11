@@ -27,6 +27,7 @@ from app.modules.memory.literature_routes import router as literature_router
 from app.modules.memory.routes import router as memory_router
 from app.modules.modeling.routes import router as modeling_router
 from app.modules.project_knowledge.routes import router as project_knowledge_router
+from app.modules.project_search.routes import router as project_search_router
 from app.modules.runner.local_python import execution_ownership_state
 from app.modules.runner.recovery import (
     live_stranded_runner_working_dirs,
@@ -140,6 +141,7 @@ def create_app() -> FastAPI:
     app.include_router(modeling_router)
     app.include_router(memory_router)
     app.include_router(literature_router)
+    app.include_router(project_search_router)
     app.include_router(runner_router)
     app.include_router(flowsheet_router)
     app.include_router(project_knowledge_router)
