@@ -150,6 +150,38 @@ def test_modeling_owner_overflow_fails_closed(monkeypatch) -> None:
         service.search_project("ws-1", query="reactor", kinds=["requirement"], limit=100)
 
 
+def test_decision_search_preserves_owner_defined_free_form_status(monkeypatch) -> None:
+    def modeling(*_args, **kwargs):
+        assert kwargs["statuses_by_kind"] == {"decision": None}
+        return {
+            "decision": [
+                SimpleNamespace(
+                    id="decision-1",
+                    title="Reactor material",
+                    decision_text="Use alloy 625",
+                    rationale="Corrosion margin",
+                    notes=None,
+                    status="owner-defined-review",
+                )
+            ]
+        }
+
+    monkeypatch.setattr(service, "select_context_records", modeling)
+    result = service.search_project(
+        "ws-1",
+        query="reactor",
+        kinds=["decision"],
+        limit=10,
+    )
+
+    assert [item.stable_ref for item in result.items] == ["decision:decision-1"]
+    assert result.items[0].lifecycle_or_status == "owner-defined-review"
+
+
+def test_composed_summary_is_bounded_to_response_contract() -> None:
+    assert len(service._summary("x" * 12_100) or "") == 12_000
+
+
 def test_project_search_global_limit_is_deterministic_and_marks_truncation(monkeypatch) -> None:
     _install_fixtures(monkeypatch)
 
