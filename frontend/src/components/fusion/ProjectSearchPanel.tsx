@@ -16,7 +16,7 @@ function navigationTarget(result: ProjectSearchResult): string {
 }
 
 function resultCue(result: ProjectSearchResult): string {
-  const cues = [result.kind.replaceAll("_", " "), result.lifecycle_or_status, result.version_or_revision].filter(Boolean);
+  const cues = [result.kind.replace(/_/g, " "), result.lifecycle_or_status, result.version_or_revision].filter(Boolean);
   return cues.join(" · ");
 }
 
