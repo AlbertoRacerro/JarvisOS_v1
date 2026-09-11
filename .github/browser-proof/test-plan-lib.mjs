@@ -19,9 +19,9 @@ const requireNames = (id, required) => {
 };
 assert.equal(plans.get('113-memory-models').fixture, 'model-version-selection');
 assert.equal(plans.get('114-literature').fixture, 'literature-knowledge');
-assert.equal(plans.get('114-literature').forbidMutatingRequests, true, 'Literature proof must assert browser-side mutation neutrality');
+assert.equal(plans.get('114-literature').forbidMutatingRequests, undefined, 'Literature proof must scope mutation neutrality to browsing interactions');
 requireNames('113-memory-models', ['113:trusted-workspace-seed','113:empty-state','113:trusted-version-seed','113:select-a','113:a-exact-identity','113:select-b','113:a-deselected','113:b-exact-identity','113:no-mutation-affordance']);
-requireNames('114-literature', ['114:seed-workspace','114:empty-state','114:seed-sources','114:expand-a','114:expand-b','114:a-remains-expanded','114:b-remains-expanded','114:a-preview','114:b-preview','114:open-source-links','114:context-neutral-disclosure','114:no-promotion-affordance']);
+requireNames('114-literature', ['114:seed-workspace','114:empty-state','114:seed-sources','114:capture-mutation-baseline','114:expand-a','114:expand-b','114:a-remains-expanded','114:b-remains-expanded','114:a-preview','114:b-preview','114:open-source-links','114:context-neutral-disclosure','114:no-promotion-affordance','114:capture-mutation-after-browsing','114:no-new-mutating-requests']);
 requireNames('124-settings-ai', ['124:provider-settings','124:provider:scaleway','124:effective-source-server-match','124:persisted-state-server-match','124:credential-canonical-combination','124:credential-human-summary','124:credential-input-empty','124:no-secret-reference-leak','124:no-provider-execution-affordance','124:provider-egress-state']);
 requireNames('140-coding', ['140:repository-truth','140:repository-disclosure','140:repository-no-direct-mutation-buttons','140:runtime-truth','140:runtime-trusted-semantic-delta-schema','140:remote-ahead-summary','140:remote-behind-summary','140:changed-files-summary','140:alignment-rendering','140:local-commit-exact-head','140:local-commit-server-match','140:remote-commit-server-match','140:raw-semantic-delta-server-match','140:development-pipeline','140:runtime-no-direct-mutation-buttons']);
 for (const id of ['113-memory-models','124-settings-ai','140-coding']) assert(plans.get(id).steps.some((s) => s.op === 'open-technical-details'), `${id} must retain real Technical details interaction`);
@@ -30,8 +30,10 @@ assert(!runSource.includes('fixture !== "model-version-selection"'), 'generic ex
 assert(!workflowSource.includes('model_version_selection.py'), 'workflow must not execute a fixture-specific script');
 assert(!workflowSource.includes('none|model-version-selection'), 'workflow must not hard-code fixture identity choices');
 assert(runSource.includes('const mutatingBrowserRequests = []'), 'generic executor must record browser mutation evidence');
-assert(runSource.includes('if (plan.forbidMutatingRequests)'), 'generic executor must enforce trusted mutation-free plan policy');
+assert(runSource.includes('if (plan.forbidMutatingRequests)'), 'generic executor must preserve optional whole-run mutation-free policy');
+assert(runSource.includes('step.op === "capture-mutating-request-count"'), 'generic executor must expose bounded mutation-count checkpoints');
 assert(!runSource.includes('planId === "114-literature"'), 'mutation evidence must remain generic rather than spec-specific');
+assert(!runSource.includes('/ai/context/packs/preview'), 'generic executor must not special-case product endpoints');
 
 assert.equal(fixturePhaseAllowed('model-version-selection', 'workspace'), true);
 assert.equal(fixturePhaseAllowed('model-version-selection', 'versions'), true);
@@ -108,6 +110,8 @@ assert.throws(() => validatePlan({...base, steps:[{op:'run-fixture', name:'evil'
 assert.throws(() => validatePlan({...base, fixture:'none', steps:[{op:'run-fixture', name:'mismatch', fixture:'model-version-selection', phase:'versions'}]}));
 assert.throws(() => validatePlan({...base, steps:[{op:'run-fixture', name:'wrong-fixture', fixture:'literature-knowledge', phase:'workspace'}]}));
 assert.throws(() => validatePlan({...base, steps:[{op:'capture-attribute', name:'secret', locator:{kind:'label',text:'Key'}, attribute:'value', capture:'x'}]}));
+assert.throws(() => validatePlan({...base, steps:[{op:'capture-mutating-request-count', name:'bad', capture:''}]}));
+assert.throws(() => validatePlan({...base, steps:[{op:'capture-mutating-request-count', name:'bad', capture:'x', path:'/special-case'}]}));
 assert.throws(() => validatePlan({...base, steps:[{op:'assert-no-button-label', name:'bad', pattern:'x', caseInsensitive:'yes'}]}));
 assert.throws(() => validatePlan({...base, steps:[{op:'assert-json-contract', name:'bad', source:'x', pointer:'/x', contract:{fields:{x:{type:'function'}}}}]}));
 assert.throws(() => validatePlan({...base, steps:[{op:'assert-json-contract', name:'bad', source:'x', pointer:'/x', contract:{fields:{x:{type:'integer',minLength:1}}}}]}));
