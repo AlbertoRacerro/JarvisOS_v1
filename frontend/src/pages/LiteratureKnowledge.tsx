@@ -12,6 +12,8 @@ type Props = Readonly<{
   kind: "literature";
   workspaceId: string | null;
   onWorkspaceChange: (workspaceId: string) => void;
+  requestedSourceId?: string | null;
+  requestedEntryId?: string | null;
 }>;
 
 function locationLabel(entry: LiteratureEntry): string {
@@ -36,10 +38,10 @@ function sourceStateLabel(source: LiteratureSource): string {
   return source.state;
 }
 
-function SourceDisclosure({ source }: Readonly<{ source: LiteratureSource }>) {
+function SourceDisclosure({ source, selected, requestedEntryId }: Readonly<{ source: LiteratureSource; selected: boolean; requestedEntryId: string | null }>) {
   const contentUrl = literatureContentUrl(source);
   const backingUnavailable = source.backing && source.backing.availability !== "available";
-  return <details className="final-fusion__disclosure" data-source-id={source.id} data-backing-availability={source.backing?.availability ?? "none"}>
+  return <details className="final-fusion__disclosure" data-source-id={source.id} data-search-selected={selected ? "true" : undefined} data-backing-availability={source.backing?.availability ?? "none"} open={selected || undefined}>
     <summary className="final-fusion__disclosure-row">
       <span><strong>{source.title}</strong><small>{source.source_kind}{source.published_year ? ` · ${source.published_year}` : ""}</small></span>
       <em>{sourceStateLabel(source)}</em>
@@ -57,7 +59,7 @@ function SourceDisclosure({ source }: Readonly<{ source: LiteratureSource }>) {
         </div>
         <div>
           <h3>Claims & data</h3>
-          {source.entries.length === 0 ? <p>No structured claims or data have been curated for this source.</p> : source.entries.map((entry) => <article key={entry.id} className="final-fusion__record-card">
+          {source.entries.length === 0 ? <p>No structured claims or data have been curated for this source.</p> : source.entries.map((entry) => <article key={entry.id} className="final-fusion__record-card" data-entry-id={entry.id} data-search-selected={entry.id === requestedEntryId ? "true" : undefined} aria-current={entry.id === requestedEntryId ? "true" : undefined}>
             <div className="final-fusion__record-heading"><strong>{entry.entry_kind === "claim" ? "Claim" : "Datum"}</strong><em>{entry.status}</em></div>
             <p>{entryValue(entry)}</p>
             <small>{locationLabel(entry)} · {entry.provenance_ref}</small>
@@ -71,13 +73,14 @@ function SourceDisclosure({ source }: Readonly<{ source: LiteratureSource }>) {
   </details>;
 }
 
-export default function LiteratureKnowledge({ workspaceId, onWorkspaceChange }: Props) {
+export default function LiteratureKnowledge({ workspaceId, onWorkspaceChange, requestedSourceId = null, requestedEntryId = null }: Props) {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [sources, setSources] = useState<LiteratureSource[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const activeWorkspaceId = useMemo(() => workspaceId ?? workspaces[0]?.id ?? null, [workspaceId, workspaces]);
+  const requestedSelectionUnavailable = Boolean(requestedSourceId && !loading && !error && !sources.some((source) => source.id === requestedSourceId));
 
   useEffect(() => {
     let alive = true;
@@ -124,8 +127,9 @@ export default function LiteratureKnowledge({ workspaceId, onWorkspaceChange }: 
       <div className="final-fusion__summary"><strong>{total}</strong> sources · <span>Browsing does not add Jarvis context.</span></div>
       {loading ? <p className="final-fusion__source-empty">Loading literature…</p> : null}
       {error ? <div className="final-fusion__source-empty" role="alert"><strong>Literature unavailable</strong><p>{error}</p></div> : null}
+      {requestedSelectionUnavailable ? <div className="final-fusion__source-empty" role="status"><strong>Requested literature source is unavailable.</strong><p>The exact search identity no longer exists in the bounded owner read.</p></div> : null}
       {!loading && !error && sources.length === 0 ? <div className="final-fusion__source-empty"><strong>No literature sources yet</strong><p>Register a bounded source through the Literature API; fixture citations are never promoted into production facts.</p></div> : null}
-      <div>{sources.map((source) => <SourceDisclosure key={source.id} source={source} />)}</div>
+      <div>{sources.map((source) => <SourceDisclosure key={source.id} source={source} selected={source.id === requestedSourceId} requestedEntryId={source.id === requestedSourceId ? requestedEntryId : null} />)}</div>
     </section>
   </div>;
 }
