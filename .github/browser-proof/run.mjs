@@ -39,6 +39,15 @@ const context = await browser.newContext();
 const traceEnabled = artifactMode === "full";
 if (traceEnabled) await context.tracing.start({ screenshots: true, snapshots: true, sources: false });
 const page = await context.newPage();
+const proofOrigin = new URL(baseUrl).origin;
+const safeBrowserMethods = new Set(["GET", "HEAD", "OPTIONS"]);
+const mutatingBrowserRequests = [];
+page.on("request", (request) => {
+  const url = new URL(request.url());
+  if (url.origin === proofOrigin && !safeBrowserMethods.has(request.method())) {
+    mutatingBrowserRequests.push({ method: request.method(), path: url.pathname });
+  }
+});
 page.on("pageerror", (error) => assertions.push({ name: "pageerror", pass: false, detail: artifactMode === "metadata-only" ? "browser page error" : String(error) }));
 page.on("console", (message) => { if (message.type() === "error") assertions.push({ name: "console-error", pass: false, detail: artifactMode === "metadata-only" ? "browser console error" : message.text() }); });
 
@@ -124,7 +133,16 @@ async function execute(step, index) {
 }
 
 let verdict = "PASS"; let failure = null;
-try { for (const [index, step] of plan.steps.entries()) await execute(step, index); }
+try {
+  for (const [index, step] of plan.steps.entries()) await execute(step, index);
+  if (plan.forbidMutatingRequests) {
+    record(
+      "browser-mutating-requests",
+      mutatingBrowserRequests.length === 0,
+      mutatingBrowserRequests.length === 0 ? "no same-origin mutating browser requests observed" : `observed=${JSON.stringify(mutatingBrowserRequests)}`,
+    );
+  }
+}
 catch (error) { verdict = "FAIL"; failure = String(error?.stack ?? error); }
 finally {
   if (traceEnabled) {
