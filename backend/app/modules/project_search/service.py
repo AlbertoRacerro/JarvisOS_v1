@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from app.modules.memory.literature_service import list_literature_sources
-from app.modules.modeling.model_dossier import list_model_dossier_index
+from app.modules.memory.literature_search import search_literature_sources
+from app.modules.modeling.model_dossier_search import search_model_dossier_index
 from app.modules.modeling.service import select_context_records
 from app.modules.project_search.models import ProjectSearchKind, ProjectSearchResponse, ProjectSearchResult
 
@@ -88,7 +88,7 @@ def _modeling_results(workspace_id: str, query: str, kinds: list[str]) -> list[P
             elif kind == "parameter":
                 fields = {"name": record.name, "symbol": record.symbol, "notes": record.notes}
                 title = record.name
-                value = f"{record.value} {record.unit}" if record.value else None
+                value = f"{record.value} {record.unit}" if record.value is not None else None
                 summary = _summary(value, record.notes)
                 status = f"{record.lifecycle_state} · {record.value_status}"
                 source_refs = _nonempty([record.source_ref])
@@ -137,7 +137,7 @@ def _modeling_results(workspace_id: str, query: str, kinds: list[str]) -> list[P
 
 def _model_results(workspace_id: str, query: str) -> list[ProjectSearchResult]:
     results: list[ProjectSearchResult] = []
-    for model in list_model_dossier_index(workspace_id):
+    for model in search_model_dossier_index(workspace_id, query):
         for version in model.versions:
             fields = {
                 "title": model.title,
@@ -176,8 +176,7 @@ def _model_results(workspace_id: str, query: str) -> list[ProjectSearchResult]:
 
 def _literature_results(workspace_id: str, query: str, kinds: set[str]) -> list[ProjectSearchResult]:
     results: list[ProjectSearchResult] = []
-    page = list_literature_sources(workspace_id, offset=0, limit=_MAX_OWNER_ITEMS)
-    for source in page.items:
+    for source in search_literature_sources(workspace_id, query):
         if "literature_source" in kinds:
             matched = _match(
                 query,
