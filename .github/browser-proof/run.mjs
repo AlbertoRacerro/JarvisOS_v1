@@ -42,7 +42,7 @@ const page = await context.newPage();
 const proofOrigin = new URL(baseUrl).origin;
 const safeBrowserMethods = new Set(["GET", "HEAD", "OPTIONS"]);
 const mutatingBrowserRequests = [];
-page.on("request", (request) => {
+context.on("request", (request) => {
   const url = new URL(request.url());
   if (url.origin === proofOrigin && !safeBrowserMethods.has(request.method())) {
     mutatingBrowserRequests.push({ method: request.method(), path: url.pathname });
