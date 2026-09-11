@@ -7,6 +7,7 @@ from app.modules.project_search import routes, service
 
 
 def _modeling_fixture(*_args, **_kwargs):
+    assert _kwargs["query"] is None
     return {
         "requirement": [
             SimpleNamespace(
@@ -104,6 +105,49 @@ def test_project_search_orders_exact_prefix_contains_and_preserves_identity(monk
     assert entry.provenance_refs == ["literature_entry:entry-1"]
     assert entry.source_refs == ["literature_source:source-1"]
     assert entry.route_params["locatorStart"] == "12"
+
+
+def test_modeling_literal_prefix_and_contains_do_not_depend_on_fts_prefilter(monkeypatch) -> None:
+    monkeypatch.setattr(service, "search_model_dossier_index", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(service, "search_literature_sources", lambda *_args, **_kwargs: [])
+
+    def modeling(*_args, **_kwargs):
+        assert _kwargs["query"] is None
+        return {
+            "requirement": [
+                SimpleNamespace(
+                    id="req-1",
+                    statement="reactor",
+                    rationale=None,
+                    notes=None,
+                    status="active",
+                )
+            ]
+        }
+
+    monkeypatch.setattr(service, "select_context_records", modeling)
+    prefix = service.search_project("ws-1", query="react", kinds=["requirement"], limit=10)
+    contains = service.search_project("ws-1", query="actor", kinds=["requirement"], limit=10)
+    assert [item.match_tier for item in prefix.items] == ["prefix"]
+    assert [item.match_tier for item in contains.items] == ["contains"]
+
+
+def test_modeling_owner_overflow_fails_closed(monkeypatch) -> None:
+    monkeypatch.setattr(service, "search_model_dossier_index", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(service, "search_literature_sources", lambda *_args, **_kwargs: [])
+    rows = [
+        SimpleNamespace(
+            id=f"req-{index}",
+            statement="reactor",
+            rationale=None,
+            notes=None,
+            status="active",
+        )
+        for index in range(101)
+    ]
+    monkeypatch.setattr(service, "select_context_records", lambda *_args, **_kwargs: {"requirement": rows})
+    with pytest.raises(service.ProjectSearchCapacityError, match="bounded requirement scan capacity"):
+        service.search_project("ws-1", query="reactor", kinds=["requirement"], limit=100)
 
 
 def test_project_search_global_limit_is_deterministic_and_marks_truncation(monkeypatch) -> None:
