@@ -4,6 +4,7 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
+import { resolveTrustedFixture } from "./fixture-registry.mjs";
 import { checkJsonContract, inputEmptyResult, jsonPointer, loadTrustedPlan, noButtonLabelMatches } from "./plan-lib.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -85,9 +86,8 @@ const screenshot = async (name) => {
   artifacts.push(path);
 };
 const runFixture = (fixture, phase) => {
-  if (fixture !== "model-version-selection") throw new Error(`unsupported fixture ${fixture}`);
   if (!proofPython || !candidateUser) throw new Error("fixture requires bounded unprivileged Python identity");
-  const script = join(here, "fixtures", "model_version_selection.py");
+  const script = resolveTrustedFixture(fixture, phase, join(here, "fixtures"));
   const seedEnv = ["GITHUB_TOKEN=", "GH_TOKEN=", `JARVISOS_DATA_ROOT=${process.env.JARVISOS_DATA_ROOT ?? ""}`, `PYTHONPATH=${process.env.PYTHONPATH ?? ""}`];
   const seeded = spawnSync("sudo", ["-u", candidateUser, "-H", "env", ...seedEnv, proofPython, script, phase], { encoding: "utf8" });
   return { pass: seeded.status === 0, detail: seeded.stderr || seeded.stdout || `status=${seeded.status}` };
