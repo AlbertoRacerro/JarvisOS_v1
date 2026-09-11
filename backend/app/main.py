@@ -23,6 +23,7 @@ from app.modules.coding.runtime_truth import (
 )
 from app.modules.flowsheet.routes import router as flowsheet_router
 from app.modules.local_ai.runtime.lifecycle import create_local_ai_runtime_lifecycle_from_env
+from app.modules.memory.literature_routes import router as literature_router
 from app.modules.memory.routes import router as memory_router
 from app.modules.modeling.routes import router as modeling_router
 from app.modules.project_knowledge.routes import router as project_knowledge_router
@@ -38,6 +39,7 @@ from app.modules.workspaces.routes import router as workspaces_router
 RUNNER_RECOVERY_RECHECK_SECONDS = 0.25
 _SPA_RESERVED_ROOT_CLIENT_ROUTES = frozenset(
     {
+        "/memory/literature",
         "/memory/models",
         "/settings/ai",
         "/coding/repository",
@@ -137,6 +139,7 @@ def create_app() -> FastAPI:
     app.include_router(workspaces_router)
     app.include_router(modeling_router)
     app.include_router(memory_router)
+    app.include_router(literature_router)
     app.include_router(runner_router)
     app.include_router(flowsheet_router)
     app.include_router(project_knowledge_router)

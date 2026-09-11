@@ -11,10 +11,11 @@
     "test:100g": "node tests/100g-final-operator-ui-repair.mjs",
     "test:112": "node tests/112-project-knowledge-lifecycle.mjs",
     "test:113": "node tests/113-model-dossier.mjs",
+    "test:114": "node tests/114-literature-knowledge.mjs",
     "test:124": "node tests/124-provider-settings.mjs",
     "test:140": "node tests/140-coding-frontend-integration.mjs",
     "test:143": "node tests/143-operator-semantic-ux.mjs",
-    "build": "npm run test:058d && npm run test:100 && npm run test:100f && npm run test:100g && npm run test:112 && npm run test:113 && npm run test:124 && npm run test:140 && npm run test:143 && node tests/100-eyebrow-contrast.mjs && tsc && vite build",
+    "build": "npm run test:058d && npm run test:100 && npm run test:100f && npm run test:100g && npm run test:112 && npm run test:113 && npm run test:114 && npm run test:124 && npm run test:140 && npm run test:143 && node tests/100-eyebrow-contrast.mjs && tsc && vite build",
     "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {
