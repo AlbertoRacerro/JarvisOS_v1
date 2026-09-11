@@ -132,7 +132,7 @@ def test_request_key_replay_rejects_material_source_payload_change(client: TestC
     original = {
         "title": "Metadata source",
         "source_kind": "report",
-        "state": "candidate",
+        "state": "raw",
         "citation": "Original citation",
         "publisher": "Publisher A",
         "published_year": 2025,
@@ -156,7 +156,7 @@ def test_artifact_replay_rejects_material_source_payload_change(client: TestClie
     original = {
         "title": "Artifact source",
         "source_kind": "paper",
-        "state": "candidate",
+        "state": "raw",
         "artifact_id": artifact_id,
         "citation": "Original citation",
         "publisher": "Publisher A",
