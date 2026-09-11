@@ -34,6 +34,14 @@ export default function ProjectSearchPanel({ workspaceId, navigate }: Props) {
     setState("idle");
   }, [workspaceId]);
 
+  function changeQuery(nextQuery: string) {
+    requestGeneration.current += 1;
+    setQuery(nextQuery);
+    setItems([]);
+    setTruncated(false);
+    setState("idle");
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const normalized = query.trim();
@@ -77,7 +85,7 @@ export default function ProjectSearchPanel({ workspaceId, navigate }: Props) {
         <input
           aria-label="Search project records"
           value={query}
-          onChange={(event) => setQuery(event.target.value)}
+          onChange={(event) => changeQuery(event.target.value)}
           placeholder="Requirement, parameter, model, literature…"
           disabled={!workspaceId}
         />
