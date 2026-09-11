@@ -82,10 +82,15 @@ def test_project_search_orders_exact_prefix_contains_and_preserves_identity(monk
     assert [item.kind for item in result.items] == [
         "requirement",
         "model",
-        "literature_source",
         "literature_entry",
+        "literature_source",
     ]
-    assert [item.match_tier for item in result.items] == ["exact", "prefix", "contains", "prefix"][:0] or True
+    assert [item.match_tier for item in result.items] == [
+        "exact",
+        "prefix",
+        "prefix",
+        "contains",
+    ]
     assert result.items[0].stable_ref == "requirement:req-1"
     model = next(item for item in result.items if item.kind == "model")
     assert model.route == "/memory/models"
