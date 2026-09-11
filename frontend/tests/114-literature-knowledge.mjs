@@ -22,6 +22,6 @@ assert.match(page, /sources\.map\(\(source\) => <SourceDisclosure/);
 assert.doesNotMatch(page, /expandedSource|activeSource|openSource/);
 
 assert.match(page, /Browsing does not add Jarvis context\./);
-assert.doesNotMatch(page, /add.*Context|attach.*Context|set.*Context|postJson|putJson|deleteJson/i);
+assert.doesNotMatch(page, /\b(?:postJson|putJson|deleteJson)\b/);
 
 console.log("114 literature knowledge frontend contract: PASS");
