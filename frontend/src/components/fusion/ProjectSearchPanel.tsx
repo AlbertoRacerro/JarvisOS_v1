@@ -51,11 +51,11 @@ export default function ProjectSearchPanel({ workspaceId, navigate }: Props) {
     setState("loading");
     try {
       const response = await projectSearch(requestWorkspace, normalized, controller.signal);
-      if (requestGeneration.current !== generation || requestWorkspace !== workspaceId) return;
+      if (requestGeneration.current !== generation) return;
       setItems(response.items);
       setTruncated(response.truncated);
       setState(response.items.length === 0 ? "empty" : "results");
-    } catch (cause: unknown) {
+    } catch {
       if (requestGeneration.current !== generation) return;
       setItems([]);
       setTruncated(false);
