@@ -24,6 +24,7 @@ const STEP_KEYS = {
   'capture-text': ['op','name','locator','capture','stripPrefix'],
   'capture-attribute': ['op','name','locator','attribute','capture'],
   'capture-json-find': ['op','name','source','arrayPointer','field','equals','capture'],
+  'capture-mutating-request-count': ['op','name','capture'],
   'assert-value-equals': ['op','name','left','right'],
   'map-value': ['op','name','source','capture','cases'],
   'assert-text-template': ['op','name','locator','template'],
@@ -271,6 +272,8 @@ export function validatePlan(plan) {
     } else if (step.op === 'capture-json-find') {
       boundedString(step.source, `step ${index}.source`, 64); if (typeof step.arrayPointer !== 'string' || !step.arrayPointer.startsWith('/')) fail(`step ${index} arrayPointer invalid`);
       boundedString(step.field, `step ${index}.field`, 100); boundedString(step.equals, `step ${index}.equals`, 300); boundedString(step.capture, `step ${index}.capture`, 64);
+    } else if (step.op === 'capture-mutating-request-count') {
+      boundedString(step.capture, `step ${index}.capture`, 64);
     } else if (step.op === 'assert-value-equals') {
       validateValueRef(step.left, `step ${index}.left`); validateValueRef(step.right, `step ${index}.right`);
     } else if (step.op === 'map-value') {
