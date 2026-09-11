@@ -1,9 +1,10 @@
 import { readFile } from 'node:fs/promises';
 import { basename, join, resolve, sep } from 'node:path';
+import { FIXTURE_IDS, fixturePhaseAllowed } from './fixture-registry.mjs';
 
 export const PLAN_SCHEMA = 'jarvisos.browser-proof-plan.v1';
 export const PLAN_ID_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
-export const ALLOWED_FIXTURES = new Set(['none', 'model-version-selection']);
+export const ALLOWED_FIXTURES = FIXTURE_IDS;
 export const ALLOWED_ROLES = new Set(['button', 'heading', 'region', 'textbox', 'link']);
 export const ALLOWED_ATTRIBUTES = new Set(['aria-pressed', 'data-provider-egress-state']);
 export const ARTIFACT_MODES = new Set(['full', 'metadata-only']);
@@ -304,7 +305,7 @@ export function validatePlan(plan) {
       if (!Number.isInteger(step.count) || step.count < 0 || step.count > 1000) fail(`step ${index} count invalid`);
     } else if (step.op === 'run-fixture') {
       if (!ALLOWED_FIXTURES.has(step.fixture) || step.fixture === 'none') fail(`step ${index} fixture invalid`);
-      if (!['versions'].includes(step.phase)) fail(`step ${index} fixture phase invalid`);
+      if (!fixturePhaseAllowed(step.fixture, step.phase)) fail(`step ${index} fixture phase invalid`);
       if (step.fixture !== fixture) fail(`step ${index} fixture does not match plan fixture`);
     } else if (step.op === 'screenshot') {
       if (artifactMode !== 'full') fail(`step ${index} screenshot requires full artifact mode`);
