@@ -25,8 +25,10 @@ _MODELING_STATUSES = {
     "requirement": ["draft", "active", "retired"],
     "parameter": ["candidate", "literature", "measured", "validated", "accepted"],
     "assumption": ["proposed", "accepted", "rejected", "superseded"],
-    "decision": ["draft", "proposed", "accepted", "rejected", "superseded", "active", "retired"],
+    # Decision.status is owner-defined/free-form. None means all owner-visible statuses.
+    "decision": None,
 }
+_MAX_SUMMARY_CHARS = 12_000
 
 
 class ProjectSearchCapacityError(RuntimeError):
@@ -63,7 +65,8 @@ def _match(query: str, fields: dict[str, str | None]) -> tuple[str, list[str]] |
 
 def _summary(*values: str | None) -> str | None:
     parts = _nonempty(values)
-    return " · ".join(parts[:3]) if parts else None
+    summary = " · ".join(parts[:3]) if parts else None
+    return summary[:_MAX_SUMMARY_CHARS] if summary is not None else None
 
 
 def _modeling_results(workspace_id: str, query: str, kinds: list[str]) -> list[ProjectSearchResult]:
