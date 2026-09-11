@@ -1,9 +1,10 @@
 import { readFile } from 'node:fs/promises';
 import { basename, join, resolve, sep } from 'node:path';
+import { FIXTURE_IDS, fixturePhaseAllowed } from './fixture-registry.mjs';
 
 export const PLAN_SCHEMA = 'jarvisos.browser-proof-plan.v1';
 export const PLAN_ID_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
-export const ALLOWED_FIXTURES = new Set(['none', 'model-version-selection']);
+export const ALLOWED_FIXTURES = FIXTURE_IDS;
 export const ALLOWED_ROLES = new Set(['button', 'heading', 'region', 'textbox', 'link']);
 export const ALLOWED_ATTRIBUTES = new Set(['aria-pressed', 'data-provider-egress-state']);
 export const ARTIFACT_MODES = new Set(['full', 'metadata-only']);
@@ -236,13 +237,14 @@ export function noButtonLabelMatches(labels, pattern, caseInsensitive = false) {
 
 export function validatePlan(plan) {
   if (!isObject(plan)) fail('root must be an object');
-  for (const key of Object.keys(plan)) if (!['schema','id','fixture','artifactMode','steps'].includes(key)) fail(`unknown root key ${key}`);
+  for (const key of Object.keys(plan)) if (!['schema','id','fixture','artifactMode','forbidMutatingRequests','steps'].includes(key)) fail(`unknown root key ${key}`);
   if (plan.schema !== PLAN_SCHEMA) fail('unknown schema');
   validatePlanId(plan.id);
   const fixture = plan.fixture ?? 'none';
   if (!ALLOWED_FIXTURES.has(fixture)) fail(`unknown fixture ${fixture}`);
   const artifactMode = plan.artifactMode ?? 'full';
   if (!ARTIFACT_MODES.has(artifactMode)) fail(`unknown artifact mode ${artifactMode}`);
+  if ('forbidMutatingRequests' in plan && typeof plan.forbidMutatingRequests !== 'boolean') fail('forbidMutatingRequests must be boolean');
   if (!Array.isArray(plan.steps) || plan.steps.length < 1 || plan.steps.length > 200) fail('steps must contain 1..200 entries');
   for (const [index, step] of plan.steps.entries()) {
     if (!isObject(step)) fail(`step ${index} must be object`);
@@ -304,7 +306,7 @@ export function validatePlan(plan) {
       if (!Number.isInteger(step.count) || step.count < 0 || step.count > 1000) fail(`step ${index} count invalid`);
     } else if (step.op === 'run-fixture') {
       if (!ALLOWED_FIXTURES.has(step.fixture) || step.fixture === 'none') fail(`step ${index} fixture invalid`);
-      if (!['versions'].includes(step.phase)) fail(`step ${index} fixture phase invalid`);
+      if (!fixturePhaseAllowed(step.fixture, step.phase)) fail(`step ${index} fixture phase invalid`);
       if (step.fixture !== fixture) fail(`step ${index} fixture does not match plan fixture`);
     } else if (step.op === 'screenshot') {
       if (artifactMode !== 'full') fail(`step ${index} screenshot requires full artifact mode`);

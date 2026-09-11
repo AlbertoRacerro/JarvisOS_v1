@@ -3,6 +3,7 @@
   "id": "113-memory-models",
   "fixture": "model-version-selection",
   "steps": [
+    {"op":"run-fixture","name":"113:trusted-workspace-seed","fixture":"model-version-selection","phase":"workspace"},
     {"op":"navigate","name":"113:memory-models","route":"/memory/models"},
     {"op":"assert-visible","name":"113:empty-state","locator":{"kind":"text","text":"No model versions","exact":true}},
     {"op":"screenshot","name":"113:empty-screenshot","file":"empty"},

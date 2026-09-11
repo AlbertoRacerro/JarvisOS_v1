@@ -4,6 +4,7 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
+import { resolveTrustedFixture } from "./fixture-registry.mjs";
 import { checkJsonContract, inputEmptyResult, jsonPointer, loadTrustedPlan, noButtonLabelMatches } from "./plan-lib.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -38,6 +39,15 @@ const context = await browser.newContext();
 const traceEnabled = artifactMode === "full";
 if (traceEnabled) await context.tracing.start({ screenshots: true, snapshots: true, sources: false });
 const page = await context.newPage();
+const proofOrigin = new URL(baseUrl).origin;
+const safeBrowserMethods = new Set(["GET", "HEAD", "OPTIONS"]);
+const mutatingBrowserRequests = [];
+context.on("request", (request) => {
+  const url = new URL(request.url());
+  if (url.origin === proofOrigin && !safeBrowserMethods.has(request.method())) {
+    mutatingBrowserRequests.push({ method: request.method(), path: url.pathname });
+  }
+});
 page.on("pageerror", (error) => assertions.push({ name: "pageerror", pass: false, detail: artifactMode === "metadata-only" ? "browser page error" : String(error) }));
 page.on("console", (message) => { if (message.type() === "error") assertions.push({ name: "console-error", pass: false, detail: artifactMode === "metadata-only" ? "browser console error" : message.text() }); });
 
@@ -85,9 +95,8 @@ const screenshot = async (name) => {
   artifacts.push(path);
 };
 const runFixture = (fixture, phase) => {
-  if (fixture !== "model-version-selection") throw new Error(`unsupported fixture ${fixture}`);
   if (!proofPython || !candidateUser) throw new Error("fixture requires bounded unprivileged Python identity");
-  const script = join(here, "fixtures", "model_version_selection.py");
+  const script = resolveTrustedFixture(fixture, phase, join(here, "fixtures"));
   const seedEnv = ["GITHUB_TOKEN=", "GH_TOKEN=", `JARVISOS_DATA_ROOT=${process.env.JARVISOS_DATA_ROOT ?? ""}`, `PYTHONPATH=${process.env.PYTHONPATH ?? ""}`];
   const seeded = spawnSync("sudo", ["-u", candidateUser, "-H", "env", ...seedEnv, proofPython, script, phase], { encoding: "utf8" });
   return { pass: seeded.status === 0, detail: seeded.stderr || seeded.stdout || `status=${seeded.status}` };
@@ -124,7 +133,16 @@ async function execute(step, index) {
 }
 
 let verdict = "PASS"; let failure = null;
-try { for (const [index, step] of plan.steps.entries()) await execute(step, index); }
+try {
+  for (const [index, step] of plan.steps.entries()) await execute(step, index);
+  if (plan.forbidMutatingRequests) {
+    record(
+      "browser-mutating-requests",
+      mutatingBrowserRequests.length === 0,
+      mutatingBrowserRequests.length === 0 ? "no same-origin mutating browser requests observed" : `observed=${JSON.stringify(mutatingBrowserRequests)}`,
+    );
+  }
+}
 catch (error) { verdict = "FAIL"; failure = String(error?.stack ?? error); }
 finally {
   if (traceEnabled) {
