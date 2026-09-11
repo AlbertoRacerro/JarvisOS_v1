@@ -261,6 +261,18 @@ def get_literature_source(workspace_id: str, source_id: str) -> LiteratureSource
         return _source_read(connection, _source_row(connection, workspace_id, source_id))
 
 
+def _source_payload_matches(row, payload: LiteratureSourceCreate) -> bool:
+    return (
+        str(row["title"]) == payload.title
+        and str(row["source_kind"]) == payload.source_kind
+        and str(row["state"]) == payload.state
+        and row["artifact_id"] == payload.artifact_id
+        and row["citation"] == payload.citation
+        and row["publisher"] == payload.publisher
+        and row["published_year"] == payload.published_year
+    )
+
+
 def create_literature_source(workspace_id: str, payload: LiteratureSourceCreate) -> LiteratureSourceRead:
     now = utc_now()
     with open_sqlite_connection() as connection:
@@ -278,10 +290,10 @@ def create_literature_source(workspace_id: str, payload: LiteratureSourceCreate)
                 (workspace_id, payload.artifact_id),
             ).fetchone()
             if existing is not None:
-                if str(existing["title"]) != payload.title or str(existing["source_kind"]) != payload.source_kind:
+                if not _source_payload_matches(existing, payload):
                     raise LiteratureError(
                         "literature_duplicate_artifact_conflict",
-                        "Backing artifact is already registered to a different literature source identity.",
+                        "Backing artifact is already registered to a different literature source payload.",
                         status_code=409,
                     )
                 return _source_read(connection, existing)
@@ -291,7 +303,7 @@ def create_literature_source(workspace_id: str, payload: LiteratureSourceCreate)
                 (workspace_id, payload.request_key),
             ).fetchone()
             if existing is not None:
-                if str(existing["title"]) != payload.title or str(existing["source_kind"]) != payload.source_kind:
+                if not _source_payload_matches(existing, payload):
                     raise LiteratureError(
                         "literature_request_key_conflict",
                         "request_key was already used for a different source payload.",
