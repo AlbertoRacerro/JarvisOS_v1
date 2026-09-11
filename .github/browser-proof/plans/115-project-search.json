@@ -34,8 +34,8 @@
     {"op":"fill","name":"115:enter-literature-query","locator":{"kind":"label","text":"Search project records","exact":true},"value":"reactor"},
     {"op":"click","name":"115:submit-literature-search","locator":{"kind":"role","role":"button","name":"Search","exact":true}},
     {"op":"click","name":"115:open-literature-entry","locator":{"kind":"within","parent":{"kind":"css","selector":"article.final-fusion__record-card:has-text('Reactor search claim for browser proof.')"},"child":{"kind":"role","role":"button","name":"Open in literature","exact":true}}},
-    {"op":"assert-attribute","name":"115:literature-source-exact-selection","locator":{"kind":"css","selector":"details[data-source-id='proof-search-source']"},"attribute":"data-search-selected","equals":"true"},
-    {"op":"assert-attribute","name":"115:literature-entry-exact-selection","locator":{"kind":"css","selector":"article[data-entry-id='proof-search-entry']"},"attribute":"aria-current","equals":"true"},
+    {"op":"assert-visible","name":"115:literature-source-exact-selection","locator":{"kind":"css","selector":"details[data-source-id='proof-search-source'][data-search-selected='true']"}},
+    {"op":"assert-visible","name":"115:literature-entry-exact-selection","locator":{"kind":"css","selector":"article[data-entry-id='proof-search-entry'][aria-current='true']"}},
     {"op":"screenshot","name":"115:search-proof","file":"project-search-exact-navigation"}
   ]
 }
