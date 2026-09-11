@@ -127,6 +127,50 @@ def test_source_entry_provenance_used_by_and_safe_content(client: TestClient) ->
     assert content.headers["content-disposition"].startswith("inline")
 
 
+def test_request_key_replay_rejects_material_source_payload_change(client: TestClient) -> None:
+    workspace_id, _ = _workspace_ids(client)
+    original = {
+        "title": "Metadata source",
+        "source_kind": "report",
+        "state": "candidate",
+        "citation": "Original citation",
+        "publisher": "Publisher A",
+        "published_year": 2025,
+        "request_key": "request-replay",
+    }
+    created = client.post(_source_url(workspace_id), json=original)
+    assert created.status_code == 201
+
+    changed = {**original, "state": "accepted"}
+    replay = client.post(_source_url(workspace_id), json=changed)
+    assert replay.status_code == 409
+    assert replay.json()["detail"]["code"] == "literature_request_key_conflict"
+
+
+def test_artifact_replay_rejects_material_source_payload_change(client: TestClient) -> None:
+    workspace_id, _ = _workspace_ids(client)
+    artifact_id = _artifact(
+        workspace_id,
+        build_paths().artifacts_dir / "literature" / "identity.pdf",
+    )
+    original = {
+        "title": "Artifact source",
+        "source_kind": "paper",
+        "state": "candidate",
+        "artifact_id": artifact_id,
+        "citation": "Original citation",
+        "publisher": "Publisher A",
+        "published_year": 2025,
+    }
+    created = client.post(_source_url(workspace_id), json=original)
+    assert created.status_code == 201
+
+    changed = {**original, "citation": "Different citation"}
+    replay = client.post(_source_url(workspace_id), json=changed)
+    assert replay.status_code == 409
+    assert replay.json()["detail"]["code"] == "literature_duplicate_artifact_conflict"
+
+
 def test_cross_workspace_artifact_is_rejected(client: TestClient) -> None:
     workspace_id, other_workspace_id = _workspace_ids(client)
     artifact_id = _artifact(
