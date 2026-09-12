@@ -33,7 +33,7 @@ A task-local commit without either a remote branch advance or this exact payload
 
 ## Automatic path
 
-When an OWNER-authored PR comment contains the Codex-specific marker, `.github/workflows/codex-result-delivery.yml` binds the immutable comment ID and full-body SHA-256, then dispatches the existing `cloud-delivery-bridge.yml` on trusted `master`.
+When a newly created PR comment carrying the Codex-specific marker is authored either by the repository OWNER or by the exact GitHub actor `chatgpt-codex-connector[bot]`, `.github/workflows/codex-result-delivery.yml` binds the immutable comment ID and full-body SHA-256, then dispatches the existing `cloud-delivery-bridge.yml` on trusted `master`.
 
 The dispatcher itself cannot apply code. The downstream bridge re-fetches the comment, checks the exact body digest, binds it to the open same-repository PR and exact remote head, parses the untrusted patch, rejects stale/unsafe/control paths, runs the fixed validation profile, and only then performs the existing guarded CAS push. CI/review/proof remain authoritative after materialization.
 
@@ -41,7 +41,7 @@ The dispatcher itself cannot apply code. The downstream bridge re-fetches the co
 
 - No Codex GitHub token or repository credential is exposed.
 - No push to `master`, automerge, force-push, branch deletion, or direct merge authority.
-- Only OWNER-authored newly created PR comments carrying both explicit markers can auto-dispatch.
+- Only newly created PR comments from the OWNER or exact allowlisted `chatgpt-codex-connector[bot]` actor, carrying both explicit markers, can auto-dispatch. No wildcard bot trust exists.
 - Existing manual `jarvis-cloud-delivery:v1` payloads do not auto-dispatch unless the Codex-specific marker is also present.
 - The fallback is intentionally bounded to one bridge validation profile and current bridge size/path limits. Mixed frontend/backend or oversized work must be split into sequential bounded tasks after each remote head advance, or materialized builder-native.
 - If Codex cannot produce a valid payload, builders immediately reconstruct/materialize from canonical remote truth rather than waiting on the sandbox artifact.
