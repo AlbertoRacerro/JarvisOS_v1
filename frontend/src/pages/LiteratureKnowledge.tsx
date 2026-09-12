@@ -129,7 +129,7 @@ export default function LiteratureKnowledge({ workspaceId, onWorkspaceChange, re
       {error ? <div className="final-fusion__source-empty" role="alert"><strong>Literature unavailable</strong><p>{error}</p></div> : null}
       {requestedSelectionUnavailable ? <div className="final-fusion__source-empty" role="status"><strong>Requested literature source is unavailable.</strong><p>The exact search identity no longer exists in the bounded owner read.</p></div> : null}
       {!loading && !error && sources.length === 0 ? <div className="final-fusion__source-empty"><strong>No literature sources yet</strong><p>Register a bounded source through the Literature API; fixture citations are never promoted into production facts.</p></div> : null}
-      <div>{sources.map((source) => <SourceDisclosure key={source.id} source={source} selected={source.id === requestedSourceId} requestedEntryId={source.id === requestedSourceId ? requestedEntryId : null} />)}</div>
+      <div className="final-fusion__source-list">{sources.map((source) => <SourceDisclosure key={source.id} source={source} selected={source.id === requestedSourceId} requestedEntryId={source.id === requestedSourceId ? requestedEntryId : null} />)}</div>
     </section>
   </div>;
 }
