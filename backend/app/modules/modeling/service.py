@@ -1,6 +1,5 @@
-from collections.abc import Mapping, Sequence
-
 import sqlite3
+from collections.abc import Mapping, Sequence
 from uuid import uuid4
 
 from app.core.database import open_sqlite_connection
