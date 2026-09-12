@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
   previewKnowledgeContext,
@@ -31,8 +31,10 @@ export default function JarvisKnowledgeActions({ workspaceId, routeId, stableRef
   const [proposal, setProposal] = useState<KnowledgeProposal | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const selectionGeneration = useRef(0);
 
   useEffect(() => {
+    selectionGeneration.current += 1;
     setPreview(null);
     setProposal(null);
     setIntent("");
@@ -46,31 +48,37 @@ export default function JarvisKnowledgeActions({ workspaceId, routeId, stableRef
 
   const addContext = async () => {
     if (!workspaceId || !stableRef || busy) return;
+    const generation = selectionGeneration.current;
     setBusy(true);
     setError(null);
     setProposal(null);
     try {
-      setPreview(await previewKnowledgeContext(workspaceId, routeId, owner, stableRef));
+      const nextPreview = await previewKnowledgeContext(workspaceId, routeId, owner, stableRef);
+      if (generation === selectionGeneration.current) setPreview(nextPreview);
     } catch (caught) {
+      if (generation !== selectionGeneration.current) return;
       setPreview(null);
       setError(caught instanceof Error ? caught.message : "Exact context preview failed");
     } finally {
-      setBusy(false);
+      if (generation === selectionGeneration.current) setBusy(false);
     }
   };
 
   const propose = async () => {
     const text = intent.trim();
     if (!preview || !text || busy) return;
+    const generation = selectionGeneration.current;
     setBusy(true);
     setError(null);
     setProposal(null);
     try {
-      setProposal(await proposeKnowledgeAction(preview, text));
+      const nextProposal = await proposeKnowledgeAction(preview, text);
+      if (generation === selectionGeneration.current) setProposal(nextProposal);
     } catch (caught) {
+      if (generation !== selectionGeneration.current) return;
       setError(caught instanceof Error ? caught.message : "Knowledge proposal failed");
     } finally {
-      setBusy(false);
+      if (generation === selectionGeneration.current) setBusy(false);
     }
   };
 
