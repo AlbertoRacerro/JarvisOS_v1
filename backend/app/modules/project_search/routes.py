@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+from typing import cast
+
 from fastapi import APIRouter, HTTPException, Query
 
+from app.modules.memory.literature_search import LiteratureSearchCapacityError
+from app.modules.modeling.model_dossier_search import ModelDossierSearchCapacityError
 from app.modules.project_search.models import ProjectSearchKind, ProjectSearchResponse
-from app.modules.project_search.service import PROJECT_SEARCH_KINDS, search_project
+from app.modules.project_search.service import PROJECT_SEARCH_KINDS, ProjectSearchCapacityError, search_project
 
 router = APIRouter(tags=["project-search"])
 _ALLOWED_KINDS = set(PROJECT_SEARCH_KINDS)
@@ -20,7 +24,7 @@ def _parse_kinds(raw: list[str] | None) -> list[ProjectSearchKind] | None:
     unknown = [value for value in values if value not in _ALLOWED_KINDS]
     if unknown:
         raise HTTPException(status_code=422, detail=f"unsupported project-search kind: {unknown[0]}")
-    return list(dict.fromkeys(values))  # type: ignore[return-value]
+    return [cast(ProjectSearchKind, value) for value in dict.fromkeys(values)]
 
 
 @router.get("/workspaces/{workspace_id}/project-search", response_model=ProjectSearchResponse)
@@ -40,3 +44,9 @@ def project_search_endpoint(
         if str(exc) == "Workspace not found.":
             raise HTTPException(status_code=404, detail="Workspace not found.") from exc
         raise
+    except (
+        ProjectSearchCapacityError,
+        ModelDossierSearchCapacityError,
+        LiteratureSearchCapacityError,
+    ) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
