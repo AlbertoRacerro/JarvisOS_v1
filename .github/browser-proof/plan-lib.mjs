@@ -49,6 +49,16 @@ const boundedString = (value, name, max = 500) => {
 const safeField = (value, name) => {
   if (typeof value !== 'string' || !/^[A-Za-z_][A-Za-z0-9_-]{0,63}$/.test(value)) fail(`${name} must be a safe field name`);
 };
+const validateReadOnlySameOriginPostPaths = (paths) => {
+  if (!Array.isArray(paths) || paths.length < 1 || paths.length > 20) fail('readOnlySameOriginPostPaths must contain 1..20 exact paths');
+  if (new Set(paths).size !== paths.length) fail('readOnlySameOriginPostPaths must be unique');
+  for (const [index, path] of paths.entries()) {
+    boundedString(path, `readOnlySameOriginPostPaths[${index}]`, 300);
+    if (!/^\/[A-Za-z0-9_./%:@+-]*$/.test(path) || path.includes('?') || path.includes('#')) fail(`readOnlySameOriginPostPaths[${index}] must be an exact same-origin pathname`);
+    const segments = path.split('/').slice(1);
+    if (segments.some((segment) => segment === '' || segment === '.' || segment === '..')) fail(`readOnlySameOriginPostPaths[${index}] contains an ambiguous path segment`);
+  }
+};
 
 export function validatePlanId(planId) {
   if (typeof planId !== 'string' || !PLAN_ID_RE.test(planId)) fail('unsafe plan id');
@@ -239,7 +249,7 @@ export function noButtonLabelMatches(labels, pattern, caseInsensitive = false) {
 
 export function validatePlan(plan) {
   if (!isObject(plan)) fail('root must be an object');
-  for (const key of Object.keys(plan)) if (!['schema','id','fixture','artifactMode','forbidMutatingRequests','steps'].includes(key)) fail(`unknown root key ${key}`);
+  for (const key of Object.keys(plan)) if (!['schema','id','fixture','artifactMode','forbidMutatingRequests','readOnlySameOriginPostPaths','steps'].includes(key)) fail(`unknown root key ${key}`);
   if (plan.schema !== PLAN_SCHEMA) fail('unknown schema');
   validatePlanId(plan.id);
   const fixture = plan.fixture ?? 'none';
@@ -247,6 +257,7 @@ export function validatePlan(plan) {
   const artifactMode = plan.artifactMode ?? 'full';
   if (!ARTIFACT_MODES.has(artifactMode)) fail(`unknown artifact mode ${artifactMode}`);
   if ('forbidMutatingRequests' in plan && typeof plan.forbidMutatingRequests !== 'boolean') fail('forbidMutatingRequests must be boolean');
+  if ('readOnlySameOriginPostPaths' in plan) validateReadOnlySameOriginPostPaths(plan.readOnlySameOriginPostPaths);
   if (!Array.isArray(plan.steps) || plan.steps.length < 1 || plan.steps.length > 200) fail('steps must contain 1..200 entries');
   for (const [index, step] of plan.steps.entries()) {
     if (!isObject(step)) fail(`step ${index} must be object`);
