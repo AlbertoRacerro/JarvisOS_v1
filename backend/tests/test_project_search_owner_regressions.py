@@ -54,12 +54,13 @@ def test_owner_filters_retired_decisions_before_applying_match_bound() -> None:
     with open_sqlite_connection() as connection:
         _insert_workspace(connection, workspace_id)
         connection.executemany(
-            "INSERT INTO decisions (id, workspace_id, title, status, basis_lifecycle_state, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO decisions (id, workspace_id, title, decision_text, status, basis_lifecycle_state, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             [
                 (
                     f"a-retired-{index:03d}",
                     workspace_id,
                     f"noise needle tail {index}",
+                    "retired decision",
                     "accepted",
                     "retired",
                     now,
@@ -69,8 +70,8 @@ def test_owner_filters_retired_decisions_before_applying_match_bound() -> None:
             ],
         )
         connection.execute(
-            "INSERT INTO decisions (id, workspace_id, title, status, basis_lifecycle_state, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            ("z-active-exact", workspace_id, "needle", "accepted", "active", now, now),
+            "INSERT INTO decisions (id, workspace_id, title, decision_text, status, basis_lifecycle_state, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            ("z-active-exact", workspace_id, "needle", "active decision", "accepted", "active", now, now),
         )
         connection.commit()
 
