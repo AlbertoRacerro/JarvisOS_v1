@@ -7,7 +7,16 @@ _LITERATURE_MATCH_LIMIT = 101
 
 
 def _escape_like_literal(value: str) -> str:
-    return value.lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return value.casefold().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def _register_casefold(connection) -> None:
+    connection.create_function(
+        "JARVIS_CASEFOLD",
+        1,
+        lambda value: "" if value is None else str(value).casefold(),
+        deterministic=True,
+    )
 
 
 def _source_read(row) -> LiteratureSourceRead:
@@ -56,6 +65,7 @@ def search_literature_sources(workspace_id: str, query: str) -> list[LiteratureS
     """Return bounded literal source/entry matches without detail-only owner reads."""
     pattern = f"%{_escape_like_literal(query)}%"
     with open_sqlite_connection() as connection:
+        _register_casefold(connection)
         workspace = connection.execute("SELECT 1 FROM workspaces WHERE id = ?", (workspace_id,)).fetchone()
         if workspace is None:
             raise ValueError("Workspace not found.")
@@ -66,9 +76,9 @@ def search_literature_sources(workspace_id: str, query: str) -> list[LiteratureS
             FROM literature_sources
             WHERE workspace_id = ?
               AND (
-                LOWER(COALESCE(title, '')) LIKE ? ESCAPE '\\'
-                OR LOWER(COALESCE(citation, '')) LIKE ? ESCAPE '\\'
-                OR LOWER(COALESCE(publisher, '')) LIKE ? ESCAPE '\\'
+                JARVIS_CASEFOLD(COALESCE(title, '')) LIKE ? ESCAPE '\\'
+                OR JARVIS_CASEFOLD(COALESCE(citation, '')) LIKE ? ESCAPE '\\'
+                OR JARVIS_CASEFOLD(COALESCE(publisher, '')) LIKE ? ESCAPE '\\'
               )
             ORDER BY created_at DESC, id ASC
             LIMIT ?
@@ -107,11 +117,11 @@ def search_literature_sources(workspace_id: str, query: str) -> list[LiteratureS
              AND ls.workspace_id = le.workspace_id
             WHERE le.workspace_id = ?
               AND (
-                LOWER(COALESCE(le.statement, '')) LIKE ? ESCAPE '\\'
-                OR LOWER(COALESCE(le.value_text, '')) LIKE ? ESCAPE '\\'
-                OR LOWER(COALESCE(CAST(le.value_number AS TEXT), '')) LIKE ? ESCAPE '\\'
-                OR LOWER(COALESCE(le.unit, '')) LIKE ? ESCAPE '\\'
-                OR LOWER(COALESCE(le.context_text, '')) LIKE ? ESCAPE '\\'
+                JARVIS_CASEFOLD(COALESCE(le.statement, '')) LIKE ? ESCAPE '\\'
+                OR JARVIS_CASEFOLD(COALESCE(le.value_text, '')) LIKE ? ESCAPE '\\'
+                OR JARVIS_CASEFOLD(COALESCE(CAST(le.value_number AS TEXT), '')) LIKE ? ESCAPE '\\'
+                OR JARVIS_CASEFOLD(COALESCE(le.unit, '')) LIKE ? ESCAPE '\\'
+                OR JARVIS_CASEFOLD(COALESCE(le.context_text, '')) LIKE ? ESCAPE '\\'
               )
             ORDER BY le.created_at DESC, le.id ASC
             LIMIT ?
