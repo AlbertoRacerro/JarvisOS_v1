@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import cast
+from typing import Annotated, cast
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -30,9 +30,9 @@ def _parse_kinds(raw: list[str] | None) -> list[ProjectSearchKind] | None:
 @router.get("/workspaces/{workspace_id}/project-search", response_model=ProjectSearchResponse)
 def project_search_endpoint(
     workspace_id: str,
-    q: str = Query(min_length=1, max_length=200),
-    kinds: list[str] | None = Query(default=None),
-    limit: int = Query(default=30, ge=1, le=100),
+    q: Annotated[str, Query(min_length=1, max_length=200)],
+    kinds: Annotated[list[str] | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 30,
 ) -> ProjectSearchResponse:
     query = q.strip()
     if len(query) < 2 or len(query) > 200:
