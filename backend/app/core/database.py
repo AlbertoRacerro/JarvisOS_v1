@@ -14,6 +14,11 @@ from app.core.cad_link_schema import (
     CAD_LINK_SCHEMA_MIGRATION_RECORD,
     CAD_LINK_SCHEMA_STATEMENTS,
 )
+from app.core.development_schema import (
+    DEVELOPMENT_SCHEMA_INDEX_STATEMENTS,
+    DEVELOPMENT_SCHEMA_MIGRATION_RECORD,
+    DEVELOPMENT_SCHEMA_STATEMENTS,
+)
 from app.core.egress_schema import (
     EGRESS_SCHEMA_INDEX_STATEMENTS,
     EGRESS_SCHEMA_MIGRATION_RECORD,
@@ -136,6 +141,8 @@ def initialize_database() -> DatabaseInfo:
             connection.execute(statement)
         for statement in LITERATURE_SCHEMA_STATEMENTS:
             connection.execute(statement)
+        for statement in DEVELOPMENT_SCHEMA_STATEMENTS:
+            connection.execute(statement)
         for statement in [
             *SCHEMA_MIGRATION_STATEMENTS,
             *EGRESS_SCHEMA_MIGRATION_STATEMENTS,
@@ -168,6 +175,8 @@ def initialize_database() -> DatabaseInfo:
         for statement in PROJECT_KNOWLEDGE_INDEX_STATEMENTS:
             connection.execute(statement)
         for statement in LITERATURE_SCHEMA_INDEX_STATEMENTS:
+            connection.execute(statement)
+        for statement in DEVELOPMENT_SCHEMA_INDEX_STATEMENTS:
             connection.execute(statement)
         if _sqlite_fts5_available(connection):
             for statement in SCHEMA_FTS_STATEMENTS:
@@ -229,6 +238,10 @@ def is_database_initialized() -> bool:
         "project_knowledge_reconciliation_requests",
         "literature_sources",
         "literature_entries",
+        "roadmap_items",
+        "roadmap_dependencies",
+        "roadmap_object_links",
+        "calendar_allocations",
     }
     with open_sqlite_connection() as connection:
         rows = connection.execute(
@@ -309,6 +322,7 @@ def _record_schema_migrations(connection: sqlite3.Connection) -> None:
         PARAMETER_LIFECYCLE_MIGRATION_RECORD,
         PROJECT_KNOWLEDGE_MIGRATION_RECORD,
         LITERATURE_SCHEMA_MIGRATION_RECORD,
+        DEVELOPMENT_SCHEMA_MIGRATION_RECORD,
     ]
     for record in records:
         connection.execute(
