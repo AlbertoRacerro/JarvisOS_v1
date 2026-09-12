@@ -140,23 +140,30 @@ async function execute(step, index) {
 let verdict = "PASS"; let failure = null;
 try {
   for (const [index, step] of plan.steps.entries()) await execute(step, index);
-  if (plan.forbidMutatingRequests) {
-    record(
-      "browser-mutating-requests",
-      mutatingBrowserRequests.length === 0,
-      mutatingBrowserRequests.length === 0 ? "no same-origin mutating browser requests observed" : `observed=${JSON.stringify(mutatingBrowserRequests)}`,
-    );
-  }
 }
 catch (error) { verdict = "FAIL"; failure = String(error?.stack ?? error); }
-finally {
-  if (traceEnabled) {
-    const trace = join(artifactDir, `${planId}-trace.zip`);
+
+let teardownFailure = null;
+if (traceEnabled) {
+  const trace = join(artifactDir, `${planId}-trace.zip`);
+  try {
     await context.tracing.stop({ path: trace });
     artifacts.push(trace);
   }
-  await browser.close();
+  catch (error) { teardownFailure = `trace teardown failed: ${String(error?.stack ?? error)}`; }
 }
+try { await browser.close(); }
+catch (error) { teardownFailure = teardownFailure ?? `browser teardown failed: ${String(error?.stack ?? error)}`; }
+
+if (plan.forbidMutatingRequests) {
+  const pass = mutatingBrowserRequests.length === 0;
+  const detail = pass ? "no same-origin mutating browser requests observed through teardown" : `observed=${JSON.stringify(mutatingBrowserRequests)}`;
+  assertions.push({ name: "browser-mutating-requests", pass, detail });
+  if (!pass && verdict === "PASS") { verdict = "FAIL"; failure = `browser-mutating-requests: ${detail}`; }
+}
+if (teardownFailure && verdict === "PASS") { verdict = "FAIL"; failure = teardownFailure; }
+else if (teardownFailure && failure === null) failure = teardownFailure;
+
 const failedAssertions = assertions.filter((item) => item.pass === false);
 if (verdict === "PASS" && failedAssertions.length > 0) { verdict = "FAIL"; failure = failure ?? `browser emitted ${failedAssertions.length} failed asynchronous assertion(s)`; }
 const backendLog = join(artifactDir, "backend.log");
