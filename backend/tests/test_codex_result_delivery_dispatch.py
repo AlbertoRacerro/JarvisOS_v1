@@ -16,7 +16,13 @@ sys.modules[SPEC.name] = mod
 SPEC.loader.exec_module(mod)
 
 
-def _event(*, association: str = "OWNER", body: str | None = None, is_pr: bool = True) -> dict:
+def _event(
+    *,
+    association: str = "OWNER",
+    login: str = "AlbertoRacerro",
+    body: str | None = None,
+    is_pr: bool = True,
+) -> dict:
     payload = body or (
         f"{mod.CODEX_MARKER}\n"
         f"{mod.DELIVERY_MARKER}\n"
@@ -32,6 +38,7 @@ def _event(*, association: str = "OWNER", body: str | None = None, is_pr: bool =
         "comment": {
             "id": 12345,
             "author_association": association,
+            "user": {"login": login},
             "body": payload,
         },
     }
@@ -47,10 +54,24 @@ def test_owner_pr_comment_with_both_markers_is_bound_to_exact_body() -> None:
     ).hexdigest()
 
 
+def test_exact_codex_connector_bot_is_admitted_without_owner_association() -> None:
+    request = mod.request_from_event(
+        _event(association="NONE", login="chatgpt-codex-connector[bot]")
+    )
+    assert request.pr == 628
+
+
 @pytest.mark.parametrize("association", ["MEMBER", "COLLABORATOR", "CONTRIBUTOR", "NONE"])
-def test_non_owner_comment_is_refused(association: str) -> None:
-    with pytest.raises(mod.DispatchError, match="not an admitted maintainer"):
-        mod.request_from_event(_event(association=association))
+def test_other_non_owner_comments_are_refused(association: str) -> None:
+    with pytest.raises(mod.DispatchError, match="not an admitted maintainer/Codex actor"):
+        mod.request_from_event(_event(association=association, login="other-user"))
+
+
+def test_lookalike_bot_is_refused() -> None:
+    with pytest.raises(mod.DispatchError, match="not an admitted maintainer/Codex actor"):
+        mod.request_from_event(
+            _event(association="NONE", login="chatgpt-codex-connector-evil[bot]")
+        )
 
 
 def test_non_pr_comment_is_refused() -> None:
