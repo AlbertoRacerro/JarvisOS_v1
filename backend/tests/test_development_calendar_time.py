@@ -40,3 +40,16 @@ def test_interval_compares_resolved_instants() -> None:
         "Europe/Rome",
     )
     assert end.instant_utc > start.instant_utc
+
+
+def test_interval_resolves_fold_endpoints_independently() -> None:
+    start, end = resolve_interval(
+        datetime(2026, 10, 25, 2, 15),
+        datetime(2026, 10, 25, 2, 45),
+        "Europe/Rome",
+        start_utc_offset_minutes=120,
+        end_utc_offset_minutes=60,
+    )
+    assert start.utc_offset_minutes == 120
+    assert end.utc_offset_minutes == 60
+    assert end.instant_utc > start.instant_utc
