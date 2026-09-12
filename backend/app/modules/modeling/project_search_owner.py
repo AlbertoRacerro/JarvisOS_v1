@@ -46,6 +46,22 @@ def _register_casefold(connection) -> None:
     )
 
 
+def get_context_record_exact(workspace_id: str, kind: str, record_id: str) -> Any | None:
+    """Return one exact Project Basis owner projection without search semantics."""
+    table = _TABLES.get(kind)
+    model = _MODELS.get(kind)
+    if table is None or model is None:
+        return None
+    with open_sqlite_connection() as connection:
+        row = connection.execute(
+            f"SELECT * FROM {table} WHERE id = ? AND workspace_id = ?",
+            (record_id, workspace_id),
+        ).fetchone()
+        if row is None:
+            return None
+        return model.model_validate(dict(row))
+
+
 def search_context_records_literal(
     workspace_id: str,
     *,
