@@ -34,10 +34,12 @@ jobs:
         run: |
           node .github/browser-proof/test-plan-lib.mjs
           node .github/browser-proof/test-mutation-window.mjs
+          node .github/browser-proof/test-request-policy.mjs
           node .github/browser-proof/validate-contract.mjs
       - name: Syntax-check trusted executor and validator
         run: |
           node --check .github/browser-proof/run.mjs
           node --check .github/browser-proof/plan-lib.mjs
+          node --check .github/browser-proof/request-policy.mjs
           node --check .github/browser-proof/validate-plan.mjs
           node --check .github/browser-proof/validate-contract.mjs
