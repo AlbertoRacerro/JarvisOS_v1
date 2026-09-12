@@ -9,9 +9,24 @@ const FIXTURE_REGISTRY = Object.freeze({
     script: "literature_knowledge.py",
     phases: Object.freeze(["workspace", "sources"]),
   }),
+  "project-search": Object.freeze({
+    script: "project_search.py",
+    phases: Object.freeze(["workspace", "records"]),
+  }),
 });
 
 export const FIXTURE_IDS = new Set(["none", ...Object.keys(FIXTURE_REGISTRY)]);
+
+export function trustedFixturePaths(fixtureDir) {
+  const root = resolve(fixtureDir);
+  return Object.values(FIXTURE_REGISTRY).map(({ script }) => {
+    const path = resolve(join(root, script));
+    if (!path.startsWith(`${root}${sep}`) || basename(path) !== script) {
+      throw new Error(`trusted fixture path escaped registry root for ${script}`);
+    }
+    return path;
+  });
+}
 
 export function fixturePhaseAllowed(fixture, phase) {
   if (fixture === "none") return false;

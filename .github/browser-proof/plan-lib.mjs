@@ -17,6 +17,7 @@ const STEP_KEYS = {
   'assert-visible': ['op','name','locator'],
   'assert-count': ['op','name','locator','equals'],
   'click': ['op','name','locator'],
+  'fill': ['op','name','locator','value'],
   'open-technical-details': ['op','name','locator'],
   'assert-attribute': ['op','name','locator','attribute','equals'],
   'assert-input-empty': ['op','name','locator'],
@@ -259,6 +260,9 @@ export function validatePlan(plan) {
       if (!step.locator || !Number.isInteger(step.equals) || step.equals < 0 || step.equals > 1000) fail(`step ${index} invalid count`);
     } else if (['assert-visible','click','open-technical-details','assert-input-empty'].includes(step.op)) {
       if (!step.locator) fail(`step ${index} locator required`);
+    } else if (step.op === 'fill') {
+      if (!step.locator) fail(`step ${index} locator required`);
+      boundedString(step.value, `step ${index}.value`, 500);
     } else if (step.op === 'assert-attribute') {
       if (!step.locator || !ALLOWED_ATTRIBUTES.has(step.attribute) || typeof step.equals !== 'string') fail(`step ${index} invalid attribute assertion`);
     } else if (step.op === 'same-origin-get') {
