@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
+import sys
 from pathlib import Path
 
 import pytest
@@ -11,6 +12,7 @@ SCRIPT = ROOT / "scripts" / "codex_result_delivery_dispatch.py"
 SPEC = importlib.util.spec_from_file_location("codex_result_delivery_dispatch", SCRIPT)
 assert SPEC and SPEC.loader
 mod = importlib.util.module_from_spec(SPEC)
+sys.modules[SPEC.name] = mod
 SPEC.loader.exec_module(mod)
 
 
