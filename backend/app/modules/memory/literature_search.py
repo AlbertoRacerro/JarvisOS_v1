@@ -121,8 +121,8 @@ def search_literature_sources(workspace_id: str, query: str) -> list[LiteratureS
 
     sources: dict[str, LiteratureSourceRead] = {}
     for row in source_rows:
-        source = _source_read(row)
-        sources[source.id] = source
+        direct_source = _source_read(row)
+        sources[direct_source.id] = direct_source
     for row in entry_rows:
         source_id = str(row["source_id"])
         source = sources.get(source_id)
