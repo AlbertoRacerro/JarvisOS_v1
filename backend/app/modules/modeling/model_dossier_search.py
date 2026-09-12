@@ -7,13 +7,23 @@ _MODEL_SEARCH_MATCH_LIMIT = 101
 
 
 def _escape_like_literal(value: str) -> str:
-    return value.lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return value.casefold().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def _register_casefold(connection) -> None:
+    connection.create_function(
+        "JARVIS_CASEFOLD",
+        1,
+        lambda value: "" if value is None else str(value).casefold(),
+        deterministic=True,
+    )
 
 
 def search_model_dossier_index(workspace_id: str, query: str) -> list[ModelDossierIndexItem]:
     """Return bounded literal model/version matches from canonical dossier tables."""
     pattern = f"%{_escape_like_literal(query)}%"
     with open_sqlite_connection() as connection:
+        _register_casefold(connection)
         workspace = connection.execute("SELECT 1 FROM workspaces WHERE id = ?", (workspace_id,)).fetchone()
         if workspace is None:
             raise ValueError("Workspace not found.")
@@ -37,11 +47,11 @@ def search_model_dossier_index(workspace_id: str, query: str) -> list[ModelDossi
              AND mv.workspace_id = ms.workspace_id
             WHERE ms.workspace_id = ?
               AND (
-                LOWER(COALESCE(ms.title, '')) LIKE ? ESCAPE '\\'
-                OR LOWER(COALESCE(ms.engineering_question, '')) LIKE ? ESCAPE '\\'
-                OR LOWER(COALESCE(ms.scope, '')) LIKE ? ESCAPE '\\'
-                OR LOWER(COALESCE(mv.version_label, '')) LIKE ? ESCAPE '\\'
-                OR LOWER(COALESCE(mv.implementation_kind, '')) LIKE ? ESCAPE '\\'
+                JARVIS_CASEFOLD(COALESCE(ms.title, '')) LIKE ? ESCAPE '\\'
+                OR JARVIS_CASEFOLD(COALESCE(ms.engineering_question, '')) LIKE ? ESCAPE '\\'
+                OR JARVIS_CASEFOLD(COALESCE(ms.scope, '')) LIKE ? ESCAPE '\\'
+                OR JARVIS_CASEFOLD(COALESCE(mv.version_label, '')) LIKE ? ESCAPE '\\'
+                OR JARVIS_CASEFOLD(COALESCE(mv.implementation_kind, '')) LIKE ? ESCAPE '\\'
               )
             ORDER BY ms.created_at DESC, ms.id ASC, mv.created_at DESC, mv.id ASC
             LIMIT ?
