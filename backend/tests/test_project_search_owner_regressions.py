@@ -5,8 +5,8 @@ from app.modules.memory.literature_search import _escape_like_literal as escape_
 from app.modules.modeling.model_dossier_search import _escape_like_literal as escape_model_literal
 from app.modules.modeling.project_search_owner import (
     _escape_like_literal as escape_project_literal,
-    search_context_records_literal,
 )
+from app.modules.modeling.project_search_owner import search_context_records_literal
 
 
 def _insert_workspace(connection, workspace_id: str) -> None:
