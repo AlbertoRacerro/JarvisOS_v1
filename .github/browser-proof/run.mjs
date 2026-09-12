@@ -110,6 +110,7 @@ async function execute(step, index) {
   else if (step.op === "assert-visible") { await locatorFromSpec(step.locator).waitFor({ state: "visible" }); record(name, true, "locator visible"); }
   else if (step.op === "assert-count") { const count = await locatorFromSpec(step.locator).count(); record(name, count === step.equals, `count=${count} expected=${step.equals}`); }
   else if (step.op === "click") { await locatorFromSpec(step.locator).click(); record(name, true, "clicked trusted locator"); }
+  else if (step.op === "fill") { await locatorFromSpec(step.locator).fill(step.value); record(name, true, "filled trusted locator"); }
   else if (step.op === "open-technical-details") { await openTechnicalDetails(locatorFromSpec(step.locator)); record(name, true, "keyboard disclosure verified and left open"); }
   else if (step.op === "assert-attribute") { const value = await locatorFromSpec(step.locator).getAttribute(step.attribute); record(name, value === step.equals, `${step.attribute}=${JSON.stringify(value)} expected=${JSON.stringify(step.equals)}`); }
   else if (step.op === "assert-input-empty") { const locator = locatorFromSpec(step.locator); await locator.waitFor({ state: "visible" }); const result = inputEmptyResult(await locator.inputValue()); record(name, result.pass, result.detail); }
