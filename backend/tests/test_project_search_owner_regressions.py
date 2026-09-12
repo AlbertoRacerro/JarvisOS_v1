@@ -1,7 +1,12 @@
 from __future__ import annotations
 
 from app.core.database import initialize_database, open_sqlite_connection
-from app.modules.modeling.project_search_owner import search_context_records_literal
+from app.modules.memory.literature_search import _escape_like_literal as escape_literature_literal
+from app.modules.modeling.model_dossier_search import _escape_like_literal as escape_model_literal
+from app.modules.modeling.project_search_owner import (
+    _escape_like_literal as escape_project_literal,
+    search_context_records_literal,
+)
 
 
 def _insert_workspace(connection, workspace_id: str) -> None:
@@ -78,3 +83,29 @@ def test_owner_filters_retired_decisions_before_applying_match_bound() -> None:
     )
 
     assert [record.id for record in selected["decision"]] == ["z-active-exact"]
+
+
+def test_owner_unicode_casefold_matches_non_ascii_text() -> None:
+    initialize_database()
+    workspace_id = "ws-search-unicode-casefold"
+    now = "2026-09-12T00:00:00Z"
+    with open_sqlite_connection() as connection:
+        _insert_workspace(connection, workspace_id)
+        connection.execute(
+            "INSERT INTO requirements (id, workspace_id, statement, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+            ("unicode-requirement", workspace_id, "Über Reaktor", "active", now, now),
+        )
+        connection.commit()
+
+    selected = search_context_records_literal(
+        workspace_id,
+        kinds=["requirement"],
+        statuses_by_kind={"requirement": ["active"]},
+        query="über",
+        max_matches_per_kind=10,
+    )
+
+    assert [record.id for record in selected["requirement"]] == ["unicode-requirement"]
+    assert escape_project_literal("ÁCIDO_%") == "ácido\\_\\%"
+    assert escape_model_literal("ÁCIDO_%") == "ácido\\_\\%"
+    assert escape_literature_literal("ÁCIDO_%") == "ácido\\_\\%"
