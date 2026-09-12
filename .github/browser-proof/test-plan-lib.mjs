@@ -42,6 +42,10 @@ assert(runSource.includes('if (plan.forbidMutatingRequests)'), 'generic executor
 assert(runSource.includes('step.op === "capture-mutating-request-count"'), 'generic executor must expose bounded mutation-count checkpoints');
 assert(!runSource.includes('planId === "114-literature"'), 'mutation evidence must remain generic rather than spec-specific');
 assert(!runSource.includes('/ai/context/packs/preview'), 'generic executor must not special-case product endpoints');
+assert(runSource.includes('const ASSERTION_POLL_TIMEOUT_MS = 5_000'), 'count assertions must use a bounded controller-owned timeout');
+assert(runSource.includes('await page.waitForTimeout(ASSERTION_POLL_INTERVAL_MS)'), 'count assertions must poll for asynchronous rendering');
+assert(runSource.includes('page.getByRole("button", { name: forbiddenPattern })'), 'forbidden button checks must use accessible role names');
+assert(!runSource.includes('getByRole("button").allTextContents()'), 'forbidden button checks must not rely on inner text only');
 
 assert.equal(fixturePhaseAllowed('model-version-selection', 'workspace'), true);
 assert.equal(fixturePhaseAllowed('model-version-selection', 'versions'), true);
