@@ -68,7 +68,8 @@ MAX_INTENT_CHARS = 4_000
 MAX_PROPOSAL_BYTES = 128 * 1024
 
 _SECRET_ASSIGNMENT_PATTERN = re.compile(
-    r"(?i)\b(?:api[_ -]?key|password|passwd|secret|access[_ -]?token|refresh[_ -]?token|authorization)\b"
+    r"(?i)\b(?:api[_ -]?key|password|passwd|secret|token|access[_ -]?token|refresh[_ -]?token|"
+    r"aws[_ -]?secret[_ -]?access[_ -]?key|authorization)\b"
     r"\s*(?::|=)\s*[\"']?[^\s,\"'}]{8,}"
 )
 _SECRET_TOKEN_PATTERNS = (
@@ -477,6 +478,8 @@ class KnowledgeActionsService:
     def propose(self, payload: KnowledgeProposalRequest) -> dict[str, object]:
         try:
             _validate_route_refs(payload.workspace_id, payload.route_id, payload.exact_refs)
+            if _contains_secret_material([{"intent": payload.intent}]):
+                raise KnowledgeActionError("sensitive_context", "secret-bearing operator intent cannot enter proposal generation")
             request = JarvisContextRequest(
                 workspace_id=payload.workspace_id,
                 route=_route(payload.route_id),
@@ -525,6 +528,9 @@ class KnowledgeActionsService:
             else:
                 generated = _template_generated(payload)
                 generated_by = {"kind": "deterministic_template", "template_id": "knowledge-proposal-v1"}
+
+            if _contains_secret_material([{"proposal": generated.model_dump(mode="json")} ]):
+                raise KnowledgeActionError("sensitive_context", "secret-bearing proposal content cannot be returned")
 
             try:
                 current = require_dispatchable_preview(request, payload.expected_context_digest)
