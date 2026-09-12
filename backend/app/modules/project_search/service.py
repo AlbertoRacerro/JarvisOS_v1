@@ -68,15 +68,12 @@ def _summary(*values: str | None) -> str | None:
 def _modeling_results(workspace_id: str, query: str, kinds: list[str]) -> list[ProjectSearchResult]:
     if not kinds:
         return []
-    selected = cast(
-        dict[str, list[Any]],
-        search_context_records_literal(
-            workspace_id,
-            kinds=kinds,
-            statuses_by_kind={kind: _MODELING_STATUSES[kind] for kind in kinds},
-            query=query,
-            max_matches_per_kind=_MAX_OWNER_MATCHES,
-        ),
+    selected = search_context_records_literal(
+        workspace_id,
+        kinds=kinds,
+        statuses_by_kind={kind: _MODELING_STATUSES[kind] for kind in kinds},
+        query=query,
+        max_matches_per_kind=_MAX_OWNER_MATCHES,
     )
     results: list[ProjectSearchResult] = []
     for kind in kinds:
