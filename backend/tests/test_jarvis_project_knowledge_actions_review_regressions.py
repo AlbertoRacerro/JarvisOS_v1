@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 
 import app.modules.memory.jarvis_knowledge_actions as knowledge
@@ -56,6 +57,92 @@ def test_semantic_proposal_refuses_secret_bearing_exact_context_before_ai(monkey
 
     assert result == {"state": "refused", "reason": "sensitive_context"}
     assert calls == []
+
+
+def test_semantic_proposal_refuses_generic_token_assignment_before_ai(monkeypatch) -> None:
+    record = _Record(
+        "req-token",
+        "r1",
+        statement="Need bounded proof",
+        status="active",
+        notes="token=abcdefghijklmnop",
+    )
+    preview = _preview(monkeypatch, record)
+    calls: list[object] = []
+
+    def unexpected_runner(request):
+        calls.append(request)
+        raise AssertionError("generic token assignments must be refused before model dispatch")
+
+    result = knowledge.KnowledgeActionsService(auto_runner=unexpected_runner).propose(
+        knowledge.KnowledgeProposalRequest(
+            workspace_id="ws-1",
+            route_id="memory-project-basis",
+            intent="Clarify the requirement",
+            exact_refs=[JarvisExactRef.model_validate(preview["exact_refs"][0])],
+            expected_context_digest=str(preview["context_digest"]),
+            semantic=True,
+        )
+    )
+
+    assert result == {"state": "refused", "reason": "sensitive_context"}
+    assert calls == []
+
+
+def test_operator_intent_secret_is_refused_for_template_path(monkeypatch) -> None:
+    record = _Record("req-intent", "r1", statement="Need bounded proof", status="active")
+    preview = _preview(monkeypatch, record)
+
+    result = knowledge.KnowledgeActionsService().propose(
+        knowledge.KnowledgeProposalRequest(
+            workspace_id="ws-1",
+            route_id="memory-project-basis",
+            intent="Use token=abcdefghijklmnop when drafting the proposal",
+            exact_refs=[JarvisExactRef.model_validate(preview["exact_refs"][0])],
+            expected_context_digest=str(preview["context_digest"]),
+            semantic=False,
+        )
+    )
+
+    assert result == {"state": "refused", "reason": "sensitive_context"}
+
+
+def test_semantic_generated_secret_is_refused_before_response(monkeypatch) -> None:
+    record = _Record("req-generated", "r1", statement="Need bounded proof", status="active")
+    preview = _preview(monkeypatch, record)
+
+    def secret_runner(request):
+        return SimpleNamespace(
+            status="success",
+            response_text=json.dumps(
+                {
+                    "summary": "Keep token=abcdefghijklmnop for later",
+                    "proposed_items": ["Review bounded evidence"],
+                    "questions": [],
+                    "research_steps": [],
+                    "assumptions": [],
+                    "warnings": [],
+                    "authoritative_next_action": None,
+                }
+            ),
+            ledger_id="job-1",
+            selected_route_class="local",
+            provider_id="test",
+            model_id="test-model",
+        )
+
+    result = knowledge.KnowledgeActionsService(auto_runner=secret_runner).propose(
+        knowledge.KnowledgeProposalRequest(
+            workspace_id="ws-1",
+            route_id="memory-project-basis",
+            intent="Clarify the requirement",
+            exact_refs=[JarvisExactRef.model_validate(preview["exact_refs"][0])],
+            expected_context_digest=str(preview["context_digest"]),
+            semantic=True,
+        )
+    )
+
+    assert result == {"state": "refused", "reason": "sensitive_context"}
 
 
 def test_duplicate_stable_refs_preserve_111_deduplication(monkeypatch) -> None:
