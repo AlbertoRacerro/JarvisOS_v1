@@ -35,5 +35,12 @@ assert(runSource.includes('step.op === "capture-mutating-request-count"'));
 assert(runSource.includes('mutatingBrowserRequests.length'));
 assert(!runSource.includes('planId === "114-literature"'));
 assert(!runSource.includes('/ai/context/packs/preview'), 'generic executor must not special-case a product endpoint');
+const tracingStop = runSource.indexOf('await context.tracing.stop');
+const browserClose = runSource.indexOf('await browser.close()');
+const finalMutationAssessment = runSource.lastIndexOf('const pass = mutatingBrowserRequests.length === 0');
+assert(tracingStop >= 0 && browserClose >= 0 && finalMutationAssessment >= 0, 'executor must expose teardown and final mutation assessment');
+assert(tracingStop < finalMutationAssessment, 'late requests emitted during trace teardown must be observed before PASS');
+assert(browserClose < finalMutationAssessment, 'late requests emitted during browser close must be observed before PASS');
+assert(runSource.includes('teardownFailure') && runSource.includes('verdict = "FAIL"'), 'teardown failures must fail closed');
 
-console.log('browser-proof mutation-window primitive and Literature scoping PASS');
+console.log('browser-proof mutation-window primitive and teardown ordering PASS');

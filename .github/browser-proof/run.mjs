@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 import { resolveTrustedFixture } from "./fixture-registry.mjs";
 import { checkJsonContract, inputEmptyResult, jsonPointer, loadTrustedPlan } from "./plan-lib.mjs";
+import { isMutatingSameOriginRequest } from "./request-policy.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const planId = process.env.PROOF_PLAN_ID;
@@ -26,6 +27,7 @@ if (!planId || !artifactDir || !expectedHead || !resolvedHead || !checkedOutHead
 if (expectedHead !== resolvedHead || expectedHead !== checkedOutHead) throw new Error("exact-head identity mismatch before browser execution");
 
 const plan = await loadTrustedPlan(planId, join(here, "plans"));
+const readOnlySameOriginPostPaths = new Set(plan.readOnlySameOriginPostPaths ?? []);
 const artifactMode = plan.artifactMode ?? "full";
 await mkdir(artifactDir, { recursive: true });
 const startedAt = new Date().toISOString();
@@ -42,11 +44,10 @@ const traceEnabled = artifactMode === "full";
 if (traceEnabled) await context.tracing.start({ screenshots: true, snapshots: true, sources: false });
 const page = await context.newPage();
 const proofOrigin = new URL(baseUrl).origin;
-const safeBrowserMethods = new Set(["GET", "HEAD", "OPTIONS"]);
 const mutatingBrowserRequests = [];
 context.on("request", (request) => {
   const url = new URL(request.url());
-  if (url.origin === proofOrigin && !safeBrowserMethods.has(request.method())) {
+  if (url.origin === proofOrigin && isMutatingSameOriginRequest(request.method(), url.pathname, readOnlySameOriginPostPaths)) {
     mutatingBrowserRequests.push({ method: request.method(), path: url.pathname });
   }
 });
@@ -139,23 +140,30 @@ async function execute(step, index) {
 let verdict = "PASS"; let failure = null;
 try {
   for (const [index, step] of plan.steps.entries()) await execute(step, index);
-  if (plan.forbidMutatingRequests) {
-    record(
-      "browser-mutating-requests",
-      mutatingBrowserRequests.length === 0,
-      mutatingBrowserRequests.length === 0 ? "no same-origin mutating browser requests observed" : `observed=${JSON.stringify(mutatingBrowserRequests)}`,
-    );
-  }
 }
 catch (error) { verdict = "FAIL"; failure = String(error?.stack ?? error); }
-finally {
-  if (traceEnabled) {
-    const trace = join(artifactDir, `${planId}-trace.zip`);
+
+let teardownFailure = null;
+if (traceEnabled) {
+  const trace = join(artifactDir, `${planId}-trace.zip`);
+  try {
     await context.tracing.stop({ path: trace });
     artifacts.push(trace);
   }
-  await browser.close();
+  catch (error) { teardownFailure = `trace teardown failed: ${String(error?.stack ?? error)}`; }
 }
+try { await browser.close(); }
+catch (error) { teardownFailure = teardownFailure ?? `browser teardown failed: ${String(error?.stack ?? error)}`; }
+
+if (plan.forbidMutatingRequests) {
+  const pass = mutatingBrowserRequests.length === 0;
+  const detail = pass ? "no same-origin mutating browser requests observed through teardown" : `observed=${JSON.stringify(mutatingBrowserRequests)}`;
+  assertions.push({ name: "browser-mutating-requests", pass, detail });
+  if (!pass && verdict === "PASS") { verdict = "FAIL"; failure = `browser-mutating-requests: ${detail}`; }
+}
+if (teardownFailure && verdict === "PASS") { verdict = "FAIL"; failure = teardownFailure; }
+else if (teardownFailure && failure === null) failure = teardownFailure;
+
 const failedAssertions = assertions.filter((item) => item.pass === false);
 if (verdict === "PASS" && failedAssertions.length > 0) { verdict = "FAIL"; failure = failure ?? `browser emitted ${failedAssertions.length} failed asynchronous assertion(s)`; }
 const backendLog = join(artifactDir, "backend.log");
