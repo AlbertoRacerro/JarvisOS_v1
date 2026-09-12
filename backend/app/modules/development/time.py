@@ -90,10 +90,19 @@ def resolve_interval(
     end_local: datetime,
     timezone: str,
     *,
-    utc_offset_minutes: int | None = None,
+    start_utc_offset_minutes: int | None = None,
+    end_utc_offset_minutes: int | None = None,
 ) -> tuple[ResolvedLocalInstant, ResolvedLocalInstant]:
-    start = resolve_local_instant(start_local, timezone, utc_offset_minutes=utc_offset_minutes)
-    end = resolve_local_instant(end_local, timezone, utc_offset_minutes=utc_offset_minutes)
+    start = resolve_local_instant(
+        start_local,
+        timezone,
+        utc_offset_minutes=start_utc_offset_minutes,
+    )
+    end = resolve_local_instant(
+        end_local,
+        timezone,
+        utc_offset_minutes=end_utc_offset_minutes,
+    )
     if end.instant_utc <= start.instant_utc:
         raise DevelopmentTimeError("calendar_interval_invalid", "Calendar end instant must be after start instant.")
     return start, end
