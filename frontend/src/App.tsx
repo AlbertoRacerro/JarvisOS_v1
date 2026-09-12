@@ -16,6 +16,7 @@ import FinalOperatorUnavailableSurface from "./components/fusion/FinalOperatorUn
 import FinalSettingsSurface from "./components/fusion/FinalSettingsSurface";
 import FinalWorkspaceHeader from "./components/fusion/FinalWorkspaceHeader";
 import ProjectKnowledgePanel from "./components/fusion/ProjectKnowledgePanel";
+import ProjectSearchPanel from "./components/fusion/ProjectSearchPanel";
 import LegacyDiagnosticSurface from "./components/shell/LegacyDiagnosticSurface";
 import MigrationPendingSurface from "./components/shell/MigrationPendingSurface";
 import AIDraft from "./pages/AIDraft";
@@ -31,6 +32,12 @@ import { PRIMARY_STAGES, type ShellRegion, type ShellRegionContributions } from 
 
 const DevLocalChat = import.meta.env.DEV ? lazy(() => import("./pages/DevLocalChat")) : null;
 type ShellRegionRequest = Readonly<{ region: ShellRegion; nonce: number }>;
+const PROJECT_BASIS_RECORD_KINDS = new Set(["requirement", "parameter", "assumption", "decision"]);
+
+function boundedSearchParam(params: URLSearchParams, name: string): string | null {
+  const value = params.get(name)?.trim() ?? "";
+  return value && value.length <= 200 ? value : null;
+}
 
 function App() {
   const { resolved, navigate } = useAppRouter();
@@ -40,6 +47,15 @@ function App() {
   const [shellRegions, setShellRegions] = useState<ShellRegionContributions>({});
   const [shellRegionRequest, setShellRegionRequest] = useState<ShellRegionRequest | null>(null);
   const engineeringProperties = useEngineeringProperties(workspaceId, setWorkspaceId, selection);
+  const routeParams = new URLSearchParams(window.location.search);
+  const requestedRecordKind = boundedSearchParam(routeParams, "recordKind");
+  const requestedRecordId = boundedSearchParam(routeParams, "recordId");
+  const requestedRecordRef = requestedRecordKind && requestedRecordId && PROJECT_BASIS_RECORD_KINDS.has(requestedRecordKind)
+    ? `${requestedRecordKind}:${requestedRecordId}`
+    : null;
+  const requestedModelVersionId = boundedSearchParam(routeParams, "modelVersionId");
+  const requestedLiteratureSourceId = boundedSearchParam(routeParams, "sourceId");
+  const requestedLiteratureEntryId = boundedSearchParam(routeParams, "entryId");
 
   useEffect(() => {
     setSelection(null);
@@ -60,13 +76,13 @@ function App() {
   } else {
     switch (route.id) {
       case "memory-project-basis":
-        content = <><FinalWorkspaceHeader group="memory" active="project-basis" navigate={navigate} /><FinalOperatorReadSurface kind="project-basis" workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} /><ProjectKnowledgePanel workspaceId={workspaceId} /></>;
+        content = <><FinalWorkspaceHeader group="memory" active="project-basis" navigate={navigate} /><FinalOperatorReadSurface kind="project-basis" workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} requestedRecordRef={requestedRecordRef} projectSearch={<ProjectSearchPanel workspaceId={workspaceId} navigate={navigate} />} /><ProjectKnowledgePanel workspaceId={workspaceId} /></>;
         break;
       case "memory-models":
-        content = <><FinalWorkspaceHeader group="memory" active="models" navigate={navigate} /><ModelDossier workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} /><ProjectKnowledgePanel workspaceId={workspaceId} readOnly /></>;
+        content = <><FinalWorkspaceHeader group="memory" active="models" navigate={navigate} /><ModelDossier workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} requestedModelVersionId={requestedModelVersionId} /><ProjectKnowledgePanel workspaceId={workspaceId} readOnly /></>;
         break;
       case "memory-literature":
-        content = <><FinalWorkspaceHeader group="memory" active="literature" navigate={navigate} /><LiteratureKnowledge kind="literature" workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} /></>;
+        content = <><FinalWorkspaceHeader group="memory" active="literature" navigate={navigate} /><LiteratureKnowledge kind="literature" workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} requestedSourceId={requestedLiteratureSourceId} requestedEntryId={requestedLiteratureEntryId} /></>;
         break;
       case "development-roadmap-timeline":
         content = <><FinalWorkspaceHeader group="development" active="roadmap" navigate={navigate} /><FinalOperatorUnavailableSurface kind="roadmap" title="Roadmap · Timeline" description="No server-owned roadmap item store currently supplies truthful workstream or execution-status items. Timeline geometry and Execution status remain visible without fabricated bars or counts." navigate={navigate} /></>;

@@ -2,11 +2,13 @@ import { useEffect, useMemo, useState } from "react";
 
 import {
   getSystemInfo as readFinalSystemInfo,
+  listAssumptions as listFinalAssumptions,
   listDecisions as listFinalDecisions,
   listModelSpecs as listFinalModelSpecs,
   listParameters as listFinalParameters,
   listRequirements as listFinalRequirements,
   listWorkspaces as listFinalWorkspaces,
+  type Assumption as FinalAssumption,
   type Decision as FinalDecision,
   type ModelSpec as FinalModelSpec,
   type Parameter as FinalParameter,
@@ -21,16 +23,19 @@ type Props = Readonly<{
   kind: ReadKind;
   workspaceId: string | null;
   onWorkspaceChange: (workspaceId: string) => void;
+  projectSearch?: React.ReactNode;
+  requestedRecordRef?: string | null;
 }>;
 
 type WorkspaceRecords = Readonly<{
   requirements: FinalRequirement[];
   parameters: FinalParameter[];
+  assumptions: FinalAssumption[];
   decisions: FinalDecision[];
   modelSpecs: FinalModelSpec[];
 }>;
 
-const emptyRecords: WorkspaceRecords = { requirements: [], parameters: [], decisions: [], modelSpecs: [] };
+const emptyRecords: WorkspaceRecords = { requirements: [], parameters: [], assumptions: [], decisions: [], modelSpecs: [] };
 
 function Panel({ title, children, className = "", status }: Readonly<{ title: string; children: React.ReactNode; className?: string; status?: string }>) {
   return <section className={`final-fusion__panel ${className}`.trim()} aria-label={title}><header className="final-fusion__panel-head"><h2>{title}</h2>{status && <span>{status}</span>}</header>{children}</section>;
@@ -44,13 +49,14 @@ function WorkspacePicker({ workspaces, selectedId, onSelect }: Readonly<{ worksp
   return <div className="final-fusion__toolbar-line"><span>Project workspace</span><select aria-label="Project workspace" value={selectedId ?? ""} onChange={(event) => onSelect(event.target.value)} disabled={!workspaces.length}><option value="">Select workspace…</option>{workspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}</select></div>;
 }
 
-function ProjectBasis({ records, workspaces, workspaceId, onWorkspaceChange, loading, error }: Readonly<{ records: WorkspaceRecords; workspaces: FinalWorkspace[]; workspaceId: string | null; onWorkspaceChange: (id: string) => void; loading: boolean; error: string | null }>) {
+function ProjectBasis({ records, workspaces, workspaceId, onWorkspaceChange, loading, error, searchPanel, requestedRecordRef }: Readonly<{ records: WorkspaceRecords; workspaces: FinalWorkspace[]; workspaceId: string | null; onWorkspaceChange: (id: string) => void; loading: boolean; error: string | null; searchPanel?: React.ReactNode; requestedRecordRef?: string | null }>) {
   const rows = [
     ...records.requirements.map((item) => ({ id: `requirement:${item.id}`, label: item.statement, meta: `Requirement · ${item.status}` })),
     ...records.parameters.map((item) => ({ id: `parameter:${item.id}`, label: `${item.name}${item.symbol ? ` (${item.symbol})` : ""}`, meta: `Parameter · ${item.value ?? "Unknown"}${item.unit ? ` ${item.unit}` : ""} · ${item.lifecycle_state ?? item.status}` })),
+    ...records.assumptions.map((item) => ({ id: `assumption:${item.id}`, label: item.statement, meta: `Assumption · ${item.status}` })),
     ...records.decisions.map((item) => ({ id: `decision:${item.id}`, label: item.title, meta: `Decision · ${item.status}` }))
   ];
-  return <div className="final-fusion__workbench final-fusion__workbench--memory"><Panel title="Project search" className="final-fusion__search-panel" status="READ"><div className="final-fusion__searchbox">Canonical record search is unavailable in this slice.</div><WorkspacePicker workspaces={workspaces} selectedId={workspaceId} onSelect={onWorkspaceChange} /><div className="final-fusion__source-list">{loading ? <div className="final-fusion__source-empty"><strong>Loading backend records…</strong></div> : error ? <div className="final-fusion__source-empty"><strong>Backend read failed</strong><span>{error}</span></div> : rows.length ? rows.map((row) => <div className="final-fusion__disclosure-row" key={row.id}><span>›</span><strong>{row.label}</strong><em>{row.meta}</em></div>) : <div className="final-fusion__source-empty"><strong>No current basis records</strong><span>The selected workspace returned no requirements, current parameters or decisions.</span></div>}</div></Panel><Panel title="Project Basis" className="final-fusion__basis" status="Existing READ projection"><div className="final-fusion__dossier-top"><strong>Current server-owned engineering records</strong><span>Working revisions are unavailable</span></div><div className="final-fusion__summary-strip"><span>Requirements · {records.requirements.length}</span><span>Parameters · {records.parameters.length}</span><span>Decisions · {records.decisions.length}</span></div><div className="final-fusion__toolbar-line"><span>Approve-all, working revision and deterministic revalidation require their future accepted owner.</span><button type="button" disabled>Approve all</button></div><div className="final-fusion__disclosures"><div className="final-fusion__disclosure-row"><span>›</span><strong>Objectives & engineering question</strong><em>Unavailable</em></div><div className="final-fusion__disclosure-row"><span>›</span><strong>Requirements & acceptance criteria</strong><em>{records.requirements.length ? "Read-only projection" : "Empty"}</em></div><div className="final-fusion__disclosure-row"><span>›</span><strong>Stable constraints & boundary conditions</strong><em>{records.parameters.length ? "Current parameters available" : "Empty"}</em></div><div className="final-fusion__disclosure-row"><span>›</span><strong>Standards, decisions & resources</strong><em>{records.decisions.length ? "Decisions available" : "Partial / unavailable"}</em></div></div></Panel><JarvisReadBoundary detail="Current requirements, parameters and decisions are backend-owned READ evidence. Working-revision proposals remain unavailable rather than being simulated in React." /></div>;
+  return <div className="final-fusion__workbench final-fusion__workbench--memory">{searchPanel ?? <Panel title="Project search" className="final-fusion__search-panel" status="READ"><div className="final-fusion__searchbox">Canonical record search is unavailable in this slice.</div></Panel>}<Panel title="Project Basis" className="final-fusion__basis" status="Existing READ projection"><WorkspacePicker workspaces={workspaces} selectedId={workspaceId} onSelect={onWorkspaceChange} /><div className="final-fusion__dossier-top"><strong>Current server-owned engineering records</strong><span>Working revisions are unavailable</span></div><div className="final-fusion__summary-strip"><span>Requirements · {records.requirements.length}</span><span>Parameters · {records.parameters.length}</span><span>Assumptions · {records.assumptions.length}</span><span>Decisions · {records.decisions.length}</span></div><div className="final-fusion__source-list">{loading ? <div className="final-fusion__source-empty"><strong>Loading backend records…</strong></div> : error ? <div className="final-fusion__source-empty"><strong>Backend read failed</strong><span>{error}</span></div> : rows.length ? rows.map((row) => <div className="final-fusion__disclosure-row" key={row.id} data-search-ref={row.id} data-search-selected={row.id === requestedRecordRef ? "true" : undefined} aria-current={row.id === requestedRecordRef ? "true" : undefined}><span>›</span><strong>{row.label}</strong><em>{row.meta}</em></div>) : <div className="final-fusion__source-empty"><strong>No current basis records</strong><span>The selected workspace returned no requirements, current parameters, assumptions or decisions.</span></div>}</div><div className="final-fusion__toolbar-line"><span>Approve-all, working revision and deterministic revalidation require their future accepted owner.</span><button type="button" disabled>Approve all</button></div><div className="final-fusion__disclosures"><div className="final-fusion__disclosure-row"><span>›</span><strong>Objectives & engineering question</strong><em>Unavailable</em></div><div className="final-fusion__disclosure-row"><span>›</span><strong>Requirements & acceptance criteria</strong><em>{records.requirements.length ? "Read-only projection" : "Empty"}</em></div><div className="final-fusion__disclosure-row"><span>›</span><strong>Stable constraints & boundary conditions</strong><em>{records.parameters.length || records.assumptions.length ? "Current parameters / assumptions available" : "Empty"}</em></div><div className="final-fusion__disclosure-row"><span>›</span><strong>Standards, decisions & resources</strong><em>{records.decisions.length ? "Decisions available" : "Partial / unavailable"}</em></div></div></Panel><JarvisReadBoundary detail="Current requirements, parameters, assumptions and decisions are backend-owned READ evidence. Working-revision proposals remain unavailable rather than being simulated in React." /></div>;
 }
 
 function Models({ records, workspaces, workspaceId, onWorkspaceChange, loading, error }: Readonly<{ records: WorkspaceRecords; workspaces: FinalWorkspace[]; workspaceId: string | null; onWorkspaceChange: (id: string) => void; loading: boolean; error: string | null }>) {
@@ -64,7 +70,7 @@ function Runtime({ system, loading, error }: Readonly<{ system: SystemInfoRespon
   return <div className="final-fusion__workbench final-fusion__workbench--coding"><Panel title="Runtime" className="final-fusion__runtime-main" status="Observed system facts"><div className="final-fusion__repo-status"><div><strong>JarvisOS runtime identity</strong><span>Exact executed SHA vs remote SHA observer unavailable</span></div><span className="final-fusion__unknown">Unknown</span></div><div className="final-fusion__runtime-body"><section className="final-fusion__compare"><div className="final-fusion__version-card"><small>Local current · actually executed</small><strong>LOCAL · Unknown SHA</strong><code>{system?.environment ?? "Environment unknown"}</code><p>{system ? `${system.app_name} ${system.version} is reporting through /system/info, but that does not prove an executed Git SHA.` : "No exact local code identity is proven."}</p></div><div className="final-fusion__delta">→<span>Unknown</span></div><div className="final-fusion__version-card is-remote"><small>GitHub latest · remote exact</small><strong>REMOTE · Unknown</strong><code>Repository observer unavailable</code><p>The frontend does not call GitHub directly or infer alignment.</p></div></section><section className="final-fusion__runtime-services"><Panel title="Observed backend" status={loading ? "Loading" : error ? "Read error" : system?.database.ready ? "Database ready" : "Unknown"}>{error ? <div className="final-fusion__empty">{error}</div> : <div className="final-fusion__facts"><div>Application · {system?.app_name ?? "Unknown"}</div><div>Version · {system?.version ?? "Unknown"}</div><div>Environment · {system?.environment ?? "Unknown"}</div><div>Database initialized · {system ? String(system.database.initialized) : "Unknown"}</div></div>}</Panel><Panel title="Update / terminal" status="Unavailable"><div className="final-fusion__empty">Safe update and terminal EXECUTE authority are not present in 100f.</div></Panel></section></div></Panel><div className="final-fusion__rightstack"><JarvisReadBoundary detail="Observed /system/info facts may be discussed, but local executed SHA, remote exact SHA and alignment remain Unknown." /><Panel title="Runtime facts" className="final-fusion__facts" status="READ"><div className="final-fusion__empty">System observations are backend-provided. No GitHub or process authority exists in the browser.</div></Panel></div></div>;
 }
 
-export default function FinalOperatorReadSurface({ kind, workspaceId, onWorkspaceChange }: Props) {
+export default function FinalOperatorReadSurface({ kind, workspaceId, onWorkspaceChange, projectSearch, requestedRecordRef }: Props) {
   const [workspaces, setWorkspaces] = useState<FinalWorkspace[]>([]);
   const [records, setRecords] = useState<WorkspaceRecords>(emptyRecords);
   const [system, setSystem] = useState<SystemInfoResponse | null>(null);
@@ -90,12 +96,12 @@ export default function FinalOperatorReadSurface({ kind, workspaceId, onWorkspac
     if (kind === "runtime" || !activeWorkspaceId) return;
     setLoading(true); setError(null);
     const calls = kind === "models"
-      ? Promise.all([Promise.resolve([] as FinalRequirement[]), Promise.resolve([] as FinalParameter[]), Promise.resolve([] as FinalDecision[]), listFinalModelSpecs(activeWorkspaceId)])
-      : Promise.all([listFinalRequirements(activeWorkspaceId), listFinalParameters(activeWorkspaceId), listFinalDecisions(activeWorkspaceId), Promise.resolve([] as FinalModelSpec[])]);
-    void calls.then(([requirements, parameters, decisions, modelSpecs]) => setRecords({ requirements, parameters, decisions, modelSpecs })).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "Workspace record read failed")).finally(() => setLoading(false));
+      ? Promise.all([Promise.resolve([] as FinalRequirement[]), Promise.resolve([] as FinalParameter[]), Promise.resolve([] as FinalAssumption[]), Promise.resolve([] as FinalDecision[]), listFinalModelSpecs(activeWorkspaceId)])
+      : Promise.all([listFinalRequirements(activeWorkspaceId), listFinalParameters(activeWorkspaceId), listFinalAssumptions(activeWorkspaceId), listFinalDecisions(activeWorkspaceId), Promise.resolve([] as FinalModelSpec[])]);
+    void calls.then(([requirements, parameters, assumptions, decisions, modelSpecs]) => setRecords({ requirements, parameters, assumptions, decisions, modelSpecs })).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "Workspace record read failed")).finally(() => setLoading(false));
   }, [activeWorkspaceId, kind]);
 
   if (kind === "runtime") return <Runtime system={system} loading={loading} error={error} />;
   if (kind === "models") return <Models records={records} workspaces={workspaces} workspaceId={activeWorkspaceId} onWorkspaceChange={onWorkspaceChange} loading={loading} error={error} />;
-  return <ProjectBasis records={records} workspaces={workspaces} workspaceId={activeWorkspaceId} onWorkspaceChange={onWorkspaceChange} loading={loading} error={error} />;
+  return <ProjectBasis records={records} workspaces={workspaces} workspaceId={activeWorkspaceId} onWorkspaceChange={onWorkspaceChange} loading={loading} error={error} searchPanel={projectSearch} requestedRecordRef={requestedRecordRef} />;
 }

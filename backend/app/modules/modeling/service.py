@@ -1,4 +1,5 @@
 import sqlite3
+from collections.abc import Mapping, Sequence
 from uuid import uuid4
 
 from app.core.database import open_sqlite_connection
@@ -127,7 +128,7 @@ def select_context_records(
     workspace_id: str,
     *,
     kinds: list[str],
-    statuses_by_kind: dict[str, list[str]],
+    statuses_by_kind: Mapping[str, Sequence[str] | None],
     ids: list[str] | None,
     query: str | None,
     max_items_per_kind: int,
@@ -169,12 +170,13 @@ def select_context_records(
             values.extend(sorted(selected_ids))
         else:
             statuses = statuses_by_kind[kind]
-            if not statuses:
-                results[kind] = []
-                continue
-            placeholders = ", ".join("?" for _ in statuses)
-            clauses.append(f"{status_column} IN ({placeholders})")
-            values.extend(statuses)
+            if statuses is not None:
+                if not statuses:
+                    results[kind] = []
+                    continue
+                placeholders = ", ".join("?" for _ in statuses)
+                clauses.append(f"{status_column} IN ({placeholders})")
+                values.extend(statuses)
         if normalized_query:
             if fts_available:
                 matched_ids = _fts_ids(connection, workspace_id, kind, normalized_query)
