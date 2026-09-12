@@ -9,6 +9,7 @@ from app.modules.project_search.service import PROJECT_SEARCH_KINDS, search_proj
 
 router = APIRouter(tags=["project-search"])
 _ALLOWED_KINDS = set(PROJECT_SEARCH_KINDS)
+_KINDS_QUERY = Query()
 
 
 def _parse_kinds(raw: list[str] | None) -> list[ProjectSearchKind] | None:
@@ -29,7 +30,7 @@ def _parse_kinds(raw: list[str] | None) -> list[ProjectSearchKind] | None:
 def project_search_endpoint(
     workspace_id: str,
     q: Annotated[str, Query(min_length=1, max_length=200)],
-    kinds: Annotated[list[str] | None, Query()] = None,
+    kinds: Annotated[list[str] | None, _KINDS_QUERY] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 30,
 ) -> ProjectSearchResponse:
     query = q.strip()
