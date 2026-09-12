@@ -7,7 +7,7 @@ from app.modules.project_search import routes, service
 
 
 def _modeling_fixture(*_args, **_kwargs):
-    assert _kwargs["query"] is None
+    assert _kwargs["query"] == "reactor"
     return {
         "requirement": [
             SimpleNamespace(
@@ -28,6 +28,7 @@ def _model_fixture(_workspace_id: str, query: str):
     assert query == "reactor"
     return [
         SimpleNamespace(
+            model_spec_id="model-1",
             title="Reactor model",
             engineering_question="Predict conversion",
             scope="Design point",
@@ -75,7 +76,7 @@ def _literature_fixture(_workspace_id: str, query: str):
 
 
 def _install_fixtures(monkeypatch) -> None:
-    monkeypatch.setattr(service, "select_context_records", _modeling_fixture)
+    monkeypatch.setattr(service, "search_context_records_literal", _modeling_fixture)
     monkeypatch.setattr(service, "search_model_dossier_index", _model_fixture)
     monkeypatch.setattr(service, "search_literature_sources", _literature_fixture)
 
@@ -107,12 +108,12 @@ def test_project_search_orders_exact_prefix_contains_and_preserves_identity(monk
     assert entry.route_params["locatorStart"] == "12"
 
 
-def test_modeling_literal_prefix_and_contains_do_not_depend_on_fts_prefilter(monkeypatch) -> None:
+def test_modeling_literal_prefix_and_contains_use_literal_owner_search(monkeypatch) -> None:
     monkeypatch.setattr(service, "search_model_dossier_index", lambda *_args, **_kwargs: [])
     monkeypatch.setattr(service, "search_literature_sources", lambda *_args, **_kwargs: [])
 
     def modeling(*_args, **_kwargs):
-        assert _kwargs["query"] is None
+        assert _kwargs["query"] in {"react", "actor"}
         return {
             "requirement": [
                 SimpleNamespace(
@@ -125,19 +126,19 @@ def test_modeling_literal_prefix_and_contains_do_not_depend_on_fts_prefilter(mon
             ]
         }
 
-    monkeypatch.setattr(service, "select_context_records", modeling)
+    monkeypatch.setattr(service, "search_context_records_literal", modeling)
     prefix = service.search_project("ws-1", query="react", kinds=["requirement"], limit=10)
     contains = service.search_project("ws-1", query="actor", kinds=["requirement"], limit=10)
     assert [item.match_tier for item in prefix.items] == ["prefix"]
     assert [item.match_tier for item in contains.items] == ["contains"]
 
 
-def test_modeling_owner_overflow_fails_closed(monkeypatch) -> None:
+def test_modeling_owner_overflow_truncates_results_instead_of_failing(monkeypatch) -> None:
     monkeypatch.setattr(service, "search_model_dossier_index", lambda *_args, **_kwargs: [])
     monkeypatch.setattr(service, "search_literature_sources", lambda *_args, **_kwargs: [])
     rows = [
         SimpleNamespace(
-            id=f"req-{index}",
+            id=f"req-{index:03d}",
             statement="reactor",
             rationale=None,
             notes=None,
@@ -145,9 +146,10 @@ def test_modeling_owner_overflow_fails_closed(monkeypatch) -> None:
         )
         for index in range(101)
     ]
-    monkeypatch.setattr(service, "select_context_records", lambda *_args, **_kwargs: {"requirement": rows})
-    with pytest.raises(service.ProjectSearchCapacityError, match="bounded requirement scan capacity"):
-        service.search_project("ws-1", query="reactor", kinds=["requirement"], limit=100)
+    monkeypatch.setattr(service, "search_context_records_literal", lambda *_args, **_kwargs: {"requirement": rows})
+    result = service.search_project("ws-1", query="reactor", kinds=["requirement"], limit=100)
+    assert result.total_returned == 100
+    assert result.truncated is True
 
 
 def test_decision_search_preserves_owner_defined_free_form_status(monkeypatch) -> None:
@@ -167,7 +169,7 @@ def test_decision_search_preserves_owner_defined_free_form_status(monkeypatch) -
             ]
         }
 
-    monkeypatch.setattr(service, "select_context_records", modeling)
+    monkeypatch.setattr(service, "search_context_records_literal", modeling)
     result = service.search_project(
         "ws-1",
         query="reactor",
@@ -209,7 +211,7 @@ def test_project_search_excludes_retired_project_basis_records(monkeypatch) -> N
             ],
         }
 
-    monkeypatch.setattr(service, "select_context_records", modeling)
+    monkeypatch.setattr(service, "search_context_records_literal", modeling)
     result = service.search_project(
         "ws-1",
         query="reactor",
@@ -223,7 +225,7 @@ def test_project_search_excludes_retired_project_basis_records(monkeypatch) -> N
 def test_project_search_bounds_owner_strings_to_response_contract(monkeypatch) -> None:
     monkeypatch.setattr(
         service,
-        "select_context_records",
+        "search_context_records_literal",
         lambda *_args, **_kwargs: {
             "decision": [
                 SimpleNamespace(
@@ -245,16 +247,26 @@ def test_project_search_bounds_owner_strings_to_response_contract(monkeypatch) -
     assert len(result.items[0].lifecycle_or_status or "") == 256
 
 
-def test_capacity_failure_maps_to_explicit_http_error(monkeypatch) -> None:
-    def overflow(*_args, **_kwargs):
-        raise service.ProjectSearchCapacityError("bounded requirement scan capacity")
-
-    monkeypatch.setattr(routes, "search_project", overflow)
-    with pytest.raises(HTTPException) as exc_info:
-        routes.project_search_endpoint("ws-1", q="reactor", kinds=None, limit=30)
-
-    assert exc_info.value.status_code == 409
-    assert exc_info.value.detail == "bounded requirement scan capacity"
+def test_versionless_model_spec_is_searchable_without_fabricated_version(monkeypatch) -> None:
+    monkeypatch.setattr(
+        service,
+        "search_model_dossier_index",
+        lambda *_args, **_kwargs: [
+            SimpleNamespace(
+                model_spec_id="model-spec-only",
+                title="Reactor kinetics",
+                engineering_question="Predict reactor conversion",
+                scope="Design",
+                versions=[],
+            )
+        ],
+    )
+    result = service.search_project("ws-1", query="reactor", kinds=["model"], limit=10)
+    assert len(result.items) == 1
+    item = result.items[0]
+    assert item.stable_ref == "model_spec:model-spec-only"
+    assert item.version_or_revision is None
+    assert item.route_params == {"modelSpecId": "model-spec-only"}
 
 
 def test_composed_summary_is_bounded_to_response_contract() -> None:
@@ -273,7 +285,7 @@ def test_project_search_global_limit_is_deterministic_and_marks_truncation(monke
 
 
 def test_kind_filter_does_not_read_unrequested_owners(monkeypatch) -> None:
-    monkeypatch.setattr(service, "select_context_records", _modeling_fixture)
+    monkeypatch.setattr(service, "search_context_records_literal", _modeling_fixture)
 
     def forbidden(*_args, **_kwargs):
         raise AssertionError("unrequested owner was read")
@@ -293,7 +305,7 @@ def test_literal_matching_treats_fts_sql_and_unicode_shapes_as_data() -> None:
 
 
 def test_owner_failure_fails_whole_request(monkeypatch) -> None:
-    monkeypatch.setattr(service, "select_context_records", _modeling_fixture)
+    monkeypatch.setattr(service, "search_context_records_literal", _modeling_fixture)
 
     def broken_owner(_workspace_id: str, _query: str):
         raise RuntimeError("owner read unavailable")
