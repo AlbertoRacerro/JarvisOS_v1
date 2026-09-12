@@ -75,7 +75,8 @@ class CalendarAllocationCreate(StrictDevelopmentModel):
     start_local: datetime
     end_local: datetime
     timezone: str = Field(min_length=1)
-    utc_offset_minutes: int | None = Field(default=None, ge=-24 * 60, le=24 * 60)
+    start_utc_offset_minutes: int | None = Field(default=None, ge=-24 * 60, le=24 * 60)
+    end_utc_offset_minutes: int | None = Field(default=None, ge=-24 * 60, le=24 * 60)
     all_day: bool = False
     deadline: bool = False
     description: str | None = None
@@ -97,7 +98,8 @@ class CalendarAllocationUpdate(StrictDevelopmentModel):
     start_local: datetime | None = None
     end_local: datetime | None = None
     timezone: str | None = Field(default=None, min_length=1)
-    utc_offset_minutes: int | None = Field(default=None, ge=-24 * 60, le=24 * 60)
+    start_utc_offset_minutes: int | None = Field(default=None, ge=-24 * 60, le=24 * 60)
+    end_utc_offset_minutes: int | None = Field(default=None, ge=-24 * 60, le=24 * 60)
     all_day: bool | None = None
     deadline: bool | None = None
     description: str | None = None
