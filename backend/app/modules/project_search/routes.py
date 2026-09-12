@@ -4,10 +4,8 @@ from typing import Annotated, cast
 
 from fastapi import APIRouter, HTTPException, Query
 
-from app.modules.memory.literature_search import LiteratureSearchCapacityError
-from app.modules.modeling.model_dossier_search import ModelDossierSearchCapacityError
 from app.modules.project_search.models import ProjectSearchKind, ProjectSearchResponse
-from app.modules.project_search.service import PROJECT_SEARCH_KINDS, ProjectSearchCapacityError, search_project
+from app.modules.project_search.service import PROJECT_SEARCH_KINDS, search_project
 
 router = APIRouter(tags=["project-search"])
 _ALLOWED_KINDS = set(PROJECT_SEARCH_KINDS)
@@ -44,9 +42,3 @@ def project_search_endpoint(
         if str(exc) == "Workspace not found.":
             raise HTTPException(status_code=404, detail="Workspace not found.") from exc
         raise
-    except (
-        ProjectSearchCapacityError,
-        ModelDossierSearchCapacityError,
-        LiteratureSearchCapacityError,
-    ) as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
