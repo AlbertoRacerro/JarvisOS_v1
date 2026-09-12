@@ -96,7 +96,7 @@ export default function ProjectSearchPanel({ workspaceId, navigate }: Props) {
     {state === "loading" ? <p className="final-fusion__source-empty" role="status">Searching project records…</p> : null}
     {state === "empty" ? <p className="final-fusion__source-empty">No project records match this literal query.</p> : null}
     {state === "error" ? <div className="final-fusion__source-empty" role="alert"><strong>Project search unavailable</strong><p>The bounded owner reads did not complete. No partial result set is shown.</p></div> : null}
-    {state === "results" ? <div>
+    {state === "results" ? <div className="final-fusion__source-list">
       {truncated ? <p role="status">Showing the first bounded results. Refine the query to narrow the project search.</p> : null}
       {items.map((result) => <article key={result.stable_ref} className="final-fusion__record-card" data-search-ref={result.stable_ref}>
         <div className="final-fusion__record-heading"><strong>{result.title}</strong><em>{resultCue(result)}</em></div>
