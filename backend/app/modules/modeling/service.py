@@ -1,3 +1,5 @@
+from collections.abc import Mapping, Sequence
+
 import sqlite3
 from uuid import uuid4
 
@@ -127,7 +129,7 @@ def select_context_records(
     workspace_id: str,
     *,
     kinds: list[str],
-    statuses_by_kind: dict[str, list[str] | None],
+    statuses_by_kind: Mapping[str, Sequence[str] | None],
     ids: list[str] | None,
     query: str | None,
     max_items_per_kind: int,
