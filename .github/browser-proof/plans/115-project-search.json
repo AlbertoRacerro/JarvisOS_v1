@@ -2,6 +2,7 @@
   "schema": "jarvisos.browser-proof-plan.v1",
   "id": "115-project-search",
   "fixture": "project-search",
+  "forbidMutatingRequests": true,
   "steps": [
     {"op":"run-fixture","name":"115:seed-workspace","fixture":"project-search","phase":"workspace"},
     {"op":"navigate","name":"115:project-basis","route":"/memory/project-basis"},
@@ -10,7 +11,6 @@
     {"op":"assert-visible","name":"115:empty-basis","locator":{"kind":"text","text":"No current basis records","exact":true}},
     {"op":"run-fixture","name":"115:seed-records","fixture":"project-search","phase":"records"},
     {"op":"reload","name":"115:reload-after-seed"},
-    {"op":"capture-mutating-request-count","name":"115:capture-mutation-baseline","capture":"mutationBaseline"},
     {"op":"fill","name":"115:enter-query","locator":{"kind":"label","text":"Search project records","exact":true},"value":"reactor"},
     {"op":"click","name":"115:submit-search","locator":{"kind":"role","role":"button","name":"Search","exact":true}},
     {"op":"assert-count","name":"115:requirement-result","locator":{"kind":"text","text":"Reactor search requirement","exact":true},"equals":2},
@@ -39,8 +39,6 @@
     {"op":"navigate","name":"115:return-search-for-no-match","route":"/memory/project-basis"},
     {"op":"fill","name":"115:enter-no-match-query","locator":{"kind":"label","text":"Search project records","exact":true},"value":"zzzz-no-match-115"},
     {"op":"click","name":"115:submit-no-match-search","locator":{"kind":"role","role":"button","name":"Search","exact":true}},
-    {"op":"assert-visible","name":"115:no-match-state","locator":{"kind":"text","text":"No project records match this literal query.","exact":true}},
-    {"op":"capture-mutating-request-count","name":"115:capture-mutation-after-navigation","capture":"mutationAfterNavigation"},
-    {"op":"assert-value-equals","name":"115:search-and-navigation-are-read-only","left":{"capture":"mutationAfterNavigation"},"right":{"capture":"mutationBaseline"}}
+    {"op":"assert-visible","name":"115:no-match-state","locator":{"kind":"text","text":"No project records match this literal query.","exact":true}}
   ]
 }
