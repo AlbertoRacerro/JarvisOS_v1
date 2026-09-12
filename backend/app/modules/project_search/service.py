@@ -5,7 +5,7 @@ from typing import Any, cast
 
 from app.modules.memory.literature_search import search_literature_sources
 from app.modules.modeling.model_dossier_search import search_model_dossier_index
-from app.modules.modeling.service import select_context_records
+from app.modules.modeling.project_search_owner import search_context_records_literal
 from app.modules.project_search.models import ProjectSearchKind, ProjectSearchResponse, ProjectSearchResult
 
 PROJECT_SEARCH_KINDS: tuple[ProjectSearchKind, ...] = (
@@ -19,8 +19,7 @@ PROJECT_SEARCH_KINDS: tuple[ProjectSearchKind, ...] = (
 )
 _KIND_ORDER = {kind: index for index, kind in enumerate(PROJECT_SEARCH_KINDS)}
 _TIER_ORDER = {"exact": 0, "prefix": 1, "contains": 2}
-_MAX_OWNER_ITEMS = 100
-_MAX_MODELING_SCAN_ITEMS = _MAX_OWNER_ITEMS + 1
+_MAX_OWNER_MATCHES = 101
 _MODELING_KINDS = ("requirement", "parameter", "assumption", "decision")
 _MODELING_STATUSES = {
     "requirement": ["draft", "active"],
@@ -30,10 +29,6 @@ _MODELING_STATUSES = {
     "decision": None,
 }
 _MAX_SUMMARY_CHARS = 12_000
-
-
-class ProjectSearchCapacityError(RuntimeError):
-    pass
 
 
 def _nonempty(values: Iterable[str | None]) -> list[str]:
@@ -75,21 +70,17 @@ def _modeling_results(workspace_id: str, query: str, kinds: list[str]) -> list[P
         return []
     selected = cast(
         dict[str, list[Any]],
-        select_context_records(
+        search_context_records_literal(
             workspace_id,
             kinds=kinds,
             statuses_by_kind={kind: _MODELING_STATUSES[kind] for kind in kinds},
-            ids=None,
-            query=None,
-            max_items_per_kind=_MAX_MODELING_SCAN_ITEMS,
+            query=query,
+            max_matches_per_kind=_MAX_OWNER_MATCHES,
         ),
     )
     results: list[ProjectSearchResult] = []
     for kind in kinds:
-        records = selected[kind]
-        if len(records) > _MAX_OWNER_ITEMS:
-            raise ProjectSearchCapacityError(f"Project Basis search exceeds bounded {kind} scan capacity.")
-        for record in records:
+        for record in selected[kind]:
             if kind == "decision" and record.basis_lifecycle_state != "active":
                 continue
             if kind == "requirement":
@@ -155,6 +146,36 @@ def _modeling_results(workspace_id: str, query: str, kinds: list[str]) -> list[P
 def _model_results(workspace_id: str, query: str) -> list[ProjectSearchResult]:
     results: list[ProjectSearchResult] = []
     for model in search_model_dossier_index(workspace_id, query):
+        if not model.versions:
+            matched = _match(
+                query,
+                {
+                    "title": model.title,
+                    "engineering_question": model.engineering_question,
+                    "scope": model.scope,
+                },
+            )
+            if matched is not None:
+                tier, match_fields = matched
+                results.append(
+                    ProjectSearchResult(
+                        kind="model",
+                        owner="model-dossier",
+                        stable_ref=f"model_spec:{model.model_spec_id}",
+                        workspace_id=workspace_id,
+                        title=model.title[:8_000],
+                        summary=_summary(model.engineering_question, model.scope),
+                        lifecycle_or_status=None,
+                        version_or_revision=None,
+                        provenance_refs=[],
+                        source_refs=[],
+                        route="/memory/models",
+                        route_params={"modelSpecId": model.model_spec_id},
+                        match_fields=match_fields,
+                        match_tier=cast(Any, tier),
+                    )
+                )
+            continue
         for version in model.versions:
             fields = {
                 "title": model.title,
