@@ -1,70 +1,133 @@
 from __future__ import annotations
 
 from app.core.database import open_sqlite_connection
-from app.modules.memory.literature_models import LiteratureSourceRead
-from app.modules.memory.literature_service import (
-    MAX_ENTRIES_PER_SOURCE,
-    MAX_LITERATURE_PAGE_SIZE,
-    list_literature_sources,
-)
+from app.modules.memory.literature_models import LiteratureEntryRead, LiteratureSourceRead
+
+_LITERATURE_MATCH_LIMIT = 101
 
 
-class LiteratureSearchCapacityError(RuntimeError):
-    pass
+def _escape_like_literal(value: str) -> str:
+    return value.lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
-def _contains_literal(needle: str, value: object) -> bool:
-    return isinstance(value, str) and needle in value.casefold()
+def _source_read(row) -> LiteratureSourceRead:
+    source_id = str(row["source_id"] if "source_id" in row.keys() else row["id"])
+    return LiteratureSourceRead(
+        id=source_id,
+        workspace_id=str(row["workspace_id"]),
+        title=str(row["title"]),
+        source_kind=row["source_kind"],
+        state=row["state"],
+        citation=row["citation"],
+        publisher=row["publisher"],
+        published_year=row["published_year"],
+        source_ref=f"literature_source:{source_id}",
+        backing=None,
+        entries=[],
+        created_at=str(row["source_created_at"] if "source_created_at" in row.keys() else row["created_at"]),
+        updated_at=str(row["source_updated_at"] if "source_updated_at" in row.keys() else row["updated_at"]),
+    )
+
+
+def _entry_read(row) -> LiteratureEntryRead:
+    entry_id = str(row["entry_id"])
+    return LiteratureEntryRead(
+        id=entry_id,
+        workspace_id=str(row["workspace_id"]),
+        source_id=str(row["source_id"]),
+        entry_kind=row["entry_kind"],
+        statement=row["statement"],
+        value_text=row["value_text"],
+        value_number=row["value_number"],
+        unit=row["unit"],
+        status=row["entry_status"],
+        locator_kind=row["locator_kind"],
+        locator_start=row["locator_start"],
+        locator_end=row["locator_end"],
+        context_text=row["context_text"],
+        provenance_ref=f"literature_entry:{entry_id}",
+        used_by=[],
+        created_at=str(row["entry_created_at"]),
+        updated_at=str(row["entry_updated_at"]),
+    )
 
 
 def search_literature_sources(workspace_id: str, query: str) -> list[LiteratureSourceRead]:
-    """Return bounded literal Literature candidates without duplicating owner state.
-
-    Literature's existing read owner is intentionally page/entry bounded. Project
-    Search must not silently present one bounded prefix as a complete workspace
-    search, so datasets beyond those owner bounds fail closed until a separately
-    accepted persistent search/index strategy exists.
-    """
-    page = list_literature_sources(workspace_id, offset=0, limit=MAX_LITERATURE_PAGE_SIZE)
-    if page.next_offset is not None or page.total > MAX_LITERATURE_PAGE_SIZE:
-        raise LiteratureSearchCapacityError("Literature search exceeds the bounded source scan capacity.")
-
+    """Return bounded literal source/entry matches without detail-only owner reads."""
+    pattern = f"%{_escape_like_literal(query)}%"
     with open_sqlite_connection() as connection:
-        overflowing_entry = connection.execute(
-            """
-            SELECT source_id
-            FROM literature_entries
-            WHERE workspace_id = ?
-            GROUP BY source_id
-            HAVING COUNT(*) > ?
-            LIMIT 1
-            """,
-            (workspace_id, MAX_ENTRIES_PER_SOURCE),
-        ).fetchone()
-        if overflowing_entry is not None:
-            raise LiteratureSearchCapacityError("Literature search exceeds the bounded entry scan capacity.")
+        workspace = connection.execute("SELECT 1 FROM workspaces WHERE id = ?", (workspace_id,)).fetchone()
+        if workspace is None:
+            raise ValueError("Workspace not found.")
 
-    needle = query.casefold()
-    matches: list[LiteratureSourceRead] = []
-    for source in page.items:
-        source_matches = any(
-            _contains_literal(needle, value)
-            for value in (source.title, source.citation, source.publisher)
-        )
-        matching_entries = [
-            entry
-            for entry in source.entries
-            if any(
-                _contains_literal(needle, value)
-                for value in (
-                    entry.statement,
-                    entry.value_text,
-                    None if entry.value_number is None else str(entry.value_number),
-                    entry.unit,
-                    entry.context_text,
-                )
-            )
-        ]
-        if source_matches or matching_entries:
-            matches.append(source.model_copy(update={"entries": matching_entries}))
-    return matches
+        source_rows = connection.execute(
+            """
+            SELECT *
+            FROM literature_sources
+            WHERE workspace_id = ?
+              AND (
+                LOWER(COALESCE(title, '')) LIKE ? ESCAPE '\\'
+                OR LOWER(COALESCE(citation, '')) LIKE ? ESCAPE '\\'
+                OR LOWER(COALESCE(publisher, '')) LIKE ? ESCAPE '\\'
+              )
+            ORDER BY created_at DESC, id ASC
+            LIMIT ?
+            """,
+            (workspace_id, pattern, pattern, pattern, _LITERATURE_MATCH_LIMIT),
+        ).fetchall()
+        entry_rows = connection.execute(
+            """
+            SELECT
+                ls.id AS source_id,
+                ls.workspace_id,
+                ls.title,
+                ls.source_kind,
+                ls.state,
+                ls.citation,
+                ls.publisher,
+                ls.published_year,
+                ls.created_at AS source_created_at,
+                ls.updated_at AS source_updated_at,
+                le.id AS entry_id,
+                le.entry_kind,
+                le.statement,
+                le.value_text,
+                le.value_number,
+                le.unit,
+                le.status AS entry_status,
+                le.locator_kind,
+                le.locator_start,
+                le.locator_end,
+                le.context_text,
+                le.created_at AS entry_created_at,
+                le.updated_at AS entry_updated_at
+            FROM literature_entries AS le
+            JOIN literature_sources AS ls
+              ON ls.id = le.source_id
+             AND ls.workspace_id = le.workspace_id
+            WHERE le.workspace_id = ?
+              AND (
+                LOWER(COALESCE(le.statement, '')) LIKE ? ESCAPE '\\'
+                OR LOWER(COALESCE(le.value_text, '')) LIKE ? ESCAPE '\\'
+                OR LOWER(COALESCE(CAST(le.value_number AS TEXT), '')) LIKE ? ESCAPE '\\'
+                OR LOWER(COALESCE(le.unit, '')) LIKE ? ESCAPE '\\'
+                OR LOWER(COALESCE(le.context_text, '')) LIKE ? ESCAPE '\\'
+              )
+            ORDER BY le.created_at DESC, le.id ASC
+            LIMIT ?
+            """,
+            (workspace_id, pattern, pattern, pattern, pattern, pattern, _LITERATURE_MATCH_LIMIT),
+        ).fetchall()
+
+    sources: dict[str, LiteratureSourceRead] = {}
+    for row in source_rows:
+        source = _source_read(row)
+        sources[source.id] = source
+    for row in entry_rows:
+        source_id = str(row["source_id"])
+        source = sources.get(source_id)
+        if source is None:
+            source = _source_read(row)
+            sources[source_id] = source
+        source.entries.append(_entry_read(row))
+    return list(sources.values())
