@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 import { resolveTrustedFixture } from "./fixture-registry.mjs";
-import { checkJsonContract, inputEmptyResult, jsonPointer, loadTrustedPlan, noButtonLabelMatches } from "./plan-lib.mjs";
+import { checkJsonContract, inputEmptyResult, jsonPointer, loadTrustedPlan } from "./plan-lib.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const planId = process.env.PROOF_PLAN_ID;
@@ -33,6 +33,8 @@ const assertions = [];
 const artifacts = [];
 const captures = new Map();
 const record = (name, pass, detail) => { assertions.push({ name, pass, detail }); if (!pass) throw new Error(`${name}: ${detail}`); };
+const ASSERTION_POLL_TIMEOUT_MS = 5_000;
+const ASSERTION_POLL_INTERVAL_MS = 50;
 
 const browser = await chromium.launch({ headless: true });
 const context = await browser.newContext();
@@ -108,8 +110,9 @@ async function execute(step, index) {
   if (step.op === "navigate") { const route = template(step.route); const response = await page.goto(`${baseUrl}${route}`, { waitUntil: "networkidle", timeout: 30_000 }); record(`${name}:http`, Boolean(response) && response.status() < 500, `status=${response?.status() ?? "none"}`); record(`${name}:path`, new URL(page.url()).pathname === new URL(`${baseUrl}${route}`).pathname, `url=${page.url()}`); }
   else if (step.op === "reload") { await page.reload({ waitUntil: "networkidle", timeout: 30_000 }); record(name, true, "page reloaded"); }
   else if (step.op === "assert-visible") { await locatorFromSpec(step.locator).waitFor({ state: "visible" }); record(name, true, "locator visible"); }
-  else if (step.op === "assert-count") { const count = await locatorFromSpec(step.locator).count(); record(name, count === step.equals, `count=${count} expected=${step.equals}`); }
+  else if (step.op === "assert-count") { const locator = locatorFromSpec(step.locator); const deadline = Date.now() + ASSERTION_POLL_TIMEOUT_MS; let count = await locator.count(); while (count !== step.equals && Date.now() < deadline) { await page.waitForTimeout(ASSERTION_POLL_INTERVAL_MS); count = await locator.count(); } record(name, count === step.equals, `count=${count} expected=${step.equals}`); }
   else if (step.op === "click") { await locatorFromSpec(step.locator).click(); record(name, true, "clicked trusted locator"); }
+  else if (step.op === "fill") { await locatorFromSpec(step.locator).fill(step.value); record(name, true, "filled trusted locator"); }
   else if (step.op === "open-technical-details") { await openTechnicalDetails(locatorFromSpec(step.locator)); record(name, true, "keyboard disclosure verified and left open"); }
   else if (step.op === "assert-attribute") { const value = await locatorFromSpec(step.locator).getAttribute(step.attribute); record(name, value === step.equals, `${step.attribute}=${JSON.stringify(value)} expected=${JSON.stringify(step.equals)}`); }
   else if (step.op === "assert-input-empty") { const locator = locatorFromSpec(step.locator); await locator.waitFor({ state: "visible" }); const result = inputEmptyResult(await locator.inputValue()); record(name, result.pass, result.detail); }
@@ -126,7 +129,7 @@ async function execute(step, index) {
   else if (step.op === "assert-json-deep-equals") { const locator = locatorFromSpec(step.locator); await locator.waitFor({ state: "visible" }); const rendered = JSON.parse(await locator.innerText()); const expected = valueOf(step.right); record(name, JSON.stringify(rendered) === JSON.stringify(expected), `rendered=${JSON.stringify(rendered)} expected=${JSON.stringify(expected)}`); }
   else if (step.op === "assert-json-contract") { if (!captures.has(step.source)) throw new Error(`${name}: missing source ${step.source}`); const value = jsonPointer(captures.get(step.source), step.pointer); const result = checkJsonContract(value, step.contract); record(name, result.pass, result.detail); }
   else if (step.op === "assert-body-absent") { let body = await page.locator("body").innerText(); let forbidden = step.forbidden; if (step.caseInsensitive) { body = body.toLowerCase(); forbidden = forbidden.map((item) => item.toLowerCase()); } record(name, forbidden.every((item) => !body.includes(item)), `forbidden=${JSON.stringify(step.forbidden)}`); }
-  else if (step.op === "assert-no-button-label") { const labels = await page.getByRole("button").allTextContents(); record(name, noButtonLabelMatches(labels, step.pattern, step.caseInsensitive ?? false), `checked ${labels.length} button labels`); }
+  else if (step.op === "assert-no-button-label") { const forbiddenPattern = new RegExp(step.pattern, step.caseInsensitive ? "i" : ""); const matches = await page.getByRole("button", { name: forbiddenPattern }).count(); record(name, matches === 0, `matched ${matches} forbidden accessible button name(s)`); }
   else if (step.op === "assert-all-attributes-in") { const locator = locatorFromSpec(step.locator); const count = await locator.count(); const values = await locator.evaluateAll((nodes, attribute) => nodes.map((node) => node.getAttribute(attribute)), step.attribute); record(name, (step.count === undefined || count === step.count) && values.every((value) => step.allowed.includes(value)), `count=${count} values=${JSON.stringify(values)}`); }
   else if (step.op === "run-fixture") { const result = runFixture(step.fixture, step.phase); record(name, result.pass, result.detail); }
   else if (step.op === "screenshot") { await screenshot(step.file); record(name, true, `saved ${step.file}`); }

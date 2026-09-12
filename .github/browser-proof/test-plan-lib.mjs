@@ -1,15 +1,22 @@
 import assert from 'node:assert/strict';
 import { checkJsonContract, inputEmptyResult, noButtonLabelMatches, validatePlan, validatePlanId } from './plan-lib.mjs';
-import { fixturePhaseAllowed, resolveTrustedFixture } from './fixture-registry.mjs';
-import { readFile } from 'node:fs/promises';
+import { FIXTURE_IDS, fixturePhaseAllowed, resolveTrustedFixture, trustedFixturePaths } from './fixture-registry.mjs';
+import { readFile, readdir } from 'node:fs/promises';
 
 const runSource = await readFile(new URL('./run.mjs', import.meta.url), 'utf8');
 const workflowSource = await readFile(new URL('../workflows/exact-head-browser-proof.yml', import.meta.url), 'utf8');
+const contractWorkflowSource = await readFile(new URL('../workflows/browser-proof-contract.yml', import.meta.url), 'utf8');
 const plans = new Map();
-for (const id of ['113-memory-models','114-literature','124-settings-ai','140-coding']) {
+const planFiles = (await readdir(new URL('./plans', import.meta.url), { withFileTypes: true }))
+  .filter((entry) => entry.isFile() && entry.name.endsWith('.json'))
+  .map((entry) => entry.name)
+  .sort();
+for (const file of planFiles) {
+  const id = file.slice(0, -'.json'.length);
   validatePlanId(id);
-  const plan = JSON.parse(await readFile(new URL(`./plans/${id}.json`, import.meta.url), 'utf8'));
+  const plan = JSON.parse(await readFile(new URL(`./plans/${file}`, import.meta.url), 'utf8'));
   validatePlan(plan);
+  assert.equal(plan.id, id, `${file} id must match its filename`);
   plans.set(id, plan);
 }
 const names = (id) => new Set(plans.get(id).steps.map((step) => step.name));
@@ -29,11 +36,16 @@ assert(!/prove113|prove124|prove140|PROOF_SCENARIO/.test(runSource), 'generic ex
 assert(!runSource.includes('fixture !== "model-version-selection"'), 'generic executor must not retain per-fixture control branches');
 assert(!workflowSource.includes('model_version_selection.py'), 'workflow must not execute a fixture-specific script');
 assert(!workflowSource.includes('none|model-version-selection'), 'workflow must not hard-code fixture identity choices');
+assert(contractWorkflowSource.includes('validate-contract.mjs'), 'contract workflow must validate all discovered plans and registered fixtures');
 assert(runSource.includes('const mutatingBrowserRequests = []'), 'generic executor must record browser mutation evidence');
 assert(runSource.includes('if (plan.forbidMutatingRequests)'), 'generic executor must preserve optional whole-run mutation-free policy');
 assert(runSource.includes('step.op === "capture-mutating-request-count"'), 'generic executor must expose bounded mutation-count checkpoints');
 assert(!runSource.includes('planId === "114-literature"'), 'mutation evidence must remain generic rather than spec-specific');
 assert(!runSource.includes('/ai/context/packs/preview'), 'generic executor must not special-case product endpoints');
+assert(runSource.includes('const ASSERTION_POLL_TIMEOUT_MS = 5_000'), 'count assertions must use a bounded controller-owned timeout');
+assert(runSource.includes('await page.waitForTimeout(ASSERTION_POLL_INTERVAL_MS)'), 'count assertions must poll for asynchronous rendering');
+assert(runSource.includes('page.getByRole("button", { name: forbiddenPattern })'), 'forbidden button checks must use accessible role names');
+assert(!runSource.includes('getByRole("button").allTextContents()'), 'forbidden button checks must not rely on inner text only');
 
 assert.equal(fixturePhaseAllowed('model-version-selection', 'workspace'), true);
 assert.equal(fixturePhaseAllowed('model-version-selection', 'versions'), true);
@@ -44,6 +56,10 @@ assert.equal(fixturePhaseAllowed('../../evil', 'workspace'), false);
 assert(resolveTrustedFixture('literature-knowledge', 'sources', new URL('./fixtures', import.meta.url).pathname).endsWith('/literature_knowledge.py'));
 assert.throws(() => resolveTrustedFixture('../../evil', 'workspace', new URL('./fixtures', import.meta.url).pathname));
 assert.throws(() => resolveTrustedFixture('literature-knowledge', '../../shell', new URL('./fixtures', import.meta.url).pathname));
+const fixturePaths = trustedFixturePaths(new URL('./fixtures', import.meta.url).pathname);
+assert.equal(fixturePaths.length, FIXTURE_IDS.size - 1);
+assert.equal(new Set(fixturePaths).size, fixturePaths.length);
+assert(fixturePaths.every((path) => path.endsWith('.py')));
 
 const p124 = plans.get('124-settings-ai');
 assert.equal(p124.artifactMode, 'metadata-only', 'credential proof must disable browser capture artifacts');
@@ -104,6 +120,12 @@ assert.throws(() => validatePlan({...base, artifactMode:'metadata-only', steps:[
 assert.throws(() => validatePlan({...base, steps:[{op:'shell', command:'rm -rf /'}]}));
 assert.throws(() => validatePlan({...base, fixture:'../../evil'}));
 assert.throws(() => validatePlan({...base, steps:[{op:'navigate', route:'/ok', eval:'alert(1)'}]}));
+assert.doesNotThrow(() => validatePlan({...base, steps:[{op:'fill', name:'bounded literal fill', locator:{kind:'label',text:'Search'}, value:'reactor'}]}));
+assert.throws(() => validatePlan({...base, steps:[{op:'fill', name:'missing locator', value:'reactor'}]}));
+assert.throws(() => validatePlan({...base, steps:[{op:'fill', name:'non-literal value', locator:{kind:'label',text:'Search'}, value:{capture:'query'}}]}));
+assert.throws(() => validatePlan({...base, steps:[{op:'fill', name:'empty value', locator:{kind:'label',text:'Search'}, value:''}]}));
+assert.throws(() => validatePlan({...base, steps:[{op:'fill', name:'oversized value', locator:{kind:'label',text:'Search'}, value:'x'.repeat(501)}]}));
+assert.throws(() => validatePlan({...base, steps:[{op:'fill', name:'extra authority', locator:{kind:'label',text:'Search'}, value:'reactor', eval:'alert(1)'}]}));
 assert.throws(() => validatePlan({...base, steps:[{op:'assert-visible', locator:{kind:'css', selector:'body; rm -rf /'}}]}));
 assert.throws(() => validatePlan({...base, steps:[{op:'same-origin-get', name:'evil', path:'/ok', capture:'x', command:'curl attacker'}]}));
 assert.throws(() => validatePlan({...base, steps:[{op:'run-fixture', name:'evil', fixture:'model-version-selection', phase:'../../shell'}]}));
