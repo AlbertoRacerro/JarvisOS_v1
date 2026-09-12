@@ -17,6 +17,17 @@ const FIXTURE_REGISTRY = Object.freeze({
 
 export const FIXTURE_IDS = new Set(["none", ...Object.keys(FIXTURE_REGISTRY)]);
 
+export function trustedFixturePaths(fixtureDir) {
+  const root = resolve(fixtureDir);
+  return Object.values(FIXTURE_REGISTRY).map(({ script }) => {
+    const path = resolve(join(root, script));
+    if (!path.startsWith(`${root}${sep}`) || basename(path) !== script) {
+      throw new Error(`trusted fixture path escaped registry root for ${script}`);
+    }
+    return path;
+  });
+}
+
 export function fixturePhaseAllowed(fixture, phase) {
   if (fixture === "none") return false;
   const spec = FIXTURE_REGISTRY[fixture];
