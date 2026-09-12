@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from typing import Any, cast
 
 from app.modules.memory.literature_search import search_literature_sources
 from app.modules.modeling.model_dossier_search import search_model_dossier_index
@@ -22,7 +23,7 @@ _MAX_OWNER_ITEMS = 100
 _MAX_MODELING_SCAN_ITEMS = _MAX_OWNER_ITEMS + 1
 _MODELING_KINDS = ("requirement", "parameter", "assumption", "decision")
 _MODELING_STATUSES = {
-    "requirement": ["draft", "active", "retired"],
+    "requirement": ["draft", "active"],
     "parameter": ["candidate", "literature", "measured", "validated", "accepted"],
     "assumption": ["proposed", "accepted", "rejected", "superseded"],
     # Decision.status is owner-defined/free-form. None means all owner-visible statuses.
@@ -72,13 +73,16 @@ def _summary(*values: str | None) -> str | None:
 def _modeling_results(workspace_id: str, query: str, kinds: list[str]) -> list[ProjectSearchResult]:
     if not kinds:
         return []
-    selected = select_context_records(
-        workspace_id,
-        kinds=kinds,
-        statuses_by_kind={kind: _MODELING_STATUSES[kind] for kind in kinds},
-        ids=None,
-        query=None,
-        max_items_per_kind=_MAX_MODELING_SCAN_ITEMS,
+    selected = cast(
+        dict[str, list[Any]],
+        select_context_records(
+            workspace_id,
+            kinds=kinds,
+            statuses_by_kind={kind: _MODELING_STATUSES[kind] for kind in kinds},
+            ids=None,
+            query=None,
+            max_items_per_kind=_MAX_MODELING_SCAN_ITEMS,
+        ),
     )
     results: list[ProjectSearchResult] = []
     for kind in kinds:
@@ -86,6 +90,8 @@ def _modeling_results(workspace_id: str, query: str, kinds: list[str]) -> list[P
         if len(records) > _MAX_OWNER_ITEMS:
             raise ProjectSearchCapacityError(f"Project Basis search exceeds bounded {kind} scan capacity.")
         for record in records:
+            if kind == "decision" and record.basis_lifecycle_state != "active":
+                continue
             if kind == "requirement":
                 fields = {
                     "statement": record.statement,
@@ -127,20 +133,20 @@ def _modeling_results(workspace_id: str, query: str, kinds: list[str]) -> list[P
             stable_ref = f"{kind}:{record.id}"
             results.append(
                 ProjectSearchResult(
-                    kind=kind,
+                    kind=cast(ProjectSearchKind, kind),
                     owner="modeling",
                     stable_ref=stable_ref,
                     workspace_id=workspace_id,
-                    title=title,
+                    title=title[:8_000],
                     summary=summary,
-                    lifecycle_or_status=status,
+                    lifecycle_or_status=status[:256] if status is not None else None,
                     version_or_revision=None,
                     provenance_refs=[],
                     source_refs=source_refs,
                     route="/memory/project-basis",
                     route_params={"recordKind": kind, "recordId": record.id},
                     match_fields=match_fields,
-                    match_tier=tier,
+                    match_tier=cast(Any, tier),
                 )
             )
     return results
@@ -167,10 +173,10 @@ def _model_results(workspace_id: str, query: str) -> list[ProjectSearchResult]:
                     owner="model-dossier",
                     stable_ref=f"model_version:{version.model_version_id}",
                     workspace_id=workspace_id,
-                    title=model.title,
+                    title=model.title[:8_000],
                     summary=_summary(model.engineering_question, model.scope),
-                    lifecycle_or_status=version.status,
-                    version_or_revision=version.version_label,
+                    lifecycle_or_status=version.status[:256] if version.status is not None else None,
+                    version_or_revision=version.version_label[:500] if version.version_label is not None else None,
                     provenance_refs=[],
                     source_refs=[],
                     route="/memory/models",
@@ -179,7 +185,7 @@ def _model_results(workspace_id: str, query: str) -> list[ProjectSearchResult]:
                         "modelVersionId": version.model_version_id,
                     },
                     match_fields=match_fields,
-                    match_tier=tier,
+                    match_tier=cast(Any, tier),
                 )
             )
     return results
@@ -205,16 +211,16 @@ def _literature_results(workspace_id: str, query: str, kinds: set[str]) -> list[
                         owner="literature",
                         stable_ref=source.source_ref,
                         workspace_id=workspace_id,
-                        title=source.title,
+                        title=source.title[:8_000],
                         summary=_summary(source.citation, source.publisher),
-                        lifecycle_or_status=source.state,
+                        lifecycle_or_status=source.state[:256] if source.state is not None else None,
                         version_or_revision=None,
                         provenance_refs=[],
                         source_refs=[source.source_ref],
                         route="/memory/literature",
                         route_params={"sourceId": source.id},
                         match_fields=match_fields,
-                        match_tier=tier,
+                        match_tier=cast(Any, tier),
                     )
                 )
         if "literature_entry" not in kinds:
@@ -249,16 +255,16 @@ def _literature_results(workspace_id: str, query: str, kinds: set[str]) -> list[
                     owner="literature",
                     stable_ref=entry.provenance_ref,
                     workspace_id=workspace_id,
-                    title=title,
+                    title=title[:8_000],
                     summary=_summary(entry.context_text, source.title),
-                    lifecycle_or_status=entry.status,
+                    lifecycle_or_status=entry.status[:256] if entry.status is not None else None,
                     version_or_revision=None,
                     provenance_refs=[entry.provenance_ref],
                     source_refs=[source.source_ref],
                     route="/memory/literature",
                     route_params=route_params,
                     match_fields=match_fields,
-                    match_tier=tier,
+                    match_tier=cast(Any, tier),
                 )
             )
     return results
