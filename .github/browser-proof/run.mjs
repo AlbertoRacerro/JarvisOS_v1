@@ -27,6 +27,7 @@ if (!planId || !artifactDir || !expectedHead || !resolvedHead || !checkedOutHead
 if (expectedHead !== resolvedHead || expectedHead !== checkedOutHead) throw new Error("exact-head identity mismatch before browser execution");
 
 const plan = await loadTrustedPlan(planId, join(here, "plans"));
+const readOnlySameOriginPostPaths = new Set(plan.readOnlySameOriginPostPaths ?? []);
 const artifactMode = plan.artifactMode ?? "full";
 await mkdir(artifactDir, { recursive: true });
 const startedAt = new Date().toISOString();
@@ -46,7 +47,7 @@ const proofOrigin = new URL(baseUrl).origin;
 const mutatingBrowserRequests = [];
 context.on("request", (request) => {
   const url = new URL(request.url());
-  if (url.origin === proofOrigin && isMutatingSameOriginRequest(request.method(), url.pathname)) {
+  if (url.origin === proofOrigin && isMutatingSameOriginRequest(request.method(), url.pathname, readOnlySameOriginPostPaths)) {
     mutatingBrowserRequests.push({ method: request.method(), path: url.pathname });
   }
 });
@@ -164,5 +165,6 @@ else try { await readFile(backendLog); artifacts.push(backendLog); } catch (erro
 const digests = {};
 for (const path of artifacts) digests[path.split("/").at(-1)] = createHash("sha256").update(await readFile(path)).digest("hex");
 const manifest = { schema:"jarvisos.exact-head-browser-proof.v1", repository, pr_number:prNumber ? Number(prNumber) : null, pr_base_sha:prBaseSha, expected_head_sha:expectedHead, resolved_pr_head_sha:resolvedHead, checked_out_head_sha:checkedOutHead, controller_sha:controllerSha, workflow_run_id:runId, plan_id:planId, artifact_mode:artifactMode, browser:"chromium", playwright_version:"1.55.0", started_at:startedAt, ended_at:new Date().toISOString(), assertions, artifacts:digests, verdict, failure };
-await writeFile(join(artifactDir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+await writeFile(join(artifactDir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\
+`, "utf8");
 if (verdict !== "PASS" || failedAssertions.length > 0) process.exitCode = 1;
