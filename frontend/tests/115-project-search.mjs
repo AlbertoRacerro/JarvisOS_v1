@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const [app, api, panel] = await Promise.all([
+const [app, api, panel, literature] = await Promise.all([
   readFile(new URL("../src/App.tsx", import.meta.url), "utf8"),
   readFile(new URL("../src/api/projectSearch.ts", import.meta.url), "utf8"),
-  readFile(new URL("../src/components/fusion/ProjectSearchPanel.tsx", import.meta.url), "utf8")
+  readFile(new URL("../src/components/fusion/ProjectSearchPanel.tsx", import.meta.url), "utf8"),
+  readFile(new URL("../src/pages/LiteratureKnowledge.tsx", import.meta.url), "utf8")
 ]);
 
 assert.match(app, /<ProjectSearchPanel\s+workspaceId=/);
@@ -26,5 +27,6 @@ assert.match(panel, /navigate\(navigationTarget\(result\)\)/);
 assert.match(panel, /Project Basis|Project knowledge/);
 assert.match(panel, /Searching does not add Jarvis context\./);
 assert.doesNotMatch(panel, /Add to Jarvis|postJson|putJson|deleteJson|execute|commit/i);
+assert.match(literature, /className="final-fusion__source-list"/, "exact Literature search targets must remain inside the bounded scrolling source list");
 
 console.log("115 project search frontend contract: PASS");
