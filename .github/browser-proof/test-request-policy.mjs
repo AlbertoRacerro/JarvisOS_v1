@@ -17,6 +17,9 @@ assert.equal(isMutatingSameOriginRequest('DELETE', '/ai/context/packs/preview', 
 assert.equal(isMutatingSameOriginRequest(null, '/ai/context/packs/preview', readOnlyPostPaths), true, 'malformed methods fail closed');
 assert.equal(isMutatingSameOriginRequest('POST', null, readOnlyPostPaths), true, 'malformed paths fail closed');
 assert.equal(isMutatingSameOriginRequest('POST', '/ai/context/packs/preview', ['/ai/context/packs/preview']), true, 'non-Set policy input fails closed');
+for (const encoded of ['/api/%77rite', '/ai/context/packs/%70review', '/ai/context/packs/preview%2Fextra', '/bad%ZZ']) {
+  assert.equal(isMutatingSameOriginRequest('POST', encoded, new Set([encoded])), true, `encoded alias ${encoded} must fail closed even when declared read-only`);
+}
 
 const basePlan = {
   schema: PLAN_SCHEMA,
