@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate owner-authored Codex delivery comments for trusted bridge dispatch.
+"""Validate trusted Codex delivery comments for cloud-delivery dispatch.
 
 This script does not write GitHub state and never applies patches. It only binds an
 issue_comment event to the existing cloud-delivery bridge inputs. The actual patch
@@ -18,6 +18,7 @@ from pathlib import Path
 CODEX_MARKER = "<!-- jarvis-codex-result-delivery:v1 -->"
 DELIVERY_MARKER = "<!-- jarvis-cloud-delivery:v1 -->"
 TRUSTED_ASSOCIATIONS = {"OWNER"}
+TRUSTED_BOT_LOGINS = {"chatgpt-codex-connector[bot]"}
 
 
 class DispatchError(RuntimeError):
@@ -43,8 +44,11 @@ def request_from_event(event: dict) -> DispatchRequest:
         raise DispatchError("comment is not attached to a pull request")
 
     association = str(comment.get("author_association", ""))
-    if association not in TRUSTED_ASSOCIATIONS:
-        raise DispatchError("comment author is not an admitted maintainer")
+    user = comment.get("user")
+    login = str(user.get("login", "")) if isinstance(user, dict) else ""
+    trusted_author = association in TRUSTED_ASSOCIATIONS or login in TRUSTED_BOT_LOGINS
+    if not trusted_author:
+        raise DispatchError("comment author is not an admitted maintainer/Codex actor")
 
     body = str(comment.get("body", ""))
     if body.count(CODEX_MARKER) != 1:
