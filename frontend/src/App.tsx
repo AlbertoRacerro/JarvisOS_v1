@@ -4,6 +4,7 @@ import type { StageSelection } from "./app/selection";
 import { useAppRouter } from "./app/useAppRouter";
 import Layout from "./components/Layout";
 import PageErrorBoundary from "./components/PageErrorBoundary";
+import JarvisKnowledgeActions from "./components/ai/JarvisKnowledgeActions";
 import { useJarvisSidecar } from "./components/ai/useJarvisSidecar";
 import AnalyticsDockContent from "./components/analytics/AnalyticsDockContent";
 import {
@@ -56,6 +57,15 @@ function App() {
   const requestedModelVersionId = boundedSearchParam(routeParams, "modelVersionId");
   const requestedLiteratureSourceId = boundedSearchParam(routeParams, "sourceId");
   const requestedLiteratureEntryId = boundedSearchParam(routeParams, "entryId");
+  const knowledgeStableRef = route.id === "memory-project-basis"
+    ? requestedRecordRef
+    : route.id === "memory-models" && requestedModelVersionId
+      ? `model_version:${requestedModelVersionId}`
+      : route.id === "memory-literature" && requestedLiteratureEntryId
+        ? `literature_entry:${requestedLiteratureEntryId}`
+        : route.id === "memory-literature" && requestedLiteratureSourceId
+          ? `literature_source:${requestedLiteratureSourceId}`
+          : null;
 
   useEffect(() => {
     setSelection(null);
@@ -138,7 +148,8 @@ function App() {
 
   const stageSidecar = shellRegions.sidecar;
   const semanticSelectionContext = selection?.kind === "bluecad-part" ? <div className="shell-properties__selection"><strong>{selection.partId}</strong><p>{selection.partKind ? `${selection.partKind} · selected BLUECAD part` : "Selected BLUECAD part"}</p></div> : undefined;
-  const jarvisLocalContext = <>{semanticSelectionContext}<JarvisEngineeringActions controller={engineeringProperties} /></>;
+  const knowledgeActions = <JarvisKnowledgeActions workspaceId={workspaceId} routeId={route.id} stableRef={knowledgeStableRef} />;
+  const jarvisLocalContext = <>{semanticSelectionContext}<JarvisEngineeringActions controller={engineeringProperties} />{knowledgeActions}</>;
   const jarvisSidecar = useJarvisSidecar(workspaceId, route.id, selection, jarvisLocalContext);
   const propertiesContent = <EngineeringPropertiesPanel controller={engineeringProperties} stageContext={stageSidecar} navigate={navigate} />;
   const effectiveShellRegions: ShellRegionContributions = {
