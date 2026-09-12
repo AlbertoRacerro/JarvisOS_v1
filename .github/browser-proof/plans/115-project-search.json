@@ -3,6 +3,7 @@
   "id": "115-project-search",
   "fixture": "project-search",
   "forbidMutatingRequests": true,
+  "readOnlySameOriginPostPaths": ["/ai/context/packs/preview"],
   "steps": [
     {"op":"run-fixture","name":"115:seed-workspace","fixture":"project-search","phase":"workspace"},
     {"op":"navigate","name":"115:project-basis","route":"/memory/project-basis"},
