@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Callable
 from typing import Literal
 
@@ -39,6 +40,7 @@ KnowledgeRefusalReason = Literal[
     "provider_unavailable",
     "proposal_invalid",
     "proposal_too_large",
+    "sensitive_context",
 ]
 
 _ROUTE_PATHS: dict[KnowledgeRouteId, str] = {
@@ -64,6 +66,17 @@ _ROUTE_NEXT_ACTION: dict[KnowledgeRouteId, str] = {
 _PROJECT_KINDS = frozenset({"requirement", "parameter", "assumption", "decision"})
 MAX_INTENT_CHARS = 4_000
 MAX_PROPOSAL_BYTES = 128 * 1024
+
+_SECRET_ASSIGNMENT_PATTERN = re.compile(
+    r"(?i)\b(?:api[_ -]?key|password|passwd|secret|access[_ -]?token|refresh[_ -]?token|authorization)\b"
+    r"\s*(?::|=)\s*[\"']?[^\s,\"'}]{8,}"
+)
+_SECRET_TOKEN_PATTERNS = (
+    re.compile(r"\bsk-[A-Za-z0-9_-]{8,}\b"),
+    re.compile(r"\bgh[pousr]_[A-Za-z0-9]{20,}\b"),
+    re.compile(r"-----BEGIN (?:[A-Z0-9 ]+ )?PRIVATE KEY-----"),
+    re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._~+/=-]{8,}"),
+)
 
 
 class KnowledgeActionError(ValueError):
@@ -130,6 +143,8 @@ class _ProjectBasisAdapter:
         provenance["revision"] = current_revision
         if ref.revision != current_revision:
             return JarvisResolvedRef(ref=ref, state="stale", reason="Project Basis record revision moved", provenance=provenance)
+        if ref.kind == "requirement" and getattr(record, "status", None) == "retired":
+            return JarvisResolvedRef(ref=ref, state="stale", reason="Project Basis requirement is retired", provenance=provenance)
         if ref.kind == "parameter" and getattr(record, "lifecycle_state", None) != "active":
             return JarvisResolvedRef(ref=ref, state="stale", reason="Project Basis parameter is no longer active", provenance=provenance)
         if ref.kind == "decision" and getattr(record, "basis_lifecycle_state", None) != "active":
@@ -213,6 +228,10 @@ class _LiteratureAdapter:
             source = get_literature_source(ref.workspace_id, source_id)
         except LiteratureError:
             return JarvisResolvedRef(ref=ref, state="unavailable", reason="Literature source is unavailable", provenance=provenance)
+        backing = getattr(source, "backing", None)
+        if backing is not None and getattr(backing, "availability", None) != "available":
+            provenance["backing_availability"] = getattr(backing, "availability", None)
+            return JarvisResolvedRef(ref=ref, state="unavailable", reason="Literature source backing is unavailable", provenance=provenance)
         if ref.kind == "source":
             stable_ref = source.source_ref
             revision = source.updated_at
@@ -298,6 +317,25 @@ def _owner_allowed(route_id: KnowledgeRouteId, owner: KnowledgeOwner) -> bool:
     return _ROUTE_OWNER[route_id] == owner
 
 
+def _dedupe_exact_refs(refs: list[JarvisExactRef]) -> list[JarvisExactRef]:
+    normalized: list[JarvisExactRef] = []
+    seen: set[str] = set()
+    for ref in refs:
+        key = ref.model_dump_json(exclude_none=True)
+        if key in seen:
+            continue
+        seen.add(key)
+        normalized.append(ref)
+    return normalized
+
+
+def _contains_secret_material(blocks: list[dict[str, object]]) -> bool:
+    serialized = json.dumps(blocks, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    if _SECRET_ASSIGNMENT_PATTERN.search(serialized):
+        return True
+    return any(pattern.search(serialized) for pattern in _SECRET_TOKEN_PATTERNS)
+
+
 def exact_ref_from_stable(workspace_id: str, route_id: KnowledgeRouteId, item: StableKnowledgeRef) -> JarvisExactRef:
     if not _owner_allowed(route_id, item.owner):
         raise KnowledgeActionError("unsupported_ref", "stable ref owner does not belong to the active knowledge route")
@@ -375,7 +413,9 @@ def _validate_route_refs(workspace_id: str, route_id: KnowledgeRouteId, refs: li
 
 
 def build_knowledge_preview(payload: KnowledgeContextPreviewRequest) -> dict[str, object]:
-    exact_refs = [exact_ref_from_stable(payload.workspace_id, payload.route_id, item) for item in payload.refs]
+    exact_refs = _dedupe_exact_refs(
+        [exact_ref_from_stable(payload.workspace_id, payload.route_id, item) for item in payload.refs]
+    )
     try:
         preview = build_jarvis_context_preview(
             JarvisContextRequest(
@@ -451,6 +491,9 @@ class KnowledgeActionsService:
 
             generated_by: dict[str, object]
             if payload.semantic:
+                context_blocks = list(inspected.blocks)
+                if _contains_secret_material(context_blocks):
+                    raise KnowledgeActionError("sensitive_context", "secret-bearing evidence cannot enter semantic model context")
                 prompt = (
                     "Return JSON only with keys summary, proposed_items, questions, research_steps, assumptions, "
                     "warnings, authoritative_next_action. Keep the answer advisory; never claim to commit, apply, "
@@ -462,7 +505,7 @@ class KnowledgeActionsService:
                             prompt=prompt,
                             task_kind="synthesis",
                             route_class="auto",
-                            context_blocks=list(inspected.blocks),
+                            context_blocks=context_blocks,
                             include_project_context=False,
                             workspace_id=payload.workspace_id,
                         )
