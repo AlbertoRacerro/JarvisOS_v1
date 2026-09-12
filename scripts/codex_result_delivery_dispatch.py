@@ -15,7 +15,8 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-MARKER = "<!-- jarvis-cloud-delivery:v1 -->"
+CODEX_MARKER = "<!-- jarvis-codex-result-delivery:v1 -->"
+DELIVERY_MARKER = "<!-- jarvis-cloud-delivery:v1 -->"
 TRUSTED_ASSOCIATIONS = {"OWNER"}
 
 
@@ -46,8 +47,10 @@ def request_from_event(event: dict) -> DispatchRequest:
         raise DispatchError("comment author is not an admitted maintainer")
 
     body = str(comment.get("body", ""))
-    if body.count(MARKER) != 1:
-        raise DispatchError("comment must contain exactly one delivery marker")
+    if body.count(CODEX_MARKER) != 1:
+        raise DispatchError("comment must contain exactly one Codex result marker")
+    if body.count(DELIVERY_MARKER) != 1:
+        raise DispatchError("comment must contain exactly one cloud delivery marker")
 
     try:
         pr = int(issue["number"])
