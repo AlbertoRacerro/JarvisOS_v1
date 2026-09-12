@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 import json
-import re
 from collections.abc import Callable
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from app.core.database import open_sqlite_connection
-from app.modules.ai.execution import AiTaskOutcome, run_ai_task
 from app.modules.ai.jarvis_context import (
     PRODUCTION_ADAPTER_REGISTRY,
     PRODUCTION_CAPABILITY_REGISTRY,
@@ -24,6 +22,8 @@ from app.modules.ai.jarvis_context_models import (
     JarvisResolvedRef,
     JarvisRouteDescriptor,
 )
+from app.modules.ai.models import AITaskRunRequest, AITaskRunResponse
+from app.modules.ai.routing.bridge import run_auto_task
 from app.modules.memory.literature_service import LiteratureError, get_literature_source
 from app.modules.modeling.model_dossier import get_model_dossier
 from app.modules.modeling.project_search_owner import get_context_record_exact
@@ -56,8 +56,12 @@ _ROUTE_DOMAIN: dict[KnowledgeRouteId, KnowledgeTargetDomain] = {
     "memory-models": "models",
     "memory-literature": "literature",
 }
+_ROUTE_NEXT_ACTION: dict[KnowledgeRouteId, str] = {
+    "memory-project-basis": "Review the proposal, then use the Project Basis owner workflow if an authoritative change is accepted.",
+    "memory-models": "Review the proposal against the read-only Model Dossier; any authoritative model change belongs to its owning workflow.",
+    "memory-literature": "Review the proposal, then use the Literature owner workflow for any accepted extraction or promotion.",
+}
 _PROJECT_KINDS = frozenset({"requirement", "parameter", "assumption", "decision"})
-_HEX64 = re.compile(r"^[0-9a-f]{64}$")
 MAX_INTENT_CHARS = 4_000
 MAX_PROPOSAL_BYTES = 128 * 1024
 
@@ -88,6 +92,7 @@ class KnowledgeProposalRequest(BaseModel):
     intent: str = Field(min_length=1, max_length=MAX_INTENT_CHARS)
     exact_refs: list[JarvisExactRef] = Field(min_length=1, max_length=50)
     expected_context_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    semantic: bool = False
 
 
 class KnowledgeGeneratedProposal(BaseModel):
@@ -152,12 +157,14 @@ class _ModelDossierAdapter:
             return JarvisResolvedRef(ref=ref, state="unavailable", reason="model version is unavailable", provenance=provenance)
         identity = dossier.identity
         immutable_ref = f"model_version:{identity.model_version_id}"
-        provenance.update({
-            "immutable_ref": immutable_ref,
-            "model_spec_id": identity.model_spec_id,
-            "version_label": identity.version_label,
-            "input_contract_digest": identity.input_contract_digest,
-        })
+        provenance.update(
+            {
+                "immutable_ref": immutable_ref,
+                "model_spec_id": identity.model_spec_id,
+                "version_label": identity.version_label,
+                "input_contract_digest": identity.input_contract_digest,
+            }
+        )
         if ref.immutable_ref != immutable_ref:
             return JarvisResolvedRef(ref=ref, state="stale", reason="model version identity moved", provenance=provenance)
         if ref.version is not None and ref.version != identity.version_label:
@@ -262,18 +269,22 @@ def _register_production_contract() -> None:
     PRODUCTION_ADAPTER_REGISTRY.register(owner="literature", kind="source", adapter=literature_adapter)
     PRODUCTION_ADAPTER_REGISTRY.register(owner="literature", kind="entry", adapter=literature_adapter)
     for route_id in _ROUTE_PATHS:
-        PRODUCTION_CAPABILITY_REGISTRY.register(JarvisCapabilityDescriptor(
-            capability_id="knowledge.add-context",
-            route_id=route_id,
-            action_class="CONTEXT",
-            label="Add exact current knowledge evidence to Jarvis context",
-        ))
-        PRODUCTION_CAPABILITY_REGISTRY.register(JarvisCapabilityDescriptor(
-            capability_id="knowledge.propose",
-            route_id=route_id,
-            action_class="PROPOSE",
-            label="Generate a bounded advisory knowledge proposal",
-        ))
+        PRODUCTION_CAPABILITY_REGISTRY.register(
+            JarvisCapabilityDescriptor(
+                capability_id="knowledge.add-context",
+                route_id=route_id,
+                action_class="CONTEXT",
+                label="Add exact current knowledge evidence to Jarvis context",
+            )
+        )
+        PRODUCTION_CAPABILITY_REGISTRY.register(
+            JarvisCapabilityDescriptor(
+                capability_id="knowledge.propose",
+                route_id=route_id,
+                action_class="PROPOSE",
+                label="Generate a bounded advisory knowledge proposal",
+            )
+        )
 
 
 _register_production_contract()
@@ -400,13 +411,28 @@ def _parse_generated(raw_text: str) -> KnowledgeGeneratedProposal:
         raise KnowledgeActionError("proposal_invalid", "model proposal did not match the closed schema") from exc
 
 
+def _template_generated(payload: KnowledgeProposalRequest) -> KnowledgeGeneratedProposal:
+    return KnowledgeGeneratedProposal(
+        summary=f"Advisory proposal grounded in the inspected exact context: {payload.intent}",
+        proposed_items=[payload.intent],
+        questions=[],
+        research_steps=[],
+        assumptions=[],
+        warnings=["This proposal is advisory only and has not changed domain truth."],
+        authoritative_next_action=_ROUTE_NEXT_ACTION[payload.route_id],
+    )
+
+
 def _refusal(reason: KnowledgeRefusalReason) -> dict[str, object]:
     return {"state": "refused", "reason": reason}
 
 
+AutoRunner = Callable[[AITaskRunRequest], AITaskRunResponse]
+
+
 class KnowledgeActionsService:
-    def __init__(self, *, ai_runner: Callable[..., AiTaskOutcome] = run_ai_task) -> None:
-        self._ai_runner = ai_runner
+    def __init__(self, *, auto_runner: AutoRunner = run_auto_task) -> None:
+        self._auto_runner = auto_runner
 
     def propose(self, payload: KnowledgeProposalRequest) -> dict[str, object]:
         try:
@@ -422,24 +448,41 @@ class KnowledgeActionsService:
                 raise KnowledgeActionError("stale_context", "knowledge context changed since inspection") from exc
             except JarvisContextError as exc:
                 raise KnowledgeActionError("missing_evidence", "knowledge context cannot be resolved") from exc
-            prompt = (
-                "Return JSON only with keys summary, proposed_items, questions, research_steps, assumptions, "
-                "warnings, authoritative_next_action. Keep the answer advisory; never claim to commit, apply, "
-                "promote, execute, fetch URLs, or mutate domain truth. Operator intent: " + payload.intent
-            )
-            try:
-                outcome = self._ai_runner(
-                    user_prompt=prompt,
-                    task_kind="synthesis",
-                    route_class="auto",
-                    context_blocks=list(inspected.blocks),
-                    workspace_id=payload.workspace_id,
+
+            generated_by: dict[str, object]
+            if payload.semantic:
+                prompt = (
+                    "Return JSON only with keys summary, proposed_items, questions, research_steps, assumptions, "
+                    "warnings, authoritative_next_action. Keep the answer advisory; never claim to commit, apply, "
+                    "promote, execute, fetch URLs, or mutate domain truth. Operator intent: " + payload.intent
                 )
-            except Exception as exc:
-                raise KnowledgeActionError("provider_unavailable", "proposal generation was unavailable") from exc
-            if outcome.status != "success" or outcome.response is None or outcome.response.text is None:
-                raise KnowledgeActionError("provider_unavailable", "proposal generation was unavailable")
-            generated = _parse_generated(outcome.response.text)
+                try:
+                    outcome = self._auto_runner(
+                        AITaskRunRequest(
+                            prompt=prompt,
+                            task_kind="synthesis",
+                            route_class="auto",
+                            context_blocks=list(inspected.blocks),
+                            include_project_context=False,
+                            workspace_id=payload.workspace_id,
+                        )
+                    )
+                except Exception as exc:
+                    raise KnowledgeActionError("provider_unavailable", "proposal generation was unavailable") from exc
+                if outcome.status != "success" or outcome.response_text is None:
+                    raise KnowledgeActionError("provider_unavailable", "proposal generation was unavailable")
+                generated = _parse_generated(outcome.response_text)
+                generated_by = {
+                    "kind": "ai_task",
+                    "ai_job_id": outcome.ledger_id,
+                    "selected_route_class": outcome.selected_route_class,
+                    "provider_id": outcome.provider_id,
+                    "model_id": outcome.model_id,
+                }
+            else:
+                generated = _template_generated(payload)
+                generated_by = {"kind": "deterministic_template", "template_id": "knowledge-proposal-v1"}
+
             try:
                 current = require_dispatchable_preview(request, payload.expected_context_digest)
             except JarvisContextConflictError as exc:
@@ -462,13 +505,7 @@ class KnowledgeActionsService:
                 "assumptions": generated.assumptions,
                 "warnings": generated.warnings,
                 "authoritative_next_action": generated.authoritative_next_action,
-                "generated_by": {
-                    "kind": "ai_task",
-                    "ai_job_id": outcome.ledger_id,
-                    "selected_route_class": outcome.selected_route_class,
-                    "provider_id": outcome.decision.provider_id,
-                    "model_id": outcome.decision.model_id,
-                },
+                "generated_by": generated_by,
             }
             if len(json.dumps(response, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")) > MAX_PROPOSAL_BYTES:
                 raise KnowledgeActionError("proposal_too_large", "proposal exceeds payload limit")
