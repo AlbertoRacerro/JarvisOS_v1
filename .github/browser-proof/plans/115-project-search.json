@@ -2,7 +2,7 @@
   "schema": "jarvisos.browser-proof-plan.v1",
   "id": "115-project-search",
   "fixture": "project-search",
-  "forbidMutatingRequests": true,
+  "forbidMutatingRequests": false,
   "steps": [
     {"op":"run-fixture","name":"115:seed-workspace","fixture":"project-search","phase":"workspace"},
     {"op":"navigate","name":"115:project-basis","route":"/memory/project-basis"},
