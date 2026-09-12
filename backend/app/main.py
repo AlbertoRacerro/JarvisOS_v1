@@ -42,6 +42,7 @@ _SPA_RESERVED_ROOT_CLIENT_ROUTES = frozenset(
     {
         "/memory/literature",
         "/memory/models",
+        "/memory/project-basis",
         "/settings/ai",
         "/coding/repository",
         "/coding/runtime",
