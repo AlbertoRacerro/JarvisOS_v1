@@ -191,7 +191,9 @@ def _model_results(workspace_id: str, query: str) -> list[ProjectSearchResult]:
     return results
 
 
-def _literature_results(workspace_id: str, query: str, kinds: set[str]) -> list[ProjectSearchResult]:
+def _literature_results(
+    workspace_id: str, query: str, kinds: set[ProjectSearchKind]
+) -> list[ProjectSearchResult]:
     results: list[ProjectSearchResult] = []
     for source in search_literature_sources(workspace_id, query):
         if "literature_source" in kinds:
@@ -280,7 +282,7 @@ def search_project(
     requested = list(kinds or PROJECT_SEARCH_KINDS)
     requested_set = set(requested)
     candidates: list[ProjectSearchResult] = []
-    modeling_kinds = [kind for kind in _MODELING_KINDS if kind in requested_set]
+    modeling_kinds: list[str] = [kind for kind in _MODELING_KINDS if kind in requested_set]
     candidates.extend(_modeling_results(workspace_id, query, modeling_kinds))
     if "model" in requested_set:
         candidates.extend(_model_results(workspace_id, query))
