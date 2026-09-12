@@ -43,11 +43,14 @@ if (traceEnabled) await context.tracing.start({ screenshots: true, snapshots: tr
 const page = await context.newPage();
 const proofOrigin = new URL(baseUrl).origin;
 const safeBrowserMethods = new Set(["GET", "HEAD", "OPTIONS"]);
+const readOnlySameOriginPostPaths = new Set(plan.readOnlySameOriginPostPaths ?? []);
 const mutatingBrowserRequests = [];
 context.on("request", (request) => {
   const url = new URL(request.url());
-  if (url.origin === proofOrigin && !safeBrowserMethods.has(request.method())) {
-    mutatingBrowserRequests.push({ method: request.method(), path: url.pathname });
+  const method = request.method();
+  const isDeclaredReadOnlyPost = method === "POST" && readOnlySameOriginPostPaths.has(url.pathname);
+  if (url.origin === proofOrigin && !safeBrowserMethods.has(method) && !isDeclaredReadOnlyPost) {
+    mutatingBrowserRequests.push({ method, path: url.pathname });
   }
 });
 page.on("pageerror", (error) => assertions.push({ name: "pageerror", pass: false, detail: artifactMode === "metadata-only" ? "browser page error" : String(error) }));
