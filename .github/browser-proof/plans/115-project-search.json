@@ -22,8 +22,6 @@
     {"op":"assert-visible","name":"115:literature-cue","locator":{"kind":"text","text":"literature source · accepted","exact":true}},
     {"op":"assert-body-absent","name":"115:no-context-promotion","forbidden":["add to jarvis context","promote to project basis","save as parameter"],"caseInsensitive":true},
     {"op":"assert-no-button-label","name":"115:no-proposal-commit-execute-affordance","pattern":"(add to jarvis context|proposal|commit|execute)","caseInsensitive":true},
-    {"op":"capture-mutating-request-count","name":"115:capture-after-search","capture":"mutationAfterSearch"},
-    {"op":"assert-value-equals","name":"115:search-is-read-only","left":{"capture":"mutationAfterSearch"},"right":{"capture":"mutationBaseline"}},
     {"op":"click","name":"115:open-project-basis-result","locator":{"kind":"within","parent":{"kind":"css","selector":"article.final-fusion__record-card:has-text('Reactor search requirement')"},"child":{"kind":"role","role":"button","name":"Open in modeling","exact":true}}},
     {"op":"assert-visible","name":"115:project-basis-exact-selection","locator":{"kind":"within","parent":{"kind":"css","selector":"[data-search-selected='true']"},"child":{"kind":"text","text":"Reactor search requirement","exact":true}}},
     {"op":"navigate","name":"115:return-search-for-model","route":"/memory/project-basis"},
@@ -41,6 +39,8 @@
     {"op":"navigate","name":"115:return-search-for-no-match","route":"/memory/project-basis"},
     {"op":"fill","name":"115:enter-no-match-query","locator":{"kind":"label","text":"Search project records","exact":true},"value":"zzzz-no-match-115"},
     {"op":"click","name":"115:submit-no-match-search","locator":{"kind":"role","role":"button","name":"Search","exact":true}},
-    {"op":"assert-visible","name":"115:no-match-state","locator":{"kind":"text","text":"No project records match this literal query.","exact":true}}
+    {"op":"assert-visible","name":"115:no-match-state","locator":{"kind":"text","text":"No project records match this literal query.","exact":true}},
+    {"op":"capture-mutating-request-count","name":"115:capture-mutation-after-navigation","capture":"mutationAfterNavigation"},
+    {"op":"assert-value-equals","name":"115:search-and-navigation-are-read-only","left":{"capture":"mutationAfterNavigation"},"right":{"capture":"mutationBaseline"}}
   ]
 }
