@@ -15,7 +15,12 @@ SPEC.loader.exec_module(mod)
 
 
 def _event(*, association: str = "OWNER", body: str | None = None, is_pr: bool = True) -> dict:
-    payload = body or f"prefix\n{mod.MARKER}\n```json\n{{}}\n```\n```diff\nx\n```"
+    payload = body or (
+        f"{mod.CODEX_MARKER}\n"
+        f"{mod.DELIVERY_MARKER}\n"
+        "```json\n{}\n```\n"
+        "```diff\nx\n```"
+    )
     issue = {"number": 628}
     if is_pr:
         issue["pull_request"] = {"url": "https://api.github.test/pr/628"}
@@ -30,7 +35,7 @@ def _event(*, association: str = "OWNER", body: str | None = None, is_pr: bool =
     }
 
 
-def test_owner_pr_comment_with_single_marker_is_bound_to_exact_body() -> None:
+def test_owner_pr_comment_with_both_markers_is_bound_to_exact_body() -> None:
     event = _event()
     request = mod.request_from_event(event)
     assert request.pr == 628
@@ -51,11 +56,23 @@ def test_non_pr_comment_is_refused() -> None:
         mod.request_from_event(_event(is_pr=False))
 
 
-def test_missing_or_ambiguous_marker_is_refused() -> None:
-    with pytest.raises(mod.DispatchError, match="exactly one delivery marker"):
-        mod.request_from_event(_event(body="no payload"))
-    with pytest.raises(mod.DispatchError, match="exactly one delivery marker"):
-        mod.request_from_event(_event(body=f"{mod.MARKER}\n{mod.MARKER}"))
+def test_missing_or_ambiguous_codex_marker_is_refused() -> None:
+    body = f"{mod.DELIVERY_MARKER}\n```json\n{{}}\n```\n```diff\nx\n```"
+    with pytest.raises(mod.DispatchError, match="exactly one Codex result marker"):
+        mod.request_from_event(_event(body=body))
+    with pytest.raises(mod.DispatchError, match="exactly one Codex result marker"):
+        mod.request_from_event(
+            _event(body=f"{mod.CODEX_MARKER}\n{mod.CODEX_MARKER}\n{mod.DELIVERY_MARKER}")
+        )
+
+
+def test_missing_or_ambiguous_cloud_marker_is_refused() -> None:
+    with pytest.raises(mod.DispatchError, match="exactly one cloud delivery marker"):
+        mod.request_from_event(_event(body=mod.CODEX_MARKER))
+    with pytest.raises(mod.DispatchError, match="exactly one cloud delivery marker"):
+        mod.request_from_event(
+            _event(body=f"{mod.CODEX_MARKER}\n{mod.DELIVERY_MARKER}\n{mod.DELIVERY_MARKER}")
+        )
 
 
 def test_only_created_events_are_eligible() -> None:
