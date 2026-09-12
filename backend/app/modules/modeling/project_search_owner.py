@@ -34,7 +34,16 @@ _TEXT_COLUMNS = {
 
 
 def _escape_like_literal(value: str) -> str:
-    return value.lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return value.casefold().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def _register_casefold(connection) -> None:
+    connection.create_function(
+        "JARVIS_CASEFOLD",
+        1,
+        lambda value: "" if value is None else str(value).casefold(),
+        deterministic=True,
+    )
 
 
 def search_context_records_literal(
@@ -56,6 +65,7 @@ def search_context_records_literal(
     prefix_pattern = f"{escaped_query}%"
     results: dict[str, list[Any]] = {}
     with open_sqlite_connection() as connection:
+        _register_casefold(connection)
         workspace = connection.execute("SELECT 1 FROM workspaces WHERE id = ?", (workspace_id,)).fetchone()
         if workspace is None:
             raise ValueError("Workspace not found.")
@@ -81,13 +91,13 @@ def search_context_records_literal(
             text_columns = _TEXT_COLUMNS[kind]
             literal_terms = []
             for column in text_columns:
-                literal_terms.append(f"LOWER(COALESCE({column}, '')) LIKE ? ESCAPE '\\'")
+                literal_terms.append(f"JARVIS_CASEFOLD(COALESCE({column}, '')) LIKE ? ESCAPE '\\'")
                 values.append(contains_pattern)
             clauses.append("(" + " OR ".join(literal_terms) + ")")
 
-            exact_terms = [f"LOWER(COALESCE({column}, '')) = ?" for column in text_columns]
+            exact_terms = [f"JARVIS_CASEFOLD(COALESCE({column}, '')) = ?" for column in text_columns]
             prefix_terms = [
-                f"LOWER(COALESCE({column}, '')) LIKE ? ESCAPE '\\'" for column in text_columns
+                f"JARVIS_CASEFOLD(COALESCE({column}, '')) LIKE ? ESCAPE '\\'" for column in text_columns
             ]
             order_values: list[object] = [normalized_query] * len(text_columns)
             order_values.extend([prefix_pattern] * len(text_columns))
