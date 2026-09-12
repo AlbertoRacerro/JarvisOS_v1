@@ -40,6 +40,17 @@ def _project_record(revision: str = "r1") -> _Record:
     return _Record("req-1", revision, statement="Need bounded proof", status="active")
 
 
+def _project_preview(monkeypatch):
+    monkeypatch.setattr(knowledge, "get_context_record_exact", lambda workspace_id, kind, record_id: _project_record())
+    return knowledge.build_knowledge_preview(
+        knowledge.KnowledgeContextPreviewRequest(
+            workspace_id="ws-1",
+            route_id="memory-project-basis",
+            refs=[{"owner": "modeling", "stable_ref": "requirement:req-1"}],
+        )
+    )
+
+
 def test_knowledge_routes_advertise_only_context_and_propose() -> None:
     for route_id in knowledge._ROUTE_PATHS:
         capabilities = knowledge.route_capabilities(route_id)
@@ -72,14 +83,16 @@ def test_project_basis_preview_is_explicit_exact_and_stale_safe(monkeypatch) -> 
     assert str(preview["context_digest"]).startswith("sha256:")
 
     record.updated_at = "r2"
-    service = knowledge.KnowledgeActionsService(ai_runner=lambda **_: None)
-    refused = service.propose(knowledge.KnowledgeProposalRequest(
-        workspace_id="ws-1",
-        route_id="memory-project-basis",
-        intent="Suggest one clarification",
-        exact_refs=[JarvisExactRef.model_validate(exact)],
-        expected_context_digest=str(preview["context_digest"]),
-    ))
+    service = knowledge.KnowledgeActionsService(auto_runner=lambda request: None)
+    refused = service.propose(
+        knowledge.KnowledgeProposalRequest(
+            workspace_id="ws-1",
+            route_id="memory-project-basis",
+            intent="Suggest one clarification",
+            exact_refs=[JarvisExactRef.model_validate(exact)],
+            expected_context_digest=str(preview["context_digest"]),
+        )
+    )
     assert refused == {"state": "refused", "reason": "stale_context"}
 
 
@@ -95,11 +108,13 @@ def test_model_version_and_literature_refs_re_resolve_owner_truth(monkeypatch) -
         outputs_summary=None,
     )
     monkeypatch.setattr(knowledge, "get_model_dossier", lambda workspace_id, version_id: dossier)
-    model_preview = knowledge.build_knowledge_preview(knowledge.KnowledgeContextPreviewRequest(
-        workspace_id="ws-1",
-        route_id="memory-models",
-        refs=[{"owner": "model-dossier", "stable_ref": "model_version:version-1"}],
-    ))
+    model_preview = knowledge.build_knowledge_preview(
+        knowledge.KnowledgeContextPreviewRequest(
+            workspace_id="ws-1",
+            route_id="memory-models",
+            refs=[{"owner": "model-dossier", "stable_ref": "model_version:version-1"}],
+        )
+    )
     assert model_preview["exact_refs"][0]["immutable_ref"] == "model_version:version-1"
 
     entry = SimpleNamespace(
@@ -133,35 +148,24 @@ def test_model_version_and_literature_refs_re_resolve_owner_truth(monkeypatch) -
     )
     monkeypatch.setattr(knowledge, "_literature_source_for_entry", lambda workspace_id, entry_id: "source-1")
     monkeypatch.setattr(knowledge, "get_literature_source", lambda workspace_id, source_id: source)
-    lit_preview = knowledge.build_knowledge_preview(knowledge.KnowledgeContextPreviewRequest(
-        workspace_id="ws-1",
-        route_id="memory-literature",
-        refs=[{"owner": "literature", "stable_ref": "literature_entry:entry-1"}],
-    ))
+    lit_preview = knowledge.build_knowledge_preview(
+        knowledge.KnowledgeContextPreviewRequest(
+            workspace_id="ws-1",
+            route_id="memory-literature",
+            refs=[{"owner": "literature", "stable_ref": "literature_entry:entry-1"}],
+        )
+    )
     assert lit_preview["exact_refs"][0]["revision"] == "lit-r1"
     assert lit_preview["exact_refs"][0]["immutable_ref"] == "literature_entry:entry-1"
 
 
-def test_proposal_uses_ai_runner_and_returns_ephemeral_closed_shape(monkeypatch) -> None:
-    monkeypatch.setattr(knowledge, "get_context_record_exact", lambda workspace_id, kind, record_id: _project_record())
-    preview = knowledge.build_knowledge_preview(knowledge.KnowledgeContextPreviewRequest(
-        workspace_id="ws-1",
-        route_id="memory-project-basis",
-        refs=[{"owner": "modeling", "stable_ref": "requirement:req-1"}],
-    ))
-    calls: list[dict[str, object]] = []
+def test_template_proposal_is_ephemeral_and_does_not_call_ai(monkeypatch) -> None:
+    preview = _project_preview(monkeypatch)
 
-    def fake_ai_runner(**kwargs: object):
-        calls.append(kwargs)
-        return SimpleNamespace(
-            status="success",
-            response=SimpleNamespace(text='{"summary":"Clarify the requirement.","proposed_items":["Add a measurable tolerance"],"questions":[],"research_steps":[],"assumptions":[],"warnings":[],"authoritative_next_action":"Review and apply through the Project Basis owner if accepted."}'),
-            ledger_id="job-1",
-            selected_route_class="local:default",
-            decision=SimpleNamespace(provider_id="local", model_id="test"),
-        )
+    def unexpected_ai_call(_request):
+        raise AssertionError("template proposal must not dispatch AI")
 
-    result = knowledge.KnowledgeActionsService(ai_runner=fake_ai_runner).propose(
+    result = knowledge.KnowledgeActionsService(auto_runner=unexpected_ai_call).propose(
         knowledge.KnowledgeProposalRequest(
             workspace_id="ws-1",
             route_id="memory-project-basis",
@@ -173,9 +177,68 @@ def test_proposal_uses_ai_runner_and_returns_ephemeral_closed_shape(monkeypatch)
     assert result["state"] == "proposed"
     assert result["target_domain"] == "project_basis"
     assert result["context_digest"] == preview["context_digest"]
-    assert result["generated_by"]["kind"] == "ai_task"
-    assert calls[0]["route_class"] == "auto"
+    assert result["generated_by"] == {
+        "kind": "deterministic_template",
+        "template_id": "knowledge-proposal-v1",
+    }
     assert "commit" not in result and "execute" not in result
+
+
+def test_semantic_proposal_uses_governed_auto_runner_and_closed_schema(monkeypatch) -> None:
+    preview = _project_preview(monkeypatch)
+    calls = []
+
+    def fake_auto_runner(request):
+        calls.append(request)
+        return SimpleNamespace(
+            status="success",
+            response_text='{"summary":"Clarify the requirement.","proposed_items":["Add a measurable tolerance"],"questions":[],"research_steps":[],"assumptions":[],"warnings":[],"authoritative_next_action":"Review through the Project Basis owner."}',
+            ledger_id="job-1",
+            selected_route_class="local:fast",
+            provider_id="local_ollama",
+            model_id="qwen3:8b",
+        )
+
+    result = knowledge.KnowledgeActionsService(auto_runner=fake_auto_runner).propose(
+        knowledge.KnowledgeProposalRequest(
+            workspace_id="ws-1",
+            route_id="memory-project-basis",
+            intent="Make this requirement measurable",
+            exact_refs=[JarvisExactRef.model_validate(preview["exact_refs"][0])],
+            expected_context_digest=str(preview["context_digest"]),
+            semantic=True,
+        )
+    )
+    assert result["state"] == "proposed"
+    assert result["generated_by"]["kind"] == "ai_task"
+    assert calls[0].route_class == "auto"
+    assert calls[0].include_project_context is False
+
+
+def test_malformed_semantic_output_is_refused(monkeypatch) -> None:
+    preview = _project_preview(monkeypatch)
+
+    def fake_auto_runner(_request):
+        return SimpleNamespace(
+            status="success",
+            response_text="not-json",
+            ledger_id="job-1",
+            selected_route_class="local:fast",
+            provider_id="local_ollama",
+            model_id="qwen3:8b",
+        )
+
+    result = knowledge.KnowledgeActionsService(auto_runner=fake_auto_runner).propose(
+        knowledge.KnowledgeProposalRequest(
+            workspace_id="ws-1",
+            route_id="memory-project-basis",
+            intent="Make this requirement measurable",
+            exact_refs=[JarvisExactRef.model_validate(preview["exact_refs"][0])],
+            expected_context_digest=str(preview["context_digest"]),
+            semantic=True,
+        )
+    )
+    assert result == {"state": "refused", "reason": "proposal_invalid"}
 
 
 def test_cross_route_search_identity_cannot_be_promoted_to_context() -> None:
