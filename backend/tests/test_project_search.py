@@ -162,6 +162,7 @@ def test_decision_search_preserves_owner_defined_free_form_status(monkeypatch) -
                     rationale="Corrosion margin",
                     notes=None,
                     status="owner-defined-review",
+                    basis_lifecycle_state="active",
                 )
             ]
         }
@@ -176,6 +177,84 @@ def test_decision_search_preserves_owner_defined_free_form_status(monkeypatch) -
 
     assert [item.stable_ref for item in result.items] == ["decision:decision-1"]
     assert result.items[0].lifecycle_or_status == "owner-defined-review"
+
+
+def test_project_search_excludes_retired_project_basis_records(monkeypatch) -> None:
+    def modeling(*_args, **kwargs):
+        assert kwargs["statuses_by_kind"] == {
+            "requirement": ["draft", "active"],
+            "decision": None,
+        }
+        return {
+            "requirement": [],
+            "decision": [
+                SimpleNamespace(
+                    id="decision-active",
+                    title="Reactor material active",
+                    decision_text="Use alloy 625",
+                    rationale=None,
+                    notes=None,
+                    status="custom-status",
+                    basis_lifecycle_state="active",
+                ),
+                SimpleNamespace(
+                    id="decision-retired",
+                    title="Reactor material retired",
+                    decision_text="Use alloy 600",
+                    rationale=None,
+                    notes=None,
+                    status="custom-status",
+                    basis_lifecycle_state="retired",
+                ),
+            ],
+        }
+
+    monkeypatch.setattr(service, "select_context_records", modeling)
+    result = service.search_project(
+        "ws-1",
+        query="reactor",
+        kinds=["requirement", "decision"],
+        limit=10,
+    )
+
+    assert [item.stable_ref for item in result.items] == ["decision:decision-active"]
+
+
+def test_project_search_bounds_owner_strings_to_response_contract(monkeypatch) -> None:
+    monkeypatch.setattr(
+        service,
+        "select_context_records",
+        lambda *_args, **_kwargs: {
+            "decision": [
+                SimpleNamespace(
+                    id="decision-1",
+                    title="reactor" + ("x" * 9_000),
+                    decision_text="bounded projection",
+                    rationale=None,
+                    notes=None,
+                    status="s" * 300,
+                    basis_lifecycle_state="active",
+                )
+            ]
+        },
+    )
+
+    result = service.search_project("ws-1", query="reactor", kinds=["decision"], limit=10)
+
+    assert len(result.items[0].title) == 8_000
+    assert len(result.items[0].lifecycle_or_status or "") == 256
+
+
+def test_capacity_failure_maps_to_explicit_http_error(monkeypatch) -> None:
+    def overflow(*_args, **_kwargs):
+        raise service.ProjectSearchCapacityError("bounded requirement scan capacity")
+
+    monkeypatch.setattr(routes, "search_project", overflow)
+    with pytest.raises(HTTPException) as exc_info:
+        routes.project_search_endpoint("ws-1", q="reactor", kinds=None, limit=30)
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail == "bounded requirement scan capacity"
 
 
 def test_composed_summary_is_bounded_to_response_contract() -> None:
