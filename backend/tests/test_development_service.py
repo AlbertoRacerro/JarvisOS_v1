@@ -1,7 +1,9 @@
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from app.modules.development.models import (
     CalendarAllocationCreate,
@@ -16,6 +18,7 @@ from app.modules.development.service import (
     delete_roadmap_item,
     get_roadmap_item,
     list_calendar_allocations,
+    list_dependencies,
     update_roadmap_item,
 )
 from app.modules.workspaces.models import WorkspaceCreate
@@ -108,6 +111,7 @@ def test_dependencies_reject_self_cycle_and_cross_workspace(monkeypatch, tmp_pat
     assert self_error.value.code == "roadmap_dependency_self"
 
     add_dependency(left.id, str(a["id"]), str(b["id"]), "tester")
+    assert [row["depends_on_item_id"] for row in list_dependencies(left.id, str(a["id"]))] == [str(b["id"])]
     with pytest.raises(DevelopmentError) as cycle:
         add_dependency(left.id, str(b["id"]), str(a["id"]), "tester")
     assert cycle.value.code == "roadmap_dependency_cycle"
@@ -115,6 +119,38 @@ def test_dependencies_reject_self_cycle_and_cross_workspace(monkeypatch, tmp_pat
     with pytest.raises(DevelopmentError) as cross_workspace:
         add_dependency(left.id, str(a["id"]), str(foreign["id"]), "tester")
     assert cross_workspace.value.code == "roadmap_item_not_found"
+
+
+def test_concurrent_opposite_dependencies_cannot_commit_a_cycle(monkeypatch, tmp_path: Path) -> None:
+    _initialize(monkeypatch, tmp_path)
+    workspace = _workspace("development-concurrent")
+    a = _item(workspace.id, "A")
+    b = _item(workspace.id, "B")
+
+    def add(left: str, right: str) -> str:
+        try:
+            add_dependency(workspace.id, left, right, "tester")
+            return "ok"
+        except DevelopmentError as exc:
+            return exc.code
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(lambda edge: add(*edge), [(str(a["id"]), str(b["id"])), (str(b["id"]), str(a["id"]))]))
+
+    assert sorted(results) == ["ok", "roadmap_dependency_cycle"]
+
+
+def test_calendar_event_type_is_bounded() -> None:
+    with pytest.raises(ValidationError):
+        CalendarAllocationCreate(
+            workspace_id="workspace",
+            title="Unknown event",
+            event_type="anything-goes",
+            start_local=datetime(2026, 9, 24, 9, 0),
+            end_local=datetime(2026, 9, 24, 10, 0),
+            timezone="Europe/Rome",
+            created_by="tester",
+        )
 
 
 def test_calendar_links_do_not_rewrite_roadmap_window_and_block_parent_delete(monkeypatch, tmp_path: Path) -> None:
@@ -128,7 +164,7 @@ def test_calendar_links_do_not_rewrite_roadmap_window_and_block_parent_delete(mo
                 workspace_id=workspace.id,
                 roadmap_item_id=str(item["id"]),
                 title=f"Commissioning block {hour}",
-                event_type="work",
+                event_type="work session",
                 start_local=datetime(2026, 9, 24, hour, 0),
                 end_local=datetime(2026, 9, 24, hour + 1, 0),
                 timezone="Europe/Rome",
