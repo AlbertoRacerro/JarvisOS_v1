@@ -43,6 +43,8 @@ MODULE_SCOPE = (0, sys.maxsize, "<module>")
 IMPORT_UNBOUND_PREFIX = "__ae002_local_unbound__."
 AE004_CODEX_RESULT_WORKFLOW = ".github/workflows/codex-result-delivery.yml"
 AE004_CODEX_RESULT_WORKFLOW_SHA256 = "ae4fb908f84e5ea2b20da6866eb806cfe9e60c573fab00f25480ff0b8d8107c9"
+AE004_CODEX_RESULT_DISPATCHER = "scripts/codex_result_delivery_dispatch.py"
+AE004_CODEX_RESULT_DISPATCHER_SHA256 = "9f73de97fb545abdb3326754b818ce15a356204aebafa112f25282350aaece51"
 
 
 @dataclass(frozen=True, order=True)
@@ -637,6 +639,12 @@ def _scan_workflow(
         observed = hashlib.sha256(path.read_bytes()).hexdigest()
         if observed != AE004_CODEX_RESULT_WORKFLOW_SHA256:
             return [Finding("AE004", rel, "on.issue_comment", "admitted issue_comment workflow behavior drifted from reviewed authority")]
+        dispatcher = root / AE004_CODEX_RESULT_DISPATCHER
+        if not dispatcher.is_file():
+            return [Finding("AE004", rel, "on.issue_comment", "admitted issue_comment dispatcher is missing")]
+        dispatcher_observed = hashlib.sha256(dispatcher.read_bytes()).hexdigest()
+        if dispatcher_observed != AE004_CODEX_RESULT_DISPATCHER_SHA256:
+            return [Finding("AE004", rel, "on.issue_comment", "admitted issue_comment dispatcher behavior drifted from reviewed authority")]
     return []
 
 
