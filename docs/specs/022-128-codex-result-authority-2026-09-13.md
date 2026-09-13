@@ -8,7 +8,7 @@ This amendment closes the remaining spec-022 materialization gap while preservin
 
 Exactly one workflow trigger is admitted as an AE004 accepted owner:
 
-`/.github/workflows/codex-result-delivery.yml::on.issue_comment`
+`.github/workflows/codex-result-delivery.yml::on.issue_comment`
 
 Its sole authority is to bind one newly-created pull-request comment to immutable metadata and dispatch the already-trusted `cloud-delivery-bridge.yml` on `master`. The dispatcher itself has no `contents: write` permission and cannot apply a patch, commit, push, merge, delete a branch, alter status/readiness, or modify product/domain state.
 
