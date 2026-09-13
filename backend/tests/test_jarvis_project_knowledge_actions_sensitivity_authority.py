@@ -111,6 +111,46 @@ def test_model_dossier_exact_ref_requires_version_label(monkeypatch) -> None:
     assert resolved.state == "stale"
 
 
+def test_model_dossier_exact_ref_detects_mutable_projection_drift(monkeypatch) -> None:
+    identity_payload = {
+        "model_spec_id": "model-1",
+        "model_version_id": "mv-1",
+        "version_label": "v1",
+        "implementation_kind": "python",
+        "status": "draft",
+        "created_at": "2026-09-12T00:00:00Z",
+        "input_contract_digest": "sha256:" + "1" * 64,
+    }
+    identity = SimpleNamespace(
+        **identity_payload,
+        model_dump=lambda mode: dict(identity_payload),
+    )
+    dossier = SimpleNamespace(
+        identity=identity,
+        title="Original title",
+        engineering_question="How?",
+        scope="bounded",
+        maturity_status="draft",
+        assumptions_summary="A",
+        inputs_summary="I",
+        outputs_summary="O",
+    )
+    monkeypatch.setattr(knowledge, "get_model_dossier", lambda workspace_id, model_version_id: dossier)
+
+    ref = knowledge.exact_ref_from_stable(
+        "ws-1",
+        "memory-models",
+        knowledge.StableKnowledgeRef(owner="model-dossier", stable_ref="model_version:mv-1"),
+    )
+    assert ref.content_digest == knowledge._model_dossier_content_digest(dossier)
+
+    dossier.title = "Mutated title"
+    resolved = knowledge._ModelDossierAdapter().resolve(ref)
+
+    assert resolved.state == "stale"
+    assert resolved.reason == "model dossier content moved"
+
+
 def test_semantic_authoritative_next_action_is_server_owned(monkeypatch) -> None:
     ref = _project_ref("req-next-action")
     preview = _preview(ref)
