@@ -16,6 +16,8 @@ def test_secret_screen_blocks_standard_tokens_and_credential_urls() -> None:
         "xoxb-1234567890-abcdefghijklmnop",
         "github_pat_11AA22BB33CC44DD55EE66FF77GG88HH99",
         "postgresql://jarvis:supersecretpassword@db.internal/jarvis",
+        "https://alice:supersecret@example.com/private",
+        "http://alice:p@example.com/private",
         "sk_live_abcdefghijklmnop",
         "glpat-abcdefghijklmnop",
         "npm_abcdefghijklmnop",
