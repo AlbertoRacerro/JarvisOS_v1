@@ -40,6 +40,7 @@
     {"rule_id":"AE003","exact_match":"backend/app/core/database.py::_ensure_parameter_lifecycle_schema","classification":"accepted_owner","owner_or_removal_spec":"098/core database migration boundary","rationale":"accepted additive Parameter lifecycle schema migration owner"},
     {"rule_id":"AE003","exact_match":"backend/app/modules/memory/service.py::_create_proposal_in_transaction","classification":"accepted_owner","owner_or_removal_spec":"040","rationale":"accepted MemoryStore proposal transaction owner"},
     {"rule_id":"AE003","exact_match":"backend/app/modules/memory/service.py::create_calc_parameter_proposals","classification":"accepted_owner","owner_or_removal_spec":"040 calc proposal flow","rationale":"accepted calculation-originated proposed Parameter owner"},
-    {"rule_id":"AE003","exact_match":"backend/app/modules/memory/service.py::promote_parameter_replacement","classification":"accepted_owner","owner_or_removal_spec":"040/098","rationale":"accepted Parameter replacement promotion owner preserved by 098"}
+    {"rule_id":"AE003","exact_match":"backend/app/modules/memory/service.py::promote_parameter_replacement","classification":"accepted_owner","owner_or_removal_spec":"040/098","rationale":"accepted Parameter replacement promotion owner preserved by 098"},
+    {"rule_id":"AE004","exact_match":".github/workflows/codex-result-delivery.yml::on.issue_comment","classification":"accepted_owner","owner_or_removal_spec":"022/128 codex-result authority 2026-09-13","rationale":"single exact Codex-result dispatcher into the existing trusted cloud-delivery bridge"}
   ]
 }

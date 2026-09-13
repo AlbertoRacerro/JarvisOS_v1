@@ -602,7 +602,9 @@ def _scan_python(path: Path, root: Path, exceptions: set[tuple[str, str]]) -> li
     return findings
 
 
-def _scan_workflow(path: Path, root: Path) -> list[Finding]:
+def _scan_workflow(
+    path: Path, root: Path, exceptions: set[tuple[str, str]]
+) -> list[Finding]:
     rel = path.relative_to(root).as_posix()
     if yaml is None:
         return [Finding("AE004", rel, "<yaml>", "PyYAML unavailable; workflow inspection fails closed")]
@@ -618,7 +620,8 @@ def _scan_workflow(path: Path, root: Path) -> list[Finding]:
         or (isinstance(trigger, list) and "issue_comment" in trigger)
         or (isinstance(trigger, dict) and "issue_comment" in trigger)
     )
-    if issue_comment:
+    exact_issue_comment = f"{rel}::on.issue_comment"
+    if issue_comment and ("AE004", exact_issue_comment) not in exceptions:
         return [Finding("AE004", rel, "on.issue_comment", "automatic issue_comment workflow is forbidden by 128")]
     text = path.read_text(encoding="utf-8")
     if any(marker in text for marker in V2_MARKERS) and any(word in text for word in MUTATION_WORDS):
@@ -644,7 +647,7 @@ def scan(root: Path, config_path: Path) -> list[Finding]:
     findings: list[Finding] = []
     for path in _iter_sources(root):
         findings.extend(
-            _scan_python(path, root, exceptions) if path.suffix == ".py" else _scan_workflow(path, root)
+            _scan_python(path, root, exceptions) if path.suffix == ".py" else _scan_workflow(path, root, exceptions)
         )
     return sorted(set(findings))
 

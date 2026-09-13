@@ -1,0 +1,113 @@
+name: TEMP Codex Authority Hardening Bootstrap
+
+on:
+  push:
+    branches: [fix/codex-result-authority-v2]
+    paths: [.github/workflows/codex-authority-hardening-bootstrap.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/codex-result-authority-v2
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Apply exact-behavior and governance-path hardening
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib
+
+          def replace_once(path: Path, old: str, new: str) -> None:
+              text = path.read_text(encoding="utf-8")
+              if text.count(old) != 1:
+                  raise SystemExit(f"replacement mismatch in {path}: {text.count(old)}")
+              path.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          scanner = Path("scripts/check_architecture_enforcement.py")
+          replace_once(scanner, "import argparse\nimport ast\nimport json\n", "import argparse\nimport ast\nimport hashlib\nimport json\n")
+          replace_once(
+              scanner,
+              '    "merge_pull_request", "update_pull_request", "STATUS.md", "apply_patch",\n}\n',
+              '    "merge_pull_request", "update_pull_request", "STATUS.md", "apply_patch",\n'
+              '    "git push", "contents: write", "actions: write", "createWorkflowDispatch",\n'
+              '    "workflow_dispatch", "repository_dispatch",\n}\n',
+          )
+          digest = hashlib.sha256(Path(".github/workflows/codex-result-delivery.yml").read_bytes()).hexdigest()
+          anchor = 'IMPORT_UNBOUND_PREFIX = "__ae002_local_unbound__."\n'
+          replace_once(
+              scanner,
+              anchor,
+              anchor
+              + 'AE004_CODEX_RESULT_WORKFLOW = ".github/workflows/codex-result-delivery.yml"\n'
+              + f'AE004_CODEX_RESULT_WORKFLOW_SHA256 = "{digest}"\n',
+          )
+          old = '''    exact_issue_comment = f"{rel}::on.issue_comment"\n    if issue_comment and ("AE004", exact_issue_comment) not in exceptions:\n        return [Finding("AE004", rel, "on.issue_comment", "automatic issue_comment workflow is forbidden by 128")]\n    text = path.read_text(encoding="utf-8")\n    if any(marker in text for marker in V2_MARKERS) and any(word in text for word in MUTATION_WORDS):\n        return [Finding("AE004", rel, "<yaml>", "workflow parses V2 coordination into mutation authority")]\n    return []\n'''
+          new = '''    text = path.read_text(encoding="utf-8")\n    if any(marker in text for marker in V2_MARKERS) and any(word in text for word in MUTATION_WORDS):\n        return [Finding("AE004", rel, "<yaml>", "workflow parses V2 coordination into mutation authority")]\n    exact_issue_comment = f"{rel}::on.issue_comment"\n    if issue_comment:\n        if ("AE004", exact_issue_comment) not in exceptions:\n            return [Finding("AE004", rel, "on.issue_comment", "automatic issue_comment workflow is forbidden by 128")]\n        if rel != AE004_CODEX_RESULT_WORKFLOW:\n            return [Finding("AE004", rel, "on.issue_comment", "issue_comment exception is not an admitted exact owner")]\n        observed = hashlib.sha256(path.read_bytes()).hexdigest()\n        if observed != AE004_CODEX_RESULT_WORKFLOW_SHA256:\n            return [Finding("AE004", rel, "on.issue_comment", "admitted issue_comment workflow behavior drifted from reviewed authority")]\n    return []\n'''
+          replace_once(scanner, old, new)
+
+          bridge = Path("scripts/cloud_delivery_bridge.py")
+          replace_once(
+              bridge,
+              '    ".github/workflows/cloud-delivery-bridge.yml",\n}\n',
+              '    ".github/workflows/cloud-delivery-bridge.yml",\n'
+              '    "docs/specs/STATUS.md",\n'
+              '    "docs/AGENT_EXECUTION_AND_AUTOMATION_PROTOCOL.md",\n'
+              '    "docs/POST_112_PARALLEL_DELIVERY_PROFILE.md",\n'
+              '    "docs/COORDINATION_BUS_V2.md",\n'
+              '    "docs/specs/022-codex-pr-autopush.md",\n'
+              '    "docs/specs/128-architecture-enforcement-gate-1.md",\n'
+              '    "docs/specs/022-128-codex-result-authority-2026-09-13.md",\n'
+              '    "scripts/check_architecture_enforcement.py",\n'
+              '    "scripts/codex_result_delivery_dispatch.py",\n'
+              '    "backend/tests/test_architecture_enforcement_codex_authority.py",\n'
+              '    "backend/tests/test_codex_result_delivery_dispatch.py",\n}\n',
+          )
+
+          arch_test = Path("backend/tests/test_architecture_enforcement_codex_authority.py")
+          replace_once(arch_test, "    config.write_text(json.dumps({\"exceptions\": [EXCEPTION]}), encoding=\"utf-8\")\n    return root, config\n", "    config.write_text(json.dumps({\"exceptions\": [EXCEPTION]}), encoding=\"utf-8\")\n    (workflows / \"codex-result-delivery.yml\").write_bytes(\n        (ROOT / \".github/workflows/codex-result-delivery.yml\").read_bytes()\n    )\n    return root, config\n")
+          replace_once(arch_test, "    allowed = root / \".github/workflows/codex-result-delivery.yml\"\n    allowed.write_text(\"name: allowed\\non:\\n  issue_comment:\\n    types: [created]\\njobs: {}\\n\", encoding=\"utf-8\")\n    assert not [f for f in scanner.scan(root, config) if f.rule_id == \"AE004\"]\n", "    assert not [f for f in scanner.scan(root, config) if f.rule_id == \"AE004\"]\n")
+          old_v2 = '''    allowed.write_text(\n        "name: forbidden-v2\\n"\n        "on:\\n  issue_comment:\\n    types: [created]\\n"\n        "env:\\n  MARKER: JARVIS_COORD_V2\\n  OP: apply_patch\\n"\n        "jobs: {}\\n",\n        encoding="utf-8",\n    )\n'''
+          new_v2 = '''    allowed.write_text(\n        allowed.read_text(encoding="utf-8")\n        + "\\n# WORKPACK\\n# git push origin HEAD:feature\\n",\n        encoding="utf-8",\n    )\n'''
+          replace_once(arch_test, old_v2, new_v2)
+          insert_after = '''    assert findings[0].symbol == "<yaml>"\n'''
+          addition = '''\n\ndef test_exact_exception_fails_closed_on_non_v2_behavior_drift(tmp_path: Path) -> None:\n    root, config = _root(tmp_path)\n    allowed = root / ".github/workflows/codex-result-delivery.yml"\n    allowed.write_text(\n        allowed.read_text(encoding="utf-8").replace("contents: read", "contents: write"),\n        encoding="utf-8",\n    )\n    findings = [f for f in scanner.scan(root, config) if f.rule_id == "AE004"]\n    assert len(findings) == 1\n    assert findings[0].symbol == "on.issue_comment"\n    assert "behavior drifted" in findings[0].detail\n'''
+          replace_once(arch_test, insert_after, insert_after + addition)
+
+          bridge_test = Path("backend/tests/test_cloud_delivery_bridge.py")
+          replace_once(
+              bridge_test,
+              '        ".gitattributes",\n    ]:\n',
+              '        ".gitattributes",\n'
+              '        "docs/specs/STATUS.md",\n'
+              '        "scripts/check_architecture_enforcement.py",\n'
+              '        "scripts/codex_result_delivery_dispatch.py",\n'
+              '        "docs/AGENT_EXECUTION_AND_AUTOMATION_PROTOCOL.md",\n'
+              '        "docs/POST_112_PARALLEL_DELIVERY_PROFILE.md",\n'
+              '    ]:\n',
+          )
+          PY
+      - name: Remove bootstrap, run focused checks, and commit
+        run: |
+          set -euo pipefail
+          git rm .github/workflows/codex-authority-hardening-bootstrap.yml
+          python -m pip install -q pytest==8.3.4 PyYAML==6.0.3
+          python scripts/check_architecture_enforcement.py --self-test
+          cd backend
+          python -m pytest -q tests/test_architecture_enforcement_codex_authority.py tests/test_codex_result_delivery_dispatch.py tests/test_cloud_delivery_bridge.py
+          cd ..
+          git diff --check
+          git config user.name "JarvisOS Maintainer Bootstrap"
+          git config user.email "actions@users.noreply.github.com"
+          git add scripts/check_architecture_enforcement.py scripts/cloud_delivery_bridge.py \
+            backend/tests/test_architecture_enforcement_codex_authority.py backend/tests/test_cloud_delivery_bridge.py
+          git commit -m "fix: harden Codex result authority boundaries"
+          git push origin HEAD:fix/codex-result-authority-v2
