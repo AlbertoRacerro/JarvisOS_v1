@@ -56,6 +56,27 @@ def _project_preview(monkeypatch):
     )
 
 
+def _model_preview(monkeypatch):
+    dossier = SimpleNamespace(
+        identity=_Identity(),
+        title="PBR model",
+        engineering_question="Does it work?",
+        scope="bounded",
+        maturity_status="draft",
+        assumptions_summary=None,
+        inputs_summary=None,
+        outputs_summary=None,
+    )
+    monkeypatch.setattr(knowledge, "get_model_dossier", lambda workspace_id, version_id: dossier)
+    return knowledge.build_knowledge_preview(
+        knowledge.KnowledgeContextPreviewRequest(
+            workspace_id="ws-1",
+            route_id="memory-models",
+            refs=[{"owner": "model-dossier", "stable_ref": "model_version:version-1"}],
+        )
+    )
+
+
 def test_knowledge_routes_advertise_only_context_and_propose() -> None:
     for route_id in knowledge._ROUTE_PATHS:
         capabilities = knowledge.route_capabilities(route_id)
@@ -190,14 +211,14 @@ def test_template_proposal_is_ephemeral_and_does_not_call_ai(monkeypatch) -> Non
 
 
 def test_semantic_proposal_uses_governed_auto_runner_and_closed_schema(monkeypatch) -> None:
-    preview = _project_preview(monkeypatch)
+    preview = _model_preview(monkeypatch)
     calls = []
 
     def fake_auto_runner(request):
         calls.append(request)
         return SimpleNamespace(
             status="success",
-            response_text='{"summary":"Clarify the requirement.","proposed_items":["Add a measurable tolerance"],"questions":[],"research_steps":[],"assumptions":[],"warnings":[],"authoritative_next_action":"Review through the Project Basis owner."}',
+            response_text='{"summary":"Clarify the model question.","proposed_items":["Review the bounded model assumptions"],"questions":[],"research_steps":[],"assumptions":[],"warnings":[],"authoritative_next_action":"Apply this model change immediately."}',
             ledger_id="job-1",
             selected_route_class="local:fast",
             provider_id="local_ollama",
@@ -207,8 +228,8 @@ def test_semantic_proposal_uses_governed_auto_runner_and_closed_schema(monkeypat
     result = knowledge.KnowledgeActionsService(auto_runner=fake_auto_runner).propose(
         knowledge.KnowledgeProposalRequest(
             workspace_id="ws-1",
-            route_id="memory-project-basis",
-            intent="Make this requirement measurable",
+            route_id="memory-models",
+            intent="Clarify the model assumptions",
             exact_refs=[JarvisExactRef.model_validate(preview["exact_refs"][0])],
             expected_context_digest=str(preview["context_digest"]),
             semantic=True,
@@ -216,12 +237,13 @@ def test_semantic_proposal_uses_governed_auto_runner_and_closed_schema(monkeypat
     )
     assert result["state"] == "proposed"
     assert result["generated_by"]["kind"] == "ai_task"
+    assert result["authoritative_next_action"] == knowledge._ROUTE_NEXT_ACTION["memory-models"]
     assert calls[0].route_class == "auto"
     assert calls[0].include_project_context is False
 
 
 def test_malformed_semantic_output_is_refused(monkeypatch) -> None:
-    preview = _project_preview(monkeypatch)
+    preview = _model_preview(monkeypatch)
 
     def fake_auto_runner(_request):
         return SimpleNamespace(
@@ -236,8 +258,8 @@ def test_malformed_semantic_output_is_refused(monkeypatch) -> None:
     result = knowledge.KnowledgeActionsService(auto_runner=fake_auto_runner).propose(
         knowledge.KnowledgeProposalRequest(
             workspace_id="ws-1",
-            route_id="memory-project-basis",
-            intent="Make this requirement measurable",
+            route_id="memory-models",
+            intent="Clarify the model assumptions",
             exact_refs=[JarvisExactRef.model_validate(preview["exact_refs"][0])],
             expected_context_digest=str(preview["context_digest"]),
             semantic=True,
