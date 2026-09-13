@@ -8,6 +8,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from app.core.database import open_sqlite_connection
+from app.modules.ai import sensitivity
 from app.modules.ai.jarvis_context import (
     PRODUCTION_ADAPTER_REGISTRY,
     PRODUCTION_CAPABILITY_REGISTRY,
@@ -350,7 +351,8 @@ def _contains_secret_material(blocks: list[dict[str, object]]) -> bool:
     serialized = json.dumps(blocks, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     candidates = [serialized, *_secret_candidate_texts(blocks)]
     return any(
-        _SECRET_ASSIGNMENT_PATTERN.search(candidate)
+        sensitivity.deterministic_floor(candidate) == "S4"
+        or _SECRET_ASSIGNMENT_PATTERN.search(candidate)
         or any(pattern.search(candidate) for pattern in _SECRET_TOKEN_PATTERNS)
         for candidate in candidates
     )
