@@ -24,6 +24,9 @@ def test_secret_screen_blocks_standard_tokens_and_credential_urls() -> None:
         "AIzaabcdefghijklmnopqrstuv",
         "Authorization: Basic YWxhZGRpbjpvcGVuc2VzYW1l",
         "Authorization: Basic dTpw",
+        '{"password": "correcthorsebattery"}',
+        '{"api_key":"abcdefghijklmnop"}',
+        '"secret":"abcdefghijklmnop"',
     ]
 
     for value in sensitive_values:
