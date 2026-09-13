@@ -252,6 +252,33 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Revalidate open same-repository PR binding at write boundary
+        uses: actions/github-script@v7
+        env:
+          INPUT_PR: ${{ inputs.pr }}
+          EXPECTED_HEAD: ${{ needs.admit.outputs.base_sha }}
+          TARGET_REF: ${{ needs.admit.outputs.target_ref }}
+        with:
+          script: |
+            const prNumber = Number(process.env.INPUT_PR);
+            const expectedHead = process.env.EXPECTED_HEAD ?? '';
+            const targetRef = process.env.TARGET_REF ?? '';
+            if (!Number.isSafeInteger(prNumber) || prNumber < 1) throw new Error('invalid PR input');
+            if (!/^[0-9a-f]{40}$/.test(expectedHead)) throw new Error('invalid expected head');
+            if (!targetRef) throw new Error('invalid target ref');
+            const pr = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber,
+            });
+            if (pr.data.number !== prNumber) throw new Error('PR identity changed before materialization');
+            if (pr.data.state !== 'open') throw new Error('target PR closed before materialization');
+            if ((pr.data.head.repo?.full_name ?? '') !== `${context.repo.owner}/${context.repo.repo}`) {
+              throw new Error('target PR repository changed before materialization');
+            }
+            if (pr.data.head.ref !== targetRef) throw new Error('target ref changed before materialization');
+            if (pr.data.head.sha !== expectedHead) throw new Error('target head changed before materialization');
+
       - name: Revalidate CAS, commit, and guarded-push only the admitted branch
         id: write
         env:

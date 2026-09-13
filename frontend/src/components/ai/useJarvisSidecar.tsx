@@ -16,6 +16,7 @@ import {
 import "./JarvisSidecar.css";
 
 const DEFAULT_SELECTION: ContextSelection = {};
+const KNOWLEDGE_ROUTES = new Set(["memory-project-basis", "memory-models", "memory-literature"]);
 
 function requestId(): string {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -273,6 +274,9 @@ export function useJarvisSidecar(
       && (!contextEnabled || pending.expectedDigest)
   );
   const contextReady = !contextEnabled || pendingRetryReady || Boolean(preview?.context_digest);
+  const stageContextClassName = KNOWLEDGE_ROUTES.has(routeId)
+    ? "jarvis-sidecar__stage-context jarvis-sidecar__stage-context--visible"
+    : "jarvis-sidecar__stage-context";
 
   return <div className="jarvis-sidecar" data-testid="jarvis-sidecar">
     <header className="jarvis-sidecar__header">
@@ -286,7 +290,7 @@ export function useJarvisSidecar(
       <span>{localSelectionLabel(selection)}</span>
       <small>This descriptor stays local. Provider context is only the inspected project pack below.</small>
     </section>
-    {contextualContent ? <section className="jarvis-sidecar__stage-context" aria-label="Current stage context">{contextualContent}</section> : null}
+    {contextualContent ? <section className={stageContextClassName} aria-label="Current stage context">{contextualContent}</section> : null}
 
     {!workspaceId ? <p>Select a workspace to use Jarvis.</p> : null}
     {workspaceId ? <label className="jarvis-sidecar__field">Thread<select value={selectedThreadId ?? ""} onChange={(event) => selectThread(event.target.value || null)} disabled={loadingThreads}><option value="">Select thread</option>{threads.map((thread) => <option key={thread.id} value={thread.id}>{thread.title || "Untitled thread"}</option>)}</select></label> : null}
