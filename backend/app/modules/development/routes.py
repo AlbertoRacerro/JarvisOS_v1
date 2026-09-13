@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException, Query, Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.errors import WORKSPACE_NOT_FOUND_CODE, workspace_not_found_http_error
+from app.modules.development.links import add_object_link, list_object_links, remove_object_link
 from app.modules.development.models import (
     CalendarAllocationCreate,
     CalendarAllocationUpdate,
@@ -20,6 +21,7 @@ from app.modules.development.service import (
     get_calendar_allocation,
     get_roadmap_item,
     list_calendar_allocations,
+    list_dependencies,
     list_roadmap_items,
     remove_dependency,
     update_calendar_allocation,
@@ -39,6 +41,13 @@ class DependencyMutation(StrictBody):
     actor: str = Field(min_length=1)
 
 
+class ObjectLinkMutation(StrictBody):
+    workspace_id: str = Field(min_length=1)
+    ref_type: str = Field(min_length=1)
+    ref_id: str = Field(min_length=1)
+    actor: str = Field(min_length=1)
+
+
 class DeleteMutation(StrictBody):
     workspace_id: str = Field(min_length=1)
     expected_revision: int = Field(ge=1)
@@ -52,6 +61,8 @@ def _http_error(exc: DevelopmentError) -> HTTPException:
         "roadmap_item_not_found",
         "calendar_allocation_not_found",
         "roadmap_dependency_not_found",
+        "roadmap_link_not_found",
+        "roadmap_link_target_not_found",
     }
     conflict = {
         "roadmap_item_stale",
@@ -59,6 +70,7 @@ def _http_error(exc: DevelopmentError) -> HTTPException:
         "roadmap_dependency_self",
         "roadmap_dependency_cycle",
         "roadmap_dependency_exists",
+        "roadmap_link_exists",
         "roadmap_done_gate_unsatisfied",
         "roadmap_item_delete_blocked",
     }
@@ -107,6 +119,16 @@ def delete_roadmap_item_endpoint(item_id: str, payload: DeleteMutation) -> Respo
     return Response(status_code=204)
 
 
+@router.get("/roadmap/items/{item_id}/dependencies")
+def list_dependencies_endpoint(
+    item_id: str, workspace_id: str = Query(min_length=1)
+) -> list[dict[str, str]]:
+    try:
+        return list_dependencies(workspace_id, item_id)
+    except DevelopmentError as exc:
+        raise _http_error(exc) from exc
+
+
 @router.post("/roadmap/items/{item_id}/dependencies", status_code=204)
 def add_dependency_endpoint(item_id: str, payload: DependencyMutation) -> Response:
     try:
@@ -125,6 +147,44 @@ def remove_dependency_endpoint(
 ) -> Response:
     try:
         remove_dependency(workspace_id, item_id, depends_on_item_id, actor)
+    except DevelopmentError as exc:
+        raise _http_error(exc) from exc
+    return Response(status_code=204)
+
+
+@router.get("/roadmap/items/{item_id}/links")
+def list_object_links_endpoint(
+    item_id: str, workspace_id: str = Query(min_length=1)
+) -> list[dict[str, str]]:
+    try:
+        return list_object_links(workspace_id, item_id)
+    except DevelopmentError as exc:
+        raise _http_error(exc) from exc
+
+
+@router.post("/roadmap/items/{item_id}/links", status_code=201)
+def add_object_link_endpoint(item_id: str, payload: ObjectLinkMutation) -> dict[str, str]:
+    try:
+        return add_object_link(
+            payload.workspace_id,
+            item_id,
+            payload.ref_type,
+            payload.ref_id,
+            payload.actor,
+        )
+    except DevelopmentError as exc:
+        raise _http_error(exc) from exc
+
+
+@router.delete("/roadmap/items/{item_id}/links/{link_id}", status_code=204)
+def remove_object_link_endpoint(
+    item_id: str,
+    link_id: str,
+    workspace_id: str = Query(min_length=1),
+    actor: str = Query(min_length=1),
+) -> Response:
+    try:
+        remove_object_link(workspace_id, item_id, link_id, actor)
     except DevelopmentError as exc:
         raise _http_error(exc) from exc
     return Response(status_code=204)
