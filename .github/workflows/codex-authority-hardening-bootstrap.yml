@@ -1,5 +1,6 @@
 name: TEMP Codex Authority Hardening Bootstrap
 
+# Triggered once by the active frontier coordinator; this workflow self-removes after applying the bounded repair wave.
 on:
   push:
     branches: [fix/codex-result-authority-v2]
@@ -76,10 +77,12 @@ jobs:
           replace_once(arch_test, "    config.write_text(json.dumps({\"exceptions\": [EXCEPTION]}), encoding=\"utf-8\")\n    return root, config\n", "    config.write_text(json.dumps({\"exceptions\": [EXCEPTION]}), encoding=\"utf-8\")\n    (workflows / \"codex-result-delivery.yml\").write_bytes(\n        (ROOT / \".github/workflows/codex-result-delivery.yml\").read_bytes()\n    )\n    return root, config\n")
           replace_once(arch_test, "    allowed = root / \".github/workflows/codex-result-delivery.yml\"\n    allowed.write_text(\"name: allowed\\non:\\n  issue_comment:\\n    types: [created]\\njobs: {}\\n\", encoding=\"utf-8\")\n    assert not [f for f in scanner.scan(root, config) if f.rule_id == \"AE004\"]\n", "    assert not [f for f in scanner.scan(root, config) if f.rule_id == \"AE004\"]\n")
           old_v2 = '''    allowed.write_text(\n        "name: forbidden-v2\\n"\n        "on:\\n  issue_comment:\\n    types: [created]\\n"\n        "env:\\n  MARKER: JARVIS_COORD_V2\\n  OP: apply_patch\\n"\n        "jobs: {}\\n",\n        encoding="utf-8",\n    )\n'''
-          new_v2 = '''    allowed.write_text(\n        allowed.read_text(encoding="utf-8")\n        + "\\n# WORKPACK\\n# git push origin HEAD:feature\\n",\n        encoding="utf-8",\n    )\n'''
+          new_v2 = '''    allowed.write_text(\n        allowed.read_text(encoding="utf-8")\n        + "\\n# WORKPACK\\n# git push origin HEAD:feature\\n",\n        encoding="utf-8",
+    )\n'''
           replace_once(arch_test, old_v2, new_v2)
           insert_after = '''    assert findings[0].symbol == "<yaml>"\n'''
-          addition = '''\n\ndef test_exact_exception_fails_closed_on_non_v2_behavior_drift(tmp_path: Path) -> None:\n    root, config = _root(tmp_path)\n    allowed = root / ".github/workflows/codex-result-delivery.yml"\n    allowed.write_text(\n        allowed.read_text(encoding="utf-8").replace("contents: read", "contents: write"),\n        encoding="utf-8",\n    )\n    findings = [f for f in scanner.scan(root, config) if f.rule_id == "AE004"]\n    assert len(findings) == 1\n    assert findings[0].symbol == "on.issue_comment"\n    assert "behavior drifted" in findings[0].detail\n'''
+          addition = '''\n\ndef test_exact_exception_fails_closed_on_non_v2_behavior_drift(tmp_path: Path) -> None:\n    root, config = _root(tmp_path)\n    allowed = root / ".github/workflows/codex-result-delivery.yml"\n    allowed.write_text(\n        allowed.read_text(encoding="utf-8").replace("contents: read", "contents: write"),\n        encoding="utf-8",
+    )\n    findings = [f for f in scanner.scan(root, config) if f.rule_id == "AE004"]\n    assert len(findings) == 1\n    assert findings[0].symbol == "on.issue_comment"\n    assert "behavior drifted" in findings[0].detail\n'''
           replace_once(arch_test, insert_after, insert_after + addition)
 
           bridge_test = Path("backend/tests/test_cloud_delivery_bridge.py")
