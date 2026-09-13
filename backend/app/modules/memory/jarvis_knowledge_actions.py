@@ -194,7 +194,7 @@ class _ModelDossierAdapter:
         )
         if ref.immutable_ref != immutable_ref:
             return JarvisResolvedRef(ref=ref, state="stale", reason="model version identity moved", provenance=provenance)
-        if ref.version is not None and ref.version != identity.version_label:
+        if ref.version != identity.version_label:
             return JarvisResolvedRef(ref=ref, state="stale", reason="model version label moved", provenance=provenance)
         return JarvisResolvedRef(
             ref=ref,
@@ -366,6 +366,22 @@ def _contains_secret_material(blocks: list[dict[str, object]]) -> bool:
     )
 
 
+def _contains_current_s4_project_basis_label(workspace_id: str, refs: list[JarvisExactRef]) -> bool:
+    for ref in refs:
+        if ref.owner != "modeling" or ref.kind not in _PROJECT_KINDS:
+            continue
+        try:
+            label = sensitivity.get_current_sensitivity_label(
+                workspace_id,
+                f"{ref.kind}:{ref.id}",
+            )
+        except (sensitivity.SensitivityNotFoundError, sensitivity.SensitivityPolicyError):
+            return True
+        if label is not None and label.current and label.level == "S4":
+            return True
+    return False
+
+
 def exact_ref_from_stable(workspace_id: str, route_id: KnowledgeRouteId, item: StableKnowledgeRef) -> JarvisExactRef:
     if not _owner_allowed(route_id, item.owner):
         raise KnowledgeActionError("unsupported_ref", "stable ref owner does not belong to the active knowledge route")
@@ -527,6 +543,10 @@ class KnowledgeActionsService:
 
             generated_by: dict[str, object]
             if payload.semantic:
+                if _contains_current_s4_project_basis_label(payload.workspace_id, payload.exact_refs):
+                    raise KnowledgeActionError(
+                        "sensitive_context", "S4 Project Basis evidence cannot enter semantic model context"
+                    )
                 context_blocks = list(inspected.blocks)
                 if _contains_secret_material(context_blocks):
                     raise KnowledgeActionError("sensitive_context", "secret-bearing evidence cannot enter semantic model context")
@@ -586,7 +606,7 @@ class KnowledgeActionsService:
                 "research_steps": generated.research_steps,
                 "assumptions": generated.assumptions,
                 "warnings": generated.warnings,
-                "authoritative_next_action": generated.authoritative_next_action,
+                "authoritative_next_action": _ROUTE_NEXT_ACTION[payload.route_id],
                 "generated_by": generated_by,
             }
             if len(json.dumps(response, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")) > MAX_PROPOSAL_BYTES:
