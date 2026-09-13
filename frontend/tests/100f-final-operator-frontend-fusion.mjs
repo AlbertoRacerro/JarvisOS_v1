@@ -61,11 +61,14 @@ check(app.includes('route.id === "design-process" || route.id === "design-blueca
 check(app.includes('sidecar: route.primaryNav === "settings" ? undefined : jarvisSidecar'), "Settings must not expose Jarvis sidecar");
 includesAll(app, [
   'FinalOperatorReadSurface kind="project-basis"', 'ModelDossier workspaceId=',
-  'kind="literature"', 'kind="roadmap"', 'kind="calendar"', 'kind="brainstorm"',
+  'kind="literature"',
+  '<DevelopmentRoadmap mode="timeline" workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} />',
+  '<DevelopmentRoadmap mode="calendar" workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} />',
+  'kind="brainstorm"',
   '<CodingWorkbench mode="repository" workspaceId={workspaceId} />',
   '<CodingWorkbench mode="runtime" workspaceId={workspaceId} />'
 ], "missing final production surface composition");
-check(app.includes("No server-owned roadmap item store") && app.includes("No server-owned time-allocation calendar"), "Development missing-authority states are not explicit");
+check(!app.includes("No server-owned roadmap item store") && !app.includes("No server-owned time-allocation calendar"), "Development still presents obsolete missing-authority states after 116 owner landed");
 check(codingWorkbench.includes("Repository browsing is context-neutral.") && codingWorkbench.includes("server-validated GitHub path"), "Repository frontend/GitHub truth boundary is not explicit");
 check(!/api\.github\.com|github\.com\/api|Authorization|GITHUB_TOKEN/i.test(codingApi), "Coding browser API client crossed provider/credential boundary");
 check(!/iframe|srcDoc/.test(app), "static HTML embedding is forbidden");
