@@ -17,6 +17,7 @@ from pathlib import Path
 
 CODEX_MARKER = "<!-- jarvis-codex-result-delivery:v1 -->"
 DELIVERY_MARKER = "<!-- jarvis-cloud-delivery:v1 -->"
+PROPOSAL_MARKERS = ("JARVIS_COORD_V2", "WORKPACK", "CANDIDATE_PATCH")
 TRUSTED_ASSOCIATIONS = {"OWNER"}
 TRUSTED_BOT_LOGIN = "chatgpt-codex-connector[bot]"
 
@@ -57,6 +58,8 @@ def request_from_event(event: dict) -> DispatchRequest:
         raise DispatchError("comment must contain exactly one Codex result marker")
     if body.count(DELIVERY_MARKER) != 1:
         raise DispatchError("comment must contain exactly one cloud delivery marker")
+    if any(marker in body for marker in PROPOSAL_MARKERS):
+        raise DispatchError("proposal/V2 markers are not eligible for result delivery")
 
     try:
         pr = int(issue["number"])
