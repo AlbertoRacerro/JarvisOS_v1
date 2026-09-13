@@ -105,7 +105,7 @@ export default function ModelDossier({ workspaceId, onWorkspaceChange, requested
       if (alive) setLoading(false);
     });
     return () => { alive = false; };
-  }, [activeWorkspaceId, onModelVersionSelectionChange, selectedVersionId]);
+  }, [activeWorkspaceId, onModelVersionSelectionChange, requestedModelVersionId, selectedVersionId]);
 
   return <div className="final-fusion__workbench final-fusion__workbench--models">
     <section className="final-fusion__panel final-fusion__versions" aria-label="Model versions">
