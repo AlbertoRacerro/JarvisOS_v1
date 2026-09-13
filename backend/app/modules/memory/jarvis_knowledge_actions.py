@@ -68,7 +68,7 @@ MAX_INTENT_CHARS = 4_000
 MAX_PROPOSAL_BYTES = 128 * 1024
 
 _SECRET_ASSIGNMENT_PATTERN = re.compile(
-    r"(?i)\b(?:api[_ -]?key|password|passwd|secret|token|access[_ -]?token|refresh[_ -]?token|"
+    r"(?i)(?:api[_ -]?key|password|passwd|secret|token|access[_ -]?token|refresh[_ -]?token|"
     r"aws[_ -]?secret[_ -]?access[_ -]?key|authorization)\b"
     r"\s*(?::|=)\s*[\"']?[^\s,\"'}]{8,}"
 )
