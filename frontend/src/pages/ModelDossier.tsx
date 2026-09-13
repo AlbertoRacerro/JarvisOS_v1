@@ -87,26 +87,24 @@ export default function ModelDossier({ workspaceId, onWorkspaceChange, requested
   }, [activeWorkspaceId, requestedModelVersionId]);
 
   useEffect(() => {
-    onModelVersionSelectionChange?.(selectedVersionId);
-  }, [onModelVersionSelectionChange, selectedVersionId]);
+    onModelVersionSelectionChange?.(null);
+    setDetail(null);
+    if (!activeWorkspaceId || !selectedVersionId) return;
 
-  useEffect(() => {
-    if (!activeWorkspaceId || !selectedVersionId) {
-      setDetail(null);
-      return;
-    }
     let alive = true;
     setLoading(true);
     setError(null);
     void getModelDossier(activeWorkspaceId, selectedVersionId).then((value) => {
-      if (alive) setDetail(value);
+      if (!alive) return;
+      setDetail(value);
+      onModelVersionSelectionChange?.(value.identity.model_version_id);
     }).catch((cause: unknown) => {
       if (alive) setError(cause instanceof Error ? cause.message : "Exact model-version dossier read failed");
     }).finally(() => {
       if (alive) setLoading(false);
     });
     return () => { alive = false; };
-  }, [activeWorkspaceId, selectedVersionId]);
+  }, [activeWorkspaceId, onModelVersionSelectionChange, selectedVersionId]);
 
   return <div className="final-fusion__workbench final-fusion__workbench--models">
     <section className="final-fusion__panel final-fusion__versions" aria-label="Model versions">
