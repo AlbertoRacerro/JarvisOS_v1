@@ -46,6 +46,8 @@ def test_codex_transport_refuses_agents_at_repository_safety_boundary() -> None:
         "docs/AGENT_EXECUTION_AND_AUTOMATION_PROTOCOL.md",
         "docs/COORDINATION_BUS_V2.md",
         "docs/POST_112_PARALLEL_DELIVERY_PROFILE.md",
+        "docs/MAINTAINER_BETA_DELIVERY_DIRECTIVE_2026-09-09.md",
+        "docs/MAINTAINER_FUTURE_SCHEDULING_DIRECTIVE.md",
         "docs/specs/STATUS.md",
         "docs/specs/114-readiness-2026-08-31.md",
         "docs/specs/999-future-authority.md",
