@@ -42,6 +42,11 @@ def _project_record(revision: str = "r1") -> _Record:
 
 def _project_preview(monkeypatch):
     monkeypatch.setattr(knowledge, "get_context_record_exact", lambda workspace_id, kind, record_id: _project_record())
+    monkeypatch.setattr(
+        knowledge.sensitivity,
+        "get_current_sensitivity_label",
+        lambda workspace_id, subject_ref: None,
+    )
     return knowledge.build_knowledge_preview(
         knowledge.KnowledgeContextPreviewRequest(
             workspace_id="ws-1",
