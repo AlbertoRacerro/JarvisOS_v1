@@ -21,7 +21,12 @@ def test_secret_screen_blocks_standard_tokens_and_credential_urls() -> None:
         "npm_abcdefghijklmnop",
         "AIzaabcdefghijklmnopqrstuv",
         "Authorization: Basic YWxhZGRpbjpvcGVuc2VzYW1l",
+        "Authorization: Basic dTpw",
     ]
 
     for value in sensitive_values:
         assert knowledge._contains_secret_material([{"content": value}])
+
+
+def test_secret_screen_does_not_treat_basic_authentication_phrase_as_secret() -> None:
+    assert not knowledge._contains_secret_material([{"intent": "Use basic authentication for this endpoint"}])
