@@ -18,6 +18,15 @@ RoadmapItemType = Literal[
 ]
 RoadmapStatus = Literal["Planned", "Ready", "In progress", "Blocked", "Done", "Cancelled"]
 RoadmapPriority = Literal["Critical", "High", "Normal", "Opportunity"]
+CalendarEventType = Literal[
+    "work session",
+    "call/meeting",
+    "experiment/lab",
+    "review",
+    "reminder",
+    "deadline",
+    "unavailable/personal",
+]
 
 
 class StrictDevelopmentModel(BaseModel):
@@ -71,7 +80,7 @@ class CalendarAllocationCreate(StrictDevelopmentModel):
     workspace_id: str = Field(min_length=1)
     roadmap_item_id: str | None = None
     title: str = Field(min_length=1)
-    event_type: str = Field(min_length=1)
+    event_type: CalendarEventType
     start_local: datetime
     end_local: datetime
     timezone: str = Field(min_length=1)
@@ -94,7 +103,7 @@ class CalendarAllocationUpdate(StrictDevelopmentModel):
     expected_revision: int = Field(ge=1)
     roadmap_item_id: str | None = None
     title: str | None = Field(default=None, min_length=1)
-    event_type: str | None = Field(default=None, min_length=1)
+    event_type: CalendarEventType | None = None
     start_local: datetime | None = None
     end_local: datetime | None = None
     timezone: str | None = Field(default=None, min_length=1)
