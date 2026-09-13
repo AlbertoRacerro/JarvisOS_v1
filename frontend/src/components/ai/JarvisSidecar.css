@@ -24,6 +24,10 @@
   display: none;
 }
 
+.jarvis-sidecar__stage-context--visible {
+  display: grid;
+}
+
 .jarvis-sidecar__header {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: start;

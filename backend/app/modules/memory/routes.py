@@ -4,6 +4,15 @@ from fastapi import APIRouter, HTTPException, Query
 
 from app.modules.flowsheet.freshness import FreshnessError
 from app.modules.flowsheet.service import FlowsheetError
+from app.modules.memory.jarvis_knowledge_actions import (
+    KnowledgeActionError,
+    KnowledgeActionsService,
+    KnowledgeContextPreviewRequest,
+    KnowledgeProposalRequest,
+    KnowledgeRouteId,
+    build_knowledge_preview,
+    route_capabilities,
+)
 from app.modules.memory.models import (
     MemoryProposalCreate,
     MemoryRecordKind,
@@ -124,3 +133,21 @@ def reject_memory_record_endpoint(record_kind: MemoryRecordKind, record_id: str)
         return reject_record(record_kind, record_id)
     except (ValueError, sqlite3.IntegrityError) as exc:
         raise _domain_error(exc) from exc
+
+
+@router.get("/jarvis/capabilities")
+def jarvis_knowledge_capabilities(route_id: KnowledgeRouteId) -> dict[str, object]:
+    return {"route_id": route_id, "capabilities": route_capabilities(route_id)}
+
+
+@router.post("/jarvis/context-preview")
+def jarvis_knowledge_context_preview(payload: KnowledgeContextPreviewRequest) -> dict[str, object]:
+    try:
+        return build_knowledge_preview(payload)
+    except KnowledgeActionError as exc:
+        return {"state": "refused", "reason": exc.reason}
+
+
+@router.post("/jarvis/propose")
+def jarvis_knowledge_propose(payload: KnowledgeProposalRequest) -> dict[str, object]:
+    return KnowledgeActionsService().propose(payload)
