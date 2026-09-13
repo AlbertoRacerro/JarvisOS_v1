@@ -9,3 +9,14 @@ def test_secret_screen_reuses_canonical_floor_for_jwt() -> None:
     )
 
     assert knowledge._contains_secret_material([{"intent": f"Use {jwt} to clarify this requirement"}])
+
+
+def test_secret_screen_blocks_standard_tokens_and_credential_urls() -> None:
+    sensitive_values = [
+        "xoxb-1234567890-abcdefghijklmnop",
+        "github_pat_11AA22BB33CC44DD55EE66FF77GG88HH99",
+        "postgresql://jarvis:supersecretpassword@db.internal/jarvis",
+    ]
+
+    for value in sensitive_values:
+        assert knowledge._contains_secret_material([{"content": value}])
