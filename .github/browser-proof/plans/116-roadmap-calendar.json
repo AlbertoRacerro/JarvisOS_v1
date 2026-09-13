@@ -41,6 +41,7 @@
     {"op":"fill","name":"116:block-two-zone","locator":{"kind":"label","text":"Time zone","exact":true},"value":"Europe/Rome"},
     {"op":"click","name":"116:add-block-two","locator":{"kind":"role","role":"button","name":"+ Add event","exact":true}},
     {"op":"assert-count","name":"116:two-blocks","locator":{"kind":"testid","testid":"calendar-allocation"},"equals":2},
+    {"op":"assert-visible","name":"116:block-two-linked","locator":{"kind":"within","parent":{"kind":"css","selector":"article.operator-card:has-text('Proof block two')"},"child":{"kind":"text","text":"Roadmap item: Proof roadmap item edited","exact":true}}},
     {"op":"click","name":"116:edit-block","locator":{"kind":"within","parent":{"kind":"css","selector":"article.operator-card:has-text('Proof block one')"},"child":{"kind":"role","role":"button","name":"Edit event","exact":true}}},
     {"op":"fill","name":"116:edit-block-title","locator":{"kind":"label","text":"Edit event title","exact":true},"value":"Proof block one edited"},
     {"op":"click","name":"116:save-block","locator":{"kind":"role","role":"button","name":"Save event","exact":true}},
