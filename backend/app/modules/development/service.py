@@ -147,6 +147,29 @@ def get_roadmap_item(workspace_id: str, item_id: str) -> dict[str, object]:
         return _roadmap_payload(_roadmap_row(connection, workspace_id, item_id))
 
 
+def list_dependencies(workspace_id: str, item_id: str) -> list[dict[str, str]]:
+    with open_sqlite_connection() as connection:
+        _workspace_exists(connection, workspace_id)
+        _roadmap_row(connection, workspace_id, item_id)
+        rows = connection.execute(
+            """
+            SELECT depends_on_item_id, created_by, created_at
+            FROM roadmap_dependencies
+            WHERE workspace_id = ? AND item_id = ?
+            ORDER BY created_at, depends_on_item_id
+            """,
+            (workspace_id, item_id),
+        ).fetchall()
+        return [
+            {
+                "depends_on_item_id": str(row["depends_on_item_id"]),
+                "created_by": str(row["created_by"]),
+                "created_at": str(row["created_at"]),
+            }
+            for row in rows
+        ]
+
+
 def update_roadmap_item(item_id: str, payload: RoadmapItemUpdate) -> dict[str, object]:
     with open_sqlite_connection() as connection:
         _workspace_exists(connection, payload.workspace_id)
@@ -215,6 +238,7 @@ def add_dependency(workspace_id: str, item_id: str, depends_on_item_id: str, act
     if item_id == depends_on_item_id:
         raise DevelopmentError("roadmap_dependency_self", "Roadmap item cannot depend on itself.")
     with open_sqlite_connection() as connection:
+        connection.execute("BEGIN IMMEDIATE")
         _workspace_exists(connection, workspace_id)
         _roadmap_row(connection, workspace_id, item_id)
         _roadmap_row(connection, workspace_id, depends_on_item_id)
