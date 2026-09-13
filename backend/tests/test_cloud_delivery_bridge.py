@@ -69,6 +69,11 @@ def test_payload_refuses_default_ref_control_paths_and_unknown_profiles() -> Non
         "scripts/cloud_delivery_bridge.py",
         ".gitmodules",
         ".gitattributes",
+        "docs/specs/STATUS.md",
+        "scripts/check_architecture_enforcement.py",
+        "scripts/codex_result_delivery_dispatch.py",
+        "docs/AGENT_EXECUTION_AND_AUTOMATION_PROTOCOL.md",
+        "docs/POST_112_PARALLEL_DELIVERY_PROFILE.md",
     ]:
         with pytest.raises(BridgeError, match="control"):
             parse_payload(_body(patch=patch, paths=[path]))
