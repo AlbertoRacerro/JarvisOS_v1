@@ -44,7 +44,7 @@ IMPORT_UNBOUND_PREFIX = "__ae002_local_unbound__."
 AE004_CODEX_RESULT_WORKFLOW = ".github/workflows/codex-result-delivery.yml"
 AE004_CODEX_RESULT_WORKFLOW_SHA256 = "ae4fb908f84e5ea2b20da6866eb806cfe9e60c573fab00f25480ff0b8d8107c9"
 AE004_CODEX_RESULT_DISPATCHER = "scripts/codex_result_delivery_dispatch.py"
-AE004_CODEX_RESULT_DISPATCHER_SHA256 = "9f73de97fb545abdb3326754b818ce15a356204aebafa112f25282350aaece51"
+AE004_CODEX_RESULT_DISPATCHER_SHA256 = "9367b88fbba1cbd213a11b7ea00afceef682a2d10330becfa24f993382c75fda"
 
 
 @dataclass(frozen=True, order=True)
