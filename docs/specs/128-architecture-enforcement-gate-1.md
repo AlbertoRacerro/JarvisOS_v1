@@ -206,3 +206,7 @@ Acceptance criterion: prevent new architecture ownership side channels with dete
 - Is this full-spec detail necessary to satisfy the criterion? **Yes.** The definition names the rule families but does not yet freeze how aliases, exceptions, CI parity, V2 negative authority, diagnostics, fixtures, or fail-closed configuration must behave.
 - Can the criterion be reached with a smaller product/runtime change? **No product/runtime change is required or authorized.** The smallest sufficient implementation is a repository-static scanner/config/tests plus one CI invocation.
 - Why not perform cleanup now? Cleanup would conflate detection authority with architectural rewiring and would make a green first gate depend on changing behavior it is meant to preserve.
+
+## 2026-09-13 exact AE004 amendment
+
+The maintainer explicitly authorized one narrow accepted AE004 owner after the original 128 freeze: `.github/workflows/codex-result-delivery.yml::on.issue_comment`, governed by `docs/specs/022-128-codex-result-authority-2026-09-13.md`. The architecture scanner may admit only that exact path+trigger through the reviewed exception configuration. This does not relax the Coordination Bus V2 negative-authority rule: `JARVIS_COORD_V2`, `WORKPACK`, or `CANDIDATE_PATCH` reaching repository mutation remains AE004 even inside the admitted workflow, and every other automatic `issue_comment` workflow remains forbidden absent a future explicit amendment.
