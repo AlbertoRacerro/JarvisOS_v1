@@ -3,6 +3,11 @@ import { API_BASE_URL } from "./client";
 export type KnowledgeRouteId = "memory-project-basis" | "memory-models" | "memory-literature";
 export type KnowledgeOwner = "modeling" | "model-dossier" | "literature";
 
+export type StableKnowledgeRef = {
+  owner: KnowledgeOwner;
+  stable_ref: string;
+};
+
 export type JarvisExactRef = {
   workspace_id: string;
   owner: string;
@@ -58,13 +63,12 @@ async function postJson<T>(path: string, body: unknown): Promise<T> {
 export async function previewKnowledgeContext(
   workspaceId: string,
   routeId: KnowledgeRouteId,
-  owner: KnowledgeOwner,
-  stableRef: string
+  refs: StableKnowledgeRef[]
 ): Promise<KnowledgeContextPreview> {
   const result = await postJson<KnowledgeContextPreview | Refused>("/memory/jarvis/context-preview", {
     workspace_id: workspaceId,
     route_id: routeId,
-    refs: [{ owner, stable_ref: stableRef }]
+    refs
   });
   if (result.state !== "current") throw new Error(`Context refused: ${result.reason}`);
   return result;
