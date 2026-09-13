@@ -377,7 +377,7 @@ def _contains_current_s4_project_basis_label(workspace_id: str, refs: list[Jarvi
             )
         except (sensitivity.SensitivityNotFoundError, sensitivity.SensitivityPolicyError):
             return True
-        if label is not None and label.current and label.level == "S4":
+        if label is not None and (not label.current or label.level == "S4"):
             return True
     return False
 
