@@ -4,6 +4,7 @@ import type { StageSelection } from "./app/selection";
 import { useAppRouter } from "./app/useAppRouter";
 import Layout from "./components/Layout";
 import PageErrorBoundary from "./components/PageErrorBoundary";
+import JarvisKnowledgeActions from "./components/ai/JarvisKnowledgeActions";
 import { useJarvisSidecar } from "./components/ai/useJarvisSidecar";
 import AnalyticsDockContent from "./components/analytics/AnalyticsDockContent";
 import {
@@ -34,6 +35,7 @@ import { PRIMARY_STAGES, type ShellRegion, type ShellRegionContributions } from 
 const DevLocalChat = import.meta.env.DEV ? lazy(() => import("./pages/DevLocalChat")) : null;
 type ShellRegionRequest = Readonly<{ region: ShellRegion; nonce: number }>;
 const PROJECT_BASIS_RECORD_KINDS = new Set(["requirement", "parameter", "assumption", "decision"]);
+const KNOWLEDGE_ROUTES = new Set(["memory-project-basis", "memory-models", "memory-literature"]);
 
 function boundedSearchParam(params: URLSearchParams, name: string): string | null {
   const value = params.get(name)?.trim() ?? "";
@@ -47,6 +49,7 @@ function App() {
   const [selection, setSelection] = useState<StageSelection | null>(null);
   const [shellRegions, setShellRegions] = useState<ShellRegionContributions>({});
   const [shellRegionRequest, setShellRegionRequest] = useState<ShellRegionRequest | null>(null);
+  const [selectedModelVersionId, setSelectedModelVersionId] = useState<string | null>(null);
   const engineeringProperties = useEngineeringProperties(workspaceId, setWorkspaceId, selection);
   const routeParams = new URLSearchParams(window.location.search);
   const requestedRecordKind = boundedSearchParam(routeParams, "recordKind");
@@ -57,11 +60,21 @@ function App() {
   const requestedModelVersionId = boundedSearchParam(routeParams, "modelVersionId");
   const requestedLiteratureSourceId = boundedSearchParam(routeParams, "sourceId");
   const requestedLiteratureEntryId = boundedSearchParam(routeParams, "entryId");
+  const knowledgeStableRef = route.id === "memory-project-basis"
+    ? requestedRecordRef
+    : route.id === "memory-models" && selectedModelVersionId
+      ? `model_version:${selectedModelVersionId}`
+      : route.id === "memory-literature" && requestedLiteratureEntryId
+        ? `literature_entry:${requestedLiteratureEntryId}`
+        : route.id === "memory-literature" && requestedLiteratureSourceId
+          ? `literature_source:${requestedLiteratureSourceId}`
+          : null;
 
   useEffect(() => {
     setSelection(null);
     setShellRegions({});
     setShellRegionRequest(null);
+    setSelectedModelVersionId(null);
   }, [route.id]);
 
   useEffect(() => {
@@ -80,7 +93,7 @@ function App() {
         content = <><FinalWorkspaceHeader group="memory" active="project-basis" navigate={navigate} /><FinalOperatorReadSurface kind="project-basis" workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} requestedRecordRef={requestedRecordRef} projectSearch={<ProjectSearchPanel workspaceId={workspaceId} navigate={navigate} />} /><ProjectKnowledgePanel workspaceId={workspaceId} /></>;
         break;
       case "memory-models":
-        content = <><FinalWorkspaceHeader group="memory" active="models" navigate={navigate} /><ModelDossier workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} requestedModelVersionId={requestedModelVersionId} /><ProjectKnowledgePanel workspaceId={workspaceId} readOnly /></>;
+        content = <><FinalWorkspaceHeader group="memory" active="models" navigate={navigate} /><ModelDossier workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} requestedModelVersionId={requestedModelVersionId} onModelVersionSelectionChange={setSelectedModelVersionId} /><ProjectKnowledgePanel workspaceId={workspaceId} readOnly /></>;
         break;
       case "memory-literature":
         content = <><FinalWorkspaceHeader group="memory" active="literature" navigate={navigate} /><LiteratureKnowledge kind="literature" workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} requestedSourceId={requestedLiteratureSourceId} requestedEntryId={requestedLiteratureEntryId} /></>;
@@ -139,7 +152,10 @@ function App() {
 
   const stageSidecar = shellRegions.sidecar;
   const semanticSelectionContext = selection?.kind === "bluecad-part" ? <div className="shell-properties__selection"><strong>{selection.partId}</strong><p>{selection.partKind ? `${selection.partKind} · selected BLUECAD part` : "Selected BLUECAD part"}</p></div> : undefined;
-  const jarvisLocalContext = <>{semanticSelectionContext}<JarvisEngineeringActions controller={engineeringProperties} /></>;
+  const knowledgeActions = <JarvisKnowledgeActions workspaceId={workspaceId} routeId={route.id} stableRef={knowledgeStableRef} />;
+  const jarvisLocalContext = KNOWLEDGE_ROUTES.has(route.id)
+    ? knowledgeActions
+    : <>{semanticSelectionContext}<JarvisEngineeringActions controller={engineeringProperties} />{knowledgeActions}</>;
   const jarvisSidecar = useJarvisSidecar(workspaceId, route.id, selection, jarvisLocalContext);
   const propertiesContent = <EngineeringPropertiesPanel controller={engineeringProperties} stageContext={stageSidecar} navigate={navigate} />;
   const effectiveShellRegions: ShellRegionContributions = {
