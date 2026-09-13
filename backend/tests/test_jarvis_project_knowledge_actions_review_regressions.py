@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from types import SimpleNamespace
 
+import pytest
+
 import app.modules.memory.jarvis_knowledge_actions as knowledge
 from app.modules.ai.jarvis_context_models import JarvisExactRef
 
@@ -99,6 +101,16 @@ def test_secret_detector_rejects_prefixed_credential_assignments() -> None:
         assert knowledge._contains_secret_material([{"content": credential}])
 
 
+def test_secret_detector_rejects_double_quoted_credential_assignments() -> None:
+    for credential in (
+        'GITHUB_TOKEN="abcdefghijklmnop"',
+        'OPENAI_API_KEY="abcdefghijklmnop"',
+        'DATABASE_PASSWORD="abcdefghijklmnop"',
+        'api_key="abcdefghijklmnop"',
+    ):
+        assert knowledge._contains_secret_material([{"content": credential}])
+
+
 def test_operator_intent_secret_is_refused_for_template_path(monkeypatch) -> None:
     record = _Record("req-intent", "r1", statement="Need bounded proof", status="active")
     preview = _preview(monkeypatch, record)
@@ -188,6 +200,38 @@ def test_retired_requirement_resolves_stale(monkeypatch) -> None:
     resolved = knowledge._ProjectBasisAdapter().resolve(ref)
 
     assert resolved.state == "stale"
+
+
+def test_superseded_assumption_resolves_stale(monkeypatch) -> None:
+    record = _Record("assumption-old", "r1", statement="Old assumption", status="superseded")
+    monkeypatch.setattr(knowledge, "get_context_record_exact", lambda workspace_id, kind, record_id: record)
+    ref = JarvisExactRef(
+        workspace_id="ws-1",
+        owner="modeling",
+        kind="assumption",
+        id="assumption-old",
+        revision="r1",
+    )
+
+    resolved = knowledge._ProjectBasisAdapter().resolve(ref)
+
+    assert resolved.state == "stale"
+
+
+def test_stale_preview_preserves_typed_refusal(monkeypatch) -> None:
+    record = _Record("req-retired", "r1", statement="Old requirement", status="retired")
+    monkeypatch.setattr(knowledge, "get_context_record_exact", lambda workspace_id, kind, record_id: record)
+
+    with pytest.raises(knowledge.KnowledgeActionError) as caught:
+        knowledge.build_knowledge_preview(
+            knowledge.KnowledgeContextPreviewRequest(
+                workspace_id="ws-1",
+                route_id="memory-project-basis",
+                refs=[{"owner": "modeling", "stable_ref": "requirement:req-retired"}],
+            )
+        )
+
+    assert caught.value.reason == "stale_context"
 
 
 def test_literature_unavailable_backing_fails_closed(monkeypatch) -> None:
