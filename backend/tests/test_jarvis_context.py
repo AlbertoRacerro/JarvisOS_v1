@@ -5,6 +5,7 @@ import json
 import pytest
 from pydantic import ValidationError
 
+import app.modules.memory.jarvis_knowledge_actions  # noqa: F401
 from app.modules.ai.context_builder import DEFAULT_CONTEXT_BUDGET_CHARS, assemble_prompt
 from app.modules.ai.jarvis_context import (
     PRODUCTION_ADAPTER_REGISTRY,
@@ -25,7 +26,6 @@ from app.modules.ai.jarvis_context_models import (
     JarvisRouteDescriptor,
 )
 from app.modules.ai.thread_models import AIThreadSubmit
-import app.modules.memory.jarvis_knowledge_actions  # noqa: F401
 
 
 class StaticAdapter:
