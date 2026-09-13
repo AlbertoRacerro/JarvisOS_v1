@@ -12,6 +12,7 @@ type Props = Readonly<{
   workspaceId: string | null;
   onWorkspaceChange: (workspaceId: string) => void;
   requestedModelVersionId?: string | null;
+  onModelVersionSelectionChange?: (modelVersionId: string | null) => void;
 }>;
 
 const plainDisclosureRowStyle = { gridTemplateColumns: "minmax(0, 1fr) auto" } as const;
@@ -28,7 +29,7 @@ function TechnicalDetails({ children }: Readonly<{ children: React.ReactNode }>)
   return <details><summary>Technical details</summary>{children}</details>;
 }
 
-export default function ModelDossier({ workspaceId, onWorkspaceChange, requestedModelVersionId = null }: Props) {
+export default function ModelDossier({ workspaceId, onWorkspaceChange, requestedModelVersionId = null, onModelVersionSelectionChange }: Props) {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [index, setIndex] = useState<ModelDossierIndexItem[]>([]);
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
@@ -84,6 +85,10 @@ export default function ModelDossier({ workspaceId, onWorkspaceChange, requested
     });
     return () => { alive = false; };
   }, [activeWorkspaceId, requestedModelVersionId]);
+
+  useEffect(() => {
+    onModelVersionSelectionChange?.(selectedVersionId);
+  }, [onModelVersionSelectionChange, selectedVersionId]);
 
   useEffect(() => {
     if (!activeWorkspaceId || !selectedVersionId) {

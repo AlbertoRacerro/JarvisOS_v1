@@ -134,7 +134,12 @@ def test_capability_lookup_is_keyed_by_canonical_route_id() -> None:
         "basis-context"
     ]
     assert registry.for_route("/memory/project-basis") == []
-    assert PRODUCTION_CAPABILITY_REGISTRY.for_route("memory-project-basis") == []
+    production = PRODUCTION_CAPABILITY_REGISTRY.for_route("memory-project-basis")
+    assert {item.capability_id for item in production} == {
+        "knowledge.add-context",
+        "knowledge.propose",
+    }
+    assert {item.action_class for item in production} == {"CONTEXT", "PROPOSE"}
 
 
 def test_exact_ref_requires_at_least_one_exact_identity() -> None:
