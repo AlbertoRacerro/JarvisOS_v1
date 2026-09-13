@@ -13,6 +13,7 @@ if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
 from cloud_delivery_bridge import MARKER, BridgeError, parse_payload  # noqa: E402
+from repository_delivery import DeliveryRefusal  # noqa: E402
 
 
 def _body(path: str) -> str:
@@ -32,10 +33,14 @@ def _body(path: str) -> str:
     )
 
 
+def test_codex_transport_refuses_agents_at_repository_safety_boundary() -> None:
+    with pytest.raises(DeliveryRefusal, match="sensitive repository path refused: AGENTS.md"):
+        parse_payload(_body("AGENTS.md"))
+
+
 @pytest.mark.parametrize(
     "path",
     [
-        "AGENTS.md",
         "docs/ARCHITECTURE.md",
         "docs/DECISIONS.md",
         "docs/AGENT_EXECUTION_AND_AUTOMATION_PROTOCOL.md",
