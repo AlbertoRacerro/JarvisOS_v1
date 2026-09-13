@@ -47,6 +47,8 @@ _SPA_RESERVED_ROOT_CLIENT_ROUTES = frozenset(
         "/settings/ai",
         "/coding/repository",
         "/coding/runtime",
+        "/development/roadmap/timeline",
+        "/development/roadmap/calendar",
     }
 )
 
