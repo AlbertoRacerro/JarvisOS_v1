@@ -175,7 +175,7 @@ export default function JarvisKnowledgeActions({ workspaceId, routeId, stableRef
     }
   };
 
-  return <section className="jarvis-sidecar__stage-context" aria-label="Knowledge actions" data-testid="knowledge-actions">
+  return <section className="jarvis-sidecar__stage-context jarvis-sidecar__stage-context--visible" aria-label="Knowledge actions" data-testid="knowledge-actions">
     <strong>Knowledge actions</strong>
     <p>{stableRef ? `Selected exact candidate: ${stableRef}` : "Select a Project search result or exact model/literature record first."}</p>
     <button type="button" onClick={() => void addContext()} disabled={!workspaceId || !stableRef || busy || Boolean(stableRef && routeBasket.includes(stableRef))}>
