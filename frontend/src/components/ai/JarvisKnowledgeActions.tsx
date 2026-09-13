@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   previewKnowledgeContext,
   proposeKnowledgeAction,
+  type JarvisExactRef,
   type KnowledgeContextPreview,
   type KnowledgeOwner,
   type KnowledgeProposal,
@@ -41,6 +42,17 @@ function emptyPreviews(): Partial<Record<KnowledgeRouteId, KnowledgeContextPrevi
 function boundedManifestEntry(entry: Record<string, unknown>): string {
   const serialized = JSON.stringify(entry);
   return serialized.length > 800 ? `${serialized.slice(0, 797)}…` : serialized;
+}
+
+function sameExactRef(left: JarvisExactRef, right: JarvisExactRef): boolean {
+  return left.workspace_id === right.workspace_id
+    && left.owner === right.owner
+    && left.kind === right.kind
+    && left.id === right.id
+    && left.version === right.version
+    && left.revision === right.revision
+    && left.immutable_ref === right.immutable_ref
+    && left.content_digest === right.content_digest;
 }
 
 export default function JarvisKnowledgeActions({ workspaceId, routeId, stableRef }: Props) {
@@ -93,6 +105,10 @@ export default function JarvisKnowledgeActions({ workspaceId, routeId, stableRef
     try {
       const nextPreview = await inspectBasket(nextRefs);
       if (generation !== requestGeneration.current || !nextPreview) return;
+      if (preview && preview.exact_refs.some((exactRef, index) => !nextPreview.exact_refs[index] || !sameExactRef(exactRef, nextPreview.exact_refs[index]))) {
+        setError("Previously inspected context changed. Remove stale context and inspect the intended evidence again.");
+        return;
+      }
       setBasket((current) => ({ ...current, [routeId]: nextRefs }));
       setPreviews((current) => ({ ...current, [routeId]: nextPreview }));
     } catch (caught) {
@@ -105,6 +121,7 @@ export default function JarvisKnowledgeActions({ workspaceId, routeId, stableRef
 
   const removeContext = async (refToRemove: string) => {
     if (!workspaceId || busy) return;
+    const removedIndex = routeBasket.indexOf(refToRemove);
     const nextRefs = routeBasket.filter((ref) => ref !== refToRemove);
     const generation = requestGeneration.current;
     setBusy(true);
@@ -123,6 +140,13 @@ export default function JarvisKnowledgeActions({ workspaceId, routeId, stableRef
       }
       const nextPreview = await inspectBasket(nextRefs);
       if (generation !== requestGeneration.current || !nextPreview) return;
+      if (preview) {
+        const expectedRefs = preview.exact_refs.filter((_, index) => index !== removedIndex);
+        if (expectedRefs.length !== nextPreview.exact_refs.length || expectedRefs.some((exactRef, index) => !sameExactRef(exactRef, nextPreview.exact_refs[index]))) {
+          setError("Remaining context changed. Clear stale context before continuing.");
+          return;
+        }
+      }
       setBasket((current) => ({ ...current, [routeId]: nextRefs }));
       setPreviews((current) => ({ ...current, [routeId]: nextPreview }));
     } catch (caught) {
