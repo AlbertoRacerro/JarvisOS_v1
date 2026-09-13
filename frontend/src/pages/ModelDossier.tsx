@@ -91,6 +91,7 @@ export default function ModelDossier({ workspaceId, onWorkspaceChange, requested
     onModelVersionSelectionChange?.(null);
     setDetail(null);
     if (!activeWorkspaceId || !selectedVersionId) return;
+    if (requestedModelVersionId && requestedModelVersionId !== selectedVersionId) return;
 
     let alive = true;
     setLoading(true);
