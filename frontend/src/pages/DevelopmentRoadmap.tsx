@@ -22,6 +22,14 @@ type Props = {
 
 type CalendarView = "Day" | "Week" | "Month" | "Agenda";
 
+function formatAllocationInstant(instant: string, timeZone: string): string {
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone
+  }).format(new Date(instant));
+}
+
 export default function DevelopmentRoadmap({ mode, workspaceId, onWorkspaceChange }: Props) {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [items, setItems] = useState<RoadmapItem[]>([]);
@@ -227,7 +235,7 @@ export default function DevelopmentRoadmap({ mode, workspaceId, onWorkspaceChang
               <button type="button" disabled={busy} onClick={() => setEditingAllocationId(null)}>Cancel</button>
             </form> : <>
               <strong>{allocation.title}</strong>
-              <p>{allocation.start_instant} → {allocation.end_instant}</p>
+              <p>{formatAllocationInstant(allocation.start_instant, allocation.timezone)} → {formatAllocationInstant(allocation.end_instant, allocation.timezone)}</p>
               <p>Time zone: {allocation.timezone}</p>
               <p>Roadmap item: {items.find((item) => item.id === allocation.roadmap_item_id)?.title ?? "None"}</p>
               <div>
