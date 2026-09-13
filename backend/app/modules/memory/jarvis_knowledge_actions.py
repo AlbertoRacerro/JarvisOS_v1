@@ -76,6 +76,9 @@ _SECRET_ASSIGNMENT_PATTERN = re.compile(
 _SECRET_TOKEN_PATTERNS = (
     re.compile(r"\bsk-[A-Za-z0-9_-]{8,}\b"),
     re.compile(r"\bgh[pousr]_[A-Za-z0-9]{20,}\b"),
+    re.compile(r"xox[a-z]-[A-Za-z0-9-]{8,}", re.I),
+    re.compile(r"github_pat_[A-Za-z0-9_]{20,}", re.I),
+    re.compile(r"(?:postgres(?:ql)?|mysql|mariadb|mongodb(?:[+]srv)?|redis)://[^ :/@]+:[^ /@]{8,}@", re.I),
     re.compile(r"-----BEGIN (?:[A-Z0-9 ]+ )?PRIVATE KEY-----"),
     re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._~+/=-]{8,}"),
 )
