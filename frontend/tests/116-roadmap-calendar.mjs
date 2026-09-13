@@ -12,14 +12,21 @@ for (const token of [
   "Edit work item",
   "Save work item",
   "Delete work item",
+  "Lifecycle status",
   "Mark Done",
   "Project window:",
   "Scheduled blocks:",
   "+ Add event",
   "Edit event",
+  "Edit Roadmap item",
+  "Edit start",
+  "Edit end",
+  "Edit time zone",
   "Save event",
   "Delete event",
   "Open roadmap item",
+  "Opened roadmap item:",
+  "View date",
   'aria-label="Calendar projection"',
   '"Day", "Week", "Month", "Agenda"'
 ]) {
@@ -27,6 +34,10 @@ for (const token of [
 }
 
 check(page.includes('useState<CalendarView>("Week")'), "Calendar must default to Week projection");
+check(page.includes("projectedAllocations"), "Calendar views must project canonical allocations instead of relabeling one unbounded list");
+check(page.includes("allocationDateKey"), "Calendar projections must use saved-zone allocation dates");
+check(page.includes("formatAllocationInstant"), "Calendar times must render in the saved IANA zone");
+check(page.includes("await refresh(workspaceId)"), "Mutation paths must reconcile against fresh server-owned state");
 check(page.includes("updateRoadmapItem(item"), "Roadmap edits must use server-owned CAS mutation");
 check(page.includes("deleteRoadmapItem(item)"), "Roadmap deletes must use server-owned CAS mutation");
 check(page.includes("updateCalendarAllocation(allocation"), "Calendar edits must use server-owned CAS mutation");
