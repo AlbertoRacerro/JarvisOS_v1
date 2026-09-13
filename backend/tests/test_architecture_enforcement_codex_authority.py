@@ -35,6 +35,9 @@ def _root(tmp_path: Path) -> tuple[Path, Path]:
     (workflows / "codex-result-delivery.yml").write_bytes(
         (ROOT / ".github/workflows/codex-result-delivery.yml").read_bytes()
     )
+    (root / "scripts/codex_result_delivery_dispatch.py").write_bytes(
+        (ROOT / "scripts/codex_result_delivery_dispatch.py").read_bytes()
+    )
     return root, config
 
 
@@ -77,3 +80,16 @@ def test_exact_exception_fails_closed_on_non_v2_behavior_drift(tmp_path: Path) -
     assert len(findings) == 1
     assert findings[0].symbol == "on.issue_comment"
     assert "behavior drifted" in findings[0].detail
+
+
+def test_exact_exception_fails_closed_on_dispatcher_behavior_drift(tmp_path: Path) -> None:
+    root, config = _root(tmp_path)
+    dispatcher = root / "scripts/codex_result_delivery_dispatch.py"
+    dispatcher.write_text(
+        dispatcher.read_text(encoding="utf-8") + "\n# unauthorized behavior drift\n",
+        encoding="utf-8",
+    )
+    findings = [f for f in scanner.scan(root, config) if f.rule_id == "AE004"]
+    assert len(findings) == 1
+    assert findings[0].symbol == "on.issue_comment"
+    assert "dispatcher behavior drifted" in findings[0].detail
