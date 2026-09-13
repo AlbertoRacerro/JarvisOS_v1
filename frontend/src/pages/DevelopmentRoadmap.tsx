@@ -4,8 +4,11 @@ import { listWorkspaces, type Workspace } from "../api/client";
 import {
   createCalendarAllocation,
   createRoadmapItem,
+  deleteCalendarAllocation,
+  deleteRoadmapItem,
   listCalendarAllocations,
   listRoadmapItems,
+  updateCalendarAllocation,
   updateRoadmapItem,
   type CalendarAllocation,
   type RoadmapItem
@@ -17,6 +20,8 @@ type Props = {
   onWorkspaceChange(next: string | null): void;
 };
 
+type CalendarView = "Day" | "Week" | "Month" | "Agenda";
+
 export default function DevelopmentRoadmap({ mode, workspaceId, onWorkspaceChange }: Props) {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [items, setItems] = useState<RoadmapItem[]>([]);
@@ -24,11 +29,19 @@ export default function DevelopmentRoadmap({ mode, workspaceId, onWorkspaceChang
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [newTitle, setNewTitle] = useState("");
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editWindowStart, setEditWindowStart] = useState("");
+  const [editWindowEnd, setEditWindowEnd] = useState("");
+  const [editDoneWhen, setEditDoneWhen] = useState("");
+  const [calendarView, setCalendarView] = useState<CalendarView>("Week");
   const [eventTitle, setEventTitle] = useState("");
   const [eventItemId, setEventItemId] = useState("");
   const [eventStart, setEventStart] = useState("");
   const [eventEnd, setEventEnd] = useState("");
   const [eventTimezone, setEventTimezone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC");
+  const [editingAllocationId, setEditingAllocationId] = useState<string | null>(null);
+  const [editEventTitle, setEditEventTitle] = useState("");
 
   useEffect(() => {
     let alive = true;
@@ -90,6 +103,14 @@ export default function DevelopmentRoadmap({ mode, workspaceId, onWorkspaceChang
     }
   }
 
+  function beginRoadmapEdit(item: RoadmapItem) {
+    setEditingItemId(item.id);
+    setEditTitle(item.title);
+    setEditWindowStart(item.window_start_date ?? "");
+    setEditWindowEnd(item.window_end_date ?? "");
+    setEditDoneWhen(item.done_when ?? "");
+  }
+
   const workspaceSelector = (
     <label>
       Workspace
@@ -126,20 +147,48 @@ export default function DevelopmentRoadmap({ mode, workspaceId, onWorkspaceChang
         </form>
         <div className="operator-card-grid">
           {items.map((item) => <article key={item.id} className="operator-card" data-testid="roadmap-item">
-            <div><strong>{item.title}</strong><p>{item.item_type} · {item.priority}</p></div>
-            <p>Status: <strong>{item.status}</strong></p>
-            <p>Project window: {item.window_start_date ?? "unset"} → {item.window_end_date ?? "unset"}</p>
-            <p>Scheduled blocks: {allocationsByItem.get(item.id) ?? 0}</p>
-            {item.done_when ? <p>Done when: {item.done_when} · {item.done_when_satisfied ? "satisfied" : "not satisfied"}</p> : null}
-            <div>
-              {item.status !== "Done" && item.status !== "Cancelled" ? <button disabled={busy} onClick={() => void run(async () => { await updateRoadmapItem(item, { status: "Done" }); })}>Mark Done</button> : null}
-            </div>
+            {editingItemId === item.id ? <form onSubmit={(event) => {
+              event.preventDefault();
+              void run(async () => {
+                await updateRoadmapItem(item, {
+                  title: editTitle.trim(),
+                  window_start_date: editWindowStart || null,
+                  window_end_date: editWindowEnd || null,
+                  done_when: editDoneWhen.trim() || null
+                });
+                setEditingItemId(null);
+              });
+            }}>
+              <label>Edit title <input value={editTitle} onChange={(event) => setEditTitle(event.target.value)} /></label>
+              <label>Window start <input type="date" value={editWindowStart} onChange={(event) => setEditWindowStart(event.target.value)} /></label>
+              <label>Window end <input type="date" value={editWindowEnd} onChange={(event) => setEditWindowEnd(event.target.value)} /></label>
+              <label>Done when <input value={editDoneWhen} onChange={(event) => setEditDoneWhen(event.target.value)} /></label>
+              <button type="submit" disabled={busy || !editTitle.trim()}>Save work item</button>
+              <button type="button" disabled={busy} onClick={() => setEditingItemId(null)}>Cancel</button>
+            </form> : <>
+              <div><strong>{item.title}</strong><p>{item.item_type} · {item.priority}</p></div>
+              <p>Status: <strong>{item.status}</strong></p>
+              <p>Project window: {item.window_start_date ?? "unset"} → {item.window_end_date ?? "unset"}</p>
+              <p>Scheduled blocks: {allocationsByItem.get(item.id) ?? 0}</p>
+              {item.done_when ? <p>Done when: {item.done_when} · {item.done_when_satisfied ? "satisfied" : "not satisfied"}</p> : null}
+              <div>
+                <button type="button" disabled={busy} onClick={() => beginRoadmapEdit(item)}>Edit work item</button>
+                {item.status !== "Done" && item.status !== "Cancelled" ? <button type="button" disabled={busy} onClick={() => void run(async () => { await updateRoadmapItem(item, { status: "Done" }); })}>Mark Done</button> : null}
+                <button type="button" disabled={busy} onClick={() => void run(async () => { await deleteRoadmapItem(item); })}>Delete work item</button>
+              </div>
+            </>}
           </article>)}
           {items.length === 0 ? <p>No Roadmap items yet.</p> : null}
         </div>
       </> : null}
 
       {workspaceId && mode === "calendar" ? <>
+        <div role="region" aria-label="Calendar projection">
+          {(["Day", "Week", "Month", "Agenda"] as CalendarView[]).map((view) => (
+            <button key={view} type="button" aria-pressed={calendarView === view} onClick={() => setCalendarView(view)}>{view}</button>
+          ))}
+          <p>Calendar projection: <strong>{calendarView}</strong></p>
+        </div>
         <form onSubmit={(event) => {
           event.preventDefault();
           if (!eventTitle.trim() || !eventStart || !eventEnd || !eventTimezone.trim()) return;
@@ -157,12 +206,29 @@ export default function DevelopmentRoadmap({ mode, workspaceId, onWorkspaceChang
           <label>Time zone <input value={eventTimezone} onChange={(event) => setEventTimezone(event.target.value)} /></label>
           <button type="submit" disabled={busy}>+ Add event</button>
         </form>
-        <div className="operator-card-grid">
+        <div className="operator-card-grid" data-calendar-view={calendarView.toLowerCase()}>
           {allocations.map((allocation) => <article key={allocation.id} className="operator-card" data-testid="calendar-allocation">
-            <strong>{allocation.title}</strong>
-            <p>{allocation.start_instant} → {allocation.end_instant}</p>
-            <p>Time zone: {allocation.timezone}</p>
-            <p>Roadmap item: {items.find((item) => item.id === allocation.roadmap_item_id)?.title ?? "None"}</p>
+            {editingAllocationId === allocation.id ? <form onSubmit={(event) => {
+              event.preventDefault();
+              void run(async () => {
+                await updateCalendarAllocation(allocation, { title: editEventTitle.trim() });
+                setEditingAllocationId(null);
+              });
+            }}>
+              <label>Edit event title <input value={editEventTitle} onChange={(event) => setEditEventTitle(event.target.value)} /></label>
+              <button type="submit" disabled={busy || !editEventTitle.trim()}>Save event</button>
+              <button type="button" disabled={busy} onClick={() => setEditingAllocationId(null)}>Cancel</button>
+            </form> : <>
+              <strong>{allocation.title}</strong>
+              <p>{allocation.start_instant} → {allocation.end_instant}</p>
+              <p>Time zone: {allocation.timezone}</p>
+              <p>Roadmap item: {items.find((item) => item.id === allocation.roadmap_item_id)?.title ?? "None"}</p>
+              <div>
+                <button type="button" disabled={busy} onClick={() => { setEditingAllocationId(allocation.id); setEditEventTitle(allocation.title); }}>Edit event</button>
+                <button type="button" disabled={busy} onClick={() => void run(async () => { await deleteCalendarAllocation(allocation); })}>Delete event</button>
+                {allocation.roadmap_item_id ? <a href="/development/roadmap/timeline">Open roadmap item</a> : null}
+              </div>
+            </>}
           </article>)}
           {allocations.length === 0 ? <p>No Calendar allocations yet.</p> : null}
         </div>
