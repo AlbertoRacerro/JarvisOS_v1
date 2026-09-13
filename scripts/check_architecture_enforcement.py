@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import hashlib
 import json
 import sys
 import tempfile
@@ -22,6 +23,8 @@ V2_MARKERS = {"JARVIS_COORD_V2", "WORKPACK", "CANDIDATE_PATCH"}
 MUTATION_WORDS = {
     "create_file", "update_file", "delete_file", "create_branch", "update_ref",
     "merge_pull_request", "update_pull_request", "STATUS.md", "apply_patch",
+    "git push", "contents: write", "actions: write", "createWorkflowDispatch",
+    "workflow_dispatch", "repository_dispatch",
 }
 SQL_EXECUTION_METHODS = {"execute", "executemany", "executescript"}
 EXACT_CANONICAL_MUTATION_OWNER_FILES = {
@@ -38,6 +41,8 @@ URLLIB3_POOL_METHODS = {"request", "urlopen"}
 SOCKET_INSTANCE_METHODS = {"connect", "connect_ex", "sendto"}
 MODULE_SCOPE = (0, sys.maxsize, "<module>")
 IMPORT_UNBOUND_PREFIX = "__ae002_local_unbound__."
+AE004_CODEX_RESULT_WORKFLOW = ".github/workflows/codex-result-delivery.yml"
+AE004_CODEX_RESULT_WORKFLOW_SHA256 = "ae4fb908f84e5ea2b20da6866eb806cfe9e60c573fab00f25480ff0b8d8107c9"
 
 
 @dataclass(frozen=True, order=True)
@@ -620,12 +625,18 @@ def _scan_workflow(
         or (isinstance(trigger, list) and "issue_comment" in trigger)
         or (isinstance(trigger, dict) and "issue_comment" in trigger)
     )
-    exact_issue_comment = f"{rel}::on.issue_comment"
-    if issue_comment and ("AE004", exact_issue_comment) not in exceptions:
-        return [Finding("AE004", rel, "on.issue_comment", "automatic issue_comment workflow is forbidden by 128")]
     text = path.read_text(encoding="utf-8")
     if any(marker in text for marker in V2_MARKERS) and any(word in text for word in MUTATION_WORDS):
         return [Finding("AE004", rel, "<yaml>", "workflow parses V2 coordination into mutation authority")]
+    exact_issue_comment = f"{rel}::on.issue_comment"
+    if issue_comment:
+        if ("AE004", exact_issue_comment) not in exceptions:
+            return [Finding("AE004", rel, "on.issue_comment", "automatic issue_comment workflow is forbidden by 128")]
+        if rel != AE004_CODEX_RESULT_WORKFLOW:
+            return [Finding("AE004", rel, "on.issue_comment", "issue_comment exception is not an admitted exact owner")]
+        observed = hashlib.sha256(path.read_bytes()).hexdigest()
+        if observed != AE004_CODEX_RESULT_WORKFLOW_SHA256:
+            return [Finding("AE004", rel, "on.issue_comment", "admitted issue_comment workflow behavior drifted from reviewed authority")]
     return []
 
 

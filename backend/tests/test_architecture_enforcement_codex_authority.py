@@ -32,13 +32,14 @@ def _root(tmp_path: Path) -> tuple[Path, Path]:
     configs.mkdir()
     config = configs / "architecture_enforcement.json"
     config.write_text(json.dumps({"exceptions": [EXCEPTION]}), encoding="utf-8")
+    (workflows / "codex-result-delivery.yml").write_bytes(
+        (ROOT / ".github/workflows/codex-result-delivery.yml").read_bytes()
+    )
     return root, config
 
 
 def test_exact_codex_issue_comment_workflow_is_the_only_admitted_exception(tmp_path: Path) -> None:
     root, config = _root(tmp_path)
-    allowed = root / ".github/workflows/codex-result-delivery.yml"
-    allowed.write_text("name: allowed\non:\n  issue_comment:\n    types: [created]\njobs: {}\n", encoding="utf-8")
     assert not [f for f in scanner.scan(root, config) if f.rule_id == "AE004"]
 
     (root / ".github/workflows/other.yml").write_text(
@@ -55,13 +56,24 @@ def test_exact_exception_does_not_admit_coordination_bus_mutation(tmp_path: Path
     root, config = _root(tmp_path)
     allowed = root / ".github/workflows/codex-result-delivery.yml"
     allowed.write_text(
-        "name: forbidden-v2\n"
-        "on:\n  issue_comment:\n    types: [created]\n"
-        "env:\n  MARKER: JARVIS_COORD_V2\n  OP: apply_patch\n"
-        "jobs: {}\n",
+        allowed.read_text(encoding="utf-8")
+        + "\n# WORKPACK\n# git push origin HEAD:feature\n",
         encoding="utf-8",
     )
     findings = [f for f in scanner.scan(root, config) if f.rule_id == "AE004"]
     assert len(findings) == 1
     assert findings[0].path == ".github/workflows/codex-result-delivery.yml"
     assert findings[0].symbol == "<yaml>"
+
+
+def test_exact_exception_fails_closed_on_non_v2_behavior_drift(tmp_path: Path) -> None:
+    root, config = _root(tmp_path)
+    allowed = root / ".github/workflows/codex-result-delivery.yml"
+    allowed.write_text(
+        allowed.read_text(encoding="utf-8").replace("contents: read", "contents: write"),
+        encoding="utf-8",
+    )
+    findings = [f for f in scanner.scan(root, config) if f.rule_id == "AE004"]
+    assert len(findings) == 1
+    assert findings[0].symbol == "on.issue_comment"
+    assert "behavior drifted" in findings[0].detail

@@ -44,6 +44,17 @@ EXTRA_CONTROL_PATHS = {
     "scripts/cloud_delivery_bridge.py",
     "backend/tests/test_cloud_delivery_bridge.py",
     ".github/workflows/cloud-delivery-bridge.yml",
+    "docs/specs/STATUS.md",
+    "docs/AGENT_EXECUTION_AND_AUTOMATION_PROTOCOL.md",
+    "docs/POST_112_PARALLEL_DELIVERY_PROFILE.md",
+    "docs/COORDINATION_BUS_V2.md",
+    "docs/specs/022-codex-pr-autopush.md",
+    "docs/specs/128-architecture-enforcement-gate-1.md",
+    "docs/specs/022-128-codex-result-authority-2026-09-13.md",
+    "scripts/check_architecture_enforcement.py",
+    "scripts/codex_result_delivery_dispatch.py",
+    "backend/tests/test_architecture_enforcement_codex_authority.py",
+    "backend/tests/test_codex_result_delivery_dispatch.py",
 }
 
 
