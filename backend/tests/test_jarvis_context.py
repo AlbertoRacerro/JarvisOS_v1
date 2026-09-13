@@ -25,6 +25,7 @@ from app.modules.ai.jarvis_context_models import (
     JarvisRouteDescriptor,
 )
 from app.modules.ai.thread_models import AIThreadSubmit
+import app.modules.memory.jarvis_knowledge_actions  # noqa: F401
 
 
 class StaticAdapter:
