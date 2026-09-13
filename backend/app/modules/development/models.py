@@ -41,7 +41,6 @@ class RoadmapItemCreate(StrictDevelopmentModel):
     cannot_start_before: date | None = None
     must_finish_before: date | None = None
     done_when: str | None = None
-    done_when_satisfied: bool | None = None
     created_by: str = Field(min_length=1)
 
 
@@ -63,7 +62,6 @@ class RoadmapItemUpdate(StrictDevelopmentModel):
     cannot_start_before: date | None = None
     must_finish_before: date | None = None
     done_when: str | None = None
-    done_when_satisfied: bool | None = None
     actor: str = Field(min_length=1)
 
 
