@@ -22,6 +22,7 @@ class _Record:
 
 def _preview(monkeypatch, record: _Record) -> dict[str, object]:
     monkeypatch.setattr(knowledge, "get_context_record_exact", lambda workspace_id, kind, record_id: record)
+    monkeypatch.setattr(knowledge.sensitivity, "get_current_sensitivity_label", lambda workspace_id, subject_ref: None)
     return knowledge.build_knowledge_preview(
         knowledge.KnowledgeContextPreviewRequest(
             workspace_id="ws-1",
