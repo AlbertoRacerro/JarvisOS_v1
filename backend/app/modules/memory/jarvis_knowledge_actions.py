@@ -562,9 +562,14 @@ class KnowledgeActionsService:
 
             generated_by: dict[str, object]
             if payload.semantic:
-                if _contains_current_s4_project_basis_label(payload.workspace_id, payload.exact_refs):
+                if any(
+                    ref.owner == "modeling" and ref.kind in _PROJECT_KINDS
+                    for ref in payload.exact_refs
+                ):
                     raise KnowledgeActionError(
-                        "sensitive_context", "S4 Project Basis evidence cannot enter semantic model context"
+                        "sensitive_context",
+                        "Project Basis semantic generation is unavailable because sensitivity authority "
+                        "can change at the dispatch boundary; use the deterministic proposal path",
                     )
                 context_blocks = list(inspected.blocks)
                 if _contains_secret_material(context_blocks):
