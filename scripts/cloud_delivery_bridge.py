@@ -44,18 +44,20 @@ EXTRA_CONTROL_PATHS = {
     "scripts/cloud_delivery_bridge.py",
     "backend/tests/test_cloud_delivery_bridge.py",
     ".github/workflows/cloud-delivery-bridge.yml",
-    "docs/specs/STATUS.md",
-    "docs/AGENT_EXECUTION_AND_AUTOMATION_PROTOCOL.md",
-    "docs/POST_112_PARALLEL_DELIVERY_PROFILE.md",
-    "docs/COORDINATION_BUS_V2.md",
-    "docs/specs/022-codex-pr-autopush.md",
-    "docs/specs/128-architecture-enforcement-gate-1.md",
-    "docs/specs/022-128-codex-result-authority-2026-09-13.md",
     "scripts/check_architecture_enforcement.py",
     "scripts/codex_result_delivery_dispatch.py",
     "backend/tests/test_architecture_enforcement_codex_authority.py",
     "backend/tests/test_codex_result_delivery_dispatch.py",
 }
+CANONICAL_AUTHORITY_PATHS = {
+    "AGENTS.md",
+    "docs/ARCHITECTURE.md",
+    "docs/DECISIONS.md",
+    "docs/AGENT_EXECUTION_AND_AUTOMATION_PROTOCOL.md",
+    "docs/COORDINATION_BUS_V2.md",
+    "docs/POST_112_PARALLEL_DELIVERY_PROFILE.md",
+}
+CANONICAL_AUTHORITY_PREFIXES = ("docs/specs/",)
 
 
 class BridgeError(RuntimeError):
@@ -115,6 +117,10 @@ def _admitted_profiles_for_paths(paths: tuple[str, ...]) -> set[str]:
     return {"docs"}
 
 
+def _is_authority_control_path(path: str) -> bool:
+    return path in CANONICAL_AUTHORITY_PATHS or path.startswith(CANONICAL_AUTHORITY_PREFIXES)
+
+
 def _assert_patch_headers(payload: Payload) -> None:
     headers = [line for line in payload.patch.splitlines() if line.startswith("diff --git ")]
     expected = [f"diff --git a/{path} b/{path}" for path in payload.changed_paths]
@@ -166,9 +172,13 @@ def parse_payload(body: str) -> Payload:
     normalized = assert_safe_paths(list(changed))
     if normalized != tuple(sorted(changed)):
         raise BridgeError("changed_paths must be normalized and sorted")
-    denied = set(normalized) & EXTRA_CONTROL_PATHS
+    denied = sorted(
+        path
+        for path in normalized
+        if path in EXTRA_CONTROL_PATHS or _is_authority_control_path(path)
+    )
     if denied:
-        raise BridgeError(f"bridge/control path refused: {sorted(denied)[0]}")
+        raise BridgeError(f"bridge/control path refused: {denied[0]}")
     admitted_profiles = _admitted_profiles_for_paths(normalized)
     if profile not in admitted_profiles:
         raise BridgeError("validation_profile is weaker or unrelated for changed_paths")
