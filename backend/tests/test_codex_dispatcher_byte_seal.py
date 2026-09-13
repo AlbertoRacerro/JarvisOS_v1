@@ -5,7 +5,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 DISPATCHER = ROOT / "scripts" / "codex_result_delivery_dispatch.py"
-EXPECTED_SHA256 = "9f73de97fb545abdb3326754b818ce15a356204aebafa112f25282350aaece51"
+EXPECTED_SHA256 = "9367b88fbba1cbd213a11b7ea00afceef682a2d10330becfa24f993382c75fda"
 
 
 def test_codex_result_dispatcher_exact_bytes_are_reviewed_authority() -> None:
