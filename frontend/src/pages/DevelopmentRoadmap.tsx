@@ -81,6 +81,12 @@ export default function DevelopmentRoadmap({ mode, workspaceId, onWorkspaceChang
     return () => { alive = false; };
   }, [workspaceId]);
 
+  useEffect(() => {
+    if (mode !== "calendar" || eventItemId || items.length === 0) return;
+    const requestedItemId = new URLSearchParams(window.location.search).get("roadmap_item_id");
+    if (requestedItemId && items.some((item) => item.id === requestedItemId)) setEventItemId(requestedItemId);
+  }, [mode, eventItemId, items]);
+
   const allocationsByItem = useMemo(() => {
     const map = new Map<string, number>();
     for (const allocation of allocations) {
@@ -175,6 +181,7 @@ export default function DevelopmentRoadmap({ mode, workspaceId, onWorkspaceChang
                 <button type="button" disabled={busy} onClick={() => beginRoadmapEdit(item)}>Edit work item</button>
                 {item.status !== "Done" && item.status !== "Cancelled" ? <button type="button" disabled={busy} onClick={() => void run(async () => { await updateRoadmapItem(item, { status: "Done" }); })}>Mark Done</button> : null}
                 <button type="button" disabled={busy} onClick={() => void run(async () => { await deleteRoadmapItem(item); })}>Delete work item</button>
+                <a href={`/development/roadmap/calendar?roadmap_item_id=${encodeURIComponent(item.id)}`}>Schedule in Calendar</a>
               </div>
             </>}
           </article>)}
@@ -226,7 +233,7 @@ export default function DevelopmentRoadmap({ mode, workspaceId, onWorkspaceChang
               <div>
                 <button type="button" disabled={busy} onClick={() => { setEditingAllocationId(allocation.id); setEditEventTitle(allocation.title); }}>Edit event</button>
                 <button type="button" disabled={busy} onClick={() => void run(async () => { await deleteCalendarAllocation(allocation); })}>Delete event</button>
-                {allocation.roadmap_item_id ? <a href="/development/roadmap/timeline">Open roadmap item</a> : null}
+                {allocation.roadmap_item_id ? <a href={`/development/roadmap/timeline?roadmap_item_id=${encodeURIComponent(allocation.roadmap_item_id)}`}>Open roadmap item</a> : null}
               </div>
             </>}
           </article>)}
