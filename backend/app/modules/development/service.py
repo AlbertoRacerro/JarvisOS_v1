@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import date, datetime
+from datetime import date
 from uuid import uuid4
 
 from app.core.database import open_sqlite_connection
-from app.core.errors import AppError, WORKSPACE_NOT_FOUND_CODE, WORKSPACE_NOT_FOUND_MESSAGE
+from app.core.errors import WORKSPACE_NOT_FOUND_CODE, WORKSPACE_NOT_FOUND_MESSAGE, AppError
 from app.modules.development.models import (
     CalendarAllocationCreate,
     CalendarAllocationUpdate,
