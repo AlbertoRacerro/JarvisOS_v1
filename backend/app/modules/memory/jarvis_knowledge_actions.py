@@ -85,7 +85,7 @@ _SECRET_TOKEN_PATTERNS = (
     re.compile(r"(?:postgres(?:ql)?|mysql|mariadb|mongodb(?:[+]srv)?|redis)://[^ :/@]+:[^ /@]{8,}@", re.I),
     re.compile(r"-----BEGIN (?:[A-Z0-9 ]+ )?PRIVATE KEY-----"),
     re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._~+/=-]{8,}"),
-    re.compile(r"(?i)\bbasic\s+[A-Za-z0-9+/=]{8,}"),
+    re.compile(r"(?i)\bauthorization\s*:\s*basic\s+[A-Za-z0-9+/]{4,}={0,2}"),
 )
 
 
