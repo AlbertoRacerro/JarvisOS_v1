@@ -47,6 +47,7 @@ function App() {
   const [selection, setSelection] = useState<StageSelection | null>(null);
   const [shellRegions, setShellRegions] = useState<ShellRegionContributions>({});
   const [shellRegionRequest, setShellRegionRequest] = useState<ShellRegionRequest | null>(null);
+  const [selectedModelVersionId, setSelectedModelVersionId] = useState<string | null>(null);
   const engineeringProperties = useEngineeringProperties(workspaceId, setWorkspaceId, selection);
   const routeParams = new URLSearchParams(window.location.search);
   const requestedRecordKind = boundedSearchParam(routeParams, "recordKind");
@@ -59,8 +60,8 @@ function App() {
   const requestedLiteratureEntryId = boundedSearchParam(routeParams, "entryId");
   const knowledgeStableRef = route.id === "memory-project-basis"
     ? requestedRecordRef
-    : route.id === "memory-models" && requestedModelVersionId
-      ? `model_version:${requestedModelVersionId}`
+    : route.id === "memory-models" && selectedModelVersionId
+      ? `model_version:${selectedModelVersionId}`
       : route.id === "memory-literature" && requestedLiteratureEntryId
         ? `literature_entry:${requestedLiteratureEntryId}`
         : route.id === "memory-literature" && requestedLiteratureSourceId
@@ -71,6 +72,7 @@ function App() {
     setSelection(null);
     setShellRegions({});
     setShellRegionRequest(null);
+    setSelectedModelVersionId(null);
   }, [route.id]);
 
   useEffect(() => {
@@ -89,7 +91,7 @@ function App() {
         content = <><FinalWorkspaceHeader group="memory" active="project-basis" navigate={navigate} /><FinalOperatorReadSurface kind="project-basis" workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} requestedRecordRef={requestedRecordRef} projectSearch={<ProjectSearchPanel workspaceId={workspaceId} navigate={navigate} />} /><ProjectKnowledgePanel workspaceId={workspaceId} /></>;
         break;
       case "memory-models":
-        content = <><FinalWorkspaceHeader group="memory" active="models" navigate={navigate} /><ModelDossier workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} requestedModelVersionId={requestedModelVersionId} /><ProjectKnowledgePanel workspaceId={workspaceId} readOnly /></>;
+        content = <><FinalWorkspaceHeader group="memory" active="models" navigate={navigate} /><ModelDossier workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} requestedModelVersionId={requestedModelVersionId} onModelVersionSelectionChange={setSelectedModelVersionId} /><ProjectKnowledgePanel workspaceId={workspaceId} readOnly /></>;
         break;
       case "memory-literature":
         content = <><FinalWorkspaceHeader group="memory" active="literature" navigate={navigate} /><LiteratureKnowledge kind="literature" workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} requestedSourceId={requestedLiteratureSourceId} requestedEntryId={requestedLiteratureEntryId} /></>;
