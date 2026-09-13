@@ -89,6 +89,16 @@ def test_semantic_proposal_refuses_generic_token_assignment_before_ai(monkeypatc
     assert calls == []
 
 
+def test_secret_detector_rejects_prefixed_credential_assignments() -> None:
+    for credential in (
+        "GITHUB_TOKEN=abcdefghijklmnop",
+        "OPENAI_API_KEY=abcdefghijklmnop",
+        "DATABASE_PASSWORD=abcdefghijklmnop",
+        "AWS_SECRET_ACCESS_KEY=abcdefghijklmnop",
+    ):
+        assert knowledge._contains_secret_material([{"content": credential}])
+
+
 def test_operator_intent_secret_is_refused_for_template_path(monkeypatch) -> None:
     record = _Record("req-intent", "r1", statement="Need bounded proof", status="active")
     preview = _preview(monkeypatch, record)
