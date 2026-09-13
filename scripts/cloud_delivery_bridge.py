@@ -57,7 +57,7 @@ CANONICAL_AUTHORITY_PATHS = {
     "docs/COORDINATION_BUS_V2.md",
     "docs/POST_112_PARALLEL_DELIVERY_PROFILE.md",
 }
-CANONICAL_AUTHORITY_PREFIXES = ("docs/specs/",)
+CANONICAL_AUTHORITY_PREFIXES = ("docs/specs/", "docs/MAINTAINER_")
 
 
 class BridgeError(RuntimeError):
