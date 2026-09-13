@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from collections.abc import Callable
@@ -170,6 +171,27 @@ class _ProjectBasisAdapter:
         )
 
 
+def _model_dossier_content(dossier: object) -> dict[str, object]:
+    identity = dossier.identity
+    return {
+        "identity": identity.model_dump(mode="json"),
+        "title": dossier.title,
+        "engineering_question": dossier.engineering_question,
+        "scope": dossier.scope,
+        "maturity_status": dossier.maturity_status,
+        "assumptions_summary": dossier.assumptions_summary,
+        "inputs_summary": dossier.inputs_summary,
+        "outputs_summary": dossier.outputs_summary,
+    }
+
+
+def _model_dossier_content_digest(dossier: object) -> str:
+    encoded = json.dumps(
+        _model_dossier_content(dossier), sort_keys=True, separators=(",", ":"), ensure_ascii=False
+    ).encode("utf-8")
+    return "sha256:" + hashlib.sha256(encoded).hexdigest()
+
+
 class _ModelDossierAdapter:
     def resolve(self, ref: JarvisExactRef) -> JarvisResolvedRef:
         provenance: dict[str, object] = {
@@ -196,19 +218,15 @@ class _ModelDossierAdapter:
             return JarvisResolvedRef(ref=ref, state="stale", reason="model version identity moved", provenance=provenance)
         if ref.version != identity.version_label:
             return JarvisResolvedRef(ref=ref, state="stale", reason="model version label moved", provenance=provenance)
+        content = _model_dossier_content(dossier)
+        content_digest = _model_dossier_content_digest(dossier)
+        provenance["content_digest"] = content_digest
+        if ref.content_digest != content_digest:
+            return JarvisResolvedRef(ref=ref, state="stale", reason="model dossier content moved", provenance=provenance)
         return JarvisResolvedRef(
             ref=ref,
             state="current",
-            content={
-                "identity": identity.model_dump(mode="json"),
-                "title": dossier.title,
-                "engineering_question": dossier.engineering_question,
-                "scope": dossier.scope,
-                "maturity_status": dossier.maturity_status,
-                "assumptions_summary": dossier.assumptions_summary,
-                "inputs_summary": dossier.inputs_summary,
-                "outputs_summary": dossier.outputs_summary,
-            },
+            content=content,
             provenance=provenance,
             action_classes=["READ", "CONTEXT"],
         )
@@ -415,6 +433,7 @@ def exact_ref_from_stable(workspace_id: str, route_id: KnowledgeRouteId, item: S
             id=record_id,
             version=version if isinstance(version, str) and version else None,
             immutable_ref=f"model_version:{record_id}",
+            content_digest=_model_dossier_content_digest(dossier),
         )
     if prefix == "literature_source":
         try:
