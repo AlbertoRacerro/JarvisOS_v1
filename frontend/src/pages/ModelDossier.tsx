@@ -58,6 +58,7 @@ export default function ModelDossier({ workspaceId, onWorkspaceChange, requested
   }, [onWorkspaceChange, workspaceId]);
 
   useEffect(() => {
+    onModelVersionSelectionChange?.(null);
     if (!activeWorkspaceId) {
       setIndex([]);
       setSelectedVersionId(null);
@@ -84,7 +85,7 @@ export default function ModelDossier({ workspaceId, onWorkspaceChange, requested
       if (alive) setLoading(false);
     });
     return () => { alive = false; };
-  }, [activeWorkspaceId, requestedModelVersionId]);
+  }, [activeWorkspaceId, onModelVersionSelectionChange, requestedModelVersionId]);
 
   useEffect(() => {
     onModelVersionSelectionChange?.(null);
