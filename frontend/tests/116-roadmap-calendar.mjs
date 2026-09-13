@@ -1,0 +1,37 @@
+import fs from "node:fs";
+
+const page = fs.readFileSync(new URL("../src/pages/DevelopmentRoadmap.tsx", import.meta.url), "utf8");
+const api = fs.readFileSync(new URL("../src/api/development.ts", import.meta.url), "utf8");
+
+function check(condition, message) {
+  if (!condition) throw new Error(message);
+}
+
+for (const token of [
+  "+ Add work item",
+  "Edit work item",
+  "Save work item",
+  "Delete work item",
+  "Mark Done",
+  "Project window:",
+  "Scheduled blocks:",
+  "+ Add event",
+  "Edit event",
+  "Save event",
+  "Delete event",
+  "Open roadmap item",
+  'aria-label="Calendar projection"',
+  '"Day", "Week", "Month", "Agenda"'
+]) {
+  check(page.includes(token), `Development Roadmap must expose ${token}`);
+}
+
+check(page.includes('useState<CalendarView>("Week")'), "Calendar must default to Week projection");
+check(page.includes("updateRoadmapItem(item"), "Roadmap edits must use server-owned CAS mutation");
+check(page.includes("deleteRoadmapItem(item)"), "Roadmap deletes must use server-owned CAS mutation");
+check(page.includes("updateCalendarAllocation(allocation"), "Calendar edits must use server-owned CAS mutation");
+check(page.includes("deleteCalendarAllocation(allocation)"), "Calendar deletes must use server-owned CAS mutation");
+check(api.includes('method: "DELETE"'), "Development API client must expose DELETE mutations");
+check(!page.toLowerCase().includes("board"), "116 must not introduce Board state or affordances");
+
+console.log("116 roadmap/calendar frontend contract: OK");
