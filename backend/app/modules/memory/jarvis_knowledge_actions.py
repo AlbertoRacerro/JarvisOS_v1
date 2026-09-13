@@ -146,6 +146,8 @@ class _ProjectBasisAdapter:
             return JarvisResolvedRef(ref=ref, state="stale", reason="Project Basis record revision moved", provenance=provenance)
         if ref.kind == "requirement" and getattr(record, "status", None) == "retired":
             return JarvisResolvedRef(ref=ref, state="stale", reason="Project Basis requirement is retired", provenance=provenance)
+        if ref.kind == "assumption" and getattr(record, "status", None) == "superseded":
+            return JarvisResolvedRef(ref=ref, state="stale", reason="Project Basis assumption is superseded", provenance=provenance)
         if ref.kind == "parameter" and getattr(record, "lifecycle_state", None) != "active":
             return JarvisResolvedRef(ref=ref, state="stale", reason="Project Basis parameter is no longer active", provenance=provenance)
         if ref.kind == "decision" and getattr(record, "basis_lifecycle_state", None) != "active":
@@ -330,11 +332,28 @@ def _dedupe_exact_refs(refs: list[JarvisExactRef]) -> list[JarvisExactRef]:
     return normalized
 
 
+def _secret_candidate_texts(value: object) -> list[str]:
+    texts: list[str] = []
+    if isinstance(value, str):
+        texts.append(value)
+    elif isinstance(value, dict):
+        for key, item in value.items():
+            texts.append(str(key))
+            texts.extend(_secret_candidate_texts(item))
+    elif isinstance(value, (list, tuple)):
+        for item in value:
+            texts.extend(_secret_candidate_texts(item))
+    return texts
+
+
 def _contains_secret_material(blocks: list[dict[str, object]]) -> bool:
     serialized = json.dumps(blocks, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-    if _SECRET_ASSIGNMENT_PATTERN.search(serialized):
-        return True
-    return any(pattern.search(serialized) for pattern in _SECRET_TOKEN_PATTERNS)
+    candidates = [serialized, *_secret_candidate_texts(blocks)]
+    return any(
+        _SECRET_ASSIGNMENT_PATTERN.search(candidate)
+        or any(pattern.search(candidate) for pattern in _SECRET_TOKEN_PATTERNS)
+        for candidate in candidates
+    )
 
 
 def exact_ref_from_stable(workspace_id: str, route_id: KnowledgeRouteId, item: StableKnowledgeRef) -> JarvisExactRef:
@@ -429,7 +448,11 @@ def build_knowledge_preview(payload: KnowledgeContextPreviewRequest) -> dict[str
         raise KnowledgeActionError("identity_conflict", "exact knowledge refs conflict") from exc
     except JarvisContextError as exc:
         raise KnowledgeActionError("missing_evidence", "exact knowledge evidence is unavailable") from exc
-    if not preview.dispatchable or preview.included_count != len(exact_refs):
+    if not preview.dispatchable:
+        if any(outcome.state == "stale" for outcome in preview.ref_outcomes):
+            raise KnowledgeActionError("stale_context", "one or more exact knowledge refs are stale")
+        raise KnowledgeActionError("missing_evidence", "one or more exact knowledge refs are unavailable")
+    if preview.included_count != len(exact_refs):
         raise KnowledgeActionError("missing_evidence", "one or more exact knowledge refs are not dispatchable")
     return {
         "state": "current",
