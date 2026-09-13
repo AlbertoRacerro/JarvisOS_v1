@@ -118,6 +118,19 @@ def test_missing_or_ambiguous_cloud_marker_is_refused() -> None:
         )
 
 
+@pytest.mark.parametrize("marker", mod.PROPOSAL_MARKERS)
+def test_proposal_markers_are_refused_before_dispatch(marker: str) -> None:
+    body = (
+        f"{mod.CODEX_MARKER}\n"
+        f"{mod.DELIVERY_MARKER}\n"
+        f"{marker}\n"
+        "```json\n{}\n```\n"
+        "```diff\nx\n```"
+    )
+    with pytest.raises(mod.DispatchError, match="proposal/V2 markers"):
+        mod.request_from_event(_event(body=body))
+
+
 def test_only_created_events_are_eligible() -> None:
     event = _event()
     event["action"] = "edited"
