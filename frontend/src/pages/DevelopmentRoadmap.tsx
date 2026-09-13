@@ -22,6 +22,7 @@ type Props = {
 
 type CalendarView = "Day" | "Week" | "Month" | "Agenda";
 const ROADMAP_STATUSES = ["Planned", "Ready", "In progress", "Blocked", "Done", "Cancelled"] as const;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 function formatAllocationInstant(instant: string, timeZone: string): string {
   return new Intl.DateTimeFormat(undefined, {
@@ -31,7 +32,7 @@ function formatAllocationInstant(instant: string, timeZone: string): string {
   }).format(new Date(instant));
 }
 
-function zonedParts(instant: string, timeZone: string): Record<string, string> {
+function zonedParts(instant: string | Date, timeZone: string): Record<string, string> {
   return Object.fromEntries(
     new Intl.DateTimeFormat("en-CA", {
       timeZone,
@@ -41,13 +42,29 @@ function zonedParts(instant: string, timeZone: string): Record<string, string> {
       hour: "2-digit",
       minute: "2-digit",
       hourCycle: "h23"
-    }).formatToParts(new Date(instant)).filter((part) => part.type !== "literal").map((part) => [part.type, part.value])
+    }).formatToParts(typeof instant === "string" ? new Date(instant) : instant).filter((part) => part.type !== "literal").map((part) => [part.type, part.value])
   );
 }
 
-function allocationDateKey(allocation: CalendarAllocation): string {
-  const parts = zonedParts(allocation.start_instant, allocation.timezone);
+function dateKeyForInstant(instant: string | Date, timeZone: string): string {
+  const parts = zonedParts(instant, timeZone);
   return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+function allocationDateKey(allocation: CalendarAllocation): string {
+  return dateKeyForInstant(allocation.start_instant, allocation.timezone);
+}
+
+function allocationEndDateKey(allocation: CalendarAllocation): string {
+  const exclusiveEnd = new Date(Math.max(
+    new Date(allocation.start_instant).getTime(),
+    new Date(allocation.end_instant).getTime() - 1
+  ));
+  return dateKeyForInstant(exclusiveEnd, allocation.timezone);
+}
+
+function allocationOverlapsDateRange(allocation: CalendarAllocation, firstDay: string, lastDay: string): boolean {
+  return allocationDateKey(allocation) <= lastDay && allocationEndDateKey(allocation) >= firstDay;
 }
 
 function allocationLocalInput(instant: string, timeZone: string): string {
@@ -65,6 +82,18 @@ function weekStart(dateKey: string): string {
   const date = new Date(`${dateKey}T00:00:00Z`);
   const mondayOffset = (date.getUTCDay() + 6) % 7;
   return shiftDate(dateKey, -mondayOffset);
+}
+
+function monthRange(dateKey: string): [string, string] {
+  const [year, month] = dateKey.split("-").map(Number);
+  const first = `${year.toString().padStart(4, "0")}-${month.toString().padStart(2, "0")}-01`;
+  const nextMonth = new Date(Date.UTC(year, month, 1));
+  nextMonth.setUTCDate(nextMonth.getUTCDate() - 1);
+  return [first, nextMonth.toISOString().slice(0, 10)];
+}
+
+function dayOffset(dateKey: string, origin: string): number {
+  return Math.round((new Date(`${dateKey}T00:00:00Z`).getTime() - new Date(`${origin}T00:00:00Z`).getTime()) / DAY_MS);
 }
 
 export default function DevelopmentRoadmap({ mode, workspaceId, onWorkspaceChange }: Props) {
@@ -156,17 +185,26 @@ export default function DevelopmentRoadmap({ mode, workspaceId, onWorkspaceChang
     return map;
   }, [allocations]);
 
+  const timelineRange = useMemo(() => {
+    const starts = items.map((item) => item.window_start_date).filter((value): value is string => Boolean(value));
+    const ends = items.map((item) => item.window_end_date).filter((value): value is string => Boolean(value));
+    if (starts.length === 0 && ends.length === 0) return null;
+    const first = [...starts, ...ends].sort()[0];
+    const last = [...starts, ...ends].sort().at(-1) ?? first;
+    return { first, last, days: Math.max(1, dayOffset(last, first) + 1) };
+  }, [items]);
+
   const projectedAllocations = useMemo(() => {
     const sorted = [...allocations].sort((left, right) => left.start_instant.localeCompare(right.start_instant));
     if (calendarView === "Agenda") return sorted;
-    if (calendarView === "Day") return sorted.filter((allocation) => allocationDateKey(allocation) === calendarAnchor);
-    if (calendarView === "Month") return sorted.filter((allocation) => allocationDateKey(allocation).slice(0, 7) === calendarAnchor.slice(0, 7));
+    if (calendarView === "Day") return sorted.filter((allocation) => allocationOverlapsDateRange(allocation, calendarAnchor, calendarAnchor));
+    if (calendarView === "Month") {
+      const [firstDay, lastDay] = monthRange(calendarAnchor);
+      return sorted.filter((allocation) => allocationOverlapsDateRange(allocation, firstDay, lastDay));
+    }
     const firstDay = weekStart(calendarAnchor);
     const lastDay = shiftDate(firstDay, 6);
-    return sorted.filter((allocation) => {
-      const day = allocationDateKey(allocation);
-      return day >= firstDay && day <= lastDay;
-    });
+    return sorted.filter((allocation) => allocationOverlapsDateRange(allocation, firstDay, lastDay));
   }, [allocations, calendarView, calendarAnchor]);
 
   const openedRoadmapItem = mode === "timeline" && requestedRoadmapItemId
@@ -244,6 +282,36 @@ export default function DevelopmentRoadmap({ mode, workspaceId, onWorkspaceChang
           <label>New work item <input value={newTitle} onChange={(event) => setNewTitle(event.target.value)} /></label>
           <button type="submit" disabled={busy || !newTitle.trim()}>+ Add work item</button>
         </form>
+
+        <section aria-label="Roadmap project-window timeline" data-testid="roadmap-timeline-projection">
+          <h2>Project windows</h2>
+          {timelineRange ? <>
+            <p>{timelineRange.first} → {timelineRange.last}</p>
+            {items.filter((item) => item.window_start_date || item.window_end_date).map((item) => {
+              const start = item.window_start_date ?? item.window_end_date ?? timelineRange.first;
+              const end = item.window_end_date ?? item.window_start_date ?? start;
+              const left = Math.max(0, dayOffset(start, timelineRange.first));
+              const width = Math.max(1, dayOffset(end, start) + 1);
+              return <div key={item.id} data-testid="roadmap-timeline-window">
+                <span>{item.title}</span>
+                <div
+                  role="img"
+                  aria-label={`${item.title}: ${start} to ${end}`}
+                  style={{ marginLeft: `${(left / timelineRange.days) * 100}%`, width: `${Math.min(100 - (left / timelineRange.days) * 100, (width / timelineRange.days) * 100)}%` }}
+                >{start} → {end}</div>
+              </div>;
+            })}
+          </> : <p>No project windows set.</p>}
+        </section>
+
+        <details data-testid="roadmap-execution-status">
+          <summary>Execution status</summary>
+          {ROADMAP_STATUSES.map((status) => {
+            const matching = items.filter((item) => item.status === status);
+            return <div key={status}><strong>{status} · {matching.length}</strong>{matching.length ? <ul>{matching.map((item) => <li key={item.id}><a href={`#roadmap-item-${item.id}`}>{item.title}</a></li>)}</ul> : null}</div>;
+          })}
+        </details>
+
         <div className="operator-card-grid">
           {items.map((item) => <article key={item.id} id={`roadmap-item-${item.id}`} className="operator-card" data-testid="roadmap-item" data-opened={requestedRoadmapItemId === item.id ? "true" : undefined}>
             {editingItemId === item.id ? <form onSubmit={(event) => {
