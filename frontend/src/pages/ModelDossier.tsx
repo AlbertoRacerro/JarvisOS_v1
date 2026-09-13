@@ -33,6 +33,7 @@ export default function ModelDossier({ workspaceId, onWorkspaceChange, requested
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [index, setIndex] = useState<ModelDossierIndexItem[]>([]);
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
+  const [activeRequestedVersionId, setActiveRequestedVersionId] = useState<string | null>(requestedModelVersionId);
   const [detail, setDetail] = useState<ModelDossierDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -59,6 +60,7 @@ export default function ModelDossier({ workspaceId, onWorkspaceChange, requested
 
   useEffect(() => {
     onModelVersionSelectionChange?.(null);
+    setActiveRequestedVersionId(requestedModelVersionId);
     if (!activeWorkspaceId) {
       setIndex([]);
       setSelectedVersionId(null);
@@ -91,7 +93,7 @@ export default function ModelDossier({ workspaceId, onWorkspaceChange, requested
     onModelVersionSelectionChange?.(null);
     setDetail(null);
     if (!activeWorkspaceId || !selectedVersionId) return;
-    if (requestedModelVersionId && requestedModelVersionId !== selectedVersionId) return;
+    if (activeRequestedVersionId && activeRequestedVersionId !== selectedVersionId) return;
 
     let alive = true;
     setLoading(true);
@@ -106,7 +108,12 @@ export default function ModelDossier({ workspaceId, onWorkspaceChange, requested
       if (alive) setLoading(false);
     });
     return () => { alive = false; };
-  }, [activeWorkspaceId, onModelVersionSelectionChange, requestedModelVersionId, selectedVersionId]);
+  }, [activeRequestedVersionId, activeWorkspaceId, onModelVersionSelectionChange, selectedVersionId]);
+
+  const selectVersion = (modelVersionId: string) => {
+    setActiveRequestedVersionId(null);
+    setSelectedVersionId(modelVersionId);
+  };
 
   return <div className="final-fusion__workbench final-fusion__workbench--models">
     <section className="final-fusion__panel final-fusion__versions" aria-label="Model versions">
@@ -114,7 +121,7 @@ export default function ModelDossier({ workspaceId, onWorkspaceChange, requested
       <div className="final-fusion__toolbar-line"><span>Project workspace</span><select aria-label="Project workspace" value={activeWorkspaceId ?? ""} onChange={(event) => onWorkspaceChange(event.target.value)} disabled={!workspaces.length}><option value="">Select workspace…</option>{workspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}</select></div>
       <div className="final-fusion__searchbox">Choose a model by its human title, version and current status. Exact identifiers remain available in Technical details.</div>
       {requestedSelectionUnavailable ? <Empty><strong>Requested model version is unavailable.</strong><span>The exact search identity no longer exists in this workspace.</span></Empty> : null}
-      {loading && !versions.length ? <Empty><strong>Loading model dossiers…</strong></Empty> : error && !versions.length ? <Empty><strong>Backend read failed</strong><span>{error}</span></Empty> : versions.length ? <div className="final-fusion__source-list">{versions.map(({ item, version }) => <button type="button" className="final-fusion__disclosure-row" data-model-version-id={version.model_version_id} data-search-selected={selectedVersionId === version.model_version_id ? "true" : undefined} style={plainDisclosureRowStyle} key={version.model_version_id} onClick={() => setSelectedVersionId(version.model_version_id)} aria-pressed={selectedVersionId === version.model_version_id}><strong>{item.title}</strong><em>{version.version_label || "Unlabelled version"} · {version.status || "Unknown status"}</em></button>)}</div> : <Empty><strong>No model versions</strong><span>The selected workspace exposes no model dossier versions.</span></Empty>}
+      {loading && !versions.length ? <Empty><strong>Loading model dossiers…</strong></Empty> : error && !versions.length ? <Empty><strong>Backend read failed</strong><span>{error}</span></Empty> : versions.length ? <div className="final-fusion__source-list">{versions.map(({ item, version }) => <button type="button" className="final-fusion__disclosure-row" data-model-version-id={version.model_version_id} data-search-selected={selectedVersionId === version.model_version_id ? "true" : undefined} style={plainDisclosureRowStyle} key={version.model_version_id} onClick={() => selectVersion(version.model_version_id)} aria-pressed={selectedVersionId === version.model_version_id}><strong>{item.title}</strong><em>{version.version_label || "Unlabelled version"} · {version.status || "Unknown status"}</em></button>)}</div> : <Empty><strong>No model versions</strong><span>The selected workspace exposes no model dossier versions.</span></Empty>}
       <div className="final-fusion__lineage-slot">{detail ? `Selected · ${detail.title} · ${detail.identity.version_label || "Unlabelled version"}` : "No model version selected"}</div>
     </section>
 
