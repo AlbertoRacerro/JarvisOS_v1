@@ -72,7 +72,7 @@ MAX_PROPOSAL_BYTES = 128 * 1024
 _SECRET_ASSIGNMENT_PATTERN = re.compile(
     r"(?i)(?:api[_ -]?key|password|passwd|secret|token|access[_ -]?token|refresh[_ -]?token|"
     r"aws[_ -]?secret[_ -]?access[_ -]?key|authorization)\b"
-    r"\s*(?::|=)\s*[\"']?[^\s,\"'}]{8,}"
+    r"\s*[\"']?\s*(?::|=)\s*[\"']?[^\s,\"'}]{8,}"
 )
 _SECRET_TOKEN_PATTERNS = (
     re.compile(r"\bsk-[A-Za-z0-9_-]{8,}\b"),
