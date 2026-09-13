@@ -4,7 +4,7 @@ import hashlib
 import json
 import re
 from collections.abc import Callable
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
@@ -171,7 +171,7 @@ class _ProjectBasisAdapter:
         )
 
 
-def _model_dossier_content(dossier: object) -> dict[str, object]:
+def _model_dossier_content(dossier: Any) -> dict[str, object]:
     identity = dossier.identity
     return {
         "identity": identity.model_dump(mode="json"),
