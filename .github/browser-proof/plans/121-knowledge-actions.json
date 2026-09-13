@@ -4,6 +4,7 @@
   "fixture": "project-search",
   "forbidMutatingRequests": true,
   "readOnlySameOriginPostPaths": [
+    "/ai/context/packs/preview",
     "/memory/jarvis/context-preview",
     "/memory/jarvis/propose"
   ],
