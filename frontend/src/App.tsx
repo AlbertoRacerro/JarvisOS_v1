@@ -22,6 +22,7 @@ import MigrationPendingSurface from "./components/shell/MigrationPendingSurface"
 import AIDraft from "./pages/AIDraft";
 import AIThreads from "./pages/AIThreads";
 import CodingWorkbench from "./pages/CodingWorkbench";
+import DevelopmentRoadmap from "./pages/DevelopmentRoadmap";
 import DomainFoundation from "./pages/DomainFoundation";
 import EngineeringData from "./pages/EngineeringData";
 import LiteratureKnowledge from "./pages/LiteratureKnowledge";
@@ -85,10 +86,10 @@ function App() {
         content = <><FinalWorkspaceHeader group="memory" active="literature" navigate={navigate} /><LiteratureKnowledge kind="literature" workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} requestedSourceId={requestedLiteratureSourceId} requestedEntryId={requestedLiteratureEntryId} /></>;
         break;
       case "development-roadmap-timeline":
-        content = <><FinalWorkspaceHeader group="development" active="roadmap" navigate={navigate} /><FinalOperatorUnavailableSurface kind="roadmap" title="Roadmap · Timeline" description="No server-owned roadmap item store currently supplies truthful workstream or execution-status items. Timeline geometry and Execution status remain visible without fabricated bars or counts." navigate={navigate} /></>;
+        content = <><FinalWorkspaceHeader group="development" active="roadmap" navigate={navigate} /><DevelopmentRoadmap mode="timeline" workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} /></>;
         break;
       case "development-roadmap-calendar":
-        content = <><FinalWorkspaceHeader group="development" active="roadmap" navigate={navigate} /><FinalOperatorUnavailableSurface kind="calendar" title="Roadmap · Calendar" description="No server-owned time-allocation calendar currently supplies actual scheduled work. Week remains the canonical default view; Gantt/reference blocks are not converted into synthetic events." navigate={navigate} /></>;
+        content = <><FinalWorkspaceHeader group="development" active="roadmap" navigate={navigate} /><DevelopmentRoadmap mode="calendar" workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} /></>;
         break;
       case "development-brainstorm":
         content = <><FinalWorkspaceHeader group="development" active="brainstorm" navigate={navigate} /><FinalOperatorUnavailableSurface kind="brainstorm" title="Brainstorm" description="The RAW → discussion/reconciliation → RECONCILED → explicit promotion composition is present, but there is no accepted persistence owner for those records in this frontend-only slice." navigate={navigate} links={[{ href: "/ai-threads", label: "Open existing AI Threads compatibility view" }]} /></>;
