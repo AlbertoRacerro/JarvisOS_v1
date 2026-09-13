@@ -34,6 +34,7 @@ import { PRIMARY_STAGES, type ShellRegion, type ShellRegionContributions } from 
 const DevLocalChat = import.meta.env.DEV ? lazy(() => import("./pages/DevLocalChat")) : null;
 type ShellRegionRequest = Readonly<{ region: ShellRegion; nonce: number }>;
 const PROJECT_BASIS_RECORD_KINDS = new Set(["requirement", "parameter", "assumption", "decision"]);
+const KNOWLEDGE_ROUTES = new Set(["memory-project-basis", "memory-models", "memory-literature"]);
 
 function boundedSearchParam(params: URLSearchParams, name: string): string | null {
   const value = params.get(name)?.trim() ?? "";
@@ -151,7 +152,9 @@ function App() {
   const stageSidecar = shellRegions.sidecar;
   const semanticSelectionContext = selection?.kind === "bluecad-part" ? <div className="shell-properties__selection"><strong>{selection.partId}</strong><p>{selection.partKind ? `${selection.partKind} · selected BLUECAD part` : "Selected BLUECAD part"}</p></div> : undefined;
   const knowledgeActions = <JarvisKnowledgeActions workspaceId={workspaceId} routeId={route.id} stableRef={knowledgeStableRef} />;
-  const jarvisLocalContext = <>{semanticSelectionContext}<JarvisEngineeringActions controller={engineeringProperties} />{knowledgeActions}</>;
+  const jarvisLocalContext = KNOWLEDGE_ROUTES.has(route.id)
+    ? knowledgeActions
+    : <>{semanticSelectionContext}<JarvisEngineeringActions controller={engineeringProperties} />{knowledgeActions}</>;
   const jarvisSidecar = useJarvisSidecar(workspaceId, route.id, selection, jarvisLocalContext);
   const propertiesContent = <EngineeringPropertiesPanel controller={engineeringProperties} stageContext={stageSidecar} navigate={navigate} />;
   const effectiveShellRegions: ShellRegionContributions = {
