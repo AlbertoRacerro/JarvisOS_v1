@@ -72,6 +72,14 @@ export function updateRoadmapItem(item: RoadmapItem, patch: Record<string, unkno
   });
 }
 
+export function deleteRoadmapItem(item: RoadmapItem): Promise<void> {
+  return requestJson(`/development/roadmap/items/${encodeURIComponent(item.id)}`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ workspace_id: item.workspace_id, expected_revision: item.revision, actor: "operator" })
+  });
+}
+
 export function listCalendarAllocations(workspaceId: string): Promise<CalendarAllocation[]> {
   return requestJson(`/development/calendar/allocations?workspace_id=${encodeURIComponent(workspaceId)}`);
 }
@@ -105,5 +113,13 @@ export function updateCalendarAllocation(allocation: CalendarAllocation, patch: 
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ workspace_id: allocation.workspace_id, expected_revision: allocation.revision, actor: "operator", ...patch })
+  });
+}
+
+export function deleteCalendarAllocation(allocation: CalendarAllocation): Promise<void> {
+  return requestJson(`/development/calendar/allocations/${encodeURIComponent(allocation.id)}`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ workspace_id: allocation.workspace_id, expected_revision: allocation.revision, actor: "operator" })
   });
 }
