@@ -99,7 +99,7 @@ export function createCalendarAllocation(
       workspace_id: workspaceId,
       roadmap_item_id: roadmapItemId,
       title,
-      event_type: "Work block",
+      event_type: "work session",
       start_local: startLocal,
       end_local: endLocal,
       timezone,
