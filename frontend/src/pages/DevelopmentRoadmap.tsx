@@ -189,8 +189,9 @@ export default function DevelopmentRoadmap({ mode, workspaceId, onWorkspaceChang
     const starts = items.map((item) => item.window_start_date).filter((value): value is string => Boolean(value));
     const ends = items.map((item) => item.window_end_date).filter((value): value is string => Boolean(value));
     if (starts.length === 0 && ends.length === 0) return null;
-    const first = [...starts, ...ends].sort()[0];
-    const last = [...starts, ...ends].sort().at(-1) ?? first;
+    const ordered = [...starts, ...ends].sort();
+    const first = ordered[0];
+    const last = ordered[ordered.length - 1] ?? first;
     return { first, last, days: Math.max(1, dayOffset(last, first) + 1) };
   }, [items]);
 
