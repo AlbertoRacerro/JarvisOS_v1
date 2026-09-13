@@ -20,6 +20,7 @@ def test_secret_screen_blocks_standard_tokens_and_credential_urls() -> None:
         "glpat-abcdefghijklmnop",
         "npm_abcdefghijklmnop",
         "AIzaabcdefghijklmnopqrstuv",
+        "Authorization: Basic YWxhZGRpbjpvcGVuc2VzYW1l",
     ]
 
     for value in sensitive_values:
