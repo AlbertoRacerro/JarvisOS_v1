@@ -24,6 +24,8 @@ type LayoutProps = Readonly<{
   children: ReactNode;
 }>;
 
+const KNOWLEDGE_ROUTES = new Set(["memory-project-basis", "memory-models", "memory-literature"]);
+
 function Layout({ route, navigate, selection, propertiesContent, shellRegions, shellRegionRequest, children }: LayoutProps) {
   const [appearance, setAppearance] = useState<AppearancePreference>(() => readAppearancePreference());
   const [navigatorOpen, setNavigatorOpen] = useState(false);
@@ -39,10 +41,12 @@ function Layout({ route, navigate, selection, propertiesContent, shellRegions, s
   useEffect(() => {
     // The approved BLUECAD composition has a persistent left model/feature
     // navigator. Process owns its palette inside the stage, so it must not
-    // inherit this behavior. Other final surfaces keep contextual navigation
+    // inherit this behavior. Knowledge routes expose their accepted Jarvis
+    // CONTEXT/PROPOSE actions through the sidecar and therefore keep it
+    // reachable by opening it on route entry. Other final surfaces stay
     // closed unless explicitly requested.
     setNavigatorOpen(route.id === "design-bluecad");
-    setSidecarOpen(route.id === "design-process" || route.id === "design-bluecad");
+    setSidecarOpen(route.id === "design-process" || route.id === "design-bluecad" || KNOWLEDGE_ROUTES.has(route.id));
     setDockOpen(false);
     document.title = `${route.title} · JarvisOS`;
     const frame = window.requestAnimationFrame(() => mainRef.current?.focus());
