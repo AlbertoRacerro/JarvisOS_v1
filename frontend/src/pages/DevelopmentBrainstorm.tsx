@@ -28,7 +28,7 @@ export default function DevelopmentBrainstorm({ workspaceId, onWorkspaceChange }
   const [promotions, setPromotions] = useState<BrainstormPromotion[]>([]);
   const [expanded, setExpanded] = useState<BrainstormIdea | null>(null);
   const [rawText, setRawText] = useState("");
-  const [attachmentType, setAttachmentType] = useState<"run_artifact" | "literature_entry">("run_artifact");
+  const [attachmentType, setAttachmentType] = useState<"run_artifact" | "generic_artifact" | "literature_entry">("run_artifact");
   const [attachmentId, setAttachmentId] = useState("");
   const [sourceRawId, setSourceRawId] = useState("");
   const [title, setTitle] = useState("");
@@ -185,8 +185,9 @@ export default function DevelopmentBrainstorm({ workspaceId, onWorkspaceChange }
           </label>
           <label>
             Attachment ref type
-            <select value={attachmentType} onChange={(event) => setAttachmentType(event.target.value as "run_artifact" | "literature_entry")}>
+            <select value={attachmentType} onChange={(event) => setAttachmentType(event.target.value as "run_artifact" | "generic_artifact" | "literature_entry")}>
               <option value="run_artifact">Run artifact</option>
+              <option value="generic_artifact">Artifact</option>
               <option value="literature_entry">Literature entry</option>
             </select>
           </label>
