@@ -199,6 +199,38 @@ def _discussion_payload(row: sqlite3.Row) -> dict[str, object]:
     return value
 
 
+def _discussion_ids_for_sources(
+    connection: sqlite3.Connection,
+    workspace_id: str,
+    refs: list[BrainstormExactRef],
+) -> list[str]:
+    discussion_ids: set[str] = set()
+    for ref in refs:
+        if ref.ref_type == "raw":
+            rows = connection.execute(
+                """
+                SELECT id FROM brainstorm_discussions
+                WHERE workspace_id = ? AND target_type = 'raw' AND target_id = ?
+                ORDER BY created_at, id
+                """,
+                (workspace_id, ref.ref_id),
+            ).fetchall()
+        elif ref.ref_type == "brainstorm_revision" and ref.revision is not None:
+            rows = connection.execute(
+                """
+                SELECT id FROM brainstorm_discussions
+                WHERE workspace_id = ? AND target_type = 'idea'
+                  AND target_id = ? AND target_revision = ?
+                ORDER BY created_at, id
+                """,
+                (workspace_id, ref.ref_id, ref.revision),
+            ).fetchall()
+        else:
+            continue
+        discussion_ids.update(str(row["id"]) for row in rows)
+    return sorted(discussion_ids)
+
+
 def _idea_payload(connection: sqlite3.Connection, row: sqlite3.Row) -> dict[str, object]:
     value = dict(row)
     revision = _revision_row(connection, str(row["workspace_id"]), str(row["id"]), int(row["current_revision"]))
@@ -387,6 +419,7 @@ def reconcile(payload: BrainstormReconcileCreate) -> dict[str, object]:
             if changed.rowcount != 1:
                 raise DevelopmentError("brainstorm_idea_stale", "Brainstorm idea revision changed concurrently.")
         refs = [_ref_payload(ref) for ref in payload.source_refs]
+        discussion_ids = _discussion_ids_for_sources(connection, payload.workspace_id, payload.source_refs)
         connection.execute(
             """
             INSERT INTO brainstorm_revisions (
@@ -405,6 +438,14 @@ def reconcile(payload: BrainstormReconcileCreate) -> dict[str, object]:
                 payload.actor,
                 now,
             ),
+        )
+        connection.executemany(
+            """
+            INSERT INTO brainstorm_revision_discussions (
+                idea_id, workspace_id, revision, discussion_id
+            ) VALUES (?, ?, ?, ?)
+            """,
+            [(idea_id, payload.workspace_id, revision, discussion_id) for discussion_id in discussion_ids],
         )
         for ref in payload.source_refs:
             if ref.ref_type == "raw":
@@ -429,7 +470,12 @@ def reconcile(payload: BrainstormReconcileCreate) -> dict[str, object]:
             target_type="brainstorm_idea",
             target_id=idea_id,
             workspace_id=payload.workspace_id,
-            payload={"revision": revision, "source_ref_count": len(refs), "synthesis_digest": _digest(payload.synthesis)},
+            payload={
+                "revision": revision,
+                "source_ref_count": len(refs),
+                "discussion_ref_count": len(discussion_ids),
+                "synthesis_digest": _digest(payload.synthesis),
+            },
         )
         row = _idea_row(connection, payload.workspace_id, idea_id)
         connection.commit()
@@ -454,38 +500,20 @@ def get_idea(workspace_id: str, idea_id: str) -> dict[str, object]:
             "SELECT * FROM brainstorm_revisions WHERE workspace_id = ? AND idea_id = ? ORDER BY revision DESC",
             (workspace_id, idea_id),
         ).fetchall()
-        revision_payloads = [_revision_payload(row) for row in revisions]
-        idea["revisions"] = revision_payloads
-        raw_ids = sorted(
-            {
-                str(ref["ref_id"])
-                for revision in revision_payloads
-                for ref in revision["source_refs"]
-                if isinstance(ref, dict) and ref.get("ref_type") == "raw" and ref.get("ref_id")
-            }
-        )
+        idea["revisions"] = [_revision_payload(row) for row in revisions]
         discussion_rows = connection.execute(
             """
-            SELECT * FROM brainstorm_discussions
-            WHERE workspace_id = ? AND target_type = 'idea' AND target_id = ?
-            ORDER BY created_at, id
+            SELECT binding.revision AS bound_revision, discussion.*
+            FROM brainstorm_revision_discussions AS binding
+            JOIN brainstorm_discussions AS discussion
+              ON discussion.id = binding.discussion_id
+             AND discussion.workspace_id = binding.workspace_id
+            WHERE binding.workspace_id = ? AND binding.idea_id = ?
+            ORDER BY binding.revision, discussion.created_at, discussion.id
             """,
             (workspace_id, idea_id),
         ).fetchall()
-        discussions = [_discussion_payload(row) for row in discussion_rows]
-        if raw_ids:
-            placeholders = ",".join("?" for _ in raw_ids)
-            raw_discussion_rows = connection.execute(
-                f"""
-                SELECT * FROM brainstorm_discussions
-                WHERE workspace_id = ? AND target_type = 'raw' AND target_id IN ({placeholders})
-                ORDER BY created_at, id
-                """,
-                (workspace_id, *raw_ids),
-            ).fetchall()
-            discussions.extend(_discussion_payload(row) for row in raw_discussion_rows)
-            discussions.sort(key=lambda value: (str(value["created_at"]), str(value["id"])))
-        idea["discussions"] = discussions
+        idea["discussions"] = [_discussion_payload(row) for row in discussion_rows]
         return idea
 
 
