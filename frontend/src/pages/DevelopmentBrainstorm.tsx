@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { listWorkspaces, type Workspace } from "../api/client";
 import {
@@ -38,6 +38,21 @@ export default function DevelopmentBrainstorm({ workspaceId, onWorkspaceChange }
   const [successorId, setSuccessorId] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const activeWorkspaceRef = useRef<string | null>(workspaceId);
+  const retryKeysRef = useRef(new Map<string, string>());
+
+  function retryIdentity(operation: string, payload: object): { fingerprint: string; key: string } {
+    const fingerprint = `${operation}:${JSON.stringify(payload)}`;
+    const existing = retryKeysRef.current.get(fingerprint);
+    if (existing) return { fingerprint, key: existing };
+    const key = `${operation}-${crypto.randomUUID()}`;
+    retryKeysRef.current.set(fingerprint, key);
+    return { fingerprint, key };
+  }
+
+  function clearRetryIdentity(fingerprint: string) {
+    retryKeysRef.current.delete(fingerprint);
+  }
 
   useEffect(() => {
     let alive = true;
@@ -50,60 +65,82 @@ export default function DevelopmentBrainstorm({ workspaceId, onWorkspaceChange }
     return () => { alive = false; };
   }, [workspaceId, onWorkspaceChange]);
 
+  useEffect(() => {
+    activeWorkspaceRef.current = workspaceId;
+    retryKeysRef.current.clear();
+    setRawRecords([]);
+    setIdeas([]);
+    setPromotions([]);
+    setExpanded(null);
+    setSourceRawId("");
+    setEditingIdeaId("");
+    setSuccessorId("");
+    setBusy(false);
+    setError(null);
+  }, [workspaceId]);
+
   async function refresh(selectedWorkspaceId: string) {
+    const expandedId = expanded?.id ?? null;
     const [nextRaw, nextIdeas, nextPromotions] = await Promise.all([
       listBrainstormRaw(selectedWorkspaceId),
       listBrainstormIdeas(selectedWorkspaceId),
       listBrainstormPromotions(selectedWorkspaceId)
     ]);
+    if (activeWorkspaceRef.current !== selectedWorkspaceId) return;
     setRawRecords(nextRaw);
     setIdeas(nextIdeas);
     setPromotions(nextPromotions);
-    if (expanded) {
-      const fresh = nextIdeas.find((idea) => idea.id === expanded.id);
-      setExpanded(fresh ? await getBrainstormIdea(selectedWorkspaceId, fresh.id) : null);
+    if (expandedId) {
+      const fresh = nextIdeas.find((idea) => idea.id === expandedId);
+      if (!fresh) setExpanded(null);
+      else {
+        const detail = await getBrainstormIdea(selectedWorkspaceId, fresh.id);
+        if (activeWorkspaceRef.current === selectedWorkspaceId) setExpanded(detail);
+      }
     }
   }
 
   useEffect(() => {
-    if (!workspaceId) {
-      setRawRecords([]);
-      setIdeas([]);
-      setPromotions([]);
-      return;
-    }
+    if (!workspaceId) return;
     let alive = true;
-    setError(null);
+    const selectedWorkspaceId = workspaceId;
     Promise.all([
-      listBrainstormRaw(workspaceId),
-      listBrainstormIdeas(workspaceId),
-      listBrainstormPromotions(workspaceId)
+      listBrainstormRaw(selectedWorkspaceId),
+      listBrainstormIdeas(selectedWorkspaceId),
+      listBrainstormPromotions(selectedWorkspaceId)
     ]).then(([nextRaw, nextIdeas, nextPromotions]) => {
-      if (!alive) return;
+      if (!alive || activeWorkspaceRef.current !== selectedWorkspaceId) return;
       setRawRecords(nextRaw);
       setIdeas(nextIdeas);
       setPromotions(nextPromotions);
-      if (!sourceRawId && nextRaw[0]) setSourceRawId(nextRaw[0].id);
-    }).catch((exc: unknown) => alive && setError(exc instanceof Error ? exc.message : "Brainstorm data failed to load."));
+      if (nextRaw[0]) setSourceRawId(nextRaw[0].id);
+    }).catch((exc: unknown) => {
+      if (alive && activeWorkspaceRef.current === selectedWorkspaceId) {
+        setError(exc instanceof Error ? exc.message : "Brainstorm data failed to load.");
+      }
+    });
     return () => { alive = false; };
-  }, [workspaceId, sourceRawId]);
+  }, [workspaceId]);
 
   async function run(action: () => Promise<void>) {
     if (!workspaceId || busy) return;
+    const selectedWorkspaceId = workspaceId;
     setBusy(true);
     setError(null);
     try {
       await action();
-      await refresh(workspaceId);
+      if (activeWorkspaceRef.current === selectedWorkspaceId) await refresh(selectedWorkspaceId);
     } catch (exc) {
-      setError(exc instanceof Error ? exc.message : "Brainstorm mutation failed.");
-      try {
-        await refresh(workspaceId);
-      } catch {
-        // Preserve the server rejection while avoiding a browser-owned canonical projection.
+      if (activeWorkspaceRef.current === selectedWorkspaceId) {
+        setError(exc instanceof Error ? exc.message : "Brainstorm mutation failed.");
+        try {
+          await refresh(selectedWorkspaceId);
+        } catch {
+          // Preserve the server rejection while avoiding a browser-owned canonical projection.
+        }
       }
     } finally {
-      setBusy(false);
+      if (activeWorkspaceRef.current === selectedWorkspaceId) setBusy(false);
     }
   }
 
@@ -149,7 +186,9 @@ export default function DevelopmentBrainstorm({ workspaceId, onWorkspaceChange }
           </label>
           <button disabled={!workspaceId || !rawText.trim() || busy} onClick={() => run(async () => {
             const refs = attachmentId.trim() ? [{ ref_type: attachmentType, ref_id: attachmentId.trim(), revision: null }] : [];
-            const created = await createBrainstormRaw(workspaceId!, rawText, refs);
+            const identity = retryIdentity("raw", { workspaceId, content: rawText, refs });
+            const created = await createBrainstormRaw(workspaceId!, rawText, identity.key, refs);
+            clearRetryIdentity(identity.fingerprint);
             setSourceRawId(created.id);
             setRawText("");
             setAttachmentId("");
@@ -178,10 +217,22 @@ export default function DevelopmentBrainstorm({ workspaceId, onWorkspaceChange }
           <label>Takeaway<textarea value={takeaway} onChange={(event) => setTakeaway(event.target.value)} /></label>
           <label>Synthesis<textarea value={synthesis} onChange={(event) => setSynthesis(event.target.value)} /></label>
           <button disabled={!workspaceId || !sourceRawId || busy} onClick={() => run(async () => {
-            await recordBrainstormDiscussion(workspaceId!, sourceRawId);
+            const identity = retryIdentity("discussion", { workspaceId, sourceRawId });
+            await recordBrainstormDiscussion(workspaceId!, sourceRawId, identity.key);
+            clearRetryIdentity(identity.fingerprint);
           })}>Record discussion</button>
           <button disabled={!workspaceId || !sourceRawId || !title.trim() || !takeaway.trim() || !synthesis.trim() || busy} onClick={() => run(async () => {
-            await reconcileBrainstorm(workspaceId!, sourceRawId, title, takeaway, synthesis, selectedIdea);
+            const identity = retryIdentity("reconcile", {
+              workspaceId,
+              sourceRawId,
+              title,
+              takeaway,
+              synthesis,
+              ideaId: selectedIdea?.id ?? null,
+              revision: selectedIdea?.current_revision ?? null
+            });
+            await reconcileBrainstorm(workspaceId!, sourceRawId, title, takeaway, synthesis, identity.key, selectedIdea);
+            clearRetryIdentity(identity.fingerprint);
             setTitle("");
             setTakeaway("");
             setSynthesis("");
@@ -210,16 +261,37 @@ export default function DevelopmentBrainstorm({ workspaceId, onWorkspaceChange }
             <h3>{idea.current.title}</h3>
             <p><strong>{idea.lineage_state}</strong> · revision {idea.current_revision}</p>
             <p>{idea.current.takeaway}</p>
-            <button disabled={busy} onClick={() => run(async () => setExpanded(await getBrainstormIdea(idea.workspace_id, idea.id)))}>Inspect synthesis and provenance</button>
+            <button disabled={busy} onClick={async () => {
+              const selectedWorkspaceId = idea.workspace_id;
+              setBusy(true);
+              setError(null);
+              try {
+                const detail = await getBrainstormIdea(selectedWorkspaceId, idea.id);
+                if (activeWorkspaceRef.current === selectedWorkspaceId) setExpanded(detail);
+              } catch (exc) {
+                if (activeWorkspaceRef.current === selectedWorkspaceId) setError(exc instanceof Error ? exc.message : "Brainstorm detail failed to load.");
+              } finally {
+                if (activeWorkspaceRef.current === selectedWorkspaceId) setBusy(false);
+              }
+            }}>Inspect synthesis and provenance</button>
             {idea.lineage_state !== "SUPERSEDED" ? <>
               <button disabled={busy} onClick={() => setEditingIdeaId(idea.id)}>Revise this idea</button>
               <button disabled={busy} onClick={() => setEditingIdeaId(idea.id)}>Use as lineage source</button>
               <button disabled={busy} onClick={() => setSuccessorId(idea.id)}>Use as successor</button>
             </> : null}
             <div role="group" aria-label={`Promotion proposals for ${idea.current.title}`}>
-              <button disabled={busy} onClick={() => run(async () => { await createBrainstormPromotion(idea, "roadmap"); })}>Add to Roadmap proposal</button>
-              <button disabled={busy} onClick={() => run(async () => { await createBrainstormPromotion(idea, "design"); })}>Promote Design proposal</button>
-              <button disabled={busy} onClick={() => run(async () => { await createBrainstormPromotion(idea, "coding"); })}>Promote Coding proposal</button>
+              {(["roadmap", "design", "coding"] as const).map((target) => (
+                <button key={target} disabled={busy} onClick={() => run(async () => {
+                  const identity = retryIdentity(`promotion-${target}`, {
+                    workspaceId: idea.workspace_id,
+                    ideaId: idea.id,
+                    revision: idea.current_revision,
+                    target
+                  });
+                  await createBrainstormPromotion(idea, target, identity.key);
+                  clearRetryIdentity(identity.fingerprint);
+                })}>{target === "roadmap" ? "Add to Roadmap proposal" : `Promote ${target[0].toUpperCase()}${target.slice(1)} proposal`}</button>
+              ))}
             </div>
           </article>
         ))}
@@ -233,6 +305,14 @@ export default function DevelopmentBrainstorm({ workspaceId, onWorkspaceChange }
           <ul>
             {expanded.current.source_refs.map((ref, index) => <li key={`${ref.ref_type}-${ref.ref_id}-${index}`}>{ref.ref_type}:{ref.ref_id}{ref.revision ? `@${ref.revision}` : ""}</li>)}
           </ul>
+          <h3>Discussion provenance</h3>
+          {(expanded.discussions ?? []).length === 0 ? <p>No recorded discussions.</p> : (
+            <ul>{(expanded.discussions ?? []).map((discussion) => (
+              <li key={discussion.id}>
+                {discussion.id} · {discussion.created_by} · {discussion.created_at} · {discussion.source_refs.map((ref) => `${ref.ref_type}:${ref.ref_id}${ref.revision ? `@${ref.revision}` : ""}`).join(", ")}
+              </li>
+            ))}</ul>
+          )}
           <h3>Immutable revisions</h3>
           <ul>{(expanded.revisions ?? []).map((revision) => <li key={revision.revision}>r{revision.revision}: {revision.title}</li>)}</ul>
         </section>
@@ -241,7 +321,19 @@ export default function DevelopmentBrainstorm({ workspaceId, onWorkspaceChange }
       <section className="operator-card">
         <h2>Supersede lineage</h2>
         <p>Choose source and successor from the reconciled idea cards.</p>
-        <button disabled={!selectedIdea || !selectedSuccessor || selectedIdea.id === selectedSuccessor.id || busy} onClick={() => run(async () => { await supersedeBrainstormIdea(selectedIdea!, selectedSuccessor!); setEditingIdeaId(""); setSuccessorId(""); })}>Supersede with successor</button>
+        <button disabled={!selectedIdea || !selectedSuccessor || selectedIdea.id === selectedSuccessor.id || busy} onClick={() => run(async () => {
+          const identity = retryIdentity("supersede", {
+            workspaceId: selectedIdea!.workspace_id,
+            sourceId: selectedIdea!.id,
+            sourceRevision: selectedIdea!.current_revision,
+            successorId: selectedSuccessor!.id,
+            successorRevision: selectedSuccessor!.current_revision
+          });
+          await supersedeBrainstormIdea(selectedIdea!, selectedSuccessor!, identity.key);
+          clearRetryIdentity(identity.fingerprint);
+          setEditingIdeaId("");
+          setSuccessorId("");
+        })}>Supersede with successor</button>
       </section>
 
       <section aria-labelledby="brainstorm-promotions-heading">
