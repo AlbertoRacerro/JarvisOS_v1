@@ -88,8 +88,13 @@ def _validate_refs(
             if ref.revision is not None:
                 raise DevelopmentError("brainstorm_ref_invalid", "AI-thread references do not accept a revision.")
             row = connection.execute(
-                "SELECT 1 FROM ai_thread_interactions WHERE workspace_id = ? AND id = ?",
-                (workspace_id, ref.ref_id),
+                """
+                SELECT 1
+                FROM ai_thread_interactions AS interaction
+                JOIN ai_threads AS thread ON thread.id = interaction.thread_id
+                WHERE interaction.id = ? AND thread.workspace_id = ?
+                """,
+                (ref.ref_id, workspace_id),
             ).fetchone()
             if row is None:
                 raise DevelopmentError("brainstorm_ref_not_found", "Referenced AI-thread interaction was not found in this workspace.")
@@ -188,6 +193,12 @@ def _revision_payload(row: sqlite3.Row) -> dict[str, object]:
     return value
 
 
+def _discussion_payload(row: sqlite3.Row) -> dict[str, object]:
+    value = dict(row)
+    value["source_refs"] = json.loads(str(value.pop("source_refs_json")))
+    return value
+
+
 def _idea_payload(connection: sqlite3.Connection, row: sqlite3.Row) -> dict[str, object]:
     value = dict(row)
     revision = _revision_row(connection, str(row["workspace_id"]), str(row["id"]), int(row["current_revision"]))
@@ -263,7 +274,9 @@ def record_discussion(payload: BrainstormDiscussionRecord) -> dict[str, object]:
                 "SELECT * FROM brainstorm_discussions WHERE workspace_id = ? AND id = ?",
                 (payload.workspace_id, str(existing["result_id"])),
             ).fetchone()
-            return dict(row) if row is not None else {}
+            if row is None:
+                raise DevelopmentError("brainstorm_discussion_not_found", "Brainstorm discussion not found.")
+            return _discussion_payload(row)
         _validate_refs(connection, payload.workspace_id, payload.source_refs)
         if payload.target_type == "raw":
             if payload.expected_revision is not None:
@@ -320,17 +333,14 @@ def record_discussion(payload: BrainstormDiscussionRecord) -> dict[str, object]:
             workspace_id=payload.workspace_id,
             payload={"source_ref_count": len(refs), "target_revision": payload.expected_revision},
         )
+        row = connection.execute(
+            "SELECT * FROM brainstorm_discussions WHERE workspace_id = ? AND id = ?",
+            (payload.workspace_id, discussion_id),
+        ).fetchone()
+        if row is None:
+            raise DevelopmentError("brainstorm_discussion_not_found", "Brainstorm discussion not found.")
         connection.commit()
-        return {
-            "id": discussion_id,
-            "workspace_id": payload.workspace_id,
-            "target_type": payload.target_type,
-            "target_id": payload.target_id,
-            "target_revision": payload.expected_revision,
-            "source_refs": refs,
-            "created_by": payload.actor,
-            "created_at": now,
-        }
+        return _discussion_payload(row)
 
 
 def reconcile(payload: BrainstormReconcileCreate) -> dict[str, object]:
@@ -444,7 +454,38 @@ def get_idea(workspace_id: str, idea_id: str) -> dict[str, object]:
             "SELECT * FROM brainstorm_revisions WHERE workspace_id = ? AND idea_id = ? ORDER BY revision DESC",
             (workspace_id, idea_id),
         ).fetchall()
-        idea["revisions"] = [_revision_payload(row) for row in revisions]
+        revision_payloads = [_revision_payload(row) for row in revisions]
+        idea["revisions"] = revision_payloads
+        raw_ids = sorted(
+            {
+                str(ref["ref_id"])
+                for revision in revision_payloads
+                for ref in revision["source_refs"]
+                if isinstance(ref, dict) and ref.get("ref_type") == "raw" and ref.get("ref_id")
+            }
+        )
+        discussion_rows = connection.execute(
+            """
+            SELECT * FROM brainstorm_discussions
+            WHERE workspace_id = ? AND target_type = 'idea' AND target_id = ?
+            ORDER BY created_at, id
+            """,
+            (workspace_id, idea_id),
+        ).fetchall()
+        discussions = [_discussion_payload(row) for row in discussion_rows]
+        if raw_ids:
+            placeholders = ",".join("?" for _ in raw_ids)
+            raw_discussion_rows = connection.execute(
+                f"""
+                SELECT * FROM brainstorm_discussions
+                WHERE workspace_id = ? AND target_type = 'raw' AND target_id IN ({placeholders})
+                ORDER BY created_at, id
+                """,
+                (workspace_id, *raw_ids),
+            ).fetchall()
+            discussions.extend(_discussion_payload(row) for row in raw_discussion_rows)
+            discussions.sort(key=lambda value: (str(value["created_at"]), str(value["id"])))
+        idea["discussions"] = discussions
         return idea
 
 
