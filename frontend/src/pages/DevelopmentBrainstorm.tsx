@@ -38,6 +38,7 @@ export default function DevelopmentBrainstorm({ workspaceId, onWorkspaceChange }
   const [successorId, setSuccessorId] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [projectionWorkspaceId, setProjectionWorkspaceId] = useState<string | null>(null);
   const activeWorkspaceRef = useRef<string | null>(workspaceId);
   const retryKeysRef = useRef(new Map<string, string>());
 
@@ -68,6 +69,7 @@ export default function DevelopmentBrainstorm({ workspaceId, onWorkspaceChange }
   useEffect(() => {
     activeWorkspaceRef.current = workspaceId;
     retryKeysRef.current.clear();
+    setProjectionWorkspaceId(null);
     setRawRecords([]);
     setIdeas([]);
     setPromotions([]);
@@ -90,6 +92,7 @@ export default function DevelopmentBrainstorm({ workspaceId, onWorkspaceChange }
     setRawRecords(nextRaw);
     setIdeas(nextIdeas);
     setPromotions(nextPromotions);
+    setProjectionWorkspaceId(selectedWorkspaceId);
     if (expandedId) {
       const fresh = nextIdeas.find((idea) => idea.id === expandedId);
       if (!fresh) setExpanded(null);
@@ -113,9 +116,11 @@ export default function DevelopmentBrainstorm({ workspaceId, onWorkspaceChange }
       setRawRecords(nextRaw);
       setIdeas(nextIdeas);
       setPromotions(nextPromotions);
+      setProjectionWorkspaceId(selectedWorkspaceId);
       if (nextRaw[0]) setSourceRawId(nextRaw[0].id);
     }).catch((exc: unknown) => {
       if (alive && activeWorkspaceRef.current === selectedWorkspaceId) {
+        setProjectionWorkspaceId(null);
         setError(exc instanceof Error ? exc.message : "Brainstorm data failed to load.");
       }
     });
@@ -136,7 +141,8 @@ export default function DevelopmentBrainstorm({ workspaceId, onWorkspaceChange }
         try {
           await refresh(selectedWorkspaceId);
         } catch {
-          // Preserve the server rejection while avoiding a browser-owned canonical projection.
+          setProjectionWorkspaceId(null);
+          // Preserve the server rejection without presenting a stale projection as canonical.
         }
       }
     } finally {
@@ -144,8 +150,12 @@ export default function DevelopmentBrainstorm({ workspaceId, onWorkspaceChange }
     }
   }
 
-  const selectedIdea = ideas.find((idea) => idea.id === editingIdeaId);
-  const selectedSuccessor = ideas.find((idea) => idea.id === successorId);
+  const projectionCurrent = projectionWorkspaceId !== null && projectionWorkspaceId === workspaceId;
+  const visibleRawRecords = projectionCurrent ? rawRecords : [];
+  const visibleIdeas = projectionCurrent ? ideas : [];
+  const visiblePromotions = projectionCurrent ? promotions : [];
+  const selectedIdea = visibleIdeas.find((idea) => idea.id === editingIdeaId);
+  const selectedSuccessor = visibleIdeas.find((idea) => idea.id === successorId);
 
   return (
     <main className="operator-page" aria-label="Brainstorm workspace">
@@ -203,25 +213,25 @@ export default function DevelopmentBrainstorm({ workspaceId, onWorkspaceChange }
             Source RAW
             <select value={sourceRawId} onChange={(event) => setSourceRawId(event.target.value)}>
               <option value="">Select RAW</option>
-              {rawRecords.map((raw) => <option key={raw.id} value={raw.id}>{raw.content.slice(0, 80)}</option>)}
+              {visibleRawRecords.map((raw) => <option key={raw.id} value={raw.id}>{raw.content.slice(0, 80)}</option>)}
             </select>
           </label>
           <label>
             Existing idea revision
             <select value={editingIdeaId} onChange={(event) => setEditingIdeaId(event.target.value)}>
               <option value="">Create new reconciled idea</option>
-              {ideas.filter((idea) => idea.lineage_state !== "SUPERSEDED").map((idea) => <option key={idea.id} value={idea.id}>{idea.current.title} · r{idea.current_revision}</option>)}
+              {visibleIdeas.filter((idea) => idea.lineage_state !== "SUPERSEDED").map((idea) => <option key={idea.id} value={idea.id}>{idea.current.title} · r{idea.current_revision}</option>)}
             </select>
           </label>
           <label>Title<input value={title} onChange={(event) => setTitle(event.target.value)} /></label>
           <label>Takeaway<textarea value={takeaway} onChange={(event) => setTakeaway(event.target.value)} /></label>
           <label>Synthesis<textarea value={synthesis} onChange={(event) => setSynthesis(event.target.value)} /></label>
-          <button disabled={!workspaceId || !sourceRawId || busy} onClick={() => run(async () => {
+          <button disabled={!projectionCurrent || !workspaceId || !sourceRawId || busy} onClick={() => run(async () => {
             const identity = retryIdentity("discussion", { workspaceId, sourceRawId });
             await recordBrainstormDiscussion(workspaceId!, sourceRawId, identity.key);
             clearRetryIdentity(identity.fingerprint);
           })}>Record discussion</button>
-          <button disabled={!workspaceId || !sourceRawId || !title.trim() || !takeaway.trim() || !synthesis.trim() || busy} onClick={() => run(async () => {
+          <button disabled={!projectionCurrent || !workspaceId || !sourceRawId || !title.trim() || !takeaway.trim() || !synthesis.trim() || busy} onClick={() => run(async () => {
             const identity = retryIdentity("reconcile", {
               workspaceId,
               sourceRawId,
@@ -243,7 +253,7 @@ export default function DevelopmentBrainstorm({ workspaceId, onWorkspaceChange }
 
       <section aria-labelledby="brainstorm-raw-heading">
         <h2 id="brainstorm-raw-heading">Immutable RAW</h2>
-        {rawRecords.length === 0 ? <p>No RAW captures yet.</p> : rawRecords.map((raw) => (
+        {visibleRawRecords.length === 0 ? <p>No RAW captures yet.</p> : visibleRawRecords.map((raw) => (
           <article className="operator-card" data-testid="brainstorm-raw" key={raw.id}>
             <p>{raw.content}</p>
             <p><strong>State:</strong> {raw.lineage_state}</p>
@@ -256,7 +266,7 @@ export default function DevelopmentBrainstorm({ workspaceId, onWorkspaceChange }
 
       <section aria-labelledby="brainstorm-reconciled-heading">
         <h2 id="brainstorm-reconciled-heading">Reconciled ideas</h2>
-        {ideas.length === 0 ? <p>No reconciled ideas yet.</p> : ideas.map((idea) => (
+        {visibleIdeas.length === 0 ? <p>No reconciled ideas yet.</p> : visibleIdeas.map((idea) => (
           <article className="operator-card" data-testid="brainstorm-idea" key={idea.id}>
             <h3>{idea.current.title}</h3>
             <p><strong>{idea.lineage_state}</strong> · revision {idea.current_revision}</p>
@@ -297,7 +307,7 @@ export default function DevelopmentBrainstorm({ workspaceId, onWorkspaceChange }
         ))}
       </section>
 
-      {expanded ? (
+      {projectionCurrent && expanded ? (
         <section className="operator-card" data-testid="brainstorm-detail">
           <h2>{expanded.current.title} · detail</h2>
           <p>{expanded.current.synthesis}</p>
@@ -308,8 +318,8 @@ export default function DevelopmentBrainstorm({ workspaceId, onWorkspaceChange }
           <h3>Discussion provenance</h3>
           {(expanded.discussions ?? []).length === 0 ? <p>No recorded discussions.</p> : (
             <ul>{(expanded.discussions ?? []).map((discussion) => (
-              <li key={discussion.id}>
-                {discussion.id} · {discussion.created_by} · {discussion.created_at} · {discussion.source_refs.map((ref) => `${ref.ref_type}:${ref.ref_id}${ref.revision ? `@${ref.revision}` : ""}`).join(", ")}
+              <li key={`${discussion.id}-${discussion.bound_revision}`}>
+                {discussion.id} · bound to r{discussion.bound_revision} · {discussion.created_by} · {discussion.created_at} · {discussion.source_refs.map((ref) => `${ref.ref_type}:${ref.ref_id}${ref.revision ? `@${ref.revision}` : ""}`).join(", ")}
               </li>
             ))}</ul>
           )}
@@ -321,7 +331,7 @@ export default function DevelopmentBrainstorm({ workspaceId, onWorkspaceChange }
       <section className="operator-card">
         <h2>Supersede lineage</h2>
         <p>Choose source and successor from the reconciled idea cards.</p>
-        <button disabled={!selectedIdea || !selectedSuccessor || selectedIdea.id === selectedSuccessor.id || busy} onClick={() => run(async () => {
+        <button disabled={!projectionCurrent || !selectedIdea || !selectedSuccessor || selectedIdea.id === selectedSuccessor.id || busy} onClick={() => run(async () => {
           const identity = retryIdentity("supersede", {
             workspaceId: selectedIdea!.workspace_id,
             sourceId: selectedIdea!.id,
@@ -338,7 +348,7 @@ export default function DevelopmentBrainstorm({ workspaceId, onWorkspaceChange }
 
       <section aria-labelledby="brainstorm-promotions-heading">
         <h2 id="brainstorm-promotions-heading">Promotion proposals</h2>
-        {promotions.length === 0 ? <p>No promotion proposals yet.</p> : promotions.map((promotion) => (
+        {visiblePromotions.length === 0 ? <p>No promotion proposals yet.</p> : visiblePromotions.map((promotion) => (
           <article className="operator-card" data-testid="brainstorm-promotion" key={promotion.id}>
             <p><strong>{promotion.target}</strong> proposal · {promotion.state}</p>
             <p>Proposal identity: {promotion.id}</p>
