@@ -12,7 +12,6 @@ for (const token of [
   "RAW capture",
   "Capture RAW",
   "Immutable RAW",
-  "DISCUSSED",
   "Reconciled ideas",
   "Append reconciled revision",
   "Inspect synthesis and provenance",
@@ -33,6 +32,7 @@ for (const token of [
 check(page.includes("await refresh(workspaceId)"), "Brainstorm mutations must reconcile from server-owned state");
 check(page.includes("getBrainstormIdea"), "Brainstorm detail must fetch canonical server-owned revisions");
 check(!page.includes("localStorage"), "Brainstorm must not introduce browser-owned canonical state");
+check(api.includes('"NEW" | "DISCUSSED" | "RECONCILED" | "SUPERSEDED"'), "Brainstorm client must preserve the accepted lineage vocabulary");
 check(api.includes('/development/brainstorm/raw'), "Brainstorm API must remain beneath Development authority");
 check(api.includes('proposal_only: true'), "Promotion API payload must remain explicitly proposal-only");
 check(api.includes("source_revision: idea.current_revision"), "Promotion must bind to an exact source revision");
