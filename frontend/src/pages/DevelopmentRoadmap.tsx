@@ -342,8 +342,20 @@ export default function DevelopmentRoadmap({ mode, workspaceId, onWorkspaceChang
               <label>Lifecycle status <select value={item.status} disabled={busy} onChange={(event) => void run(async () => { await updateRoadmapItem(item, { status: event.target.value }); })}>{ROADMAP_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}</select></label>
               <div>
                 <button type="button" disabled={busy} onClick={() => beginRoadmapEdit(item)}>Edit work item</button>
-                {item.status !== "Done" && item.status !== "Cancelled" ? <button type="button" disabled={busy} onClick={() => void run(async () => { await updateRoadmapItem(item, { status: "Done" }); })}>Mark Done</button> : null}
-                <button type="button" disabled={busy} onClick={() => void run(async () => { await deleteRoadmapItem(item); })}>Delete work item</button>
+                {item.status !== "Done" && item.status !== "Cancelled" ? <button type="button" disabled={busy} onClick={() => {
+                  if (item.done_when && item.done_when_satisfied !== true) {
+                    setError("Roadmap item cannot transition to Done while its done-when criterion is unsatisfied or unknown.");
+                    return;
+                  }
+                  void run(async () => { await updateRoadmapItem(item, { status: "Done" }); });
+                }}>Mark Done</button> : null}
+                <button type="button" disabled={busy} onClick={() => {
+                  if ((allocationsByItem.get(item.id) ?? 0) > 0) {
+                    setError("Roadmap item still has dependency or Calendar references that must be resolved explicitly.");
+                    return;
+                  }
+                  void run(async () => { await deleteRoadmapItem(item); });
+                }}>Delete work item</button>
                 <a href={`/development/roadmap/calendar?roadmap_item_id=${encodeURIComponent(item.id)}`}>Schedule in Calendar</a>
               </div>
             </>}
