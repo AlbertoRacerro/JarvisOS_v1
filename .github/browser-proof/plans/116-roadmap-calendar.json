@@ -57,7 +57,7 @@
     {"op":"assert-visible","name":"116:one-scheduled-block","locator":{"kind":"text","text":"Scheduled blocks: 1","exact":true}},
     {"op":"click","name":"116:blocked-done","locator":{"kind":"within","parent":{"kind":"css","selector":"article.operator-card:has-text('Proof roadmap item edited')"},"child":{"kind":"role","role":"button","name":"Mark Done","exact":true}}},
     {"op":"assert-visible","name":"116:done-refused","locator":{"kind":"text","text":"Roadmap item cannot transition to Done while its done-when criterion is unsatisfied or unknown.","exact":true}},
-    {"op":"assert-visible","name":"116:status-preserved","locator":{"kind":"within","parent":{"kind":"css","selector":"article.operator-card:has-text('Proof roadmap item edited')"},"child":{"kind":"css","selector":"p:has-text('Status:') strong"}}},
+    {"op":"assert-visible","name":"116:status-preserved","locator":{"kind":"within","parent":{"kind":"css","selector":"article.operator-card:has-text('Proof roadmap item edited')"},"child":{"kind":"css","selector":"p:has-text('Status:') strong:text-is('Planned')"}}},
     {"op":"click","name":"116:blocked-parent-delete","locator":{"kind":"within","parent":{"kind":"css","selector":"article.operator-card:has-text('Proof roadmap item edited')"},"child":{"kind":"role","role":"button","name":"Delete work item","exact":true}}},
     {"op":"assert-visible","name":"116:delete-refused","locator":{"kind":"text","text":"Roadmap item still has dependency or Calendar references that must be resolved explicitly.","exact":true}},
     {"op":"assert-visible","name":"116:item-survives-delete-refusal","locator":{"kind":"within","parent":{"kind":"testid","testid":"roadmap-item"},"child":{"kind":"text","text":"Proof roadmap item edited","exact":true}}},
