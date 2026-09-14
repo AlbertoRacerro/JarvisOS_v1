@@ -2,6 +2,7 @@
   "schema": "jarvisos.browser-proof-plan.v1",
   "id": "117-brainstorm",
   "fixture": "project-search",
+  "viewport": {"width":1440,"height":900},
   "forbidMutatingRequests": false,
   "expectedConsoleErrors": [
     {"text":"Failed to load resource: the server responded with a status of 409 (Conflict)","count":1}
