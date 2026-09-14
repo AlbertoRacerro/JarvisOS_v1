@@ -22,8 +22,6 @@ for (const token of [
   "Supersede lineage",
   "Supersede with successor",
   "Add to Roadmap proposal",
-  "Promote Design proposal",
-  "Promote Coding proposal",
   "Promotion proposals",
   "Speech capture:",
   "unavailable"
@@ -31,6 +29,7 @@ for (const token of [
   check(page.includes(token), `Brainstorm surface must expose ${token}`);
 }
 
+check(page.includes('["roadmap", "design", "coding"] as const'), "Brainstorm must expose proposal actions for all accepted targets");
 check(page.includes("await refresh(selectedWorkspaceId)"), "Brainstorm mutations must reconcile from server-owned state");
 check(page.includes("activeWorkspaceRef.current !== selectedWorkspaceId"), "Brainstorm loads must reject stale workspace projections");
 check(page.includes("retryKeysRef"), "Brainstorm ambiguous retries must retain component-memory idempotency identity");
