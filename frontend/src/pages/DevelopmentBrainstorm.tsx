@@ -179,6 +179,7 @@ export default function DevelopmentBrainstorm({ workspaceId, onWorkspaceChange }
             <p><strong>State:</strong> {raw.lineage_state}</p>
             <p><strong>Identity:</strong> {raw.id}</p>
             <p><strong>Attachments:</strong> {raw.attachment_refs.length === 0 ? "none" : raw.attachment_refs.map((ref) => `${ref.ref_type}:${ref.ref_id}`).join(", ")}</p>
+            <button disabled={busy} onClick={() => setSourceRawId(raw.id)}>Use as reconciliation source</button>
           </article>
         ))}
       </section>
@@ -191,6 +192,11 @@ export default function DevelopmentBrainstorm({ workspaceId, onWorkspaceChange }
             <p><strong>{idea.lineage_state}</strong> · revision {idea.current_revision}</p>
             <p>{idea.current.takeaway}</p>
             <button disabled={busy} onClick={() => run(async () => setExpanded(await getBrainstormIdea(idea.workspace_id, idea.id)))}>Inspect synthesis and provenance</button>
+            {idea.lineage_state !== "SUPERSEDED" ? <>
+              <button disabled={busy} onClick={() => setEditingIdeaId(idea.id)}>Revise this idea</button>
+              <button disabled={busy} onClick={() => setEditingIdeaId(idea.id)}>Use as lineage source</button>
+              <button disabled={busy} onClick={() => setSuccessorId(idea.id)}>Use as successor</button>
+            </> : null}
             <div role="group" aria-label={`Promotion proposals for ${idea.current.title}`}>
               <button disabled={busy} onClick={() => run(async () => { await createBrainstormPromotion(idea, "roadmap"); })}>Add to Roadmap proposal</button>
               <button disabled={busy} onClick={() => run(async () => { await createBrainstormPromotion(idea, "design"); })}>Promote Design proposal</button>
@@ -215,21 +221,8 @@ export default function DevelopmentBrainstorm({ workspaceId, onWorkspaceChange }
 
       <section className="operator-card">
         <h2>Supersede lineage</h2>
-        <label>
-          Source idea
-          <select value={editingIdeaId} onChange={(event) => setEditingIdeaId(event.target.value)}>
-            <option value="">Select source</option>
-            {ideas.filter((idea) => idea.lineage_state !== "SUPERSEDED").map((idea) => <option key={idea.id} value={idea.id}>{idea.current.title}</option>)}
-          </select>
-        </label>
-        <label>
-          Successor idea
-          <select value={successorId} onChange={(event) => setSuccessorId(event.target.value)}>
-            <option value="">Select successor</option>
-            {ideas.filter((idea) => idea.id !== editingIdeaId && idea.lineage_state !== "SUPERSEDED").map((idea) => <option key={idea.id} value={idea.id}>{idea.current.title}</option>)}
-          </select>
-        </label>
-        <button disabled={!selectedIdea || !selectedSuccessor || busy} onClick={() => run(async () => { await supersedeBrainstormIdea(selectedIdea!, selectedSuccessor!); setEditingIdeaId(""); setSuccessorId(""); })}>Supersede with successor</button>
+        <p>Choose source and successor from the reconciled idea cards.</p>
+        <button disabled={!selectedIdea || !selectedSuccessor || selectedIdea.id === selectedSuccessor.id || busy} onClick={() => run(async () => { await supersedeBrainstormIdea(selectedIdea!, selectedSuccessor!); setEditingIdeaId(""); setSuccessorId(""); })}>Supersede with successor</button>
       </section>
 
       <section aria-labelledby="brainstorm-promotions-heading">
