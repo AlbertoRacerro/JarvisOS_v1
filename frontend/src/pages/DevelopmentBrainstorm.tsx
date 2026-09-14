@@ -28,6 +28,8 @@ export default function DevelopmentBrainstorm({ workspaceId, onWorkspaceChange }
   const [promotions, setPromotions] = useState<BrainstormPromotion[]>([]);
   const [expanded, setExpanded] = useState<BrainstormIdea | null>(null);
   const [rawText, setRawText] = useState("");
+  const [attachmentType, setAttachmentType] = useState<"run_artifact" | "literature_entry">("run_artifact");
+  const [attachmentId, setAttachmentId] = useState("");
   const [sourceRawId, setSourceRawId] = useState("");
   const [title, setTitle] = useState("");
   const [takeaway, setTakeaway] = useState("");
@@ -134,10 +136,24 @@ export default function DevelopmentBrainstorm({ workspaceId, onWorkspaceChange }
             RAW idea
             <textarea value={rawText} onChange={(event) => setRawText(event.target.value)} placeholder="Capture the original thought exactly as written." />
           </label>
+          <label>
+            Attachment ref type
+            <select value={attachmentType} onChange={(event) => setAttachmentType(event.target.value as "run_artifact" | "literature_entry")}>
+              <option value="run_artifact">Run artifact</option>
+              <option value="literature_entry">Literature entry</option>
+            </select>
+          </label>
+          <label>
+            Attachment ref ID (optional)
+            <input value={attachmentId} onChange={(event) => setAttachmentId(event.target.value)} placeholder="Exact existing owner ID" />
+          </label>
           <button disabled={!workspaceId || !rawText.trim() || busy} onClick={() => run(async () => {
-            await createBrainstormRaw(workspaceId!, rawText);
+            const refs = attachmentId.trim() ? [{ ref_type: attachmentType, ref_id: attachmentId.trim(), revision: null }] : [];
+            await createBrainstormRaw(workspaceId!, rawText, refs);
             setRawText("");
+            setAttachmentId("");
           })}>Capture RAW</button>
+          <p>Attachment references are accepted only when the server resolves the exact existing owner ID in this workspace.</p>
           <p><strong>Speech capture:</strong> unavailable — deferred until a bounded media/privacy path exists.</p>
         </article>
 
