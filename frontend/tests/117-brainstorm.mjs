@@ -30,6 +30,7 @@ for (const token of [
 }
 
 check(page.includes('["roadmap", "design", "coding"] as const'), "Brainstorm must expose proposal actions for all accepted targets");
+check(page.includes('<option value="generic_artifact">Artifact</option>'), "Brainstorm must expose the accepted generic artifact attachment path");
 check(page.includes("await refresh(selectedWorkspaceId)"), "Brainstorm mutations must reconcile from server-owned state");
 check(page.includes("activeWorkspaceRef.current !== selectedWorkspaceId"), "Brainstorm loads must reject stale workspace projections");
 check(page.includes("projectionWorkspaceId !== null && projectionWorkspaceId === workspaceId"), "Brainstorm rendering must suppress a projection from a prior workspace synchronously");
@@ -42,6 +43,7 @@ check(page.includes("discussion.bound_revision"), "Brainstorm detail must disclo
 check(page.includes("getBrainstormIdea"), "Brainstorm detail must fetch canonical server-owned revisions");
 check(!page.includes("localStorage"), "Brainstorm must not introduce browser-owned canonical state");
 check(api.includes('"NEW" | "DISCUSSED" | "RECONCILED" | "SUPERSEDED"'), "Brainstorm client must preserve the accepted lineage vocabulary");
+check(api.includes('"generic_artifact"'), "Brainstorm client contract must preserve generic artifact refs");
 check(api.includes('/development/brainstorm/raw'), "Brainstorm API must remain beneath Development authority");
 check(api.includes("bound_revision: number"), "Brainstorm client must type exact discussion-to-revision provenance");
 check(api.includes("idempotencyKey: string"), "Brainstorm mutation APIs must accept caller-retained idempotency keys");
