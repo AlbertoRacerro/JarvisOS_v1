@@ -32,6 +32,13 @@ CalendarEventType = Literal[
 class StrictDevelopmentModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    @field_validator("title", check_fields=False)
+    @classmethod
+    def reject_blank_title(cls, value: object) -> object:
+        if isinstance(value, str) and not value.strip():
+            raise ValueError("title must contain non-whitespace characters")
+        return value
+
 
 class RoadmapItemCreate(StrictDevelopmentModel):
     workspace_id: str = Field(min_length=1)
