@@ -26,6 +26,7 @@
     {"op":"assert-value-equals","name":"117:raw-identity-persists","left":{"capture":"rawIdentityAfterReload"},"right":{"capture":"rawIdentityBeforeReload"}},
     {"op":"capture-mutating-request-count","name":"117:reload-read-after","capture":"mutationAfterReload"},
     {"op":"assert-value-equals","name":"117:reload-read-no-commit","left":{"capture":"mutationAfterReload"},"right":{"capture":"mutationBeforeReload"}},
+    {"op":"click","name":"117:discussion-one","locator":{"kind":"role","role":"button","name":"Record discussion","exact":true}},
     {"op":"fill","name":"117:title-one","locator":{"kind":"label","text":"Title","exact":true},"value":"Proof idea"},
     {"op":"fill","name":"117:takeaway-one","locator":{"kind":"label","text":"Takeaway","exact":true},"value":"First reconciled takeaway"},
     {"op":"fill","name":"117:synthesis-one","locator":{"kind":"label","text":"Synthesis","exact":true},"value":"First synthesis with exact RAW provenance"},
