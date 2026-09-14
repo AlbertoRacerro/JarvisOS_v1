@@ -62,6 +62,7 @@ export type BrainstormDiscussion = {
   target_type: "raw" | "idea";
   target_id: string;
   target_revision?: number | null;
+  bound_revision: number;
   source_refs: BrainstormExactRef[];
   created_by: string;
   created_at: string;
