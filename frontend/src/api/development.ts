@@ -29,7 +29,7 @@ export type CalendarAllocation = {
 };
 
 export type BrainstormExactRef = {
-  ref_type: "raw" | "brainstorm_revision" | "ai_thread_message" | "run_artifact" | "literature_entry";
+  ref_type: "raw" | "brainstorm_revision" | "ai_thread_message" | "run_artifact" | "generic_artifact" | "literature_entry";
   ref_id: string;
   revision?: number | null;
 };
