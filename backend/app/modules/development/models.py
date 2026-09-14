@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 RoadmapItemType = Literal[
     "Task",
@@ -75,6 +75,19 @@ class RoadmapItemUpdate(StrictDevelopmentModel):
     done_when_satisfied: Literal[False] | None = None
     actor: str = Field(min_length=1)
 
+    @field_validator("title", "item_type", "status", "priority", mode="before")
+    @classmethod
+    def reject_null_required_updates(cls, value: object) -> object:
+        if value is None:
+            raise ValueError("required update field must not be null")
+        return value
+
+    @model_validator(mode="after")
+    def reject_atomic_done_gate_clear(self) -> RoadmapItemUpdate:
+        if self.status == "Done" and "done_when" in self.model_fields_set and not self.done_when:
+            raise ValueError("done_when must be cleared separately before transitioning to Done")
+        return self
+
 
 class CalendarAllocationCreate(StrictDevelopmentModel):
     workspace_id: str = Field(min_length=1)
@@ -119,3 +132,10 @@ class CalendarAllocationUpdate(StrictDevelopmentModel):
     reminder: dict[str, object] | None = None
     tags: list[str] | None = None
     actor: str = Field(min_length=1)
+
+    @field_validator("title", "event_type", mode="before")
+    @classmethod
+    def reject_null_required_updates(cls, value: object) -> object:
+        if value is None:
+            raise ValueError("required update field must not be null")
+        return value
