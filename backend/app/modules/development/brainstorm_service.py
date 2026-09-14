@@ -77,6 +77,8 @@ def _validate_refs(
 ) -> None:
     for ref in refs:
         if ref.ref_type == "raw" and not attachment_only:
+            if ref.revision is not None:
+                raise DevelopmentError("brainstorm_ref_invalid", "RAW references do not accept a revision.")
             _raw_row(connection, workspace_id, ref.ref_id)
         elif ref.ref_type == "brainstorm_revision" and not attachment_only:
             if ref.revision is None:
@@ -91,16 +93,33 @@ def _validate_refs(
             ).fetchone()
             if row is None:
                 raise DevelopmentError("brainstorm_ref_not_found", "Referenced AI-thread interaction was not found in this workspace.")
-        elif ref.ref_type in {"run_artifact", "literature_entry"}:
-            table = "run_artifacts" if ref.ref_type == "run_artifact" else "literature_entries"
+        elif ref.ref_type == "run_artifact":
             if ref.revision is not None:
                 raise DevelopmentError("brainstorm_ref_invalid", "Attachment/source reference does not accept a revision.")
             row = connection.execute(
-                f"SELECT 1 FROM {table} WHERE workspace_id = ? AND id = ?",
+                """
+                SELECT 1
+                FROM artifacts AS a
+                JOIN run_artifacts AS ra ON ra.artifact_id = a.id
+                JOIN simulation_runs AS sr ON sr.id = ra.simulation_run_id
+                WHERE a.id = ?
+                  AND a.workspace_id = ?
+                  AND ra.workspace_id = ?
+                  AND sr.workspace_id = ?
+                """,
+                (ref.ref_id, workspace_id, workspace_id, workspace_id),
+            ).fetchone()
+            if row is None:
+                raise DevelopmentError("brainstorm_ref_not_found", "Referenced run artifact was not found in this workspace.")
+        elif ref.ref_type == "literature_entry":
+            if ref.revision is not None:
+                raise DevelopmentError("brainstorm_ref_invalid", "Attachment/source reference does not accept a revision.")
+            row = connection.execute(
+                "SELECT 1 FROM literature_entries WHERE workspace_id = ? AND id = ?",
                 (workspace_id, ref.ref_id),
             ).fetchone()
             if row is None:
-                raise DevelopmentError("brainstorm_ref_not_found", "Referenced artifact was not found in this workspace.")
+                raise DevelopmentError("brainstorm_ref_not_found", "Referenced literature entry was not found in this workspace.")
         else:
             raise DevelopmentError("brainstorm_ref_invalid", f"Unsupported Brainstorm reference type: {ref.ref_type}.")
 
