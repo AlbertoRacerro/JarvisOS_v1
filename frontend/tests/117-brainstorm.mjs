@@ -18,6 +18,7 @@ for (const token of [
   "Inspect synthesis and provenance",
   "Exact provenance",
   "Discussion provenance",
+  "RAW discussion provenance",
   "Immutable revisions",
   "Supersede lineage",
   "Supersede with successor",
@@ -38,6 +39,7 @@ check(page.includes("setProjectionWorkspaceId(null)"), "Brainstorm must invalida
 check(page.includes("retryKeysRef"), "Brainstorm ambiguous retries must retain component-memory idempotency identity");
 check(page.includes("clearRetryIdentity"), "Brainstorm retry identities must clear only after confirmed mutation success");
 check(page.includes("retryKeysRef.current.clear()"), "Workspace changes must discard retry identities from the prior authority scope");
+check(page.includes("raw.discussions"), "Brainstorm RAW cards must render server-owned unreconciled discussion provenance after reload");
 check(page.includes("discussion.source_refs"), "Brainstorm detail must render persisted discussion source provenance");
 check(page.includes("discussion.bound_revision"), "Brainstorm detail must disclose the exact reconciled revision bound to discussion provenance");
 check(page.includes("getBrainstormIdea"), "Brainstorm detail must fetch canonical server-owned revisions");
