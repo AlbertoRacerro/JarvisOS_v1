@@ -49,6 +49,12 @@ const boundedString = (value, name, max = 500) => {
 const safeField = (value, name) => {
   if (typeof value !== 'string' || !/^[A-Za-z_][A-Za-z0-9_-]{0,63}$/.test(value)) fail(`${name} must be a safe field name`);
 };
+const validateViewport = (viewport) => {
+  if (!isObject(viewport)) fail('viewport must be an object');
+  for (const key of Object.keys(viewport)) if (!['width','height'].includes(key)) fail(`viewport unknown key ${key}`);
+  if (!Number.isInteger(viewport.width) || viewport.width < 320 || viewport.width > 3840) fail('viewport.width must be an integer in 320..3840');
+  if (!Number.isInteger(viewport.height) || viewport.height < 240 || viewport.height > 2160) fail('viewport.height must be an integer in 240..2160');
+};
 const validateReadOnlySameOriginPostPaths = (paths) => {
   if (!Array.isArray(paths) || paths.length < 1 || paths.length > 20) fail('readOnlySameOriginPostPaths must contain 1..20 exact paths');
   if (new Set(paths).size !== paths.length) fail('readOnlySameOriginPostPaths must be unique');
@@ -261,13 +267,14 @@ export function noButtonLabelMatches(labels, pattern, caseInsensitive = false) {
 
 export function validatePlan(plan) {
   if (!isObject(plan)) fail('root must be an object');
-  for (const key of Object.keys(plan)) if (!['schema','id','fixture','artifactMode','forbidMutatingRequests','readOnlySameOriginPostPaths','expectedConsoleErrors','steps'].includes(key)) fail(`unknown root key ${key}`);
+  for (const key of Object.keys(plan)) if (!['schema','id','fixture','artifactMode','viewport','forbidMutatingRequests','readOnlySameOriginPostPaths','expectedConsoleErrors','steps'].includes(key)) fail(`unknown root key ${key}`);
   if (plan.schema !== PLAN_SCHEMA) fail('unknown schema');
   validatePlanId(plan.id);
   const fixture = plan.fixture ?? 'none';
   if (!ALLOWED_FIXTURES.has(fixture)) fail(`unknown fixture ${fixture}`);
   const artifactMode = plan.artifactMode ?? 'full';
   if (!ARTIFACT_MODES.has(artifactMode)) fail(`unknown artifact mode ${artifactMode}`);
+  if ('viewport' in plan) validateViewport(plan.viewport);
   if ('forbidMutatingRequests' in plan && typeof plan.forbidMutatingRequests !== 'boolean') fail('forbidMutatingRequests must be boolean');
   if ('readOnlySameOriginPostPaths' in plan) validateReadOnlySameOriginPostPaths(plan.readOnlySameOriginPostPaths);
   if ('expectedConsoleErrors' in plan) validateExpectedConsoleErrors(plan.expectedConsoleErrors);
