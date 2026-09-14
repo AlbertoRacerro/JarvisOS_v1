@@ -149,7 +149,8 @@ export default function DevelopmentBrainstorm({ workspaceId, onWorkspaceChange }
           </label>
           <button disabled={!workspaceId || !rawText.trim() || busy} onClick={() => run(async () => {
             const refs = attachmentId.trim() ? [{ ref_type: attachmentType, ref_id: attachmentId.trim(), revision: null }] : [];
-            await createBrainstormRaw(workspaceId!, rawText, refs);
+            const created = await createBrainstormRaw(workspaceId!, rawText, refs);
+            setSourceRawId(created.id);
             setRawText("");
             setAttachmentId("");
           })}>Capture RAW</button>
