@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 from app.modules.development.brainstorm_models import (
+    BrainstormDiscussionRecord,
     BrainstormExactRef,
     BrainstormPromotionCreate,
     BrainstormRawCreate,
@@ -15,6 +16,7 @@ from app.modules.development.brainstorm_service import (
     get_idea,
     list_raw,
     reconcile,
+    record_discussion,
     supersede,
 )
 from app.modules.development.service import DevelopmentError
@@ -77,6 +79,33 @@ def test_raw_is_immutable_and_retry_is_payload_bound(monkeypatch, tmp_path: Path
     stored = list_raw(workspace.id)
     assert len(stored) == 1
     assert stored[0]["content"] == "Original raw thought"
+
+
+def test_discussion_replay_and_idea_detail_preserve_exact_provenance(monkeypatch, tmp_path: Path) -> None:
+    _initialize(monkeypatch, tmp_path)
+    workspace = _workspace("brainstorm-discussion")
+    raw = _raw(workspace.id, "Discuss this", "raw-discussion")
+    payload = BrainstormDiscussionRecord(
+        workspace_id=workspace.id,
+        target_type="raw",
+        target_id=str(raw["id"]),
+        source_refs=[BrainstormExactRef(ref_type="raw", ref_id=str(raw["id"]))],
+        actor="tester",
+        idempotency_key="discussion-1",
+    )
+    first = record_discussion(payload)
+    replay = record_discussion(payload)
+    assert replay == first
+    assert first["source_refs"] == [
+        {"ref_type": "raw", "ref_id": str(raw["id"]), "revision": None}
+    ]
+
+    idea = _idea(workspace.id, str(raw["id"]), "discussion-idea")
+    detail = get_idea(workspace.id, str(idea["id"]))
+    assert len(detail["discussions"]) == 1
+    assert detail["discussions"][0]["id"] == first["id"]
+    assert detail["discussions"][0]["created_by"] == "tester"
+    assert detail["discussions"][0]["source_refs"] == first["source_refs"]
 
 
 def test_reconciliation_appends_immutable_revision_and_stale_cas_fails(monkeypatch, tmp_path: Path) -> None:
