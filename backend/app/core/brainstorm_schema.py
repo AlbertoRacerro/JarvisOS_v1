@@ -68,6 +68,18 @@ BRAINSTORM_SCHEMA_STATEMENTS = (
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS brainstorm_revision_discussions (
+        idea_id TEXT NOT NULL,
+        workspace_id TEXT NOT NULL,
+        revision INTEGER NOT NULL CHECK (revision >= 1),
+        discussion_id TEXT NOT NULL,
+        PRIMARY KEY (idea_id, revision, discussion_id),
+        FOREIGN KEY (idea_id, revision) REFERENCES brainstorm_revisions(idea_id, revision),
+        FOREIGN KEY (workspace_id) REFERENCES workspaces(id),
+        FOREIGN KEY (discussion_id) REFERENCES brainstorm_discussions(id)
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS brainstorm_promotions (
         id TEXT PRIMARY KEY,
         workspace_id TEXT NOT NULL,
@@ -105,5 +117,6 @@ BRAINSTORM_SCHEMA_INDEX_STATEMENTS = (
     "CREATE INDEX IF NOT EXISTS idx_brainstorm_ideas_workspace_updated ON brainstorm_ideas(workspace_id, updated_at DESC, id)",
     "CREATE INDEX IF NOT EXISTS idx_brainstorm_revisions_workspace_idea ON brainstorm_revisions(workspace_id, idea_id, revision DESC)",
     "CREATE INDEX IF NOT EXISTS idx_brainstorm_discussions_target ON brainstorm_discussions(workspace_id, target_type, target_id, created_at, id)",
+    "CREATE INDEX IF NOT EXISTS idx_brainstorm_revision_discussions_idea ON brainstorm_revision_discussions(workspace_id, idea_id, revision, discussion_id)",
     "CREATE INDEX IF NOT EXISTS idx_brainstorm_promotions_source ON brainstorm_promotions(workspace_id, idea_id, source_revision, created_at, id)",
 )
