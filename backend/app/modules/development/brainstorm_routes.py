@@ -23,7 +23,7 @@ from app.modules.development.brainstorm_service import (
 )
 from app.modules.development.service import DevelopmentError
 
-router = APIRouter(prefix="/brainstorm", tags=["development-brainstorm"])
+router = APIRouter(prefix="/development/brainstorm", tags=["development-brainstorm"])
 
 
 def _http_error(exc: DevelopmentError) -> HTTPException:
