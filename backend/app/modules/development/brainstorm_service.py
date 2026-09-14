@@ -27,6 +27,10 @@ def _digest(value: object) -> str:
     return hashlib.sha256(_canonical(value).encode("utf-8")).hexdigest()
 
 
+def _begin_write(connection: sqlite3.Connection) -> None:
+    connection.execute("BEGIN IMMEDIATE")
+
+
 def _workspace_exists(connection: sqlite3.Connection, workspace_id: str) -> None:
     if connection.execute("SELECT 1 FROM workspaces WHERE id = ?", (workspace_id,)).fetchone() is None:
         raise DevelopmentError(WORKSPACE_NOT_FOUND_CODE, WORKSPACE_NOT_FOUND_MESSAGE)
@@ -190,19 +194,28 @@ def _record_idempotency(
     )
 
 
-def _raw_payload(row: sqlite3.Row) -> dict[str, object]:
-    value = dict(row)
-    value["attachment_refs"] = json.loads(str(value.pop("attachment_refs_json")))
-    return value
-
-
-def _revision_payload(row: sqlite3.Row) -> dict[str, object]:
+def _discussion_payload(row: sqlite3.Row) -> dict[str, object]:
     value = dict(row)
     value["source_refs"] = json.loads(str(value.pop("source_refs_json")))
     return value
 
 
-def _discussion_payload(row: sqlite3.Row) -> dict[str, object]:
+def _raw_payload(connection: sqlite3.Connection, row: sqlite3.Row) -> dict[str, object]:
+    value = dict(row)
+    value["attachment_refs"] = json.loads(str(value.pop("attachment_refs_json")))
+    discussion_rows = connection.execute(
+        """
+        SELECT * FROM brainstorm_discussions
+        WHERE workspace_id = ? AND target_type = 'raw' AND target_id = ?
+        ORDER BY created_at, id
+        """,
+        (str(row["workspace_id"]), str(row["id"])),
+    ).fetchall()
+    value["discussions"] = [_discussion_payload(discussion) for discussion in discussion_rows]
+    return value
+
+
+def _revision_payload(row: sqlite3.Row) -> dict[str, object]:
     value = dict(row)
     value["source_refs"] = json.loads(str(value.pop("source_refs_json")))
     return value
@@ -251,12 +264,13 @@ def create_raw(payload: BrainstormRawCreate) -> dict[str, object]:
     request = payload.model_dump(mode="json")
     request_digest = _digest(request)
     with open_sqlite_connection() as connection:
+        _begin_write(connection)
         _workspace_exists(connection, payload.workspace_id)
         existing = _idempotent_result(
             connection, payload.workspace_id, payload.idempotency_key, "raw.create", request_digest
         )
         if existing is not None:
-            return _raw_payload(_raw_row(connection, payload.workspace_id, str(existing["result_id"])))
+            return _raw_payload(connection, _raw_row(connection, payload.workspace_id, str(existing["result_id"])))
         _validate_refs(connection, payload.workspace_id, payload.attachment_refs, attachment_only=True)
         raw_id = str(uuid4())
         now = utc_now()
@@ -289,7 +303,7 @@ def create_raw(payload: BrainstormRawCreate) -> dict[str, object]:
         )
         row = _raw_row(connection, payload.workspace_id, raw_id)
         connection.commit()
-        return _raw_payload(row)
+        return _raw_payload(connection, row)
 
 
 def list_raw(workspace_id: str) -> list[dict[str, object]]:
@@ -299,13 +313,14 @@ def list_raw(workspace_id: str) -> list[dict[str, object]]:
             "SELECT * FROM brainstorm_raw_records WHERE workspace_id = ? ORDER BY created_at DESC, id",
             (workspace_id,),
         ).fetchall()
-        return [_raw_payload(row) for row in rows]
+        return [_raw_payload(connection, row) for row in rows]
 
 
 def record_discussion(payload: BrainstormDiscussionRecord) -> dict[str, object]:
     request = payload.model_dump(mode="json")
     request_digest = _digest(request)
     with open_sqlite_connection() as connection:
+        _begin_write(connection)
         _workspace_exists(connection, payload.workspace_id)
         existing = _idempotent_result(
             connection, payload.workspace_id, payload.idempotency_key, "discussion.record", request_digest
@@ -388,6 +403,7 @@ def reconcile(payload: BrainstormReconcileCreate) -> dict[str, object]:
     request = payload.model_dump(mode="json")
     request_digest = _digest(request)
     with open_sqlite_connection() as connection:
+        _begin_write(connection)
         _workspace_exists(connection, payload.workspace_id)
         existing = _idempotent_result(
             connection, payload.workspace_id, payload.idempotency_key, "idea.reconcile", request_digest
@@ -530,6 +546,7 @@ def supersede(payload: BrainstormSupersedeRequest) -> dict[str, object]:
     request = payload.model_dump(mode="json")
     request_digest = _digest(request)
     with open_sqlite_connection() as connection:
+        _begin_write(connection)
         _workspace_exists(connection, payload.workspace_id)
         existing = _idempotent_result(
             connection, payload.workspace_id, payload.idempotency_key, "idea.supersede", request_digest
@@ -603,6 +620,7 @@ def create_promotion(payload: BrainstormPromotionCreate) -> dict[str, object]:
         raise DevelopmentError("brainstorm_promotion_oversized", "Brainstorm promotion payload is too large.")
     request_digest = _digest(request)
     with open_sqlite_connection() as connection:
+        _begin_write(connection)
         _workspace_exists(connection, payload.workspace_id)
         existing = _idempotent_result(
             connection, payload.workspace_id, payload.idempotency_key, "promotion.create", request_digest
