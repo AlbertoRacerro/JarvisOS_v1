@@ -116,6 +116,15 @@ def _validate_refs(
             ).fetchone()
             if row is None:
                 raise DevelopmentError("brainstorm_ref_not_found", "Referenced run artifact was not found in this workspace.")
+        elif ref.ref_type == "generic_artifact":
+            if ref.revision is not None:
+                raise DevelopmentError("brainstorm_ref_invalid", "Attachment/source reference does not accept a revision.")
+            row = connection.execute(
+                "SELECT 1 FROM artifacts WHERE workspace_id = ? AND id = ?",
+                (workspace_id, ref.ref_id),
+            ).fetchone()
+            if row is None:
+                raise DevelopmentError("brainstorm_ref_not_found", "Referenced artifact was not found in this workspace.")
         elif ref.ref_type == "literature_entry":
             if ref.revision is not None:
                 raise DevelopmentError("brainstorm_ref_invalid", "Attachment/source reference does not accept a revision.")
