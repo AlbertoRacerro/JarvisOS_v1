@@ -104,8 +104,43 @@ def test_discussion_replay_and_idea_detail_preserve_exact_provenance(monkeypatch
     detail = get_idea(workspace.id, str(idea["id"]))
     assert len(detail["discussions"]) == 1
     assert detail["discussions"][0]["id"] == first["id"]
+    assert detail["discussions"][0]["bound_revision"] == 1
     assert detail["discussions"][0]["created_by"] == "tester"
     assert detail["discussions"][0]["source_refs"] == first["source_refs"]
+
+    later = record_discussion(
+        BrainstormDiscussionRecord(
+            workspace_id=workspace.id,
+            target_type="raw",
+            target_id=str(raw["id"]),
+            source_refs=[BrainstormExactRef(ref_type="raw", ref_id=str(raw["id"]))],
+            actor="tester",
+            idempotency_key="discussion-later",
+        )
+    )
+    unchanged = get_idea(workspace.id, str(idea["id"]))
+    assert [row["id"] for row in unchanged["discussions"]] == [first["id"]]
+
+    revised = reconcile(
+        BrainstormReconcileCreate(
+            workspace_id=workspace.id,
+            idea_id=str(idea["id"]),
+            expected_revision=1,
+            title="Idea v2",
+            takeaway="Updated takeaway",
+            synthesis="Updated synthesis",
+            source_refs=[BrainstormExactRef(ref_type="raw", ref_id=str(raw["id"]))],
+            actor="tester",
+            idempotency_key="discussion-idea-v2",
+        )
+    )
+    assert revised["current_revision"] == 2
+    rebound = get_idea(workspace.id, str(idea["id"]))
+    assert [(row["id"], row["bound_revision"]) for row in rebound["discussions"]] == [
+        (first["id"], 1),
+        (first["id"], 2),
+        (later["id"], 2),
+    ]
 
 
 def test_reconciliation_appends_immutable_revision_and_stale_cas_fails(monkeypatch, tmp_path: Path) -> None:
