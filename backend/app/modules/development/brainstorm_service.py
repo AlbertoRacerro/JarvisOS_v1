@@ -308,6 +308,7 @@ def create_raw(payload: BrainstormRawCreate) -> dict[str, object]:
 
 def list_raw(workspace_id: str) -> list[dict[str, object]]:
     with open_sqlite_connection() as connection:
+        connection.execute("BEGIN")
         _workspace_exists(connection, workspace_id)
         rows = connection.execute(
             "SELECT * FROM brainstorm_raw_records WHERE workspace_id = ? ORDER BY created_at DESC, id",
