@@ -50,6 +50,7 @@ _SPA_RESERVED_ROOT_CLIENT_ROUTES = frozenset(
         "/coding/runtime",
         "/development/roadmap/timeline",
         "/development/roadmap/calendar",
+        "/development/brainstorm",
     }
 )
 
