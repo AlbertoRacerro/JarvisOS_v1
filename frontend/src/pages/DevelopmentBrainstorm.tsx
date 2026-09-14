@@ -177,8 +177,10 @@ export default function DevelopmentBrainstorm({ workspaceId, onWorkspaceChange }
           <label>Title<input value={title} onChange={(event) => setTitle(event.target.value)} /></label>
           <label>Takeaway<textarea value={takeaway} onChange={(event) => setTakeaway(event.target.value)} /></label>
           <label>Synthesis<textarea value={synthesis} onChange={(event) => setSynthesis(event.target.value)} /></label>
-          <button disabled={!workspaceId || !sourceRawId || !title.trim() || !takeaway.trim() || !synthesis.trim() || busy} onClick={() => run(async () => {
+          <button disabled={!workspaceId || !sourceRawId || busy} onClick={() => run(async () => {
             await recordBrainstormDiscussion(workspaceId!, sourceRawId);
+          })}>Record discussion</button>
+          <button disabled={!workspaceId || !sourceRawId || !title.trim() || !takeaway.trim() || !synthesis.trim() || busy} onClick={() => run(async () => {
             await reconcileBrainstorm(workspaceId!, sourceRawId, title, takeaway, synthesis, selectedIdea);
             setTitle("");
             setTakeaway("");
