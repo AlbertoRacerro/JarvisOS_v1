@@ -520,6 +520,7 @@ def list_ideas(workspace_id: str) -> list[dict[str, object]]:
 
 def get_idea(workspace_id: str, idea_id: str) -> dict[str, object]:
     with open_sqlite_connection() as connection:
+        connection.execute("BEGIN")
         _workspace_exists(connection, workspace_id)
         idea = _idea_payload(connection, _idea_row(connection, workspace_id, idea_id))
         revisions = connection.execute(
