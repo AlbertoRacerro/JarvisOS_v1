@@ -6,12 +6,13 @@ def test_development_schema_is_initialized_and_recorded(tmp_path: Path, monkeypa
 
     from app.core.config import get_settings
     from app.core.database import initialize_database, open_sqlite_connection
+    from app.core.schema import CURRENT_SCHEMA_MIGRATION_ID
 
     get_settings.cache_clear()
     info = initialize_database()
 
     assert info.ready is True
-    assert info.schema_current.migration_id == "0019_roadmap_calendar"
+    assert info.schema_current.migration_id == CURRENT_SCHEMA_MIGRATION_ID
 
     with open_sqlite_connection() as connection:
         tables = {
