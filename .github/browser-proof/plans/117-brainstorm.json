@@ -4,6 +4,7 @@
   "fixture": "project-search",
   "viewport": {"width":1440,"height":900},
   "forbidMutatingRequests": false,
+  "readOnlySameOriginPostPaths": ["/ai/context/packs/preview"],
   "expectedConsoleErrors": [
     {"text":"Failed to load resource: the server responded with a status of 409 (Conflict)","count":1}
   ],
