@@ -21,9 +21,20 @@ type Props = {
   onWorkspaceChange(next: string | null): void;
 };
 
+type RawDiscussion = {
+  id: string;
+  source_refs: Array<{ ref_type: string; ref_id: string; revision?: number | null }>;
+  created_by: string;
+  created_at: string;
+};
+
+type BrainstormRawWithDiscussions = BrainstormRaw & {
+  discussions?: RawDiscussion[];
+};
+
 export default function DevelopmentBrainstorm({ workspaceId, onWorkspaceChange }: Props) {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
-  const [rawRecords, setRawRecords] = useState<BrainstormRaw[]>([]);
+  const [rawRecords, setRawRecords] = useState<BrainstormRawWithDiscussions[]>([]);
   const [ideas, setIdeas] = useState<BrainstormIdea[]>([]);
   const [promotions, setPromotions] = useState<BrainstormPromotion[]>([]);
   const [expanded, setExpanded] = useState<BrainstormIdea | null>(null);
@@ -260,6 +271,16 @@ export default function DevelopmentBrainstorm({ workspaceId, onWorkspaceChange }
             <p><strong>State:</strong> {raw.lineage_state}</p>
             <p><strong>Identity:</strong> {raw.id}</p>
             <p><strong>Attachments:</strong> {raw.attachment_refs.length === 0 ? "none" : raw.attachment_refs.map((ref) => `${ref.ref_type}:${ref.ref_id}`).join(", ")}</p>
+            {(raw.discussions ?? []).length === 0 ? null : (
+              <div>
+                <strong>RAW discussion provenance</strong>
+                <ul>{(raw.discussions ?? []).map((discussion) => (
+                  <li key={discussion.id}>
+                    {discussion.id} · {discussion.created_by} · {discussion.created_at} · {discussion.source_refs.map((ref) => `${ref.ref_type}:${ref.ref_id}${ref.revision ? `@${ref.revision}` : ""}`).join(", ")}
+                  </li>
+                ))}</ul>
+              </div>
+            )}
             <button disabled={busy} onClick={() => setSourceRawId(raw.id)}>Use as reconciliation source</button>
           </article>
         ))}
