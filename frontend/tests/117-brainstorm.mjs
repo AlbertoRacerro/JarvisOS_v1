@@ -13,6 +13,7 @@ for (const token of [
   "Capture RAW",
   "Immutable RAW",
   "Reconciled ideas",
+  "Record discussion",
   "Append reconciled revision",
   "Inspect synthesis and provenance",
   "Exact provenance",
