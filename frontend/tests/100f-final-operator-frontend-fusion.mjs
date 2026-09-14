@@ -64,7 +64,7 @@ includesAll(app, [
   'kind="literature"',
   '<DevelopmentRoadmap mode="timeline" workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} />',
   '<DevelopmentRoadmap mode="calendar" workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} />',
-  'kind="brainstorm"',
+  '<DevelopmentBrainstorm workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} />',
   '<CodingWorkbench mode="repository" workspaceId={workspaceId} />',
   '<CodingWorkbench mode="runtime" workspaceId={workspaceId} />'
 ], "missing final production surface composition");

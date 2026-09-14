@@ -21,6 +21,7 @@ from app.modules.coding.runtime_truth import (
     capture_runtime_snapshot,
     startup_snapshot_unavailable,
 )
+from app.modules.development.brainstorm_routes import router as brainstorm_router
 from app.modules.development.routes import router as development_router
 from app.modules.flowsheet.routes import router as flowsheet_router
 from app.modules.local_ai.runtime.lifecycle import create_local_ai_runtime_lifecycle_from_env
@@ -49,6 +50,7 @@ _SPA_RESERVED_ROOT_CLIENT_ROUTES = frozenset(
         "/coding/runtime",
         "/development/roadmap/timeline",
         "/development/roadmap/calendar",
+        "/development/brainstorm",
     }
 )
 
@@ -151,6 +153,7 @@ def create_app() -> FastAPI:
     app.include_router(project_knowledge_router)
     app.include_router(coding_runtime_router)
     app.include_router(development_router)
+    app.include_router(brainstorm_router)
 
     frontend_dist = _frontend_dist_path()
     if frontend_dist.is_dir():

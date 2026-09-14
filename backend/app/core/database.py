@@ -9,6 +9,11 @@ from app.core.ai_thread_schema import (
     AI_THREAD_SCHEMA_MIGRATION_RECORD,
     AI_THREAD_SCHEMA_STATEMENTS,
 )
+from app.core.brainstorm_schema import (
+    BRAINSTORM_SCHEMA_INDEX_STATEMENTS,
+    BRAINSTORM_SCHEMA_MIGRATION_RECORD,
+    BRAINSTORM_SCHEMA_STATEMENTS,
+)
 from app.core.cad_link_schema import (
     CAD_LINK_SCHEMA_INDEX_STATEMENTS,
     CAD_LINK_SCHEMA_MIGRATION_RECORD,
@@ -143,6 +148,8 @@ def initialize_database() -> DatabaseInfo:
             connection.execute(statement)
         for statement in DEVELOPMENT_SCHEMA_STATEMENTS:
             connection.execute(statement)
+        for statement in BRAINSTORM_SCHEMA_STATEMENTS:
+            connection.execute(statement)
         for statement in [
             *SCHEMA_MIGRATION_STATEMENTS,
             *EGRESS_SCHEMA_MIGRATION_STATEMENTS,
@@ -177,6 +184,8 @@ def initialize_database() -> DatabaseInfo:
         for statement in LITERATURE_SCHEMA_INDEX_STATEMENTS:
             connection.execute(statement)
         for statement in DEVELOPMENT_SCHEMA_INDEX_STATEMENTS:
+            connection.execute(statement)
+        for statement in BRAINSTORM_SCHEMA_INDEX_STATEMENTS:
             connection.execute(statement)
         if _sqlite_fts5_available(connection):
             for statement in SCHEMA_FTS_STATEMENTS:
@@ -242,6 +251,12 @@ def is_database_initialized() -> bool:
         "roadmap_dependencies",
         "roadmap_object_links",
         "calendar_allocations",
+        "brainstorm_raw_records",
+        "brainstorm_ideas",
+        "brainstorm_revisions",
+        "brainstorm_discussions",
+        "brainstorm_promotions",
+        "brainstorm_idempotency",
     }
     with open_sqlite_connection() as connection:
         rows = connection.execute(
@@ -323,6 +338,7 @@ def _record_schema_migrations(connection: sqlite3.Connection) -> None:
         PROJECT_KNOWLEDGE_MIGRATION_RECORD,
         LITERATURE_SCHEMA_MIGRATION_RECORD,
         DEVELOPMENT_SCHEMA_MIGRATION_RECORD,
+        BRAINSTORM_SCHEMA_MIGRATION_RECORD,
     ]
     for record in records:
         connection.execute(

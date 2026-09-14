@@ -20,8 +20,8 @@ SCHEMA_MODEL_INPUT_CONTRACT_MIGRATION_ID = "0012_model_input_contract"
 SCHEMA_MODEL_INPUT_CONTRACT_MIGRATION_NAME = "Model-version input contracts and scenario DOF metadata"
 SCHEMA_FRESHNESS_INVALIDATION_MIGRATION_ID = "0013_freshness_invalidation"
 SCHEMA_FRESHNESS_INVALIDATION_MIGRATION_NAME = "Parameter replacement and freshness invalidation overlay"
-CURRENT_SCHEMA_MIGRATION_ID = "0019_roadmap_calendar"
-CURRENT_SCHEMA_MIGRATION_NAME = "Roadmap work items and Calendar time allocations"
+CURRENT_SCHEMA_MIGRATION_ID = "0020_brainstorm"
+CURRENT_SCHEMA_MIGRATION_NAME = "Development brainstorm state"
 
 SCHEMA_MIGRATION_RECORDS = [
     {
