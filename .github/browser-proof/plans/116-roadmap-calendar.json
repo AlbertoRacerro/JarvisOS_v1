@@ -3,9 +3,6 @@
   "id": "116-roadmap-calendar",
   "fixture": "project-search",
   "forbidMutatingRequests": false,
-  "expectedConsoleErrors": [
-    {"text":"Failed to load resource: the server responded with a status of 409 (Conflict)","count":2}
-  ],
   "steps": [
     {"op":"run-fixture","name":"116:seed-workspace","fixture":"project-search","phase":"workspace"},
     {"op":"navigate","name":"116:timeline","route":"/development/roadmap/timeline"},

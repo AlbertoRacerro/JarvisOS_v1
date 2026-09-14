@@ -45,7 +45,6 @@ if (traceEnabled) await context.tracing.start({ screenshots: true, snapshots: tr
 const page = await context.newPage();
 const proofOrigin = new URL(baseUrl).origin;
 const mutatingBrowserRequests = [];
-const consoleErrors = [];
 context.on("request", (request) => {
   const url = new URL(request.url());
   if (url.origin === proofOrigin && isMutatingSameOriginRequest(request.method(), url.pathname, readOnlySameOriginPostPaths)) {
@@ -53,7 +52,7 @@ context.on("request", (request) => {
   }
 });
 page.on("pageerror", (error) => assertions.push({ name: "pageerror", pass: false, detail: artifactMode === "metadata-only" ? "browser page error" : String(error) }));
-page.on("console", (message) => { if (message.type() === "error") consoleErrors.push(message.text()); });
+page.on("console", (message) => { if (message.type() === "error") assertions.push({ name: "console-error", pass: false, detail: artifactMode === "metadata-only" ? "browser console error" : message.text() }); });
 
 const regexFromTrusted = (value) => new RegExp(value);
 const locatorFromSpec = (spec, root = page) => {
@@ -155,21 +154,6 @@ if (traceEnabled) {
 }
 try { await browser.close(); }
 catch (error) { teardownFailure = teardownFailure ?? `browser teardown failed: ${String(error?.stack ?? error)}`; }
-
-const remainingConsoleErrors = [...consoleErrors];
-for (const [index, expected] of (plan.expectedConsoleErrors ?? []).entries()) {
-  const observed = remainingConsoleErrors.filter((text) => text === expected.text).length;
-  const pass = observed === expected.count;
-  assertions.push({
-    name: `console-error-expected-${index}`,
-    pass,
-    detail: artifactMode === "metadata-only" ? `observed=${observed} expected=${expected.count}` : `text=${JSON.stringify(expected.text)} observed=${observed} expected=${expected.count}`,
-  });
-  for (let i = remainingConsoleErrors.length - 1; i >= 0; i -= 1) if (remainingConsoleErrors[i] === expected.text) remainingConsoleErrors.splice(i, 1);
-}
-for (const text of remainingConsoleErrors) {
-  assertions.push({ name: "console-error-unexpected", pass: false, detail: artifactMode === "metadata-only" ? "unexpected browser console error" : text });
-}
 
 if (plan.forbidMutatingRequests) {
   const pass = mutatingBrowserRequests.length === 0;

@@ -59,18 +59,6 @@ const validateReadOnlySameOriginPostPaths = (paths) => {
     if (segments.some((segment) => segment === '' || segment === '.' || segment === '..')) fail(`readOnlySameOriginPostPaths[${index}] contains an ambiguous path segment`);
   }
 };
-const validateExpectedConsoleErrors = (items) => {
-  if (!Array.isArray(items) || items.length < 1 || items.length > 10) fail('expectedConsoleErrors must contain 1..10 exact entries');
-  const seen = new Set();
-  for (const [index, item] of items.entries()) {
-    if (!isObject(item)) fail(`expectedConsoleErrors[${index}] must be object`);
-    for (const key of Object.keys(item)) if (!['text','count'].includes(key)) fail(`expectedConsoleErrors[${index}] unknown key ${key}`);
-    boundedString(item.text, `expectedConsoleErrors[${index}].text`, 500);
-    if (seen.has(item.text)) fail('expectedConsoleErrors text must be unique');
-    seen.add(item.text);
-    if (!Number.isInteger(item.count) || item.count < 1 || item.count > 20) fail(`expectedConsoleErrors[${index}].count invalid`);
-  }
-};
 
 export function validatePlanId(planId) {
   if (typeof planId !== 'string' || !PLAN_ID_RE.test(planId)) fail('unsafe plan id');
@@ -261,7 +249,7 @@ export function noButtonLabelMatches(labels, pattern, caseInsensitive = false) {
 
 export function validatePlan(plan) {
   if (!isObject(plan)) fail('root must be an object');
-  for (const key of Object.keys(plan)) if (!['schema','id','fixture','artifactMode','forbidMutatingRequests','readOnlySameOriginPostPaths','expectedConsoleErrors','steps'].includes(key)) fail(`unknown root key ${key}`);
+  for (const key of Object.keys(plan)) if (!['schema','id','fixture','artifactMode','forbidMutatingRequests','readOnlySameOriginPostPaths','steps'].includes(key)) fail(`unknown root key ${key}`);
   if (plan.schema !== PLAN_SCHEMA) fail('unknown schema');
   validatePlanId(plan.id);
   const fixture = plan.fixture ?? 'none';
@@ -270,7 +258,6 @@ export function validatePlan(plan) {
   if (!ARTIFACT_MODES.has(artifactMode)) fail(`unknown artifact mode ${artifactMode}`);
   if ('forbidMutatingRequests' in plan && typeof plan.forbidMutatingRequests !== 'boolean') fail('forbidMutatingRequests must be boolean');
   if ('readOnlySameOriginPostPaths' in plan) validateReadOnlySameOriginPostPaths(plan.readOnlySameOriginPostPaths);
-  if ('expectedConsoleErrors' in plan) validateExpectedConsoleErrors(plan.expectedConsoleErrors);
   if (!Array.isArray(plan.steps) || plan.steps.length < 1 || plan.steps.length > 200) fail('steps must contain 1..200 entries');
   for (const [index, step] of plan.steps.entries()) {
     if (!isObject(step)) fail(`step ${index} must be object`);
