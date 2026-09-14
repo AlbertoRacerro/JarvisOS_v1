@@ -13,7 +13,6 @@ import {
 } from "./components/engineering/EngineeringProperties";
 import JarvisEngineeringActions from "./components/engineering/JarvisEngineeringActions";
 import FinalOperatorReadSurface from "./components/fusion/FinalOperatorReadSurface";
-import FinalOperatorUnavailableSurface from "./components/fusion/FinalOperatorUnavailableSurface";
 import FinalSettingsSurface from "./components/fusion/FinalSettingsSurface";
 import FinalWorkspaceHeader from "./components/fusion/FinalWorkspaceHeader";
 import ProjectKnowledgePanel from "./components/fusion/ProjectKnowledgePanel";
@@ -23,6 +22,7 @@ import MigrationPendingSurface from "./components/shell/MigrationPendingSurface"
 import AIDraft from "./pages/AIDraft";
 import AIThreads from "./pages/AIThreads";
 import CodingWorkbench from "./pages/CodingWorkbench";
+import DevelopmentBrainstorm from "./pages/DevelopmentBrainstorm";
 import DevelopmentRoadmap from "./pages/DevelopmentRoadmap";
 import DomainFoundation from "./pages/DomainFoundation";
 import EngineeringData from "./pages/EngineeringData";
@@ -105,7 +105,7 @@ function App() {
         content = <><FinalWorkspaceHeader group="development" active="roadmap" navigate={navigate} /><DevelopmentRoadmap mode="calendar" workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} /></>;
         break;
       case "development-brainstorm":
-        content = <><FinalWorkspaceHeader group="development" active="brainstorm" navigate={navigate} /><FinalOperatorUnavailableSurface kind="brainstorm" title="Brainstorm" description="The RAW → discussion/reconciliation → RECONCILED → explicit promotion composition is present, but there is no accepted persistence owner for those records in this frontend-only slice." navigate={navigate} links={[{ href: "/ai-threads", label: "Open existing AI Threads compatibility view" }]} /></>;
+        content = <><FinalWorkspaceHeader group="development" active="brainstorm" navigate={navigate} /><DevelopmentBrainstorm workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} /></>;
         break;
       case "coding-repository":
         content = <><FinalWorkspaceHeader group="coding" active="repository" navigate={navigate} /><CodingWorkbench mode="repository" workspaceId={workspaceId} /></>;
