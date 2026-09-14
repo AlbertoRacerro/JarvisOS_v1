@@ -56,6 +56,17 @@ export type BrainstormRevision = {
   created_at: string;
 };
 
+export type BrainstormDiscussion = {
+  id: string;
+  workspace_id: string;
+  target_type: "raw" | "idea";
+  target_id: string;
+  target_revision?: number | null;
+  source_refs: BrainstormExactRef[];
+  created_by: string;
+  created_at: string;
+};
+
 export type BrainstormIdea = {
   id: string;
   workspace_id: string;
@@ -65,6 +76,7 @@ export type BrainstormIdea = {
   successor_revision?: number | null;
   current: BrainstormRevision;
   revisions?: BrainstormRevision[];
+  discussions?: BrainstormDiscussion[];
 };
 
 export type BrainstormPromotion = {
@@ -94,10 +106,6 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   }
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
-}
-
-function mutationId(prefix: string): string {
-  return `${prefix}-${crypto.randomUUID()}`;
 }
 
 export function listRoadmapItems(workspaceId: string): Promise<RoadmapItem[]> {
@@ -183,7 +191,12 @@ export function listBrainstormRaw(workspaceId: string): Promise<BrainstormRaw[]>
   return requestJson(`/development/brainstorm/raw?workspace_id=${encodeURIComponent(workspaceId)}`);
 }
 
-export function createBrainstormRaw(workspaceId: string, content: string, attachmentRefs: BrainstormExactRef[] = []): Promise<BrainstormRaw> {
+export function createBrainstormRaw(
+  workspaceId: string,
+  content: string,
+  idempotencyKey: string,
+  attachmentRefs: BrainstormExactRef[] = []
+): Promise<BrainstormRaw> {
   return requestJson("/development/brainstorm/raw", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -192,7 +205,7 @@ export function createBrainstormRaw(workspaceId: string, content: string, attach
       content,
       attachment_refs: attachmentRefs,
       created_by: "operator",
-      idempotency_key: mutationId("raw")
+      idempotency_key: idempotencyKey
     })
   });
 }
@@ -205,7 +218,7 @@ export function getBrainstormIdea(workspaceId: string, ideaId: string): Promise<
   return requestJson(`/development/brainstorm/ideas/${encodeURIComponent(ideaId)}?workspace_id=${encodeURIComponent(workspaceId)}`);
 }
 
-export function recordBrainstormDiscussion(workspaceId: string, rawId: string): Promise<Record<string, unknown>> {
+export function recordBrainstormDiscussion(workspaceId: string, rawId: string, idempotencyKey: string): Promise<BrainstormDiscussion> {
   return requestJson("/development/brainstorm/discussions", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -216,7 +229,7 @@ export function recordBrainstormDiscussion(workspaceId: string, rawId: string): 
       expected_revision: null,
       source_refs: [{ ref_type: "raw", ref_id: rawId, revision: null }],
       actor: "operator",
-      idempotency_key: mutationId("discussion")
+      idempotency_key: idempotencyKey
     })
   });
 }
@@ -227,6 +240,7 @@ export function reconcileBrainstorm(
   title: string,
   takeaway: string,
   synthesis: string,
+  idempotencyKey: string,
   idea?: BrainstormIdea
 ): Promise<BrainstormIdea> {
   return requestJson("/development/brainstorm/ideas/reconcile", {
@@ -241,12 +255,12 @@ export function reconcileBrainstorm(
       synthesis,
       source_refs: [{ ref_type: "raw", ref_id: sourceRawId, revision: null }],
       actor: "operator",
-      idempotency_key: mutationId("reconcile")
+      idempotency_key: idempotencyKey
     })
   });
 }
 
-export function supersedeBrainstormIdea(source: BrainstormIdea, successor: BrainstormIdea): Promise<BrainstormIdea> {
+export function supersedeBrainstormIdea(source: BrainstormIdea, successor: BrainstormIdea, idempotencyKey: string): Promise<BrainstormIdea> {
   return requestJson(`/development/brainstorm/ideas/${encodeURIComponent(source.id)}/supersede`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -257,7 +271,7 @@ export function supersedeBrainstormIdea(source: BrainstormIdea, successor: Brain
       successor_idea_id: successor.id,
       successor_revision: successor.current_revision,
       actor: "operator",
-      idempotency_key: mutationId("supersede")
+      idempotency_key: idempotencyKey
     })
   });
 }
@@ -266,7 +280,11 @@ export function listBrainstormPromotions(workspaceId: string): Promise<Brainstor
   return requestJson(`/development/brainstorm/promotions?workspace_id=${encodeURIComponent(workspaceId)}`);
 }
 
-export function createBrainstormPromotion(idea: BrainstormIdea, target: "roadmap" | "design" | "coding"): Promise<BrainstormPromotion> {
+export function createBrainstormPromotion(
+  idea: BrainstormIdea,
+  target: "roadmap" | "design" | "coding",
+  idempotencyKey: string
+): Promise<BrainstormPromotion> {
   return requestJson("/development/brainstorm/promotions", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -282,7 +300,7 @@ export function createBrainstormPromotion(idea: BrainstormIdea, target: "roadmap
         source: { idea_id: idea.id, revision: idea.current_revision }
       },
       actor: "operator",
-      idempotency_key: mutationId(`promotion-${target}`)
+      idempotency_key: idempotencyKey
     })
   });
 }
