@@ -39,7 +39,7 @@ const ASSERTION_POLL_TIMEOUT_MS = 5_000;
 const ASSERTION_POLL_INTERVAL_MS = 50;
 
 const browser = await chromium.launch({ headless: true });
-const context = await browser.newContext();
+const context = await browser.newContext(plan.viewport ? { viewport: plan.viewport } : {});
 const traceEnabled = artifactMode === "full";
 if (traceEnabled) await context.tracing.start({ screenshots: true, snapshots: true, sources: false });
 const page = await context.newPage();
