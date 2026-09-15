@@ -1,7 +1,7 @@
 # Maintainer-approved product direction packet
 
 Status: **future product direction; not implementation authority**  
-Approved in maintainer design session: 2026-08-26; final visual/product reconciliation: 2026-08-27  
+Approved in maintainer design session: 2026-08-26; final visual/product reconciliation: 2026-08-27; human-usability completion contract added: 2026-09-15  
 Owner: repository maintainer
 
 This directory freezes product decisions that were previously at risk of existing only in chat context. These files are deliberately more precise than ordinary brainstorming notes: they define intended product semantics, navigation, ownership boundaries, non-goals, and future backend responsibilities so that later specification authors do not reinterpret the maintainer's decisions.
@@ -39,22 +39,33 @@ For frontend/product-facing promotion work, also read:
 
 - `docs/design-references/APPROVED_OPERATOR_UI_MANIFEST_2026-08-27.md` — canonical HTML index, exact reference viewport/hash/blob identity and final cross-surface overlays;
 - `docs/design-references/FRONTEND_CONFORMANCE_CONTRACT_2026-08-27.md` — mandatory translation/conformance rules for production frontend;
+- `docs/design-references/FINAL_OPERATOR_INTERACTION_CONTRACT_2026-08-27.md` — user-visible interaction/action/state-transition semantics;
+- `docs/design-references/OPERATOR_USABILITY_AND_FRONTEND_COMPLETION_CONTRACT_2026-09-15.md` — mandatory human-usability, backend-to-frontend completion and evidence requirements;
 - the most-specific approved surface reference under `docs/design-references/`.
 
-These visual/reference documents define intended composition but do not grant runtime/backend authority.
+These visual/reference documents define intended composition and product-quality requirements but do not grant runtime/backend authority.
+
+## Human-usability completion rule
+
+Human usability is a product requirement, not optional polish.
+
+For an operator-facing capability, a correct backend is necessary but insufficient. Product completion requires a truthful frontend path that lets the operator discover, understand and complete the intended task without needing to know backend architecture. Internal-only infrastructure may remain headless only when the accepted contract explicitly classifies it that way.
+
+A user-facing spec derived from this packet must include frontend wiring and human-task acceptance criteria unless it explicitly stages the frontend into a named later owner. A later frontend stage may not disappear silently.
 
 ## Promotion rule
 
 A future real specification derived from this packet must:
 
 - cite the exact product-direction file(s) it promotes, including PD-08 whenever the promoted behavior intersects the final visual/product reconciliation;
-- for frontend/product-facing work, cite the canonical manifest/conformance contract and exact selected HTML/reference identity;
+- for frontend/product-facing work, cite the canonical manifest/conformance/interaction/usability contracts and exact selected HTML/reference identity;
 - preserve every explicit invariant and non-goal unless the maintainer explicitly revises it;
 - identify any current route/component/schema that is being replaced rather than silently retaining both concepts;
 - keep user-facing concepts separate from storage/database implementation concepts;
 - avoid creating a second competing memory, provider, orchestration, artifact, repository, Roadmap/Calendar, or runtime state store where current canonical infrastructure can be extended;
 - define migration/compatibility behavior explicitly where current canonical records already exist;
 - preserve every approved visible capability as implementation work when backend support is missing rather than redesigning it away;
+- ensure an operator-facing backend capability has a usable frontend owner and task-level evidence before treating the product capability as complete;
 - reconcile every semantically overlapping live/planned `STATUS.md` row before allocating new canonical ownership.
 
 ## Visual-reference rule
