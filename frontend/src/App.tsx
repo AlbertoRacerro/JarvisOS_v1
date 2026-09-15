@@ -49,6 +49,7 @@ function App() {
   const [selection, setSelection] = useState<StageSelection | null>(null);
   const [shellRegions, setShellRegions] = useState<ShellRegionContributions>({});
   const [shellRegionRequest, setShellRegionRequest] = useState<ShellRegionRequest | null>(null);
+  const [selectedKnowledgeRef, setSelectedKnowledgeRef] = useState<string | null>(null);
   const [selectedModelVersionId, setSelectedModelVersionId] = useState<string | null>(null);
   const engineeringProperties = useEngineeringProperties(workspaceId, setWorkspaceId, selection);
   const routeParams = new URLSearchParams(window.location.search);
@@ -61,7 +62,7 @@ function App() {
   const requestedLiteratureSourceId = boundedSearchParam(routeParams, "sourceId");
   const requestedLiteratureEntryId = boundedSearchParam(routeParams, "entryId");
   const knowledgeStableRef = route.id === "memory-project-basis"
-    ? requestedRecordRef
+    ? selectedKnowledgeRef ?? requestedRecordRef
     : route.id === "memory-models" && selectedModelVersionId
       ? `model_version:${selectedModelVersionId}`
       : route.id === "memory-literature" && requestedLiteratureEntryId
@@ -72,16 +73,30 @@ function App() {
 
   useEffect(() => {
     setSelection(null);
+    setSelectedKnowledgeRef(null);
     setShellRegions({});
     setShellRegionRequest(null);
     setSelectedModelVersionId(null);
   }, [route.id]);
 
   useEffect(() => {
+    setSelectedKnowledgeRef(null);
+    setSelectedModelVersionId(null);
+  }, [workspaceId]);
+
+  useEffect(() => {
     if (selection?.kind === "record" && selection.ref.workspaceId !== workspaceId) setWorkspaceId(selection.ref.workspaceId);
   }, [selection, workspaceId]);
 
   const requestShellRegionOpen = (region: ShellRegion) => setShellRegionRequest((current) => ({ region, nonce: (current?.nonce ?? 0) + 1 }));
+
+  const stageSidecar = shellRegions.sidecar;
+  const semanticSelectionContext = selection?.kind === "bluecad-part" ? <div className="shell-properties__selection"><strong>{selection.partId}</strong><p>{selection.partKind ? `${selection.partKind} · selected BLUECAD part` : "Selected BLUECAD part"}</p></div> : undefined;
+  const knowledgeActions = <JarvisKnowledgeActions workspaceId={workspaceId} routeId={route.id} stableRef={knowledgeStableRef} />;
+  const jarvisLocalContext = KNOWLEDGE_ROUTES.has(route.id)
+    ? knowledgeActions
+    : <>{semanticSelectionContext}<JarvisEngineeringActions controller={engineeringProperties} />{knowledgeActions}</>;
+  const jarvisSidecar = useJarvisSidecar(workspaceId, route.id, selection, jarvisLocalContext);
 
   let content: ReactNode;
   if (route.stageKind && (route.id === "design-process" || route.id === "design-bluecad" || route.id === "review")) {
@@ -90,13 +105,13 @@ function App() {
   } else {
     switch (route.id) {
       case "memory-project-basis":
-        content = <><FinalWorkspaceHeader group="memory" active="project-basis" navigate={navigate} /><FinalOperatorReadSurface kind="project-basis" workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} requestedRecordRef={requestedRecordRef} projectSearch={<ProjectSearchPanel workspaceId={workspaceId} navigate={navigate} />} /><ProjectKnowledgePanel workspaceId={workspaceId} /></>;
+        content = <><FinalWorkspaceHeader group="memory" active="project-basis" navigate={navigate} /><FinalOperatorReadSurface kind="project-basis" workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} requestedRecordRef={requestedRecordRef} onRecordSelect={setSelectedKnowledgeRef} jarvis={jarvisSidecar} projectSearch={<ProjectSearchPanel workspaceId={workspaceId} navigate={navigate} />} /></>;
         break;
       case "memory-models":
-        content = <><FinalWorkspaceHeader group="memory" active="models" navigate={navigate} /><ModelDossier workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} requestedModelVersionId={requestedModelVersionId} onModelVersionSelectionChange={setSelectedModelVersionId} /><ProjectKnowledgePanel workspaceId={workspaceId} readOnly /></>;
+        content = <><FinalWorkspaceHeader group="memory" active="models" navigate={navigate} /><ModelDossier workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} requestedModelVersionId={requestedModelVersionId} onModelVersionSelectionChange={setSelectedModelVersionId} jarvis={jarvisSidecar} /><ProjectKnowledgePanel workspaceId={workspaceId} readOnly /></>;
         break;
       case "memory-literature":
-        content = <><FinalWorkspaceHeader group="memory" active="literature" navigate={navigate} /><LiteratureKnowledge kind="literature" workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} requestedSourceId={requestedLiteratureSourceId} requestedEntryId={requestedLiteratureEntryId} /></>;
+        content = <><FinalWorkspaceHeader group="memory" active="literature" navigate={navigate} /><LiteratureKnowledge kind="literature" workspaceId={workspaceId} jarvis={jarvisSidecar} onWorkspaceChange={setWorkspaceId} requestedSourceId={requestedLiteratureSourceId} requestedEntryId={requestedLiteratureEntryId} /></>;
         break;
       case "development-roadmap-timeline":
         content = <><FinalWorkspaceHeader group="development" active="roadmap" navigate={navigate} /><DevelopmentRoadmap mode="timeline" workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} /></>;
@@ -105,7 +120,7 @@ function App() {
         content = <><FinalWorkspaceHeader group="development" active="roadmap" navigate={navigate} /><DevelopmentRoadmap mode="calendar" workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} /></>;
         break;
       case "development-brainstorm":
-        content = <><FinalWorkspaceHeader group="development" active="brainstorm" navigate={navigate} /><DevelopmentBrainstorm workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} /></>;
+        content = <><FinalWorkspaceHeader group="development" active="brainstorm" navigate={navigate} /><DevelopmentBrainstorm jarvis={jarvisSidecar} workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} /></>;
         break;
       case "coding-repository":
         content = <><FinalWorkspaceHeader group="coding" active="repository" navigate={navigate} /><CodingWorkbench mode="repository" workspaceId={workspaceId} /></>;
@@ -150,13 +165,6 @@ function App() {
     }
   }
 
-  const stageSidecar = shellRegions.sidecar;
-  const semanticSelectionContext = selection?.kind === "bluecad-part" ? <div className="shell-properties__selection"><strong>{selection.partId}</strong><p>{selection.partKind ? `${selection.partKind} · selected BLUECAD part` : "Selected BLUECAD part"}</p></div> : undefined;
-  const knowledgeActions = <JarvisKnowledgeActions workspaceId={workspaceId} routeId={route.id} stableRef={knowledgeStableRef} />;
-  const jarvisLocalContext = KNOWLEDGE_ROUTES.has(route.id)
-    ? knowledgeActions
-    : <>{semanticSelectionContext}<JarvisEngineeringActions controller={engineeringProperties} />{knowledgeActions}</>;
-  const jarvisSidecar = useJarvisSidecar(workspaceId, route.id, selection, jarvisLocalContext);
   const propertiesContent = <EngineeringPropertiesPanel controller={engineeringProperties} stageContext={stageSidecar} navigate={navigate} />;
   const effectiveShellRegions: ShellRegionContributions = {
     ...shellRegions,

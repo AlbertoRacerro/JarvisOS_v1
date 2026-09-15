@@ -9,6 +9,7 @@ import {
 } from "../api/literature";
 
 type Props = Readonly<{
+  jarvis?: React.ReactNode;
   kind: "literature";
   workspaceId: string | null;
   onWorkspaceChange: (workspaceId: string) => void;
@@ -73,7 +74,7 @@ function SourceDisclosure({ source, selected, requestedEntryId }: Readonly<{ sou
   </details>;
 }
 
-export default function LiteratureKnowledge({ workspaceId, onWorkspaceChange, requestedSourceId = null, requestedEntryId = null }: Props) {
+export default function LiteratureKnowledge({ jarvis, workspaceId, onWorkspaceChange, requestedSourceId = null, requestedEntryId = null }: Props) {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [sources, setSources] = useState<LiteratureSource[]>([]);
   const [total, setTotal] = useState(0);
@@ -131,5 +132,6 @@ export default function LiteratureKnowledge({ workspaceId, onWorkspaceChange, re
       {!loading && !error && sources.length === 0 ? <div className="final-fusion__source-empty"><strong>No literature sources yet</strong><p>Register a bounded source through the Literature API; fixture citations are never promoted into production facts.</p></div> : null}
       <div className="final-fusion__source-list">{sources.map((source) => <SourceDisclosure key={source.id} source={source} selected={source.id === requestedSourceId} requestedEntryId={source.id === requestedSourceId ? requestedEntryId : null} />)}</div>
     </section>
+    <section className="final-fusion__panel final-fusion__jarvis" aria-label="Jarvis">{jarvis}</section>
   </div>;
 }

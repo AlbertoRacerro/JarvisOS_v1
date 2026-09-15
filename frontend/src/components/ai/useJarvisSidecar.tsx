@@ -57,7 +57,7 @@ export function useJarvisSidecar(
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [detail, setDetail] = useState<ThreadDetail | null>(null);
   const [preview, setPreview] = useState<ContextPackPreview | null>(null);
-  const [contextEnabled, setContextEnabled] = useState(true);
+  const [contextEnabled, setContextEnabled] = useState(false);
   const [previewNonce, setPreviewNonce] = useState(0);
   const [prompt, setPrompt] = useState("");
   const [pending, setPending] = useState<PendingSubmit | null>(null);
@@ -202,11 +202,28 @@ export function useJarvisSidecar(
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     const text = prompt.trim();
-    if (!workspaceId || !selectedThreadId || !text || submitting) return;
+    if (!workspaceId || !text || submitting) return;
+    const workspaceTokenForCreate = workspaceOwner.current;
+    let threadId = selectedThreadId;
+    if (!threadId) {
+      setSubmitting(true);
+      try {
+        const created = await createThread(workspaceId, text.slice(0, 70));
+        if (workspaceOwner.current !== workspaceTokenForCreate) return;
+        threadId = created.id;
+        setThreads((current) => [created, ...current]);
+        setSelectedThreadId(created.id);
+      } catch {
+        if (workspaceOwner.current !== workspaceTokenForCreate) return;
+        setError("Could not start a conversation. Your message is preserved; try again.");
+        setSubmitting(false);
+        return;
+      }
+    }
 
     const reusable = pending
       && pending.workspaceId === workspaceId
-      && pending.threadId === selectedThreadId
+      && pending.threadId === threadId
       && pending.prompt === text
       && pending.contextEnabled === contextEnabled;
     const currentDigest = contextEnabled
@@ -215,6 +232,7 @@ export function useJarvisSidecar(
         : preview?.context_digest ?? null
       : null;
     if (contextEnabled && !currentDigest) {
+      setSubmitting(false);
       setError("Project context is empty or stale. Refresh it or turn project context off.");
       return;
     }
@@ -223,7 +241,7 @@ export function useJarvisSidecar(
       ? pending
       : {
           workspaceId,
-          threadId: selectedThreadId,
+          threadId,
           requestId: requestId(),
           prompt: text,
           contextEnabled,
@@ -245,6 +263,7 @@ export function useJarvisSidecar(
           : undefined
       );
       if (submitOwner.current !== token || workspaceOwner.current !== workspaceToken) return;
+      detailOwner.current += 1;
       const refreshed = await getThread(captured.workspaceId, captured.threadId);
       if (submitOwner.current !== token || workspaceOwner.current !== workspaceToken) return;
       setDetail(refreshed);
@@ -280,20 +299,20 @@ export function useJarvisSidecar(
 
   return <div className="jarvis-sidecar" data-testid="jarvis-sidecar">
     <header className="jarvis-sidecar__header">
-      <div><p className="eyebrow">Jarvis advisory</p><strong>Contextual engineering assistant</strong></div>
+      <div><p className="eyebrow">Jarvis advisory</p><strong>Jarvis</strong></div>
       <button type="button" onClick={() => void create()} disabled={!workspaceId || loadingThreads}>New thread</button>
     </header>
 
-    <section className="jarvis-sidecar__local-context" aria-label="Local application context">
+    <details className="jarvis-sidecar__local-context"><summary>Technical details</summary>
       <strong>Local context</strong>
       <span>Route: {routeId}</span>
       <span>{localSelectionLabel(selection)}</span>
       <small>This descriptor stays local. Provider context is only the inspected project pack below.</small>
-    </section>
-    {contextualContent ? <section className={stageContextClassName} aria-label="Current stage context">{contextualContent}</section> : null}
+    </details>
+    {contextualContent ? <details className="jarvis-selection-actions"><summary>Selected context & proposals</summary><section className={stageContextClassName} aria-label="Current stage context">{contextualContent}</section></details> : null}
 
     {!workspaceId ? <p>Select a workspace to use Jarvis.</p> : null}
-    {workspaceId ? <label className="jarvis-sidecar__field">Thread<select value={selectedThreadId ?? ""} onChange={(event) => selectThread(event.target.value || null)} disabled={loadingThreads}><option value="">Select thread</option>{threads.map((thread) => <option key={thread.id} value={thread.id}>{thread.title || "Untitled thread"}</option>)}</select></label> : null}
+    {workspaceId ? <label className="jarvis-sidecar__field">Conversation<select value={selectedThreadId ?? ""} onChange={(event) => selectThread(event.target.value || null)} disabled={loadingThreads}><option value="">Select thread</option>{threads.map((thread) => <option key={thread.id} value={thread.id}>{thread.title || "Untitled thread"}</option>)}</select></label> : null}
     {loadingDetail ? <p className="jarvis-sidecar__status">Loading thread…</p> : null}
 
     <section className="jarvis-sidecar__context" aria-label="Project context controls">
@@ -304,13 +323,14 @@ export function useJarvisSidecar(
       {pendingRetryReady && contextEnabled ? <p className="jarvis-sidecar__status">An uncertain prior submit retains its inspected digest for a safe idempotent retry.</p> : null}
     </section>
 
-    {detail ? <ol className="jarvis-sidecar__transcript" aria-label="Jarvis thread transcript">{detail.interactions.map((interaction) => <li key={interaction.id}><p><strong>You</strong> {interaction.user_text}</p><p><strong>Jarvis advisory</strong> {interaction.assistant_text ?? "No durable assistant snapshot."}</p><dl><div><dt>Flow</dt><dd>{interaction.flow_id}</dd></div><div><dt>Canonical state</dt><dd>{interaction.flow_state}</dd></div><div><dt>Persistence</dt><dd>{interaction.persistence_state}</dd></div><div><dt>Attempts</dt><dd>{interaction.attempt_count}</dd></div><div><dt>Proposals</dt><dd>{interaction.proposal_count}{interaction.proposals_truncated ? "+" : ""}</dd></div></dl>{interaction.terminal_reason ? <small>Terminal reason: {interaction.terminal_reason}</small> : null}{interaction.persistence_error ? <small>Persistence diagnostic: {interaction.persistence_error}</small> : null}{interaction.proposal_ids.length ? <small>Proposal refs: {interaction.proposal_ids.join(", ")}</small> : null}</li>)}</ol> : null}
+    {detail ? <ol className="jarvis-sidecar__transcript" aria-label="Jarvis thread transcript">{detail.interactions.map((interaction) => <li key={interaction.id}><p><strong>You</strong> {interaction.user_text}</p><p><strong>Jarvis advisory</strong> {interaction.assistant_text ?? "No durable assistant snapshot."}</p><details><summary>Interaction details</summary><dl><div><dt>Flow</dt><dd>{interaction.flow_id}</dd></div><div><dt>Canonical state</dt><dd>{interaction.flow_state}</dd></div><div><dt>Persistence</dt><dd>{interaction.persistence_state}</dd></div><div><dt>Attempts</dt><dd>{interaction.attempt_count}</dd></div><div><dt>Proposals</dt><dd>{interaction.proposal_count}{interaction.proposals_truncated ? "+" : ""}</dd></div></dl></details>{interaction.terminal_reason ? <small>Terminal reason: {interaction.terminal_reason}</small> : null}{interaction.persistence_error ? <small>Persistence diagnostic: {interaction.persistence_error}</small> : null}{interaction.proposal_ids.length ? <small>Proposal refs: {interaction.proposal_ids.join(", ")}</small> : null}</li>)}</ol> : null}
     {error ? <p className="jarvis-sidecar__status" role="status">{error}</p> : null}
 
     <form onSubmit={(event) => void submit(event)} className="jarvis-sidecar__composer">
+      <p className="jarvis-sidecar__status">This conversation uses a synthetic test responder. Messages are saved, but this path does not provide real AI answers yet.</p>
       <label htmlFor="jarvis-prompt">Message</label>
-      <textarea id="jarvis-prompt" value={prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} maxLength={12000} rows={5} disabled={!selectedThreadId || submitting} />
-      <button type="submit" disabled={!selectedThreadId || !prompt.trim() || submitting || !contextReady}>{submitting ? "Submitting…" : contextEnabled ? pendingRetryReady ? "Retry with original context" : "Send with inspected context" : "Send without project context"}</button>
+      <textarea id="jarvis-prompt" value={prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} maxLength={12000} rows={5} disabled={!workspaceId || submitting} placeholder="Ask Jarvis…" />
+      <button type="submit" disabled={!workspaceId || !prompt.trim() || submitting || !contextReady}>{submitting ? "Submitting…" : contextEnabled ? pendingRetryReady ? "Retry with original context" : "Send with inspected context" : "Send without project context"}</button>
       <small>Enter submits. Shift+Enter adds a line. Closing the sidecar does not cancel canonical execution.</small>
     </form>
   </div>;

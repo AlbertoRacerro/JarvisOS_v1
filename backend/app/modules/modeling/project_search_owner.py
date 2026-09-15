@@ -5,6 +5,7 @@ from typing import Any
 
 from app.core.database import open_sqlite_connection
 from app.core.repository import rows_to_models
+from app.core.search_text import register_search
 from app.modules.modeling.models import AssumptionRead, DecisionRead, ParameterRead, RequirementRead
 
 _TABLES = {
@@ -78,18 +79,14 @@ def search_context_records_literal(
     query: str,
     max_matches_per_kind: int,
 ) -> dict[str, list[Any]]:
-    """Read bounded literal matches from canonical Project Basis owner tables.
+    """Read bounded exact, normalized and token matches from canonical Project Basis owner tables.
 
     Eligibility and literal match tier are applied before the per-kind bound so
     retired/newer contains rows cannot hide an eligible exact or prefix match.
     """
-    normalized_query = query.casefold()
-    escaped_query = _escape_like_literal(query)
-    contains_pattern = f"%{escaped_query}%"
-    prefix_pattern = f"{escaped_query}%"
     results: dict[str, list[Any]] = {}
     with open_sqlite_connection() as connection:
-        _register_casefold(connection)
+        register_search(connection, query)
         workspace = connection.execute("SELECT 1 FROM workspaces WHERE id = ?", (workspace_id,)).fetchone()
         if workspace is None:
             raise ValueError("Workspace not found.")
@@ -112,30 +109,15 @@ def search_context_records_literal(
                 clauses.append(f"{_STATUS_COLUMNS[kind]} IN ({placeholders})")
                 values.extend(statuses)
 
-            text_columns = _TEXT_COLUMNS[kind]
-            literal_terms = []
-            for column in text_columns:
-                literal_terms.append(f"JARVIS_CASEFOLD(COALESCE({column}, '')) LIKE ? ESCAPE '\\'")
-                values.append(contains_pattern)
-            clauses.append("(" + " OR ".join(literal_terms) + ")")
-
-            exact_terms = [f"JARVIS_CASEFOLD(COALESCE({column}, '')) = ?" for column in text_columns]
-            prefix_terms = [
-                f"JARVIS_CASEFOLD(COALESCE({column}, '')) LIKE ? ESCAPE '\\'" for column in text_columns
-            ]
-            order_values: list[object] = [normalized_query] * len(text_columns)
-            order_values.extend([prefix_pattern] * len(text_columns))
-            match_tier_order = (
-                "CASE "
-                f"WHEN ({' OR '.join(exact_terms)}) THEN 0 "
-                f"WHEN ({' OR '.join(prefix_terms)}) THEN 1 "
-                "ELSE 2 END"
-            )
+            # Eligibility and rank precede LIMIT, including token matches.
+            text_columns = ("id", *_TEXT_COLUMNS[kind])
+            rank = "MIN(" + ", ".join(f"JARVIS_MATCH({column})" for column in text_columns) + ")"
+            clauses.append(f"{rank} < 99")
 
             rows = connection.execute(
                 f"SELECT * FROM {table} WHERE {' AND '.join(clauses)} "
-                f"ORDER BY {match_tier_order}, id ASC LIMIT ?",
-                (*values, *order_values, max_matches_per_kind),
+                f"ORDER BY {rank}, id ASC LIMIT ?",
+                (*values, max_matches_per_kind),
             ).fetchall()
             results[kind] = rows_to_models(rows, _MODELS[kind])
     return results

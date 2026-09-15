@@ -64,19 +64,17 @@ includesAll(app, [
   'kind="literature"',
   '<DevelopmentRoadmap mode="timeline" workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} />',
   '<DevelopmentRoadmap mode="calendar" workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} />',
-  '<DevelopmentBrainstorm workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} />',
+  '<DevelopmentBrainstorm jarvis={jarvisSidecar} workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId}',
   '<CodingWorkbench mode="repository" workspaceId={workspaceId} />',
   '<CodingWorkbench mode="runtime" workspaceId={workspaceId} />'
 ], "missing final production surface composition");
 check(!app.includes("No server-owned roadmap item store") && !app.includes("No server-owned time-allocation calendar"), "Development still presents obsolete missing-authority states after 116 owner landed");
-check(codingWorkbench.includes("Repository browsing is context-neutral.") && codingWorkbench.includes("server-validated GitHub path"), "Repository frontend/GitHub truth boundary is not explicit");
+check(codingWorkbench.includes("readSafeGithubUrl(repository, requestSha, path)") && codingWorkbench.includes("href={safeUrl}"), "Repository frontend/GitHub truth boundary is not explicit");
 check(!/api\.github\.com|github\.com\/api|Authorization|GITHUB_TOKEN/i.test(codingApi), "Coding browser API client crossed provider/credential boundary");
 check(!/iframe|srcDoc/.test(app), "static HTML embedding is forbidden");
 check(!/localStorage|sessionStorage|fetch\(|axios|github\.com\/api/i.test(app), "final surface shell gained private truth/API authority");
 
 includesAll(readFusion, [
-  "Working revisions are unavailable",
-  "Approve-all, working revision and deterministic revalidation require their future accepted owner.",
   "Exact model-version inventory is not exposed by the current read owner.",
   "Specification record; not an exact model version",
   "Not projected from workspace-level records because exact model/version binding cannot be proven.",
@@ -86,6 +84,7 @@ includesAll(readFusion, [
   "The frontend does not call GitHub directly or infer alignment.",
   "Safe update and terminal EXECUTE authority are not present in 100f."
 ], "truthful READ/Unknown boundary missing");
+check(readFusion.includes("<ProjectKnowledgePanel") && readFusion.includes("aria-expanded={open.has(row.id)}"), "Project Basis must expose real revisions and operable record disclosure");
 check(!/cd951bae|86cdedde|working tree clean|remote current|PASS|Aligned/i.test(readFusion), "fixture repository/runtime success identity leaked into truthful read surface");
 check(!/localStorage|sessionStorage|github\.com\/api|api\.github|child_process|powershell|cmd\.exe/i.test(readFusion), "read surface crossed frontend authority boundary");
 check(readFusion.includes('from "../../api/client"'), "final operator READ surface no longer uses the shared API client");

@@ -17,6 +17,7 @@ import {
 } from "../api/development";
 
 type Props = {
+  jarvis?: React.ReactNode;
   workspaceId: string | null;
   onWorkspaceChange(next: string | null): void;
 };
@@ -32,12 +33,14 @@ type BrainstormRawWithDiscussions = BrainstormRaw & {
   discussions?: RawDiscussion[];
 };
 
-export default function DevelopmentBrainstorm({ workspaceId, onWorkspaceChange }: Props) {
+export default function DevelopmentBrainstorm({ jarvis, workspaceId, onWorkspaceChange }: Props) {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [rawRecords, setRawRecords] = useState<BrainstormRawWithDiscussions[]>([]);
   const [ideas, setIdeas] = useState<BrainstormIdea[]>([]);
   const [promotions, setPromotions] = useState<BrainstormPromotion[]>([]);
   const [expanded, setExpanded] = useState<BrainstormIdea | null>(null);
+  const [rawQuery, setRawQuery] = useState("");
+  const [notice, setNotice] = useState<string | null>(null);
   const [rawText, setRawText] = useState("");
   const [attachmentType, setAttachmentType] = useState<"run_artifact" | "generic_artifact" | "literature_entry">("run_artifact");
   const [attachmentId, setAttachmentId] = useState("");
@@ -143,8 +146,10 @@ export default function DevelopmentBrainstorm({ workspaceId, onWorkspaceChange }
     const selectedWorkspaceId = workspaceId;
     setBusy(true);
     setError(null);
+    setNotice(null);
     try {
       await action();
+      if (activeWorkspaceRef.current === selectedWorkspaceId) setNotice("Saved successfully.");
       if (activeWorkspaceRef.current === selectedWorkspaceId) await refresh(selectedWorkspaceId);
     } catch (exc) {
       if (activeWorkspaceRef.current === selectedWorkspaceId) {
@@ -169,12 +174,10 @@ export default function DevelopmentBrainstorm({ workspaceId, onWorkspaceChange }
   const selectedSuccessor = visibleIdeas.find((idea) => idea.id === successorId);
 
   return (
-    <main className="operator-page" aria-label="Brainstorm workspace">
+    <div className="operator-page brainstorm-workspace" aria-label="Brainstorm workspace">
       <header className="operator-page__header">
         <div>
-          <p className="operator-page__eyebrow">Development</p>
-          <h1>Brainstorm</h1>
-          <p>Capture immutable RAW thoughts, reconcile them with explicit provenance, and create proposal-only handoffs.</p>
+          <h2>Brainstorm</h2><p>Write freely. Organize your thoughts when you are ready.</p>
         </div>
         <label>
           Workspace
@@ -186,15 +189,15 @@ export default function DevelopmentBrainstorm({ workspaceId, onWorkspaceChange }
       </header>
 
       {error ? <p role="alert" className="operator-error">{error}</p> : null}
+      {notice ? <p role="status">{notice}</p> : null}
 
-      <section className="operator-grid">
-        <article className="operator-card">
-          <h2>RAW capture</h2>
+      <div className="brainstorm-board"><section className="brainstorm-raw-column">        <article className="operator-card">
+          <h3>Raw thoughts</h3>
           <label>
             RAW idea
-            <textarea value={rawText} onChange={(event) => setRawText(event.target.value)} placeholder="Capture the original thought exactly as written." />
+            <textarea value={rawText} onChange={(event) => setRawText(event.target.value)} rows={10} placeholder="An idea, a question, a problem… Write it as it comes, with no need to classify it." />
           </label>
-          <label>
+          <details className="brainstorm-attachments"><summary>Attach an existing project reference (optional)</summary><label>
             Attachment ref type
             <select value={attachmentType} onChange={(event) => setAttachmentType(event.target.value as "run_artifact" | "generic_artifact" | "literature_entry")}>
               <option value="run_artifact">Run artifact</option>
@@ -206,70 +209,27 @@ export default function DevelopmentBrainstorm({ workspaceId, onWorkspaceChange }
             Attachment ref ID (optional)
             <input value={attachmentId} onChange={(event) => setAttachmentId(event.target.value)} placeholder="Exact existing owner ID" />
           </label>
-          <button disabled={!workspaceId || !rawText.trim() || busy} onClick={() => run(async () => {
+          </details><button className="primary-action" disabled={!workspaceId || !rawText.trim() || busy} onClick={() => run(async () => {
             const refs = attachmentId.trim() ? [{ ref_type: attachmentType, ref_id: attachmentId.trim(), revision: null }] : [];
             const identity = retryIdentity("raw", { workspaceId, content: rawText, refs });
             const created = await createBrainstormRaw(workspaceId!, rawText, identity.key, refs);
             clearRetryIdentity(identity.fingerprint);
+            if (activeWorkspaceRef.current !== created.workspace_id) return;
             setSourceRawId(created.id);
             setRawText("");
             setAttachmentId("");
-          })}>Capture RAW</button>
-          <p>Attachment references are accepted only when the server resolves the exact existing owner ID in this workspace.</p>
-          <p><strong>Speech capture:</strong> unavailable — deferred until a bounded media/privacy path exists.</p>
-        </article>
+          })}>{busy ? "Saving…" : "Save raw note"}</button>
 
-        <article className="operator-card">
-          <h2>Reconcile</h2>
-          <label>
-            Source RAW
-            <select value={sourceRawId} onChange={(event) => setSourceRawId(event.target.value)}>
-              <option value="">Select RAW</option>
-              {visibleRawRecords.map((raw) => <option key={raw.id} value={raw.id}>{raw.content.slice(0, 80)}</option>)}
-            </select>
-          </label>
-          <label>
-            Existing idea revision
-            <select value={editingIdeaId} onChange={(event) => setEditingIdeaId(event.target.value)}>
-              <option value="">Create new reconciled idea</option>
-              {visibleIdeas.filter((idea) => idea.lineage_state !== "SUPERSEDED").map((idea) => <option key={idea.id} value={idea.id}>{idea.current.title} · r{idea.current_revision}</option>)}
-            </select>
-          </label>
-          <label>Title<input value={title} onChange={(event) => setTitle(event.target.value)} /></label>
-          <label>Takeaway<textarea value={takeaway} onChange={(event) => setTakeaway(event.target.value)} /></label>
-          <label>Synthesis<textarea value={synthesis} onChange={(event) => setSynthesis(event.target.value)} /></label>
-          <button disabled={!projectionCurrent || !workspaceId || !sourceRawId || busy} onClick={() => run(async () => {
-            const identity = retryIdentity("discussion", { workspaceId, sourceRawId });
-            await recordBrainstormDiscussion(workspaceId!, sourceRawId, identity.key);
-            clearRetryIdentity(identity.fingerprint);
-          })}>Record discussion</button>
-          <button disabled={!projectionCurrent || !workspaceId || !sourceRawId || !title.trim() || !takeaway.trim() || !synthesis.trim() || busy} onClick={() => run(async () => {
-            const identity = retryIdentity("reconcile", {
-              workspaceId,
-              sourceRawId,
-              title,
-              takeaway,
-              synthesis,
-              ideaId: selectedIdea?.id ?? null,
-              revision: selectedIdea?.current_revision ?? null
-            });
-            await reconcileBrainstorm(workspaceId!, sourceRawId, title, takeaway, synthesis, identity.key, selectedIdea);
-            clearRetryIdentity(identity.fingerprint);
-            setTitle("");
-            setTakeaway("");
-            setSynthesis("");
-            setEditingIdeaId("");
-          })}>{selectedIdea ? "Append reconciled revision" : "Create reconciled idea"}</button>
+          <small>Voice capture is not available yet.</small>
         </article>
-      </section>
 
       <section aria-labelledby="brainstorm-raw-heading">
-        <h2 id="brainstorm-raw-heading">Immutable RAW</h2>
-        {visibleRawRecords.length === 0 ? <p>No RAW captures yet.</p> : visibleRawRecords.map((raw) => (
+        <h3 id="brainstorm-raw-heading">Saved notes</h3><input aria-label="Search raw notes" placeholder="Search raw notes…" value={rawQuery} onChange={event => setRawQuery(event.target.value)} />
+        {visibleRawRecords.length === 0 ? <p>No RAW captures yet.</p> : visibleRawRecords.filter(raw => raw.content.toLocaleLowerCase().includes(rawQuery.toLocaleLowerCase())).map((raw) => (
           <article className="operator-card" data-testid="brainstorm-raw" key={raw.id}>
-            <p>{raw.content}</p>
+            <p className="raw-note-text">{raw.content}</p>
             <p><strong>State:</strong> {raw.lineage_state}</p>
-            <p><strong>Identity:</strong> {raw.id}</p>
+            <details><summary>Provenance</summary><p>{raw.id}</p></details>
             <p><strong>Attachments:</strong> {raw.attachment_refs.length === 0 ? "none" : raw.attachment_refs.map((ref) => `${ref.ref_type}:${ref.ref_id}`).join(", ")}</p>
             {(raw.discussions ?? []).length === 0 ? null : (
               <div>
@@ -286,7 +246,7 @@ export default function DevelopmentBrainstorm({ workspaceId, onWorkspaceChange }
         ))}
       </section>
 
-      <section aria-labelledby="brainstorm-reconciled-heading">
+</section><section className="brainstorm-ideas-column">      <section aria-labelledby="brainstorm-reconciled-heading">
         <h2 id="brainstorm-reconciled-heading">Reconciled ideas</h2>
         {visibleIdeas.length === 0 ? <p>No reconciled ideas yet.</p> : visibleIdeas.map((idea) => (
           <article className="operator-card" data-testid="brainstorm-idea" key={idea.id}>
@@ -329,6 +289,48 @@ export default function DevelopmentBrainstorm({ workspaceId, onWorkspaceChange }
         ))}
       </section>
 
+        <details className="operator-card brainstorm-organize"><summary>Organize a saved note</summary>
+          <p>Preserve the original note and save your reasoning as an idea. AI reconciliation is not available yet.</p>
+          <label>
+            Source RAW
+            <select value={sourceRawId} onChange={(event) => setSourceRawId(event.target.value)}>
+              <option value="">Select RAW</option>
+              {visibleRawRecords.map((raw) => <option key={raw.id} value={raw.id}>{raw.content.slice(0, 80)}</option>)}
+            </select>
+          </label>
+          <label>
+            Existing idea revision
+            <select value={editingIdeaId} onChange={(event) => setEditingIdeaId(event.target.value)}>
+              <option value="">Create new reconciled idea</option>
+              {visibleIdeas.filter((idea) => idea.lineage_state !== "SUPERSEDED").map((idea) => <option key={idea.id} value={idea.id}>{idea.current.title} · r{idea.current_revision}</option>)}
+            </select>
+          </label>
+          <label>Title<input value={title} onChange={(event) => setTitle(event.target.value)} /></label>
+          <label>Takeaway<textarea value={takeaway} onChange={(event) => setTakeaway(event.target.value)} /></label>
+          <label>Synthesis<textarea value={synthesis} onChange={(event) => setSynthesis(event.target.value)} /></label>
+          <button disabled={!projectionCurrent || !workspaceId || !sourceRawId || busy} onClick={() => run(async () => {
+            const identity = retryIdentity("discussion", { workspaceId, sourceRawId });
+            await recordBrainstormDiscussion(workspaceId!, sourceRawId, identity.key);
+            clearRetryIdentity(identity.fingerprint);
+          })}>Record discussion</button>
+          <button disabled={!projectionCurrent || !workspaceId || !sourceRawId || !title.trim() || !takeaway.trim() || !synthesis.trim() || busy} onClick={() => run(async () => {
+            const identity = retryIdentity("reconcile", {
+              workspaceId,
+              sourceRawId,
+              title,
+              takeaway,
+              synthesis,
+              ideaId: selectedIdea?.id ?? null,
+              revision: selectedIdea?.current_revision ?? null
+            });
+            await reconcileBrainstorm(workspaceId!, sourceRawId, title, takeaway, synthesis, identity.key, selectedIdea);
+            clearRetryIdentity(identity.fingerprint);
+            setTitle("");
+            setTakeaway("");
+            setSynthesis("");
+            setEditingIdeaId("");
+          })}>{selectedIdea ? "Append reconciled revision" : "Create reconciled idea"}</button>
+        </details>
       {projectionCurrent && expanded ? (
         <section className="operator-card" data-testid="brainstorm-detail">
           <h2>{expanded.current.title} · detail</h2>
@@ -378,6 +380,7 @@ export default function DevelopmentBrainstorm({ workspaceId, onWorkspaceChange }
           </article>
         ))}
       </section>
-    </main>
+</section><aside className="final-fusion__panel final-fusion__jarvis">{jarvis}</aside></div>
+    </div>
   );
 }

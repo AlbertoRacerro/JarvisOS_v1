@@ -9,6 +9,7 @@ import {
 } from "../api/modelDossier";
 
 type Props = Readonly<{
+  jarvis?: React.ReactNode;
   workspaceId: string | null;
   onWorkspaceChange: (workspaceId: string) => void;
   requestedModelVersionId?: string | null;
@@ -29,7 +30,7 @@ function TechnicalDetails({ children }: Readonly<{ children: React.ReactNode }>)
   return <details><summary>Technical details</summary>{children}</details>;
 }
 
-export default function ModelDossier({ workspaceId, onWorkspaceChange, requestedModelVersionId = null, onModelVersionSelectionChange }: Props) {
+export default function ModelDossier({ jarvis, workspaceId, onWorkspaceChange, requestedModelVersionId = null, onModelVersionSelectionChange }: Props) {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [index, setIndex] = useState<ModelDossierIndexItem[]>([]);
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
@@ -119,7 +120,7 @@ export default function ModelDossier({ workspaceId, onWorkspaceChange, requested
     <section className="final-fusion__panel final-fusion__versions" aria-label="Model versions">
       <header className="final-fusion__panel-head"><h2>Model versions</h2><span>Canonical READ</span></header>
       <div className="final-fusion__toolbar-line"><span>Project workspace</span><select aria-label="Project workspace" value={activeWorkspaceId ?? ""} onChange={(event) => onWorkspaceChange(event.target.value)} disabled={!workspaces.length}><option value="">Select workspace…</option>{workspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}</select></div>
-      <div className="final-fusion__searchbox">Choose a model by its human title, version and current status. Exact identifiers remain available in Technical details.</div>
+      <div className="final-fusion__searchbox">Opening a version does not add records to Jarvis context. Use Selected context in Jarvis to include it explicitly.</div>
       {requestedSelectionUnavailable ? <Empty><strong>Requested model version is unavailable.</strong><span>The exact search identity no longer exists in this workspace.</span></Empty> : null}
       {loading && !versions.length ? <Empty><strong>Loading model dossiers…</strong></Empty> : error && !versions.length ? <Empty><strong>Backend read failed</strong><span>{error}</span></Empty> : versions.length ? <div className="final-fusion__source-list">{versions.map(({ item, version }) => <button type="button" className="final-fusion__disclosure-row" data-model-version-id={version.model_version_id} data-search-selected={selectedVersionId === version.model_version_id ? "true" : undefined} style={plainDisclosureRowStyle} key={version.model_version_id} onClick={() => selectVersion(version.model_version_id)} aria-pressed={selectedVersionId === version.model_version_id}><strong>{item.title}</strong><em>{version.version_label || "Unlabelled version"} · {version.status || "Unknown status"}</em></button>)}</div> : <Empty><strong>No model versions</strong><span>The selected workspace exposes no model dossier versions.</span></Empty>}
       <div className="final-fusion__lineage-slot">{detail ? `Selected · ${detail.title} · ${detail.identity.version_label || "Unlabelled version"}` : "No model version selected"}</div>
@@ -144,6 +145,6 @@ export default function ModelDossier({ workspaceId, onWorkspaceChange, requested
       <div className="final-fusion__context-strip">Browsing is context-neutral. This surface does not add dossier records to Project Context or invoke mutation authority.</div>
     </section>
 
-    <section className="final-fusion__panel final-fusion__jarvis" aria-label="Jarvis"><header className="final-fusion__panel-head"><h2>Jarvis</h2><span>Read context only</span></header><div className="final-fusion__jarvis-body"><div className="final-fusion__context-note">Model browsing does not add records to Jarvis context. Explicit context insertion remains governed separately.</div><div className="final-fusion__bubble">{detail ? `Viewing ${detail.title}, ${detail.identity.version_label || "unlabelled version"}.` : "Select a model version to inspect canonical dossier evidence."}</div><div className="final-fusion__composer" aria-disabled="true"><span>Ask Jarvis about an explicitly inserted model context…</span><button type="button" disabled>Send</button></div></div></section>
+    <section className="final-fusion__panel final-fusion__jarvis" aria-label="Jarvis">{jarvis}</section>
   </div>;
 }
