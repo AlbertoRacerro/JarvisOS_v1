@@ -2,127 +2,245 @@
 
 MAPPING_STATUS: IN_PROGRESS
 
-Source-of-truth audit base: `master` at `240d5e0b27d9837d40f47bddfa24871ae7a2a4bb`. Runtime/code/tests are primary evidence; STATUS/spec prose below is used to classify historical/deferred authority, not to infer implementation.
+Runtime/code/tests are primary evidence; STATUS/spec prose only classifies historical/deferred authority.
 
-## BLUECAD GeometrySpec → deterministic CAD/export — REAL
-- **What/when:** Canonicalize a bounded GeometrySpec, construct typed parts/assemblies with build123d/OCP, export STEP/STL/GLB, and emit manifest + validation report. Reuse for any current trusted BLUECAD geometry build; do not bypass with ad-hoc CAD exporters.
-- **Canonical files:** `backend/app/modules/bluecad/{spec.py,builders.py,assembly.py,service.py,export.py,validate.py,models.py,cli.py}`.
-- **Invoke/reuse:** `build_geometry_spec(spec, out_dir, timeout_s=30)` or `build_geometry_spec_file(...)`; CLI imports the same service. Build runs in a spawned worker and is killed on timeout.
-- **I/O/persistence:** input GeometrySpec dict/file; output `model.step`, `model.stl`, `model.glb`, `manifest.json`, `validation_report.json`. STEP wall-clock header is normalized; manifest hashes artifacts and has a canonical digest. No DB write in the build API itself.
-- **Preconditions:** build123d importable in the execution environment. `configs/bluecad_tools.yaml` currently declares build123d `0.11.1` but leaves it disabled; the direct CAD path imports build123d rather than resolving it through the registry.
-- **Side effects/risk:** filesystem writes and a local spawned CAD-kernel process only. Structured `SPEC_INVALID`, `KERNEL_ERROR`, `EXPORT_ERROR`, `TIMEOUT` evidence; partial artifact sizes/phase are retained on abnormal worker exit.
-- **Tests/evidence:** `backend/tests/bluecad/test_adapter_stage2.py`, `test_005_conformance.py`, `test_build_service_spawn.py`, property/golden suites under `backend/tests/bluecad/`; spec-056 report documents the offline determinism net.
-- **Limitations:** deterministic equivalence is same pinned kernel/tool environment, not a cross-version CAD guarantee. Geometry vocabulary is bounded typed builders, not arbitrary generated CAD code.
-- **Do not reinvent:** reuse canonicalization + `build_geometry_spec` + manifest/report contract for new trusted primitives.
-- **Search anchors:** `build_geometry_spec`, `build_artifacts`, `canonicalize_geometry_spec`, `ARTIFACT_NAMES`, `manifest_digest`.
+## GeometrySpec → CAD/export — REAL
+- **What/when:** bounded typed GeometrySpec → build123d/OCP parts/assemblies → STEP/STL/GLB + manifest/validation. Use for trusted BLUECAD geometry.
+- **Canonical:** `backend/app/modules/bluecad/{spec.py,builders.py,assembly.py,service.py,export.py,validate.py,models.py,cli.py}`.
+- **Invoke:** `build_geometry_spec`, `build_geometry_spec_file`; spawned worker, hard timeout.
+- **I/O/persistence:** filesystem artifacts; canonical manifest hashes/digest; no DB write in build API.
+- **Preconditions:** build123d importable. Checked-in tool registry declares it disabled; direct CAD path imports it.
+- **Risk:** local CAD process/files; structured spec/kernel/export/timeout failures.
+- **Evidence:** `backend/tests/bluecad/` conformance, spawn, property/golden suites.
+- **Limits:** bounded vocabulary; determinism only within pinned tool/kernel environment.
+- **Do not reinvent:** reuse canonicalization/build/manifest/report.
+- **Anchors:** `build_geometry_spec`, `canonicalize_geometry_spec`, `manifest_digest`.
 
-## Scene-bound GLB / part identity — REAL
-- **What/when:** Exports each manifest part as a deterministic GLTF-visible wrapper and records a bijective scene-key → canonical `part_id` map; use for viewer selection and semantic handoff.
-- **Canonical files:** `backend/app/modules/bluecad/export.py`; downstream frontend selection/Properties composition uses the manifest binding.
-- **Invoke/reuse:** automatic inside `build_artifacts`; `_scene_binding_key(part_id)` is SHA-256-derived and bounded rather than embedding arbitrary user IDs in node labels.
-- **I/O/persistence:** `model.glb` plus `manifest.scene_binding={version,artifact,spec_id,objects}`.
-- **Preconditions:** every built part must be selectable; empty/colliding/non-bijective bindings fail export.
-- **Side effects/risk:** artifact generation only; scene hits carry identity but do not themselves mutate engineering records or working configuration.
-- **Tests/evidence:** exporter validation plus merged scene-binding/runtime tests (092 family).
-- **Limitations:** semantic meaning beyond canonical part identity is separately gated; geometry-only viewer hits are not engineering authority.
-- **Do not reinvent:** never create a second frontend object-ID map when the manifest scene binding exists.
-- **Search anchors:** `SCENE_BINDING_VERSION`, `_scene_bound_gltf_shape`, `_validate_scene_binding_manifest`, `bluecad-part-sha256-`.
+## Scene-bound GLB / semantic part identity — REAL
+- **What/when:** deterministic GLTF scene key ↔ canonical `part_id` binding for viewer selection.
+- **Canonical:** `backend/app/modules/bluecad/export.py`; frontend viewer/Properties consumers.
+- **Invoke/I/O:** automatic in export; `manifest.scene_binding`; collisions/non-bijection fail.
+- **Authority/risk:** identity/context only; viewer hit does not mutate engineering state.
+- **Evidence:** exporter + 092 scene-binding tests.
+- **Limits:** semantic meaning beyond part identity separately gated.
+- **Do not reinvent:** no second frontend object-ID map.
+- **Anchors:** `SCENE_BINDING_VERSION`, `_validate_scene_binding_manifest`.
 
-## Tool registry, hash verification, health and execution — REAL framework / default tools DISABLED
-- **What/when:** Operator-selected registry for CAD/mesher/FEM/etc metadata; validates exact versions/licenses/integration modes and fail-closes subprocess/container tools on missing/mismatched SHA-256 before execution.
-- **Canonical files:** `backend/app/modules/bluecad/registry.py`, `configs/bluecad_tools.yaml`.
-- **Invoke/reuse:** `load_registry`, `resolve_tool`, `run_tool`; `python -m app.modules.bluecad.registry check` via registry CLI. Override registry with explicit path or `JARVISOS_BLUECAD_TOOL_REGISTRY`.
-- **I/O/persistence:** YAML registry in; captured returncode/stdout/stderr out. Subprocess env is reduced (`PATH`, UTF-8, `OMP_NUM_THREADS=1`); `shell=False`.
-- **Preconditions:** enabled subprocess/container entries require entrypoint, exact `binary_sha256`, provenance URL and valid license metadata. Boundary C/D tools cannot be in-process.
-- **Side effects/risk:** executes only registry-authored/hash-matched binary plus adapter-authored args. Timeout returns code 124. Health check for subprocess tools must begin with the registered entrypoint.
-- **Tests/evidence:** `backend/tests/bluecad/test_registry.py`; mesh/FEM tests use hash-pinned fake executables.
-- **Limitations:** checked-in registry currently has build123d, gmsh 4.13.1 and CalculiX 2.22 all `enabled: false`; gmsh/CalculiX entrypoint/hash/provenance are null. Real solver use therefore requires an operator-owned configured registry.
-- **Do not reinvent:** external engineering binaries must use this hash/license boundary, not direct arbitrary subprocess calls.
-- **Search anchors:** `resolve_tool`, `run_tool`, `check_registry`, `UNHASHED_SUBPROCESS_TOOL`, `TOOL_HASH_MISMATCH`.
+## Tool registry / health / hash-pinned execution — REAL framework; defaults DISABLED
+- **What/when:** operator registry for CAD/mesh/FEM binaries; exact version/license/integration/hash enforcement.
+- **Canonical:** `backend/app/modules/bluecad/registry.py`, `configs/bluecad_tools.yaml`.
+- **Invoke:** `load_registry`, `resolve_tool`, `run_tool`, registry `check`; override `JARVISOS_BLUECAD_TOOL_REGISTRY`.
+- **I/O:** reduced env, `shell=False`, bounded stdout/stderr/timeout.
+- **Preconditions:** enabled external entries need entrypoint, SHA-256, provenance, license.
+- **Risk:** native execution only after registry/hash checks.
+- **Evidence:** `backend/tests/bluecad/test_registry.py`, hash-pinned fake executables.
+- **Limits:** checked-in build123d/Gmsh/CalculiX entries disabled; Gmsh/CalculiX paths/hashes absent.
+- **Do not reinvent:** no direct arbitrary solver subprocesses.
+- **Anchors:** `UNHASHED_SUBPROCESS_TOOL`, `TOOL_HASH_MISMATCH`, `check_registry`.
 
-## Gmsh mesh adapter — REAL adapter / external runtime opt-in
-- **What/when:** Converts AnalysisSpec geometry STEP + BLUECAD manifest ports into deterministic Gmsh `.geo`, tetrahedral `.inp/.msh`, physical groups and bounded mesh-quality evidence.
-- **Canonical files:** `backend/app/modules/bluecad/mesh_adapter.py`, registry above.
-- **Invoke/reuse:** `mesh_analysis_spec(analysis_spec, out_dir, registry_path=..., timeout_s=60)`; always calls registry `run_tool("gmsh", ...)`.
-- **I/O/persistence:** reads STEP/manifest; writes `mesh.geo`, `mesh.inp`, `mesh.msh`, `gmsh.log`; returns structured result/attempt/artifact maps. One automatic retry at half target size only for `MESH_FAIL`.
-- **Preconditions:** safe alphanumeric/underscore port labels; manifest-resolved ports; enabled hash-pinned Gmsh. Supports element order 1/2; order 2 must yield C3D10 and no detected inverted/negative-Jacobian diagnostics.
-- **Side effects/risk:** local external solver subprocess + files; no promotion authority.
-- **Tests/evidence:** `backend/tests/bluecad/test_mesh_adapter.py`, SIM-WIRE tests, real-tool proof family where configured.
-- **Limitations:** bounded tetrahedral path, heuristic bounding-box physical-surface selection; not a generic meshing platform. Default registry cannot run it.
-- **Do not reinvent:** use this adapter and its physical-group/error contract for static BLUECAD FEM.
-- **Search anchors:** `mesh_analysis_spec`, `_geo_text`, `_post_check`, `MESH_HIGH_ORDER_INVALID`, `MESH_GROUP_EMPTY`.
+## Gmsh mesh adapter — REAL adapter; external runtime opt-in
+- **What/when:** AnalysisSpec STEP + manifest ports → deterministic `.geo`, tetra mesh, physical groups, quality evidence.
+- **Canonical:** `backend/app/modules/bluecad/mesh_adapter.py`.
+- **Invoke:** `mesh_analysis_spec`; always registry `run_tool("gmsh")`; one half-size retry only on `MESH_FAIL`.
+- **I/O:** `mesh.geo/.inp/.msh`, log, structured result.
+- **Preconditions:** safe port labels, resolved ports, enabled hash-pinned Gmsh; order-2 C3D10/Jacobian checks.
+- **Risk:** local solver/files, no promotion authority.
+- **Evidence:** mesh adapter/SIM-WIRE tests.
+- **Limits:** tetrahedral bounded path; heuristic surface selection; default registry cannot run real Gmsh.
+- **Anchors:** `mesh_analysis_spec`, `MESH_HIGH_ORDER_INVALID`, `MESH_GROUP_EMPTY`.
 
-## CalculiX static FEM adapter — REAL adapter / external runtime opt-in
-- **What/when:** Builds a bounded static CalculiX deck from AnalysisSpec + mesh result, maps solid-face pressure, runs ccx, parses FRD/DAT, reactions and criteria.
-- **Canonical files:** `backend/app/modules/bluecad/fem_adapter.py`, `fem_adapter_base.py`, `fem_pressure_integration.py`, `fem_reactions.py`, `pressure_mapping.py`.
-- **Invoke/reuse:** `solve_static_analysis(...)`; registry resolves/runs `calculix`.
-- **I/O/persistence:** writes `analysis.inp`, log and solver outputs; returns `bluecad_result_summary_v0_1`, solver version/returncode, parsed fields, criteria and hashed artifacts.
-- **Preconditions:** `analysis_type == static`; valid mesh groups; enabled hash-pinned CalculiX. Pressure mapping may generate a solid solver mesh.
-- **Side effects/risk:** local solver subprocess/files only; TIMEOUT/divergence/parse/mapping failures are structured and advisory.
-- **Tests/evidence:** `backend/tests/bluecad/test_fem_adapter.py`; 024 analytic C3D10 verification battery is merged and records deterministic reports.
-- **Limitations:** production solve path supports static only. STATUS keeps modal/thermal as planned spec 027 even though registry capability metadata names them; metadata is not runtime support. Default CalculiX entry is disabled.
-- **Do not reinvent:** extend only from this verified static boundary when a real analysis class is authorized.
-- **Search anchors:** `solve_static_analysis`, `_prepare_pressure_mappings`, `_parse_outputs`, `SOLVE_DIVERGED`, `reaction_resultant`.
+## CalculiX static FEM — REAL adapter; external runtime opt-in
+- **What/when:** bounded static deck, pressure mapping, ccx, FRD/DAT/reaction/criteria parsing.
+- **Canonical:** `backend/app/modules/bluecad/{fem_adapter.py,fem_adapter_base.py,fem_pressure_integration.py,fem_reactions.py,pressure_mapping.py}`.
+- **Invoke:** `solve_static_analysis`; registry resolves CalculiX.
+- **I/O:** `analysis.inp`, logs/results → `bluecad_result_summary_v0_1` + hashed artifacts.
+- **Preconditions:** static analysis, valid mesh groups, enabled hash-pinned CalculiX.
+- **Risk:** timeout/divergence/parse/mapping failures advisory and structured.
+- **Evidence:** FEM tests + analytic C3D10 verification battery.
+- **Limits:** static only; modal/thermal DEFERRED despite registry metadata; default solver disabled.
+- **Anchors:** `solve_static_analysis`, `SOLVE_DIVERGED`, `reaction_resultant`.
 
-## Process kernel / exact 047 profile — REAL but HISTORICAL/INCUMBENT, not generic process-design authority
-- **What/when:** Typed acyclic material/scalar flowsheet engine with streams, semantic units and unit-operation contracts; current bundled profile reproduces exact BlueRev 047 geometry/hydraulics identity.
-- **Canonical files:** `backend/app/modules/process_kernel/{flowsheet.py,streams.py,contracts.py,units.py,profile_047.py,...}`, `backend/app/modules/runner/process_kernel_047.py`, `process_kernel_registration.py`, bundled example script.
-- **Invoke/reuse:** `ProcessFlowsheet.validate()/execute(...)`; `execute_047_process_kernel`; bundled runner registration uses exact server-known profile identity.
-- **I/O/persistence:** immutable typed streams/scalars in memory; runner layer persists normal simulation-run/job/artifact evidence. Flowsheet enforces max 64 blocks/256 connections, one driver per input, exact port/unit/semantic-basis compatibility and deterministic topological order.
-- **Preconditions:** acyclic graph; exact external stream and caller-parameter sets; finite scalars; required stream fields/composition present.
-- **Side effects/risk:** kernel itself pure/in-memory; runner execution is bounded by calc runner safety. No automatic engineering promotion.
-- **Tests/evidence:** `backend/tests/test_process_kernel_075_*`, exact 047 identity tests, runner tests.
-- **Limitations/authority:** STATUS explicitly classifies 075 as a **historical acyclic typed process-kernel experiment with exact 047 identity**, zero sunk-cost privilege; no generic solver expansion before future upstream bakeoff. It may later be wrapped/reduced/deleted. It is not proof that arbitrary process networks/recycles are supported.
-- **Do not reinvent:** reuse equations/fixtures/semantic-unit helpers when appropriate, but do not treat the custom kernel as mandatory future architecture.
-- **Search anchors:** `ProcessFlowsheet`, `execute_047_process_kernel`, `PROFILE_ID`, `semantic_registry_sha256`, `flowsheet_driver_duplicate`.
+## Candidate/attempt generate-build-validate loop — REAL
+- **What/when:** bounded tiered AI GeometrySpec generation/repair; deterministic parse/build/validate; attempt/evidence/artifact ledger; valid or parked candidate.
+- **Canonical:** `backend/app/modules/bluecad/{loop.py,ledger.py,prompts.py,models.py,evidence.py}` + AI execution/budget/settings.
+- **Invoke:** `create_bluecad_candidate`; tiers/attempt bounds from `BluecadLoopConfig`.
+- **I/O/persistence:** `bluecad_candidates`, `bluecad_attempts`, registered spec/report/manifest/GLB, validation evidence.
+- **Preconditions:** provider/budget/config allowed; strict GeometrySpec parse/canonicalization.
+- **Risk:** provider calls + CAD process + DB/files. Malformed/provider/config failures never become valid geometry; candidates park fail-closed.
+- **Evidence:** BLUECAD loop/ledger/provider tests.
+- **Limits:** synchronous bounded loop, not arbitrary AI CAD coding.
+- **Do not reinvent:** reuse candidate/attempt ledger.
+- **Anchors:** `create_bluecad_candidate`, `start_attempt`, `finish_attempt`, `park_candidate`.
 
-## Process/PBR 047–075 authority snapshot — MIXED
-- **REAL/current bounded models:** 047 `BLUEREV-PROCESS-0` deterministic calc model (geometry/hydraulics/residence/turnover/pumping); 048 biomass/nutrients/gas/harvest/energy-cost KPIs with explicit preliminary-economic boundary; 049 buoyancy + light/transmittance proxies; 052 one-run 047→one-`tube_run` CAD link; 071 immutable input-contract/binding/DOF preview; 071b Properties owner; 072 deterministic symmetric parallel topology M1 **experiment/reference, not canonical default**; 073 capped branch-manifold CAD primitive; 074 072→multi-part CAD link **experiment, not process-design authority**; 075 process kernel as historical incumbent.
-- **REAL provenance machinery:** 050 read-only dependency DAG; 051 deterministic stale propagation when accepted inputs change; no auto-recompute.
-- **CANCELLED/DEFERRED:** 078 standalone PBR modeling implementation is cancelled/superseded; its planning/scientific evidence is historical reference only. STATUS assigns future integrated PBR evaluator authority to 107 after upstream bakeoff/evaluator work. 093 future serial topology waits for process bakeoff + typed handoff.
-- **Critical warning:** `examples/batch_growth.py` is only a deterministic runner demo, not a qualified PBR biology model. Do not represent 078 prose or the batch-growth demo as current PBR runtime capability.
-- **Search anchors:** STATUS rows `047`–`078`, `bluerev_geometry_hydraulics_v0`, `process_kernel_047`, `bluecad_cad_links`.
+## Evidence-guided structural repair / egress — REAL, tightly bounded
+- **What/when:** valid geometry that fails static criteria can enter bounded evidence-guided repair.
+- **Canonical:** `bluecad/{loop.py,evidence_sight.py,evidence_egress.py,structural_ledger.py,evidence.py}`.
+- **Invoke:** `_run_structural_repair_cycle`, `render_evidence_sight`, `prepare_external_structural_repair`, `start_structural_attempt`.
+- **I/O/persistence:** evidence digest/prompt version recorded; speculative attempts do not replace candidate owner artifacts; commit only after rebuild + validation + simulation criteria pass.
+- **Preconditions:** pass criteria + resolvable binding. Network preparation fail-closes before attempt insert.
+- **Risk:** external prompt strips raw GeometrySpec, project identity, exact dimensions, unpublished parameters, credentials/secrets; lineage bound explicitly.
+- **Evidence:** structural-ledger/evidence-sight/evidence-egress tests.
+- **Limits:** bounded static repair, not optimizer; no automatic engineering promotion.
+- **Do not reinvent:** reuse sanitized evidence path for network repair.
+- **Anchors:** `bind_evidence_lineage`, `commit_structural_candidate_artifacts`.
+
+## Candidate aggregate / artifacts / viewer — REAL read projection
+- **What/when:** candidate-scoped aggregate of attempts, artifacts, evidence and CAD-link provenance for workbench/viewer.
+- **Canonical:** `backend/app/modules/bluecad/read_model.py`, routes/models; `frontend/src/pages/BlueCAD.tsx`.
+- **Invoke/I/O:** aggregate/read endpoints; registered GLB + manifest scene binding.
+- **Risk:** read-only; no repair/promote/recompute/provider/filesystem scan.
+- **Evidence:** 084 read-model + BLUECAD frontend tests.
+- **Limits:** cannot infer current viewer selection/session/generation from candidate provenance.
+- **Do not reinvent:** no frontend N+1 authority reconstruction.
+- **Anchors:** `read_model.py`, `bluecad_cad_links`, `BlueCAD.tsx`.
+
+## Guarded calc/Python runner — REAL, exact-bundled only
+- **What/when:** persist/execute reviewed server-known Python models with immutable script identity, contracts, run/job evidence, logs/artifacts and idempotent request keys.
+- **Canonical:** `backend/app/modules/runner/{guarded_service.py,service.py,local_python.py,_execution_owner.py,_execution_child.py,safety.py,input_contracts.py,linked_parameters.py}`.
+- **Invoke:** guarded `create_runner_job` → `run_runner_job`; bundled registration helpers for reviewed process/topology/kernel profiles.
+- **I/O/persistence:** `simulation_runs`, `runner_jobs`, logs, `result.json`/artifacts/events; schema-v1 unit-bearing scalar result envelope.
+- **Preconditions:** exact server-known script path/hash/contract; linked Parameters currently usable; timeout ≤60 s.
+- **Risk:** child Python process under single-owner cross-process lock; reduced non-inherited env, shell false, byte/time bounds.
+- **Evidence:** runner safety/idempotency/input-contract/profile/process-kernel tests.
+- **Limits:** NOT arbitrary user/model-authored Python. Non-bundled implementations rejected; batch-growth is demo, not qualified PBR.
+- **Do not reinvent:** engineering calculations reuse guarded run lifecycle.
+- **Anchors:** `_require_exact_bundled`, `_is_exact_bundled`, `prepare_execution_owner`, `RUNNER_SCRIPT_POLICY_VIOLATION`.
+
+## Process/PBR 047–075 family — MIXED
+- **REAL bounded:** 047 geometry/hydraulics/residence/turnover/pumping; 048 biomass/nutrients/gas/harvest/energy-cost KPIs with preliminary-economic boundary; 049 buoyancy + light/transmittance proxies; 052 exact 047→single-tube CAD; 071 input-contract/binding/DOF preview; 071b Properties; 072 symmetric parallel topology M1 **experiment/reference**; 073 capped branch-manifold CAD; 074 topology→multi-part CAD **experiment**; 075 typed acyclic process kernel **historical incumbent**.
+- **REAL provenance:** 050 dependency DAG; 051 deterministic stale propagation, no auto-recompute.
+- **DEFERRED/CANCELLED:** standalone 078 PBR implementation cancelled/superseded; its scientific planning is historical reference. Future integrated PBR/general process direction waits upstream bakeoff/evaluator authority. Serial topology also waits that boundary.
+- **Critical warning:** `runner/examples/batch_growth.py` is a deterministic runner demo, not PBR biology authority.
+- **Evidence:** exact bundled runner/golden tests, process-kernel exact-047 identity, topology/CAD-link tests.
+- **Limits:** no general recycle convergence, broad thermo/property package, arbitrary unit-op library or qualified integrated PBR biology.
+- **Do not reinvent:** reuse exact reviewed models now; do not grow 075 by sunk-cost preference.
+- **Anchors:** `bluerev_geometry_hydraulics_v0`, `bluerev_process1`, `bluerev_process2`, `bluerev_topology_m1`, `execute_047_process_kernel`.
+
+## Typed process kernel / exact 047 profile — REAL but HISTORICAL/INCUMBENT
+- **What/when:** acyclic typed material/scalar flowsheet with semantic units and unit-operation contracts; exact 047 compatibility profile.
+- **Canonical:** `backend/app/modules/process_kernel/**`, `runner/process_kernel_047.py`, `process_kernel_registration.py`.
+- **Invoke:** `ProcessFlowsheet.validate()/execute`, `execute_047_process_kernel`.
+- **I/O:** immutable in-memory streams/scalars; runner persists evidence. Bounds 64 blocks/256 connections; deterministic topological order.
+- **Preconditions:** acyclic, exact external streams/parameters, semantic unit/port compatibility.
+- **Risk:** kernel pure; no promotion.
+- **Evidence:** `test_process_kernel_075_*`, exact 047 identity.
+- **Limits:** not general recycle/network solver; zero sunk-cost privilege pending upstream bakeoff.
+- **Anchors:** `ProcessFlowsheet`, `PROFILE_ID`, `semantic_registry_sha256`.
 
 ## Dependency/lineage graph — REAL read model
-- **What/when:** Materializes workspace dependency/provenance graph from existing DB authority for model specs/versions, runs/jobs/artifacts, engineering records, BLUECAD candidates/attempts, evidence and CAD links. Use for lineage/freshness inspection, not as a recompute engine.
-- **Canonical files:** `backend/app/modules/flowsheet/{service.py,models.py,routes.py}`.
-- **Invoke/reuse:** `get_flowsheet_graph(workspace_id)`, `get_flowsheet_node`, connection-scoped builders/resolver.
-- **I/O/persistence:** query-only SQLite transaction; derives canonical `<kind>:<id>` nodes/edges, authorities/source fields, unresolved-reference diagnostics, cycles and topological order. No graph table/store.
-- **Preconditions:** workspace exists; bounded to 1000 nodes/3000 edges/200 diagnostics.
-- **Side effects/risk:** none; `PRAGMA query_only`. Dangling/malformed/unsupported refs become diagnostics rather than invented nodes.
-- **Tests/evidence:** flowsheet service/API tests and 087 frontend lineage workbench checks.
-- **Limitations:** provenance/read model only; no graph-layout engine and no automatic recomputation. 051 owns stale propagation separately.
-- **Do not reinvent:** add provenance at source records and let this projection derive the graph; do not create a second dependency DB.
-- **Search anchors:** `build_flowsheet_graph_from_connection`, `_GraphBuilder`, `_CANONICAL_KINDS`, `bound_input`, `bluecad_cad_links`.
+- **What/when:** projects DB authority into provenance graph for models, runs/jobs/artifacts, records, BLUECAD candidates/attempts/evidence/CAD links.
+- **Canonical:** `backend/app/modules/flowsheet/{service.py,models.py,routes.py}`.
+- **Invoke:** `get_flowsheet_graph`, `get_flowsheet_node`, connection-scoped builder/resolver.
+- **I/O:** query-only derived `<kind>:<id>` graph; unresolved refs/cycles/topological order; no graph store. Bounds 1000/3000/200.
+- **Risk:** none; malformed/dangling refs become diagnostics.
+- **Evidence:** flowsheet API/service + 087 frontend tests.
+- **Limits:** lineage, not process simulation/recompute.
+- **Do not reinvent:** add provenance to source rows; no second dependency DB.
+- **Anchors:** `build_flowsheet_graph_from_connection`, `_GraphBuilder`, `_CANONICAL_KINDS`.
 
-## Engineering Properties / transient working configuration — REAL frontend owner
-- **What/when:** Single transient operator working configuration over authoritative model input contracts: baseline/effective bindings, Parameter selection, dirty state, max-20 Undo, field/all revert, deterministic preview/preflight, run-start snapshot/idempotency and semantic target/source composition.
-- **Canonical files:** `frontend/src/components/engineering/EngineeringProperties.tsx`; composed by `frontend/src/App.tsx`; previous-run loading helper and Jarvis engineering actions reuse this controller.
-- **Invoke/reuse:** `useEngineeringProperties` / `EngineeringPropertiesController`; API calls `listModelImplementations`, `listParameters`, `previewModelBindings`, `createRunnerJob`, `runRunnerJob`, plus guarded BLUECAD aggregate lookup for reviewed scene semantics.
-- **I/O/persistence:** working/baseline/undo/revision are frontend transient state; Run creates normal server runner job/run state. `crypto.randomUUID()` supplies secure request identity.
-- **Preconditions:** selected registered model/input contract and workspace; numeric finite bindings; semantic geometry is accepted only for the exact reviewed 047 tubular-loop option/part gate.
-- **Side effects/risk:** edits are local until explicit Run or record lifecycle action. Scene selection supplies context only. Jarvis actions use compare-and-apply against workspace/model/contract/revision/fingerprint and cannot silently self-certify stale proposals.
-- **Tests/evidence:** engineering-properties harness/check scripts, 071b/058c/097 deterministic frontend tests.
-- **Limitations:** one transient owner, not a persistent design-configuration database. Current object-semantic geometry is deliberately narrow to reviewed 047 `illuminated_tube_proxy`/`tube_run`.
-- **Do not reinvent:** all future engineering editing/preflight/run UI must compose this owner rather than a second working-state store.
-- **Search anchors:** `EngineeringPropertiesController`, `buildPayload`, `reviewedContractForTarget`, `startRun`, `applyWorkingAction`.
+## Freshness/staleness — REAL append-only invalidation evidence
+- **What/when:** accepted Parameter replacement computes deterministic downstream closure and stale marks.
+- **Canonical:** `backend/app/modules/flowsheet/freshness.py`; Parameter lifecycle transactional caller.
+- **Invoke:** `prepare_freshness_invalidation`, `persist_freshness_invalidation`; reads `get_node_freshness`, `get_freshness_invalidation`.
+- **I/O/persistence:** `freshness_invalidations` + `freshness_marks`, canonical path/digest + graph digest; path ≤100, marks ≤1000.
+- **Preconditions:** source Parameter resolves; unresolved supported lineage in closure fails closed.
+- **Risk:** marks only; never auto-mutates/recomputes downstream values.
+- **Evidence:** 051 lifecycle/CAD-link staleness tests.
+- **Limits:** freshness is provenance state, not scientific validity.
+- **Do not reinvent:** reuse graph + marks.
+- **Anchors:** `PreparedFreshnessInvalidation`, `upstream_parameter_superseded`.
 
-## Engineering records/lifecycle — REAL, Parameter-first mutation boundary
-- **What/when:** Engineering Data projects model-spec/assumption/parameter/decision records for search/inspection; lifecycle mutation is server-owned and, in current V0, Parameter-first.
-- **Canonical files:** frontend `components/engineering-data/engineeringDataState.ts`, `pages/EngineeringData.tsx`; backend MemoryStore/record lifecycle services are shared with Area A.
-- **Invoke/reuse:** use canonical Engineering Data projection/search/selection; mutate through server lifecycle endpoints/CAS rather than editing projected rows.
-- **I/O/persistence:** canonical records persist in SQLite; frontend projection is derived. Parameter lifecycle tracks exact CAS/audit/dependency state, linked source revision and unit-normalized value identity.
-- **Preconditions:** workspace/current revision; transitions are explicit operator authority.
-- **Side effects/risk:** accepted record edits can trigger 051 stale propagation. Other record kinds remain read-only in the 098 lifecycle V0.
-- **Tests/evidence:** `engineeringDataStateHarness.ts`, `scripts/check_engineering_data.py`, backend lifecycle/CAS/staleness tests.
-- **Limitations:** do not infer symmetric edit support for every engineering record kind.
-- **Do not reinvent:** MemoryStore/canonical records remain authority; Engineering Data is a projection/workbench, not another store.
-- **Search anchors:** `EngineeringRecordProjection`, `projectEngineeringData`, `recordKey`, spec/STATUS 098.
+## Process → CAD handoff — REAL, bounded transformations
+- **What/when:** succeeded process run → deterministic BLUECAD child. 052 exact 047 M0 single `tube_run`; 074 topology-M1 multi-part experiment.
+- **Canonical:** `backend/app/modules/bluecad/cad_link.py`, `cad_link_topology_execute.py`, topology preview/build modules, CAD-link schema.
+- **Invoke:** `preview_cad_link_047` → digest-bound `execute_cad_link_047`; topology path uses same preview-digest lifecycle.
+- **I/O/persistence:** immutable source snapshot/model identity/reconciliation/digests in `bluecad_cad_links`, child candidate/attempt/artifacts/evidence; `(workspace_id, preview_digest)` idempotent.
+- **Preconditions:** exact recognized succeeded source run; execute rechecks preview transactionally.
+- **Risk:** deterministic candidate/artifact creation; no AI for 047 link.
+- **Evidence:** `test_cad_link.py`, `test_cad_link_topology_execute.py`.
+- **Limits:** 047 is one proxy; M1 is experiment, not general process→CAD synthesis.
+- **Do not reinvent:** reuse preview digest + immutable snapshot/link lifecycle.
+- **Anchors:** `TRANSFORMATION_VERSION`, `preview_digest`, `bluecad_cad_links`.
+
+## Engineering Properties / working configuration / preflight / run creation — REAL frontend owner
+- **What/when:** one transient operator configuration: baseline/effective bindings, Parameter selection, dirty state, max-20 Undo, revert, deterministic preview/preflight, run snapshot/idempotency, semantic target/source composition.
+- **Canonical:** `frontend/src/components/engineering/EngineeringProperties.tsx`; App composition + previous-run/Jarvis engineering helpers.
+- **Invoke:** `useEngineeringProperties` / controller; model/parameter/binding-preview/runner APIs.
+- **I/O:** frontend transient state; explicit Run creates server job/run; `crypto.randomUUID()` request identity.
+- **Preconditions:** registered model/contract/workspace; finite numeric bindings; scene semantics currently narrow to reviewed 047 tubular-loop part.
+- **Risk:** edits local until explicit Run/lifecycle action; Jarvis compare-and-apply guards workspace/model/contract/revision/fingerprint.
+- **Evidence:** Properties harness/check scripts, 071b/058c/097 tests.
+- **Limits:** not persistent design-config DB.
+- **Do not reinvent:** compose this owner.
+- **Anchors:** `EngineeringPropertiesController`, `reviewedContractForTarget`, `startRun`.
+
+## Runs / evidence / previous-run reuse — REAL
+- **What/when:** persisted run history/detail/input/output/log/artifact workbench; explicit successful-run reload into transient Properties.
+- **Canonical:** `frontend/src/pages/RunsWorkbench.tsx`, `components/runs/{state.ts,stateHarness.ts}`, `api/runs.ts`; runner reads.
+- **Invoke:** `listRuns`, `getRun`, `listRunLogs`, `listRunArtifacts`.
+- **I/O:** read persisted run evidence; previous-run load changes only transient Properties.
+- **Preconditions:** exact workspace/run; compatible model contract for reload.
+- **Risk:** dirty config requires confirmation/revision match; async generation+identity guards reject stale responses.
+- **Evidence:** runs harness + `scripts/check_runs_workbench.py`.
+- **Limits:** no live stream; run success is execution evidence, not accepted engineering truth.
+- **Anchors:** `RunsWorkbench`, `loadPreviousSuccessfulRun`, `acceptsResponse`.
+
+## Analytics / comparison — REAL bounded frontend analysis
+- **What/when:** compare persisted succeeded run outputs and exact engineering input configurations.
+- **Canonical:** `frontend/src/components/analytics/{analyticsState.ts,AnalyticsDockContent.tsx,analyticsStateHarness.ts,variantComparisonNavigation.ts}`.
+- **Invoke:** `projectAnalyticsRun`, `compareAnalyticsRuns`, `compareEngineeringConfigurations`; max 6 runs.
+- **I/O:** read-only; schema-v1 output extraction bounded to 1 MiB/128 keys; exact units; no conversion.
+- **Preconditions:** succeeded runs; direct comparison requires same exact model version.
+- **Risk:** malformed/non-finite/missing/oversized data reject rather than silently truncate.
+- **Evidence:** analytics harness/checker.
+- **Limits:** scalar unit-bearing outputs only; no uncertainty/statistics/general plotting/unit conversion.
+- **Do not reinvent:** reuse bounded comparison helpers.
+- **Anchors:** `MAX_SELECTED_RUNS`, `compareAnalyticsRuns`, `compareEngineeringConfigurations`.
+
+## Engineering records/lifecycle — REAL; Parameter-first mutation
+- **What/when:** Engineering Data projection of model-spec/assumption/parameter/decision; server lifecycle/CAS for mutation.
+- **Canonical:** `frontend/src/components/engineering-data/engineeringDataState.ts`, `pages/EngineeringData.tsx`; backend MemoryStore/modeling Parameter lifecycle.
+- **I/O:** canonical SQLite records; frontend derived projection.
+- **Preconditions:** current workspace/revision, explicit operator transition.
+- **Risk:** accepted Parameter replacement may atomically trigger 051 staleness.
+- **Evidence:** Engineering Data harness/check + lifecycle/CAS/staleness tests.
+- **Limits:** other record kinds are not assumed symmetrically editable.
+- **Do not reinvent:** canonical stores remain authority.
+- **Anchors:** `EngineeringRecordProjection`, `parameter_lifecycle.py`.
+
+## External solver / Windows-local seam — PARTIAL operational capability
+- **What/when:** adapters are real; workstation solver availability is operator configuration.
+- **Canonical:** registry/config + mesh/FEM adapters + real-tool proof tests.
+- **Invoke:** install/configure exact binary path/hash/provenance/license; registry health before solve.
+- **Preconditions:** compatible local Gmsh/CalculiX. Runner ownership supports Windows via `msvcrt` and POSIX via `fcntl`; repo does not embed machine paths/hashes.
+- **Risk:** native executable; never weaken hash/license boundary.
+- **Evidence:** fake-executable deterministic tests + optional real-tool proof.
+- **Limits:** green default CI does not prove a specific Windows machine has working solvers.
+- **Do not reinvent:** configure registry; no direct Windows solver subprocess seam.
+- **Anchors:** `JARVISOS_BLUECAD_TOOL_REGISTRY`, `msvcrt.locking`.
+
+## Deterministic/property/golden/cross-process verification — REAL, distributed
+- **What/when:** regression net for geometry/export, spawn/timeout, registry, mesh/FEM, runner ownership/idempotency, process identity, CAD links, staleness and frontend engineering state.
+- **Canonical:** `backend/tests/bluecad/**`, `backend/tests/test_{cad_link,cad_link_topology_execute,process_kernel_075_*,runner*,flowsheet*,freshness*}.py`, frontend engineering/runs/analytics harnesses.
+- **Invoke:** targeted pytest + repository checker scripts; real-tool tests separately configured.
+- **Risk:** test temp processes/files only.
+- **Evidence:** property/golden BLUECAD, analytic C3D10, exact 047 identity, CAD-link replay/stale, cross-process ownership.
+- **Limits:** deterministic equality ≠ scientific validity; real solver proof environment-dependent.
+- **Do not reinvent:** extend nearest fixture/harness.
+- **Anchors:** `backend/tests/bluecad`, `test_process_kernel_075`, `analyticsStateHarness`.
+
+## Custom-process / future upstream bakeoff boundary — REAL limitation; DEFERRED decision
+- **What/when:** custom equations/kernel are useful bounded incumbents, not authority for a proprietary general simulator.
+- **Canonical:** process-kernel/runner runtime + canonical STATUS authority.
+- **Reuse:** exact reviewed bundled models/fixtures only until separately authorized upstream bakeoff/evaluator decision.
+- **Risk:** major architecture error would be treating 075 or 072/074 experiments as canonical general process-design authority.
+- **Evidence:** exact 047 cross-implementation identity proves compatibility only for that profile.
+- **Limits:** no general recycle convergence, broad thermo/property package, arbitrary unit-op library, or qualified integrated PBR biology.
+- **Do not reinvent:** no custom-kernel/PBR expansion before bakeoff authority.
+- **Anchors:** `process_kernel`, `bluerev_topology_m1`, STATUS upstream bakeoff/evaluator rows.
 
 ## Remaining coverage
-- BLUECAD candidate/attempt AI loop, evidence-guided repair (010/038/076/077), candidate aggregate/read model and lifecycle APIs.
-- Calc runner execution/artifact/proposal details and bundled-only safety boundary.
-- 047/048/049/072 runner implementations and exact tests; 051 stale service; 052/074 process→CAD code paths.
-- Runs/evidence/lineage analytics/comparison implementation details (044/084/087/088/089/058b), artifact registration and viewer/workbench lifecycle.
-- Deterministic/property/golden/cross-process test matrix and Windows/real-solver requirements/proof.
-- Current custom-process limitations and explicit future upstream bakeoff boundary (103–109) from runtime/STATUS.
+- File-level audit of 047/048/049/072 bundled scripts/contracts and model-specific golden/property tests.
+- File-level audit of topology-M1 preview/execute and 073 branch-manifold builder for additional reusable primitives/limits.
+- Area-C artifact registration + typed evidence schema sweep for details not represented above.
+- Final backend/frontend/test directory sweep for any major uninspected Area-C subsystem; only then mark COMPLETE.
