@@ -20,14 +20,14 @@ PR #658 is superseded as an execution owner. Its material may be absorbed by A+B
 
 | Owner | Current evidence | Union eligibility |
 |---|---|---|
-| A+B | #660 latest inspected patch is 318 lines of capability mapping and still contains no literal `## EXPLICIT FILE COVERAGE LEDGER` | BLOCKED until exact paths are enumerated |
-| C | #659 latest inspected patch is 332 lines of capability mapping and still contains no literal `## EXPLICIT FILE COVERAGE LEDGER` | BLOCKED until exact paths are enumerated |
+| A+B | #660 latest file was re-read this run through its end; it still terminates after the fake/inert-control sweep and contains no literal `## EXPLICIT FILE COVERAGE LEDGER` | BLOCKED until exact paths are enumerated |
+| C | #659 previously inspected capability map still has no literal `## EXPLICIT FILE COVERAGE LEDGER` | BLOCKED until exact paths are enumerated |
 | D | #657 capability map + this audit exist; D literal per-path ledger conversion is still incomplete | IN PROGRESS |
-| Fresh recursive tree | master tree at baseline SHA fetched from GitHub; root and `.github` inventories revalidated | authoritative comparison set once ledgers are mechanically enumerable |
+| Fresh recursive tree | master tree at baseline SHA revalidated; root, `.github`, `.github/workflows`, `.github/browser-proof`, and `scripts` inventories are available from GitHub tree objects | authoritative comparison set once ledgers are mechanically enumerable |
 
 ## Counts
 
-- Total tracked files: **PENDING strict mechanical enumeration**. The fresh recursive tree has been fetched, but connector rendering is truncated; this audit will not invent a count.
+- Total tracked files: **PENDING strict mechanical enumeration**. The fresh recursive tree is available but the connector's single recursive rendering is truncated; this audit will not invent a count.
 - Covered files: **PENDING union**.
 - A+B READ / GENERATED-ASSET: **PENDING A+B ledger**.
 - C READ / GENERATED-ASSET: **PENDING C ledger**.
@@ -43,8 +43,8 @@ A literal zero is not yet defensible. Until all active ledgers are mechanically 
 
 ### Active-owner blockers
 
-- **A+B (#660):** latest inspected patch still has no literal ledger. Enumerate every owned backend/core/api/schema/module/test/helper/fixture/config path plus frontend source/test/helper/fixture/style/package/lock/build-config/generated/asset paths. Explicitly resolve `backend/app/modules/agents`, `dev_message_route`, `events`, `files`, `local_ai`, `local_ai_eval`, `secrets`, `tools`, `workspaces`, and all tiny registry/protocol/`__init__.py` files. Cross-owner exclusions must name the destination owner.
-- **C (#659):** latest inspected patch now says capability-level `MAPPING_STATUS: COMPLETE`, but still has no literal ledger; that status does not satisfy this audit. Enumerate every owned BLUECAD/process/scientific module, runner, test/helper/fixture, config, schema, report and asset path. Cross-owner exclusions must name the destination owner.
+- **A+B (#660):** latest file still has no literal ledger. Enumerate every owned backend/core/api/schema/module/test/helper/fixture/config path plus frontend source/test/helper/fixture/style/package/lock/build-config/generated/asset paths. Explicitly resolve `backend/app/modules/agents`, `dev_message_route`, `events`, `files`, `local_ai`, `local_ai_eval`, `secrets`, `tools`, `workspaces`, and all tiny registry/protocol/`__init__.py` files. Cross-owner exclusions must name the destination owner.
+- **C (#659):** latest inspected map still has no literal ledger; capability-level completion does not satisfy this audit. Enumerate every owned BLUECAD/process/scientific module, runner, test/helper/fixture, config, schema, report and asset path. Cross-owner exclusions must name the destination owner.
 - **D (#657):** finish literal coverage for `.github/**`, all development/delivery/security/ops `scripts/**`, root launch/metadata files, governance/operations docs, repository-level configs/tests and D-owned generated/assets.
 
 ## Freshness / added-file guard
@@ -53,7 +53,11 @@ For each active ledger, record or infer its master baseline before union. Compar
 
 ## D audit evidence already established
 
-Fresh directory inventories were re-read for repository root, `.github/`, `.github/workflows/`, and `scripts/`. The root inventory explicitly contains `.gitignore`, `AGENTS.md`, `CLAUDE.md`, `README.md`, `Start-JarvisOS-Backend.cmd`, `Start-JarvisOS-Frontend.cmd`, and `Start-JarvisOS.cmd` in addition to repository directories. Prior Area-D capability work source-read implementation/tests for repository delivery/CAS, local worktree actuator/IPC/writer guard, CI scope classifier, architecture/type/codegen enforcement, PR Attention, Claude/manual review, Codex delivery/autopush, cloud delivery bridge, exact-head browser proof/controller/contract, continuation, merge authority, BLUECAD real-tool proof, backup/restore and Windows launchers. Those reads still require literal per-path ledger rows before they count toward strict global completion.
+Fresh GitHub tree objects were re-read for repository root, `.github/`, `.github/workflows/`, `.github/browser-proof/`, and `scripts/`. `.github/workflows` is a closed 17-file tree at this baseline. `.github/browser-proof` is a closed tree containing its registry, three Python fixtures, package file, controller/library, eight declarative plans, request policy, runner, three contract tests and two validators. The root inventory contains `.gitignore`, `AGENTS.md`, `CLAUDE.md`, `README.md`, `Start-JarvisOS-Backend.cmd`, `Start-JarvisOS-Frontend.cmd`, and `Start-JarvisOS.cmd` in addition to repository directories.
+
+This run directly re-read all three root CMD launchers at the exact master SHA. They are thin Windows wrappers: backend delegates to `scripts/start-backend.ps1`; frontend delegates to `scripts/start-frontend.ps1`; combined launcher checks Python/Node/npm, starts separate backend/frontend consoles, and uses a fixed three-second delay rather than a health probe. These exact paths are therefore eligible for D `READ` ledger rows once the ledger is materialized.
+
+Prior Area-D capability work source-read implementation/tests for repository delivery/CAS, local worktree actuator/IPC/writer guard, CI scope classifier, architecture/type/codegen enforcement, PR Attention, Claude/manual review, Codex delivery/autopush, cloud delivery bridge, exact-head browser proof/controller/contract, continuation, merge authority, BLUECAD real-tool proof, backup/restore and Windows launchers. Those reads still require literal per-path ledger rows before they count toward strict global completion.
 
 ## Completion gate
 
