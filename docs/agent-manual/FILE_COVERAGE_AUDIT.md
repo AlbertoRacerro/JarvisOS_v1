@@ -18,33 +18,33 @@ PR #658 is superseded as an execution owner and cannot independently satisfy uni
 
 | Owner | Current evidence | Union eligibility |
 |---|---|---|
-| A+B | Latest #660 patch re-read; still no literal `## EXPLICIT FILE COVERAGE LEDGER` | BLOCKED |
-| C | Latest #659 patch re-read; still no literal `## EXPLICIT FILE COVERAGE LEDGER` | BLOCKED |
-| D | Literal ledger exists; 70 exact paths are now classified `READ`; remaining D tree is still being source-read | IN PROGRESS |
-| Fresh tree | master `240d5e0...`; recursive tree remains authoritative comparison set | READY FOR UNION once all ledgers are enumerable |
+| A+B | #660 now contains literal READ sidecar/increment ledgers, but they explicitly remain `MAPPING_STATUS: IN_PROGRESS` / `UNACCOUNTED_FILES: NOT_YET_ZERO` and are not yet consolidated into the canonical owner ledger | IN PROGRESS |
+| C | #659 capability map remains `MAPPING_STATUS: IN_PROGRESS` under the strict bar; PR body says runner/BLUECAD/tests/configs/schemas/reports/assets and zero-orphan reconciliation remain; no canonical literal ledger is yet mechanically enumerable | BLOCKED |
+| D | Canonical literal ledger contains 70 committed READ rows. Three further scripts have now been re-read from fresh master and have durable exact-path evidence, but are not credited until their rows are committed into the canonical ledger | IN PROGRESS |
+| Fresh tree | master `240d5e0...`; recursive tree remains authoritative comparison set | READY FOR UNION once all owner ledgers are canonical and enumerable |
 
 ## Counts
 
-- Total tracked files: **PENDING strict mechanical enumeration**. The recursive Git tree exists but the connector rendering is truncated; no count is inferred from truncated output.
+- Total tracked files: **PENDING strict mechanical enumeration**. No count is inferred from a truncated recursive-tree rendering.
 - Covered files globally: **PENDING union**.
-- A+B READ / GENERATED-ASSET: **PENDING A+B ledger**.
-- C READ / GENERATED-ASSET: **PENDING C ledger**.
-- D READ: **70 literal rows currently**.
+- A+B READ / GENERATED-ASSET: **PENDING canonical A+B consolidation and zero-orphan reconciliation**.
+- C READ / GENERATED-ASSET: **PENDING C literal ledger**.
+- D READ: **70 committed canonical rows**; 3 additional inspected paths pending canonical-row commit.
 - D GENERATED/ASSET: **0 currently**.
 - Duplicate ownership count: **PENDING union**.
-- Ambiguous ownership count: **non-zero** until A+B/C ledgers exist and D remaining scope is classified.
+- Ambiguous ownership count: **non-zero** until all three canonical ledgers are enumerable and cross-owner rows reconcile exactly.
 
 ## UNACCOUNTED_FILES
 
 `UNACCOUNTED_FILES: UNKNOWN_NONZERO`
 
-A literal zero is not defensible yet. The exact orphan list becomes mechanically valid only when all three active ledgers are enumerable against one fresh tracked tree.
+A literal zero is not defensible yet. The exact orphan list becomes mechanically valid only when all three active ledgers are canonical/enumerable against one fresh tracked tree.
 
 ### Active-owner blockers
 
-- **A+B (#660):** latest patch still has no literal ledger. Must enumerate every owned backend/core/api/schema/module/test/helper/fixture/config path plus frontend source/test/helper/fixture/style/package/lock/build-config/generated/asset path, including `backend/app/modules/agents`, `dev_message_route`, `events`, `files`, `local_ai`, `local_ai_eval`, `secrets`, `tools`, `workspaces`, tiny registry/protocol/`__init__.py` files.
-- **C (#659):** latest patch still has no literal ledger. Must enumerate every BLUECAD/process/scientific module, runner, test/helper/fixture, config, schema, report and asset path.
-- **D (#657):** `.github/browser-proof/**` is now completely literalized at the baseline. Remaining source reads/rows: unclassified remainder of `scripts/**`; D-owned governance/operations docs/config/tests/repository metadata. Cross-owner `OUT_OF_SCOPE` rows will only be credited when the destination ledger contains the exact path.
+- **A+B (#660):** literal sidecar/increment rows now exist, but #660 itself states that they must be folded into `B-frontend-operator-ux.md`; remaining backend/frontend/design-reference scope is not yet zero-orphan.
+- **C (#659):** capability mapping exists, but strict file-by-file completion is explicitly still in progress; runner, BLUECAD, engineering tests/schemas/configs/reports/assets and final reconciliation remain.
+- **D (#657):** `.github/browser-proof/**` is completely literalized. Remaining work includes committing the three newly re-read checker rows, then reading/classifying the rest of `scripts/**` plus D-owned governance/operations docs/config/tests/repository metadata.
 
 ## Freshness / added-file guard
 
@@ -52,11 +52,15 @@ For each owner, compare its ledger baseline to the fresh master tree. Any tracke
 
 ## D evidence established
 
-The D map is strict `MAPPING_STATUS: IN_PROGRESS` and now contains `## EXPLICIT FILE COVERAGE LEDGER` with 70 exact `READ` paths. The latest tranche adds every file under `.github/browser-proof/**`: controller package metadata, fixture registry, all three Python fixtures, generic plan library/executor/request policy, all eight declarative plans, three test files and both validators.
+The canonical D map remains strict `MAPPING_STATUS: IN_PROGRESS` with 70 committed `READ` rows. In this audit pass, the following master-baseline files were re-read in full/actual source content and have durable inspection evidence, but are deliberately not counted in D's canonical total until ledger rows are committed:
 
-A concrete defect was found by actual content inspection: `.github/browser-proof/plans/115-project-search.json` performs `assert-value-equals` against `{capture:"mutationBaseline"}` but contains no step that creates that capture. `run.mjs` fails when a requested capture is absent, so this proof plan cannot complete successfully as written. Issue #656 is documentation-only, therefore the runtime plan was not modified; the defect is recorded in Area D rather than hidden by a capability-level `REAL` label.
+- `scripts/check_ai_threads.py` — freezes spec-090 scope, pre-created-flow authority, idempotent thread ownership, no-history egress, product-surface and lifecycle invariants.
+- `scripts/check_analytics_dock.py` — enforces bounded run/output payloads, exact model-version/unit comparability, no implicit conversion, no fake analytics/statistical authority, and stale-response/cap harnesses.
+- `scripts/check_app_shell.py` — freezes historical shell footprint and validates route/router/stage/accessibility/storage/style contracts.
 
-The previously established D tranche includes all seven root files, both root `.github` policy/template files, both local-worktree control files, all 17 workflow files in the closed workflow tree, and 20 source-inspected delivery/review/CI/continuation/codegen/recovery scripts.
+Previously established D evidence includes all seven root files, root `.github` policy/template and worktree-control files, all 17 workflows, all `.github/browser-proof/**`, and the committed delivery/review/CI/continuation/codegen/recovery script tranche.
+
+A concrete existing defect remains recorded: `.github/browser-proof/plans/115-project-search.json` references capture `mutationBaseline` without creating it; the generic executor fails closed on missing captures. Runtime is intentionally untouched by issue #656.
 
 ## Completion gate
 
