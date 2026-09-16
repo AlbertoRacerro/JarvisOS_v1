@@ -320,7 +320,8 @@ def _context_blocks_for_new_submit(workspace_id: str, payload: AIThreadSubmit) -
         if any(ref.owner in {"modeling", "model-dossier", "literature"} for ref in payload.jarvis_context.added_context_refs):
             # Exact Memory chat must not bypass its owner’s semantic restrictions.
             from app.modules.memory.jarvis_knowledge_actions import (
-                KnowledgeActionError, validate_semantic_knowledge_context,
+                KnowledgeActionError,
+                validate_semantic_knowledge_context,
             )
             try:
                 validate_semantic_knowledge_context(payload.jarvis_context.added_context_refs, payload.prompt, preview.blocks)
