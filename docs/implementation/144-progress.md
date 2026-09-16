@@ -1,5 +1,18 @@
 # Spec 144 persistent implementation checkpoint
 
+## CI repair checkpoint — 2026-09-16
+
+PR #661 remains draft and not ready for maintainer acceptance. Fresh review of
+head `6865c0cee53410f1827ae78ae83ab6d785e9f901` found the full frontend build,
+all sharded backend tests, BLUECAD canary, architecture and governance gates
+green; the aggregate CI failed only Ruff import formatting in
+`backend/app/modules/ai/thread_service.py`. Commit
+`865e3a88ef99f70f03bf8221baf4b1337e8b3363` applies Ruff's multiline import
+layout with no behavioral or authority change. Fresh exact-head CI is pending.
+No review threads or maintainer reviews were present when checked. Remaining
+product acceptance gaps and environment limits below are unchanged.
+
+
 Updated 2026-09-16. **IN PROGRESS — NOT READY FOR MAINTAINER ACCEPTANCE.**
 
 ## Latest checkpoint — 2026-09-16
