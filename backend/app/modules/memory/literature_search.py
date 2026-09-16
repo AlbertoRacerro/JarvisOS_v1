@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from app.core.database import open_sqlite_connection
+from app.core.search_text import register_search
 from app.modules.memory.literature_models import LiteratureEntryRead, LiteratureSourceRead
 
 _LITERATURE_MATCH_LIMIT = 101
@@ -8,15 +9,6 @@ _LITERATURE_MATCH_LIMIT = 101
 
 def _escape_like_literal(value: str) -> str:
     return value.casefold().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-
-
-def _register_casefold(connection) -> None:
-    connection.create_function(
-        "JARVIS_CASEFOLD",
-        1,
-        lambda value: "" if value is None else str(value).casefold(),
-        deterministic=True,
-    )
 
 
 def _source_read(row) -> LiteratureSourceRead:
@@ -63,9 +55,8 @@ def _entry_read(row) -> LiteratureEntryRead:
 
 def search_literature_sources(workspace_id: str, query: str) -> list[LiteratureSourceRead]:
     """Return bounded literal source/entry matches without detail-only owner reads."""
-    pattern = f"%{_escape_like_literal(query)}%"
     with open_sqlite_connection() as connection:
-        _register_casefold(connection)
+        register_search(connection, query)
         workspace = connection.execute("SELECT 1 FROM workspaces WHERE id = ?", (workspace_id,)).fetchone()
         if workspace is None:
             raise ValueError("Workspace not found.")
@@ -76,14 +67,14 @@ def search_literature_sources(workspace_id: str, query: str) -> list[LiteratureS
             FROM literature_sources
             WHERE workspace_id = ?
               AND (
-                JARVIS_CASEFOLD(COALESCE(title, '')) LIKE ? ESCAPE '\\'
-                OR JARVIS_CASEFOLD(COALESCE(citation, '')) LIKE ? ESCAPE '\\'
-                OR JARVIS_CASEFOLD(COALESCE(publisher, '')) LIKE ? ESCAPE '\\'
+                JARVIS_MATCH(title) < 99
+                OR JARVIS_MATCH(citation) < 99
+                OR JARVIS_MATCH(publisher) < 99
               )
-            ORDER BY created_at DESC, id ASC
+            ORDER BY MIN(JARVIS_MATCH(title), JARVIS_MATCH(citation), JARVIS_MATCH(publisher)), created_at DESC, id ASC
             LIMIT ?
             """,
-            (workspace_id, pattern, pattern, pattern, _LITERATURE_MATCH_LIMIT),
+            (workspace_id, _LITERATURE_MATCH_LIMIT),
         ).fetchall()
         entry_rows = connection.execute(
             """
@@ -117,16 +108,16 @@ def search_literature_sources(workspace_id: str, query: str) -> list[LiteratureS
              AND ls.workspace_id = le.workspace_id
             WHERE le.workspace_id = ?
               AND (
-                JARVIS_CASEFOLD(COALESCE(le.statement, '')) LIKE ? ESCAPE '\\'
-                OR JARVIS_CASEFOLD(COALESCE(le.value_text, '')) LIKE ? ESCAPE '\\'
-                OR JARVIS_CASEFOLD(COALESCE(CAST(le.value_number AS TEXT), '')) LIKE ? ESCAPE '\\'
-                OR JARVIS_CASEFOLD(COALESCE(le.unit, '')) LIKE ? ESCAPE '\\'
-                OR JARVIS_CASEFOLD(COALESCE(le.context_text, '')) LIKE ? ESCAPE '\\'
+                JARVIS_MATCH(le.statement) < 99
+                OR JARVIS_MATCH(le.value_text) < 99
+                OR JARVIS_MATCH(CAST(le.value_number AS TEXT)) < 99
+                OR JARVIS_MATCH(le.unit) < 99
+                OR JARVIS_MATCH(le.context_text) < 99
               )
-            ORDER BY le.created_at DESC, le.id ASC
+            ORDER BY MIN(JARVIS_MATCH(le.statement), JARVIS_MATCH(le.value_text), JARVIS_MATCH(CAST(le.value_number AS TEXT)), JARVIS_MATCH(le.unit), JARVIS_MATCH(le.context_text)), le.created_at DESC, le.id ASC
             LIMIT ?
             """,
-            (workspace_id, pattern, pattern, pattern, pattern, pattern, _LITERATURE_MATCH_LIMIT),
+            (workspace_id, _LITERATURE_MATCH_LIMIT),
         ).fetchall()
 
     sources: dict[str, LiteratureSourceRead] = {}

@@ -13,6 +13,18 @@ class AIThreadCreate(BaseModel):
     title: str | None = Field(default=None, max_length=120)
 
 
+class AIConversationRoute(BaseModel):
+    route_class: str
+    label: str
+    model_id: str
+    execution_class: Literal["local_compute", "synthetic"]
+
+
+class AIConversationOptions(BaseModel):
+    routes: list[AIConversationRoute]
+    availability: Literal["configured", "unavailable"]
+
+
 class AIThreadSubmit(BaseModel):
     request_id: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
     prompt: str = Field(min_length=1, max_length=12000)
@@ -59,6 +71,8 @@ class AIThreadInteractionRead(BaseModel):
     terminal_reason: str | None = None
     attempt_count: int
     terminal_attempt_id: str | None = None
+    execution_class: str | None = None
+    model_id: str | None = None
     proposal_ids: list[str] = Field(default_factory=list)
     proposal_count: int = 0
     proposals_truncated: bool = False

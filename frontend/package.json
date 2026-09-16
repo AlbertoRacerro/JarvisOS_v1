@@ -17,7 +17,7 @@
     "test:117": "node tests/117-brainstorm.mjs",
     "test:124": "node tests/124-provider-settings.mjs",
     "test:140": "node tests/140-coding-frontend-integration.mjs",
-    "test:143": "node tests/143-operator-semantic-ux.mjs",
+    "test:143": "node tests/143-operator-semantic-ux.mjs && node tests/144-sidecar-race.mjs",
     "build": "npm run test:058d && npm run test:100 && npm run test:100f && npm run test:100g && npm run test:112 && npm run test:113 && npm run test:114 && npm run test:115 && npm run test:116 && npm run test:117 && npm run test:124 && npm run test:140 && npm run test:143 && node tests/100-eyebrow-contrast.mjs && tsc && vite build",
     "preview": "vite preview --host 127.0.0.1"
   },
@@ -25,14 +25,16 @@
     "@phosphor-icons/react": "2.1.10",
     "react": "18.3.1",
     "react-dom": "18.3.1",
+    "react-markdown": "10.1.0",
+    "remark-gfm": "4.0.1",
     "three": "0.171.0"
   },
   "devDependencies": {
     "@types/react": "18.3.18",
     "@types/react-dom": "18.3.5",
-    "typescript": "5.7.2",
-    "vite": "6.0.5",
+    "@types/three": "0.171.0",
     "@vitejs/plugin-react": "4.3.4",
-    "@types/three": "0.171.0"
+    "typescript": "5.7.2",
+    "vite": "6.0.5"
   }
 }

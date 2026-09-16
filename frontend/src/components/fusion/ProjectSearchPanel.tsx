@@ -76,7 +76,7 @@ export default function ProjectSearchPanel({ workspaceId, navigate }: Props) {
       <div>
         <span className="final-fusion__eyebrow">Project knowledge</span>
         <h2>Search</h2>
-        <p>Read-only literal search across Project Basis, Models, and Literature. Searching does not add Jarvis context.</p>
+        <p>Find requirements, models and sources using ordinary words.</p>
       </div>
     </div>
     <form onSubmit={submit} role="search">
@@ -94,7 +94,7 @@ export default function ProjectSearchPanel({ workspaceId, navigate }: Props) {
     </form>
     {state === "idle" ? <p className="final-fusion__source-empty">Enter at least two characters to search this workspace.</p> : null}
     {state === "loading" ? <p className="final-fusion__source-empty" role="status">Searching project records…</p> : null}
-    {state === "empty" ? <p className="final-fusion__source-empty">No project records match this literal query.</p> : null}
+    {state === "empty" ? <p className="final-fusion__source-empty">No records match. Try fewer words or another term.</p> : null}
     {state === "error" ? <div className="final-fusion__source-empty" role="alert"><strong>Project search unavailable</strong><p>The bounded owner reads did not complete. No partial result set is shown.</p></div> : null}
     {state === "results" ? <div className="final-fusion__source-list">
       {truncated ? <p role="status">Showing the first bounded results. Refine the query to narrow the project search.</p> : null}
@@ -103,7 +103,7 @@ export default function ProjectSearchPanel({ workspaceId, navigate }: Props) {
         {result.summary ? <p>{result.summary}</p> : null}
         {result.provenance_refs.length > 0 ? <small>Provenance: {result.provenance_refs.join(", ")}</small> : null}
         {result.source_refs.length > 0 ? <small>Source: {result.source_refs.join(", ")}</small> : null}
-        <button type="button" onClick={() => navigate(navigationTarget(result))}>Open in {result.owner}</button>
+        <button type="button" onClick={() => navigate(navigationTarget(result))}>Open in {result.owner === "modeling" ? "Project Basis" : result.owner === "model-dossier" ? "Models" : "Literature"}</button>
       </article>)}
     </div> : null}
   </section>;

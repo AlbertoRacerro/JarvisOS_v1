@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { listWorkspaces, type Workspace } from "../api/client";
 import {
@@ -14,7 +14,10 @@ import {
   type RoadmapItem
 } from "../api/development";
 
+import "../styles/development-roadmap.css";
+
 type Props = {
+  jarvis?: ReactNode;
   mode: "timeline" | "calendar";
   workspaceId: string | null;
   onWorkspaceChange(next: string | null): void;
@@ -51,20 +54,20 @@ function dateKeyForInstant(instant: string | Date, timeZone: string): string {
   return `${parts.year}-${parts.month}-${parts.day}`;
 }
 
-function allocationDateKey(allocation: CalendarAllocation): string {
-  return dateKeyForInstant(allocation.start_instant, allocation.timezone);
+function allocationDateKey(allocation: CalendarAllocation, timeZone = allocation.timezone): string {
+  return dateKeyForInstant(allocation.start_instant, timeZone);
 }
 
-function allocationEndDateKey(allocation: CalendarAllocation): string {
+function allocationEndDateKey(allocation: CalendarAllocation, timeZone = allocation.timezone): string {
   const exclusiveEnd = new Date(Math.max(
     new Date(allocation.start_instant).getTime(),
     new Date(allocation.end_instant).getTime() - 1
   ));
-  return dateKeyForInstant(exclusiveEnd, allocation.timezone);
+  return dateKeyForInstant(exclusiveEnd, timeZone);
 }
 
-function allocationOverlapsDateRange(allocation: CalendarAllocation, firstDay: string, lastDay: string): boolean {
-  return allocationDateKey(allocation) <= lastDay && allocationEndDateKey(allocation) >= firstDay;
+function allocationOverlapsDateRange(allocation: CalendarAllocation, firstDay: string, lastDay: string, timeZone = allocation.timezone): boolean {
+  return allocationDateKey(allocation, timeZone) <= lastDay && allocationEndDateKey(allocation, timeZone) >= firstDay;
 }
 
 function allocationLocalInput(instant: string, timeZone: string): string {
@@ -96,7 +99,18 @@ function dayOffset(dateKey: string, origin: string): number {
   return Math.round((new Date(`${dateKey}T00:00:00Z`).getTime() - new Date(`${origin}T00:00:00Z`).getTime()) / DAY_MS);
 }
 
-export default function DevelopmentRoadmap({ mode, workspaceId, onWorkspaceChange }: Props) {
+export default function DevelopmentRoadmap({ mode, workspaceId, onWorkspaceChange, jarvis }: Props) {
+  const activeWorkspace = useRef(workspaceId);
+  activeWorkspace.current = workspaceId;
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const [selectedAllocationId, setSelectedAllocationId] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [notice, setNotice] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
+  const displayTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  const calendarScroller = useRef<HTMLDivElement>(null);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [items, setItems] = useState<RoadmapItem[]>([]);
   const [allocations, setAllocations] = useState<CalendarAllocation[]>([]);
@@ -140,17 +154,22 @@ export default function DevelopmentRoadmap({ mode, workspaceId, onWorkspaceChang
       listRoadmapItems(selectedWorkspaceId),
       listCalendarAllocations(selectedWorkspaceId)
     ]);
+    if (activeWorkspace.current !== selectedWorkspaceId) return;
     setItems(nextItems);
     setAllocations(nextAllocations);
   }
 
   useEffect(() => {
+    setItems([]); setAllocations([]); setSelectedItemId(null); setSelectedAllocationId(null);
+    setEditingItemId(null); setEditingAllocationId(null); setShowCreate(false); setBusy(false); setNotice(null);
+    setCalendarAnchorTouched(false); setEventItemId("");
     if (!workspaceId) {
       setItems([]);
       setAllocations([]);
       return;
     }
     let alive = true;
+    setLoading(true);
     setError(null);
     Promise.all([listRoadmapItems(workspaceId), listCalendarAllocations(workspaceId)])
       .then(([nextItems, nextAllocations]) => {
@@ -158,7 +177,7 @@ export default function DevelopmentRoadmap({ mode, workspaceId, onWorkspaceChang
         setItems(nextItems);
         setAllocations(nextAllocations);
       })
-      .catch((exc: unknown) => alive && setError(exc instanceof Error ? exc.message : "Development data failed to load."));
+      .catch((exc: unknown) => alive && setError(exc instanceof Error ? exc.message : "Development data failed to load.")).finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
   }, [workspaceId]);
 
@@ -169,12 +188,12 @@ export default function DevelopmentRoadmap({ mode, workspaceId, onWorkspaceChang
 
   useEffect(() => {
     if (mode !== "calendar" || calendarAnchorTouched || allocations.length === 0) return;
-    setCalendarAnchor(allocationDateKey(allocations[0]));
+    setCalendarAnchor(allocationDateKey(allocations[0], displayTimezone));
   }, [mode, allocations, calendarAnchorTouched]);
 
   useEffect(() => {
     if (mode !== "timeline" || !requestedRoadmapItemId || items.length === 0) return;
-    document.getElementById(`roadmap-item-${requestedRoadmapItemId}`)?.scrollIntoView({ block: "center" });
+    setSelectedItemId(requestedRoadmapItemId);
   }, [mode, requestedRoadmapItemId, items]);
 
   const allocationsByItem = useMemo(() => {
@@ -197,16 +216,17 @@ export default function DevelopmentRoadmap({ mode, workspaceId, onWorkspaceChang
 
   const projectedAllocations = useMemo(() => {
     const sorted = [...allocations].sort((left, right) => left.start_instant.localeCompare(right.start_instant));
-    if (calendarView === "Agenda") return sorted;
-    if (calendarView === "Day") return sorted.filter((allocation) => allocationOverlapsDateRange(allocation, calendarAnchor, calendarAnchor));
+    const matches = sorted.filter((allocation) => allocation.title.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
+    if (calendarView === "Agenda") return matches;
+    if (calendarView === "Day") return matches.filter((allocation) => allocationOverlapsDateRange(allocation, calendarAnchor, calendarAnchor, displayTimezone));
     if (calendarView === "Month") {
       const [firstDay, lastDay] = monthRange(calendarAnchor);
-      return sorted.filter((allocation) => allocationOverlapsDateRange(allocation, firstDay, lastDay));
+      return matches.filter((allocation) => allocationOverlapsDateRange(allocation, firstDay, lastDay, displayTimezone));
     }
     const firstDay = weekStart(calendarAnchor);
     const lastDay = shiftDate(firstDay, 6);
-    return sorted.filter((allocation) => allocationOverlapsDateRange(allocation, firstDay, lastDay));
-  }, [allocations, calendarView, calendarAnchor]);
+    return matches.filter((allocation) => allocationOverlapsDateRange(allocation, firstDay, lastDay, displayTimezone));
+  }, [allocations, calendarView, calendarAnchor, query, displayTimezone]);
 
   const openedRoadmapItem = mode === "timeline" && requestedRoadmapItemId
     ? items.find((item) => item.id === requestedRoadmapItemId) ?? null
@@ -214,12 +234,15 @@ export default function DevelopmentRoadmap({ mode, workspaceId, onWorkspaceChang
 
   async function run(action: () => Promise<void>) {
     if (!workspaceId || busy) return;
+    const originWorkspace = workspaceId;
     setBusy(true);
-    setError(null);
+    setError(null); setNotice(null);
     try {
       await action();
       await refresh(workspaceId);
+      if (activeWorkspace.current === originWorkspace) setNotice("Saved successfully.");
     } catch (exc) {
+      if (activeWorkspace.current !== originWorkspace) return;
       setError(exc instanceof Error ? exc.message : "Development mutation failed.");
       try {
         await refresh(workspaceId);
@@ -227,7 +250,7 @@ export default function DevelopmentRoadmap({ mode, workspaceId, onWorkspaceChang
         // Keep the original mutation error visible; the next explicit refresh remains available through navigation.
       }
     } finally {
-      setBusy(false);
+      if (activeWorkspace.current === originWorkspace) setBusy(false);
     }
   }
 
@@ -258,63 +281,106 @@ export default function DevelopmentRoadmap({ mode, workspaceId, onWorkspaceChang
     </label>
   );
 
+  const visibleItems = items.filter((item) => (!statusFilter || item.status === statusFilter) && item.title.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
+  const calendarDays = useMemo(() => {
+    if (!calendarAnchor) return [];
+    if (calendarView === "Day") return [calendarAnchor];
+    const [monthFirst, monthLast] = monthRange(calendarAnchor);
+    const first = weekStart(calendarView === "Month" ? monthFirst : calendarAnchor);
+    const count = calendarView === "Month" ? Math.ceil((dayOffset(monthLast, first) + 1) / 7) * 7 : 7;
+    return Array.from({ length: count }, (_, index) => shiftDate(first, index));
+  }, [calendarAnchor, calendarView]);
+  useEffect(() => {
+    if (calendarScroller.current && (calendarView === "Day" || calendarView === "Week")) {
+      const earliest = projectedAllocations[0];
+      const hour = earliest ? Number(zonedParts(earliest.start_instant, displayTimezone).hour) : 8;
+      calendarScroller.current.scrollTop = Math.max(0, hour - 1) * 56;
+    }
+  }, [calendarView, mode, workspaceId, loading]);
+  useEffect(() => {
+    if (selectedItemId || selectedAllocationId) document.querySelector(".roadmap-detail article")?.scrollIntoView({ block: "nearest" });
+  }, [selectedItemId, selectedAllocationId, editingItemId, editingAllocationId]);
+  function moveCalendar(direction: number) {
+    if (calendarView === "Month") {
+      const date = new Date(`${calendarAnchor}T12:00:00Z`); date.setUTCDate(1); date.setUTCMonth(date.getUTCMonth() + direction);
+      setCalendarAnchor(date.toISOString().slice(0, 10));
+    } else setCalendarAnchor(shiftDate(calendarAnchor, direction * (calendarView === "Day" ? 1 : 7)));
+    setCalendarAnchorTouched(true);
+  }
+  const dateLabel = (key: string) => new Date(`${key}T12:00:00Z`).toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "UTC" });
+  function eventButton(allocation: CalendarAllocation) {
+    return <button type="button" className="calendar-event" aria-pressed={selectedAllocationId === allocation.id} onClick={() => { setSelectedAllocationId(allocation.id); setEditingAllocationId(null); }} title={`${allocation.title} · ${formatAllocationInstant(allocation.start_instant, allocation.timezone)} (${allocation.timezone})`}>
+      <strong>{allocation.title}</strong><span>{new Date(allocation.start_instant).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", timeZone: displayTimezone })} – {new Date(allocation.end_instant).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", timeZone: displayTimezone })}</span>
+    </button>;
+  }
   return (
-    <section className="operator-page" data-testid={`development-roadmap-${mode}`}>
-      <header className="operator-page__header">
-        <div>
-          <p className="eyebrow">Development · Roadmap</p>
-          <h1>{mode === "timeline" ? "Timeline" : "Calendar"}</h1>
-          <p>{mode === "timeline" ? "Project windows and execution status remain Roadmap-owned state." : "Scheduled work blocks remain Calendar-owned state and never rewrite Roadmap windows."}</p>
-        </div>
+    <section className="operator-page roadmap-workspace" data-testid={`development-roadmap-${mode}`}>
+      <div className="roadmap-navigation">
+        <nav aria-label="Roadmap views"><a aria-current={mode === "timeline" ? "page" : undefined} href="/development/roadmap/timeline">Timeline</a><a aria-current={mode === "calendar" ? "page" : undefined} href="/development/roadmap/calendar">Calendar</a></nav>
         {workspaceSelector}
-      </header>
-
+      </div>
       {error ? <div role="alert" className="inline-notice inline-notice--error">{error}</div> : null}
-      {!workspaceId ? <p>Select a workspace to load server-owned Development state.</p> : null}
-
-      {workspaceId && mode === "timeline" ? <>
-        {requestedRoadmapItemId ? <p aria-live="polite">Opened roadmap item: {openedRoadmapItem?.title ?? "not found in this workspace"}</p> : null}
-        <form onSubmit={(event) => {
+      {notice ? <p role="status">{notice}</p> : null}
+      {loading ? <p role="status">Loading your planning workspace…</p> : null}
+      {!workspaceId ? <p>Select a workspace to start planning.</p> : <div className="roadmap-workbench">
+        <div className="roadmap-primary">
+          <div className="roadmap-toolbar">
+            <strong>{mode === "timeline" ? "Project windows" : "Scheduled time"}</strong>
+            <label className="roadmap-search">Search {mode === "timeline" ? "work items" : "events"}<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={mode === "timeline" ? "Find work…" : "Find an event…"} /></label>
+            <button type="button" onClick={() => setShowCreate(!showCreate)} aria-expanded={showCreate}>{showCreate ? "Close new entry" : mode === "timeline" ? "+ Add work item" : "+ Add event"}</button>
+          </div>
+          {showCreate ? <div className="roadmap-create">{mode === "timeline" ? <>        <form onSubmit={(event) => {
           event.preventDefault();
           const title = newTitle.trim();
           if (!title) return;
-          void run(async () => { await createRoadmapItem(workspaceId, title); setNewTitle(""); });
+          void run(async () => { const created = await createRoadmapItem(workspaceId, title); if (activeWorkspace.current === workspaceId) { setNewTitle(""); setSelectedItemId(created.id); beginRoadmapEdit(created); setShowCreate(false); } });
         }}>
           <label>New work item <input value={newTitle} onChange={(event) => setNewTitle(event.target.value)} /></label>
           <button type="submit" disabled={busy || !newTitle.trim()}>+ Add work item</button>
         </form>
-
-        <section aria-label="Roadmap project-window timeline" data-testid="roadmap-timeline-projection">
-          <h2>Project windows</h2>
-          {timelineRange ? <>
-            <p>{timelineRange.first} → {timelineRange.last}</p>
-            {items.filter((item) => item.window_start_date || item.window_end_date).map((item) => {
-              const start = item.window_start_date ?? item.window_end_date ?? timelineRange.first;
-              const end = item.window_end_date ?? item.window_start_date ?? start;
-              const left = Math.max(0, dayOffset(start, timelineRange.first));
-              const width = Math.max(1, dayOffset(end, start) + 1);
-              return <div key={item.id} data-testid="roadmap-timeline-window">
-                <span>{item.title}</span>
-                <div
-                  role="img"
-                  aria-label={`${item.title}: ${start} to ${end}`}
-                  style={{ marginLeft: `${(left / timelineRange.days) * 100}%`, width: `${Math.min(100 - (left / timelineRange.days) * 100, (width / timelineRange.days) * 100)}%` }}
-                >{start} → {end}</div>
-              </div>;
-            })}
-          </> : <p>No project windows set.</p>}
-        </section>
-
-        <details data-testid="roadmap-execution-status">
-          <summary>Execution status</summary>
-          {ROADMAP_STATUSES.map((status) => {
-            const matching = items.filter((item) => item.status === status);
-            return <div key={status}><strong>{status} · {matching.length}</strong>{matching.length ? <ul>{matching.map((item) => <li key={item.id}><a href={`#roadmap-item-${item.id}`}>{item.title}</a></li>)}</ul> : null}</div>;
-          })}
-        </details>
-
-        <div className="operator-card-grid">
-          {items.map((item) => <article key={item.id} id={`roadmap-item-${item.id}`} className="operator-card" data-testid="roadmap-item" data-opened={requestedRoadmapItemId === item.id ? "true" : undefined}>
+</> : <>        <form onSubmit={(event) => {
+          event.preventDefault();
+          if (!eventTitle.trim() || !eventStart || !eventEnd || !eventTimezone.trim()) return;
+          void run(async () => {
+            const created = await createCalendarAllocation(workspaceId, eventItemId || null, eventTitle.trim(), eventStart, eventEnd, eventTimezone.trim());
+            if (activeWorkspace.current !== workspaceId) return;
+            setSelectedAllocationId(created.id); setShowCreate(false);
+            setCalendarAnchor(allocationDateKey(created, displayTimezone));
+            setCalendarAnchorTouched(true);
+            setEventTitle("");
+            setEventStart("");
+            setEventEnd("");
+          });
+        }}>
+          <label>Title <input value={eventTitle} onChange={(event) => setEventTitle(event.target.value)} /></label>
+          <label>Roadmap item <select value={eventItemId} onChange={(event) => setEventItemId(event.target.value)}><option value="">None</option>{items.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></label>
+          <label>Start <input type="datetime-local" value={eventStart} onChange={(event) => setEventStart(event.target.value)} /></label>
+          <label>End <input type="datetime-local" value={eventEnd} onChange={(event) => setEventEnd(event.target.value)} /></label>
+          <label>Time zone <input value={eventTimezone} onChange={(event) => setEventTimezone(event.target.value)} /></label>
+          <button type="submit" disabled={busy || !eventTitle.trim() || !eventStart || !eventEnd || !eventTimezone.trim()}>+ Add event</button>
+        </form></>}</div> : null}
+          {mode === "timeline" ? <>
+            <div className="roadmap-subtoolbar"><label>Execution status <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="">All work items</option>{ROADMAP_STATUSES.map((status) => <option key={status}>{status}</option>)}</select></label><span>Project windows show intended dates. Schedule working time in Calendar.</span></div>
+            {requestedRoadmapItemId ? <p>Opened roadmap item: {openedRoadmapItem?.title ?? "not found in this workspace"}</p> : null}
+            <section className="roadmap-timeline-scroll" aria-label="Roadmap project-window timeline" data-testid="roadmap-timeline-projection">
+              <div className="roadmap-timeline">
+                <div className="roadmap-axis"><span>Work item</span><div>{timelineRange ? Array.from({ length: 5 }, (_, index) => <span key={index}>{dateLabel(shiftDate(timelineRange.first, Math.round(index * (timelineRange.days - 1) / 4)))}</span>) : <span>Choose a work item to set its project window</span>}</div></div>
+                {visibleItems.map((item) => {
+                  const start = item.window_start_date ?? item.window_end_date;
+                  const end = item.window_end_date ?? item.window_start_date;
+                  const left = timelineRange && start ? dayOffset(start, timelineRange.first) / timelineRange.days * 100 : 0;
+                  const width = timelineRange && start && end ? (dayOffset(end, start) + 1) / timelineRange.days * 100 : 0;
+                  return <div className="roadmap-lane" key={item.id} data-status={item.status}>
+                    <button type="button" className="roadmap-lane-label" aria-pressed={selectedItemId === item.id} onClick={() => {setSelectedItemId(item.id); setEditingItemId(null);}}><strong>{item.title}</strong><small>{item.status} · {allocationsByItem.get(item.id) ?? 0} scheduled blocks</small></button>
+                    <div className="roadmap-track">{start && end ? <button className="roadmap-window" type="button" data-testid="roadmap-timeline-window" style={{ left: `${left}%`, width: `${width}%` }} title={`${item.title}: ${start} to ${end}`} onClick={() => {setSelectedItemId(item.id); setEditingItemId(null);}}><span>{item.title}</span><small>{dateLabel(start)} → {dateLabel(end)}</small></button> : <button type="button" className="roadmap-unscheduled" onClick={() => {setSelectedItemId(item.id); beginRoadmapEdit(item);}}>Set project window</button>}</div>
+                  </div>;
+                })}
+                {!visibleItems.length ? <p className="roadmap-empty">{items.length ? "No work items match your search and status." : "What would you like to make progress on? Add your first work item."}</p> : null}
+              </div>
+            </section>
+            <details className="roadmap-execution" data-testid="roadmap-execution-status"><summary>Execution status · {items.length} work items</summary><div className="roadmap-status-columns">{ROADMAP_STATUSES.map((status) => <div key={status}><strong>{status} · {items.filter((item) => item.status === status).length}</strong>{items.filter((item) => item.status === status).map((item) => <button key={item.id} type="button" onClick={() => {setSelectedItemId(item.id); setEditingItemId(null);}}>{item.title}</button>)}</div>)}</div></details>
+        <div className="roadmap-detail" aria-label="Selected work item">
+          {items.filter((item) => item.id === selectedItemId).map((item) => <article key={item.id} id={`roadmap-item-${item.id}`} className="operator-card" data-testid="roadmap-item" data-opened={requestedRoadmapItemId === item.id ? "true" : undefined}>
             {editingItemId === item.id ? <form onSubmit={(event) => {
               event.preventDefault();
               void run(async () => {
@@ -343,44 +409,44 @@ export default function DevelopmentRoadmap({ mode, workspaceId, onWorkspaceChang
               <div>
                 <button type="button" disabled={busy} onClick={() => beginRoadmapEdit(item)}>Edit work item</button>
                 {item.status !== "Done" && item.status !== "Cancelled" ? <button type="button" disabled={busy} onClick={() => void run(async () => { await updateRoadmapItem(item, { status: "Done" }); })}>Mark Done</button> : null}
-                <button type="button" disabled={busy} onClick={() => void run(async () => { await deleteRoadmapItem(item); })}>Delete work item</button>
+                <button type="button" disabled={busy} onClick={() => void run(async () => { if (window.confirm(`Delete “${item.title}”? Linked calendar events and dependencies must be removed first.`)) { await deleteRoadmapItem(item); if (activeWorkspace.current === workspaceId) setSelectedItemId(null); } })}>Delete work item</button>
                 <a href={`/development/roadmap/calendar?roadmap_item_id=${encodeURIComponent(item.id)}`}>Schedule in Calendar</a>
               </div>
             </>}
           </article>)}
-          {items.length === 0 ? <p>No Roadmap items yet.</p> : null}
-        </div>
-      </> : null}
 
-      {workspaceId && mode === "calendar" ? <>
-        <div role="region" aria-label="Calendar projection">
-          {(["Day", "Week", "Month", "Agenda"] as CalendarView[]).map((view) => (
-            <button key={view} type="button" aria-pressed={calendarView === view} onClick={() => setCalendarView(view)}>{view}</button>
-          ))}
-          <label>View date <input type="date" value={calendarAnchor} onChange={(event) => { setCalendarAnchor(event.target.value); setCalendarAnchorTouched(true); }} /></label>
-          <p>Calendar projection: <strong>{calendarView}</strong>{calendarView === "Agenda" ? " · all allocations" : ` · ${calendarAnchor}`}</p>
         </div>
-        <form onSubmit={(event) => {
-          event.preventDefault();
-          if (!eventTitle.trim() || !eventStart || !eventEnd || !eventTimezone.trim()) return;
-          void run(async () => {
-            await createCalendarAllocation(workspaceId, eventItemId || null, eventTitle.trim(), eventStart, eventEnd, eventTimezone.trim());
-            setCalendarAnchor(eventStart.slice(0, 10));
-            setCalendarAnchorTouched(true);
-            setEventTitle("");
-            setEventStart("");
-            setEventEnd("");
-          });
-        }}>
-          <label>Title <input value={eventTitle} onChange={(event) => setEventTitle(event.target.value)} /></label>
-          <label>Roadmap item <select value={eventItemId} onChange={(event) => setEventItemId(event.target.value)}><option value="">None</option>{items.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></label>
-          <label>Start <input type="datetime-local" value={eventStart} onChange={(event) => setEventStart(event.target.value)} /></label>
-          <label>End <input type="datetime-local" value={eventEnd} onChange={(event) => setEventEnd(event.target.value)} /></label>
-          <label>Time zone <input value={eventTimezone} onChange={(event) => setEventTimezone(event.target.value)} /></label>
-          <button type="submit" disabled={busy}>+ Add event</button>
-        </form>
-        <div className="operator-card-grid" data-calendar-view={calendarView.toLowerCase()}>
-          {projectedAllocations.map((allocation) => <article key={allocation.id} className="operator-card" data-testid="calendar-allocation">
+          </> : <>
+            <div className="roadmap-subtoolbar" role="region" aria-label="Calendar projection"><div className="calendar-modes">{(["Day", "Week", "Month", "Agenda"] as CalendarView[]).map((view) => <button key={view} type="button" aria-pressed={calendarView === view} onClick={() => setCalendarView(view)}>{view}</button>)}</div><div className="calendar-date-nav"><button type="button" aria-label="Previous period" onClick={() => moveCalendar(-1)}>‹</button><label>View date <input type="date" required value={calendarAnchor} onChange={(event) => { if (event.target.value) setCalendarAnchor(event.target.value); setCalendarAnchorTouched(true); }} /></label><button type="button" aria-label="Next period" onClick={() => moveCalendar(1)}>›</button><button type="button" onClick={() => {setCalendarAnchor(dateKeyForInstant(new Date(), displayTimezone)); setCalendarAnchorTouched(true);}}>Today</button></div></div>
+            <p className="calendar-zone">All grid times: {displayTimezone}. Each event keeps its original time zone.</p>
+            <div className={`calendar-projection calendar-projection--${calendarView.toLowerCase()}`} data-calendar-view={calendarView.toLowerCase()} ref={calendarScroller}>
+              {calendarView === "Agenda" ? projectedAllocations.map((allocation) => <div className="calendar-agenda-row" key={allocation.id}><time>{dateLabel(allocationDateKey(allocation, displayTimezone))}</time>{eventButton(allocation)}</div>) : calendarView === "Month" ? <div className="calendar-month">{calendarDays.map((day) => <div className="calendar-month-day" key={day} data-outside-month={day.slice(0,7) !== calendarAnchor.slice(0,7)}><button className="calendar-day-heading" type="button" onClick={() => {setCalendarAnchor(day); setCalendarView("Day"); setCalendarAnchorTouched(true);}}>{new Date(`${day}T12:00:00Z`).toLocaleDateString(undefined, {weekday: "short", day: "numeric", timeZone: "UTC"})}</button>{projectedAllocations.filter((allocation) => allocationOverlapsDateRange(allocation, day, day, displayTimezone)).map((allocation) => <div key={allocation.id}>{eventButton(allocation)}</div>)}</div>)}</div> : <div className="calendar-time-grid" style={{ gridTemplateColumns: `48px repeat(${calendarDays.length}, minmax(105px, 1fr))` }}>
+                <div className="calendar-hour-column"><div className="calendar-day-heading">Time</div>{Array.from({length: 24}, (_, hour) => <time key={hour}>{`${String(hour).padStart(2,"0")}:00`}</time>)}</div>
+                {calendarDays.map((day) => {
+                  const events = projectedAllocations.filter((allocation) => allocationOverlapsDateRange(allocation, day, day, displayTimezone));
+                  const segments = events.map((allocation) => {
+                    const start = zonedParts(allocation.start_instant, displayTimezone), end = zonedParts(allocation.end_instant, displayTimezone);
+                    const from = allocationDateKey(allocation, displayTimezone) < day ? 0 : Number(start.hour)*60+Number(start.minute);
+                    const until = dateKeyForInstant(allocation.end_instant, displayTimezone) > day ? 1440 : Number(end.hour)*60+Number(end.minute);
+                    const duration = (new Date(allocation.end_instant).getTime() - new Date(allocation.start_instant).getTime()) / 60000;
+                    return {allocation, from, until: Math.min(1440, Math.max(from + 15, until <= from ? from + duration : until)), lane: 0, lanes: 1};
+                  }).sort((a,b) => a.from-b.from || a.until-b.until);
+                  let group: typeof segments = [], laneEnds: number[] = [], groupEnd = -1;
+                  const finishGroup = () => { for (const entry of group) entry.lanes = laneEnds.length; group = []; laneEnds = []; };
+                  for (const segment of segments) {
+                    if (segment.from >= groupEnd) finishGroup();
+                    let lane = laneEnds.findIndex((end) => end <= segment.from); if (lane < 0) lane = laneEnds.length;
+                    laneEnds[lane] = segment.until; segment.lane = lane; group.push(segment); groupEnd = Math.max(groupEnd, segment.until);
+                  }
+                  finishGroup();
+                  return <div key={day} className="calendar-day-column"><div className="calendar-day-heading">{new Date(`${day}T12:00:00Z`).toLocaleDateString(undefined, {weekday:"short", day:"numeric", month:"short", timeZone:"UTC"})}</div><div className="calendar-day-hours">{segments.map(({allocation,from,until,lane,lanes}) => <div className="calendar-event-position" key={allocation.id} style={{top:`${from/60*56}px`,height:`${(until-from)/60*56}px`,left:`${lane/lanes*100}%`,width:`${100/lanes}%`}}>{eventButton(allocation)}</div>)}</div></div>;
+                })}
+              </div>}
+              {!projectedAllocations.length ? <p className="roadmap-empty">No scheduled time in this {calendarView.toLowerCase()}. Add an event or choose another date.</p> : null}
+            </div>
+
+        <div className="roadmap-detail" aria-label="Selected calendar event">
+          {allocations.filter((allocation) => allocation.id === selectedAllocationId).map((allocation) => <article key={allocation.id} className="operator-card" data-testid="calendar-allocation">
             {editingAllocationId === allocation.id ? <form onSubmit={(event) => {
               event.preventDefault();
               void run(async () => {
@@ -410,14 +476,17 @@ export default function DevelopmentRoadmap({ mode, workspaceId, onWorkspaceChang
               <p>Roadmap item: {items.find((item) => item.id === allocation.roadmap_item_id)?.title ?? "None"}</p>
               <div>
                 <button type="button" disabled={busy} onClick={() => beginAllocationEdit(allocation)}>Edit event</button>
-                <button type="button" disabled={busy} onClick={() => void run(async () => { await deleteCalendarAllocation(allocation); })}>Delete event</button>
+                <button type="button" disabled={busy} onClick={() => void run(async () => { if (window.confirm(`Delete “${allocation.title}” from the calendar?`)) { await deleteCalendarAllocation(allocation); if (activeWorkspace.current === workspaceId) setSelectedAllocationId(null); } })}>Delete event</button>
                 {allocation.roadmap_item_id ? <a href={`/development/roadmap/timeline?roadmap_item_id=${encodeURIComponent(allocation.roadmap_item_id)}`}>Open roadmap item</a> : null}
               </div>
             </>}
           </article>)}
-          {projectedAllocations.length === 0 ? <p>No Calendar allocations in this {calendarView.toLowerCase()} projection.</p> : null}
+
         </div>
-      </> : null}
+          </>}
+        </div>
+        {jarvis ? <aside className="roadmap-jarvis">{jarvis}</aside> : null}
+      </div>}
     </section>
   );
 }

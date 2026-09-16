@@ -33,7 +33,7 @@ for (const key of [
   assert(processStage.includes(key), `Process landing must inspect ${key}`);
 }
 assert(processStage.includes("Incomplete Project Knowledge recomputation handoff ignored"), "partial Process handoff must fail closed");
-assert(processStage.includes("Process recomputation remains unavailable until its server owner exists"), "handoff display must not fabricate Process execution authority");
+assert(processStage.includes("This editor cannot launch recomputation from the handoff."), "handoff display must not fabricate Process execution authority");
 assert(router.includes("destination.search") && router.includes("destination.hash"), "SPA navigation must preserve exact handoff query context");
 
 // Models may inspect the same server-owned lifecycle but must not acquire mutation authority.

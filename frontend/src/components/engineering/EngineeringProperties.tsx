@@ -1150,6 +1150,7 @@ export function EngineeringPropertiesPanel({
 
   return (
     <div className="engineering-properties">
+      {stageContext ? <section className="shell-properties__inspect" aria-label="Stage inspector">{stageContext}</section> : null}
       {controller.implementations.length === 0 ? (
         <InlineNotice tone="neutral">No eligible model input contract is registered in this workspace.</InlineNotice>
       ) : (
@@ -1240,7 +1241,6 @@ export function EngineeringPropertiesPanel({
         </>
       )}
 
-      {stageContext ? <details className="shell-properties__inspect"><summary>Current stage context</summary>{stageContext}</details> : null}
       {controller.semanticSource ? (
         <details className="shell-properties__inspect">
           <summary>Semantic source</summary>

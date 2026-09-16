@@ -9,9 +9,9 @@ function check(condition, message) {
 }
 
 for (const token of [
-  "RAW capture",
-  "Capture RAW",
-  "Immutable RAW",
+  "Raw thoughts",
+  "Save raw note",
+  "Saved notes",
   "Reconciled ideas",
   "Record discussion",
   "Append reconciled revision",
@@ -24,8 +24,8 @@ for (const token of [
   "Supersede with successor",
   "Add to Roadmap proposal",
   "Promotion proposals",
-  "Speech capture:",
-  "unavailable"
+  "Voice capture is not available yet.",
+  "not available"
 ]) {
   check(page.includes(token), `Brainstorm surface must expose ${token}`);
 }
@@ -52,6 +52,6 @@ check(api.includes("idempotencyKey: string"), "Brainstorm mutation APIs must acc
 check(!api.includes('mutationId("raw")'), "Brainstorm API helpers must not mint a fresh key per retry attempt");
 check(api.includes('proposal_only: true'), "Promotion API payload must remain explicitly proposal-only");
 check(api.includes("source_revision: idea.current_revision"), "Promotion must bind to an exact source revision");
-check(app.includes('<DevelopmentBrainstorm workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} />'), "Brainstorm route must activate the server-owned surface");
+check(app.includes('<DevelopmentBrainstorm jarvis={jarvisSidecar} workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId}'), "Brainstorm route must activate the server-owned surface");
 
 console.log("117 brainstorm frontend contract: OK");

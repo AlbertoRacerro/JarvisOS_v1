@@ -20,6 +20,7 @@ import "./styles/ai-threads.css";
 import "./styles/settings.css";
 import "./styles/responsive.css";
 import "./styles/100g-ui-repair.css";
+import "./styles/operator-recovery.css";
 
 applyStoredVisualPreferences();
 

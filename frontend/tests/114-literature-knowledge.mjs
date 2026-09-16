@@ -18,8 +18,12 @@ assert.match(page, /Backing unavailable\./);
 assert.match(page, /Safe preview unavailable\./);
 
 assert.match(page, /<details className="final-fusion__disclosure"/);
-assert.match(page, /sources\.map\(\(source\) => <SourceDisclosure/);
-assert.doesNotMatch(page, /expandedSource|activeSource|openSource/);
+assert.match(page, /filtered\.map\(\(source\) => <SourceDisclosure/);
+assert.match(page, /openIds/);
+assert.match(page, /createLiteratureSource/);
+assert.match(page, /createLiteratureEntry/);
+assert.match(page, /onKnowledgeSelectionChange/);
+assert.match(api, /request_key/);
 
 assert.match(page, /Browsing does not add Jarvis context\./);
 assert.doesNotMatch(page, /\b(?:postJson|putJson|deleteJson)\b/);

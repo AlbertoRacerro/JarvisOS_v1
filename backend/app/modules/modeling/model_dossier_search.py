@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from app.core.database import open_sqlite_connection
+from app.core.search_text import register_search
 from app.modules.modeling.dossier_models import ModelDossierIndexItem, ModelDossierVersionIdentity
 
 _MODEL_SEARCH_MATCH_LIMIT = 101
@@ -10,20 +11,10 @@ def _escape_like_literal(value: str) -> str:
     return value.casefold().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
-def _register_casefold(connection) -> None:
-    connection.create_function(
-        "JARVIS_CASEFOLD",
-        1,
-        lambda value: "" if value is None else str(value).casefold(),
-        deterministic=True,
-    )
-
-
 def search_model_dossier_index(workspace_id: str, query: str) -> list[ModelDossierIndexItem]:
     """Return bounded literal model/version matches from canonical dossier tables."""
-    pattern = f"%{_escape_like_literal(query)}%"
     with open_sqlite_connection() as connection:
-        _register_casefold(connection)
+        register_search(connection, query)
         workspace = connection.execute("SELECT 1 FROM workspaces WHERE id = ?", (workspace_id,)).fetchone()
         if workspace is None:
             raise ValueError("Workspace not found.")
@@ -47,16 +38,16 @@ def search_model_dossier_index(workspace_id: str, query: str) -> list[ModelDossi
              AND mv.workspace_id = ms.workspace_id
             WHERE ms.workspace_id = ?
               AND (
-                JARVIS_CASEFOLD(COALESCE(ms.title, '')) LIKE ? ESCAPE '\\'
-                OR JARVIS_CASEFOLD(COALESCE(ms.engineering_question, '')) LIKE ? ESCAPE '\\'
-                OR JARVIS_CASEFOLD(COALESCE(ms.scope, '')) LIKE ? ESCAPE '\\'
-                OR JARVIS_CASEFOLD(COALESCE(mv.version_label, '')) LIKE ? ESCAPE '\\'
-                OR JARVIS_CASEFOLD(COALESCE(mv.implementation_kind, '')) LIKE ? ESCAPE '\\'
+                JARVIS_MATCH(ms.title) < 99
+                OR JARVIS_MATCH(ms.engineering_question) < 99
+                OR JARVIS_MATCH(ms.scope) < 99
+                OR JARVIS_MATCH(mv.version_label) < 99
+                OR JARVIS_MATCH(mv.implementation_kind) < 99
               )
-            ORDER BY ms.created_at DESC, ms.id ASC, mv.created_at DESC, mv.id ASC
+            ORDER BY MIN(JARVIS_MATCH(ms.title),JARVIS_MATCH(ms.engineering_question),JARVIS_MATCH(ms.scope),JARVIS_MATCH(mv.version_label),JARVIS_MATCH(mv.implementation_kind)), ms.created_at DESC, ms.id ASC, mv.created_at DESC, mv.id ASC
             LIMIT ?
             """,
-            (workspace_id, pattern, pattern, pattern, pattern, pattern, _MODEL_SEARCH_MATCH_LIMIT),
+            (workspace_id, _MODEL_SEARCH_MATCH_LIMIT),
         ).fetchall()
 
     grouped: dict[str, ModelDossierIndexItem] = {}
