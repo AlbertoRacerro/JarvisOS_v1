@@ -20,6 +20,9 @@ This is a temporary durable ledger increment for issue #656 on PR #660. It recor
 | `backend/app/modules/ai/egress_confirmation_core.py` | READ | Confirmed-ticket execution core binds persisted ticket metadata/reservation/packet to provider execution, rechecks provider budget and adapter identity, terminalizes drift/start/provider failures, and records uncertain dispatch explicitly. |
 | `backend/app/modules/ai/egress_policy.py` | READ | Strict loader/parser for the sole canonical `configs/ai_egress_policy.json`; rejects alternate paths, missing/extra keys, invalid sampling/TTL/spend values, non-confirmable triggers, or unsupported operations and computes a canonical config digest. |
 | `backend/app/modules/ai/egress_sanitizer.py` | READ | Immutable prompt/canonical derivative persistence and audit lifecycle; binds exact content/source digests, sanitizer provenance and policy version, refuses S4 prompt sanitization and stale/revoked derivative reuse, and atomically validates canonical source snapshots before approval. |
+| `backend/app/modules/ai/egress_lifecycle.py` | READ | Transactional confirmation/reservation/attempt lifecycle; atomically consumes pending tickets, revalidates mutable authority and budget, CAS-transitions reservations into flight, and reconciles immutable attempt evidence with explicit failed-before-network versus network-attempt semantics. |
+| `backend/app/modules/ai/egress_revalidation.py` | READ | Pending-ticket freshness gate; rechecks approved prompt/canonical derivatives, workspace/source manifests, current sensitivity labels and source digests inside the same transaction as ticket consumption so stale authority cannot dispatch. |
+| `backend/app/modules/ai/egress_service.py` | READ | Pure canonical external-attempt packet builder; validates safe S0/S1 material and concrete provider/fallback binding, strips body fields from safe manifests, binds source/config/policy digests, and computes deterministic projected token/cost upper bounds without performing persistence or network I/O. |
 
 ## Absorbed Area-A capability facts
 
@@ -34,6 +37,9 @@ This is a temporary durable ledger increment for issue #656 on PR #660. It recor
 - Confirmation is not permission to trust mutable client state. Execution reloads persisted ticket metadata and packet/reservation identity, rechecks the provider budget gate, validates response provider/model and dispatch-state evidence, and terminalizes drift or uncertainty instead of inferring success.
 - Egress policy is canonical-file-only and schema-closed. Operator settings should not imply arbitrary runtime policy-file selection or unsupported external operation types.
 - Sanitized derivatives are immutable provenance objects tied to exact raw/source digests, sanitizer configuration/job identity and policy versions; stale, rejected or revoked evidence must not be presented as externally eligible context.
+- Confirmation-ticket consumption is itself an authority boundary: mutable derivatives, source snapshots, sensitivity labels, source digests and provider budget are revalidated transactionally before a pending ticket can become consumed and reserve spend.
+- Reservation reconciliation distinguishes provider-network attempts from failures before network I/O; UI/accounting must preserve that distinction and must not turn a released zero-consumption reservation into an apparent provider failure/cost.
+- External egress packets are canonical server artifacts, not caller-authored payloads. The packet builder permits only effective S0/S1 material, verifies the exact configured provider/fallback slot, excludes prompt/content/credential fields from safe metadata manifests, and binds policy/config/source digests before execution.
 
 ## Remaining coverage
 
