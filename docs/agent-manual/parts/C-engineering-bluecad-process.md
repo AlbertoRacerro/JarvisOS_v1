@@ -1,6 +1,6 @@
 # Area C — Engineering / BLUECAD / process / scientific tooling
 
-MAPPING_STATUS: COMPLETE
+MAPPING_STATUS: IN_PROGRESS
 
 Runtime/code/tests are primary evidence; STATUS/spec prose is used only to classify historical/deferred authority.
 
@@ -330,3 +330,14 @@ Critical warning: `runner/examples/batch_growth.py` is a deterministic runner de
 - 072/074 and 075 are useful implemented compatibility/experiment paths but must not be promoted by documentation into general process authority.
 - BLUECAD has both generic geometry primitives and task-specific CAD-link reconciliation code; future work should reuse shared kernels/preview-digest/artifact/evidence primitives rather than cloning them.
 - The current evidence ontology is deliberately narrow (`validation_v0`, `mesh_quality_v0`, `fem_static_v0`); broader uncertainty/experimental-validation evidence is not present.
+
+## EXPLICIT FILE COVERAGE LEDGER
+
+Fresh-tree baseline for this incremental ledger: `master@240d5e0b27d9837d40f47bddfa24871ae7a2a4bb`. Rows are added only after literal content inspection; absence from this ledger remains unaccounted until the final tree set-difference is zero.
+
+| path | status | one-line role/reason |
+|---|---|---|
+| `backend/app/modules/runner/examples/bluerev_process_topology_m1_v0.py` | READ | Exact bundled 072 symmetric-parallel topology calculation; validates cross-field geometry/hydraulics and emits canonical result/topology evidence. |
+| `backend/app/modules/runner/examples/bluerev_process_topology_m1_v0.contract.json` | READ | Versioned 072 input contract defining 26 required topology, geometry, fluid, equipment and loss-coefficient variables with units/domains. |
+
+UNACCOUNTED_FILES: >0
