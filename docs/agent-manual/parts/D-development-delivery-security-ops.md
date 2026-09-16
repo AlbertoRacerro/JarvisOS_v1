@@ -69,10 +69,11 @@ Evidence baseline: fresh `master` `240d5e0b27d9837d40f47bddfa24871ae7a2a4bb`. Ru
 - **Limits:** `frontend-143` profile specialization remains; do not clone bridge control logic.
 - **Anchors:** `jarvis-cloud-delivery:v1`, `payload_body_sha256`, `validation_profile`.
 
-### Exact-head browser proof — REAL
+### Exact-head browser proof — REAL with one plan defect found
 - **Canonical:** `.github/workflows/{exact-head-browser-proof,exact-head-browser-proof-command,browser-proof-contract}.yml`, `.github/browser-proof/**`.
 - **Reuse:** generic trusted controller + declarative plans; candidate checkout unprivileged/token-blanked.
 - **Risk:** real candidate/browser execution; controller/plan workspace protected and verified clean.
+- **Defect found during file audit:** `plans/115-project-search.json` compares `mutationAfterNavigation` against capture `mutationBaseline`, but no step creates `mutationBaseline`; generic executor fails on missing capture. This is evidence drift/runtime-proof failure, not a documentation-only concern; runtime is intentionally not modified by issue #656.
 - **Limits:** browser evidence is not semantic/security review.
 - **Anchors:** `PROOF_PLAN_ID`, `jarviscandidate`, `PROOF_EXPECTED_HEAD_SHA`.
 
@@ -127,6 +128,28 @@ Evidence baseline: fresh `master` `240d5e0b27d9837d40f47bddfa24871ae7a2a4bb`. Ru
 | `Start-JarvisOS-Backend.cmd` | READ | Windows backend wrapper delegating to PowerShell launcher. |
 | `Start-JarvisOS-Frontend.cmd` | READ | Windows frontend wrapper delegating to PowerShell launcher. |
 | `Start-JarvisOS.cmd` | READ | Combined Windows launcher; prerequisite checks, separate consoles, fixed startup delay. |
+| `.github/browser-proof/.gitignore` | READ | Browser-proof-local generated dependency/lock ignore policy. |
+| `.github/browser-proof/fixture-registry.mjs` | READ | Closed trusted fixture registry; validates fixture IDs/phases and prevents path escape. |
+| `.github/browser-proof/fixtures/literature_knowledge.py` | READ | Trusted DB/artifact seed for literature proof; writes isolated proof workspace/source/entry data. |
+| `.github/browser-proof/fixtures/model_version_selection.py` | READ | Trusted DB seed for exact model-version selection proof. |
+| `.github/browser-proof/fixtures/project_search.py` | READ | Trusted workspace/project/model/literature search seed; uses modeling service plus direct isolated DB/artifact writes. |
+| `.github/browser-proof/package.json` | READ | Private exact-head proof controller package; pins Playwright 1.55.0. |
+| `.github/browser-proof/plan-lib.mjs` | READ | Generic plan schema/validator and bounded locator/value/contract primitives; fail-closed plan admission. |
+| `.github/browser-proof/plans/113-memory-models.json` | READ | Exact model-version identity/read-only UI proof plan. |
+| `.github/browser-proof/plans/114-literature.json` | READ | Literature multi-expand/source-navigation proof with bounded mutation-window comparison. |
+| `.github/browser-proof/plans/115-project-search.json` | READ | Project search/exact-navigation proof; defect: references missing `mutationBaseline` capture, so execution must fail closed. |
+| `.github/browser-proof/plans/116-roadmap-calendar.json` | READ | Mutating roadmap/calendar lifecycle and refusal-gate browser proof; expected 409 console errors are explicitly bounded. |
+| `.github/browser-proof/plans/117-brainstorm.json` | READ | Brainstorm persistence/provenance/revision/lineage/proposal proof with scoped mutation-neutral read windows. |
+| `.github/browser-proof/plans/121-knowledge-actions.json` | READ | Project/model Jarvis-context advisory proposal proof; selected POST paths explicitly classified read-only. |
+| `.github/browser-proof/plans/124-settings-ai.json` | READ | Metadata-only provider/credential rendering proof; forbids capture artifacts and checks secret-safe empty replacement input. |
+| `.github/browser-proof/plans/140-coding.json` | READ | Repository/runtime exact-head and semantic-delta browser proof; no direct mutation controls. |
+| `.github/browser-proof/request-policy.mjs` | READ | Fail-closed same-origin mutation classifier; only exact declared POST paths may be treated read-only. |
+| `.github/browser-proof/run.mjs` | READ | Generic Playwright executor; exact-head identity gate, trusted fixtures, request/console evidence, bounded operations/artifacts. |
+| `.github/browser-proof/test-mutation-window.mjs` | READ | Tests generic mutation-window primitive and teardown ordering/fail-closed verdict behavior. |
+| `.github/browser-proof/test-plan-lib.mjs` | READ | Broad plan/fixture/secret/contract compatibility and negative-path test suite. |
+| `.github/browser-proof/test-request-policy.mjs` | READ | Tests method/path mutation classification, encoded aliases, malformed input and plan exception validation. |
+| `.github/browser-proof/validate-contract.mjs` | READ | Discovers/validates every trusted plan and syntax-checks all registered Python fixtures. |
+| `.github/browser-proof/validate-plan.mjs` | READ | Single trusted-plan validator/fixture query CLI with bounded arguments. |
 | `.github/merge-authority-policy.json` | READ | Declares master protection/status-check expectations; auto-merge false; observe-only merge methods. |
 | `.github/pull_request_template.md` | READ | PR spec/status/deviation/test/invariant checklist; governance evidence template. |
 | `.github/local_worktree_actuator_core.py` | READ | Persistent worktree registration/ownership/writer guard core; inspected during Area-D capability audit. |
@@ -170,7 +193,7 @@ Evidence baseline: fresh `master` `240d5e0b27d9837d40f47bddfa24871ae7a2a4bb`. Ru
 | `scripts/jarvisos_data_root.py` | READ | Thin recovery CLI entry point. |
 
 ### Remaining coverage
-- Finish literal source reads and rows for every remaining `.github/browser-proof/**` file and every remaining `scripts/**` file from the fresh tree; do not credit directory discovery.
+- Finish literal source reads and rows for every remaining `scripts/**` file from the fresh tree; do not credit directory discovery.
 - Finish repository-global governance/docs/config/test surfaces that belong to D and add exact `OUT_OF_SCOPE` cross-owner rows only after A+B/C ledgers contain the same exact destination paths.
 - Re-read latest A+B #660 and C #659 ledgers when they appear, then mechanically union all three active ledgers against a fresh recursive tracked-file tree.
 - Keep global audit fail-closed until total/covered/duplicate/ambiguous/unaccounted counts are exact and freshness-reconciled.
