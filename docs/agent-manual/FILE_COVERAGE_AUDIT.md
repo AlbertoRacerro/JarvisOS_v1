@@ -20,10 +20,10 @@ PR #658 is superseded as an execution owner. Its material may be absorbed by A+B
 
 | Owner | Current evidence | Union eligibility |
 |---|---|---|
-| A+B | #660 capability map exists; latest inspected patch still lacks a literal `## EXPLICIT FILE COVERAGE LEDGER` | BLOCKED until exact paths are enumerated |
-| C | #659 capability map exists; strict file-level reconciliation is not yet proven complete | BLOCKED until latest exact-path ledger is available and fresh enough |
+| A+B | #660 latest inspected patch is 318 lines of capability mapping and still contains no literal `## EXPLICIT FILE COVERAGE LEDGER` | BLOCKED until exact paths are enumerated |
+| C | #659 latest inspected patch is 332 lines of capability mapping and still contains no literal `## EXPLICIT FILE COVERAGE LEDGER` | BLOCKED until exact paths are enumerated |
 | D | #657 capability map + this audit exist; D literal per-path ledger conversion is still incomplete | IN PROGRESS |
-| Fresh recursive tree | master tree at baseline SHA fetched from GitHub | authoritative comparison set once ledgers are mechanically enumerable |
+| Fresh recursive tree | master tree at baseline SHA fetched from GitHub; root and `.github` inventories revalidated | authoritative comparison set once ledgers are mechanically enumerable |
 
 ## Counts
 
@@ -43,8 +43,8 @@ A literal zero is not yet defensible. Until all active ledgers are mechanically 
 
 ### Active-owner blockers
 
-- **A+B (#660):** enumerate every owned backend/core/api/schema/module/test/helper/fixture/config path plus frontend source/test/helper/fixture/style/package/lock/build-config/generated/asset paths. Explicitly resolve `backend/app/modules/agents`, `dev_message_route`, `events`, `files`, `local_ai`, `local_ai_eval`, `secrets`, `tools`, `workspaces`, and all tiny registry/protocol/`__init__.py` files. Cross-owner exclusions must name the destination owner.
-- **C (#659):** enumerate every owned BLUECAD/process/scientific module, runner, test/helper/fixture, config, schema, report and asset path. Cross-owner exclusions must name the destination owner.
+- **A+B (#660):** latest inspected patch still has no literal ledger. Enumerate every owned backend/core/api/schema/module/test/helper/fixture/config path plus frontend source/test/helper/fixture/style/package/lock/build-config/generated/asset paths. Explicitly resolve `backend/app/modules/agents`, `dev_message_route`, `events`, `files`, `local_ai`, `local_ai_eval`, `secrets`, `tools`, `workspaces`, and all tiny registry/protocol/`__init__.py` files. Cross-owner exclusions must name the destination owner.
+- **C (#659):** latest inspected patch now says capability-level `MAPPING_STATUS: COMPLETE`, but still has no literal ledger; that status does not satisfy this audit. Enumerate every owned BLUECAD/process/scientific module, runner, test/helper/fixture, config, schema, report and asset path. Cross-owner exclusions must name the destination owner.
 - **D (#657):** finish literal coverage for `.github/**`, all development/delivery/security/ops `scripts/**`, root launch/metadata files, governance/operations docs, repository-level configs/tests and D-owned generated/assets.
 
 ## Freshness / added-file guard
@@ -53,7 +53,7 @@ For each active ledger, record or infer its master baseline before union. Compar
 
 ## D audit evidence already established
 
-Fresh directory inventories were re-read for repository root, `.github/`, `.github/workflows/`, and `scripts/`. Prior Area-D capability work source-read implementation/tests for repository delivery/CAS, local worktree actuator/IPC/writer guard, CI scope classifier, architecture/type/codegen enforcement, PR Attention, Claude/manual review, Codex delivery/autopush, cloud delivery bridge, exact-head browser proof/controller/contract, continuation, merge authority, BLUECAD real-tool proof, backup/restore and Windows launchers. Those reads still require literal per-path ledger rows before they count toward strict global completion.
+Fresh directory inventories were re-read for repository root, `.github/`, `.github/workflows/`, and `scripts/`. The root inventory explicitly contains `.gitignore`, `AGENTS.md`, `CLAUDE.md`, `README.md`, `Start-JarvisOS-Backend.cmd`, `Start-JarvisOS-Frontend.cmd`, and `Start-JarvisOS.cmd` in addition to repository directories. Prior Area-D capability work source-read implementation/tests for repository delivery/CAS, local worktree actuator/IPC/writer guard, CI scope classifier, architecture/type/codegen enforcement, PR Attention, Claude/manual review, Codex delivery/autopush, cloud delivery bridge, exact-head browser proof/controller/contract, continuation, merge authority, BLUECAD real-tool proof, backup/restore and Windows launchers. Those reads still require literal per-path ledger rows before they count toward strict global completion.
 
 ## Completion gate
 
