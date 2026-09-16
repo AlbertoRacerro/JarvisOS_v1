@@ -4,68 +4,65 @@ GLOBAL_FILE_COVERAGE: IN_PROGRESS
 
 Fresh master baseline: `240d5e0b27d9837d40f47bddfa24871ae7a2a4bb`.
 
-This audit is deliberately fail-closed. `READ` is credited only where an active owner ledger or this audit establishes actual content inspection; capability prose, directory discovery, or a filename mention does not count as `READ`.
+This audit is fail-closed. `READ` is credited only where an active owner ledger establishes actual content inspection; capability prose, directory discovery, or filename mention does not count.
 
 ## Active owner set
-
-Only these mapping owners participate in the union:
 
 - **A+B:** PR #660 / `docs/capability-map-B-frontend-ux`.
 - **C:** PR #659 / `docs/capability-map-C-engineering`.
 - **D:** PR #657 / `docs/capability-map-D-devops-security`.
 
-PR #658 is superseded as an execution owner. Its material may be absorbed by A+B but it cannot independently satisfy union ownership.
+PR #658 is superseded as an execution owner and cannot independently satisfy union ownership.
 
 ## Current union state
 
 | Owner | Current evidence | Union eligibility |
 |---|---|---|
-| A+B | #660 latest file was re-read this run through its end; it still terminates after the fake/inert-control sweep and contains no literal `## EXPLICIT FILE COVERAGE LEDGER` | BLOCKED until exact paths are enumerated |
-| C | #659 previously inspected capability map still has no literal `## EXPLICIT FILE COVERAGE LEDGER` | BLOCKED until exact paths are enumerated |
-| D | #657 capability map + this audit exist; D literal per-path ledger conversion is still incomplete | IN PROGRESS |
-| Fresh recursive tree | master tree at baseline SHA revalidated; root, `.github`, `.github/workflows`, `.github/browser-proof`, and `scripts` inventories are available from GitHub tree objects | authoritative comparison set once ledgers are mechanically enumerable |
+| A+B | Latest #660 patch re-read; still no literal `## EXPLICIT FILE COVERAGE LEDGER` | BLOCKED |
+| C | Latest #659 patch re-read; still no literal `## EXPLICIT FILE COVERAGE LEDGER` | BLOCKED |
+| D | Literal ledger now exists; first 48 exact paths are classified `READ`; remaining D tree is still being source-read | IN PROGRESS |
+| Fresh tree | master `240d5e0...`; root and `.github/workflows` closed trees revalidated; recursive tree is authoritative comparison set | READY FOR UNION once ledgers are enumerable |
 
 ## Counts
 
-- Total tracked files: **PENDING strict mechanical enumeration**. The fresh recursive tree is available but the connector's single recursive rendering is truncated; this audit will not invent a count.
-- Covered files: **PENDING union**.
+- Total tracked files: **PENDING strict mechanical enumeration**. The recursive Git tree exists but the connector rendering is truncated; no count is inferred from truncated output.
+- Covered files globally: **PENDING union**.
 - A+B READ / GENERATED-ASSET: **PENDING A+B ledger**.
 - C READ / GENERATED-ASSET: **PENDING C ledger**.
-- D READ / GENERATED-ASSET: **IN PROGRESS**.
+- D READ: **48 literal rows currently**.
+- D GENERATED/ASSET: **0 currently**.
 - Duplicate ownership count: **PENDING union**.
-- Ambiguous ownership count: **non-zero** until all three active ledgers are literal and cross-owner `OUT_OF_SCOPE` references resolve to an exact destination entry.
+- Ambiguous ownership count: **non-zero** until A+B/C ledgers exist and D remaining scope is classified.
 
 ## UNACCOUNTED_FILES
 
 `UNACCOUNTED_FILES: UNKNOWN_NONZERO`
 
-A literal zero is not yet defensible. Until all active ledgers are mechanically enumerable, every tracked path not explicitly resolved by those ledgers remains unaccounted. This includes tiny `__init__.py`, registry/protocol files, fixtures/helpers, package/lock/config/schema/report files, and files added to master after an owner's ledger baseline.
+A literal zero is not defensible yet. The exact orphan list becomes mechanically valid only when all three active ledgers are enumerable against one fresh tracked tree.
 
 ### Active-owner blockers
 
-- **A+B (#660):** latest file still has no literal ledger. Enumerate every owned backend/core/api/schema/module/test/helper/fixture/config path plus frontend source/test/helper/fixture/style/package/lock/build-config/generated/asset paths. Explicitly resolve `backend/app/modules/agents`, `dev_message_route`, `events`, `files`, `local_ai`, `local_ai_eval`, `secrets`, `tools`, `workspaces`, and all tiny registry/protocol/`__init__.py` files. Cross-owner exclusions must name the destination owner.
-- **C (#659):** latest inspected map still has no literal ledger; capability-level completion does not satisfy this audit. Enumerate every owned BLUECAD/process/scientific module, runner, test/helper/fixture, config, schema, report and asset path. Cross-owner exclusions must name the destination owner.
-- **D (#657):** finish literal coverage for `.github/**`, all development/delivery/security/ops `scripts/**`, root launch/metadata files, governance/operations docs, repository-level configs/tests and D-owned generated/assets.
+- **A+B (#660):** no literal ledger yet. Must enumerate every owned backend/core/api/schema/module/test/helper/fixture/config path plus frontend source/test/helper/fixture/style/package/lock/build-config/generated/asset path, including `backend/app/modules/agents`, `dev_message_route`, `events`, `files`, `local_ai`, `local_ai_eval`, `secrets`, `tools`, `workspaces`, tiny registry/protocol/`__init__.py` files.
+- **C (#659):** no literal ledger yet. Must enumerate every BLUECAD/process/scientific module, runner, test/helper/fixture, config, schema, report and asset path.
+- **D (#657):** first literal tranche is durable. Remaining source reads/rows: `.github/browser-proof/**`; unclassified remainder of `scripts/**`; D-owned governance/operations docs/config/tests/repository metadata. Cross-owner `OUT_OF_SCOPE` rows will only be credited when the destination ledger contains the exact path.
 
 ## Freshness / added-file guard
 
-For each active ledger, record or infer its master baseline before union. Compare that baseline with the fresh master tree. Any tracked file added after an owner's baseline is automatically `UNACCOUNTED` until that owner explicitly reads/classifies the exact path or another active owner legitimately owns it. A capability-level statement cannot grandfather later files.
+For each owner, compare its ledger baseline to the fresh master tree. Any tracked file added after an owner's baseline is automatically unaccounted until the exact path is explicitly classified by an active owner. Capability prose cannot grandfather later files.
 
-## D audit evidence already established
+## D evidence established this run
 
-Fresh GitHub tree objects were re-read for repository root, `.github/`, `.github/workflows/`, `.github/browser-proof/`, and `scripts/`. `.github/workflows` is a closed 17-file tree at this baseline. `.github/browser-proof` is a closed tree containing its registry, three Python fixtures, package file, controller/library, eight declarative plans, request policy, runner, three contract tests and two validators. The root inventory contains `.gitignore`, `AGENTS.md`, `CLAUDE.md`, `README.md`, `Start-JarvisOS-Backend.cmd`, `Start-JarvisOS-Frontend.cmd`, and `Start-JarvisOS.cmd` in addition to repository directories.
+The D map was changed from capability-level `MAPPING_STATUS: COMPLETE` to strict `MAPPING_STATUS: IN_PROGRESS` and now contains `## EXPLICIT FILE COVERAGE LEDGER` with 48 exact `READ` paths. This tranche includes all seven root files, both root `.github` policy/template files, both local-worktree control files, all 17 workflow files in the closed workflow tree, and 20 source-inspected delivery/review/CI/continuation/codegen/recovery scripts.
 
-This run directly re-read all three root CMD launchers at the exact master SHA. They are thin Windows wrappers: backend delegates to `scripts/start-backend.ps1`; frontend delegates to `scripts/start-frontend.ps1`; combined launcher checks Python/Node/npm, starts separate backend/frontend consoles, and uses a fixed three-second delay rather than a health probe. These exact paths are therefore eligible for D `READ` ledger rows once the ledger is materialized.
-
-Prior Area-D capability work source-read implementation/tests for repository delivery/CAS, local worktree actuator/IPC/writer guard, CI scope classifier, architecture/type/codegen enforcement, PR Attention, Claude/manual review, Codex delivery/autopush, cloud delivery bridge, exact-head browser proof/controller/contract, continuation, merge authority, BLUECAD real-tool proof, backup/restore and Windows launchers. Those reads still require literal per-path ledger rows before they count toward strict global completion.
+The closed workflow tree at this baseline contains exactly: `bluecad-real-tool-proof.yml`, `browser-proof-contract.yml`, `cheap-review.yml`, `ci.yml`, `claude-review.yml`, `cloud-delivery-bridge.yml`, `codex-autopush.yml`, `codex-result-delivery.yml`, `daily-development-continuation.yml`, `event-driven-continuation.yml`, `exact-head-browser-proof-command.yml`, `exact-head-browser-proof.yml`, `merge-authority-verify.yml`, `post-merge-status-reconcile.yml`, `pr-attention.yml`, `project-knowledge-fast.yml`, `senior-review.yml`.
 
 ## Completion gate
 
-Set `GLOBAL_FILE_COVERAGE: COMPLETE` only after all conditions are mechanically checkable against one fresh tracked-file tree:
+Set `GLOBAL_FILE_COVERAGE: COMPLETE` only when all are mechanically checkable against one fresh tracked tree:
 
 1. every tracked file resolves to exactly one active owner as `READ` or `GENERATED/ASSET`;
-2. every `OUT_OF_SCOPE` entry cross-references an active destination ledger that covers that exact path;
+2. every `OUT_OF_SCOPE` entry resolves to an exact destination-ledger path;
 3. `UNACCOUNTED_FILES: 0`;
-4. duplicate ownership count = 0 after intentional cross-references are normalized;
+4. duplicate ownership count = 0 after normalized cross-references;
 5. ambiguous ownership count = 0;
-6. no file was added to master after an owner's ledger baseline without explicit reconciliation.
+6. files added after any owner baseline are explicitly reconciled.
