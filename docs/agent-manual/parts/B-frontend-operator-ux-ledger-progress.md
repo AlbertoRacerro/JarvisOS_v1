@@ -31,6 +31,14 @@ The canonical destination remains `docs/agent-manual/parts/B-frontend-operator-u
 | `frontend/src/api/settings.ts` | READ | Security-sensitive Settings client: reads canonical AI/provider/secret/system state, bounds public error projection, mutates AI settings, and replaces/deletes Scaleway credentials without any read-back API for raw secret material. |
 | `frontend/src/api/threads.ts` | READ | Typed AI-thread client for list/detail/create, context-pack preview, and interaction submission with explicit request IDs plus optional expected context digest binding. |
 | `frontend/src/api/generated/modeling.ts` | GENERATED/ASSET | Verified generated TypeScript contract for backend `ParameterRead`; file declares its backend source and regeneration command and models value/lifecycle states explicitly. |
+| `frontend/src/api/client.ts` | READ | Broad legacy/core frontend API seam: loopback/configurable base URL, typed system/workspace/modeling/AI/secret/BLUECAD contracts and basic JSON helpers; exposes explicit attempted/succeeded, blocking, usage and escalation metadata instead of deriving provider success from text. |
+| `frontend/src/api/development.ts` | READ | Development API client for roadmap/calendar CRUD and brainstorm lineage/discussion/reconciliation/promotion; optimistic revision tokens and idempotency keys are carried on mutating operations, with promotions explicitly proposal-only. |
+| `frontend/src/api/knowledgeActions.ts` | READ | Jarvis knowledge-action client requiring server context preview with exact refs/digest before proposal; refused states are rejected rather than silently treated as current/proposed context. |
+| `frontend/src/api/literature.ts` | READ | Literature read client modeling source/entry review states, provenance locators, used-by references and backing availability; content URLs are exposed only when backing is explicitly available and content-enabled. |
+| `frontend/src/api/memory.ts` | READ | Memory proposal client for assumption/parameter/decision promotion/rejection and parameter replacement; preserves structured status errors and replacement invalidation evidence. |
+| `frontend/src/api/modelDossier.ts` | READ | Read-only model-dossier client exposing version identity plus run/artifact/evidence availability, keeping operator dossier inspection bound to explicit model-version IDs. |
+| `frontend/src/api/parameterLifecycle.ts` | READ | Canonical parameter edit/lifecycle client with expected timestamp/state concurrency guards and structured error code/status propagation for activate/deactivate/archive/delete transitions. |
+| `frontend/src/api/projectKnowledge.ts` | READ | Project-knowledge draft/impact/approval/revalidation/reconcile client; carries revision tokens, preview/validation digests, expected target identity and idempotency keys so operator approval is bound to reviewed server state. |
 
 ## Capability facts from B increments
 
@@ -45,6 +53,12 @@ The canonical destination remains `docs/agent-manual/parts/B-frontend-operator-u
 - Settings error handling intentionally refuses to project arbitrary unparseable response text. Credential status/capability is structured metadata; raw submitted Scaleway API keys are only sent on replacement and are never returned by this client.
 - Thread interaction submission can bind to a previewed context digest, preserving the distinction between ambient UI state and explicit server-validated context selection.
 - `api/generated/modeling.ts` is genuinely generated rather than merely living in a `generated/` directory: its header identifies `backend/app/modules/modeling/models.py::ParameterRead` and `python scripts/generate_frontend_contracts.py` as provenance/regeneration path.
+- `api/client.ts` exposes provider execution truth as separate status/blocking/attempted/succeeded/usage fields. Operator surfaces must preserve those distinctions and must not interpret non-empty `response_text` as proof that the intended external provider call succeeded.
+- Development mutations carry revision/idempotency authority; brainstorm promotion payloads are explicitly `proposal_only`, so UI language must not imply that promotion directly mutates downstream roadmap/design/coding truth.
+- Knowledge actions bind proposals to a prior server-produced exact-ref context digest. A refused preview/proposal is a terminal UI-visible refusal for that request, not context that the browser may reconstruct locally.
+- Literature backing availability is explicit and multi-state (`available`, `missing`, `ineligible`, `unsupported`, `unsafe`); only an available/content-enabled backing gets a content URL, preventing UI from equating a citation record with readable source bytes.
+- Memory replacement returns invalidation evidence (`affected_count`, graph digest, replacement ref); parameter lifecycle edits separately use expected timestamp/current-state guards. Operator UX should surface stale/conflict outcomes rather than overwrite optimistically without reconciliation.
+- Project-knowledge approval/reconcile is review-state-bound: revision tokens and preview/validation/target digests are part of the mutation contract, so stale previews cannot be represented as unconditional approval authority.
 
 ## Canonical-ledger integration blocker
 
@@ -52,6 +66,6 @@ The connected GitHub file reader returns the large canonical `B-frontend-operato
 
 ## Remaining coverage
 
-Area B only. Literal completion is not yet proven. A fresh PR-head tree scan was performed before this update. The remaining scope includes `frontend/package-lock.json`, `frontend/public/`, all unledgered `frontend/src/` files, every CSS/static/helper/test file, and canonical behavior/appearance assets under `docs/design-references/`. The canonical `B-frontend-operator-ux.md` currently contains capability-level coverage but still lacks the required exhaustive one-row-per-file ledger, so its historical `MAPPING_STATUS: COMPLETE` claim is not valid under the maintainer's literal-coverage acceptance rule.
+Area B only. Literal completion is not yet proven. Fresh master and PR-head tree truth were inspected before this update. The remaining scope includes `frontend/package-lock.json`, `frontend/public/`, all still-unledgered `frontend/src/` components/pages/styles/helpers and tests, plus canonical behavior/appearance assets under `docs/design-references/`. The canonical `B-frontend-operator-ux.md` still requires safe reconstruction and exhaustive one-row-per-file consolidation before its historical COMPLETE claim can be accepted.
 
 UNACCOUNTED_FILES: NOT_YET_ZERO
