@@ -317,6 +317,15 @@ def _context_blocks_for_new_submit(workspace_id: str, payload: AIThreadSubmit) -
             )
         except JarvisContextConflictError as exc:
             raise AIThreadConflictError(str(exc)) from exc
+        if any(ref.owner in {"modeling", "model-dossier", "literature"} for ref in payload.jarvis_context.added_context_refs):
+            # Exact Memory chat must not bypass its owner’s semantic restrictions.
+            from app.modules.memory.jarvis_knowledge_actions import (
+                KnowledgeActionError, validate_semantic_knowledge_context,
+            )
+            try:
+                validate_semantic_knowledge_context(payload.jarvis_context.added_context_refs, payload.prompt, preview.blocks)
+            except KnowledgeActionError as exc:
+                raise AIThreadError(str(exc)) from exc
         if blocks is None:
             blocks = preview.blocks
         elif preview.blocks:
@@ -449,9 +458,12 @@ SELECT
     flow.terminal_reason,
     flow.attempt_count,
     flow.terminal_attempt_id,
+    terminal_job.execution_class,
+    terminal_job.model_id,
     capture.proposal_ids_json
 FROM ai_thread_interactions AS interaction
 JOIN ai_flows AS flow ON flow.id = interaction.flow_id
+LEFT JOIN ai_jobs AS terminal_job ON terminal_job.id = flow.terminal_attempt_id
 LEFT JOIN ai_flow_record_captures AS capture ON capture.flow_id = interaction.flow_id
 """
 
@@ -526,6 +538,8 @@ def _interaction_from_row(row: sqlite3.Row) -> AIThreadInteractionRead:
         terminal_reason=row["terminal_reason"],
         attempt_count=int(row["attempt_count"]),
         terminal_attempt_id=row["terminal_attempt_id"],
+        execution_class=row["execution_class"],
+        model_id=row["model_id"],
         proposal_ids=proposal_ids[:_MAX_PROPOSAL_IDS],
         proposal_count=len(proposal_ids),
         proposals_truncated=len(proposal_ids) > _MAX_PROPOSAL_IDS,

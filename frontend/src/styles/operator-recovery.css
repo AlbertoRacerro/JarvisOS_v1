@@ -47,14 +47,14 @@
 .basis-record-detail dd { margin: 0; overflow-wrap: anywhere; }
 .final-fusion__basis > .final-fusion__basis { flex-shrink: 0; margin: 12px; }
 .final-fusion__jarvis { padding: 14px; }
-.final-fusion__jarvis .jarvis-sidecar { overflow: auto; height: auto; min-height: 100%; gap: 12px; font-size: 12px; }
+.final-fusion__jarvis .jarvis-sidecar { overflow: hidden; height: 100%; min-height: 0; gap: 8px; font-size: 12px; }
 .jarvis-sidecar__composer { margin-top: auto; }
-.jarvis-sidecar__transcript { flex-shrink: 0; overflow: visible; }
+.jarvis-sidecar__transcript { flex: 1 1 auto; min-height: 100px; overflow: auto; }
 .jarvis-sidecar__header .eyebrow { font-size: 10px; margin: 0; }
 .jarvis-sidecar__header strong { font-size: 16px; font-weight: 500; }
 .jarvis-sidecar__composer textarea { min-height: 100px; font: inherit; }
 .jarvis-sidecar summary { cursor: pointer; }
-.jarvis-selection-actions { padding: 8px 0; border-block: 1px solid var(--fusion-line); }
+.jarvis-selection-actions { padding: 8px 0; border-block: 1px solid var(--fusion-line); max-height: 200px; overflow: auto; flex: 0 1 auto; }
 .jarvis-selection-actions[open] { max-height: 55vh; overflow: auto; }
 .jarvis-sidecar__context { font-size: 11px; }
 .jarvis-sidecar__toggle { display: flex; }
@@ -114,7 +114,11 @@
 .application-shell--final .basis-record { background: transparent; color: #283026; box-shadow: none; }
 .application-shell--final .basis-record:hover,
 .application-shell--final .basis-record[aria-expanded=true] { background: var(--fusion-green-soft); }
-.jarvis-sidecar__transcript { max-height: 25vh; overflow: auto; }
+.jarvis-sidecar__transcript { max-height: none; }
+.jarvis-conversation-settings { flex: 0 0 auto; }
+.jarvis-sidecar p { margin: 4px 0; }
+.jarvis-sidecar [data-testid="knowledge-context-basket"] li { display: flex; align-items: center; gap: 6px; }
+.jarvis-sidecar [data-testid="knowledge-context-basket"] li span { flex: 1; }
 .basis-revision-summary { padding: 0 12px; }
 .basis-change-list { padding-left: 20px; font-size: 12px; }
 @media (min-width: 1051px) and (max-width: 1350px) {
@@ -124,3 +128,5 @@
 @media(max-width: 1050px) {
   .brainstorm-board { overflow: auto; grid-template-rows: minmax(420px, auto) minmax(350px, auto); }
 }
+.process-stage__available-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 16px; }
+.brainstorm-ideas-column [data-testid="brainstorm-detail"] { padding: 12px; background: var(--fusion-green-soft); border: 1px solid var(--fusion-line); }

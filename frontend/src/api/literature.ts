@@ -63,8 +63,8 @@ export type LiteratureSourcePage = {
   next_offset: number | null;
 };
 
-export async function listLiteratureSources(workspaceId: string): Promise<LiteratureSourcePage> {
-  const response = await fetch(`${API_BASE_URL}/workspaces/${encodeURIComponent(workspaceId)}/literature/sources?limit=100`);
+export async function listLiteratureSources(workspaceId: string, offset = 0): Promise<LiteratureSourcePage> {
+  const response = await fetch(`${API_BASE_URL}/workspaces/${encodeURIComponent(workspaceId)}/literature/sources?limit=100&offset=${offset}`);
   if (!response.ok) throw new Error(`Literature request failed with ${response.status}`);
   return response.json() as Promise<LiteratureSourcePage>;
 }
@@ -72,4 +72,27 @@ export async function listLiteratureSources(workspaceId: string): Promise<Litera
 export function literatureContentUrl(source: LiteratureSource): string | null {
   if (!source.backing?.content_available || source.backing.availability !== "available" || !source.backing.content_url) return null;
   return `${API_BASE_URL}${source.backing.content_url}`;
+}
+
+export type LiteratureSourceInput = Pick<LiteratureSource, "title" | "source_kind" | "citation" | "publisher" | "published_year">;
+export type LiteratureEntryInput = { entry_kind: LiteratureEntryKind; statement?: string; value_text?: string; unit?: string; context_text?: string };
+
+async function createLiteratureRecord<T>(path: string, payload: object, requestKey: string): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...payload, request_key: requestKey })
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(typeof body?.detail?.message === "string" ? body.detail.message : `Could not save literature (${response.status}). Your text has been kept; please retry.`);
+  }
+  return response.json() as Promise<T>;
+}
+
+export function createLiteratureSource(workspaceId: string, payload: LiteratureSourceInput, requestKey: string): Promise<LiteratureSource> {
+  return createLiteratureRecord(`/workspaces/${encodeURIComponent(workspaceId)}/literature/sources`, payload, requestKey);
+}
+
+export function createLiteratureEntry(workspaceId: string, sourceId: string, payload: LiteratureEntryInput, requestKey: string): Promise<LiteratureEntry> {
+  return createLiteratureRecord(`/workspaces/${encodeURIComponent(workspaceId)}/literature/sources/${encodeURIComponent(sourceId)}/entries`, payload, requestKey);
 }

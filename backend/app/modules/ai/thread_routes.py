@@ -1,6 +1,8 @@
 from fastapi import APIRouter, HTTPException, Query
 
 from app.modules.ai.thread_models import (
+    AIConversationOptions,
+    AIConversationRoute,
     AIThreadCreate,
     AIThreadDetail,
     AIThreadList,
@@ -19,6 +21,31 @@ from app.modules.ai.thread_service import (
 )
 
 router = APIRouter(prefix="/threads", tags=["ai-threads"])
+
+
+@router.get("/conversation-options", response_model=AIConversationOptions)
+def read_conversation_options() -> AIConversationOptions:
+    """Project existing local bindings, without probing, dispatching or exposing config."""
+    from app.modules.ai.provider_registry import registry_bindings
+
+    try:
+        bindings = registry_bindings()
+    except (OSError, ValueError):
+        return AIConversationOptions(routes=[], availability="unavailable")
+    routes = []
+    for route, label in (
+        ("local:general", "Local assistant"),
+        ("local:coder", "Local coding assistant"),
+        ("local:fake", "Test responder (synthetic)"),
+    ):
+        binding = bindings.get(route)
+        if not binding or binding.requires_network or binding.execution_class not in {"local_compute", "synthetic"}:
+            continue
+        routes.append(AIConversationRoute(
+            route_class=route, label=label, model_id=binding.model_id,
+            execution_class=binding.execution_class,
+        ))
+    return AIConversationOptions(routes=routes, availability="configured" if routes else "unavailable")
 
 
 @router.post("", response_model=AIThreadSummary)

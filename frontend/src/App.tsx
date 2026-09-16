@@ -1,4 +1,5 @@
-import { Suspense, lazy, useEffect, useState, type ReactNode } from "react";
+import type { KnowledgeContextPreview } from "./api/knowledgeActions";
+import { Suspense, lazy, useEffect, useCallback, useState, type ReactNode } from "react";
 
 import type { StageSelection } from "./app/selection";
 import { useAppRouter } from "./app/useAppRouter";
@@ -49,8 +50,16 @@ function App() {
   const [selection, setSelection] = useState<StageSelection | null>(null);
   const [shellRegions, setShellRegions] = useState<ShellRegionContributions>({});
   const [shellRegionRequest, setShellRegionRequest] = useState<ShellRegionRequest | null>(null);
+  const [knowledgeContext, setKnowledgeContext] = useState<KnowledgeContextPreview | null>(null);
+  const [selectedKnowledgeLabel, setSelectedKnowledgeLabel] = useState<string | null>(null);
   const [selectedKnowledgeRef, setSelectedKnowledgeRef] = useState<string | null>(null);
   const [selectedModelVersionId, setSelectedModelVersionId] = useState<string | null>(null);
+  const selectKnowledge = useCallback((ref: string | null, label?: string) => {
+    setSelectedKnowledgeRef(ref); setSelectedKnowledgeLabel(label ?? null);
+  }, []);
+  const selectModelVersion = useCallback((id: string | null, label?: string) => {
+    setSelectedModelVersionId(id); setSelectedKnowledgeLabel(label ?? null);
+  }, []);
   const engineeringProperties = useEngineeringProperties(workspaceId, setWorkspaceId, selection);
   const routeParams = new URLSearchParams(window.location.search);
   const requestedRecordKind = boundedSearchParam(routeParams, "recordKind");
@@ -65,7 +74,9 @@ function App() {
     ? selectedKnowledgeRef ?? requestedRecordRef
     : route.id === "memory-models" && selectedModelVersionId
       ? `model_version:${selectedModelVersionId}`
-      : route.id === "memory-literature" && requestedLiteratureEntryId
+      : route.id === "memory-literature" && selectedKnowledgeRef
+        ? selectedKnowledgeRef
+        : route.id === "memory-literature" && requestedLiteratureEntryId
         ? `literature_entry:${requestedLiteratureEntryId}`
         : route.id === "memory-literature" && requestedLiteratureSourceId
           ? `literature_source:${requestedLiteratureSourceId}`
@@ -74,6 +85,7 @@ function App() {
   useEffect(() => {
     setSelection(null);
     setSelectedKnowledgeRef(null);
+    setSelectedKnowledgeLabel(null);
     setShellRegions({});
     setShellRegionRequest(null);
     setSelectedModelVersionId(null);
@@ -81,6 +93,7 @@ function App() {
 
   useEffect(() => {
     setSelectedKnowledgeRef(null);
+    setSelectedKnowledgeLabel(null);
     setSelectedModelVersionId(null);
   }, [workspaceId]);
 
@@ -92,11 +105,11 @@ function App() {
 
   const stageSidecar = shellRegions.sidecar;
   const semanticSelectionContext = selection?.kind === "bluecad-part" ? <div className="shell-properties__selection"><strong>{selection.partId}</strong><p>{selection.partKind ? `${selection.partKind} · selected BLUECAD part` : "Selected BLUECAD part"}</p></div> : undefined;
-  const knowledgeActions = <JarvisKnowledgeActions workspaceId={workspaceId} routeId={route.id} stableRef={knowledgeStableRef} />;
+  const knowledgeActions = <JarvisKnowledgeActions workspaceId={workspaceId} routeId={route.id} stableRef={knowledgeStableRef} selectedLabel={selectedKnowledgeLabel} onContextChange={setKnowledgeContext} />;
   const jarvisLocalContext = KNOWLEDGE_ROUTES.has(route.id)
     ? knowledgeActions
     : <>{semanticSelectionContext}<JarvisEngineeringActions controller={engineeringProperties} />{knowledgeActions}</>;
-  const jarvisSidecar = useJarvisSidecar(workspaceId, route.id, selection, jarvisLocalContext);
+  const jarvisSidecar = useJarvisSidecar(workspaceId, route.id, selection, jarvisLocalContext, knowledgeContext);
 
   let content: ReactNode;
   if (route.stageKind && (route.id === "design-process" || route.id === "design-bluecad" || route.id === "review")) {
@@ -105,19 +118,19 @@ function App() {
   } else {
     switch (route.id) {
       case "memory-project-basis":
-        content = <><FinalWorkspaceHeader group="memory" active="project-basis" navigate={navigate} /><FinalOperatorReadSurface kind="project-basis" workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} requestedRecordRef={requestedRecordRef} onRecordSelect={setSelectedKnowledgeRef} jarvis={jarvisSidecar} projectSearch={<ProjectSearchPanel workspaceId={workspaceId} navigate={navigate} />} /></>;
+        content = <><FinalWorkspaceHeader group="memory" active="project-basis" navigate={navigate} /><FinalOperatorReadSurface kind="project-basis" workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} requestedRecordRef={requestedRecordRef} onRecordSelect={selectKnowledge} jarvis={jarvisSidecar} projectSearch={<ProjectSearchPanel workspaceId={workspaceId} navigate={navigate} />} /></>;
         break;
       case "memory-models":
-        content = <><FinalWorkspaceHeader group="memory" active="models" navigate={navigate} /><ModelDossier workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} requestedModelVersionId={requestedModelVersionId} onModelVersionSelectionChange={setSelectedModelVersionId} jarvis={jarvisSidecar} /><ProjectKnowledgePanel workspaceId={workspaceId} readOnly /></>;
+        content = <><FinalWorkspaceHeader group="memory" active="models" navigate={navigate} /><ModelDossier workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} requestedModelVersionId={requestedModelVersionId} onModelVersionSelectionChange={selectModelVersion} jarvis={jarvisSidecar} revisionPanel={<ProjectKnowledgePanel workspaceId={workspaceId} readOnly />} /></>;
         break;
       case "memory-literature":
-        content = <><FinalWorkspaceHeader group="memory" active="literature" navigate={navigate} /><LiteratureKnowledge kind="literature" workspaceId={workspaceId} jarvis={jarvisSidecar} onWorkspaceChange={setWorkspaceId} requestedSourceId={requestedLiteratureSourceId} requestedEntryId={requestedLiteratureEntryId} /></>;
+        content = <><FinalWorkspaceHeader group="memory" active="literature" navigate={navigate} /><LiteratureKnowledge kind="literature" workspaceId={workspaceId} jarvis={jarvisSidecar} onWorkspaceChange={setWorkspaceId} requestedSourceId={requestedLiteratureSourceId} requestedEntryId={requestedLiteratureEntryId} onKnowledgeSelectionChange={selectKnowledge} searchPanel={<ProjectSearchPanel workspaceId={workspaceId} navigate={navigate} />} /></>;
         break;
       case "development-roadmap-timeline":
-        content = <><FinalWorkspaceHeader group="development" active="roadmap" navigate={navigate} /><DevelopmentRoadmap mode="timeline" workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} /></>;
+        content = <><FinalWorkspaceHeader group="development" active="roadmap" navigate={navigate} /><DevelopmentRoadmap mode="timeline" workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} jarvis={jarvisSidecar} /></>;
         break;
       case "development-roadmap-calendar":
-        content = <><FinalWorkspaceHeader group="development" active="roadmap" navigate={navigate} /><DevelopmentRoadmap mode="calendar" workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} /></>;
+        content = <><FinalWorkspaceHeader group="development" active="roadmap" navigate={navigate} /><DevelopmentRoadmap mode="calendar" workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} jarvis={jarvisSidecar} /></>;
         break;
       case "development-brainstorm":
         content = <><FinalWorkspaceHeader group="development" active="brainstorm" navigate={navigate} /><DevelopmentBrainstorm jarvis={jarvisSidecar} workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} /></>;

@@ -46,18 +46,19 @@ assert(processStage.includes('import type { PrimaryStageProps } from "./registry
 assert(!/from\s+["'][^"']*(?:api|lineage|runner|provider)/i.test(processStage), "ProcessStage imports runtime/domain authority");
 assert(!/\b(?:fetch|localStorage|sessionStorage|onSelectionChange|onWorkspaceChange|useEffect|useState)\b/.test(processStage), "ProcessStage gained state, storage, fetch, or selection authority");
 assert((processStage.match(/\bdisabled\b/g) ?? []).length >= 2, "Process controls are not deterministically disabled");
-// 100f adds exactly one canonical NAVIGATE handler between Design peers; Process authoring mutations remain forbidden.
-const processClickHandlers = processStage.match(/\bonClick\s*=/g) ?? [];
+// 144 adds navigation to existing inspection owners, not Process authoring.
+const processClickHandlers = processStage.match(/\bonClick\s*=\{[^}]+\}/g) ?? [];
 assert(
-  processClickHandlers.length === 1 && processStage.includes('onClick={() => navigate("/design/bluecad")}'),
+  processClickHandlers.length === 4 && processClickHandlers.every(handler =>
+    /^onClick=\{\(\) => navigate\("\/(design\/bluecad|memory\/models|runs|engineering-data)"\)\}$/.test(handler)),
   "Process scaffold exposes a non-navigation click handler"
 );
 // 100f supersedes the old 058d literal copy while preserving the same fail-closed server-authority boundary.
 includesAll(processStage, [
-  "Future Process authoring control — unavailable until server-owned topology/evaluator authority is integrated.",
-  "Process topology editing will activate only when server-owned Process and evaluator contracts are integrated.",
+  "The visual process editor is not connected to a topology-authoring service.",
+  "Inspect existing models and runs while the visual process editor is unavailable.",
   "No process topology is loaded.",
-  "This canvas becomes authoritative only after Process backends are connected. No topology is fabricated in the frontend."
+  "A process calculation kernel exists, but this visual editor cannot create, connect or solve equipment yet."
 ], "truthful Process empty-state contract");
 
 const routeReset = app.match(/useEffect\(\(\) => \{([\s\S]*?)\}, \[route\.id\]\);/)?.[1] ?? "";

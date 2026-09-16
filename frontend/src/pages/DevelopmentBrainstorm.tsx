@@ -33,12 +33,34 @@ type BrainstormRawWithDiscussions = BrainstormRaw & {
   discussions?: RawDiscussion[];
 };
 
+function IdeaDetails({ expanded }: { expanded: BrainstormIdea }) {
+  return <section className="operator-card" data-testid="brainstorm-detail">
+          <h2>{expanded.current.title} · detail</h2>
+          <p>{expanded.current.synthesis}</p>
+          <h3>Exact provenance</h3>
+          <ul>
+            {expanded.current.source_refs.map((ref, index) => <li key={`${ref.ref_type}-${ref.ref_id}-${index}`}>{ref.ref_type}:{ref.ref_id}{ref.revision ? `@${ref.revision}` : ""}</li>)}
+          </ul>
+          <h3>Discussion provenance</h3>
+          {(expanded.discussions ?? []).length === 0 ? <p>No recorded discussions.</p> : (
+            <ul>{(expanded.discussions ?? []).map((discussion) => (
+              <li key={`${discussion.id}-${discussion.bound_revision}`}>
+                {discussion.id} · bound to r{discussion.bound_revision} · {discussion.created_by} · {discussion.created_at} · {discussion.source_refs.map((ref) => `${ref.ref_type}:${ref.ref_id}${ref.revision ? `@${ref.revision}` : ""}`).join(", ")}
+              </li>
+            ))}</ul>
+          )}
+          <h3>Immutable revisions</h3>
+          <ul>{(expanded.revisions ?? []).map((revision) => <li key={revision.revision}>r{revision.revision}: {revision.title}</li>)}</ul>
+        </section>;
+}
+
 export default function DevelopmentBrainstorm({ jarvis, workspaceId, onWorkspaceChange }: Props) {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [rawRecords, setRawRecords] = useState<BrainstormRawWithDiscussions[]>([]);
   const [ideas, setIdeas] = useState<BrainstormIdea[]>([]);
   const [promotions, setPromotions] = useState<BrainstormPromotion[]>([]);
-  const [expanded, setExpanded] = useState<BrainstormIdea | null>(null);
+  const [expanded, setExpanded] = useState<Record<string, BrainstormIdea>>({});
+  const [organizeOpen, setOrganizeOpen] = useState(false);
   const [rawQuery, setRawQuery] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const [rawText, setRawText] = useState("");
@@ -87,7 +109,7 @@ export default function DevelopmentBrainstorm({ jarvis, workspaceId, onWorkspace
     setRawRecords([]);
     setIdeas([]);
     setPromotions([]);
-    setExpanded(null);
+    setExpanded({});
     setSourceRawId("");
     setEditingIdeaId("");
     setSuccessorId("");
@@ -96,7 +118,7 @@ export default function DevelopmentBrainstorm({ jarvis, workspaceId, onWorkspace
   }, [workspaceId]);
 
   async function refresh(selectedWorkspaceId: string) {
-    const expandedId = expanded?.id ?? null;
+    const expandedIds = Object.keys(expanded);
     const [nextRaw, nextIdeas, nextPromotions] = await Promise.all([
       listBrainstormRaw(selectedWorkspaceId),
       listBrainstormIdeas(selectedWorkspaceId),
@@ -107,14 +129,8 @@ export default function DevelopmentBrainstorm({ jarvis, workspaceId, onWorkspace
     setIdeas(nextIdeas);
     setPromotions(nextPromotions);
     setProjectionWorkspaceId(selectedWorkspaceId);
-    if (expandedId) {
-      const fresh = nextIdeas.find((idea) => idea.id === expandedId);
-      if (!fresh) setExpanded(null);
-      else {
-        const detail = await getBrainstormIdea(selectedWorkspaceId, fresh.id);
-        if (activeWorkspaceRef.current === selectedWorkspaceId) setExpanded(detail);
-      }
-    }
+    const refreshed = await Promise.all(expandedIds.filter(id => nextIdeas.some(idea => idea.id === id)).map(id => getBrainstormIdea(selectedWorkspaceId, id)));
+    if (activeWorkspaceRef.current === selectedWorkspaceId) setExpanded(Object.fromEntries(refreshed.map(idea => [idea.id, idea])));
   }
 
   useEffect(() => {
@@ -241,7 +257,7 @@ export default function DevelopmentBrainstorm({ jarvis, workspaceId, onWorkspace
                 ))}</ul>
               </div>
             )}
-            <button disabled={busy} onClick={() => setSourceRawId(raw.id)}>Use as reconciliation source</button>
+            <button disabled={busy} onClick={() => { setSourceRawId(raw.id); setEditingIdeaId(""); setOrganizeOpen(true); }}>Organize this note</button>
           </article>
         ))}
       </section>
@@ -253,21 +269,23 @@ export default function DevelopmentBrainstorm({ jarvis, workspaceId, onWorkspace
             <h3>{idea.current.title}</h3>
             <p><strong>{idea.lineage_state}</strong> · revision {idea.current_revision}</p>
             <p>{idea.current.takeaway}</p>
-            <button disabled={busy} onClick={async () => {
+            <button aria-expanded={Boolean(expanded[idea.id])} disabled={busy} onClick={async () => {
+              if (expanded[idea.id]) { setExpanded(current => { const next = { ...current }; delete next[idea.id]; return next; }); return; }
               const selectedWorkspaceId = idea.workspace_id;
               setBusy(true);
               setError(null);
               try {
                 const detail = await getBrainstormIdea(selectedWorkspaceId, idea.id);
-                if (activeWorkspaceRef.current === selectedWorkspaceId) setExpanded(detail);
+                if (activeWorkspaceRef.current === selectedWorkspaceId) setExpanded(current => ({ ...current, [detail.id]: detail }));
               } catch (exc) {
                 if (activeWorkspaceRef.current === selectedWorkspaceId) setError(exc instanceof Error ? exc.message : "Brainstorm detail failed to load.");
               } finally {
                 if (activeWorkspaceRef.current === selectedWorkspaceId) setBusy(false);
               }
             }}>Inspect synthesis and provenance</button>
+            {expanded[idea.id] && <IdeaDetails expanded={expanded[idea.id]} />}
             {idea.lineage_state !== "SUPERSEDED" ? <>
-              <button disabled={busy} onClick={() => setEditingIdeaId(idea.id)}>Revise this idea</button>
+              <button disabled={busy} onClick={() => { setEditingIdeaId(idea.id); setTitle(idea.current.title); setTakeaway(idea.current.takeaway); setSynthesis(idea.current.synthesis); setOrganizeOpen(true); }}>Revise this idea</button>
               <button disabled={busy} onClick={() => setEditingIdeaId(idea.id)}>Use as lineage source</button>
               <button disabled={busy} onClick={() => setSuccessorId(idea.id)}>Use as successor</button>
             </> : null}
@@ -289,7 +307,7 @@ export default function DevelopmentBrainstorm({ jarvis, workspaceId, onWorkspace
         ))}
       </section>
 
-        <details className="operator-card brainstorm-organize"><summary>Organize a saved note</summary>
+        <details className="operator-card brainstorm-organize" open={organizeOpen} onToggle={event => setOrganizeOpen(event.currentTarget.open)}><summary>Organize a saved note</summary>
           <p>Preserve the original note and save your reasoning as an idea. AI reconciliation is not available yet.</p>
           <label>
             Source RAW
@@ -331,28 +349,8 @@ export default function DevelopmentBrainstorm({ jarvis, workspaceId, onWorkspace
             setEditingIdeaId("");
           })}>{selectedIdea ? "Append reconciled revision" : "Create reconciled idea"}</button>
         </details>
-      {projectionCurrent && expanded ? (
-        <section className="operator-card" data-testid="brainstorm-detail">
-          <h2>{expanded.current.title} · detail</h2>
-          <p>{expanded.current.synthesis}</p>
-          <h3>Exact provenance</h3>
-          <ul>
-            {expanded.current.source_refs.map((ref, index) => <li key={`${ref.ref_type}-${ref.ref_id}-${index}`}>{ref.ref_type}:{ref.ref_id}{ref.revision ? `@${ref.revision}` : ""}</li>)}
-          </ul>
-          <h3>Discussion provenance</h3>
-          {(expanded.discussions ?? []).length === 0 ? <p>No recorded discussions.</p> : (
-            <ul>{(expanded.discussions ?? []).map((discussion) => (
-              <li key={`${discussion.id}-${discussion.bound_revision}`}>
-                {discussion.id} · bound to r{discussion.bound_revision} · {discussion.created_by} · {discussion.created_at} · {discussion.source_refs.map((ref) => `${ref.ref_type}:${ref.ref_id}${ref.revision ? `@${ref.revision}` : ""}`).join(", ")}
-              </li>
-            ))}</ul>
-          )}
-          <h3>Immutable revisions</h3>
-          <ul>{(expanded.revisions ?? []).map((revision) => <li key={revision.revision}>r{revision.revision}: {revision.title}</li>)}</ul>
-        </section>
-      ) : null}
 
-      <section className="operator-card">
+      {visibleIdeas.length > 1 && <section className="operator-card">
         <h2>Supersede lineage</h2>
         <p>Choose source and successor from the reconciled idea cards.</p>
         <button disabled={!projectionCurrent || !selectedIdea || !selectedSuccessor || selectedIdea.id === selectedSuccessor.id || busy} onClick={() => run(async () => {
@@ -368,15 +366,15 @@ export default function DevelopmentBrainstorm({ jarvis, workspaceId, onWorkspace
           setEditingIdeaId("");
           setSuccessorId("");
         })}>Supersede with successor</button>
-      </section>
+      </section>}
 
       <section aria-labelledby="brainstorm-promotions-heading">
         <h2 id="brainstorm-promotions-heading">Promotion proposals</h2>
         {visiblePromotions.length === 0 ? <p>No promotion proposals yet.</p> : visiblePromotions.map((promotion) => (
           <article className="operator-card" data-testid="brainstorm-promotion" key={promotion.id}>
             <p><strong>{promotion.target}</strong> proposal · {promotion.state}</p>
-            <p>Proposal identity: {promotion.id}</p>
-            <p>Source revision: {promotion.idea_id}@{promotion.source_revision}</p>
+            <p>{visibleIdeas.find(idea => idea.id === promotion.idea_id)?.current.title ?? "Source idea"} · revision {promotion.source_revision}</p>
+            <details><summary>Technical proposal identity</summary><p>{promotion.id}</p><p>{promotion.idea_id}</p></details>
           </article>
         ))}
       </section>

@@ -4,11 +4,6 @@ import {
   ArrowCounterClockwise,
   Circle,
   Cube,
-  CursorClick,
-  Export,
-  Hand,
-  MagnifyingGlass,
-  MagnifyingGlassPlus,
   Ruler,
   Selection,
   SketchLogo,
@@ -19,21 +14,15 @@ import BluecadWorkbench from "../components/bluecad/BluecadWorkbench";
 import type { PrimaryStageProps } from "./registry";
 
 const bluecadPresentationTools = [
-  ["Select", CursorClick],
-  ["Orbit", ArrowClockwise],
-  ["Pan", Hand],
   ["Measure", Ruler],
   ["Sketch", SketchLogo],
   ["Circle", Circle],
   ["Extrude", Cube],
   ["Pattern", SquaresFour],
   ["Fit view", ArrowsOut],
-  ["Zoom", MagnifyingGlassPlus],
   ["Undo", ArrowCounterClockwise],
   ["Redo", ArrowClockwise],
   ["Section", Selection],
-  ["Inspect", MagnifyingGlass],
-  ["Export", Export]
 ] as const;
 
 function ModelStage({ onSelectionChange, onShellRegionsChange, requestShellRegionOpen, navigate }: PrimaryStageProps) {
@@ -56,6 +45,7 @@ function ModelStage({ onSelectionChange, onShellRegionsChange, requestShellRegio
         </nav>
       </header>
 
+      <p className="panel-subtitle">When geometry is available: click to select a mesh, drag to orbit, right-drag to pan and scroll to zoom. Open the candidate inspector for mesh details, validation and existing artifact downloads.</p>
       <div className="bluecad-final-stage__toolbar" aria-label="BLUECAD tools">
         {bluecadPresentationTools.map(([label, Icon]) => (
           <button key={label} type="button" disabled title={futureReason} aria-label={`${label} unavailable: ${futureReason}`}>

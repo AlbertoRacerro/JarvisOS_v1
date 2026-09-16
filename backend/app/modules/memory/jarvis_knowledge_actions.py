@@ -540,6 +540,18 @@ def _refusal(reason: KnowledgeRefusalReason) -> dict[str, object]:
 AutoRunner = Callable[[AITaskRunRequest], AITaskRunResponse]
 
 
+def validate_semantic_knowledge_context(exact_refs: list[JarvisExactRef], intent: str, blocks: list[dict]) -> None:
+    """Shared existing Memory restrictions, including local conversation dispatch."""
+    if any(ref.owner == "modeling" and ref.kind in _PROJECT_KINDS for ref in exact_refs):
+        raise KnowledgeActionError(
+            "sensitive_context",
+            "Project Basis semantic generation is unavailable because sensitivity authority "
+            "can change at the dispatch boundary; use the deterministic proposal path",
+        )
+    if _contains_secret_material([{"intent": intent}, *blocks]):
+        raise KnowledgeActionError("sensitive_context", "secret-bearing evidence cannot enter semantic model context")
+
+
 class KnowledgeActionsService:
     def __init__(self, *, auto_runner: AutoRunner = run_auto_task) -> None:
         self._auto_runner = auto_runner
@@ -563,18 +575,8 @@ class KnowledgeActionsService:
 
             generated_by: dict[str, object]
             if payload.semantic:
-                if any(
-                    ref.owner == "modeling" and ref.kind in _PROJECT_KINDS
-                    for ref in payload.exact_refs
-                ):
-                    raise KnowledgeActionError(
-                        "sensitive_context",
-                        "Project Basis semantic generation is unavailable because sensitivity authority "
-                        "can change at the dispatch boundary; use the deterministic proposal path",
-                    )
                 context_blocks = list(inspected.blocks)
-                if _contains_secret_material(context_blocks):
-                    raise KnowledgeActionError("sensitive_context", "secret-bearing evidence cannot enter semantic model context")
+                validate_semantic_knowledge_context(payload.exact_refs, payload.intent, context_blocks)
                 prompt = (
                     "Return JSON only with keys summary, proposed_items, questions, research_steps, assumptions, "
                     "warnings, authoritative_next_action. Keep the answer advisory; never claim to commit, apply, "

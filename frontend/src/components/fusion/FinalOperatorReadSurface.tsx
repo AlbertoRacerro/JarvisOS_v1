@@ -27,7 +27,7 @@ type Props = Readonly<{
   onWorkspaceChange: (workspaceId: string) => void;
   projectSearch?: React.ReactNode;
   jarvis?: React.ReactNode;
-  onRecordSelect?: (ref: string | null) => void;
+  onRecordSelect?: (ref: string | null, label?: string) => void;
   requestedRecordRef?: string | null;
 }>;
 
@@ -53,7 +53,7 @@ function WorkspacePicker({ workspaces, selectedId, onSelect }: Readonly<{ worksp
   return <div className="final-fusion__toolbar-line"><span>Project workspace</span><select aria-label="Project workspace" value={selectedId ?? ""} onChange={(event) => onSelect(event.target.value)} disabled={!workspaces.length}><option value="">Select workspace…</option>{workspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}</select></div>;
 }
 
-function ProjectBasis({ records, workspaces, workspaceId, onWorkspaceChange, loading, error, searchPanel, requestedRecordRef, jarvis, onRecordSelect, onChanged }: Readonly<{ records: WorkspaceRecords; workspaces: FinalWorkspace[]; workspaceId: string | null; onWorkspaceChange: (id: string) => void; loading: boolean; error: string | null; searchPanel?: React.ReactNode; requestedRecordRef?: string | null; jarvis?: React.ReactNode; onRecordSelect?: (ref: string | null) => void; onChanged: () => void }>) {
+function ProjectBasis({ records, workspaces, workspaceId, onWorkspaceChange, loading, error, searchPanel, requestedRecordRef, jarvis, onRecordSelect, onChanged }: Readonly<{ records: WorkspaceRecords; workspaces: FinalWorkspace[]; workspaceId: string | null; onWorkspaceChange: (id: string) => void; loading: boolean; error: string | null; searchPanel?: React.ReactNode; requestedRecordRef?: string | null; jarvis?: React.ReactNode; onRecordSelect?: (ref: string | null, label?: string) => void; onChanged: () => void }>) {
   const [open, setOpen] = useState<Set<string>>(new Set());
   useEffect(() => { setOpen(new Set(requestedRecordRef ? [requestedRecordRef] : [])); }, [workspaceId, requestedRecordRef]);
   const groups = [
@@ -62,9 +62,9 @@ function ProjectBasis({ records, workspaces, workspaceId, onWorkspaceChange, loa
     { title: "Assumptions", rows: records.assumptions.map(item => ({ id: `assumption:${item.id}`, title: item.statement, status: item.status, data: item })) },
     { title: "Decisions", rows: records.decisions.map(item => ({ id: `decision:${item.id}`, title: item.title, status: item.status, data: item })) }
   ];
-  const toggle = (id: string) => {
+  const toggle = (id: string, label: string) => {
     setOpen(current => { const next = new Set(current); next.has(id) ? next.delete(id) : next.add(id); return next; });
-    onRecordSelect?.(id);
+    onRecordSelect?.(id, label);
   };
   return <div className="final-fusion__workbench final-fusion__workbench--memory">
     {searchPanel}
@@ -76,7 +76,7 @@ function ProjectBasis({ records, workspaces, workspaceId, onWorkspaceChange, loa
           {groups.map(group => <section key={group.title} className="basis-group">
             <h3>{group.title} <span>{group.rows.length}</span></h3>
             {group.rows.map(row => <article key={row.id} data-search-ref={row.id} data-search-selected={row.id === requestedRecordRef ? "true" : undefined}>
-              <button className="basis-record" aria-expanded={open.has(row.id)} onClick={() => toggle(row.id)}>
+              <button className="basis-record secondary-button" aria-expanded={open.has(row.id)} onClick={() => toggle(row.id, row.title)}>
                 <span aria-hidden="true">{open.has(row.id) ? "⌄" : "›"}</span><strong>{row.title}</strong><em>{row.status}</em>
               </button>
               {open.has(row.id) && <div className="basis-record-detail">

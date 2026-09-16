@@ -1,6 +1,124 @@
 # Spec 144 persistent implementation checkpoint
 
-Updated 2026-09-15. **IN PROGRESS — NOT READY FOR MAINTAINER ACCEPTANCE.**
+Updated 2026-09-16. **IN PROGRESS — NOT READY FOR MAINTAINER ACCEPTANCE.**
+
+## Latest checkpoint — 2026-09-16
+
+This section supersedes the older implementation/next-work details below where
+they differ. Fresh remote master was `240d5e0b27d9837d40f47bddfa24871ae7a2a4bb`;
+branch parent was `8d8acc28c1f90bd7d0c0e27ea39aff0386c13553`. Issue #655 remains
+the mission contract. No implementation PR existed on the fresh branch lookup.
+No master merge or status promotion was performed.
+
+Recovered and integrated the prior uncommitted implementation rather than
+discarding/restarting it. Other active mapping tasks were confined to separate
+documentation branches; no other live implementation child was present.
+
+### Implemented and exercised
+
+- Shared Jarvis exposes existing configured local routes plus an explicitly
+  synthetic test responder. Configuration is not advertised as runtime health.
+  Transcript entries expose actual persisted execution class/model and failure.
+  Default provider config, paid-disabled/zero budget and egress are unchanged.
+- Memory exact context is passed with its inspected digest. Thread dispatch now
+  reuses the Memory owner's semantic restrictions before reservation/dispatch;
+  Project Basis semantic discussion remains refused, including local routes.
+  Model/Literature secret-bearing context or intent is refused. This does not
+  weaken sensitivity authority to make a button appear functional.
+- Independent bounded review found a delayed initial thread-list race. Sending
+  is now blocked while conversation ownership loads; auto-create completion also
+  checks submit ownership. Browser regression delays the REAL list response,
+  presses Enter, verifies no thread write, then releases it and verifies draft
+  and conversation identity. A source guard is also included in normal build.
+- Timeline/Calendar now have actual time-grid/day/week/month/agenda composition,
+  navigation, selected-item/event editing and readable feedback. Existing owner,
+  timezone conversion, revision and done-when checks remain authoritative.
+- Brainstorm has inline expandable synthesis, saved-note organization and human
+  promotion source labels. Browser exercised manual discussion, reconciliation,
+  disclosure and proposal-only promotion through real owners and after restart.
+  AI reconciliation is still unavailable; manual synthesis is not AI evidence.
+- Literature supports source metadata and raw claim/datum entry; Models expose
+  versionless definitions and in-panel revision history. Exact selection has a
+  human label and removable context. See the bounded Memory note as history.
+- Coding has bounded scrolling, readable deterministic inspection/proposal
+  output, context removal and stale-proposal invalidation. Actual provider was
+  unavailable; simulated successful file/proposal results are explicitly only
+  supplementary component tests, never backend/provider-success evidence.
+- Process distinguishes its unavailable visual authoring from existing kernel,
+  model and run inspection. Navigation-only tests were updated to allow the
+  exact four read/navigation destinations, not arbitrary click handlers.
+- BLUECAD exposes existing inspector/interaction controls truthfully; Settings
+  separates enabled/configured from reachable and provides failed-read recovery.
+  Actual BLUECAD candidate remained `parked` / `budget_blocked`; no paid generation.
+
+### Fresh verification
+
+- `cd frontend && npm run build`: PASS (contract gates, TypeScript, Vite).
+  Existing >500 kB bundle warning remains. `git diff --check`: PASS.
+- Backend pytest: 132 passed across AI threads/conversation options (37),
+  knowledge actions/security/review/sensitivity/context/Literature (58), and
+  Development/calendar/done authority/Brainstorm/human search owners (37).
+- `scripts/144-operator-browser-smoke.mjs`: PASS against real FastAPI/Vite/Chromium,
+  fresh isolated data, no synthetic app responses. Covers RAW, manual idea and
+  promotion, first thread, delayed list race, requirement reconcile/search/
+  disclosure, exact-context refusal/removal, restart persistence, 12 surfaces at
+  1600x1000 and 1280x800. No page errors/document horizontal overflow. Actual
+  local model returned `failed_terminal` / `localrespondertransporterror`.
+- `scripts/144-roadmap-browser-smoke.mjs`: PASS create/edit window, done-when
+  refusal, linked event create/edit, four calendar projections, compact widths
+  and backend restart. No fabricated completed roadmap item.
+- `scripts/144-memory-browser-smoke.mjs`: PASS source/raw findings and exact
+  preview/removal, versionless model, reload/restart, compact overflow. Extended
+  run also PASS: real thread submission accepts exactly the inspected Literature
+  refs/digest, persists across restart, and reports the responder as synthetic
+  (not inference proof). Evidence: `/tmp/jarvis-144-B3Xc12/evidence`.
+- `scripts/144-bluecad-settings-browser-smoke.mjs`: PASS real parked candidate
+  create/archive/reload/restart. Settings failed-read recovery uses explicitly
+  labeled request-abort fault injection, not a claimed real outage.
+- `scripts/144-coding-browser-smoke.mjs`: PASS actual unavailable state/runtime
+  checks and separately labeled fixture-only reader/context/proposal regressions.
+- All five browser harnesses are now checked in and use repository-relative
+  roots and explicit Python/Playwright/Chromium overrides. Successful runs do not
+  substitute for maintainer hands-on acceptance or full visual-reference review.
+
+Fresh local evidence directories (not published artifacts):
+`/tmp/jarvis-144-k99czx/evidence` (main),
+`/tmp/jarvis-144-Us9JDh/evidence` (roadmap),
+`/tmp/jarvis-144-9l2ZMD/evidence` (Memory before exact-submit extension),
+`/tmp/jarvis-144-xbodWr/evidence` (BLUECAD/Settings),
+`/tmp/jarvis-coding-144-vy9UOE/evidence` (Coding actual/fixture separated).
+Main compact Brainstorm and populated compact Calendar screenshots were visually
+inspected in this run; no claim of full approved-reference fidelity is made.
+
+### Environment and exact next work
+
+Cloud Browser again refused loopback with `ERR_BLOCKED_BY_CLIENT`. The persisted
+Chromium binary had been truncated (ELF missing sections); regenerated from the
+already-installed official npm package's Brotli archive. SwiftShader libraries
+must sit beside the restored executable. Python venv executable was absent;
+existing 3.12 packages work through the installed Python with explicit PYTHONPATH.
+No policy/network bypass, provider credentials or repository dependencies changed.
+
+Example reproduction environment for this checkpoint: `PYTHONPATH` points to
+`/workspace/scratch/61bf444950e2/venv/lib/python3.12/site-packages`,
+`JARVIS_PLAYWRIGHT_MODULE` to the primary-runtime `playwright/index.mjs`,
+`JARVIS_CHROMIUM_EXECUTABLE=/tmp/chromium-144-restored`, `LD_LIBRARY_PATH=/tmp`.
+These are disposable environment paths; normal environments can use installed
+Python/Playwright/Chromium. Run main and roadmap serially (both use 8000/5173).
+
+Next: inspect populated surface screenshots against every approved reference;
+complete usable-path audit for unexercised existing owners, generated BLUECAD
+geometry and live Coding reads where the real provider is available. Prove
+successful local inference on the actual operator machine without changing safe
+defaults or claiming synthetic output as inference. Review first-run workspace
+creation and long/partial/stale task paths. Exact Memory submission must not be
+extended around the Project Basis refusal. Only after remaining acceptance gaps
+are closed, open/reuse the single implementation PR, reconcile STATUS to that
+PR, run exact-head checks/review and report READY. Do not merge master.
+
+---
+
+## Earlier checkpoint — 2026-09-15 (historical)
 
 Mission: issue #655; branch `impl/144-operator-usability-recovery`. Do not merge.
 Accepted starting master: `240d5e0b27d9837d40f47bddfa24871ae7a2a4bb`.

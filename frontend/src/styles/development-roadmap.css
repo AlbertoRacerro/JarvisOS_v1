@@ -1,0 +1,69 @@
+.application-shell--final .roadmap-workspace { display:flex; flex-direction:column; gap:10px; min-width:0; min-height:0; height:100%; }
+.application-shell--final .roadmap-workspace .roadmap-navigation, .application-shell--final .roadmap-workspace .roadmap-navigation nav, .application-shell--final .roadmap-workspace .roadmap-toolbar, .application-shell--final .roadmap-workspace .roadmap-subtoolbar, .application-shell--final .roadmap-workspace .calendar-modes, .application-shell--final .roadmap-workspace .calendar-date-nav { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.application-shell--final .roadmap-workspace .roadmap-navigation { justify-content:space-between; }
+.application-shell--final .roadmap-workspace .roadmap-navigation nav a { padding:8px 18px; border:1px solid #ddd5c8; border-radius:4px; text-decoration:none; color:#65705f; background:#fffefc; }
+.application-shell--final .roadmap-workspace .roadmap-navigation nav a[aria-current="page"] { background:#edf7e7; border-color:#6e955a; color:#28581a; }
+.application-shell--final .roadmap-workspace .roadmap-primary label, .application-shell--final .roadmap-workspace .roadmap-navigation label { display:flex; flex-direction:column; gap:4px; font-size:11px; }
+.application-shell--final .roadmap-workspace input, .application-shell--final .roadmap-workspace select { min-width:0; padding:6px 8px; border:1px solid #ddd5c8; border-radius:4px; background:#fffefc; }
+.application-shell--final .roadmap-workspace.operator-page button { cursor:pointer; border:1px solid #ddd5c8; border-radius:4px; background:#fffefc; color:#4c5945; box-shadow:none; padding:7px 10px; }
+.application-shell--final .roadmap-workspace button:disabled { cursor:default; }
+.application-shell--final .roadmap-workspace button[aria-pressed="true"] { border-color:#6e955a; background:#edf7e7; color:#28581a; }
+.application-shell--final .roadmap-workspace .roadmap-workbench { display:grid; grid-template-columns:minmax(0,1fr) 315px; gap:10px; flex:1; min-height:0; }
+.application-shell--final .roadmap-workspace .roadmap-workbench:not(:has(.roadmap-jarvis)) { grid-template-columns:minmax(0,1fr); }
+.application-shell--final .roadmap-workspace .roadmap-primary { display:flex; flex-direction:column; overflow:auto; min-width:0; min-height:0; background:#fffefc; border:1px solid #ddd5c8; border-radius:5px; }
+.application-shell--final .roadmap-workspace .roadmap-toolbar { padding:11px 13px; border-bottom:1px solid #ddd5c8; }
+.application-shell--final .roadmap-workspace .roadmap-toolbar strong { margin-right:auto; font-size:15px; }
+.application-shell--final .roadmap-workspace .roadmap-toolbar .roadmap-search { font-size:0; }
+.application-shell--final .roadmap-workspace .roadmap-toolbar input { font-size:12px; width:190px; }
+.application-shell--final .roadmap-workspace .roadmap-subtoolbar { padding:8px 13px; background:#fcfaf6; border-bottom:1px solid #eee7db; justify-content:space-between; }
+.application-shell--final .roadmap-workspace .roadmap-subtoolbar > span, .application-shell--final .roadmap-workspace .calendar-zone { font-size:11px; color:#737b6e; }
+.application-shell--final .roadmap-workspace .roadmap-create { padding:14px; background:#f8faf5; border-bottom:1px solid #ddd5c8; }
+.application-shell--final .roadmap-workspace .roadmap-create form, .application-shell--final .roadmap-workspace .roadmap-detail form { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+.application-shell--final .roadmap-workspace .roadmap-create label:first-child, .application-shell--final .roadmap-workspace .roadmap-detail form label:first-child { grid-column:1/-1; }
+.application-shell--final .roadmap-workspace .roadmap-timeline-scroll { flex:1 0 340px; overflow:auto; }
+.application-shell--final .roadmap-workspace .roadmap-timeline { min-width:650px; }
+.application-shell--final .roadmap-workspace .roadmap-axis, .application-shell--final .roadmap-workspace .roadmap-lane { display:grid; grid-template-columns:190px minmax(0,1fr); }
+.application-shell--final .roadmap-workspace .roadmap-axis { position:sticky; top:0; z-index:2; background:#fcfaf6; border-bottom:1px solid #ddd5c8; font-size:11px; padding:12px; }
+.application-shell--final .roadmap-workspace .roadmap-axis > div { display:flex; justify-content:space-between; }
+.application-shell--final .roadmap-workspace .roadmap-lane { min-height:82px; border-bottom:1px solid #eee7db; padding:0 12px; }
+.application-shell--final .roadmap-workspace .roadmap-lane .roadmap-lane-label { border:0; border-radius:0; background:transparent; padding:12px 12px 12px 0; text-align:left; color:#333c30; overflow-wrap:anywhere; }
+.application-shell--final .roadmap-workspace .roadmap-lane-label small { display:block; margin-top:5px; color:#77806f; font-size:10px; }
+.application-shell--final .roadmap-workspace .roadmap-track { position:relative; min-height:82px; background:repeating-linear-gradient(90deg,#eee7db 0,#eee7db 1px,transparent 1px,transparent 25%); }
+.application-shell--final .roadmap-workspace .roadmap-track .roadmap-window { position:absolute; top:15px; bottom:15px; min-width:8px; padding:7px 10px; border:1px solid #3f6b30; border-radius:5px; background:linear-gradient(#6e9a57,#477237); color:#f8fbf6; text-align:left; overflow:hidden; white-space:nowrap; box-shadow:inset 0 -4px 7px #0002; }
+.application-shell--final .roadmap-workspace .roadmap-window span, .application-shell--final .roadmap-workspace .roadmap-window small { display:block; overflow:hidden; text-overflow:ellipsis; }
+.application-shell--final .roadmap-workspace .roadmap-window small { font-size:10px; margin-top:3px; }
+.application-shell--final .roadmap-workspace .roadmap-lane[data-status="Blocked"] .roadmap-window { background:linear-gradient(#b75a51,#8c3832); border-color:#7d302b; }
+.application-shell--final .roadmap-workspace .roadmap-lane[data-status="In progress"] .roadmap-window { background:linear-gradient(#d7a53e,#a8741e); border-color:#996816; }
+.application-shell--final .roadmap-workspace .roadmap-track .roadmap-unscheduled { position:absolute; top:24px; left:10px; background:#fffefc; color:#65705f; border:1px dashed #b9c5ad; }
+.application-shell--final .roadmap-workspace .roadmap-execution { padding:12px; border-top:1px solid #ddd5c8; }
+.application-shell--final .roadmap-workspace .roadmap-status-columns { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin-top:10px; }
+.application-shell--final .roadmap-workspace .roadmap-status-columns > div { border:1px solid #e5ddd0; border-radius:4px; padding:8px; }
+.application-shell--final .roadmap-workspace .roadmap-status-columns strong { display:block; margin-bottom:7px; }
+.application-shell--final .roadmap-workspace .roadmap-status-columns button { display:block; width:100%; text-align:left; margin-top:4px; }
+.application-shell--final .roadmap-workspace .roadmap-detail { padding:0 13px; }
+.application-shell--final .roadmap-workspace .roadmap-detail article { border-top:1px solid #ddd5c8; padding:14px 0; }
+.application-shell--final .roadmap-workspace .roadmap-detail article > div:last-child { display:flex; gap:7px; flex-wrap:wrap; align-items:center; }
+.application-shell--final .roadmap-workspace .roadmap-detail p { margin:7px 0; }
+.application-shell--final .roadmap-workspace .roadmap-detail article > label { max-width:220px; margin:10px 0; }
+.application-shell--final .roadmap-workspace .roadmap-jarvis { min-height:0; overflow:auto; padding:14px; border:1px solid #ddd5c8; border-radius:5px; background:#fffefc; }
+.application-shell--final .roadmap-workspace .roadmap-jarvis > * { height:100%; }
+.application-shell--final .roadmap-workspace .calendar-zone { padding:8px 13px; margin:0; }
+.application-shell--final .roadmap-workspace .calendar-projection { position:relative; overflow:auto; flex:1 0 370px; min-height:300px; border-top:1px solid #eee7db; }
+.application-shell--final .roadmap-workspace .calendar-time-grid { display:grid; min-width:100%; width:max-content; }
+.application-shell--final .roadmap-workspace .calendar-day-heading { position:sticky; top:0; z-index:3; display:block; height:43px; padding:12px 6px; background:#fffefc; border-bottom:1px solid #ddd5c8; font-size:11px; }
+.application-shell--final .roadmap-workspace .calendar-hour-column > time { display:block; height:56px; padding:3px 5px; text-align:right; font-size:10px; color:#798071; }
+.application-shell--final .roadmap-workspace .calendar-day-column { border-left:1px solid #eee7db; min-width:0; }
+.application-shell--final .roadmap-workspace .calendar-day-hours { height:1344px; position:relative; background:repeating-linear-gradient(#eee7db 0,#eee7db 1px,transparent 1px,transparent 28px,#f5f1e9 28px,#f5f1e9 29px,transparent 29px,transparent 56px); }
+.application-shell--final .roadmap-workspace .calendar-event-position { position:absolute; padding:1px 2px; min-height:14px; }
+.application-shell--final .roadmap-workspace .calendar-projection .calendar-event { display:flex; flex-direction:column; gap:4px; text-align:left; width:100%; height:100%; overflow:hidden; border:1px solid #719760; border-radius:4px; background:linear-gradient(#eff7e9,#dfecd5); color:#33542c; padding:6px; }
+.application-shell--final .roadmap-workspace .calendar-event strong { font-size:11px; overflow:hidden; text-overflow:ellipsis; width:100%; }
+.application-shell--final .roadmap-workspace .calendar-event span { font-size:10px; }
+.application-shell--final .roadmap-workspace .calendar-month { display:grid; grid-template-columns:repeat(7,minmax(105px,1fr)); }
+.application-shell--final .roadmap-workspace .calendar-month-day { min-height:135px; padding:3px; border-right:1px solid #eee7db; border-bottom:1px solid #eee7db; }
+.application-shell--final .roadmap-workspace .calendar-month-day[data-outside-month="true"] { background:#f6f3ed; color:#92968d; }
+.application-shell--final .roadmap-workspace .calendar-month-day .calendar-day-heading { position:static; width:100%; height:30px; border:0; text-align:left; padding:5px; }
+.application-shell--final .roadmap-workspace .calendar-month-day .calendar-event { margin-top:4px; }
+.application-shell--final .roadmap-workspace .calendar-agenda-row { display:grid; grid-template-columns:110px minmax(0,1fr); padding:10px; gap:10px; border-bottom:1px solid #eee7db; }
+.application-shell--final .roadmap-workspace .roadmap-empty { padding:20px; color:#727a6a; }
+@media(max-width:1350px) { .roadmap-workbench { grid-template-columns:minmax(0,1fr) 285px; } .roadmap-toolbar input { width:150px; } }
+@media(max-width:1100px) { .roadmap-workbench { grid-template-columns:minmax(0,1fr); overflow:auto; } .roadmap-primary { min-height:550px; } .roadmap-jarvis { min-height:350px; } }

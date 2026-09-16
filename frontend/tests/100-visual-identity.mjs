@@ -150,9 +150,10 @@ for (const label of ["Heat exchanger", "Pump", "Compressor", "Reactor"]) {
   check(processStage.includes(`"${label}"`), `final Process future palette is missing ${label}`);
 }
 check((processStage.match(/\bdisabled\b/g) ?? []).length >= 2, "final Process future palette/toolbar is not deterministically disabled");
-const processClickHandlers = processStage.match(/\bonClick\s*=/g) ?? [];
+const processClickHandlers = processStage.match(/\bonClick\s*=\{[^}]+\}/g) ?? [];
 check(
-  processClickHandlers.length === 1 && processStage.includes('onClick={() => navigate("/design/bluecad")}'),
+  processClickHandlers.length === 4 && processClickHandlers.every(handler =>
+    /^onClick=\{\(\) => navigate\("\/(design\/bluecad|memory\/models|runs|engineering-data)"\)\}$/.test(handler)),
   "final Process scaffold exposes a non-navigation click handler"
 );
 check(!/\buseState\b|\buseEffect\b|\bfetch\s*\(/.test(processStage), "Process future affordances gained frontend mutation/runtime authority");
