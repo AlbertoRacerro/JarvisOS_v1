@@ -34,13 +34,13 @@ Runtime/source baseline: fresh `master` `240d5e0b27d9837d40f47bddfa24871ae7a2a4b
 - **What/when:** single local-first product-data root and SQLite/bootstrap owner.
 - **Canonical files:** `backend/app/core/paths.py`, `database.py`, `bootstrap.py`, `schema.py`, domain `*_schema.py` files.
 - **Invocation/reuse:** `build_paths`, `ensure_data_directories`, `open_sqlite_connection`, `initialize_database`, `get_database_info`.
-- **I/O/persistence:** canonical SQLite plus workspace/artifact/log/secret directories; application-managed migrations and conditional FTS5.
+- **I/O/persistence:** canonical SQLite plus workspace/artifact/log/secret directories; application-managed migrations and conditional FTS5. SQLite connections enforce foreign keys, WAL and a 5 s busy timeout.
 - **Preconditions:** writable data root and SQLite.
-- **Side effects/authority/risk:** high persistence authority; schema bootstrap/migrations mutate canonical DB.
-- **Tests/evidence:** database/bootstrap/domain persistence tests.
-- **Limitations:** no Alembic; FTS availability depends on SQLite build.
+- **Side effects/authority/risk:** high persistence authority; schema bootstrap/migrations mutate canonical DB. `initialize_storage` also ensures AI settings and optionally seeds the default workspace.
+- **Tests/evidence:** direct inspection of paths/bootstrap/database; domain schema/test files remain literal coverage targets.
+- **Limitations:** no Alembic; FTS availability depends on SQLite build; initialization uses duplicate-column tolerance for additive migrations and explicit migration recording.
 - **Do not reinvent:** no second product DB or data root.
-- **Search anchors:** `SCHEMA_MIGRATION_RECORDS`, `initialize_database`, `open_sqlite_connection`.
+- **Search anchors:** `SCHEMA_MIGRATION_RECORDS`, `initialize_database`, `open_sqlite_connection`, `_sqlite_fts5_available`, `initialize_storage`.
 
 ### Canonical engineering MemoryStore — REAL
 - **What/when:** assumptions/parameters/decisions and AI-origin proposal lifecycle.
@@ -129,7 +129,13 @@ No executable spec-122 multi-record Development CONTEXT/PROPOSE action service w
 | path | status | concise role/reason |
 |---|---|---|
 | `backend/app/main.py` | READ | FastAPI composition root; mounts live routers, owns local-AI lifecycle, Coding startup runtime snapshot, stranded-runner reconciliation and guarded SPA mount. |
+| `backend/app/core/__init__.py` | READ | Tiny core package marker/docstring only; no hidden imports or startup behavior. |
+| `backend/app/core/bootstrap.py` | READ | Storage bootstrap wrapper: initializes canonical DB, ensures AI settings, optionally seeds default workspace; executable CLI entry prints initialized DB location. |
 | `backend/app/core/config.py` | READ | Cached env-backed process settings for data root/DB/CORS/default AI-provider string and allowed Coding repositories. |
+| `backend/app/core/database.py` | READ | Canonical SQLite connection/bootstrap/migration orchestrator; WAL+FK+busy-timeout, domain schema/index registration, conditional FTS5, migration recording and readiness projection. |
+| `backend/app/core/errors.py` | READ | Shared immutable `AppError` plus canonical structured workspace-not-found HTTP error helper. |
+| `backend/app/core/logging.py` | READ | Minimal process logging configurator using INFO and a fixed timestamp/level/logger/message format. |
+| `backend/app/core/paths.py` | READ | Canonical `JarvisPaths` derivation and directory creation for DB/workspaces/artifacts/logs/secrets; includes compatibility `resolve_paths` alias. |
 | `backend/app/core/spa_static.py` | READ | Safe SPA static/fallback server; derives reserved API roots, validates exact client-route exceptions, requires HTML negotiation and rejects unsafe/asset/API fallback. |
 | `backend/app/api/health.py` | READ | Read-only `/health` projection of app identity/environment and resolved data root. |
 | `backend/app/api/system.py` | READ | `/system/info` projects DB/schema + canonical gateway status; `/system/initialize` bootstraps storage and AI settings. |
@@ -138,7 +144,7 @@ No executable spec-122 multi-record Development CONTEXT/PROPOSE action service w
 | `backend/app/modules/agents/registry.py` | READ | In-memory name-keyed `AgentRegistry` with overwrite-by-name and deterministic sorted listing; no persistence/provider authority. |
 
 ### Remaining coverage
-- Literal owned-scope enumeration remains incomplete. Next pass must continue with remaining `app/api`, `app/core`, then every file in owned module families `ai`, `coding`, `dev_message_route`, `development`, `events`, `files`, `local_ai`, `local_ai_eval`, `memory`, `modeling`, `project_knowledge`, `project_search`, `secrets`, `tools`, `workspaces`, followed by their owned tests/configs/schemas/helpers/fixtures/migrations.
+- Literal owned-scope enumeration remains incomplete. Continue remaining `app/api` and `app/core` schema files, then every file in owned module families `ai`, `coding`, `dev_message_route`, `development`, `events`, `files`, `local_ai`, `local_ai_eval`, `memory`, `modeling`, `project_knowledge`, `project_search`, `secrets`, `tools`, `workspaces`, followed by their owned tests/configs/schemas/helpers/fixtures/migrations.
 - PR #660 remains hints-only; every imported row requires reopening the source file.
 - Final completion requires a fresh tracked-tree rescan and a defensible exact zero count.
 
