@@ -1,8 +1,10 @@
 # Area A — Product backend / AI / data / context
 
-MAPPING_STATUS: COMPLETE
+MAPPING_STATUS: IN_PROGRESS
 
 Runtime/source baseline inspected from fresh `master` at `240d5e0b27d9837d40f47bddfa24871ae7a2a4bb`. Labels below describe executable source/runtime contracts, not merged-spec intent. Issue #656 common schema is compressed into dense bullets.
+
+> File-coverage recovery note (2026-09-16): the capability map below was previously complete at subsystem level, but issue #656 now requires literal tracked-file accounting. Completion is reopened until every owned tracked file is represented in the explicit ledger and each `READ` row has been content-inspected from fresh repository source.
 
 ## FastAPI composition + process startup — REAL
 - **What/when:** canonical backend composition root; start here to discover mounted product surfaces and lifecycle owners.
@@ -248,3 +250,20 @@ Runtime/source baseline inspected from fresh `master` at `240d5e0b27d9837d40f47b
 - Jarvis sidecar does not own a second backend/thread store; it reuses AI threads/common context/governed execution.
 - Coding pipeline state is a projection, not a second canonical delivery queue; Coding actions are bounded inspect/PROPOSE, not repository mutation authority.
 - Product-data recovery exists as a local data-root snapshot/verify/restore primitive; do not describe it as cloud backup/replication.
+
+## EXPLICIT FILE COVERAGE LEDGER
+
+Literal file accounting is being rebuilt from fresh `master`. `READ` means the file contents were opened and inspected in this mapping pass; rows are not inferred from path names or prior PR #660.
+
+| path | status | concise role/reason |
+|---|---|---|
+| `backend/app/modules/agents/__init__.py` | READ | Tiny package boundary; docstring declares the agent-registry module boundary and exports no hidden runtime behavior. |
+| `backend/app/modules/agents/base.py` | READ | Defines immutable `AgentCapability` metadata and the minimal `Agent` protocol (`name`, `capabilities`); no execution loop or persistence. |
+| `backend/app/modules/agents/registry.py` | READ | In-memory `AgentRegistry`: name-keyed registration with overwrite-by-name semantics and deterministic sorted name listing; no persistence/provider authority. |
+
+### Remaining coverage
+- Fresh backend tree confirms additional owned files under `app/api`, `app/core`, and the owned module families (`ai`, `coding`, `dev_message_route`, `development`, `events`, `files`, `local_ai`, `local_ai_eval`, `memory`, `modeling`, `project_knowledge`, `project_search`, `secrets`, `tools`, `workspaces`) plus owned tests/configs/schemas/helpers/fixtures/migrations. These must each be reopened and entered before completion.
+- PR #660 remains hints-only: no A-scope row from it may be imported without reopening the corresponding source file.
+- Re-scan fresh tracked tree after ledger expansion to compute the defensible exact final count.
+
+UNACCOUNTED_FILES: >0 (exact count pending full owned-scope tree enumeration; completion is intentionally blocked)
