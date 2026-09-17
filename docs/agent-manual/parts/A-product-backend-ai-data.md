@@ -25,10 +25,10 @@ Curated source/revision/apply owner under `backend/app/modules/project_knowledge
 Literature curation, model dossier projection and bounded project search are implemented in their canonical backend owners. Search/open remains discovery and does not implicitly bind Jarvis context.
 
 ### AI threads + Jarvis context/action foundation — REAL
-Persistent workspace AI threads/interactions, explicit digest-bound Jarvis context, adapter/capability registries and governed submit path exist. Context authority is separate from domain COMMIT/EXECUTE authority.
+Persistent workspace AI threads/interactions, explicit digest-bound Jarvis context, adapter/capability registries and governed submit path exist. Context authority is separate from domain COMMIT/EXECUTE authority. `context_builder.py` is deterministic and intentionally non-retrieval: it validates caller blocks, separates PROJECT_CONTEXT data from instructions, emits canonical digests/source manifests, reads canonical modeling records, and bounds/drop-prioritizes context packs. Selected evidence integration crosses into Area-C BLUECAD evidence ownership; A does not claim that evidence implementation.
 
 ### AI gateway/provider/settings + sensitivity/egress/budget/token flow — REAL, external availability conditional
-Canonical gateway/registry/adapters and provider/settings projections exist. Persisted sensitivity and fail-closed egress authority govern sanitization, budget reservations, token caps and usage reconciliation. `backend/app/core/token_flow_schema.py` makes flow identity/evidence durable: bounded direct-continuation policy snapshots, ordered attempt IDs, execution/external-dispatch/accounting aggregates, terminal/output/accounting digests, immutable flow segments with expiry/policy+guard digests, one record-capture per flow, and per-attempt execution/usage/accounting provenance on `ai_jobs`. Provider configuration is not credential/network/quota health; direct SDK bypass is not equivalent.
+Canonical gateway/registry/adapters and provider/settings projections exist. Persisted sensitivity and fail-closed egress authority govern sanitization, budget reservations, token caps and usage reconciliation. `backend/app/core/token_flow_schema.py` makes flow identity/evidence durable: bounded direct-continuation policy snapshots, ordered attempt IDs, execution/external-dispatch/accounting aggregates, terminal/output/accounting digests, immutable flow segments with expiry/policy+guard digests, one record-capture per flow, and per-attempt execution/usage/accounting provenance on `ai_jobs`. `budget.py` evaluates the server-owned external-provider gate against policy mode, paid-AI switch, global monthly spend, registry enablement, credential presence, provider caps, and active egress reservations; status projections are not provider-health proof. `costs.py` is an estimate helper only (4 chars/token plus configured max output against a small route-price registry), not authoritative billing. `egress_policy.py` accepts only the canonical `configs/ai_egress_policy.json`, rejects missing/extra/invalid keys, and hashes the canonical policy. Provider configuration is not credential/network/quota health; direct SDK bypass is not equivalent.
 
 ### Dev message-route / local-chat seam — PARTIAL, dev-only
 `backend/app/api/dev_message_route.py` exposes bounded `/api/dev/message-route-smoke` and `/api/dev/local-chat` request surfaces with strict Pydantic validation, per-request trace IDs, disabled-by-default gating and sanitized error responses. `backend/app/modules/dev_message_route/smoke_adapter.py` is explicitly a narrow development seam into existing router-policy smoke/evaluation scripts, not a production dependency pattern. Local responder execution is separately gated, defaults to loopback Ollama, bounds message/history/prompt/output sizes, filters history conservatively for secret/private/external-provider/operational/tool intent, and must not be mistaken for persistent Jarvis context, memory or production AI routing.
@@ -48,16 +48,17 @@ Data-root recovery helpers snapshot, verify and restore local product data; this
 ## Reusable helpers / do-not-reinvent index
 - SQLite/data root: `open_sqlite_connection`, path/schema registries, `row_to_model`, `optional_row_to_model`, `rows_to_models`.
 - Dependency graphs: `deterministic_topological_order`, `TopologyError`.
-- Exact context: Jarvis context adapter/capability registry and digest/source-manifest helpers.
-- AI routing/cost: gateway, provider registry/pricing, egress/budget/token-flow owners.
+- Exact context: `canonicalize_blocks`, `canonical_digest`, `context_sources_manifest`, `assemble_prompt`, `build_workspace_context_bundle`, and Jarvis context adapter/capability registry; do not add an implicit retrieval layer to the deterministic builder.
+- AI routing/cost: gateway, provider/model registry contracts, provider registry/pricing, egress/budget/token-flow owners. Treat `estimate_route_cost` as estimate-only.
 - Dev message route: reuse the bounded `dev_message_route` API/adapter only for development smoke/local-chat work; do not promote its script-import seam into production architecture.
 - Repository safety: repository truth and Coding exact-target/path/diff validators.
 
 ## Stale/duplication warnings
-- Historical ProviderRegistry-missing prose is stale versus executable runtime.
+- Historical ProviderRegistry-missing prose is stale versus executable runtime; `contracts.py` contains concrete in-memory provider/model registry contracts and filtering.
 - Configured provider/model does not prove credentials/network/quota health.
 - Jarvis sidecar does not own a second backend/thread store; Coding pipeline projection is not canonical delivery authority.
 - Dev local-chat is deliberately non-persistent and lacks memory/retrieval/files/browser/tools/external-provider/project-store authority; its loopback responder is not evidence of production Jarvis integration.
+- `context_builder.py` explicitly says it performs no retrieval/vector search/embeddings/LLM ranking; do not infer those capabilities from its context-bundle seam.
 
 ## EXPLICIT FILE COVERAGE LEDGER
 
@@ -94,13 +95,20 @@ Data-root recovery helpers snapshot, verify and restore local product data; this
 | `backend/app/modules/agents/__init__.py` | READ | Tiny package boundary. |
 | `backend/app/modules/agents/base.py` | READ | Agent capability metadata and minimal protocol. |
 | `backend/app/modules/agents/registry.py` | READ | In-memory name-keyed registry; no persistence/provider authority. |
+| `backend/app/modules/ai/__init__.py` | READ | Tiny AI gateway module marker; no hidden runtime behavior. |
+| `backend/app/modules/ai/budget.py` | READ | Server-owned external-provider/budget gate and AI-status projection; accounts routed usage plus active reservations and provider caps/credentials. |
+| `backend/app/modules/ai/context_builder.py` | READ | Deterministic bounded context assembly/selection, prompt data-instruction separation, digests/manifests; no retrieval/vector/LLM ranking. |
+| `backend/app/modules/ai/contracts.py` | READ | Provider-neutral request/response/usage/error/routing/gate contracts plus in-memory provider/model registries and adapter protocol. |
+| `backend/app/modules/ai/costs.py` | READ | Heuristic route-cost estimator and external-reasoning escalation proposal helper; estimate-only, context excluded. |
+| `backend/app/modules/ai/egress_confirmation.py` | READ | Thin confirmation execution facade; synchronizes patchable core bindings and consumes persisted rejected continuation for expired/revoked tickets. |
+| `backend/app/modules/ai/egress_policy.py` | READ | Strict canonical egress-policy JSON loader/parser/digest with bounded fields and supported-operation/trigger validation. |
 | `backend/app/modules/dev_message_route/__init__.py` | READ | Tiny package marker explicitly identifying the dev-only smoke adapter. |
 | `backend/app/modules/dev_message_route/smoke_adapter.py` | READ | Dev-only RouterPolicy/script import seam; env-gated loopback local responder, conservative history filtering and bounded non-persistent local chat. |
 
 ### Remaining coverage
-- Fresh `backend/app/core` enumeration found one previously missing owned file, `token_flow_schema.py`; it is now directly inspected and accounted. Core is fully accounted on the inspected master baseline except any future fresh-tree additions.
-- Continue all files in `ai`, `coding`, `development`, `events`, `files`, `local_ai`, `local_ai_eval`, `memory`, `modeling`, `project_knowledge`, `project_search`, `secrets`, `tools`, `workspaces`, followed by owned tests/configs/schemas/helpers/fixtures/migrations.
-- `backend/app/api` and `backend/app/modules/dev_message_route` are fully accounted on the inspected baseline.
+- `backend/app/core`, `backend/app/api`, `backend/app/modules/agents`, and `backend/app/modules/dev_message_route` are fully accounted on the inspected master baseline except future fresh-tree additions.
+- AI module coverage has started with `__init__.py`, budget, context builder, contracts, costs, confirmation facade, and policy. Continue every remaining `backend/app/modules/ai` file (including egress core/lifecycle/persistence/rejected-continuation, execution/gateway/provider registry/providers, settings, token-flow and thread/service surfaces) before leaving the family.
+- Then continue all files in `coding`, `development`, `events`, `files`, `local_ai`, `local_ai_eval`, `memory`, `modeling`, `project_knowledge`, `project_search`, `secrets`, `tools`, `workspaces`, followed by owned tests/configs/schemas/helpers/fixtures/migrations.
 - Scientific/CAD-only files must be directly inspected then marked `OUT_OF_SCOPE`; `cad_link_schema.py` is explicitly accounted.
 - PR #660 remains hints-only; every imported row requires reopening source.
 - Final completion requires a fresh tracked-tree rescan and defensible exact zero.
