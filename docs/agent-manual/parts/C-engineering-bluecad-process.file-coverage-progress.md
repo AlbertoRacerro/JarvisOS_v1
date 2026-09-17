@@ -13,6 +13,7 @@ Temporary staging ledger; every row must be consolidated into `docs/agent-manual
 | `backend/app/modules/runner/public_models.py` | READ | Caller-visible registration model; forbids extra fields and excludes executable/trust-shaped fields. |
 | `backend/app/modules/runner/models.py` | READ | Runner API/evidence models covering run/binding states, implementation and preview payloads, bounded job creation, persisted run detail, logs and artifact provenance/integrity metadata. |
 | `backend/app/modules/runner/linked_parameters.py` | READ | Fail-closed linked-Parameter freshness/revision guard for authoritative schema-v2/v3 contracts; validates workspace/lifecycle/freshness, revision and physical value identity through process-kernel unit normalization before execution. |
+| `backend/app/modules/runner/input_contracts.py` | READ | Canonical schema-v1/v2/v3 input-contract validator and binding normalizer: hashes canonical payloads, enforces bounded unique variables/semantic context, validates manual or Parameter bindings, normalizes units through process-kernel conversion, and fails closed on hash/canonicality/domain/semantic mismatch. |
 
 UNACCOUNTED_FILES: >0
 
