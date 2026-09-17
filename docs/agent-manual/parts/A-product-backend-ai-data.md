@@ -30,6 +30,9 @@ Persistent workspace AI threads/interactions, explicit digest-bound Jarvis conte
 ### AI gateway/provider/settings + sensitivity/egress/budget/token flow — REAL, external availability conditional
 Canonical gateway/registry/adapters and provider/settings projections exist. Persisted sensitivity and fail-closed egress authority govern sanitization, budget reservations, token caps and usage reconciliation. Provider configuration is not credential/network/quota health; direct SDK bypass is not equivalent.
 
+### Dev message-route / local-chat seam — PARTIAL, dev-only
+`backend/app/api/dev_message_route.py` exposes bounded `/api/dev/message-route-smoke` and `/api/dev/local-chat` request surfaces with strict Pydantic validation, per-request trace IDs, disabled-by-default gating and sanitized error responses. `backend/app/modules/dev_message_route/smoke_adapter.py` is explicitly a narrow development seam into existing router-policy smoke/evaluation scripts, not a production dependency pattern. Local responder execution is separately gated, defaults to loopback Ollama, bounds message/history/prompt/output sizes, filters history conservatively for secret/private/external-provider/operational/tool intent, and must not be mistaken for persistent Jarvis context, memory or production AI routing.
+
 ### Development Roadmap + Calendar + Brainstorm — REAL
 Canonical roadmap/calendar/brainstorm persistence exists. Brainstorm promotion is explicit.
 
@@ -47,12 +50,14 @@ Data-root recovery helpers snapshot, verify and restore local product data; this
 - Dependency graphs: `deterministic_topological_order`, `TopologyError`.
 - Exact context: Jarvis context adapter/capability registry and digest/source-manifest helpers.
 - AI routing/cost: gateway, provider registry/pricing, egress/budget/token-flow owners.
+- Dev message route: reuse the bounded `dev_message_route` API/adapter only for development smoke/local-chat work; do not promote its script-import seam into production architecture.
 - Repository safety: repository truth and Coding exact-target/path/diff validators.
 
 ## Stale/duplication warnings
 - Historical ProviderRegistry-missing prose is stale versus executable runtime.
 - Configured provider/model does not prove credentials/network/quota health.
 - Jarvis sidecar does not own a second backend/thread store; Coding pipeline projection is not canonical delivery authority.
+- Dev local-chat is deliberately non-persistent and lacks memory/retrieval/files/browser/tools/external-provider/project-store authority; its loopback responder is not evidence of production Jarvis integration.
 
 ## EXPLICIT FILE COVERAGE LEDGER
 
@@ -81,15 +86,20 @@ Data-root recovery helpers snapshot, verify and restore local product data; this
 | `backend/app/core/sensitivity_schema.py` | READ | Sensitivity labels and sanitized derivative provenance/revocation persistence. |
 | `backend/app/core/spa_static.py` | READ | Safe SPA static/fallback boundary with reserved API-root protection. |
 | `backend/app/core/topology.py` | READ | Bounded deterministic topological sort with structured fail-closed validation. |
+| `backend/app/api/__init__.py` | READ | Tiny HTTP-router package marker; no hidden runtime behavior. |
+| `backend/app/api/dev_message_route.py` | READ | Dev-only smoke/local-chat HTTP boundary; strict bounded validation, trace IDs, disabled gating and sanitized errors. |
 | `backend/app/api/health.py` | READ | Read-only health projection. |
 | `backend/app/api/system.py` | READ | System info plus explicit storage initialization endpoint. |
 | `backend/app/modules/agents/__init__.py` | READ | Tiny package boundary. |
 | `backend/app/modules/agents/base.py` | READ | Agent capability metadata and minimal protocol. |
 | `backend/app/modules/agents/registry.py` | READ | In-memory name-keyed registry; no persistence/provider authority. |
+| `backend/app/modules/dev_message_route/__init__.py` | READ | Tiny package marker explicitly identifying the dev-only smoke adapter. |
+| `backend/app/modules/dev_message_route/smoke_adapter.py` | READ | Dev-only RouterPolicy/script import seam; env-gated loopback local responder, conservative history filtering and bounded non-persistent local chat. |
 
 ### Remaining coverage
-- Continue every unaccounted owned `app/core`/`app/api` file, then all files in `ai`, `coding`, `dev_message_route`, `development`, `events`, `files`, `local_ai`, `local_ai_eval`, `memory`, `modeling`, `project_knowledge`, `project_search`, `secrets`, `tools`, `workspaces`, followed by owned tests/configs/schemas/helpers/fixtures/migrations.
-- Scientific/CAD-only files must be directly inspected then marked `OUT_OF_SCOPE`; `cad_link_schema.py` is now explicitly accounted.
+- `backend/app/api` is now fully accounted on the inspected master baseline; continue any remaining unaccounted `app/core` files, then all files in `ai`, `coding`, `development`, `events`, `files`, `local_ai`, `local_ai_eval`, `memory`, `modeling`, `project_knowledge`, `project_search`, `secrets`, `tools`, `workspaces`, followed by owned tests/configs/schemas/helpers/fixtures/migrations.
+- `backend/app/modules/dev_message_route` is fully accounted on the inspected baseline.
+- Scientific/CAD-only files must be directly inspected then marked `OUT_OF_SCOPE`; `cad_link_schema.py` is explicitly accounted.
 - PR #660 remains hints-only; every imported row requires reopening source.
 - Final completion requires a fresh tracked-tree rescan and defensible exact zero.
 
