@@ -65,20 +65,24 @@ The canonical destination remains `docs/agent-manual/parts/B-frontend-operator-u
 | `frontend/src/components/shell/Rail.tsx` | READ | Primary JarvisOS navigation rail sourced from the canonical primary-nav registry with `aria-current` state. |
 | `frontend/src/components/shell/TopBar.tsx` | READ | Thin current-route header that composes externally owned panel and appearance controls without inventing state. |
 | `frontend/src/components/shell/ContextualSidecar.tsx` | READ | Accessible Jarvis/Properties sidecar: focus-on-open/Escape/arrow-key tabs; explicitly distinguishes ephemeral geometry, unresolved/ambiguous bindings and canonical BLUECAD/engineering selections without granting edit authority. |
+| `frontend/src/pages/Dashboard.tsx` | READ | Legacy/foundation health dashboard; fetches backend health but uses local fallback strings for environment/version, so those fallbacks must not be treated as authoritative runtime evidence. |
+| `frontend/src/pages/DevLocalChat.tsx` | READ | Explicit DEV-only local-chat diagnostic UI: no persistent memory/retrieval/external providers/tools; surfaces route gates, network/HTTP failures, deterministic history filtering, prompt-char budget and adapter truncation semantics. |
 
 ## Capability facts from latest B increment
 
-- `ContextualSidecar` keeps viewer geometry identity separate from engineering identity: raw geometry hits are explicitly described as ephemeral and not yet engineering records.
-- BLUECAD binding resolution is fail-closed in presentation: resolving, unresolved and ambiguous states state that no engineering object is selected/editable and retain inspectable workspace/candidate/artifact/session/mesh/semantic identifiers.
-- Sidecar tabs use explicit `tablist`/`tab`/`tabpanel` semantics, roving `tabIndex`, ArrowLeft/ArrowRight keyboard switching, focus-on-open and Escape-to-close behavior.
-- Generic engineering-record fallback exposes machine identity but explicitly says editable model-contract Properties are unavailable rather than fabricating editable fields.
+- `Dashboard` is a small foundation/diagnostic surface, not an authority projection: backend status comes from `getHealth`, while absent environment/version render `local` and `0.1.0` fallbacks. Consumers must not interpret those fallback labels as verified runtime identity.
+- `DevLocalChat` explicitly labels itself non-production and local-only, builds history solely from prior successful user/assistant turns, and keeps blocked/error entries out of subsequent history.
+- Local-chat failure modes are operator-visible: 404 explains the dev-route gate, 422 reports validation failure, 5xx includes bounded `error_type`, invalid JSON becomes a blocked reason, and network failure points to backend/proxy availability.
+- Prompt-budget UI distinguishes the adapter's character budget from the model context window, reports deterministic safety/history omissions, and explicitly states that `response_truncated=false` is not a completion guarantee.
 
 ## Canonical-ledger integration blocker
 
 The connected GitHub file reader returns the large canonical `B-frontend-operator-ux.md` only in bounded/truncated form, while the available contents write operation replaces the complete file atomically and has no patch/append primitive. Replacing it from an incomplete fetch would destroy existing capability material. Verified B rows are therefore preserved durably here pending safe complete-file reconstruction. This is a tooling/write-shape blocker to canonical consolidation, not a coverage exemption.
 
+The canonical file currently contains a stale `MAPPING_STATUS: COMPLETE` header inherited from the earlier capability-level map. That status is NOT defensible under the later literal file-by-file requirement and MUST be treated as superseded by this progress ledger's `MAPPING_STATUS: IN_PROGRESS` until canonical reconstruction can safely replace it and a fresh-tree comparison proves zero unaccounted B files.
+
 ## Remaining coverage
 
-Area B only. Literal completion is not yet proven. Fresh PR-head tree truth was inspected before this update. Remaining scope includes `frontend/package-lock.json`, `frontend/public/`, still-unledgered `frontend/src/` API/components/pages/stages/styles/helpers/tests, and canonical behavior/appearance assets under `docs/design-references/`. The shell subtree's previously named `ContextualSidecar.tsx` gap is now directly read and ledgered. The canonical `B-frontend-operator-ux.md` still requires safe reconstruction and exhaustive one-row-per-file consolidation before completion.
+Area B only. Literal completion is not yet proven. Fresh PR-head tree truth was inspected before this update. Remaining scope includes `frontend/package-lock.json`, `frontend/public/`, still-unledgered `frontend/src/` API/components/pages/stages/styles/helpers/tests, and canonical behavior/appearance assets under `docs/design-references/`. `Dashboard.tsx` and `DevLocalChat.tsx` are now directly read and ledgered. The canonical `B-frontend-operator-ux.md` still requires safe reconstruction and exhaustive one-row-per-file consolidation before completion.
 
 UNACCOUNTED_FILES: NOT_YET_ZERO
