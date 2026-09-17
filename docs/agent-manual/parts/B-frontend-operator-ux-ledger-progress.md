@@ -58,13 +58,19 @@ The canonical destination remains `docs/agent-manual/parts/B-frontend-operator-u
 | `frontend/src/components/ui/InlineNotice.tsx` | READ | Shared inline status notice with explicit tone labels; danger state receives alert semantics rather than relying on color alone. |
 | `frontend/src/components/ui/StatusBadge.tsx` | READ | Presentation-only status badge with explicit domain tones including proposed/stale/unavailable/synthetic/archived; does not infer status. |
 | `frontend/src/components/ui/Surface.tsx` | READ | Minimal semantic surface wrapper selecting section/article/div while preserving native HTML attributes. |
+| `frontend/src/components/shell/AnalysisDock.tsx` | READ | Accessible analysis panel focuses its heading on open, closes on Escape, and explicitly states analytics unavailability when no real content is supplied. |
+| `frontend/src/components/shell/ContextualNavigator.tsx` | READ | Accessible route-sensitive navigator derives peer/roadmap links from canonical registries, marks current pages, focuses on open, and closes on Escape. |
+| `frontend/src/components/shell/LegacyDiagnosticSurface.tsx` | READ | Transition wrapper visibly labels legacy diagnostic content as stale rather than presenting it as canonical operator truth. |
+| `frontend/src/components/shell/MigrationPendingSurface.tsx` | READ | Explicit migration-pending/unavailable placeholder with semantic notice and optional native-safe related-route navigation. |
+| `frontend/src/components/shell/Rail.tsx` | READ | Primary JarvisOS navigation rail sourced from the canonical primary-nav registry with `aria-current` state. |
+| `frontend/src/components/shell/TopBar.tsx` | READ | Thin current-route header that composes externally owned panel and appearance controls without inventing state. |
 
 ## Capability facts from latest B increment
 
-- The shared UI layer is intentionally thin rather than a parallel application framework. `Button`, `Field`, `InlineNotice`, `StatusBadge`, and `Surface` preserve native element semantics and leave domain authority/state to their callers.
-- `Field` deterministically links labels, hints and errors to the supplied control and marks error state through `aria-invalid`; this is the reusable accessibility seam for ordinary form composition.
-- Destructive/error notice presentation is not color-only: `InlineNotice` emits a textual tone label and uses `role=alert` for danger. Status badges remain presentation-only and must be fed explicit evidence by callers.
-- `Button` defaults to `type=button`, preventing accidental form submission unless a caller explicitly requests submit semantics.
+- Shell fallback states do not silently masquerade as finished functionality: migration/unavailable surfaces label their state, and legacy diagnostics receive a visible stale badge.
+- `AnalysisDock` and `ContextualNavigator` provide explicit keyboard Escape handling and focus their headings when opened, keeping transient shell panels operable without pointer-only interaction.
+- Contextual navigation is registry-driven rather than hard-coded per page; peer and roadmap view links preserve native SPA-link behavior and explicit `aria-current` state.
+- The primary rail is likewise registry-driven and exposes current-page semantics, while `TopBar` remains a composition seam rather than duplicating control state.
 
 ## Canonical-ledger integration blocker
 
@@ -72,6 +78,6 @@ The connected GitHub file reader returns the large canonical `B-frontend-operato
 
 ## Remaining coverage
 
-Area B only. Literal completion is not yet proven. Fresh PR-head tree truth was inspected before this update. Remaining scope includes `frontend/package-lock.json`, `frontend/public/`, still-unledgered `frontend/src/` API/components/pages/stages/styles/helpers/tests, and canonical behavior/appearance assets under `docs/design-references/`. The canonical `B-frontend-operator-ux.md` still requires safe reconstruction and exhaustive one-row-per-file consolidation before completion.
+Area B only. Literal completion is not yet proven. Fresh PR-head tree truth was inspected before this update. Remaining scope includes `frontend/package-lock.json`, `frontend/public/`, still-unledgered `frontend/src/` API/components/pages/stages/styles/helpers/tests (including `ContextualSidecar.tsx` in the shell subtree), and canonical behavior/appearance assets under `docs/design-references/`. The canonical `B-frontend-operator-ux.md` still requires safe reconstruction and exhaustive one-row-per-file consolidation before completion.
 
 UNACCOUNTED_FILES: NOT_YET_ZERO
