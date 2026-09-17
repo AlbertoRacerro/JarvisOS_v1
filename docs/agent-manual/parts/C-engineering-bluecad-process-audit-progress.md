@@ -21,6 +21,7 @@ Fresh-tree baseline: `master@240d5e0b27d9837d40f47bddfa24871ae7a2a4bb`.
 | `backend/app/modules/runner/process_kernel_registration.py` | READ | Server-owned PROCESS-KERNEL-1 registration boundary: reuses only an exact script/contract/profile match, creates the scoped model spec when absent, installs and verifies the isolated bundle, normalizes linked parameters through the exact 047 contract, and transactionally removes model/artifact files if registration fails. |
 | `backend/app/modules/runner/_execution_child.py` | READ | Cross-platform isolated execution child: acquires a nonblocking child lock, signals readiness, waits for an explicit run token, rewrites argv/sys.path to the registered script and executes via runpy, then always clears readiness and releases ownership. |
 | `backend/app/modules/runner/_execution_owner.py` | READ | Cross-platform execution ownership supervisor: serializes runs with file locks, launches the child handshake, enforces child-ready and execution timeouts, bounds stdout/stderr bytes, emits deterministic JSON state/results, and retains ownership through caller durable result/failure acknowledgement. |
+| `backend/app/modules/runner/safety.py` | READ | Central fail-closed runner safety boundary: canonical finite/size-bounded input normalization, workspace/run path confinement, exact script hashing, GeometrySpec validation, AST import/name/file-I/O policy for calc/topology/process-kernel/BLUECAD profiles, forbidden secret/network/process markers, and bounded output/artifact validation. |
 
 UNACCOUNTED_FILES: >0
 
