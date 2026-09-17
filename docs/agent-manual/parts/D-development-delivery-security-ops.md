@@ -172,7 +172,11 @@ Evidence baseline: fresh `master` `240d5e0b27d9837d40f47bddfa24871ae7a2a4bb`. Ru
 | `.github/workflows/project-knowledge-fast.yml` | READ | Fast project-knowledge check workflow; repository CI/delivery surface. |
 | `.github/workflows/senior-review.yml` | READ | Manual senior/GLM review seam with bounded secret exposure. |
 | `scripts/cheap_review.py` | READ | Legacy/manual provider review helper and parsing/redaction primitives. |
+| `scripts/check_ai_threads.py` | READ | Deterministic AI-thread authority/privacy/idempotency checker; validates bounded thread semantics rather than model output quality. |
+| `scripts/check_analytics_dock.py` | READ | Analytics-dock conformance gate; enforces bounded analytics surfaces and rejects implicit conversion/fake-authority behavior. |
+| `scripts/check_app_shell.py` | READ | App-shell contract checker covering routing, accessibility, storage and style invariants. |
 | `scripts/check_architecture_enforcement.py` | READ | AE deterministic architecture/egress/control-owner enforcement. |
+| `scripts/check_jarvis_sidecar.py` | READ | Spec-091 sidecar conformance gate with implementation allow-list, authority/context/idempotency assertions and deterministic negative self-tests. |
 | `scripts/check_pr_attention_integration.py` | READ | Validates PR-attention permissions/pinning/head/mutation boundaries. |
 | `scripts/check_review_secret_boundary.py` | READ | Trusted-code/untrusted-data review secret boundary checker including shadow-import defense. |
 | `scripts/check_spec_status.py` | READ | Deterministic spec/STATUS linkage validation used by CI/delivery. |
@@ -185,6 +189,11 @@ Evidence baseline: fresh `master` `240d5e0b27d9837d40f47bddfa24871ae7a2a4bb`. Ru
 | `scripts/event_bound_continuation_plan.py` | READ | Event-bound continuation plan helper. |
 | `scripts/event_driven_continuation.py` | READ | Event wake/continuation helper. |
 | `scripts/generate_frontend_contracts.py` | READ | Deterministic backend-model -> generated TS contract writer. |
+| `scripts/manual_review.py` | READ | Maintainer-dispatched advisory review wrapper; sanitizes actionable mentions, records stale/truncated evidence limits and never grants merge/readiness authority. |
+| `scripts/init-database.ps1` | READ | Developer DB bootstrap convenience path; creates backend venv, installs requirements, sets PYTHONPATH and runs app.core.bootstrap. |
+| `scripts/start-backend.ps1` | READ | Developer backend launcher; creates venv as needed, upgrades pip/installs requirements, bootstraps DB and starts reload-mode Uvicorn on localhost. |
+| `scripts/start-frontend.ps1` | READ | Developer frontend launcher; installs dependencies when absent, opens browser after fixed timer, then runs npm dev server; timer is not a readiness probe. |
+| `docs/RUNBOOKS.md` | READ | Windows-first local developer runbooks for environment recreation, DB bootstrap/status, launch, transient credentials, bounded runner validation and localhost classification probe. |
 | `scripts/data_root_recovery/__init__.py` | READ | Recovery package export/entry surface. |
 | `scripts/data_root_recovery/cli.py` | READ | Snapshot/verify/restore CLI parsing/dispatch. |
 | `scripts/data_root_recovery/common.py` | READ | Recovery manifests, hashes, path/integrity helpers. |
@@ -194,6 +203,6 @@ Evidence baseline: fresh `master` `240d5e0b27d9837d40f47bddfa24871ae7a2a4bb`. Ru
 
 ### Remaining coverage
 - Finish literal source reads and rows for every remaining `scripts/**` file from the fresh tree; do not credit directory discovery.
-- Finish repository-global governance/docs/config/test surfaces that belong to D and add exact `OUT_OF_SCOPE` cross-owner rows only after A+B/C ledgers contain the same exact destination paths.
-- Re-read latest A+B #660 and C #659 ledgers when they appear, then mechanically union all three active ledgers against a fresh recursive tracked-file tree.
+- Finish repository-global governance/docs/config/test surfaces that belong to D and add exact `OUT_OF_SCOPE` cross-owner rows only after A/B/C ledgers contain the same exact destination paths.
+- Re-read latest A #658, B #660 and C #659 ledgers, excluding historical temporary backend A+B rows on B, then mechanically union all four active ledgers against a fresh recursive tracked-file tree.
 - Keep global audit fail-closed until total/covered/duplicate/ambiguous/unaccounted counts are exact and freshness-reconciled.
