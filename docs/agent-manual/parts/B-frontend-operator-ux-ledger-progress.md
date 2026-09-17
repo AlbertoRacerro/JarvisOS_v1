@@ -53,16 +53,18 @@ The canonical destination remains `docs/agent-manual/parts/B-frontend-operator-u
 | `frontend/src/components/analytics/analyticsState.ts` | READ | Fail-closed analytics projection/comparison: bounded schema-v1 outputs, finite scalars, exact model versions/units, deterministic baseline, and authoritative engineering-input reconstruction. |
 | `frontend/src/components/analytics/analyticsStateHarness.ts` | READ | Executable source-contract harness covering malformed/oversized payloads, unit/model mismatch, stale workspace responses, selection/baseline rules, configuration drift and deep-link ambiguity. |
 | `frontend/src/components/analytics/variantComparisonNavigation.ts` | READ | Builds encoded source-run deep links and rejects missing, duplicate, blank or overlong workspace/run identities. |
+| `frontend/src/components/ui/Button.tsx` | READ | Shared native-button primitive; defaults to `type=button`, forwards refs/HTML semantics, and exposes bounded visual variants without inventing action authority. |
+| `frontend/src/components/ui/Field.tsx` | READ | Accessible form-field compositor linking label, generated/control id, hint/error descriptions, required state and `aria-invalid` onto the supplied control. |
+| `frontend/src/components/ui/InlineNotice.tsx` | READ | Shared inline status notice with explicit tone labels; danger state receives alert semantics rather than relying on color alone. |
+| `frontend/src/components/ui/StatusBadge.tsx` | READ | Presentation-only status badge with explicit domain tones including proposed/stale/unavailable/synthetic/archived; does not infer status. |
+| `frontend/src/components/ui/Surface.tsx` | READ | Minimal semantic surface wrapper selecting section/article/div while preserving native HTML attributes. |
 
 ## Capability facts from latest B increment
 
-- Analytics is evidence-first rather than permissive visualization: only succeeded schema-v1 persisted outputs with finite numeric values and bounded nonblank units become observations; malformed, oversized, wrong-schema and non-scalar evidence fails closed.
-- Direct recorded-result comparison requires one exact model version. Metric keys must exist in every selected run and unit strings must match exactly; the browser performs no implicit Pa/kPa-style conversion.
-- Engineering-configuration comparison separately reconstructs each persisted run against the exact model implementation/input contract. Workspace mismatch, non-succeeded runs, model-version drift, missing/malformed contracts, oversized input snapshots, unknown fields, missing required bindings, non-finite values and unit mismatch reject the comparison rather than fabricating alignment.
-- The comparison baseline is explicit and deterministic, remains selected even when configuration evidence is unavailable, and deltas are absolute differences from that selected baseline.
-- Async analytics loading uses generation plus workspace identity to reject stale A-B-A responses. Run-list failure is terminal for the dock load; model-contract failure is shown separately so recorded-result evidence can remain usable.
-- Source-run navigation URL-encodes exact workspace/run identity and parsing rejects partial, duplicate, blank and >256-code-point identifiers.
-- The analytics harness directly exercises these failure modes, including six-run selection bounds and stale workspace-response rejection.
+- The shared UI layer is intentionally thin rather than a parallel application framework. `Button`, `Field`, `InlineNotice`, `StatusBadge`, and `Surface` preserve native element semantics and leave domain authority/state to their callers.
+- `Field` deterministically links labels, hints and errors to the supplied control and marks error state through `aria-invalid`; this is the reusable accessibility seam for ordinary form composition.
+- Destructive/error notice presentation is not color-only: `InlineNotice` emits a textual tone label and uses `role=alert` for danger. Status badges remain presentation-only and must be fed explicit evidence by callers.
+- `Button` defaults to `type=button`, preventing accidental form submission unless a caller explicitly requests submit semantics.
 
 ## Canonical-ledger integration blocker
 
