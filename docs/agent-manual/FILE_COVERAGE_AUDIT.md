@@ -22,7 +22,7 @@ The temporary backend A+B increment files on PR #660 are historical source only.
 | A | PR #658 is again an active owner for product/backend scope. Historical backend rows on #660 are not credited to A until re-read/absorbed into A's canonical ledger. | IN PROGRESS |
 | B | PR #660 owns frontend/operator UX/design-reference scope only. Historical temporary backend A+B increment rows are excluded from B and from duplicate calculations. | IN PROGRESS |
 | C | PR #659 owns engineering/modeling scope; strict literal ledger and zero-orphan reconciliation remain required before final union. | IN PROGRESS |
-| D | Canonical literal ledger contains 70 committed READ rows. Seven further D paths were read from fresh master and have exact-path evidence, but are not credited until their rows are committed into the canonical D ledger. | IN PROGRESS |
+| D | Canonical literal ledger contains 70 committed READ rows. Eight further D paths were read from fresh master and have exact-path evidence, but are not credited until their rows are committed into the canonical D ledger. | IN PROGRESS |
 | Fresh tree | master `240d5e0...`; recursive tracked tree is the authoritative comparison set. | READY FOR UNION once all four canonical ledgers are enumerable and fresh |
 
 ## Counts
@@ -32,7 +32,7 @@ The temporary backend A+B increment files on PR #660 are historical source only.
 - A READ / GENERATED-ASSET: **PENDING canonical A reconciliation**.
 - B READ / GENERATED-ASSET: **PENDING canonical B reconciliation; historical backend A+B temp rows excluded**.
 - C READ / GENERATED-ASSET: **PENDING canonical C reconciliation**.
-- D READ: **70 committed canonical rows**; 7 additional inspected paths pending canonical-row commit.
+- D READ: **70 committed canonical rows**; 8 additional inspected paths pending canonical-row commit.
 - D GENERATED/ASSET: **0 currently**.
 - Duplicate ownership count: **PENDING union**; historical A+B temp rows on #660 are ignored by definition.
 - Ambiguous ownership count: **non-zero** until all four canonical ledgers are enumerable and cross-owner rows reconcile exactly.
@@ -48,7 +48,7 @@ A literal zero is not defensible yet. The exact orphan list becomes mechanically
 - **A (#658):** must re-read/absorb backend paths formerly represented only in temporary A+B increment material on #660; those historical rows do not count globally.
 - **B (#660):** must finish canonical frontend/operator-UX/design-reference literal coverage while excluding historical backend temp rows from ownership.
 - **C (#659):** must finish engineering/modeling literal coverage and final zero-orphan reconciliation.
-- **D (#657):** `.github/browser-proof/**` is completely literalized. Remaining work includes committing the seven newly read rows, then reading/classifying the rest of `scripts/**` plus D-owned governance/operations docs/config/tests/repository metadata.
+- **D (#657):** `.github/browser-proof/**` is completely literalized. Remaining work includes committing the eight newly read rows, then reading/classifying the rest of `scripts/**` plus D-owned governance/operations docs/config/tests/repository metadata.
 
 ## Freshness / added-file guard
 
@@ -65,6 +65,7 @@ The canonical D map remains strict `MAPPING_STATUS: IN_PROGRESS` with 70 committ
 - `scripts/init-database.ps1` — Windows bootstrap helper: requires system Python, creates `backend/.venv` if absent, installs backend requirements, sets `PYTHONPATH`, and invokes `app.core.bootstrap`; convenience setup rather than an idempotent/offline dependency-lock guarantee.
 - `scripts/manual_review.py` — explicitly maintainer-dispatched advisory PR-review wrapper reusing hardened review helpers; sanitizes actionable `@codex` mentions, records stale-head/truncated-diff caveats, never applies readiness labels or dispatches fixes, and leaves merge/finding authority with CI and the maintainer.
 - `scripts/start-backend.ps1` — Windows developer launcher: requires system Python, creates the backend virtualenv if absent, unconditionally upgrades pip and installs requirements, bootstraps application state, then starts reload-mode Uvicorn on localhost:8000; convenience-first startup with network/dependency side effects rather than an offline/reproducible launch contract.
+- `scripts/start-frontend.ps1` — Windows frontend launcher: requires Node.js and npm, installs dependencies only when `node_modules` is absent, opens `http://localhost:5173` after a fixed five-second background delay, then runs `npm run dev`; the browser-open path is timer-based rather than readiness-probed.
 
 Previously established D evidence includes all seven root files, root `.github` policy/template and worktree-control files, all 17 workflows, all `.github/browser-proof/**`, and the committed delivery/review/CI/continuation/codegen/recovery script tranche.
 
