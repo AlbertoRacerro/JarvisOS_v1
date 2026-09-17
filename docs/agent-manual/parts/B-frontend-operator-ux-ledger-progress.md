@@ -64,13 +64,14 @@ The canonical destination remains `docs/agent-manual/parts/B-frontend-operator-u
 | `frontend/src/components/shell/MigrationPendingSurface.tsx` | READ | Explicit migration-pending/unavailable placeholder with semantic notice and optional native-safe related-route navigation. |
 | `frontend/src/components/shell/Rail.tsx` | READ | Primary JarvisOS navigation rail sourced from the canonical primary-nav registry with `aria-current` state. |
 | `frontend/src/components/shell/TopBar.tsx` | READ | Thin current-route header that composes externally owned panel and appearance controls without inventing state. |
+| `frontend/src/components/shell/ContextualSidecar.tsx` | READ | Accessible Jarvis/Properties sidecar: focus-on-open/Escape/arrow-key tabs; explicitly distinguishes ephemeral geometry, unresolved/ambiguous bindings and canonical BLUECAD/engineering selections without granting edit authority. |
 
 ## Capability facts from latest B increment
 
-- Shell fallback states do not silently masquerade as finished functionality: migration/unavailable surfaces label their state, and legacy diagnostics receive a visible stale badge.
-- `AnalysisDock` and `ContextualNavigator` provide explicit keyboard Escape handling and focus their headings when opened, keeping transient shell panels operable without pointer-only interaction.
-- Contextual navigation is registry-driven rather than hard-coded per page; peer and roadmap view links preserve native SPA-link behavior and explicit `aria-current` state.
-- The primary rail is likewise registry-driven and exposes current-page semantics, while `TopBar` remains a composition seam rather than duplicating control state.
+- `ContextualSidecar` keeps viewer geometry identity separate from engineering identity: raw geometry hits are explicitly described as ephemeral and not yet engineering records.
+- BLUECAD binding resolution is fail-closed in presentation: resolving, unresolved and ambiguous states state that no engineering object is selected/editable and retain inspectable workspace/candidate/artifact/session/mesh/semantic identifiers.
+- Sidecar tabs use explicit `tablist`/`tab`/`tabpanel` semantics, roving `tabIndex`, ArrowLeft/ArrowRight keyboard switching, focus-on-open and Escape-to-close behavior.
+- Generic engineering-record fallback exposes machine identity but explicitly says editable model-contract Properties are unavailable rather than fabricating editable fields.
 
 ## Canonical-ledger integration blocker
 
@@ -78,6 +79,6 @@ The connected GitHub file reader returns the large canonical `B-frontend-operato
 
 ## Remaining coverage
 
-Area B only. Literal completion is not yet proven. Fresh PR-head tree truth was inspected before this update. Remaining scope includes `frontend/package-lock.json`, `frontend/public/`, still-unledgered `frontend/src/` API/components/pages/stages/styles/helpers/tests (including `ContextualSidecar.tsx` in the shell subtree), and canonical behavior/appearance assets under `docs/design-references/`. The canonical `B-frontend-operator-ux.md` still requires safe reconstruction and exhaustive one-row-per-file consolidation before completion.
+Area B only. Literal completion is not yet proven. Fresh PR-head tree truth was inspected before this update. Remaining scope includes `frontend/package-lock.json`, `frontend/public/`, still-unledgered `frontend/src/` API/components/pages/stages/styles/helpers/tests, and canonical behavior/appearance assets under `docs/design-references/`. The shell subtree's previously named `ContextualSidecar.tsx` gap is now directly read and ledgered. The canonical `B-frontend-operator-ux.md` still requires safe reconstruction and exhaustive one-row-per-file consolidation before completion.
 
 UNACCOUNTED_FILES: NOT_YET_ZERO
