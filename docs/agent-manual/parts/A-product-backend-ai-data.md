@@ -35,7 +35,7 @@ Runtime/source baseline: fresh `master` `240d5e0b27d9837d40f47bddfa24871ae7a2a4b
 Canonical assumptions/parameters/decisions and AI-origin proposal/replacement lifecycle in `backend/app/modules/memory/*` plus `backend/app/core/schema.py`. Domain-authoritative writes can invalidate downstream freshness. Reuse proposal/replacement machinery; do not create a second engineering-record store.
 
 ### Project Knowledge / Project Basis — REAL
-Curated source/revision/apply owner in `backend/app/modules/project_knowledge/*`, `backend/app/core/project_knowledge_schema.py`, and the explicit Memory bridge. Apply/revision operations mutate canonical knowledge with stale-write guards. This is distinct from MemoryStore engineering-record ownership.
+Curated source/revision/apply owner in `backend/app/modules/project_knowledge/*`, `backend/app/core/project_knowledge_schema.py`, and the explicit Memory bridge. Apply/revision operations mutate canonical knowledge with stale-write guards. Schema persists drafts, working/reconciled revisions, idempotent approval/reconciliation requests, requirement applicability, validation evidence and reconciled graph snapshots. This is distinct from MemoryStore engineering-record ownership.
 
 ### Literature knowledge — REAL
 Persistent literature source/claim/datum curation under `backend/app/modules/memory/literature_*` and `backend/app/core/literature_schema.py`. Source states are `raw/review/accepted`; entries are typed `claim/datum`, support locators/context, and can bind artifacts. Curated metadata can remain valid while backing content is unavailable; do not create another bibliography store.
@@ -59,7 +59,10 @@ Persistent workspace-scoped threads/interactions under `backend/app/modules/ai/t
 `/ai/settings`, `/ai/status`, `/ai/provider-settings` project canonical settings/gateway/registry authority. Settings mutation is bounded; projections must not expose provider secrets.
 
 ### Sensitivity + governed egress/budget/token flow — REAL
-Persisted sensitivity labels/sanitized derivatives feed fail-closed external-egress policy. External transmission/cost require current authority, sanitization, budget/token caps, persistence and usage reconciliation. Missing/inconsistent actual usage is handled conservatively. Do not bypass with direct SDK calls.
+Persisted S0–S4 sensitivity labels and S0–S2 sanitized derivatives feed fail-closed external-egress policy. Egress persistence records derivative provenance/revocation, immutable packets/manifests, allow/deny/pause decisions, budget reservations, confirmation tickets, attempts and sanitizer audits. Reservation finalization synchronizes actual or conservative projected usage back to attempts/reservations/`ai_jobs`; missing/inconsistent actual usage can become `conservative_unverified_usage`. External transmission/cost require current authority, sanitization, budget/token caps, persistence and usage reconciliation. Do not bypass with direct SDK calls.
+
+### AI flow human grading — REAL persistence foundation
+`backend/app/core/grade_schema.py` persists immutable versioned grade subjects bound to flow outcome/accounting/output digests and append-only operator grade events (`set`/`withdraw`) with idempotency and supersession. Grade values are bounded to `useful/partly/rework/failed`; this schema alone does not prove UI/API invocation.
 
 ### Development Roadmap + Calendar + Brainstorm — REAL
 Roadmap schema persists typed items, lifecycle/status/priority, date constraints, dependencies and object links; calendar allocations enforce positive intervals and may bind roadmap items. Brainstorm persists raw records, versioned ideas, discussions, explicit promotions and idempotency. Brainstorm content is not automatically canonical engineering knowledge; promotion remains explicit.
@@ -105,10 +108,15 @@ No executable spec-122 multi-record Development CONTEXT/PROPOSE service was foun
 | `backend/app/core/config.py` | READ | Cached env-backed settings for data root/DB/CORS/default AI-provider string and allowed Coding repositories. |
 | `backend/app/core/database.py` | READ | Canonical SQLite connection/bootstrap/migration orchestrator; WAL+FK+busy-timeout, domain schema/index registration, conditional FTS5 and migration recording. |
 | `backend/app/core/development_schema.py` | READ | Migration `0019_roadmap_calendar`; roadmap items/dependencies/object links and calendar allocations with lifecycle, date, interval and FK constraints plus query indexes. |
+| `backend/app/core/egress_schema.py` | READ | Migration `0010_ip_egress_policy_autopilot`; derivative/packet/decision/reservation/ticket/attempt/audit/policy persistence plus usage-finalization trigger and catch-up migrations. |
 | `backend/app/core/errors.py` | READ | Immutable `AppError` and structured workspace-not-found HTTP helper. |
+| `backend/app/core/grade_schema.py` | READ | Migration `0014_grade_0`; versioned AI-flow outcome subjects and append-only idempotent operator grade/withdraw events. |
 | `backend/app/core/literature_schema.py` | READ | Migration `0018_literature_knowledge`; workspace literature sources and typed claim/datum entries with lifecycle, artifact/request uniqueness, locators and provenance indexes. |
 | `backend/app/core/logging.py` | READ | Minimal INFO process logging configurator with fixed format. |
 | `backend/app/core/paths.py` | READ | Canonical `JarvisPaths` derivation/directory creation for DB/workspaces/artifacts/logs/secrets; compatibility alias. |
+| `backend/app/core/project_knowledge_schema.py` | READ | Migration `0017_project_knowledge_core`; drafts/revisions/approval, applicability, scalar extraction, validation, reconciled snapshots and idempotent reconciliation requests. |
+| `backend/app/core/schema.py` | READ | Shared baseline schema/migration owner: workspaces/entities/events/artifacts, Memory engineering records/freshness, models/runs, AI jobs/settings, FTS triggers/backfill and mixed engineering tables; Area-C-owned scientific semantics are not claimed here. |
+| `backend/app/core/sensitivity_schema.py` | READ | Sensitivity sidecar schema: S0–S4 append-style labels and S0–S2 sanitized derivatives with review/revocation/staleness provenance and indexes. |
 | `backend/app/core/spa_static.py` | READ | Safe SPA static/fallback boundary; reserved API roots, exact client exceptions, HTML negotiation and unsafe/asset/API rejection. |
 | `backend/app/api/health.py` | READ | Read-only `/health` app/environment/data-root projection. |
 | `backend/app/api/system.py` | READ | `/system/info` DB/schema + gateway projection; `/system/initialize` storage/AI-settings bootstrap. |
@@ -117,7 +125,8 @@ No executable spec-122 multi-record Development CONTEXT/PROPOSE service was foun
 | `backend/app/modules/agents/registry.py` | READ | In-memory name-keyed registry with overwrite-by-name and deterministic listing; no persistence/provider authority. |
 
 ### Remaining coverage
-- Continue remaining owned `app/core` schema files and any remaining `app/api`, then every file in `ai`, `coding`, `dev_message_route`, `development`, `events`, `files`, `local_ai`, `local_ai_eval`, `memory`, `modeling`, `project_knowledge`, `project_search`, `secrets`, `tools`, `workspaces`, followed by owned tests/configs/schemas/helpers/fixtures/migrations.
+- Continue any remaining owned `app/core` files and `app/api`, then every file in `ai`, `coding`, `dev_message_route`, `development`, `events`, `files`, `local_ai`, `local_ai_eval`, `memory`, `modeling`, `project_knowledge`, `project_search`, `secrets`, `tools`, `workspaces`, followed by owned tests/configs/schemas/helpers/fixtures/migrations.
+- Core files whose semantics are engineering/scientific-only (for example CAD-specific schema sidecars) must still be explicitly classified `OUT_OF_SCOPE` after direct inspection rather than silently omitted.
 - PR #660 remains hints-only; every imported row requires reopening the source file.
 - Final completion requires fresh tracked-tree rescan and defensible exact zero.
 
