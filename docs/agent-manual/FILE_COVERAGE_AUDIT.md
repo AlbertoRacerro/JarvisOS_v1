@@ -23,23 +23,27 @@ Verified non-recursive tree checkpoints:
 
 - root `26db144c1d54e4b9dd4a9ebd9ef32829bbba99ed`: complete (`truncated:false`); immediate trees `.github`, `backend`, `configs`, `docs`, `frontend`, `reports`, `schemas`, `scripts`, `tests`; seven root blobs.
 - `.github` `5e5814bc5febc97050d9d7468961c1197b2f6439`: complete; child trees `browser-proof`, `workflows`, plus four blobs.
+- `.github/browser-proof` `8d322344d8c6708d0c531d280f603730f4e68297`: **complete (`truncated:false`)**; 11 immediate blobs and child trees `fixtures` (`d47f563078f690209dbca163bf567b0b5a08fff7`) and `plans` (`382aae278505cefc7c358b13f3fe8fba7ffdb68c`).
+- `.github/browser-proof/fixtures` `d47f563078f690209dbca163bf567b0b5a08fff7`: **complete (`truncated:false`)**; exactly 3 blobs, no child trees.
+- `.github/browser-proof/plans` `382aae278505cefc7c358b13f3fe8fba7ffdb68c`: **complete (`truncated:false`)**; exactly 8 blobs, no child trees.
+- `.github/workflows` `6892f52a31222cd4dacc481d0165bf8c9416039b`: **complete (`truncated:false`)**; exactly 17 blobs, no child trees.
 - `backend` `181f4ceb6706cd9d6277103479926eae9f73cd09`: complete; child trees `app`, `tests`, plus five blobs.
 - `configs` `ae088584f40dddbf92507b87f7e69bbc53ea2b5d`: complete; five blobs.
-- `frontend` `3773cd76215df3b9d1227768f5160de7376fbe01`: **complete (`truncated:false`)**; five immediate blobs (`index.html`, `package-lock.json`, `package.json`, `tsconfig.json`, `vite.config.ts`) and child trees `public` (`278c79dffe00104511969635ba02454ebad1f90d`), `src` (`16fc4b1a6fd39f0e0f6b0ae948af19058a8c1dac`), `tests` (`15747481e17a349b68a8b1e6efe098c7fc4c9d7d`).
-- `schemas` `ca6b6a51355c42461b94d751b66744b658a488bb`: **complete (`truncated:false`)**; 15 immediate blobs and no child trees.
+- `frontend` `3773cd76215df3b9d1227768f5160de7376fbe01`: complete (`truncated:false`); five immediate blobs and child trees `public` (`278c79dffe00104511969635ba02454ebad1f90d`), `src` (`16fc4b1a6fd39f0e0f6b0ae948af19058a8c1dac`), `tests` (`15747481e17a349b68a8b1e6efe098c7fc4c9d7d`).
+- `schemas` `ca6b6a51355c42461b94d751b66744b658a488bb`: complete (`truncated:false`); 15 immediate blobs and no child trees.
 - `reports` `e0f1cb39da18db6b61cde9b1767efaa38d7b4696`: complete (`truncated:false`); one immediate blob plus 39 child trees already checkpointed in the prior audit revision. Those exact child SHAs remain queued for descent.
-- `tests` `4125f0a449045ff55b5aa0f051d722642c5e6865`: GitHub reports the underlying non-recursive tree as `truncated:false`, but the connector display itself truncates the returned JSON because of the large immediate blob list. Therefore **no immediate tests blob count is credited from this response**. One exact child tree visible before display truncation is `tests/fixtures` (`7431123ed0af068136cef1ccc2534b39257358fb`); it is queued for descent. The complete immediate `tests/**` blob set still requires a smaller exact retrieval surface.
-- `docs` `e46f18ea475c6f5f79895e4811acaa15a82640a4`: both Git-tree and repository-contents directory payloads exceed connector display budget; partial payloads are excluded from counts. This remains an exceptional directory requiring smaller exact child discovery.
-- `scripts` `f641460e1746c8b22c0c0fb5606ac2982c9de8ca`: non-recursive request is accepted but connector-display truncated because of the large immediate blob list. Partial payload is excluded from denominator counts. Exact visible child tree `scripts/data_root_recovery` (`0afa149242e66a78a4db0a2090353d56ba956208`) remains queued.
+- `tests` `4125f0a449045ff55b5aa0f051d722642c5e6865`: underlying non-recursive tree reports `truncated:false`, but connector display truncates the large immediate blob list. No immediate tests blob count is credited. Exact child `tests/fixtures` (`7431123ed0af068136cef1ccc2534b39257358fb`) remains queued.
+- `docs` `e46f18ea475c6f5f79895e4811acaa15a82640a4`: Git-tree and repository-contents parent payloads exceed connector display budget; partial payloads excluded.
+- `scripts` `f641460e1746c8b22c0c0fb5606ac2982c9de8ca`: parent response connector-truncated; partial blobs excluded. Exact child `scripts/data_root_recovery` (`0afa149242e66a78a4db0a2090353d56ba956208`) remains queued.
 
 ### Durable traversal queue/checkpoint
 
-1. Resolve `docs` exact immediate entries through smaller directory-specific/code-search/Git-data retrieval; do not count its truncated parent payload.
-2. Resolve complete immediate `scripts/**` blob set through a smaller exact retrieval surface; descend `scripts/data_root_recovery` (`0afa149242e66a78a4db0a2090353d56ba956208`).
-3. Resolve complete immediate `tests/**` blob set through a smaller exact retrieval surface; descend `tests/fixtures` (`7431123ed0af068136cef1ccc2534b39257358fb`).
+1. Resolve `docs` exact immediate entries through smaller exact retrieval surfaces; do not count truncated parent payload.
+2. Resolve complete immediate `scripts/**` blob set; descend `scripts/data_root_recovery` (`0afa149242e66a78a4db0a2090353d56ba956208`).
+3. Resolve complete immediate `tests/**` blob set; descend `tests/fixtures` (`7431123ed0af068136cef1ccc2534b39257358fb`).
 4. Descend frontend child trees: `frontend/public` (`278c79dffe00104511969635ba02454ebad1f90d`), `frontend/src` (`16fc4b1a6fd39f0e0f6b0ae948af19058a8c1dac`), `frontend/tests` (`15747481e17a349b68a8b1e6efe098c7fc4c9d7d`).
-5. Descend `.github/browser-proof` (`8d322344d8c6708d0c531d280f603730f4e68297`), `.github/workflows` (`6892f52a31222cd4dacc481d0165bf8c9416039b`), `backend/app` (`7d5e0a165afa17a9841a3a0bafa88dedae9f7823`), `backend/tests` (`dd6d280a2c16625b57dd9f700f9f3578776b96bf`).
-6. Descend all 39 exact `reports/**` child-tree SHAs checkpointed in the prior audit revision.
+5. Descend `backend/app` (`7d5e0a165afa17a9841a3a0bafa88dedae9f7823`) and `backend/tests` (`dd6d280a2c16625b57dd9f700f9f3578776b96bf`). `.github/browser-proof`, its `fixtures`/`plans`, and `.github/workflows` are now terminal-complete and removed from queue.
+6. Descend all 39 exact `reports/**` child-tree SHAs checkpointed in prior audit revision.
 7. Continue BFS until every queued tree resolves exclusively to blobs/submodules. Only then construct normalized tracked-path set and publish exact denominator.
 
 **Accounting invariant is intentionally NOT asserted until traversal completes.** No approximate count, percentage, or orphan total is published.
@@ -67,7 +71,7 @@ Required counters remain gated:
 | B | PR #660 owns frontend/operator UX/design-reference scope only; historical temporary backend rows are excluded. | IN PROGRESS |
 | C | PR #659 owns engineering/modeling scope. | IN PROGRESS |
 | D | Canonical literal ledger contains 79 committed READ rows; `scripts/check_lineage_overview.py` is actually read but remains uncredited until canonical-ledger insertion succeeds. | IN PROGRESS |
-| Fresh tree | master `240d5e0...`, root tree `26db144c...`; exact BFS now has complete root/.github/backend/configs/frontend/schemas/reports parent checkpoints; tests/docs/scripts remain blob-heavy exceptional parents and all discovered child trees are queued. | IN PROGRESS |
+| Fresh tree | master `240d5e0...`, root tree `26db144c...`; `.github` subtree is now fully terminal-enumerated through browser-proof fixtures/plans and workflows. Remaining BFS queue is docs/scripts/tests exceptions plus frontend/backend/reports descendants. | IN PROGRESS |
 
 ## UNACCOUNTED_FILES
 
