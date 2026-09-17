@@ -28,7 +28,7 @@ Literature curation, model dossier projection and bounded project search are imp
 Persistent workspace AI threads/interactions, explicit digest-bound Jarvis context, adapter/capability registries and governed submit path exist. Context authority is separate from domain COMMIT/EXECUTE authority.
 
 ### AI gateway/provider/settings + sensitivity/egress/budget/token flow — REAL, external availability conditional
-Canonical gateway/registry/adapters and provider/settings projections exist. Persisted sensitivity and fail-closed egress authority govern sanitization, budget reservations, token caps and usage reconciliation. Provider configuration is not credential/network/quota health; direct SDK bypass is not equivalent.
+Canonical gateway/registry/adapters and provider/settings projections exist. Persisted sensitivity and fail-closed egress authority govern sanitization, budget reservations, token caps and usage reconciliation. `backend/app/core/token_flow_schema.py` makes flow identity/evidence durable: bounded direct-continuation policy snapshots, ordered attempt IDs, execution/external-dispatch/accounting aggregates, terminal/output/accounting digests, immutable flow segments with expiry/policy+guard digests, one record-capture per flow, and per-attempt execution/usage/accounting provenance on `ai_jobs`. Provider configuration is not credential/network/quota health; direct SDK bypass is not equivalent.
 
 ### Dev message-route / local-chat seam — PARTIAL, dev-only
 `backend/app/api/dev_message_route.py` exposes bounded `/api/dev/message-route-smoke` and `/api/dev/local-chat` request surfaces with strict Pydantic validation, per-request trace IDs, disabled-by-default gating and sanitized error responses. `backend/app/modules/dev_message_route/smoke_adapter.py` is explicitly a narrow development seam into existing router-policy smoke/evaluation scripts, not a production dependency pattern. Local responder execution is separately gated, defaults to loopback Ollama, bounds message/history/prompt/output sizes, filters history conservatively for secret/private/external-provider/operational/tool intent, and must not be mistaken for persistent Jarvis context, memory or production AI routing.
@@ -85,6 +85,7 @@ Data-root recovery helpers snapshot, verify and restore local product data; this
 | `backend/app/core/schema.py` | READ | Shared baseline schema/migration owner; mixed Area-C scientific semantics not claimed by A. |
 | `backend/app/core/sensitivity_schema.py` | READ | Sensitivity labels and sanitized derivative provenance/revocation persistence. |
 | `backend/app/core/spa_static.py` | READ | Safe SPA static/fallback boundary with reserved API-root protection. |
+| `backend/app/core/token_flow_schema.py` | READ | Token-flow migration: durable flow/capture/segment state plus per-attempt execution, dispatch, usage and accounting provenance; bounded continuation policy. |
 | `backend/app/core/topology.py` | READ | Bounded deterministic topological sort with structured fail-closed validation. |
 | `backend/app/api/__init__.py` | READ | Tiny HTTP-router package marker; no hidden runtime behavior. |
 | `backend/app/api/dev_message_route.py` | READ | Dev-only smoke/local-chat HTTP boundary; strict bounded validation, trace IDs, disabled gating and sanitized errors. |
@@ -97,8 +98,9 @@ Data-root recovery helpers snapshot, verify and restore local product data; this
 | `backend/app/modules/dev_message_route/smoke_adapter.py` | READ | Dev-only RouterPolicy/script import seam; env-gated loopback local responder, conservative history filtering and bounded non-persistent local chat. |
 
 ### Remaining coverage
-- `backend/app/api` is now fully accounted on the inspected master baseline; continue any remaining unaccounted `app/core` files, then all files in `ai`, `coding`, `development`, `events`, `files`, `local_ai`, `local_ai_eval`, `memory`, `modeling`, `project_knowledge`, `project_search`, `secrets`, `tools`, `workspaces`, followed by owned tests/configs/schemas/helpers/fixtures/migrations.
-- `backend/app/modules/dev_message_route` is fully accounted on the inspected baseline.
+- Fresh `backend/app/core` enumeration found one previously missing owned file, `token_flow_schema.py`; it is now directly inspected and accounted. Core is fully accounted on the inspected master baseline except any future fresh-tree additions.
+- Continue all files in `ai`, `coding`, `development`, `events`, `files`, `local_ai`, `local_ai_eval`, `memory`, `modeling`, `project_knowledge`, `project_search`, `secrets`, `tools`, `workspaces`, followed by owned tests/configs/schemas/helpers/fixtures/migrations.
+- `backend/app/api` and `backend/app/modules/dev_message_route` are fully accounted on the inspected baseline.
 - Scientific/CAD-only files must be directly inspected then marked `OUT_OF_SCOPE`; `cad_link_schema.py` is explicitly accounted.
 - PR #660 remains hints-only; every imported row requires reopening source.
 - Final completion requires a fresh tracked-tree rescan and defensible exact zero.
