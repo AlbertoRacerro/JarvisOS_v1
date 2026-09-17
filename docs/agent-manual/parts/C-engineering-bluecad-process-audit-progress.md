@@ -10,6 +10,8 @@ Fresh-tree baseline: `master@240d5e0b27d9837d40f47bddfa24871ae7a2a4bb`.
 | `backend/app/modules/runner/examples/bluerev_geometry_hydraulics_v0.py` | READ | Reviewed 047 M0 geometry/hydraulics executable: strict nine-input unit envelope, finite/domain checks, OD>=ID, tube/inventory geometry, Reynolds, qualified Darcy friction regimes, pressure/head and pump-power outputs with fail-closed correlation limits. |
 | `backend/app/modules/runner/examples/bluerev_geometry_hydraulics_v0.contract.json` | READ | Schema-v1 forward input contract freezing the nine 047 geometry, operating, fluid-property, loss and pump-efficiency variables with units and numeric domains. |
 | `backend/app/modules/runner/examples/bluerev_geometry_hydraulics_semantic_v0.contract.json` | READ | Schema-v3 semantic 047 contract adding model-family/tube-run applicability, physical dimensions/property groups and explicit caller-owned versus part-owned engineering semantics. |
+| `backend/app/modules/runner/examples/bluerev_geometry_hydraulics_process_kernel_v1.py` | READ | Thin exact-process-kernel executable boundary: requires the exact EXPECTED_UNITS key set, finite numeric values and exact units, rejects extra fields, delegates to execute_047_process_kernel, maps kernel failures deterministically, and emits canonical finite JSON. |
+| `backend/app/modules/runner/examples/bluerev_geometry_hydraulics_process_kernel_v1.contract.json` | READ | Schema-v2 forward contract for the exact 047 process-kernel profile, freezing nine required variables with physical dimensions, units, categories and numeric domains. |
 
 UNACCOUNTED_FILES: >0
 
