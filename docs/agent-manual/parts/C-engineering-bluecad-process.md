@@ -124,7 +124,7 @@ Runtime/code/tests are primary evidence; STATUS/spec prose is used only to class
 - **What/when:** persist/execute reviewed server-known Python models with immutable script identity, contracts, run/job evidence, logs/artifacts and idempotent request keys.
 - **Canonical:** `backend/app/modules/runner/{guarded_service.py,service.py,local_python.py,_execution_owner.py,_execution_child.py,safety.py,input_contracts.py,linked_parameters.py}`.
 - **Invoke:** guarded `create_runner_job` → `run_runner_job`; bundled registration helpers for reviewed process/topology/kernel profiles.
-- **I/O/persistence:** `simulation_runs`, `runner_jobs`, logs, `result.json`/artifacts/events; schema-v1 unit-bearing scalar result envelope.
+- **I/O/persistence:** `simulation_runs`, `runner_jobs`, logs, `result.json`/artifacts/events`; schema-v1 unit-bearing scalar result envelope.
 - **Preconditions:** exact server-known script path/hash/contract; linked Parameters currently usable; timeout ≤60 s.
 - **Risk:** child Python process under single-owner cross-process lock; reduced non-inherited env, shell false, byte/time bounds.
 - **Evidence:** runner safety/idempotency/input-contract/profile/process-kernel tests.
@@ -209,5 +209,7 @@ Fresh-tree baseline for this incremental ledger: `master@240d5e0b27d9837d40f47bd
 | `backend/app/modules/runner/examples/bluerev_process_topology_m1_v0.contract.json` | READ | Versioned 072 input contract defining 26 required topology, geometry, fluid, equipment and loss-coefficient variables with units/domains. |
 | `backend/app/modules/runner/examples/bluerev_geometry_hydraulics_process_kernel_v1.py` | READ | Exact 075/047 compatibility runner wrapper: requires the complete expected unit-bearing input set, rejects non-finite/unit-invalid values, delegates to `execute_047_process_kernel`, maps kernel errors to deterministic runner failure, and writes canonical finite JSON output. |
 | `backend/app/modules/runner/examples/bluerev_geometry_hydraulics_process_kernel_v1.contract.json` | READ | Schema-v2 forward contract for the process-kernel 047 profile: nine required design/operating/property/model/equipment variables with explicit physical dimensions, units and bounded domains. |
+| `backend/app/modules/runner/examples/bluerev_geometry_hydraulics_v0.py` | READ | Exact bundled 047 M0 closed-loop geometry/hydraulics model: strict nine-input unit envelope, finite/domain checks, laminar 64/Re or qualified Blasius friction, Darcy pressure/head/power outputs, and explicit omitted-physics diagnostics. |
+| `backend/app/modules/runner/examples/bluerev_geometry_hydraulics_v0.contract.json` | READ | Schema-v1 forward contract for 047: nine required design/operating/property/model/equipment variables with explicit units and bounded scalar domains. |
 
 UNACCOUNTED_FILES: >0
