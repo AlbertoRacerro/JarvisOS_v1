@@ -22,7 +22,7 @@ The temporary backend A+B increment files on PR #660 are historical source only.
 | A | PR #658 is again an active owner for product/backend scope. Historical backend rows on #660 are not credited to A until re-read/absorbed into A's canonical ledger. | IN PROGRESS |
 | B | PR #660 owns frontend/operator UX/design-reference scope only. Historical temporary backend A+B increment rows are excluded from B and from duplicate calculations. | IN PROGRESS |
 | C | PR #659 owns engineering/modeling scope; strict literal ledger and zero-orphan reconciliation remain required before final union. | IN PROGRESS |
-| D | Canonical literal ledger contains 70 committed READ rows. Nine further D paths were read from fresh master and have exact-path evidence, but are not credited until their rows are committed into the canonical D ledger. | IN PROGRESS |
+| D | Canonical literal ledger contains 79 committed READ rows. One further D path has now been read from fresh master and has exact-path evidence, but is not credited until its row is committed into the canonical D ledger. | IN PROGRESS |
 | Fresh tree | master `240d5e0...`; recursive tracked tree is the authoritative comparison set. | READY FOR UNION once all four canonical ledgers are enumerable and fresh |
 
 ## Counts
@@ -32,7 +32,7 @@ The temporary backend A+B increment files on PR #660 are historical source only.
 - A READ / GENERATED-ASSET: **PENDING canonical A reconciliation**.
 - B READ / GENERATED-ASSET: **PENDING canonical B reconciliation; historical backend A+B temp rows excluded**.
 - C READ / GENERATED-ASSET: **PENDING canonical C reconciliation**.
-- D READ: **70 committed canonical rows**; 9 additional inspected paths pending canonical-row commit.
+- D READ: **79 committed canonical rows**; 1 additional inspected path pending canonical-row commit.
 - D GENERATED/ASSET: **0 currently**.
 - Duplicate ownership count: **PENDING union**; historical A+B temp rows on #660 are ignored by definition.
 - Ambiguous ownership count: **non-zero** until all four canonical ledgers are enumerable and cross-owner rows reconcile exactly.
@@ -48,7 +48,7 @@ A literal zero is not defensible yet. The exact orphan list becomes mechanically
 - **A (#658):** must re-read/absorb backend paths formerly represented only in temporary A+B increment material on #660; those historical rows do not count globally.
 - **B (#660):** must finish canonical frontend/operator-UX/design-reference literal coverage while excluding historical backend temp rows from ownership.
 - **C (#659):** must finish engineering/modeling literal coverage and final zero-orphan reconciliation.
-- **D (#657):** `.github/browser-proof/**` is completely literalized. Remaining work includes committing the nine newly read rows, then reading/classifying the rest of `scripts/**` plus D-owned governance/operations docs/config/tests/repository metadata.
+- **D (#657):** `.github/browser-proof/**` is completely literalized. The previous nine-file inspected backlog is now committed in the canonical ledger. Remaining work is to commit the newly read `scripts/check_lineage_overview.py` row, then read/classify the rest of `scripts/**` plus D-owned governance/operations docs/config/tests/repository metadata.
 
 ## Freshness / added-file guard
 
@@ -56,17 +56,11 @@ For each owner, compare its ledger baseline to the fresh master tree. Any tracke
 
 ## D evidence established
 
-The canonical D map remains strict `MAPPING_STATUS: IN_PROGRESS` with 70 committed `READ` rows. In the current audit tranche, the following master-baseline files were read in actual source content and have inspection evidence, but are deliberately not counted in D's canonical total until ledger rows are committed:
+The canonical D map remains strict `MAPPING_STATUS: IN_PROGRESS` with 79 committed `READ` rows. The previously pending nine exact-path reads (`scripts/check_ai_threads.py`, `scripts/check_analytics_dock.py`, `scripts/check_app_shell.py`, `scripts/check_jarvis_sidecar.py`, `scripts/manual_review.py`, `scripts/init-database.ps1`, `scripts/start-backend.ps1`, `scripts/start-frontend.ps1`, and `docs/RUNBOOKS.md`) are now present in the canonical D ledger and are mechanically creditable.
 
-- `scripts/check_ai_threads.py` — freezes spec-090 scope, pre-created-flow authority, idempotent thread ownership, no-history egress, product-surface and lifecycle invariants.
-- `scripts/check_analytics_dock.py` — enforces bounded run/output payloads, exact model-version/unit comparability, no implicit conversion, no fake analytics/statistical authority, and stale-response/cap harnesses.
-- `scripts/check_app_shell.py` — freezes historical shell footprint and validates route/router/stage/accessibility/storage/style contracts.
-- `docs/RUNBOOKS.md` — Windows-first local operations runbook covering environment/dependency recreation, database bootstrap/status checks, launch paths, transient Scaleway-key handling, bounded Python-runner validation, local evaluation retention, and manual local-classification probing; it explicitly states JarvisOS is not thereby a hosted/installer/production system.
-- `scripts/init-database.ps1` — Windows bootstrap helper: requires system Python, creates `backend/.venv` if absent, installs backend requirements, sets `PYTHONPATH`, and invokes `app.core.bootstrap`; convenience setup rather than an idempotent/offline dependency-lock guarantee.
-- `scripts/manual_review.py` — explicitly maintainer-dispatched advisory PR-review wrapper reusing hardened review helpers; sanitizes actionable `@codex` mentions, records stale-head/truncated-diff caveats, never applies readiness labels or dispatches fixes, and leaves merge/finding authority with CI and the maintainer.
-- `scripts/start-backend.ps1` — Windows developer launcher: requires system Python, creates the backend virtualenv if absent, unconditionally upgrades pip and installs requirements, bootstraps application state, then starts reload-mode Uvicorn on localhost:8000; convenience-first startup with network/dependency side effects rather than an offline/reproducible launch contract.
-- `scripts/start-frontend.ps1` — Windows frontend launcher: requires Node.js and npm, installs dependencies only when `node_modules` is absent, opens `http://localhost:5173` after a fixed five-second background delay, then runs `npm run dev`; the browser-open path is timer-based rather than readiness-probed.
-- `scripts/check_jarvis_sidecar.py` — spec-091 conformance checker: freezes an explicit implementation allow-list, forbids workflow/package and existing-authority mutations, asserts server-owned context/digest/idempotency seams, forbids raw thread-history egress/direct provider fetch/parallel execution route, checks sidecar composition and stale-request ownership, and includes deterministic negative self-tests; source/scope evidence only, not behavioral/provider proof.
+Current additional actual-content inspection pending canonical-ledger insertion:
+
+- `scripts/check_lineage_overview.py` — deterministic spec-087 frontend lineage conformance gate. It reads the shell/stage/client/lineage API+state/selection surfaces and STATUS, asserts typed graph/node/freshness clients, stale-request rejection, deterministic topological ordering with cycle fallback, bounded lineage-to-selection mapping, workspace discovery/change plumbing, empty/failure states, and absence of mutation controls or invented confidence/health/impact authority. Its self-test covers A→B→A and X→Y→X stale-response rejection plus ordering/mapping boundaries. It is source-contract evidence, not runtime/browser proof.
 
 Previously established D evidence includes all seven root files, root `.github` policy/template and worktree-control files, all 17 workflows, all `.github/browser-proof/**`, and the committed delivery/review/CI/continuation/codegen/recovery script tranche.
 
