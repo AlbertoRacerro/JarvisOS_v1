@@ -211,5 +211,6 @@ Fresh-tree baseline for this incremental ledger: `master@240d5e0b27d9837d40f47bd
 | `backend/app/modules/runner/examples/bluerev_geometry_hydraulics_process_kernel_v1.contract.json` | READ | Schema-v2 forward contract for the process-kernel 047 profile: nine required design/operating/property/model/equipment variables with explicit physical dimensions, units and bounded domains. |
 | `backend/app/modules/runner/examples/bluerev_geometry_hydraulics_v0.py` | READ | Exact bundled 047 M0 closed-loop geometry/hydraulics model: strict nine-input unit envelope, finite/domain checks, laminar 64/Re or qualified Blasius friction, Darcy pressure/head/power outputs, and explicit omitted-physics diagnostics. |
 | `backend/app/modules/runner/examples/bluerev_geometry_hydraulics_v0.contract.json` | READ | Schema-v1 forward contract for 047: nine required design/operating/property/model/equipment variables with explicit units and bounded scalar domains. |
+| `backend/app/modules/runner/_execution_owner.py` | READ | Cross-platform execution-owner supervisor: acquires the nonblocking owner lock, spawns the lock-owning child, enforces readiness and execution timeout, bounds stdout/stderr, reports deterministic busy/completed states, and deliberately retains ownership until the caller acknowledges durable result/failure persistence. |
 
 UNACCOUNTED_FILES: >0
