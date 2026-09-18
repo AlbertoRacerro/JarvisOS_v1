@@ -18,10 +18,13 @@ Evidence baseline: fresh `master` `240d5e0b27d9837d40f47bddfa24871ae7a2a4bb`. Ru
 | `scripts/check_settings_surface.py` | READ | Deterministic settings-surface conformance checker; verifies frozen scope, credential non-disclosure, mutation locks, canonical endpoints and bounded error projection. |
 | `scripts/check_ai_threads.py` | READ | Deterministic AI-THREADS-0 conformance checker; freezes PR scope, flow/idempotency authority, thread-history egress/privacy boundaries, stale ownership and unsafe-rendering prohibitions. |
 | `scripts/check_jarvis_sidecar.py` | READ | Deterministic JARVIS-SIDECAR-1 conformance checker; freezes bounded context/digest authority, server-owned context rebuild, stale preview/submit ownership, credential-safe canonical execution projection and unsafe-rendering prohibitions. |
+| `scripts/check_architecture_enforcement.py` | READ | Deterministic architecture-enforcement checker; validates exact exception targets and AE001-AE004 boundaries including mutation ownership, external-network call surfaces, protected-table writes and pinned delivery artifacts. |
+| `scripts/check_bluecad_read_model.py` | READ | Deterministic BLUECAD read-model readiness checker; enforces exact changed-file scope, query-only aggregate contract, typed/encoded frontend client, canonical registry evidence and no premature UI consumption. |
+| `scripts/check_bluecad_workbench.py` | READ | Deterministic BLUECAD workbench readiness checker; enforces bounded UI scope, aggregate/state authority, stale async guards, resource cleanup, accessibility and forbidden backend/dependency/workflow/schema changes. |
 
 ### Ledger continuity
 
-Branch history contains the earlier exact READ evidence for root files, `.github/**`, workflows, delivery/review/CI/continuation/codegen/recovery scripts, `docs/RUNBOOKS.md`, and data-root recovery files. This checkpoint adds two directly inspected checker paths without inferring unread paths from directory membership.
+Branch history contains the earlier exact READ evidence for root files, `.github/**`, workflows, delivery/review/CI/continuation/codegen/recovery scripts, `docs/RUNBOOKS.md`, and data-root recovery files. This checkpoint adds three directly inspected checker paths without inferring unread paths from directory membership.
 
 ### Remaining coverage
 
