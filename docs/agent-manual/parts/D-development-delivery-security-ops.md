@@ -28,10 +28,11 @@ Evidence baseline: fresh `master` `240d5e0b27d9837d40f47bddfa24871ae7a2a4bb`. Ru
 | `scripts/check_spec_status.py` | READ | Deterministic canonical spec-registry/PR consistency gate; validates registry shape/status/dependencies, rejects duplicate/self/missing dependencies, enforces implementation versus definition lifecycle rules, exact current-PR linkage and merged dependency prerequisites, and includes negative self-tests. |
 | `scripts/check_typecheck_ratchet.py` | READ | Fail-closed per-file backend mypy-debt ratchet; normalizes diagnostics to backend-relative paths, rejects malformed/escaping diagnostics and invalid/unsorted baselines, pins baseline schema/source SHA/mypy version, forbids allowance increases versus the exact PR base, reports any per-file debt regression, and includes negative self-tests. |
 | `scripts/check_ui_foundation.py` | READ | Deterministic UI-foundation/spec-070 checker; validates complete light/dark semantic token parity, exact primitive set and authority-free primitives, raw-color/inline-style/SVG prohibitions, reduced-motion behavior, appearance-storage confinement, stylesheet ordering, BLUECAD technical-viewport token consumption, and exact canonical merged registry evidence. Referenced frontend/docs files are not credited by this checker read. |
+| `scripts/classify_ci_scope.py` | READ | Deterministic CI scope classifier; docs-only fast path requires every changed path literally under `docs/`; ordinary backend/frontend/BLUECAD paths select bounded lanes; empty input, root/workflow/script/unknown paths and shared backend/dependency boundaries fail closed to the full suite. Whitespace-prefixed path evidence is deliberately not normalized. |
 
 ### Ledger continuity
 
-Branch history contains the earlier exact READ evidence for root files, `.github/**`, workflows, delivery/review/CI/continuation/codegen/recovery scripts, `docs/RUNBOOKS.md`, and data-root recovery files. This checkpoint adds direct master-source evidence for the UI-foundation conformance checker; files referenced or executed by that checker are not credited by this read.
+Branch history contains earlier exact READ evidence for root files, `.github/**`, workflows, delivery/review/CI/continuation/codegen/recovery scripts, `docs/RUNBOOKS.md`, and data-root recovery files. This checkpoint adds direct master-source evidence for the CI scope classifier; referenced paths are not credited by this read.
 
 ### Remaining coverage
 
