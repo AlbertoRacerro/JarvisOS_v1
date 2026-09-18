@@ -21,10 +21,11 @@ Evidence baseline: fresh `master` `240d5e0b27d9837d40f47bddfa24871ae7a2a4bb`. Ru
 | `scripts/check_architecture_enforcement.py` | READ | Deterministic architecture-enforcement checker; validates exact exception targets and AE001-AE004 boundaries including mutation ownership, external-network call surfaces, protected-table writes and pinned delivery artifacts. |
 | `scripts/check_bluecad_read_model.py` | READ | Deterministic BLUECAD read-model readiness checker; enforces exact changed-file scope, query-only aggregate contract, typed/encoded frontend client, canonical registry evidence and no premature UI consumption. |
 | `scripts/check_bluecad_workbench.py` | READ | Deterministic BLUECAD workbench readiness checker; enforces bounded UI scope, aggregate/state authority, stale async guards, resource cleanup, accessibility and forbidden backend/dependency/workflow/schema changes. |
+| `scripts/check_ai_advisory_governance.py` | READ | Deterministic AI-advisory governance checker; validates policy vocabulary/enforcement across advisory/provider/LLM surfaces, including provider allow-list/egress and budget gates, sensitive-data handling, redaction/confirmation requirements and fail-closed behavior. Model output remains advisory rather than authoritative. |
 
 ### Ledger continuity
 
-Branch history contains the earlier exact READ evidence for root files, `.github/**`, workflows, delivery/review/CI/continuation/codegen/recovery scripts, `docs/RUNBOOKS.md`, and data-root recovery files. This checkpoint adds three directly inspected checker paths without inferring unread paths from directory membership.
+Branch history contains the earlier exact READ evidence for root files, `.github/**`, workflows, delivery/review/CI/continuation/codegen/recovery scripts, `docs/RUNBOOKS.md`, and data-root recovery files. This checkpoint adds one directly inspected governance checker without inferring unread paths from directory membership.
 
 ### Remaining coverage
 
