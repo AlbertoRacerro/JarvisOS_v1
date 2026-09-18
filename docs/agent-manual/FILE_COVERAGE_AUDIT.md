@@ -62,23 +62,54 @@ Required counters remain fail-closed pending exact path union:
 
 ## Canonical owner-ledger discovery checkpoint
 
-The union input locations were re-discovered directly from the live owner branches rather than guessed from prior notes.
+- **A:** canonical main ledger `docs/agent-manual/parts/A-product-backend-ai-data.md` plus `A-product-backend-ai-data.increment-11.md`; #660 backend hints remain source-only.
+- **B:** exact `docs/agent-manual/parts` inventory was recovered from the branch Contents response. It contains **29 files total**: 27 increment/progress artifacts plus the canonical `B-frontend-operator-ux.md` and `B-frontend-operator-ux-ledger-progress.md`. The exact names are checkpointed below, so B inventory is no longer a connector-truncation blocker.
+- **C:** exact four inputs: `C-engineering-bluecad-process.md`, `C-engineering-bluecad-process.file-coverage-progress.md`, `C-engineering-bluecad-process-audit.md`, `C-engineering-bluecad-process-audit-progress.md`.
+- **D:** canonical current ledger `docs/agent-manual/parts/D-development-delivery-security-ops.md`.
 
-- **A:** canonical main ledger is `docs/agent-manual/parts/A-product-backend-ai-data.md` (blob `9122dda08379f5421b1278652c944f54f3370b46`), with `A-product-backend-ai-data.increment-11.md` (blob `2a89d9127a0eea6266259cc7944e983216c383f8`) also present on the A branch. The main ledger explicitly states that PR #660 is hints-only and confers no coverage; its literal table contains `READ` and `OUT_OF_SCOPE` rows. This is now the canonical A parsing target.
-- **B:** the B branch currently contains multiple timestamped `B-file-coverage-*` and `B-frontend-operator-ux-ledger-*` increment files. The directory response itself exceeded connector display budget, so this run does not pretend the visible prefix is a complete B ledger inventory. B must be parsed from its canonical B-owned frontend/operator-UX evidence only; historical backend temporary rows remain excluded.
-- **C:** the C branch currently exposes exactly four part files in the inspected parts directory: `C-engineering-bluecad-process.md` (`82202e886fa2094dc425acb5c644448f50ef6237`), `C-engineering-bluecad-process.file-coverage-progress.md` (`61ecf11ebcfc38ebf3d1b2ce2887e94a9df279d0`), `C-engineering-bluecad-process-audit.md` (`9514c703d32ee66e0656451650d793024bacb898`), and `C-engineering-bluecad-process-audit-progress.md` (`db812e5b9a40b56d9eb3098442c9261500722fe3`). These are now the deterministic C parsing inputs.
-- **D:** canonical current ledger is `docs/agent-manual/parts/D-development-delivery-security-ops.md`; `scripts/check_lineage_overview.py` is now a committed exact `READ` row.
+### Exact B parts inventory
 
-This checkpoint removes filename ambiguity for A/C/D and records the remaining B-inventory extraction problem explicitly. It does **not** infer coverage counts from prose or from file presence.
+1. `B-file-coverage-increment-2026-09-17-11.md`
+2. `B-file-coverage-increment-2026-09-17-domain-foundation.md`
+3. `B-file-coverage-increment-2026-09-18-0231.md`
+4. `B-frontend-operator-ux-increment-2026-09-17T2030.md`
+5. `B-frontend-operator-ux-ledger-increment-11.md`
+6. `B-frontend-operator-ux-ledger-increment-17.md`
+7. `B-frontend-operator-ux-ledger-increment-2026-09-16T1506Z.md`
+8. `B-frontend-operator-ux-ledger-increment-2026-09-16T2102Z.md`
+9. `B-frontend-operator-ux-ledger-increment-2026-09-17T0132Z.md`
+10. `B-frontend-operator-ux-ledger-increment-2026-09-17T0232Z.md`
+11. `B-frontend-operator-ux-ledger-increment-2026-09-17T0730Z.md`
+12. `B-frontend-operator-ux-ledger-increment-2026-09-17T0927Z.md`
+13. `B-frontend-operator-ux-ledger-increment-2026-09-17T1129Z.md`
+14. `B-frontend-operator-ux-ledger-increment-2026-09-17T1331Z.md`
+15. `B-frontend-operator-ux-ledger-increment-2026-09-17T1427Z.md`
+16. `B-frontend-operator-ux-ledger-increment-2026-09-17T1630Z.md`
+17. `B-frontend-operator-ux-ledger-increment-2026-09-17T1933Z.md`
+18. `B-frontend-operator-ux-ledger-increment-2026-09-17T2132Z.md`
+19. `B-frontend-operator-ux-ledger-increment-2026-09-17T2230.md`
+20. `B-frontend-operator-ux-ledger-increment-2026-09-18-0828.md`
+21. `B-frontend-operator-ux-ledger-increment-2026-09-18T0030.md`
+22. `B-frontend-operator-ux-ledger-increment-2026-09-18T0130.md`
+23. `B-frontend-operator-ux-ledger-progress.md`
+24. `B-frontend-operator-ux.md`
+25. `B-ledger-increment-2026-09-18-0532.md`
+26. `B-ledger-increment-2026-09-18-0629.md`
+27. `B-ledger-increment-2026-09-18-0730.md`
+28. `B-ledger-increment-2026-09-18T0327-threads.md`
+29. `B-ledger-increment-2026-09-18T0429-coding-api.md`
+30. `B-ledger-increment-2026-09-18T0932.md`
+
+**Correction:** the exact response contains **30 files**, not the previously estimated 29. This explicit count is authoritative for this checkpoint. All 30 names above came from one complete Contents payload; future B additions remain subject to the freshness guard.
 
 ## Current union state
 
 | Owner | Current evidence | Union eligibility |
 |---|---|---|
-| A | Canonical main ledger and increment-11 identified; main ledger explicitly excludes #660 hints-only coverage. | READY FOR LITERAL ROW PARSE |
-| B | Multiple canonical B increments exist; directory payload is display-truncated and needs exact inventory/row parse. | IN PROGRESS |
-| C | Four exact canonical part inputs identified with blob SHAs. | READY FOR LITERAL ROW PARSE |
-| D | Canonical ledger contains actual-read evidence including `scripts/check_lineage_overview.py`. | READY FOR LITERAL ROW PARSE |
+| A | Main ledger + increment identified; #660 hints excluded. | READY FOR LITERAL ROW PARSE |
+| B | Exact 30-file parts inventory recovered and checkpointed. | READY FOR LITERAL ROW PARSE |
+| C | Four exact canonical part inputs identified. | READY FOR LITERAL ROW PARSE |
+| D | Canonical ledger contains actual-read evidence. | READY FOR LITERAL ROW PARSE |
 | Fresh tree | exact denominator established at 2036 tracked files. | IN PROGRESS |
 
 ## UNACCOUNTED_FILES
@@ -87,7 +118,7 @@ Exact literal `UNACCOUNTED_FILES` remains pending mechanical extraction of the n
 
 ### Deterministic next work
 
-1. Parse exact literal READ / GENERATED-ASSET / OUT_OF_SCOPE rows from the identified A/C/D inputs and finish exact B input inventory.
+1. Parse literal READ / GENERATED-ASSET / OUT_OF_SCOPE rows from all exact A/B/C/D inputs above, de-duplicating repeated B increment rows by exact path/status.
 2. Materialize the exact normalized 2036 master path set from the fixed baseline; fail closed if cardinality differs from 2036.
 3. Resolve OUT_OF_SCOPE only when the destination owner ledger contains the exact path.
 4. Persist exact counters, duplicate/ambiguous sets and literal orphan queues grouped by provisional owner/directory.
