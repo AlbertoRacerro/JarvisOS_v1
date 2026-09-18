@@ -8,7 +8,7 @@ Evidence baseline: fresh `master` `240d5e0b27d9837d40f47bddfa24871ae7a2a4bb`. Ru
 
 | Path | Status | Role / reason |
 |---|---|---|
-| `scripts/check_lineage_overview.py` | READ | Deterministic lineage overview conformance checker. |
+| `scripts/check_lineage_overview.py` | READ | Deterministic LINEAGE-OVERVIEW-1 conformance checker; exact request-generation stale guards, deterministic topological ordering with cyclic/null fallback, bounded lineage→selection mapping, workspace-discovery stale guard, mutation/fake-authority rejection and canonical spec-087 lifecycle validation. |
 | `scripts/check_analytics_dock.py` | READ | Deterministic analytics dock conformance checker. |
 | `scripts/check_engineering_data.py` | READ | Deterministic engineering-data conformance checker. |
 | `scripts/check_app_shell.py` | READ | Deterministic app-shell conformance checker. |
@@ -27,7 +27,7 @@ Evidence baseline: fresh `master` `240d5e0b27d9837d40f47bddfa24871ae7a2a4bb`. Ru
 
 ### Ledger continuity
 
-Branch history contains the earlier exact READ evidence for root files, `.github/**`, workflows, delivery/review/CI/continuation/codegen/recovery scripts, `docs/RUNBOOKS.md`, and data-root recovery files. This checkpoint adds two directly inspected deterministic checker files without inferring unread paths from directory membership.
+Branch history contains the earlier exact READ evidence for root files, `.github/**`, workflows, delivery/review/CI/continuation/codegen/recovery scripts, `docs/RUNBOOKS.md`, and data-root recovery files. This checkpoint deepens the already-credited lineage checker from direct master source inspection; referenced frontend/docs paths remain uncredited by that checker read.
 
 ### Remaining coverage
 
