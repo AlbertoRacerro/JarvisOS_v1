@@ -6,19 +6,20 @@ Evidence baseline: fresh `master` `240d5e0b27d9837d40f47bddfa24871ae7a2a4bb`. Ru
 
 ## EXPLICIT FILE COVERAGE LEDGER
 
-This ledger preserves the previously committed Area-D READ evidence. The following newly reconciled exact paths are additionally credited after direct source inspection at the baseline SHA:
-
 | Path | Status | Role / reason |
 |---|---|---|
-| `scripts/check_lineage_overview.py` | READ | Deterministic LINEAGE-OVERVIEW-1 conformance checker over frontend lineage/workspace state plus STATUS lifecycle evidence; includes stale-response, ordering, selection-boundary and fake-authority negative checks. |
-| `scripts/check_analytics_dock.py` | READ | Deterministic ANALYTICS-DOCK-1 conformance checker; verifies bounded run/output selection, exact model-version/unit comparability, stale-response guards, and rejects conversion/statistical/fake-authority behavior. |
-| `scripts/check_engineering_data.py` | READ | Deterministic ENGINEERING-DATA-1 conformance checker; verifies typed engineering-record projection/filtering, workspace-generation guards, partial-failure behavior, and rejects mutation/fake freshness-authority behavior. |
-| `scripts/check_app_shell.py` | READ | Deterministic app-shell/spec-083 conformance checker. Direct source inspection confirms exact route/navigation registries, historical diff allow-lists, accessibility markers, shell-state/persistence prohibitions, frontend/backend footprint checks, and fail-closed STATUS-registry validation. |
-| `scripts/check_model_inspection.py` | READ | Deterministic MODEL-INSPECTION-A0/spec-086 conformance checker. Direct source inspection confirms PR/base scope validation, geometry-only inspection markers, stale session-command guard, backend/network/persistence prohibitions, semantic-identity rejection, STATUS lifecycle validation, and negative self-tests. |
+| `scripts/check_lineage_overview.py` | READ | Deterministic lineage overview conformance checker. |
+| `scripts/check_analytics_dock.py` | READ | Deterministic analytics dock conformance checker. |
+| `scripts/check_engineering_data.py` | READ | Deterministic engineering-data conformance checker. |
+| `scripts/check_app_shell.py` | READ | Deterministic app-shell conformance checker. |
+| `scripts/check_model_inspection.py` | READ | Deterministic model-inspection conformance checker. |
+| `scripts/check_operator_workbench.py` | READ | Deterministic operator-workbench conformance checker; verifies sidecar identity, compact tabs, bounded panes and technical-detail disclosure. |
+| `scripts/check_runs_workbench.py` | READ | Deterministic runs-workbench conformance checker; verifies typed run/log/artifact reads, stale-response guards, bounded payload projection and negative mutation/authority checks. |
+| `scripts/check_settings_surface.py` | READ | Deterministic settings-surface conformance checker; verifies frozen scope, credential non-disclosure, mutation locks, canonical endpoints and bounded error projection. |
 
 ### Ledger continuity
 
-The branch history before this commit contains the existing 79 exact READ rows for root files, `.github/**`, workflows, delivery/review/CI/continuation/codegen/recovery scripts, `docs/RUNBOOKS.md`, and data-root recovery files. This commit does not revoke those rows; it adds two directly inspected checker paths while preserving the three checker rows above. Global audit must parse canonical branch history/current ledger evidence conservatively and must not infer unread paths from directory membership.
+Branch history contains the earlier exact READ evidence for root files, `.github/**`, workflows, delivery/review/CI/continuation/codegen/recovery scripts, `docs/RUNBOOKS.md`, and data-root recovery files. This checkpoint adds three directly inspected checker paths without inferring unread paths from directory membership.
 
 ### Remaining coverage
 
