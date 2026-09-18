@@ -8,6 +8,7 @@ Evidence baseline: fresh `master` `240d5e0b27d9837d40f47bddfa24871ae7a2a4bb`. Ru
 
 | Path | Status | Role / reason |
 |---|---|---|
+| `scripts/cheap_review.py` | READ | Tiered advisory PR-review orchestrator; builds bounded diff/spec/AGENTS review packs, calls OpenAI-compatible providers with bounded retry/stream parsing, keeps model verdicts non-authoritative, gates label/fix-request progression on parsed verdict/escalation/current PR head, uses append-only round accounting, constrains Codex follow-up outcomes, and includes offline negative/self-tests. Provider failures are explicitly routed through fail-open review behavior rather than merge authority. |
 | `scripts/check_lineage_overview.py` | READ | Deterministic LINEAGE-OVERVIEW-1 conformance checker; exact request-generation stale guards, deterministic topological ordering with cyclic/null fallback, bounded lineage→selection mapping, workspace-discovery stale guard, mutation/fake-authority rejection and canonical spec-087 lifecycle validation. |
 | `scripts/check_analytics_dock.py` | READ | Deterministic analytics dock conformance checker. |
 | `scripts/check_engineering_data.py` | READ | Deterministic engineering-data conformance checker. |
@@ -32,7 +33,7 @@ Evidence baseline: fresh `master` `240d5e0b27d9837d40f47bddfa24871ae7a2a4bb`. Ru
 
 ### Ledger continuity
 
-Branch history contains earlier exact READ evidence for root files, `.github/**`, workflows, delivery/review/CI/continuation/codegen/recovery scripts, `docs/RUNBOOKS.md`, and data-root recovery files. This checkpoint adds direct master-source evidence for the CI scope classifier; referenced paths are not credited by this read.
+Branch history contains earlier exact READ evidence for root files, `.github/**`, workflows, delivery/review/CI/continuation/codegen/recovery scripts, `docs/RUNBOOKS.md`, and data-root recovery files. This checkpoint adds direct master-source evidence for the tiered cheap/senior advisory review orchestrator; files merely referenced or loaded by that script are not credited by this read.
 
 ### Remaining coverage
 
