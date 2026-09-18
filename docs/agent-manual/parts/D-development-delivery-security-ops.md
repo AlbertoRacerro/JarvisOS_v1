@@ -13,10 +13,12 @@ This ledger preserves the previously committed Area-D READ evidence. The followi
 | `scripts/check_lineage_overview.py` | READ | Deterministic LINEAGE-OVERVIEW-1 conformance checker over frontend lineage/workspace state plus STATUS lifecycle evidence; includes stale-response, ordering, selection-boundary and fake-authority negative checks. |
 | `scripts/check_analytics_dock.py` | READ | Deterministic ANALYTICS-DOCK-1 conformance checker; verifies bounded run/output selection, exact model-version/unit comparability, stale-response guards, and rejects conversion/statistical/fake-authority behavior. |
 | `scripts/check_engineering_data.py` | READ | Deterministic ENGINEERING-DATA-1 conformance checker; verifies typed engineering-record projection/filtering, workspace-generation guards, partial-failure behavior, and rejects mutation/fake freshness-authority behavior. |
+| `scripts/check_app_shell.py` | READ | Deterministic app-shell/spec-083 conformance checker. Direct source inspection confirms exact route/navigation registries, historical diff allow-lists, accessibility markers, shell-state/persistence prohibitions, frontend/backend footprint checks, and fail-closed STATUS-registry validation. |
+| `scripts/check_model_inspection.py` | READ | Deterministic MODEL-INSPECTION-A0/spec-086 conformance checker. Direct source inspection confirms PR/base scope validation, geometry-only inspection markers, stale session-command guard, backend/network/persistence prohibitions, semantic-identity rejection, STATUS lifecycle validation, and negative self-tests. |
 
 ### Ledger continuity
 
-The branch history before this commit contains the existing 79 exact READ rows for root files, `.github/**`, workflows, delivery/review/CI/continuation/codegen/recovery scripts, `docs/RUNBOOKS.md`, and data-root recovery files. This commit does not revoke those rows; it adds the two directly inspected checker paths above while preserving `scripts/check_lineage_overview.py`. Global audit must parse canonical branch history/current ledger evidence conservatively and must not infer unread paths from directory membership.
+The branch history before this commit contains the existing 79 exact READ rows for root files, `.github/**`, workflows, delivery/review/CI/continuation/codegen/recovery scripts, `docs/RUNBOOKS.md`, and data-root recovery files. This commit does not revoke those rows; it adds two directly inspected checker paths while preserving the three checker rows above. Global audit must parse canonical branch history/current ledger evidence conservatively and must not infer unread paths from directory membership.
 
 ### Remaining coverage
 
