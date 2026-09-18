@@ -13,11 +13,11 @@ This audit is fail-closed. `READ` is credited only where an active owner ledger 
 - **C:** PR #659 / `docs/capability-map-C-engineering`.
 - **D:** PR #657 / `docs/capability-map-D-devops-security`.
 
-The temporary backend A+B increment files on PR #660 are historical source only. They do not count as B ownership and do not create duplicate union ownership. Their backend paths count only after Area A re-reads/absorbs them into PR #658.
+Historical backend A+B temporary rows on PR #660 are source-only and never count as B/global coverage.
 
 ## Exact mechanical denominator — ESTABLISHED
 
-Supervisor-verified exact enumeration is authoritative for this baseline. The root non-recursive Git tree is `truncated:false` and contains 7 root blobs. Each top-level subtree was fetched independently with recursive Git-tree traversal and independently verified `truncated:false`; all returned non-tree entries were blobs and no submodules were present.
+Supervisor-verified enumeration is authoritative for this baseline. Root non-recursive tree is `truncated:false` with 7 blobs. Each top-level subtree was independently fetched recursively with `truncated:false`; all non-tree entries were blobs and no submodules were present.
 
 | Top-level set | Exact tracked blobs |
 |---|---:|
@@ -33,9 +33,7 @@ Supervisor-verified exact enumeration is authoritative for this baseline. The ro
 | `tests` | 31 |
 | **TOTAL_TRACKED_FILES** | **2036** |
 
-The previous breadth-first reconstruction is retired for denominator purposes unless master SHA changes. Exact normalized path extraction and four-ledger union are now the active task.
-
-Required counters:
+Required counters remain fail-closed pending exact path union:
 
 - `TOTAL_TRACKED_FILES: 2036`
 - `READ_FILES: PENDING_FOUR_LEDGER_UNION`
@@ -50,11 +48,9 @@ Required counters:
 - duplicate ownership count: `PENDING_FOUR_LEDGER_UNION`
 - ambiguous ownership count: `PENDING_EXACT_PATH_LEDGER_UNION`
 
-**Accounting invariant gate:** `2036 = COVERED_FILES + UNACCOUNTED_FILES_COUNT` must hold after duplicate/ambiguity normalization before the audit can be valid. It is not asserted until the exact path-set/ledger union is computed.
+**Accounting invariant gate:** `2036 = COVERED_FILES + UNACCOUNTED_FILES_COUNT` must hold after duplicate/ambiguity normalization before this audit can be valid.
 
-## Exact path extraction checkpoint
-
-The normalized master-set extraction has started from the fixed tree rather than re-deriving the denominator. The root tree was re-fetched directly and is `truncated:false`; its exact seven blob paths are:
+## Exact root paths
 
 - `.gitignore`
 - `AGENTS.md`
@@ -64,63 +60,43 @@ The normalized master-set extraction has started from the fixed tree rather than
 - `Start-JarvisOS-Frontend.cmd`
 - `Start-JarvisOS.cmd`
 
-The same root response establishes the exact subtree SHAs used for independent recursive extraction, including `scripts` = `f641460e1746c8b22c0c0fb5606ac2982c9de8ca`. A recursive fetch of that exact scripts tree was issued and GitHub's returned tree begins with the expected normalized blob sequence and nested `data_root_recovery/**` paths. The connector display truncates the large response before all 67 blobs can be copied into this document, so this run does **not** claim a complete literal scripts path set from the displayed payload. The supervisor-verified cardinality of 67 remains denominator evidence, not path-union evidence. No partial scripts list is credited as exhaustive.
+## Canonical owner-ledger discovery checkpoint
 
-A previously inspected D file, `scripts/check_lineage_overview.py`, was re-read from the exact master SHA this run. Its content is a deterministic LINEAGE-OVERVIEW-1 conformance checker over frontend lineage/workspace state plus STATUS lifecycle evidence, with explicit stale-response, ordering, selection-boundary and fake-authority negative checks. It remains excluded from global `READ_FILES` until the canonical D ledger contains its exact READ row; this preserves actual-read plus canonical-ledger semantics.
+The union input locations were re-discovered directly from the live owner branches rather than guessed from prior notes.
+
+- **A:** canonical main ledger is `docs/agent-manual/parts/A-product-backend-ai-data.md` (blob `9122dda08379f5421b1278652c944f54f3370b46`), with `A-product-backend-ai-data.increment-11.md` (blob `2a89d9127a0eea6266259cc7944e983216c383f8`) also present on the A branch. The main ledger explicitly states that PR #660 is hints-only and confers no coverage; its literal table contains `READ` and `OUT_OF_SCOPE` rows. This is now the canonical A parsing target.
+- **B:** the B branch currently contains multiple timestamped `B-file-coverage-*` and `B-frontend-operator-ux-ledger-*` increment files. The directory response itself exceeded connector display budget, so this run does not pretend the visible prefix is a complete B ledger inventory. B must be parsed from its canonical B-owned frontend/operator-UX evidence only; historical backend temporary rows remain excluded.
+- **C:** the C branch currently exposes exactly four part files in the inspected parts directory: `C-engineering-bluecad-process.md` (`82202e886fa2094dc425acb5c644448f50ef6237`), `C-engineering-bluecad-process.file-coverage-progress.md` (`61ecf11ebcfc38ebf3d1b2ce2887e94a9df279d0`), `C-engineering-bluecad-process-audit.md` (`9514c703d32ee66e0656451650d793024bacb898`), and `C-engineering-bluecad-process-audit-progress.md` (`db812e5b9a40b56d9eb3098442c9261500722fe3`). These are now the deterministic C parsing inputs.
+- **D:** canonical current ledger is `docs/agent-manual/parts/D-development-delivery-security-ops.md`; `scripts/check_lineage_overview.py` is now a committed exact `READ` row.
+
+This checkpoint removes filename ambiguity for A/C/D and records the remaining B-inventory extraction problem explicitly. It does **not** infer coverage counts from prose or from file presence.
 
 ## Current union state
 
 | Owner | Current evidence | Union eligibility |
 |---|---|---|
-| A | PR #658 active product/backend owner; historical backend rows on #660 are not credited until independently re-read/absorbed by A. | IN PROGRESS |
-| B | PR #660 owns frontend/operator UX/design-reference scope only; historical temporary backend rows are excluded. | IN PROGRESS |
-| C | PR #659 owns engineering/modeling scope. | IN PROGRESS |
-| D | Canonical literal ledger contains 79 committed READ rows; `scripts/check_lineage_overview.py` is actually read but remains uncredited pending canonical-ledger insertion. | IN PROGRESS |
-| Fresh tree | exact denominator established at 2036 tracked files; root exact path set is now durably extracted, top-level recursive literal path extraction continues. | IN PROGRESS |
+| A | Canonical main ledger and increment-11 identified; main ledger explicitly excludes #660 hints-only coverage. | READY FOR LITERAL ROW PARSE |
+| B | Multiple canonical B increments exist; directory payload is display-truncated and needs exact inventory/row parse. | IN PROGRESS |
+| C | Four exact canonical part inputs identified with blob SHAs. | READY FOR LITERAL ROW PARSE |
+| D | Canonical ledger contains actual-read evidence including `scripts/check_lineage_overview.py`. | READY FOR LITERAL ROW PARSE |
+| Fresh tree | exact denominator established at 2036 tracked files. | IN PROGRESS |
 
 ## UNACCOUNTED_FILES
 
-Exact literal `UNACCOUNTED_FILES` is pending mechanical extraction of the 2036 normalized paths and union against the latest canonical A/B/C/D ledgers. This is not interpreted as zero and does not satisfy completion.
+Exact literal `UNACCOUNTED_FILES` remains pending mechanical extraction of the normalized 2036 master paths and union against canonical A/B/C/D ledger rows. This is not interpreted as zero.
 
 ### Deterministic next work
 
-1. Continue independent recursive extraction of each top-level subtree at the fixed baseline and materialize every blob path; do not substitute cardinality for literal paths.
-2. Normalize/deduplicate with the seven root paths to an exact 2036-path master set; fail closed if cardinality differs from 2036.
-3. Fetch latest canonical A/B/C/D ledgers from PR branches; exclude B historical backend A+B temporary rows.
-4. Parse exact READ and GENERATED/ASSET paths and mechanically union them against master paths.
-5. Persist exact counters, duplicate/ambiguous sets, and literal orphan queues grouped by provisional owner/directory.
-6. Consume D-owned orphans by actual reading; leave exact A/B/C queues for their owners.
-
-### Active-owner blockers
-
-- **GLOBAL:** finish literal normalized 2036-path extraction and mechanically union four canonical ledgers.
-- **A (#658):** re-read/absorb backend paths formerly represented only in temporary A+B material on #660.
-- **B (#660):** finish canonical frontend/operator-UX/design-reference literal coverage while excluding historical backend temp rows.
-- **C (#659):** finish engineering/modeling literal coverage and zero-orphan reconciliation.
-- **D (#657):** insert the already-read `scripts/check_lineage_overview.py` into the canonical ledger; then continue from mechanically generated D orphan queue.
+1. Parse exact literal READ / GENERATED-ASSET / OUT_OF_SCOPE rows from the identified A/C/D inputs and finish exact B input inventory.
+2. Materialize the exact normalized 2036 master path set from the fixed baseline; fail closed if cardinality differs from 2036.
+3. Resolve OUT_OF_SCOPE only when the destination owner ledger contains the exact path.
+4. Persist exact counters, duplicate/ambiguous sets and literal orphan queues grouped by provisional owner/directory.
+5. Consume D-owned orphans by actual reading; publish exact A/B/C orphan queues for their owners.
 
 ## Freshness / added-file guard
 
-For each owner, compare its ledger baseline to fresh master tree. Any tracked file added after an owner's baseline is automatically unaccounted until exact path is explicitly classified by an active owner. Capability prose or historical sidecars cannot grandfather later files. If master changes from `240d5e0b27d9837d40f47bddfa24871ae7a2a4bb`, invalidate the denominator/path set and enumerate the new tree before completion.
-
-## D evidence established
-
-Canonical D map remains strict `MAPPING_STATUS: IN_PROGRESS` with 79 committed `READ` rows. `scripts/check_lineage_overview.py` has been actually inspected from fresh master but remains uncredited until canonical-ledger insertion. No runtime/product code is modified by this audit.
-
-Previously established D evidence includes all seven root files, root `.github` policy/template and worktree-control files, all 17 workflows, all `.github/browser-proof/**`, and the committed delivery/review/CI/continuation/codegen/recovery script tranche.
-
-A concrete existing defect remains recorded: `.github/browser-proof/plans/115-project-search.json` references capture `mutationBaseline` without creating it; generic executor fails closed on missing captures. Runtime is intentionally untouched by issue #656.
+Any tracked file added after an owner's baseline is unaccounted until explicitly classified. If master changes from `240d5e0b27d9837d40f47bddfa24871ae7a2a4bb`, invalidate denominator/path set before completion.
 
 ## Completion gate
 
-Set `GLOBAL_FILE_COVERAGE: COMPLETE` only when all are mechanically checkable against this exact 2036-file fresh tree:
-
-1. exact normalized tracked-path set cardinality is 2036;
-2. `2036 = COVERED_FILES + UNACCOUNTED_FILES_COUNT` after duplicate/ambiguity normalization;
-3. every tracked file resolves to exactly one active owner as `READ` or `GENERATED/ASSET`;
-4. every `OUT_OF_SCOPE` entry resolves to an exact destination-ledger path;
-5. historical A+B temporary backend rows on #660 are excluded and any needed backend paths are independently covered by A;
-6. `UNACCOUNTED_FILES_COUNT: 0`;
-7. duplicate ownership count = 0;
-8. ambiguous ownership count = 0;
-9. cross-owner references resolve and files added after any owner baseline are explicitly reconciled.
+Set `GLOBAL_FILE_COVERAGE: COMPLETE` only when all are mechanically checkable against the exact 2036-file tree: normalized master-set cardinality 2036; accounting invariant holds; every tracked file resolves exactly once as READ or GENERATED/ASSET; OUT_OF_SCOPE destinations resolve; historical #660 backend temporary rows are excluded; unaccounted=0; duplicate ownership=0; ambiguous ownership=0; cross-owner references and freshness guard pass.
