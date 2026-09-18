@@ -24,6 +24,7 @@ Temporary staging ledger; every row must be consolidated into `docs/agent-manual
 | `backend/app/modules/runner/routes.py` | READ | FastAPI runner surface: exposes reviewed bundled BLUECAD/process/topology/kernel registration, implementation listing/binding preview, job creation/execution and run evidence reads; mutation endpoints use the Origin guard and RunnerSafetyError codes map deterministically to 404/409/400. |
 | `backend/app/modules/runner/service.py` | READ | Legacy/core runner persistence and execution service: registers bounded implementation kinds, copies the fixed batch demo or persists caller-supplied BLUECAD/calc scripts, canonicalizes input contracts and hashes script identity; dedicated BlueRev registrations are idempotent on workspace/version/contract/script hashes and create model specs when absent; job/run paths validate workspace/model provenance, linked parameters, safety limits and artifacts while persisting simulation/log/evidence records. |
 | `backend/app/modules/runner/process_kernel_registration.py` | READ | Dedicated exact-047 process-kernel registrar/normalizer: idempotently matches workspace/version/contract/script identity, creates the model spec if absent, installs the server-owned bundle, marks immutable artifact identity, rolls back partial registration on failure, and resolves linked Parameters through the fail-closed usability guard before normalization. |
+| `backend/app/modules/runner/process_kernel_047.py` | READ | Exact process-kernel bundle identity/install/validation boundary: hashes contract, semantic registry, component/profile constants and every bundled source; rejects symlinks, extra/missing/stale files or hash drift; recognizes only the exact reviewed calc_v0 profile and enforces schema-v2 normalization plus OD≥ID before execution. |
 | `backend/app/modules/runner/topology_m1.py` | READ | Exact M1 topology profile/evidence helper: binds bundled script/contract/schema identity, verifies canonical finite topology manifests against schema, executed-input digest, model identity and result diagnostics, rejects symlink/noncanonical/oversized/mismatched evidence, and declares only runner-owned result/manifest artifacts. |
 | `backend/app/modules/runner/examples/batch_growth.py` | READ | Deterministic exponential batch-growth demonstration: validates four finite scalar inputs and a bounded time grid, integrates `X <- X*exp(mu_max*dt)`, writes canonical result JSON plus CSV timeseries; demonstration only, not qualified PBR biology authority. |
 | `backend/app/modules/runner/examples/bluerev_biomass_nutrients_harvest_v0.contract.json` | READ | Schema-v1 forward contract for 048 biomass/nutrient/harvest screening: 21 explicit design/operating/property/equipment/economic variables with units/domains; productivity is imposed rather than kinetically predicted, CO2 rate is only an instantaneous benchmark, pump power is externally bound, and product price is optional for the gross-margin proxy. |
@@ -40,12 +41,14 @@ Temporary staging ledger; every row must be consolidated into `docs/agent-manual
 
 ### Fresh-tree reconciliation checkpoint
 
-The fresh `master@240d5e0b27d9837d40f47bddfa24871ae7a2a4bb` directory listing for `backend/app/modules/runner/examples/` contains exactly the 12 tracked files represented above. Every one has been content-inspected and has an explicit READ row. Therefore:
+The fresh `master@240d5e0b27d9837d40f47bddfa24871ae7a2a4bb` directory listing for `backend/app/modules/runner/` contains exactly 17 tracked core Python files plus the `examples/` directory. All 17 core files and all 12 tracked example files have now been content-inspected and explicitly ledgered across the canonical/staging Area-C ledgers. Therefore:
+
+`RUNNER_CORE_UNACCOUNTED: 0`
 
 `RUNNER_EXAMPLES_UNACCOUNTED: 0`
 
-This closes only the runner-example subtree; it does not imply Area C completion.
+This closes the runner runtime subtree only; it does not imply Area C completion. Canonical consolidation remains required before COMPLETE.
 
 UNACCOUNTED_FILES: >0
 
-Next: consolidate all staged runner rows into the canonical explicit ledger, inspect remaining runner core and then runner engineering tests; continue BLUECAD/tests/schemas/configs/reports/assets; perform final fresh-tree set difference. COMPLETE remains forbidden until `UNACCOUNTED_FILES: 0` is proven.
+Next: consolidate staged runner rows into the canonical explicit ledger, then inspect engineering-specific runner tests; continue BLUECAD/tests/schemas/configs/reports/assets; perform final fresh-tree set difference. COMPLETE remains forbidden until `UNACCOUNTED_FILES: 0` is proven.
