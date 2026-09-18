@@ -25,10 +25,11 @@ Evidence baseline: fresh `master` `240d5e0b27d9837d40f47bddfa24871ae7a2a4bb`. Ru
 | `scripts/check_pr_attention_integration.py` | READ | Deterministic read-only PR-attention integration guard; requires pull_request rather than pull_request_target, explicit read-only permissions, immutable action pin and exact head binding, while rejecting semantic-authority inputs and downstream mutation-capable actions/commands. |
 | `scripts/check_proposal_review.py` | READ | Deterministic proposal-review readiness checker; enforces bounded implementation diff, canonical proposal/promote/reject routes, stale request/mutation guards, inert rendering and prohibition of provider/grading/client authority. |
 | `scripts/check_review_secret_boundary.py` | READ | Deterministic provider-secret review boundary guard; requires workflow_dispatch-only master-gated review, trusted-master checkout with credentials disabled, confines provider secrets to trusted `manual_review.py`, rejects PR-controlled checkout/reconstruction, and self-tests against hostile sibling-module import shadowing. |
+| `scripts/check_spec_status.py` | READ | Deterministic canonical spec-registry/PR consistency gate; validates registry shape/status/dependencies, rejects duplicate/self/missing dependencies, enforces implementation versus definition lifecycle rules, exact current-PR linkage and merged dependency prerequisites, and includes negative self-tests. |
 
 ### Ledger continuity
 
-Branch history contains the earlier exact READ evidence for root files, `.github/**`, workflows, delivery/review/CI/continuation/codegen/recovery scripts, `docs/RUNBOOKS.md`, and data-root recovery files. This checkpoint adds direct master-source evidence for the provider-secret manual-review boundary; referenced workflow files remain uncredited by this checker read.
+Branch history contains the earlier exact READ evidence for root files, `.github/**`, workflows, delivery/review/CI/continuation/codegen/recovery scripts, `docs/RUNBOOKS.md`, and data-root recovery files. This checkpoint adds direct master-source evidence for the canonical spec-status gate; files referenced by that checker are not credited by this read.
 
 ### Remaining coverage
 
