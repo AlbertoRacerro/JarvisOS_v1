@@ -38,6 +38,7 @@ Temporary staging ledger; every row must be consolidated into `docs/agent-manual
 | `backend/app/modules/runner/examples/bluerev_geometry_hydraulics_v0.py` | READ | Exact bundled 047 M0 closed-loop geometry/hydraulics model: strict nine-input unit envelope, finite/domain checks, laminar 64/Re or qualified Blasius friction, Darcy pressure/head/power outputs, and explicit omitted-physics diagnostics. |
 | `backend/app/modules/runner/examples/bluerev_process_topology_m1_v0.contract.json` | READ | Schema-v1 forward contract for the M1 topology model: 26 required design/operating/property/equipment/model-parameter variables covering parallel branches, illuminated/dark runs, bends, common supply/return, diameters, holdups, velocity, fluid properties, pump efficiency and distributed minor-loss coefficients with explicit units/domains. |
 | `backend/app/modules/runner/examples/bluerev_process_topology_m1_v0.py` | READ | Deterministic M1 parallel-topology hydraulic screening executable: exact input/unit/key validation plus integer/cross-field geometry rules; computes installed/illuminated/dark tube geometry, inventory, flow/transit, Reynolds/friction, pressure-loss and pump-power evidence; fails closed outside laminar or qualified Blasius regimes and emits canonical model/manifest evidence including M0-reduction diagnostics. |
+| `docs/runbooks/bluecad-real-tool-proof.md` | READ | Operator proof contract for real Gmsh/CalculiX: requires an external hash/version/license-pinned registry, distinguishes skip-capable ordinary tests from strict proof, pins C3D10/pressure-mapping and analytic tolerances, preserves bounded proof artifacts, and documents determinism/failure interpretation without weakening evidence gates. |
 
 ### Fresh-tree reconciliation checkpoint
 
@@ -49,6 +50,10 @@ The fresh `master@240d5e0b27d9837d40f47bddfa24871ae7a2a4bb` directory listing fo
 
 This closes the runner runtime subtree only; it does not imply Area C completion. Canonical consolidation remains required before COMPLETE.
 
+### Canonical-ledger write blocker
+
+The connected GitHub write action replaces an existing file as a whole rather than applying a patch. The canonical Area-C document is longer than the connector returns in one bounded read, so rewriting it from a partial response risks silently deleting already-mapped content. Until a lossless full-file/patch path is available, inspected rows are staged here and COMPLETE is forbidden; this is a tooling blocker on consolidation, not on continued literal inspection.
+
 UNACCOUNTED_FILES: >0
 
-Next: consolidate staged runner rows into the canonical explicit ledger, then inspect engineering-specific runner tests; continue BLUECAD/tests/schemas/configs/reports/assets; perform final fresh-tree set difference. COMPLETE remains forbidden until `UNACCOUNTED_FILES: 0` is proven.
+Next: consolidate staged rows into the canonical explicit ledger when lossless patching is available; meanwhile continue BLUECAD/tests/schemas/configs/reports/assets and engineering-specific runner tests, then perform final fresh-tree set difference. COMPLETE remains forbidden until `UNACCOUNTED_FILES: 0` is proven.
