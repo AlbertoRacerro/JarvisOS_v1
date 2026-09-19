@@ -1258,58 +1258,58 @@ frontend/tests/143-operator-semantic-ux.mjs	B	READ	Fresh master source inspectio
 frontend/tsconfig.json	B	READ	Directly inspected. Strict no-emit browser TypeScript contract over `src`, ES2020/DOM libs, ESNext modules, React JSX, isolated modules and JSON module resolution. It is compile-time verification only and confers no runtime/operator authority.
 frontend/vite.config.ts	B	READ	Directly inspected. React Vite configuration; dev server binds `127.0.0.1:5173` and proxies `/api` to `http://127.0.0.1:8000` without origin rewriting. This is local development transport wiring, not production/backend capability evidence.
 README.md	D	READ	Fresh master root/launcher source inspection.
-reports/024-C-PREFLIGHT/summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/024-C1-VERIFICATION-KERNEL/summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/024-C2-ANALYTIC-BATTERY/summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/056-DEFINITION-RECONCILIATION/summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/056-PROPERTY-BASED-GEOMETRY-TESTING/summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/059-EGRESS-AUTOPILOT-AMENDMENT/summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/059-IP-EGRESS-DEFINITION/summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/059A-IP-EGRESS-SENSITIVITY-CONTEXT/summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/059B-FULL-SPEC-RECONCILIATION/summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/059B-POLICY-AUTOPILOT-IMPLEMENTATION/summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/024-C-PREFLIGHT/summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
+reports/024-C1-VERIFICATION-KERNEL/summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
+reports/024-C2-ANALYTIC-BATTERY/summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
+reports/056-DEFINITION-RECONCILIATION/summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
+reports/056-PROPERTY-BASED-GEOMETRY-TESTING/summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
+reports/059-EGRESS-AUTOPILOT-AMENDMENT/summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
+reports/059-IP-EGRESS-DEFINITION/summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
+reports/059A-IP-EGRESS-SENSITIVITY-CONTEXT/summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
+reports/059B-FULL-SPEC-RECONCILIATION/summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
+reports/059B-POLICY-AUTOPILOT-IMPLEMENTATION/summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/bluecad_spike_a1_a2_artifacts/hollow_cylinder.glb	C	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/bluecad_spike_a1_a2_artifacts/hollow_cylinder.step	C	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/bluecad_spike_a1_a2_artifacts/hollow_cylinder.stl	C	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/bluecad_spike_a1_a2_artifacts/torus_bend_90.glb	C	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/bluecad_spike_a1_a2_artifacts/torus_bend_90.step	C	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/bluecad_spike_a1_a2_artifacts/torus_bend_90.stl	C	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/bluecad_spike_a1_a2.md	C	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/BLUEREV-ENGINEERING-PLAYBOOK-V1/summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/bluecad_spike_a1_a2.md	C	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
+reports/BLUEREV-ENGINEERING-PLAYBOOK-V1/summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/E1-EXTERNAL-EGRESS-SAFETY-GATE/summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/E1-EXTERNAL-EGRESS-SAFETY-GATE/summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/E1-EXTERNAL-EGRESS-SAFETY-GATE/summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/E2-EXTERNAL-ROUTING-FLAG-GOVERNANCE/summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/E2-EXTERNAL-ROUTING-FLAG-GOVERNANCE/summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/E2-EXTERNAL-ROUTING-FLAG-GOVERNANCE/summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/E3-EXTERNAL-BUDGET-SESSION-GATE/summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/E3-EXTERNAL-BUDGET-SESSION-GATE/summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/E3-EXTERNAL-BUDGET-SESSION-GATE/summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/E4-A1-DETERMINISTIC-EGRESS-SCOPE/summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/E4-A1-DETERMINISTIC-EGRESS-SCOPE/summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/E4-A1-DETERMINISTIC-EGRESS-SCOPE/summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/E4-A2-CANONICAL-DIGEST-HELPER/summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/E4-A2-CANONICAL-DIGEST-HELPER/summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/E4-A2-CANONICAL-DIGEST-HELPER/summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/E4-A3-CONFIRMATION-DIGEST-BINDING-INTEGRATION/summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/E4-A3-CONFIRMATION-DIGEST-BINDING-INTEGRATION/summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/E4-A3-CONFIRMATION-DIGEST-BINDING-INTEGRATION/summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/E4-A3-PRE-DIGEST-BINDING-CONTRACT/summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/E4-A3-PRE-DIGEST-BINDING-CONTRACT/summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/E4-A3-PRE-DIGEST-BINDING-CONTRACT/summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/E4-A4-CONFIRMATION-DECISION-REVALIDATION-BOUNDARY/summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/E4-A4-CONFIRMATION-DECISION-REVALIDATION-BOUNDARY/summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/E4-A4-CONFIRMATION-DECISION-REVALIDATION-BOUNDARY/summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/E4-A5-CONFIRMED-EXECUTION-ACTIVATION-BOUNDARY/summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/E4-A5-CONFIRMED-EXECUTION-ACTIVATION-BOUNDARY/summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/E4-A5-CONFIRMED-EXECUTION-ACTIVATION-BOUNDARY/summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/E4-A6-CONFIRMED-EXECUTION-CONSUMPTION-DURABLE-TICKET-BOUNDARY/summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/E4-A6-CONFIRMED-EXECUTION-CONSUMPTION-DURABLE-TICKET-BOUNDARY/summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/E4-A6-CONFIRMED-EXECUTION-CONSUMPTION-DURABLE-TICKET-BOUNDARY/summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/E4-A7-PRE-3-NO-PROVIDER-RUNTIME-AUTHORITY-CHAIN-DRY-RUN/summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/E4-A7-PRE-3-NO-PROVIDER-RUNTIME-AUTHORITY-CHAIN-DRY-RUN/summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/E4-A7-PRE-3-NO-PROVIDER-RUNTIME-AUTHORITY-CHAIN-DRY-RUN/summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/E4-A7-PRE-4-BENCHMARK-FIXTURE-SCHEMA-REPLAY-HARNESS/summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/E4-A7-PRE-4-BENCHMARK-FIXTURE-SCHEMA-REPLAY-HARNESS/summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/E4-A7-PRE-4-BENCHMARK-FIXTURE-SCHEMA-REPLAY-HARNESS/summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/E4-A7-PRE-5-ROUTING-RECOMMENDATION-FALLBACK-CONTRACT-NO-PROVIDER-PERMISSION/summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/E4-A7-PRE-5-ROUTING-RECOMMENDATION-FALLBACK-CONTRACT-NO-PROVIDER-PERMISSION/summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/E4-A7-PRE-5-ROUTING-RECOMMENDATION-FALLBACK-CONTRACT-NO-PROVIDER-PERMISSION/summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/E4-A7-PRE-ECONOMIC-EXECUTION-POLICY-BOUNDARY/summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/E4-A7-PRE-ECONOMIC-EXECUTION-POLICY-BOUNDARY/summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/E4-A7-PRE-ECONOMIC-EXECUTION-POLICY-BOUNDARY/summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/E4-BASELINE-CLEANUP/summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/E4-BASELINE-CLEANUP/summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/E4-BASELINE-CLEANUP/summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/E4-PRE-R1-FORCED-EXTERNAL-ARTIFACT-SCRUB/summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/E4-PRE-R1-FORCED-EXTERNAL-ARTIFACT-SCRUB/summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/E4-PRE-R1-FORCED-EXTERNAL-ARTIFACT-SCRUB/summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/E4-PRE-ROUTER-EXTERNAL-PROPOSAL-INVARIANT/summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/E4-PRE-ROUTER-EXTERNAL-PROPOSAL-INVARIANT/summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/E4-PRE-ROUTER-EXTERNAL-PROPOSAL-INVARIANT/summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/local_model_smoke/1G-B1/gemma4_12b-it-qat__HG-001__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B1/gemma4_12b-it-qat__HG-001__result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B1/gemma4_12b-it-qat__HG-006__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
@@ -1317,7 +1317,7 @@ reports/local_model_smoke/1G-B1/gemma4_12b-it-qat__HG-006__result.json	A	GENERAT
 reports/local_model_smoke/1G-B1/gemma4_12b-it-qat__HG-016__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B1/gemma4_12b-it-qat__HG-016__result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B1/local_model_form_fill_smoke_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/local_model_smoke/1G-B1/local_model_form_fill_smoke_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/local_model_smoke/1G-B1/local_model_form_fill_smoke_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/local_model_smoke/1G-B1/qwen3_8b__HG-001__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B1/qwen3_8b__HG-001__result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B1/qwen3_8b__HG-006__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
@@ -1331,7 +1331,7 @@ reports/local_model_smoke/1G-B2-A/full__gemma4_12b-it-qat__HG-006__result.json	A
 reports/local_model_smoke/1G-B2-A/full__gemma4_12b-it-qat__HG-016__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-A/full__gemma4_12b-it-qat__HG-016__result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-A/full__local_model_form_fill_smoke_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/local_model_smoke/1G-B2-A/full__local_model_form_fill_smoke_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/local_model_smoke/1G-B2-A/full__local_model_form_fill_smoke_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/local_model_smoke/1G-B2-A/full__qwen3_8b__HG-001__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-A/full__qwen3_8b__HG-001__result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-A/full__qwen3_8b__HG-006__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
@@ -1345,7 +1345,7 @@ reports/local_model_smoke/1G-B2-A/lite__gemma4_12b-it-qat__HG-006__result.json	A
 reports/local_model_smoke/1G-B2-A/lite__gemma4_12b-it-qat__HG-016__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-A/lite__gemma4_12b-it-qat__HG-016__result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-A/lite__local_model_form_fill_smoke_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/local_model_smoke/1G-B2-A/lite__local_model_form_fill_smoke_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/local_model_smoke/1G-B2-A/lite__local_model_form_fill_smoke_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/local_model_smoke/1G-B2-A/lite__qwen3_8b__HG-001__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-A/lite__qwen3_8b__HG-001__result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-A/lite__qwen3_8b__HG-006__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
@@ -1359,7 +1359,7 @@ reports/local_model_smoke/1G-B2-A/micro__gemma4_12b-it-qat__HG-006__result.json	
 reports/local_model_smoke/1G-B2-A/micro__gemma4_12b-it-qat__HG-016__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-A/micro__gemma4_12b-it-qat__HG-016__result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-A/micro__local_model_form_fill_smoke_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/local_model_smoke/1G-B2-A/micro__local_model_form_fill_smoke_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/local_model_smoke/1G-B2-A/micro__local_model_form_fill_smoke_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/local_model_smoke/1G-B2-A/micro__qwen3_8b__HG-001__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-A/micro__qwen3_8b__HG-001__result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-A/micro__qwen3_8b__HG-006__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
@@ -1373,7 +1373,7 @@ reports/local_model_smoke/1G-B2-B/lite_rules_v0_2__gemma4_12b-it-qat__HG-006__re
 reports/local_model_smoke/1G-B2-B/lite_rules_v0_2__gemma4_12b-it-qat__HG-016__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-B/lite_rules_v0_2__gemma4_12b-it-qat__HG-016__result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-B/lite_rules_v0_2__local_model_form_fill_smoke_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/local_model_smoke/1G-B2-B/lite_rules_v0_2__local_model_form_fill_smoke_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/local_model_smoke/1G-B2-B/lite_rules_v0_2__local_model_form_fill_smoke_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/local_model_smoke/1G-B2-B/lite_rules_v0_2__qwen3_8b__HG-001__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-B/lite_rules_v0_2__qwen3_8b__HG-001__result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-B/lite_rules_v0_2__qwen3_8b__HG-006__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
@@ -1387,7 +1387,7 @@ reports/local_model_smoke/1G-B2-B/lite_v0_1__gemma4_12b-it-qat__HG-006__result.j
 reports/local_model_smoke/1G-B2-B/lite_v0_1__gemma4_12b-it-qat__HG-016__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-B/lite_v0_1__gemma4_12b-it-qat__HG-016__result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-B/lite_v0_1__local_model_form_fill_smoke_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/local_model_smoke/1G-B2-B/lite_v0_1__local_model_form_fill_smoke_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/local_model_smoke/1G-B2-B/lite_v0_1__local_model_form_fill_smoke_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/local_model_smoke/1G-B2-B/lite_v0_1__qwen3_8b__HG-001__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-B/lite_v0_1__qwen3_8b__HG-001__result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-B/lite_v0_1__qwen3_8b__HG-006__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
@@ -1401,7 +1401,7 @@ reports/local_model_smoke/1G-B2-B/micro_rules_v0_2__gemma4_12b-it-qat__HG-006__r
 reports/local_model_smoke/1G-B2-B/micro_rules_v0_2__gemma4_12b-it-qat__HG-016__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-B/micro_rules_v0_2__gemma4_12b-it-qat__HG-016__result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-B/micro_rules_v0_2__local_model_form_fill_smoke_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/local_model_smoke/1G-B2-B/micro_rules_v0_2__local_model_form_fill_smoke_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/local_model_smoke/1G-B2-B/micro_rules_v0_2__local_model_form_fill_smoke_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/local_model_smoke/1G-B2-B/micro_rules_v0_2__qwen3_8b__HG-001__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-B/micro_rules_v0_2__qwen3_8b__HG-001__result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-B/micro_rules_v0_2__qwen3_8b__HG-006__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
@@ -1415,7 +1415,7 @@ reports/local_model_smoke/1G-B2-B/micro_v0_1__gemma4_12b-it-qat__HG-006__result.
 reports/local_model_smoke/1G-B2-B/micro_v0_1__gemma4_12b-it-qat__HG-016__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-B/micro_v0_1__gemma4_12b-it-qat__HG-016__result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-B/micro_v0_1__local_model_form_fill_smoke_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/local_model_smoke/1G-B2-B/micro_v0_1__local_model_form_fill_smoke_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/local_model_smoke/1G-B2-B/micro_v0_1__local_model_form_fill_smoke_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/local_model_smoke/1G-B2-B/micro_v0_1__qwen3_8b__HG-001__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-B/micro_v0_1__qwen3_8b__HG-001__result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-B/micro_v0_1__qwen3_8b__HG-006__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
@@ -1423,9 +1423,9 @@ reports/local_model_smoke/1G-B2-B/micro_v0_1__qwen3_8b__HG-006__result.json	A	GE
 reports/local_model_smoke/1G-B2-B/micro_v0_1__qwen3_8b__HG-016__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-B/micro_v0_1__qwen3_8b__HG-016__result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-B/recipe_ablation_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/local_model_smoke/1G-B2-B/recipe_ablation_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/local_model_smoke/1G-B2-B/recipe_ablation_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/local_model_smoke/1G-B2-C/micro_rules_v0_2__local_model_form_fill_smoke_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/local_model_smoke/1G-B2-C/micro_rules_v0_2__local_model_form_fill_smoke_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/local_model_smoke/1G-B2-C/micro_rules_v0_2__local_model_form_fill_smoke_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/local_model_smoke/1G-B2-C/micro_rules_v0_2__qwen3_8b__HG-001__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-C/micro_rules_v0_2__qwen3_8b__HG-001__result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-C/micro_rules_v0_2__qwen3_8b__HG-006__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
@@ -1433,7 +1433,7 @@ reports/local_model_smoke/1G-B2-C/micro_rules_v0_2__qwen3_8b__HG-006__result.jso
 reports/local_model_smoke/1G-B2-C/micro_rules_v0_2__qwen3_8b__HG-016__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-C/micro_rules_v0_2__qwen3_8b__HG-016__result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-C/micro_v0_1__local_model_form_fill_smoke_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/local_model_smoke/1G-B2-C/micro_v0_1__local_model_form_fill_smoke_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/local_model_smoke/1G-B2-C/micro_v0_1__local_model_form_fill_smoke_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/local_model_smoke/1G-B2-C/micro_v0_1__qwen3_8b__HG-001__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-C/micro_v0_1__qwen3_8b__HG-001__result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-C/micro_v0_1__qwen3_8b__HG-006__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
@@ -1441,9 +1441,9 @@ reports/local_model_smoke/1G-B2-C/micro_v0_1__qwen3_8b__HG-006__result.json	A	GE
 reports/local_model_smoke/1G-B2-C/micro_v0_1__qwen3_8b__HG-016__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-C/micro_v0_1__qwen3_8b__HG-016__result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-C/qwen_context_optimization_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/local_model_smoke/1G-B2-C/qwen_context_optimization_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/local_model_smoke/1G-B2-C/qwen_context_optimization_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/local_model_smoke/1G-B2-C/qwen_examples_v0_3__local_model_form_fill_smoke_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/local_model_smoke/1G-B2-C/qwen_examples_v0_3__local_model_form_fill_smoke_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/local_model_smoke/1G-B2-C/qwen_examples_v0_3__local_model_form_fill_smoke_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/local_model_smoke/1G-B2-C/qwen_examples_v0_3__qwen3_8b__HG-001__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-C/qwen_examples_v0_3__qwen3_8b__HG-001__result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-C/qwen_examples_v0_3__qwen3_8b__HG-006__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
@@ -1451,7 +1451,7 @@ reports/local_model_smoke/1G-B2-C/qwen_examples_v0_3__qwen3_8b__HG-006__result.j
 reports/local_model_smoke/1G-B2-C/qwen_examples_v0_3__qwen3_8b__HG-016__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-C/qwen_examples_v0_3__qwen3_8b__HG-016__result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-C/qwen_hybrid_v0_3__local_model_form_fill_smoke_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/local_model_smoke/1G-B2-C/qwen_hybrid_v0_3__local_model_form_fill_smoke_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/local_model_smoke/1G-B2-C/qwen_hybrid_v0_3__local_model_form_fill_smoke_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/local_model_smoke/1G-B2-C/qwen_hybrid_v0_3__qwen3_8b__HG-001__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-C/qwen_hybrid_v0_3__qwen3_8b__HG-001__result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-C/qwen_hybrid_v0_3__qwen3_8b__HG-006__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
@@ -1459,7 +1459,7 @@ reports/local_model_smoke/1G-B2-C/qwen_hybrid_v0_3__qwen3_8b__HG-006__result.jso
 reports/local_model_smoke/1G-B2-C/qwen_hybrid_v0_3__qwen3_8b__HG-016__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-C/qwen_hybrid_v0_3__qwen3_8b__HG-016__result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-C/qwen_output_strict_v0_3__local_model_form_fill_smoke_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/local_model_smoke/1G-B2-C/qwen_output_strict_v0_3__local_model_form_fill_smoke_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/local_model_smoke/1G-B2-C/qwen_output_strict_v0_3__local_model_form_fill_smoke_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/local_model_smoke/1G-B2-C/qwen_output_strict_v0_3__qwen3_8b__HG-001__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-C/qwen_output_strict_v0_3__qwen3_8b__HG-001__result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-C/qwen_output_strict_v0_3__qwen3_8b__HG-006__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
@@ -1467,7 +1467,7 @@ reports/local_model_smoke/1G-B2-C/qwen_output_strict_v0_3__qwen3_8b__HG-006__res
 reports/local_model_smoke/1G-B2-C/qwen_output_strict_v0_3__qwen3_8b__HG-016__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-C/qwen_output_strict_v0_3__qwen3_8b__HG-016__result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-C/qwen_recipe_only_v0_3__local_model_form_fill_smoke_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/local_model_smoke/1G-B2-C/qwen_recipe_only_v0_3__local_model_form_fill_smoke_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/local_model_smoke/1G-B2-C/qwen_recipe_only_v0_3__local_model_form_fill_smoke_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/local_model_smoke/1G-B2-C/qwen_recipe_only_v0_3__qwen3_8b__HG-001__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-C/qwen_recipe_only_v0_3__qwen3_8b__HG-001__result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-C/qwen_recipe_only_v0_3__qwen3_8b__HG-006__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
@@ -1475,7 +1475,7 @@ reports/local_model_smoke/1G-B2-C/qwen_recipe_only_v0_3__qwen3_8b__HG-006__resul
 reports/local_model_smoke/1G-B2-C/qwen_recipe_only_v0_3__qwen3_8b__HG-016__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-C/qwen_recipe_only_v0_3__qwen3_8b__HG-016__result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-C/qwen_recipe_table_v0_3__local_model_form_fill_smoke_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/local_model_smoke/1G-B2-C/qwen_recipe_table_v0_3__local_model_form_fill_smoke_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/local_model_smoke/1G-B2-C/qwen_recipe_table_v0_3__local_model_form_fill_smoke_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/local_model_smoke/1G-B2-C/qwen_recipe_table_v0_3__qwen3_8b__HG-001__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-C/qwen_recipe_table_v0_3__qwen3_8b__HG-001__result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-C/qwen_recipe_table_v0_3__qwen3_8b__HG-006__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
@@ -1483,9 +1483,9 @@ reports/local_model_smoke/1G-B2-C/qwen_recipe_table_v0_3__qwen3_8b__HG-006__resu
 reports/local_model_smoke/1G-B2-C/qwen_recipe_table_v0_3__qwen3_8b__HG-016__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-C/qwen_recipe_table_v0_3__qwen3_8b__HG-016__result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-D-R/qwen_failure_rerun_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/local_model_smoke/1G-B2-D-R/qwen_failure_rerun_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/local_model_smoke/1G-B2-D-R/qwen_failure_rerun_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/local_model_smoke/1G-B2-D-R/qwen_hybrid_parse_safe_v0_4__local_model_form_fill_smoke_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/local_model_smoke/1G-B2-D-R/qwen_hybrid_parse_safe_v0_4__local_model_form_fill_smoke_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/local_model_smoke/1G-B2-D-R/qwen_hybrid_parse_safe_v0_4__local_model_form_fill_smoke_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/local_model_smoke/1G-B2-D-R/qwen_hybrid_parse_safe_v0_4__qwen3_8b__HG-006__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-D-R/qwen_hybrid_parse_safe_v0_4__qwen3_8b__HG-006__result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-D-R/qwen_hybrid_parse_safe_v0_4__qwen3_8b__HG-018__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
@@ -1493,7 +1493,7 @@ reports/local_model_smoke/1G-B2-D-R/qwen_hybrid_parse_safe_v0_4__qwen3_8b__HG-01
 reports/local_model_smoke/1G-B2-D-R/qwen_hybrid_parse_safe_v0_4__qwen3_8b__HG-022__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-D-R/qwen_hybrid_parse_safe_v0_4__qwen3_8b__HG-022__result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-D-R/qwen_hybrid_v0_3__local_model_form_fill_smoke_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/local_model_smoke/1G-B2-D-R/qwen_hybrid_v0_3__local_model_form_fill_smoke_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/local_model_smoke/1G-B2-D-R/qwen_hybrid_v0_3__local_model_form_fill_smoke_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/local_model_smoke/1G-B2-D-R/qwen_hybrid_v0_3__qwen3_8b__HG-006__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-D-R/qwen_hybrid_v0_3__qwen3_8b__HG-006__result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-D-R/qwen_hybrid_v0_3__qwen3_8b__HG-018__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
@@ -1501,9 +1501,9 @@ reports/local_model_smoke/1G-B2-D-R/qwen_hybrid_v0_3__qwen3_8b__HG-018__result.j
 reports/local_model_smoke/1G-B2-D-R/qwen_hybrid_v0_3__qwen3_8b__HG-022__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-D-R/qwen_hybrid_v0_3__qwen3_8b__HG-022__result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-D/expanded_profiled_qwen_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/local_model_smoke/1G-B2-D/expanded_profiled_qwen_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/local_model_smoke/1G-B2-D/expanded_profiled_qwen_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/local_model_smoke/1G-B2-D/micro_rules_v0_2__local_model_form_fill_smoke_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/local_model_smoke/1G-B2-D/micro_rules_v0_2__local_model_form_fill_smoke_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/local_model_smoke/1G-B2-D/micro_rules_v0_2__local_model_form_fill_smoke_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/local_model_smoke/1G-B2-D/micro_rules_v0_2__qwen3_8b__HG-001__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-D/micro_rules_v0_2__qwen3_8b__HG-001__result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-D/micro_rules_v0_2__qwen3_8b__HG-002__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
@@ -1529,7 +1529,7 @@ reports/local_model_smoke/1G-B2-D/micro_rules_v0_2__qwen3_8b__HG-022__result.jso
 reports/local_model_smoke/1G-B2-D/micro_rules_v0_2__qwen3_8b__HG-028__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-D/micro_rules_v0_2__qwen3_8b__HG-028__result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-D/qwen_hybrid_v0_3__local_model_form_fill_smoke_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/local_model_smoke/1G-B2-D/qwen_hybrid_v0_3__local_model_form_fill_smoke_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/local_model_smoke/1G-B2-D/qwen_hybrid_v0_3__local_model_form_fill_smoke_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/local_model_smoke/1G-B2-D/qwen_hybrid_v0_3__qwen3_8b__HG-001__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-D/qwen_hybrid_v0_3__qwen3_8b__HG-001__result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-D/qwen_hybrid_v0_3__qwen3_8b__HG-002__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
@@ -1555,9 +1555,9 @@ reports/local_model_smoke/1G-B2-D/qwen_hybrid_v0_3__qwen3_8b__HG-022__result.jso
 reports/local_model_smoke/1G-B2-D/qwen_hybrid_v0_3__qwen3_8b__HG-028__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-D/qwen_hybrid_v0_3__qwen3_8b__HG-028__result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-E/full_holdout_qwen_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/local_model_smoke/1G-B2-E/full_holdout_qwen_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/local_model_smoke/1G-B2-E/full_holdout_qwen_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/local_model_smoke/1G-B2-E/qwen_hybrid_parse_safe_v0_4__local_model_form_fill_smoke_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/local_model_smoke/1G-B2-E/qwen_hybrid_parse_safe_v0_4__local_model_form_fill_smoke_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/local_model_smoke/1G-B2-E/qwen_hybrid_parse_safe_v0_4__local_model_form_fill_smoke_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/local_model_smoke/1G-B2-E/qwen_hybrid_parse_safe_v0_4__qwen3_8b__HG-001__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-E/qwen_hybrid_parse_safe_v0_4__qwen3_8b__HG-001__result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-E/qwen_hybrid_parse_safe_v0_4__qwen3_8b__HG-002__raw.txt	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
@@ -1639,9 +1639,9 @@ reports/local_model_smoke/1G-B2-F1/HG-024__result.json	A	GENERATED/ASSET	Fresh m
 reports/local_model_smoke/1G-B2-F1/HG-025__raw_response.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-F1/HG-025__result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-F1/structured_output_schema_smoke_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/local_model_smoke/1G-B2-F1/structured_output_schema_smoke_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/local_model_smoke/1G-B2-F1/structured_output_schema_smoke_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/local_model_smoke/1G-B2-F2-A/hard_gate_schema_smoke_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/local_model_smoke/1G-B2-F2-A/hard_gate_schema_smoke_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/local_model_smoke/1G-B2-F2-A/hard_gate_schema_smoke_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/local_model_smoke/1G-B2-F2-A/HG-007__raw_response.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-F2-A/HG-007__result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-F2-A/HG-010__raw_response.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
@@ -1667,7 +1667,7 @@ reports/local_model_smoke/1G-B2-F2-B1/HG-018__phase_b_soft_review.json	A	GENERAT
 reports/local_model_smoke/1G-B2-F2-B1/HG-024__phase_b_soft_review.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-F2-B1/HG-025__phase_b_soft_review.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-F2-B1/phase_b_soft_review_fixture_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/local_model_smoke/1G-B2-F2-B1/phase_b_soft_review_fixture_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/local_model_smoke/1G-B2-F2-B1/phase_b_soft_review_fixture_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/local_model_smoke/1G-B2-F2-B2/HG-007__result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-F2-B2/HG-010__result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-F2-B2/HG-013__result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
@@ -1677,7 +1677,7 @@ reports/local_model_smoke/1G-B2-F2-B2/HG-018__result.json	A	GENERATED/ASSET	Fres
 reports/local_model_smoke/1G-B2-F2-B2/HG-024__result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-F2-B2/HG-025__result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-F2-B2/phase_b_soft_review_harness_integration_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/local_model_smoke/1G-B2-F2-B2/phase_b_soft_review_harness_integration_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/local_model_smoke/1G-B2-F2-B2/phase_b_soft_review_harness_integration_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/local_model_smoke/1G-B2-F2-B3-S/HG-007__phase_b_soft_only_raw_response.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-F2-B3-S/HG-007__phase_b_soft_only_result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-F2-B3-S/HG-018__phase_b_soft_only_raw_response.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
@@ -1687,7 +1687,7 @@ reports/local_model_smoke/1G-B2-F2-B3-S/HG-024__phase_b_soft_only_result.json	A	
 reports/local_model_smoke/1G-B2-F2-B3-S/HG-025__phase_b_soft_only_raw_response.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-F2-B3-S/HG-025__phase_b_soft_only_result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-F2-B3-S/phase_b_soft_only_local_smoke_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/local_model_smoke/1G-B2-F2-B3-S/phase_b_soft_only_local_smoke_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/local_model_smoke/1G-B2-F2-B3-S/phase_b_soft_only_local_smoke_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/local_model_smoke/1G-B2-F2-B3/HG-007__phase_b_model_result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-F2-B3/HG-007__phase_b_raw_response.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-F2-B3/HG-018__phase_b_model_result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
@@ -1697,7 +1697,7 @@ reports/local_model_smoke/1G-B2-F2-B3/HG-024__phase_b_raw_response.json	A	GENERA
 reports/local_model_smoke/1G-B2-F2-B3/HG-025__phase_b_model_result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-F2-B3/HG-025__phase_b_raw_response.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-F2-B3/phase_b_local_structured_output_smoke_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/local_model_smoke/1G-B2-F2-B3/phase_b_local_structured_output_smoke_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/local_model_smoke/1G-B2-F2-B3/phase_b_local_structured_output_smoke_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/local_model_smoke/1G-B2-F2-B4/HG-007__phase_b_soft_only_raw_response.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-F2-B4/HG-007__phase_b_soft_only_result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-F2-B4/HG-010__phase_b_soft_only_raw_response.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
@@ -1715,7 +1715,7 @@ reports/local_model_smoke/1G-B2-F2-B4/HG-024__phase_b_soft_only_result.json	A	GE
 reports/local_model_smoke/1G-B2-F2-B4/HG-025__phase_b_soft_only_raw_response.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-F2-B4/HG-025__phase_b_soft_only_result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-F2-B4/phase_b_expanded_local_soft_review_panel_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/local_model_smoke/1G-B2-F2-B4/phase_b_expanded_local_soft_review_panel_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/local_model_smoke/1G-B2-F2-B4/phase_b_expanded_local_soft_review_panel_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/local_model_smoke/1G-B2-F2-B5-A/HG-007__phase_b_soft_only_raw_response.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-F2-B5-A/HG-007__phase_b_soft_only_result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-F2-B5-A/HG-010__phase_b_soft_only_raw_response.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
@@ -1733,7 +1733,7 @@ reports/local_model_smoke/1G-B2-F2-B5-A/HG-024__phase_b_soft_only_result.json	A	
 reports/local_model_smoke/1G-B2-F2-B5-A/HG-025__phase_b_soft_only_raw_response.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-F2-B5-A/HG-025__phase_b_soft_only_result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-F2-B5-A/phase_b_general_instruction_repair_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/local_model_smoke/1G-B2-F2-B5-A/phase_b_general_instruction_repair_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/local_model_smoke/1G-B2-F2-B5-A/phase_b_general_instruction_repair_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/local_model_smoke/1G-B2-F2-B5-B/HG-007__phase_b_soft_only_raw_response.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-F2-B5-B/HG-007__phase_b_soft_only_result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-F2-B5-B/HG-010__phase_b_soft_only_raw_response.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
@@ -1751,11 +1751,11 @@ reports/local_model_smoke/1G-B2-F2-B5-B/HG-024__phase_b_soft_only_result.json	A	
 reports/local_model_smoke/1G-B2-F2-B5-B/HG-025__phase_b_soft_only_raw_response.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-F2-B5-B/HG-025__phase_b_soft_only_result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-F2-B5-B/phase_b_deterministic_soft_clamp_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/local_model_smoke/1G-B2-F2-B5-B/phase_b_deterministic_soft_clamp_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/local_model_smoke/1G-B2-F2-B5-B/phase_b_deterministic_soft_clamp_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/local_model_smoke/1G-B2-F2-B5-C-R/compound_provider_negation_repair_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/local_model_smoke/1G-B2-F2-B5-C-R/compound_provider_negation_repair_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/local_model_smoke/1G-B2-F2-B5-C-R/compound_provider_negation_repair_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/local_model_smoke/1G-B2-F2-B5-C-R2/target_based_provider_export_repair_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/local_model_smoke/1G-B2-F2-B5-C-R2/target_based_provider_export_repair_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/local_model_smoke/1G-B2-F2-B5-C-R2/target_based_provider_export_repair_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/local_model_smoke/1G-B2-F2-B5-C/HG-007__phase_b_soft_only_raw_response.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-F2-B5-C/HG-007__phase_b_soft_only_result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-F2-B5-C/HG-010__phase_b_soft_only_raw_response.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
@@ -1773,7 +1773,7 @@ reports/local_model_smoke/1G-B2-F2-B5-C/HG-024__phase_b_soft_only_result.json	A	
 reports/local_model_smoke/1G-B2-F2-B5-C/HG-025__phase_b_soft_only_raw_response.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-F2-B5-C/HG-025__phase_b_soft_only_result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-F2-B5-C/phase_b_sensitivity_semantic_repair_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/local_model_smoke/1G-B2-F2-B5-C/phase_b_sensitivity_semantic_repair_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/local_model_smoke/1G-B2-F2-B5-C/phase_b_sensitivity_semantic_repair_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/local_model_smoke/1G-B2-F2-B5-D/HG-007__phase_b_soft_only_raw_response.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-F2-B5-D/HG-007__phase_b_soft_only_result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-F2-B5-D/HG-010__phase_b_soft_only_raw_response.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
@@ -1791,11 +1791,11 @@ reports/local_model_smoke/1G-B2-F2-B5-D/HG-024__phase_b_soft_only_result.json	A	
 reports/local_model_smoke/1G-B2-F2-B5-D/HG-025__phase_b_soft_only_raw_response.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-F2-B5-D/HG-025__phase_b_soft_only_result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-F2-B5-D/phase_b_ambiguity_prompt_repair_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/local_model_smoke/1G-B2-F2-B5-D/phase_b_ambiguity_prompt_repair_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/local_model_smoke/1G-B2-F2-B5-D/phase_b_ambiguity_prompt_repair_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/local_model_smoke/1G-B2-F2-B5-D/phase_b_sensitivity_semantic_repair_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/local_model_smoke/1G-B2-F2-B5-D/phase_b_sensitivity_semantic_repair_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/local_model_smoke/1G-B2-F2-B5-D/phase_b_sensitivity_semantic_repair_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/local_model_smoke/1G-B2-F2-C/hard_gate_comparator_holdout_cleanup_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/local_model_smoke/1G-B2-F2-C/hard_gate_comparator_holdout_cleanup_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/local_model_smoke/1G-B2-F2-C/hard_gate_comparator_holdout_cleanup_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/local_model_smoke/1G-B2-F2-C/HG-007__result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-F2-C/HG-010__result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-F2-C/HG-013__result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
@@ -1813,7 +1813,7 @@ reports/local_model_smoke/1G-B2-F2-P2/HG-018__overlay_replay.json	A	GENERATED/AS
 reports/local_model_smoke/1G-B2-F2-P2/HG-024__overlay_replay.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-F2-P2/HG-025__overlay_replay.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-F2-P2/policy_gate_overlay_replay_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/local_model_smoke/1G-B2-F2-P2/policy_gate_overlay_replay_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/local_model_smoke/1G-B2-F2-P2/policy_gate_overlay_replay_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/local_model_smoke/1G-B2-F2-P3/HG-007__result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-F2-P3/HG-010__result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-F2-P3/HG-013__result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
@@ -1823,7 +1823,7 @@ reports/local_model_smoke/1G-B2-F2-P3/HG-018__result.json	A	GENERATED/ASSET	Fres
 reports/local_model_smoke/1G-B2-F2-P3/HG-024__result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-F2-P3/HG-025__result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-F2-P3/policy_overlay_harness_integration_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/local_model_smoke/1G-B2-F2-P3/policy_overlay_harness_integration_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/local_model_smoke/1G-B2-F2-P3/policy_overlay_harness_integration_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/local_model_smoke/1G-B2-F2/HG-001__raw_response.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-F2/HG-001__result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-F2/HG-006__raw_response.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
@@ -1849,76 +1849,76 @@ reports/local_model_smoke/1G-B2-F2/HG-024__result.json	A	GENERATED/ASSET	Fresh m
 reports/local_model_smoke/1G-B2-F2/HG-025__raw_response.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-F2/HG-025__result.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/local_model_smoke/1G-B2-F2/structured_output_12_case_panel_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/local_model_smoke/1G-B2-F2/structured_output_12_case_panel_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/POST-101-LIFECYCLE-GATE-FIX/summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/POST-ADR059-LIFECYCLE-RECONCILIATION/summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/local_model_smoke/1G-B2-F2/structured_output_12_case_panel_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
+reports/POST-101-LIFECYCLE-GATE-FIX/summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
+reports/POST-ADR059-LIFECYCLE-RECONCILIATION/summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/router_policy/1G-B2-F3-A1-R1/router_policy_invariant_repair_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/router_policy/1G-B2-F3-A1-R1/router_policy_invariant_repair_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/router_policy/1G-B2-F3-A1-R1/router_policy_invariant_repair_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/router_policy/1G-B2-F3-A1/router_policy_contract_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/router_policy/1G-B2-F3-A1/router_policy_contract_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/router_policy/1G-B2-F3-A1/router_policy_contract_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/router_policy/1G-B2-F3-A2-R1/router_policy_external_proposal_consistency_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/router_policy/1G-B2-F3-A2-R1/router_policy_external_proposal_consistency_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/router_policy/1G-B2-F3-A2-R1/router_policy_external_proposal_consistency_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/router_policy/1G-B2-F3-A2/router_policy_decision_probe_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/router_policy/1G-B2-F3-A2/router_policy_decision_probe_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/router_policy/1G-B2-F3-A2/router_policy_decision_probe_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/router_policy/1G-B2-F3-A3/router_policy_local_route_smoke_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/router_policy/1G-B2-F3-A3/router_policy_local_route_smoke_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/router_policy/1G-B2-F3-A3/router_policy_local_route_smoke_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/router_policy/1G-B2-F3-A4-R1/summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/router_policy/1G-B2-F3-A4-R1/summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/router_policy/1G-B2-F3-A4-R1/summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/router_policy/1G-B2-F3-A4-R2-R1/summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/router_policy/1G-B2-F3-A4-R2-R1/summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/router_policy/1G-B2-F3-A4-R2-R1/summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/router_policy/1G-B2-F3-A4-R2/summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/router_policy/1G-B2-F3-A4-R2/summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/router_policy/1G-B2-F3-A4-R2/summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/router_policy/1G-B2-F3-A4/router_policy_local_responder_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/router_policy/1G-B2-F3-A4/router_policy_local_responder_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/router_policy/1G-B2-F3-A4/router_policy_local_responder_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/router_policy/1G-B2-F3-A5-R/router_policy_message_route_smoke_audit.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/router_policy/1G-B2-F3-A5-R/router_policy_message_route_smoke_audit.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/router_policy/1G-B2-F3-A5-R/router_policy_message_route_smoke_audit.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/router_policy/1G-B2-F3-A5-R1/router_policy_message_route_smoke_repair_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/router_policy/1G-B2-F3-A5-R1/router_policy_message_route_smoke_repair_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/router_policy/1G-B2-F3-A5-R1/router_policy_message_route_smoke_repair_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/router_policy/1G-B2-F3-A5-R2-R1/summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/router_policy/1G-B2-F3-A5-R2-R1/summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/router_policy/1G-B2-F3-A5-R2-R1/summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/router_policy/1G-B2-F3-A5-R2/summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/router_policy/1G-B2-F3-A5-R2/summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/router_policy/1G-B2-F3-A5-R2/summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/router_policy/1G-B2-F3-A5-R3/summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/router_policy/1G-B2-F3-A5-R3/summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/router_policy/1G-B2-F3-A5-R3/summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/router_policy/1G-B2-F3-A5/router_policy_message_route_smoke_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/router_policy/1G-B2-F3-A5/router_policy_message_route_smoke_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/router_policy/1G-B2-F3-A5/router_policy_message_route_smoke_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/router_policy/1G-B2-F3-B1/router_policy_hint_bridge_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/router_policy/1G-B2-F3-B1/router_policy_hint_bridge_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/router_policy/1G-B2-F3-B1/router_policy_hint_bridge_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/router_policy/1G-B2-F3-B2/router_policy_message_route_phase_b_hint_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/router_policy/1G-B2-F3-B2/router_policy_message_route_phase_b_hint_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/router_policy/1G-B2-F3-B2/router_policy_message_route_phase_b_hint_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/router_policy/1G-B2-F3-B3-R1/router_policy_message_route_phase_b_default_audit.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/router_policy/1G-B2-F3-B3-R1/router_policy_message_route_phase_b_default_audit.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/router_policy/1G-B2-F3-B3-R1/router_policy_message_route_phase_b_default_audit.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/router_policy/1G-B2-F3-B3/router_policy_message_route_phase_b_default_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/router_policy/1G-B2-F3-B3/router_policy_message_route_phase_b_default_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/router_policy/1G-B2-F3-B3/router_policy_message_route_phase_b_default_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/router_policy/1G-B2-F3-B4-live-R1/router_policy_message_route_live_phase_b_r1_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/router_policy/1G-B2-F3-B4-live-R1/router_policy_message_route_live_phase_b_r1_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/router_policy/1G-B2-F3-B4-live-R1/router_policy_message_route_live_phase_b_r1_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/router_policy/1G-B2-F3-B4-live/router_policy_message_route_live_phase_b_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/router_policy/1G-B2-F3-B4-live/router_policy_message_route_live_phase_b_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/router_policy/1G-B2-F3-B4-live/router_policy_message_route_live_phase_b_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/router_policy/1G-B2-F3-B4/router_policy_message_route_deterministic_phase_b_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/router_policy/1G-B2-F3-B4/router_policy_message_route_deterministic_phase_b_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/router_policy/1G-B2-F3-B4/router_policy_message_route_deterministic_phase_b_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/router_policy/1G-B2-F3-C1-R1/router_policy_dev_message_route_validation_boundary_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/router_policy/1G-B2-F3-C1-R1/router_policy_dev_message_route_validation_boundary_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/router_policy/1G-B2-F3-C1-R1/router_policy_dev_message_route_validation_boundary_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/router_policy/1G-B2-F3-C1/router_policy_dev_message_route_endpoint_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/router_policy/1G-B2-F3-C1/router_policy_dev_message_route_endpoint_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/router_policy/1G-B2-F3-C1/router_policy_dev_message_route_endpoint_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/router_policy/1G-B2-F3-C2-R1/router_policy_stateless_local_chat_budget_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/router_policy/1G-B2-F3-C2-R1/router_policy_stateless_local_chat_budget_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/router_policy/1G-B2-F3-C2-R1/router_policy_stateless_local_chat_budget_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/router_policy/1G-B2-F3-C2-R2/router_policy_local_chat_authorization_gate_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/router_policy/1G-B2-F3-C2-R2/router_policy_local_chat_authorization_gate_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/router_policy/1G-B2-F3-C2-R2/router_policy_local_chat_authorization_gate_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/router_policy/1G-B2-F3-C2/router_policy_stateless_local_chat_context_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/router_policy/1G-B2-F3-C2/router_policy_stateless_local_chat_context_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/router_policy/1G-B2-F3-C2/router_policy_stateless_local_chat_context_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/router_policy/1G-B2-F3-C3/router_policy_minimal_local_chat_ui_summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/router_policy/1G-B2-F3-C3/router_policy_minimal_local_chat_ui_summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/router_policy/1G-B2-F3-C3/router_policy_minimal_local_chat_ui_summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/router_policy/1G-B2-F3-LOCAL-RESPONDER-ROOT-CAUSE-RERUN/diagnostic_raw.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/router_policy/1G-B2-F3-LOCAL-RESPONDER-ROOT-CAUSE-RERUN/run_diagnostic.py	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
 reports/router_policy/1G-B2-F3-LOCAL-RESPONDER-ROOT-CAUSE-RERUN/summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/router_policy/1G-B2-F3-LOCAL-RESPONDER-ROOT-CAUSE-RERUN/summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/router_policy/1G-B2-F3-LOCAL-RESPONDER-ROOT-CAUSE-RERUN/summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 reports/router_policy/1G-B2-F3-LOCAL-RESPONDER-TIMEOUT-DIAG/summary.json	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/router_policy/1G-B2-F3-LOCAL-RESPONDER-TIMEOUT-DIAG/summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/WP2-ROUTING-MEMORY-KERNELS/summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/WP3-ROADMAP-RESEQUENCE/summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/WP4-AUTOPILOT-ADR/summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/WP5-HERMES-INTEGRATION-KERNELS/summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
-reports/WP6-HERMES-ADOPTION-ADR/summary.md	A	GENERATED/ASSET	Fresh master tree identity/provenance verified; generated report or binary/reference asset, not executable source.
+reports/router_policy/1G-B2-F3-LOCAL-RESPONDER-TIMEOUT-DIAG/summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
+reports/WP2-ROUTING-MEMORY-KERNELS/summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
+reports/WP3-ROADMAP-RESEQUENCE/summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
+reports/WP4-AUTOPILOT-ADR/summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
+reports/WP5-HERMES-INTEGRATION-KERNELS/summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
+reports/WP6-HERMES-ADOPTION-ADR/summary.md	A	READ	Semantic audit: human-authored report summary inspected; operational provenance retained alongside runtime evidence.
 schemas/bluecad_analysis_spec_v0_1.schema.json	C	READ	Fresh master contract/config inspection; C-owned deterministic input boundary.
 schemas/bluecad_geometry_spec_v0_1.schema.json	C	READ	Fresh master contract/config inspection; C-owned deterministic input boundary.
 schemas/bluecad_mesh_result_v0_1.schema.json	C	READ	Fresh master contract/config inspection; C-owned deterministic input boundary.

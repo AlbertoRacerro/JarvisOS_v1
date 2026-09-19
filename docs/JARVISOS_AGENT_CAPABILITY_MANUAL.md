@@ -12,7 +12,7 @@ This is an operational map for coding agents. Runtime/code and deterministic tes
 |---|---|
 | Compose/start the backend or inspect API mounting | backend/app/main.py; backend/app/core/bootstrap.py; backend/app/core/config.py; backend/app/core/paths.py |
 | Use the canonical SQLite/data-root layer | backend/app/core/database.py; backend/app/core/schema.py; backend/app/core/repository.py; backend/app/core/paths.py |
-| Execute a product AI task | backend/app/modules/ai/gateway.py → execution.py → token_flow_runtime.py; do not call providers directly |
+| Execute a product AI task | backend/app/modules/ai/gateway.py → execution.py → token_flow_runtime.py; explicit auto requests are normalized by gateway.py; do not call providers directly |
 | Understand provider, route, budget, privacy or egress admission | backend/app/modules/ai/provider_registry.py; egress_policy.py; egress_authority.py; egress_persistence.py; egress_lifecycle.py; egress_revalidation.py |
 | Continue or account for bounded AI output | backend/app/modules/ai/token_flow_service.py; token_flow_continuation.py; token_flow_external_runtime.py; token_flow_segments.py; token_flow_evidence.py |
 | Use local AI classification/evaluation | backend/app/modules/local_ai/; backend/app/modules/local_ai_eval/; scripts/local_model_*.py; scripts/router_policy_*.py |
@@ -33,6 +33,7 @@ This is an operational map for coding agents. Runtime/code and deterministic tes
 | Understand CI/merge/security authority | .github/workflows/ci.yml; merge-authority-verify.yml; exact-head-browser-proof-command.yml; AGENTS.md |
 | Recover local product data | scripts/data_root_recovery/; docs/DATA_ROOT_RECOVERY.md |
 | Inspect provider/model evaluation evidence | backend/app/modules/local_ai_eval/; scripts/local_*probe.py; reports/; docs/LOCAL_AI_EVALUATION_EVIDENCE.md |
+| Inspect persistent AI threads and cohort accounting | backend/app/modules/ai/thread_routes.py; thread_service.py; flow_grade_cohort_routes.py; flow_grade_cohorts.py |
 
 ## System contract and authority order
 
@@ -74,16 +75,19 @@ Useful anchors: open_sqlite_connection, initialize_database, build_workspace_con
 
 ### AI execution, routing and egress — REAL, bounded by policy
 
-Use gateway.py for product-facing entry. Normal tasks reach run_ai_task/execution.py and persist attempt/token-flow evidence. Local adapters execute through the provider-neutral contract. External routes pass through egress_runtime.py and the persisted packet/ticket/reservation lifecycle; no direct provider call is a valid product path.
+Use gateway.py for product-facing entry. Normal tasks reach run_ai_task/execution.py and persist attempt/token-flow evidence; an explicit `route_class=auto` request is first handled by gateway.py's `run_auto_task` policy path. Local adapters execute through the provider-neutral contract. External routes pass through egress_runtime.py and the persisted packet/ticket/reservation lifecycle; no direct provider call is a valid product path.
 
 Important seams:
 
 - provider_registry.py is the strict YAML-backed provider/model/route/fallback/pricing authority.
-- routing/decision.py, capability_route_matrix.py, invariants.py and safe_local.py classify route/task/provider relationships; recommendations are advisory until deterministic policy promotes them.
+- routing/decision.py, capability_route_matrix.py, invariants.py and safe_local.py classify route/task/provider relationships; `routing/decision.py` is explicitly a provider-free contract/probe producer, while `invariants.py` validates permission fields. Their recommendations are advisory until the governed gateway/egress path promotes them; neither module calls providers or grants network permission.
 - privacy.py, sensitivity.py and sensitivity_routes.py classify/label context; deterministic floors only raise sensitivity and never grant permission.
 - egress_authority.py and egress_revalidation.py prepare and re-check eligible prompt/context authority against exact source digests and policy versions.
 - egress_policy.py only accepts the canonical policy file. egress_persistence.py, egress_lifecycle.py and egress_confirmation_core.py own tickets, reservations, CAS transitions, dispatch-state, accounting and conservative reconciliation.
 - token_flow_* owns durable flow/segment/continuation state. A length-limited output becomes a bounded continuation, not a fabricated complete result.
+- egress_spine.py records body-free pre-packet deny/pause decisions, creates the single queued `ai_jobs` row, and CAS-finalizes its binding, output digest, usage and terminal status. flow_record_capture.py atomically/idempotently turns eligible terminal outputs into canonical MemoryStore proposals.
+- thread_service.py owns workspace-scoped AI threads and interaction capture. It binds retries to a canonical request digest, reserves/dispatches through `run_ai_task`, captures bounded assistant text, and records proposal IDs; it is transcript/interaction state, not domain promotion authority.
+- flow_grade_cohort_routes.py exposes bounded, read-only cohort reconciliation: terminal flows, grades, execution composition, dispatch quality, provider accounting basis, token/latency distributions and conservative-spend invariants. It is evaluation/observability, not permission to execute.
 - providers/*.py and *_adapter.py implement adapters; they are not routing, secret storage, budget or egress authority.
 - fake_adapter.py is deterministic test/provider-mode behavior. local_ollama_adapter.py is loopback/local only when configured. Scaleway/DeepSeek/OpenAI-compatible adapters can be externally capable, but canonical execution and policy still govern product dispatch.
 
@@ -99,9 +103,13 @@ Failure modes:
 - Local fallback does not authorize external fallback.
 - Duplicate or stale token/egress state must be reconciled conservatively, not guessed away.
 
-### Local AI and evaluation — REAL/PARTIAL
+### Local AI classification — PARTIAL; evaluation harness — REAL
 
-local_ai is an advisory local classifier/intake/runtime seam with deterministic contracts, bounded Ollama loopback lifecycle/status and explicit no-network assumptions. It cannot own permission, provider, memory or sensitivity decisions. local_ai_eval and scripts/local_* are evaluation harnesses: dry-run/replay and holdout scoring are real, but model output remains advisory, semantic truth is not implied, and generated reports are evidence artifacts.
+`local_ai` is an advisory local classifier/intake/runtime seam with deterministic contracts and bounded Ollama loopback lifecycle/status. It depends on a configured local runtime/model and does not become usable merely because the adapter exists; it has no external-network authority and cannot own permission, provider, memory or sensitivity decisions. `local_ai_eval` and `scripts/local_*` provide real dry-run/replay, holdout scoring and evidence capture, but model output remains advisory and semantic truth is not implied. The evaluation harness is not a provider permission gate.
+
+
+
+Structured tool/agent boundary: backend/app/modules/agents/ and backend/app/modules/tools/ currently provide only small in-memory `register`/`names` containers. They are not a general agent scheduler, structured tool-calling exchange, sandbox, or authority layer. The current provider-neutral AI path is text-oriented; Hermes/tool-calling integration remains planned documentation, not an implemented runtime. Do not build a second orchestration or tool-permission path by treating these registries as one.
 
 ### Jarvis context/actions — REAL, explicit and non-domain-authoritative
 
@@ -109,7 +117,7 @@ jarvis_context.py plus jarvis_context_models.py/routes.py implement digest-bound
 
 ### Development/coding — REAL but bounded
 
-Development services persist roadmap/calendar/brainstorm records and explicit promotions. Coding services expose repository truth, runtime truth, pipeline state and bounded actions/proposals. Proposals do not apply patches, commit or push; use delivery authority and exact-head/CAS workflows for repository mutation.
+Development services persist roadmap/calendar/brainstorm records and explicit promotions with workspace, dependency-cycle, revision and done-when checks. Coding services expose read-only repository/ref/commit/path/search/check/review truth and bounded AI proposals. `CodingActionsService` freezes an exact base SHA, admits at most 16 non-binary paths, rejects protected targets, validates a closed proposal schema and rechecks the ref after generation. Proposals do not apply patches, commit or push; use delivery authority and exact-head/CAS workflows for repository mutation.
 
 ## Engineering / scientific capability map
 
@@ -218,6 +226,10 @@ High-value commands from repository context:
 - Frontend: cd frontend && npm run build
 - Browser plans: node .github/browser-proof/validate-contract.mjs
 - Coverage: python3 scripts/validate_agent_manual_coverage.py --base-ref master
+
+## Report provenance and generated evidence
+
+The report tree is mixed. Markdown summaries are human-authored operational provenance and were inspected as READ evidence when they contain implementation boundaries, acceptance criteria, failure modes or status decisions. JSON, text logs, CAD/mesh binaries and other machine-produced outputs remain GENERATED/ASSET when they do not add standalone capability semantics. A report can support a claim, but it never outranks current runtime code or deterministic tests.
 
 ## Coverage manifest
 
