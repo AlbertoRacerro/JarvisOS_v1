@@ -40,10 +40,11 @@ Evidence baseline: fresh `master` `240d5e0b27d9837d40f47bddfa24871ae7a2a4bb`. Ru
 | `scripts/init-database.ps1` | READ | Local database/bootstrap launcher; creates/verifies backend venv, installs requirements, sets PYTHONPATH and invokes bootstrap. Referenced backend files are not transitively credited. |
 | `scripts/jarvis_silent_start.vbs` | READ | Windows silent launcher. Derives repo/backend paths from its own location, probes `http://127.0.0.1:8000/`, launches backend via `.venv\\Scripts\\pythonw.exe -m uvicorn app.main:app` with `JARVISOS_MANAGE_OLLAMA=1` only when not already responding, redirects output to `C:\\JarvisOS\\jarvis.log`, polls readiness for about 40 seconds, then opens the UI. Referenced backend/runtime components are not transitively credited. |
 | `scripts/jarvis_silent_stop.vbs` | READ | Windows stop helper. Enumerates python/pythonw/cmd processes and terminates any command line containing both `uvicorn` and `app.main`; intentionally leaves Ollama running and reports whether a process was killed. This broad command-line match is operationally convenient but is not repository-path scoped. |
+| `scripts/jarvisos_data_root.py` | READ | Thin public/CLI compatibility facade over `data_root_recovery`: re-exports snapshot/verify/restore primitives plus selected helpers and delegates direct execution to `data_root_recovery.cli.main`; imported recovery modules are not transitively credited by this read. |
 
 ### Ledger continuity
 
-Branch history contains earlier exact READ evidence for root files, `.github/**`, workflows, delivery/review/CI/continuation/codegen/recovery scripts, `docs/RUNBOOKS.md`, and data-root recovery files. This checkpoint adds direct master-source evidence for `scripts/jarvis_silent_stop.vbs`; referenced runtime components are not newly credited by this read.
+Branch history contains earlier exact READ evidence for root files, `.github/**`, workflows, delivery/review/CI/continuation/codegen/recovery scripts, `docs/RUNBOOKS.md`, and data-root recovery files. This checkpoint adds direct master-source evidence for `scripts/jarvisos_data_root.py`; imported recovery modules are not newly credited by this facade read.
 
 ### Remaining coverage
 
