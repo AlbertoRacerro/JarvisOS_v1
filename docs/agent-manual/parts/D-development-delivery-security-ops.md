@@ -57,7 +57,7 @@ Evidence baseline: fresh `master` `240d5e0b27d9837d40f47bddfa24871ae7a2a4bb`. Ru
 
 ### Ledger continuity
 
-Branch history contains earlier exact READ evidence for root files, `.github/**`, workflows, delivery/review/CI/continuation/codegen/recovery scripts, `docs/RUNBOOKS.md`, and data-root recovery files. This checkpoint adds direct fixed-master evidence for `scripts/local_worktree_ipc.py`; imported actuator and repository-delivery policy are not transitively credited.
+Branch history contains earlier exact READ evidence for root files, `.github/**`, workflows, delivery/review/CI/continuation/codegen/recovery scripts, `docs/RUNBOOKS.md`, and data-root recovery files. This checkpoint adds direct fixed-master evidence for `scripts/local_route_smoke.py`; imported backend/eval modules and generated reports are not transitively credited.
 
 ### Remaining coverage
 
