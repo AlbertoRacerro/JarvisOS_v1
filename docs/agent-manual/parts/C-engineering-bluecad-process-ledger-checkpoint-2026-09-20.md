@@ -3,7 +3,7 @@
 MAPPING_STATUS: IN_PROGRESS
 
 Fresh-tree baseline inspected: `master@240d5e0b27d9837d40f47bddfa24871ae7a2a4bb`.
-PR #659 head inspected before this run: `12c4b79da4caad9289a3a8846eec7ffeb453e6b7`.
+PR #659 head inspected before this run: `5913785ac07cc8699ef35f90a4475395cffe0f59`.
 
 This checkpoint records literal content inspection pending lossless consolidation into `C-engineering-bluecad-process.md`. It does not supersede the canonical `## EXPLICIT FILE COVERAGE LEDGER`; COMPLETE is not claimed.
 
@@ -14,6 +14,7 @@ This checkpoint records literal content inspection pending lossless consolidatio
 | `backend/tests/bluecad/hashseed_determinism_runner.py` | READ | Determinism subprocess helper: loads a named golden fixture, builds and validates it in a temporary directory, snapshots spec ID/manifest digest/artifact hashes, and—regardless of the parent process seed—spawns the actual BLUECAD child with canonical `PYTHONHASHSEED=0`, bounded timeout and machine-readable sorted JSON output. |
 | `backend/tests/bluecad/test_capped_manifold.py` | READ | Capped-manifold contract/kernel battery: cross-checks schema, canonical validator and AI prompt vocabulary; rejects non-integer/bool/out-of-range branch counts, non-positive gaps/stubs/caps, invalid wall ratios, unexpected params and derived overflow before kernel execution; under the pinned canary proves exact common/branch ports, bbox/final volume, valid manifold solid, open bores with closed cap, mirrored parallel-path assembly consistency for 1/2/12 branches, and repeat-build manifest determinism. |
 | `backend/tests/test_process_kernel_075_identity.py` | READ | 075 scientific identity proof: runs the legacy exact-bundled 047 script and process-kernel implementation on canonical turbulent and laminar cases, requires identical schema/status/diagnostics/output units, float-hex values, canonical JSON bytes and SHA-256 digest, then proves physically equivalent alternate units normalize to the same case and numerically equivalent outputs. |
+| `backend/tests/test_process_kernel_075_profile_identity.py` | READ | Process-kernel profile identity battery: requires the bundle manifest to carry SHA-256 identities for contract, semantic-unit registry, component catalog, screening constants, flowsheet profile, profile constants, assembler contract and entrypoint; pins AST/import-policy identity to the runner safety allowlist; proves import-policy changes alter bundle identity, gravity and assembler changes propagate only through their intended profile/flowsheet identities, and 048 screening-mass constant drift is visible in screening/component identities without falsely changing the 047 flowsheet profile. |
 
 CHECKPOINT_UNACCOUNTED_FILES: >0
 
