@@ -7,7 +7,6 @@ import {
   getBluecadCandidateAggregate,
   listModelImplementations,
   listParameters,
-  listWorkspaces,
   previewModelBindings,
   runRunnerJob,
   type BindingPreviewResponse,
@@ -420,17 +419,6 @@ export function useEngineeringProperties(
     pendingPreviousRunLoadRef.current = null;
     setPreviousRunBaseline(null);
   }, [workspaceId]);
-
-  useEffect(() => {
-    if (workspaceId) return;
-    const generation = ++loadGeneration.current;
-    listWorkspaces()
-      .then((items) => {
-        if (generation !== loadGeneration.current) return;
-        onWorkspaceChange(items[0]?.id ?? null);
-      })
-      .catch(() => undefined);
-  }, [workspaceId, onWorkspaceChange]);
 
   useEffect(() => {
     if (!workspaceId) {

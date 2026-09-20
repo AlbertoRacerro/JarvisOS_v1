@@ -1,5 +1,5 @@
 import type { KnowledgeContextPreview } from "./api/knowledgeActions";
-import { Suspense, lazy, useEffect, useCallback, useState, type ReactNode } from "react";
+import { Suspense, lazy, useEffect, useCallback, useRef, useState, type ReactNode } from "react";
 
 import type { StageSelection } from "./app/selection";
 import { useAppRouter } from "./app/useAppRouter";
@@ -18,6 +18,8 @@ import FinalSettingsSurface from "./components/fusion/FinalSettingsSurface";
 import FinalWorkspaceHeader from "./components/fusion/FinalWorkspaceHeader";
 import ProjectKnowledgePanel from "./components/fusion/ProjectKnowledgePanel";
 import ProjectSearchPanel from "./components/fusion/ProjectSearchPanel";
+import WorkspaceBootstrap, { readStoredWorkspaceId, writeStoredWorkspaceId } from "./components/WorkspaceBootstrap";
+import { listWorkspaces, type Workspace } from "./api/client";
 import LegacyDiagnosticSurface from "./components/shell/LegacyDiagnosticSurface";
 import MigrationPendingSurface from "./components/shell/MigrationPendingSurface";
 import AIDraft from "./pages/AIDraft";
@@ -37,6 +39,8 @@ const DevLocalChat = import.meta.env.DEV ? lazy(() => import("./pages/DevLocalCh
 type ShellRegionRequest = Readonly<{ region: ShellRegion; nonce: number }>;
 const PROJECT_BASIS_RECORD_KINDS = new Set(["requirement", "parameter", "assumption", "decision"]);
 const KNOWLEDGE_ROUTES = new Set(["memory-project-basis", "memory-models", "memory-literature"]);
+const WORKSPACE_OPTIONAL_ROUTES = new Set(["settings-appearance", "settings-ai", "settings-system", "coding-runtime", "legacy-domain-foundation", "legacy-ai-draft", "legacy-system-status", "legacy-dev-local-chat"]);
+type WorkspaceLoadState = "loading" | "ready" | "empty" | "error";
 
 function boundedSearchParam(params: URLSearchParams, name: string): string | null {
   const value = params.get(name)?.trim() ?? "";
@@ -46,7 +50,11 @@ function boundedSearchParam(params: URLSearchParams, name: string): string | nul
 function App() {
   const { resolved, navigate } = useAppRouter();
   const { route } = resolved;
-  const [workspaceId, setWorkspaceId] = useState<string | null>(null);
+  const [workspaceId, setWorkspaceIdState] = useState<string | null>(null);
+  const [workspaceLoadState, setWorkspaceLoadState] = useState<WorkspaceLoadState>("loading");
+  const [workspaceLoadError, setWorkspaceLoadError] = useState<string | null>(null);
+  const workspaceIds = useRef(new Set<string>());
+  const workspaceLoadGeneration = useRef(0);
   const [selection, setSelection] = useState<StageSelection | null>(null);
   const [shellRegions, setShellRegions] = useState<ShellRegionContributions>({});
   const [shellRegionRequest, setShellRegionRequest] = useState<ShellRegionRequest | null>(null);
@@ -59,6 +67,33 @@ function App() {
   }, []);
   const selectModelVersion = useCallback((id: string | null, label?: string) => {
     setSelectedModelVersionId(id); setSelectedKnowledgeLabel(label ?? null);
+  }, []);
+  const loadWorkspaces = useCallback((preferredId?: string | null) => {
+    const generation = ++workspaceLoadGeneration.current;
+    setWorkspaceLoadState("loading"); setWorkspaceLoadError(null); setWorkspaceIdState(null);
+    return listWorkspaces().then((items: Workspace[]) => {
+      if (generation !== workspaceLoadGeneration.current) return;
+      workspaceIds.current = new Set(items.map((item) => item.id));
+      const stored = preferredId ?? readStoredWorkspaceId();
+      const selected = stored && workspaceIds.current.has(stored) ? stored : items[0]?.id ?? null;
+      setWorkspaceIdState(selected);
+      writeStoredWorkspaceId(selected);
+      setWorkspaceLoadState(items.length ? "ready" : "empty");
+    }).catch((cause: unknown) => {
+      if (generation !== workspaceLoadGeneration.current) return;
+      setWorkspaceLoadState("error"); setWorkspaceLoadError(cause instanceof Error ? cause.message : "Workspace discovery failed.");
+    });
+  }, []);
+  useEffect(() => { void loadWorkspaces(); return () => { workspaceLoadGeneration.current++; }; }, [loadWorkspaces]);
+  const setWorkspaceId = useCallback((next: string | null) => {
+    if (!next || !workspaceIds.current.has(next)) { void loadWorkspaces(next); return; }
+    setWorkspaceIdState(next);
+    writeStoredWorkspaceId(next);
+  }, [loadWorkspaces]);
+  const handleWorkspaceCreated = useCallback((workspace: Workspace) => {
+    workspaceLoadGeneration.current++;
+    workspaceIds.current.add(workspace.id); setWorkspaceIdState(workspace.id); setWorkspaceLoadState("ready"); setWorkspaceLoadError(null);
+    writeStoredWorkspaceId(workspace.id);
   }, []);
   const engineeringProperties = useEngineeringProperties(workspaceId, setWorkspaceId, selection);
   const routeParams = new URLSearchParams(window.location.search);
@@ -99,7 +134,7 @@ function App() {
 
   useEffect(() => {
     if (selection?.kind === "record" && selection.ref.workspaceId !== workspaceId) setWorkspaceId(selection.ref.workspaceId);
-  }, [selection, workspaceId]);
+  }, [selection, setWorkspaceId, workspaceId]);
 
   const requestShellRegionOpen = (region: ShellRegion) => setShellRegionRequest((current) => ({ region, nonce: (current?.nonce ?? 0) + 1 }));
 
@@ -112,7 +147,12 @@ function App() {
   const jarvisSidecar = useJarvisSidecar(workspaceId, route.id, selection, jarvisLocalContext, knowledgeContext);
 
   let content: ReactNode;
-  if (route.stageKind && (route.id === "design-process" || route.id === "design-bluecad" || route.id === "review")) {
+  const workspaceRequired = !WORKSPACE_OPTIONAL_ROUTES.has(route.id);
+  if (workspaceRequired && workspaceLoadState !== "ready") {
+    content = workspaceLoadState === "loading" ? <div className="workspace-bootstrap" aria-live="polite"><p>Loading workspaces…</p></div>
+      : workspaceLoadState === "error" ? <WorkspaceBootstrap error={workspaceLoadError} onRetry={() => void loadWorkspaces()} onCreated={handleWorkspaceCreated} />
+      : <WorkspaceBootstrap onCreated={handleWorkspaceCreated} />;
+  } else if (route.stageKind && (route.id === "design-process" || route.id === "design-bluecad" || route.id === "review")) {
     const Stage = PRIMARY_STAGES[route.stageKind].render;
     content = <Stage workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} selection={selection} onSelectionChange={setSelection} onShellRegionsChange={setShellRegions} requestShellRegionOpen={requestShellRegionOpen} navigate={navigate} />;
   } else {
@@ -181,7 +221,7 @@ function App() {
   const propertiesContent = <EngineeringPropertiesPanel controller={engineeringProperties} stageContext={stageSidecar} navigate={navigate} />;
   const effectiveShellRegions: ShellRegionContributions = {
     ...shellRegions,
-    sidecar: route.primaryNav === "settings" ? undefined : jarvisSidecar,
+    sidecar: route.primaryNav === "settings" || workspaceLoadState !== "ready" || !workspaceId ? undefined : jarvisSidecar,
     ...(route.id === "runs" || route.id === "engineering-data" || route.id === "design-process" ? { dock: <AnalyticsDockContent workspaceId={workspaceId} /> } : {})
   };
 

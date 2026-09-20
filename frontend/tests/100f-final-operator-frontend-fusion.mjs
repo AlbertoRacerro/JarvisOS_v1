@@ -58,7 +58,7 @@ check(!routes.includes('label: "Board"'), "Board reintroduced as Roadmap peer");
 check(contextNav.includes("ROADMAP_STAGE_ITEMS"), "Roadmap Timeline/Calendar secondary navigation missing");
 
 check(app.includes('route.id === "design-process" || route.id === "design-bluecad"'), "Process/BLUECAD do not reuse the existing stage shell");
-check(app.includes('sidecar: route.primaryNav === "settings" ? undefined : jarvisSidecar'), "Settings must not expose Jarvis sidecar");
+check(app.includes('sidecar: route.primaryNav === "settings" || workspaceLoadState !== "ready" || !workspaceId ? undefined : jarvisSidecar'), "Settings must not expose Jarvis sidecar");
 includesAll(app, [
   'FinalOperatorReadSurface kind="project-basis"', 'ModelDossier workspaceId=',
   'kind="literature"',

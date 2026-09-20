@@ -44,6 +44,10 @@ try {
   await page.getByTestId('brainstorm-idea').filter({hasText:'Check pump pressure drop'}).waitFor();
   await page.getByRole('button',{name:'Inspect synthesis and provenance',exact:true}).click();
   await page.getByTestId('brainstorm-detail').getByText('Compare the measured pressure drop against the proposed one-bar limit.',{exact:true}).waitFor();
+  await page.getByLabel('Search reconciled ideas',{exact:true}).fill('no matching idea');
+  await page.getByRole('status').filter({hasText:'No reconciled ideas match'}).waitFor();
+  await page.getByLabel('Search reconciled ideas',{exact:true}).fill('pump');
+  await page.getByTestId('brainstorm-idea').filter({hasText:'Check pump pressure drop'}).locator('summary').filter({hasText:'Idea actions'}).click();
   await page.getByRole('button',{name:'Add to Roadmap proposal',exact:true}).click();
   await page.getByTestId('brainstorm-promotion').filter({hasText:'roadmap'}).waitFor();
   await page.reload();

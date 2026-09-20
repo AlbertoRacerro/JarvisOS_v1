@@ -34,23 +34,30 @@ type BrainstormRawWithDiscussions = BrainstormRaw & {
 };
 
 function IdeaDetails({ expanded }: { expanded: BrainstormIdea }) {
-  return <section className="operator-card" data-testid="brainstorm-detail">
-          <h2>{expanded.current.title} · detail</h2>
-          <p>{expanded.current.synthesis}</p>
-          <h3>Exact provenance</h3>
-          <ul>
-            {expanded.current.source_refs.map((ref, index) => <li key={`${ref.ref_type}-${ref.ref_id}-${index}`}>{ref.ref_type}:{ref.ref_id}{ref.revision ? `@${ref.revision}` : ""}</li>)}
-          </ul>
-          <h3>Discussion provenance</h3>
-          {(expanded.discussions ?? []).length === 0 ? <p>No recorded discussions.</p> : (
-            <ul>{(expanded.discussions ?? []).map((discussion) => (
-              <li key={`${discussion.id}-${discussion.bound_revision}`}>
-                {discussion.id} · bound to r{discussion.bound_revision} · {discussion.created_by} · {discussion.created_at} · {discussion.source_refs.map((ref) => `${ref.ref_type}:${ref.ref_id}${ref.revision ? `@${ref.revision}` : ""}`).join(", ")}
-              </li>
-            ))}</ul>
-          )}
-          <h3>Immutable revisions</h3>
-          <ul>{(expanded.revisions ?? []).map((revision) => <li key={revision.revision}>r{revision.revision}: {revision.title}</li>)}</ul>
+  return <section className="operator-card brainstorm-idea-detail" data-testid="brainstorm-detail">
+          <h2>{expanded.current.title}</h2>
+          <p className="brainstorm-detail-label">Discussion synthesis</p>
+          <p className="brainstorm-detail-synthesis">{expanded.current.synthesis}</p>
+          <details className="brainstorm-provenance"><summary>Exact provenance and revision history</summary>
+            <h3>Source records</h3>
+            <ul>
+              {expanded.current.source_refs.map((ref, index) => <li key={`${ref.ref_type}-${ref.ref_id}-${index}`}>{ref.ref_type}{ref.revision ? ` · revision ${ref.revision}` : ""}</li>)}
+            </ul>
+            <h3>Discussion provenance</h3>
+            {(expanded.discussions ?? []).length === 0 ? <p>No recorded discussions.</p> : (
+              <ul>{(expanded.discussions ?? []).map((discussion) => (
+                <li key={`${discussion.id}-${discussion.bound_revision}`}>
+                  Revision {discussion.bound_revision} · {discussion.created_by} · {discussion.created_at}
+                </li>
+              ))}</ul>
+            )}
+            <h3>Immutable revisions</h3>
+            <ul>{(expanded.revisions ?? []).map((revision) => <li key={revision.revision}>Revision {revision.revision}: {revision.title}</li>)}</ul>
+            <details><summary>Technical identifiers</summary>
+              <p>Idea: {expanded.id}</p>
+              <ul>{expanded.current.source_refs.map((ref, index) => <li key={`${ref.ref_type}-${ref.ref_id}-technical-${index}`}>{ref.ref_type}:{ref.ref_id}{ref.revision ? `@${ref.revision}` : ""}</li>)}</ul>
+            </details>
+          </details>
         </section>;
 }
 
@@ -62,6 +69,7 @@ export default function DevelopmentBrainstorm({ jarvis, workspaceId, onWorkspace
   const [expanded, setExpanded] = useState<Record<string, BrainstormIdea>>({});
   const [organizeOpen, setOrganizeOpen] = useState(false);
   const [rawQuery, setRawQuery] = useState("");
+  const [ideaQuery, setIdeaQuery] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const [rawText, setRawText] = useState("");
   const [attachmentType, setAttachmentType] = useState<"run_artifact" | "generic_artifact" | "literature_entry">("run_artifact");
@@ -186,6 +194,14 @@ export default function DevelopmentBrainstorm({ jarvis, workspaceId, onWorkspace
   const visibleRawRecords = projectionCurrent ? rawRecords : [];
   const visibleIdeas = projectionCurrent ? ideas : [];
   const visiblePromotions = projectionCurrent ? promotions : [];
+  const normalizedIdeaQuery = ideaQuery.trim().toLocaleLowerCase();
+  const visibleIdeasFiltered = visibleIdeas.filter((idea) => {
+    if (!normalizedIdeaQuery) return true;
+    return [idea.current.title, idea.current.takeaway, idea.current.synthesis, idea.lineage_state]
+      .join(" ")
+      .toLocaleLowerCase()
+      .includes(normalizedIdeaQuery);
+  });
   const selectedIdea = visibleIdeas.find((idea) => idea.id === editingIdeaId);
   const selectedSuccessor = visibleIdeas.find((idea) => idea.id === successorId);
 
@@ -264,8 +280,12 @@ export default function DevelopmentBrainstorm({ jarvis, workspaceId, onWorkspace
 
 </section><section className="brainstorm-ideas-column">      <section aria-labelledby="brainstorm-reconciled-heading">
         <h2 id="brainstorm-reconciled-heading">Reconciled ideas</h2>
-        {visibleIdeas.length === 0 ? <p>No reconciled ideas yet.</p> : visibleIdeas.map((idea) => (
-          <article className="operator-card" data-testid="brainstorm-idea" key={idea.id}>
+        {visibleIdeas.length > 0 ? <label className="brainstorm-idea-search">
+          Search reconciled ideas
+          <input aria-label="Search reconciled ideas" value={ideaQuery} onChange={(event) => setIdeaQuery(event.target.value)} placeholder="Search title, takeaway, or synthesis…" />
+        </label> : null}
+        {visibleIdeas.length === 0 ? <p>No reconciled ideas yet.</p> : visibleIdeasFiltered.length === 0 ? <p role="status">No reconciled ideas match “{ideaQuery}”.</p> : visibleIdeasFiltered.map((idea) => (
+          <article className="operator-card brainstorm-idea-card" data-testid="brainstorm-idea" key={idea.id}>
             <h3>{idea.current.title}</h3>
             <p><strong>{idea.lineage_state}</strong> · revision {idea.current_revision}</p>
             <p>{idea.current.takeaway}</p>
@@ -284,25 +304,30 @@ export default function DevelopmentBrainstorm({ jarvis, workspaceId, onWorkspace
               }
             }}>Inspect synthesis and provenance</button>
             {expanded[idea.id] && <IdeaDetails expanded={expanded[idea.id]} />}
-            {idea.lineage_state !== "SUPERSEDED" ? <>
-              <button disabled={busy} onClick={() => { setEditingIdeaId(idea.id); setTitle(idea.current.title); setTakeaway(idea.current.takeaway); setSynthesis(idea.current.synthesis); setOrganizeOpen(true); }}>Revise this idea</button>
-              <button disabled={busy} onClick={() => setEditingIdeaId(idea.id)}>Use as lineage source</button>
-              <button disabled={busy} onClick={() => setSuccessorId(idea.id)}>Use as successor</button>
-            </> : null}
-            <div role="group" aria-label={`Promotion proposals for ${idea.current.title}`}>
-              {(["roadmap", "design", "coding"] as const).map((target) => (
-                <button key={target} disabled={busy} onClick={() => run(async () => {
-                  const identity = retryIdentity(`promotion-${target}`, {
-                    workspaceId: idea.workspace_id,
-                    ideaId: idea.id,
-                    revision: idea.current_revision,
-                    target
-                  });
-                  await createBrainstormPromotion(idea, target, identity.key);
-                  clearRetryIdentity(identity.fingerprint);
-                })}>{target === "roadmap" ? "Add to Roadmap proposal" : `Promote ${target[0].toUpperCase()}${target.slice(1)} proposal`}</button>
-              ))}
-            </div>
+            <details className="brainstorm-idea-actions">
+              <summary>Idea actions</summary>
+              <div className="brainstorm-idea-actions__body">
+                {idea.lineage_state !== "SUPERSEDED" ? <>
+                  <button disabled={busy} onClick={() => { setEditingIdeaId(idea.id); setTitle(idea.current.title); setTakeaway(idea.current.takeaway); setSynthesis(idea.current.synthesis); setOrganizeOpen(true); }}>Revise this idea</button>
+                  <button disabled={busy} onClick={() => setEditingIdeaId(idea.id)}>Use as lineage source</button>
+                  <button disabled={busy} onClick={() => setSuccessorId(idea.id)}>Use as successor</button>
+                </> : null}
+                <div role="group" aria-label={`Promotion proposals for ${idea.current.title}`}>
+                  {(["roadmap", "design", "coding"] as const).map((target) => (
+                    <button key={target} disabled={busy} onClick={() => run(async () => {
+                      const identity = retryIdentity(`promotion-${target}`, {
+                        workspaceId: idea.workspace_id,
+                        ideaId: idea.id,
+                        revision: idea.current_revision,
+                        target
+                      });
+                      await createBrainstormPromotion(idea, target, identity.key);
+                      clearRetryIdentity(identity.fingerprint);
+                    })}>{target === "roadmap" ? "Add to Roadmap proposal" : `Promote ${target[0].toUpperCase()}${target.slice(1)} proposal`}</button>
+                  ))}
+                </div>
+              </div>
+            </details>
           </article>
         ))}
       </section>

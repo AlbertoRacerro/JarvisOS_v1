@@ -1,5 +1,56 @@
 # Spec 144 persistent implementation checkpoint
 
+## Workspace and Brainstorm recovery — 2026-09-20
+
+Continued PR #661 from `5b334ef64ae7d1798bc0340d888eebdfca848d32`.
+Fresh master: `f49d2203943cc85cf772401faa198fa930c10a4c`. Read the merged
+capability manual as the routing map; no mapping manifest rediscovery or master
+merge. Parent CI and PR Attention Evidence both passed. No other active
+implementation automation was present; the spec-144 automation remains paused.
+
+- Fixed a real first-install dead end: the production shell now offers workspace
+  creation through the existing workspace API when a successful discovery is empty.
+  A name is sufficient; slug/description are optional advanced presentation.
+  Failed discovery exposes Retry and does not pretend the database is empty.
+- Retain the selected workspace across reload only after fresh backend validation.
+  Browser storage contains the selected ID, not domain records or permission.
+  Invalid selections cannot reach workspace-scoped requests before validation.
+  Browser testing exposed a competing automatic selection in Engineering Properties;
+  removed that duplicate discovery now that App owns bootstrap. Settings stays reachable.
+- Brainstorm reconciled rows are compact at rest, searchable by their loaded
+  title/takeaway/synthesis, with lifecycle actions in an explicit disclosure.
+  Synthesis precedes expandable provenance and technical IDs. Existing backend
+  revision/idempotency/proposal-only semantics remain unchanged.
+
+Verification on the final local code for this checkpoint:
+
+- `cd frontend && npm run build`: PASS, including existing contract gates,
+  TypeScript and Vite; existing bundle-size warning remains.
+- `scripts/144-first-run-browser-smoke.mjs`: PASS with real FastAPI/SQLite/Vite/
+  Chromium on isolated empty data. Covers UI-only first workspace creation,
+  failed-list retry (explicit request-abort fault injection), originating route,
+  two-workspace selection, reload and backend restart persistence, invalid cached
+  ID refusal, and Settings access. No browser page errors.
+- `scripts/144-operator-browser-smoke.mjs`: PASS again, extended for reconciled
+  idea search and disclosed promotion actions. Existing RAW/manual synthesis/
+  proposal, search/reconciliation, thread/context controls, reload/restart and
+  12 surfaces at desktop/compact remain exercised. No document horizontal overflow.
+- Visually inspected first-workspace and compact populated Brainstorm screenshots;
+  compared Brainstorm hierarchy with its approved HTML. Screenshots are checked
+  into `docs/implementation/144-evidence/`; they complement the interaction proof.
+
+Environment: cloud Browser still refuses localhost (`ERR_BLOCKED_BY_CLIENT`).
+The repository's real Chromium harness works after restoring the truncated
+scratch executable from its installed npm Brotli package. Local inference still
+returns `failed_terminal / localrespondertransporterror`; no provider or policy
+configuration was changed. No new live Coding or generated BLUECAD geometry proof.
+
+Remaining: complete populated visual/interaction comparison for the other
+surfaces; exercise real Coding provider reads and successful local inference in
+an environment where those existing services are available; generated BLUECAD
+geometry remains unexercised. Run CI on the published checkpoint. PR stays draft;
+this is not maintainer acceptance readiness.
+
 ## CI repair checkpoint — 2026-09-16
 
 PR #661 remains draft and not ready for maintainer acceptance. Fresh review of
