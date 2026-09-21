@@ -34,6 +34,9 @@ try {
   await page.getByLabel('Citation, DOI or URL (optional)',{exact:true}).fill('Operator acceptance source, 2026');
   await page.getByRole('button',{name:'Save source',exact:true}).click();
   await page.getByText('Source saved as raw.',{exact:false}).waitFor();
+  await page.getByLabel('Find in loaded sources',{exact:false}).fill('handbook pressure');
+  await page.getByText('Pressure drop handbook',{exact:true}).first().waitFor();
+  await page.getByLabel('Find in loaded sources',{exact:false}).fill('');
   await page.getByText('Add a finding',{exact:true}).click();
   await page.getByLabel('Claim statement',{exact:true}).fill('The friction factor depends on Reynolds number.');
   await page.getByRole('button',{name:'Save raw finding',exact:true}).click();
@@ -88,11 +91,45 @@ try {
   assert.equal(saved.items[0].entries.length,2);
   assert.ok(saved.items[0].entries.every(entry=>entry.status==='raw'));
   assert.equal(saved.items[0].entries.find(entry=>entry.entry_kind==='datum').value_text,'1.25');
-  const model=await fetch(`http://127.0.0.1:8021/workspaces/${ws}/model-specs`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:'Pipe pressure drop',engineering_question:'How much pressure is lost?',scope:'Single-phase incompressible flow'})});
-  assert.equal(model.status,201,await model.text());
   await page.goto('http://127.0.0.1:5191/memory/models');
+  await page.getByRole('button',{name:'+ New model',exact:true}).click();
+  await page.getByLabel('Model title',{exact:true}).fill('Pipe pressure drop');
+  await page.getByLabel('Engineering question',{exact:true}).fill('How much pressure is lost?');
+  await page.getByLabel('Scope (optional)',{exact:true}).fill('Single-phase incompressible flow');
+  let rejectModelPost = true;
+  let failModelRefresh = false;
+  await page.route('**/workspaces/*/model-specs', async (route) => {
+    if (route.request().method() === 'POST' && rejectModelPost) {
+      rejectModelPost = false;
+      await route.fulfill({status: 422, contentType: 'application/json', body: JSON.stringify({detail: 'Draft title rejected for browser failure proof'})});
+      return;
+    }
+    await route.continue();
+  });
+  await page.getByRole('button',{name:'Save draft definition',exact:true}).click();
+  await page.getByRole('alert').filter({hasText:'could not be saved'}).waitFor();
+  assert.ok(await page.getByRole('button',{name:'Save draft definition',exact:true}).isVisible());
+  failModelRefresh = true;
+  await page.route('**/workspaces/*/model-dossiers', async (route) => {
+    if (route.request().method() === 'GET' && failModelRefresh) {
+      failModelRefresh = false;
+      await route.fulfill({status: 503, contentType: 'application/json', body: JSON.stringify({detail: 'Refresh intentionally unavailable for browser failure proof'})});
+      return;
+    }
+    await route.continue();
+  });
+  await page.getByRole('button',{name:'Save draft definition',exact:true}).click();
+  await page.getByRole('status').filter({hasText:'Saved draft definition'}).waitFor();
+  await page.getByRole('alert').filter({hasText:'could not be refreshed'}).waitFor();
+  assert.equal(await page.getByRole('button',{name:'Save draft definition',exact:true}).count(), 0);
+  await page.unroute('**/workspaces/*/model-specs');
+  await page.unroute('**/workspaces/*/model-dossiers');
+  await page.reload();
   await page.getByRole('button',{name:'Pipe pressure drop Definition · no version yet',exact:true}).click();
   await page.getByText('How much pressure is lost?',{exact:true}).waitFor();
+  await page.getByLabel('Find a model or version',{exact:false}).fill('drop pipe');
+  await page.getByRole('button',{name:'Pipe pressure drop Definition · no version yet',exact:true}).waitFor();
+  await page.getByLabel('Find a model or version',{exact:false}).fill('');
   await page.screenshot({path:evidence+'/model-definition.png'});
   for(const route of ['memory/models','memory/literature']) {
     await page.goto('http://127.0.0.1:5191/'+route);
@@ -111,6 +148,12 @@ try {
   await page.getByText('The friction factor depends on Reynolds number.',{exact:true}).waitFor();
   assert.deepEqual(pageErrors,[]);
   await page.getByLabel('Jarvis thread transcript').getByText('Explain the selected friction-factor claim.',{exact:false}).first().waitFor();
-  console.log('PASS real citation + claim/datum create, human selection label, real context preview/removal, reload, restart persistence; versionless model visible; compact overflow checks');
+  await page.goto('http://127.0.0.1:5191/memory/models');
+  await page.getByRole('button',{name:'Pipe pressure drop Definition · no version yet',exact:true}).click();
+  await page.getByText('How much pressure is lost?',{exact:true}).waitFor();
+  const persistedModels = await (await fetch(`http://127.0.0.1:8021/workspaces/${ws}/model-specs`)).json();
+  assert.equal(persistedModels.filter(model => model.title === 'Pipe pressure drop').length, 1);
+  assert.deepEqual(pageErrors,[]);
+  console.log('PASS real citation + claim/datum and model draft creation; explicit 422/503 fault recovery without duplicate model; token search, context preview/removal, reload and backend restart persistence; compact overflow checks');
   console.log('Evidence:',evidence);
 }finally{await browser?.close();frontend.kill();backend.kill();}

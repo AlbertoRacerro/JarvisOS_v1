@@ -1,5 +1,66 @@
 # Spec 144 persistent implementation checkpoint
 
+## Existing surface recovery — 2026-09-21
+
+Continued draft PR #661 from `21b1384d47979673d463eb861a3ab69beb76da2b`.
+Fresh master remains `f49d2203943cc85cf772401faa198fa930c10a4c`; used its
+capability manual for routing without merging master. Parent exact-head CI and
+PR Attention Evidence passed. The spec-144 automation remains paused; checked
+for concurrent implementation before shared mutations. Two Luna workers owned
+separate Memory and Calendar files; parent reviewed and integrated their changes.
+
+- Models now offers **+ New model** using the existing `createModelSpec` client
+  and modeling owner. Title/question/scope produce a saved draft definition,
+  explicitly not an executable model version. Selection, reload and failure
+  feedback use real persisted state. Async creation cannot inject an old
+  workspace's results after switching workspace. Successful POST closes/clears
+  the form before list refresh; a failed refresh reports the saved definition
+  rather than inviting another identical submission.
+- Models and Literature filter loaded records with accent-normalized, unordered
+  search tokens. This does not claim full-server search beyond loaded records.
+- Calendar Day/Week opens near the earliest rendered event segment across the
+  visible columns, in the display timezone. Overnight segments correctly focus
+  midnight; empty grids start at 08:00. Empty feedback remains visible above
+  the scrollable grid. Existing calendar persistence/authority is unchanged.
+- BLUECAD candidate headings show a bounded human brief. Exact candidate ID and
+  full brief remain available through an explicit **Candidate details** disclosure.
+  Real archive/reload/restart and Settings failure recovery were re-exercised.
+- Updated the old frontend 113 read-only source guard transparently for the
+  spec-144 draft creation path through the canonical client. Direct fetch and
+  generic mutation helpers remain forbidden; the gate remains in the build.
+  No frozen backend conformance tests were changed.
+
+Verification:
+
+- Integrated `cd frontend && npm run build`: PASS, including all existing frontend
+  gates, TypeScript and production Vite build. Existing bundle-size warning remains.
+- Real FastAPI/SQLite/Vite/Chromium Memory smoke: UI citation, claim/datum and
+  draft model creation; token search; exact Literature context preview/digest and
+  removal; explicit browser fault injection for rejected POST (422) and failed
+  post-save list refresh (503); reload/restart and no duplicate draft; compact
+  overflow checks. Fault injection tests error feedback, not a backend outage.
+- Roadmap browser smoke: real create/edit, done_when refusal, linked calendar
+  event, Day/Week/Month/Agenda, overnight focus assertions, compact widths and
+  backend restart persistence. No browser page errors.
+- BLUECAD/Settings browser smoke: real parked candidate create/read/archive,
+  disclosure open/close, reload/restart, Settings failure/retry; desktop and
+  compact inspection. No generated geometry is claimed by this fixture.
+- Screenshots in `docs/implementation/144-evidence/` show the actual rendered
+  model definition, overnight Calendar and compact BLUECAD candidate. These
+  complement interaction checks; they are not proof of full mission acceptance.
+
+Environment and next work: cloud Browser refuses localhost; the real repository
+Chromium harness works with the restored installed executable. The existing
+local model previously returned `failed_terminal / localrespondertransporterror`;
+no successful inference is claimed. BLUECAD candidate remains budget-blocked
+without generated geometry; paid/provider/privacy/budget defaults were preserved.
+Next: continue populated approved-reference comparison and existing workflows,
+particularly Coding live repository reads/proposal flow and Models version
+inspection with real populated data. Successful local inference and generated
+geometry require the corresponding existing services to be available. No new
+Process authoring, arbitrary execution, Hermes or provider authority was added.
+PR #661 remains draft; this checkpoint is not maintainer-acceptance readiness.
+
 ## Workspace and Brainstorm recovery — 2026-09-20
 
 Continued PR #661 from `5b334ef64ae7d1798bc0340d888eebdfca848d32`.

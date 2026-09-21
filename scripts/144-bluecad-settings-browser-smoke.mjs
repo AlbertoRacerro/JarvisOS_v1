@@ -34,6 +34,10 @@ try {
   await page.getByRole('status').filter({hasText:'Candidate saved · parked — budget_blocked.'}).waitFor();
   await page.getByRole('button',{name:'Inspect candidate',exact:true}).click();
   await page.getByRole('heading',{name:'Candidate inspector',exact:true}).waitFor();
+  assert.equal(await page.locator('.bluecad-workbench__chrome details').getAttribute('open'),null);
+  await page.locator('.bluecad-workbench__chrome summary').filter({hasText:'Candidate details'}).click();
+  await page.locator('.bluecad-workbench__chrome').getByText('Candidate ID',{exact:true}).waitFor();
+  await page.locator('.bluecad-workbench__chrome summary').filter({hasText:'Candidate details'}).click();
   await page.reload();
   await page.getByRole('button',{name:/parkedBrowser parked candidate safety check/}).count();
   await page.getByRole('button',{name:'Archive',exact:true}).waitFor();

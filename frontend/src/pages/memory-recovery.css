@@ -28,6 +28,11 @@
 .models-recovery .model-version-row { display: grid; gap: 3px; width: 100%; text-align: left; padding: 10px 8px; border: 0; border-bottom: 1px solid var(--fusion-line); border-radius: 0; background: transparent; color: inherit; }
 .models-recovery .model-version-row strong { font-weight: 500; overflow-wrap: anywhere; }.models-recovery .model-version-row span { font-size: 11px; color: var(--fusion-muted); }
 .models-recovery .model-version-row[aria-pressed=true] { background: var(--fusion-green-soft); }.models-recovery .model-filter { padding: 0 12px; }
+.models-recovery .model-create { margin: 12px; padding: 12px; border: 1px solid var(--fusion-line); background: var(--fusion-panel-warm); }
+.models-recovery .model-create h3 { margin: 0 0 4px; }.models-recovery .model-create p { margin: 4px 0 10px; color: var(--fusion-muted); font-size: 12px; }
+.models-recovery .model-create label { display: grid; gap: 5px; margin: 10px 0; }.models-recovery .model-create :is(input, textarea) { width: 100%; box-sizing: border-box; padding: 8px; }.models-recovery .model-create textarea { min-height: 70px; resize: vertical; }
+.models-recovery .model-create button { margin-right: 8px; }.models-recovery .model-notice { margin: 8px 12px; font-size: 12px; color: var(--fusion-muted); }
+.models-recovery .model-create-error { margin: 8px 12px; color: var(--fusion-danger, #9b2c2c); font-size: 12px; overflow-wrap: anywhere; }
 .models-recovery .model-definition-empty { padding: 24px; }.models-recovery .model-revision-history { margin: 12px; border-top: 1px solid var(--fusion-line); padding-top: 12px; }
 .models-recovery .model-revision-history > summary { cursor: pointer; }.models-recovery .model-revision-history > .final-fusion__basis { padding: 8px; }
 @media (max-width: 1350px) {

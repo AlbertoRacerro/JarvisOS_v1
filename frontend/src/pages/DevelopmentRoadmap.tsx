@@ -99,6 +99,15 @@ function dayOffset(dateKey: string, origin: string): number {
   return Math.round((new Date(`${dateKey}T00:00:00Z`).getTime() - new Date(`${origin}T00:00:00Z`).getTime()) / DAY_MS);
 }
 
+function renderedStartMinute(allocation: CalendarAllocation, day: string, timeZone: string): number {
+  // An event that began before this column is rendered from midnight. This
+  // keeps overnight blocks visible instead of placing them at the previous
+  // day's wall-clock start.
+  if (allocationDateKey(allocation, timeZone) < day) return 0;
+  const start = zonedParts(allocation.start_instant, timeZone);
+  return Number(start.hour) * 60 + Number(start.minute);
+}
+
 export default function DevelopmentRoadmap({ mode, workspaceId, onWorkspaceChange, jarvis }: Props) {
   const activeWorkspace = useRef(workspaceId);
   activeWorkspace.current = workspaceId;
@@ -292,11 +301,27 @@ export default function DevelopmentRoadmap({ mode, workspaceId, onWorkspaceChang
   }, [calendarAnchor, calendarView]);
   useEffect(() => {
     if (calendarScroller.current && (calendarView === "Day" || calendarView === "Week")) {
+      // Keep the first visible event in view with one hour of context. Use
+      // display-timezone parts so an event authored in another zone lands on
+      // the same day/hour the operator sees in the grid. Overnight events
+      // clamp to midnight; an empty calendar opens on a useful workday hour.
       const earliest = projectedAllocations[0];
-      const hour = earliest ? Number(zonedParts(earliest.start_instant, displayTimezone).hour) : 8;
-      calendarScroller.current.scrollTop = Math.max(0, hour - 1) * 56;
+      if (!earliest) {
+        calendarScroller.current.scrollTop = 8 * 56;
+        return;
+      }
+      const visibleDays = calendarDays.filter((day) => projectedAllocations.some((allocation) => allocationOverlapsDateRange(allocation, day, day, displayTimezone)));
+      const minutes = visibleDays.flatMap((day) => projectedAllocations
+        .filter((allocation) => allocationOverlapsDateRange(allocation, day, day, displayTimezone))
+        .map((allocation) => renderedStartMinute(allocation, day, displayTimezone)))
+        .reduce((minimum, value) => Math.min(minimum, value), Number.POSITIVE_INFINITY);
+      if (!Number.isFinite(minutes)) {
+        calendarScroller.current.scrollTop = 8 * 56;
+        return;
+      }
+      calendarScroller.current.scrollTop = Math.max(0, (minutes / 60 - 1) * 56);
     }
-  }, [calendarView, mode, workspaceId, loading]);
+  }, [calendarView, mode, workspaceId, loading, projectedAllocations, calendarDays, displayTimezone]);
   useEffect(() => {
     if (selectedItemId || selectedAllocationId) document.querySelector(".roadmap-detail article")?.scrollIntoView({ block: "nearest" });
   }, [selectedItemId, selectedAllocationId, editingItemId, editingAllocationId]);
@@ -420,13 +445,14 @@ export default function DevelopmentRoadmap({ mode, workspaceId, onWorkspaceChang
             <div className="roadmap-subtoolbar" role="region" aria-label="Calendar projection"><div className="calendar-modes">{(["Day", "Week", "Month", "Agenda"] as CalendarView[]).map((view) => <button key={view} type="button" aria-pressed={calendarView === view} onClick={() => setCalendarView(view)}>{view}</button>)}</div><div className="calendar-date-nav"><button type="button" aria-label="Previous period" onClick={() => moveCalendar(-1)}>‹</button><label>View date <input type="date" required value={calendarAnchor} onChange={(event) => { if (event.target.value) setCalendarAnchor(event.target.value); setCalendarAnchorTouched(true); }} /></label><button type="button" aria-label="Next period" onClick={() => moveCalendar(1)}>›</button><button type="button" onClick={() => {setCalendarAnchor(dateKeyForInstant(new Date(), displayTimezone)); setCalendarAnchorTouched(true);}}>Today</button></div></div>
             <p className="calendar-zone">All grid times: {displayTimezone}. Each event keeps its original time zone.</p>
             <div className={`calendar-projection calendar-projection--${calendarView.toLowerCase()}`} data-calendar-view={calendarView.toLowerCase()} ref={calendarScroller}>
+              {!projectedAllocations.length ? <p className="roadmap-empty calendar-empty">No scheduled time in this {calendarView.toLowerCase()}. Add an event or choose another date.</p> : null}
               {calendarView === "Agenda" ? projectedAllocations.map((allocation) => <div className="calendar-agenda-row" key={allocation.id}><time>{dateLabel(allocationDateKey(allocation, displayTimezone))}</time>{eventButton(allocation)}</div>) : calendarView === "Month" ? <div className="calendar-month">{calendarDays.map((day) => <div className="calendar-month-day" key={day} data-outside-month={day.slice(0,7) !== calendarAnchor.slice(0,7)}><button className="calendar-day-heading" type="button" onClick={() => {setCalendarAnchor(day); setCalendarView("Day"); setCalendarAnchorTouched(true);}}>{new Date(`${day}T12:00:00Z`).toLocaleDateString(undefined, {weekday: "short", day: "numeric", timeZone: "UTC"})}</button>{projectedAllocations.filter((allocation) => allocationOverlapsDateRange(allocation, day, day, displayTimezone)).map((allocation) => <div key={allocation.id}>{eventButton(allocation)}</div>)}</div>)}</div> : <div className="calendar-time-grid" style={{ gridTemplateColumns: `48px repeat(${calendarDays.length}, minmax(105px, 1fr))` }}>
                 <div className="calendar-hour-column"><div className="calendar-day-heading">Time</div>{Array.from({length: 24}, (_, hour) => <time key={hour}>{`${String(hour).padStart(2,"0")}:00`}</time>)}</div>
                 {calendarDays.map((day) => {
                   const events = projectedAllocations.filter((allocation) => allocationOverlapsDateRange(allocation, day, day, displayTimezone));
                   const segments = events.map((allocation) => {
-                    const start = zonedParts(allocation.start_instant, displayTimezone), end = zonedParts(allocation.end_instant, displayTimezone);
-                    const from = allocationDateKey(allocation, displayTimezone) < day ? 0 : Number(start.hour)*60+Number(start.minute);
+                    const end = zonedParts(allocation.end_instant, displayTimezone);
+                    const from = renderedStartMinute(allocation, day, displayTimezone);
                     const until = dateKeyForInstant(allocation.end_instant, displayTimezone) > day ? 1440 : Number(end.hour)*60+Number(end.minute);
                     const duration = (new Date(allocation.end_instant).getTime() - new Date(allocation.start_instant).getTime()) / 60000;
                     return {allocation, from, until: Math.min(1440, Math.max(from + 15, until <= from ? from + duration : until)), lane: 0, lanes: 1};
@@ -442,7 +468,6 @@ export default function DevelopmentRoadmap({ mode, workspaceId, onWorkspaceChang
                   return <div key={day} className="calendar-day-column"><div className="calendar-day-heading">{new Date(`${day}T12:00:00Z`).toLocaleDateString(undefined, {weekday:"short", day:"numeric", month:"short", timeZone:"UTC"})}</div><div className="calendar-day-hours">{segments.map(({allocation,from,until,lane,lanes}) => <div className="calendar-event-position" key={allocation.id} style={{top:`${from/60*56}px`,height:`${(until-from)/60*56}px`,left:`${lane/lanes*100}%`,width:`${100/lanes}%`}}>{eventButton(allocation)}</div>)}</div></div>;
                 })}
               </div>}
-              {!projectedAllocations.length ? <p className="roadmap-empty">No scheduled time in this {calendarView.toLowerCase()}. Add an event or choose another date.</p> : null}
             </div>
 
         <div className="roadmap-detail" aria-label="Selected calendar event">

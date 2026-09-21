@@ -24,6 +24,16 @@ function entryValue(entry: LiteratureEntry): string {
   if (entry.value_number !== null) return `${entry.value_number}${entry.unit ? ` ${entry.unit}` : ""}`;
   return `${entry.value_text ?? "Datum unavailable"}${entry.unit ? ` ${entry.unit}` : ""}`;
 }
+
+function normalizedSearch(value: string): string {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase().trim();
+}
+
+function matchesSearch(value: string, query: string): boolean {
+  const terms = normalizedSearch(query).split(/\s+/).filter(Boolean);
+  const haystack = normalizedSearch(value);
+  return terms.every((term) => haystack.includes(term));
+}
 // Retain the same request key after a lost response; changing the payload starts a new write.
 function useRequestKey() {
   const pending = useRef({ payload: "", key: "" });
@@ -163,7 +173,7 @@ export default function LiteratureKnowledge({ jarvis, searchPanel, workspaceId, 
     } catch (cause) { if (workspaceToken.current === ws) setError(cause instanceof Error ? cause.message : "Source could not be saved."); }
     finally { if (workspaceToken.current === ws) setSaving(false); }
   };
-  const filtered = sources.filter((source) => `${source.title} ${source.citation ?? ""} ${source.publisher ?? ""} ${source.entries.map(entryValue).join(" ")}`.toLocaleLowerCase().includes(query.toLocaleLowerCase()));
+  const filtered = sources.filter((source) => matchesSearch(`${source.title} ${source.citation ?? ""} ${source.publisher ?? ""} ${source.entries.map(entryValue).join(" ")}`, query));
   return <div className={`final-fusion__workbench final-fusion__workbench--literature literature-recovery${searchPanel ? " literature-recovery--with-search" : ""}`}>
     {searchPanel ? <section className="final-fusion__panel literature-search">{searchPanel}</section> : null}
     <section className="final-fusion__panel literature-library">

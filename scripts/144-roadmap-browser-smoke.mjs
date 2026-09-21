@@ -52,13 +52,27 @@ try {
   await page.getByLabel('Edit event title',{exact:true}).fill('Review pressure drop and pipe sizing');
   await page.getByRole('button',{name:'Save event',exact:true}).click();
   await page.getByRole('button',{name:'Edit event',exact:true}).waitFor();
+  await page.getByRole('button',{name:'+ Add event',exact:true}).click();
+  await page.getByLabel('Title',{exact:true}).fill('Overnight calibration');
+  await page.getByLabel('Start',{exact:true}).fill('2026-09-15T23:30');
+  await page.getByLabel('End',{exact:true}).fill('2026-09-16T01:00');
+  await page.getByLabel('Time zone',{exact:true}).fill('America/New_York');
+  await page.getByRole('button',{name:'+ Add event',exact:true}).click();
+  await page.getByRole('button',{name:/Overnight calibration/}).first().waitFor();
   for(const view of ['Week','Month','Day','Agenda']) {
     await page.getByRole('button',{name:view,exact:true}).click();
     if(view==='Day') await page.getByLabel('View date',{exact:true}).fill('2026-09-16');
     await page.getByRole('button',{name:/Review pressure drop and pipe sizing/}).first().waitFor();
+    if(view==='Day') {
+      await page.getByRole('button',{name:/Overnight calibration/}).first().waitFor();
+      const dayProjection = page.locator('[data-calendar-view="day"]');
+      assert.equal(await dayProjection.evaluate((element) => element.scrollTop), 0, 'overnight event must anchor Day view at midnight');
+    }
     await page.screenshot({path:evidence+'/calendar-'+view.toLowerCase()+'.png'});
   }
   await page.getByRole('button',{name:'Week',exact:true}).click();
+  const weekProjection = page.locator('[data-calendar-view="week"]');
+  assert.equal(await weekProjection.evaluate((element) => element.scrollTop), 0, 'minimum rendered segment across Week columns must anchor at midnight');
   for(const route of ['development/roadmap/timeline','development/roadmap/calendar']) {
     await page.goto('http://127.0.0.1:5173/'+route);
     await page.waitForTimeout(500);
@@ -75,6 +89,5 @@ try {
   await page.goto('http://127.0.0.1:5173/development/roadmap/calendar');
   await page.getByRole('button',{name:/Review pressure drop and pipe sizing/}).waitFor();
   assert.deepEqual(pageErrors,[]);
-  console.log('PASS create/edit roadmap window, done_when refusal, linked event create/edit, day/week/month/agenda, compact widths, backend restart persistence. Evidence:',evidence);
+  console.log('PASS create/edit roadmap window, done_when refusal, linked event create/edit, overnight/day/week focus, month/agenda, compact widths, backend restart persistence. Evidence:',evidence);
 }finally{await browser?.close();frontend.kill();backend.kill();}
-
