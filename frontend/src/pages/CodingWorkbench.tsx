@@ -129,6 +129,12 @@ function readableReason(code: string): string {
     stale_target: "The branch changed since this file was opened. Refresh the repository and review the new file before retrying.",
     identity_conflict: "The selected context is no longer current. Remove it, refresh the repository, and add the file again.",
     unauthorized_repository: "This repository is not enabled in the backend configuration.",
+    authentication_required: "GitHub refused this read. The current repository reader does not send credentials; private repository access is unavailable through this connection.",
+    not_found: "GitHub could not expose this repository, ref or file. Check that it exists and is publicly readable; private content may also be reported as not found.",
+    rate_limited: "GitHub's read limit was reached. Wait before refreshing; repeated retries will not restore access sooner.",
+    timeout: "The repository connection timed out. Retry when GitHub is reachable from the backend.",
+    unsupported_target: "This action does not accept protected governance, credential or binary files. Choose a supported source or documentation file.",
+    policy_denied: "The existing execution policy refused this proposal. No file was changed; provider and privacy limits remain in force.",
     missing_exact_sha: "The repository commit could not be verified. Refresh the repository before opening files.",
     proposal_invalid: "The model did not return a valid bounded proposal. No change was applied; you can retry.",
     proposal_too_large: "The proposed change exceeds the allowed size. Describe a smaller change and retry.",
@@ -136,6 +142,21 @@ function readableReason(code: string): string {
     invalid_pipeline_selection: "Enter a positive pull request number and a three-digit spec ID, such as 144."
   };
   return reasons[code] ?? humanize(code, "The request could not be completed. Please retry.");
+}
+
+function repositoryMarkdownLink(href: string | undefined, safeFileUrl: string | null): string | null {
+  if (!href) return null;
+  // Keep repository-relative links at the inspected commit, never at the SPA origin.
+  // External Markdown links are navigation only; do not fetch/embed their content.
+  try {
+    if (/^https?:\/\//i.test(href)) return new URL(href).href;
+    if (!safeFileUrl || href.startsWith("//") || /^[a-z][a-z0-9+.-]*:/i.test(href)) return null;
+    const base = new URL(safeFileUrl);
+    const match = base.pathname.match(/^(\/[^/]+\/[^/]+\/blob\/[0-9a-f]{40}\/)/);
+    if (base.origin !== "https://github.com" || !match) return null;
+    const url = new URL(href.startsWith("/") ? `.${href}` : href, href.startsWith("/") ? `${base.origin}${match[1]}` : base);
+    return url.origin === base.origin && url.pathname.startsWith(match[1]) ? url.href : null;
+  } catch { return null; }
 }
 
 function ActionResult({ value, kind }: Readonly<{ value: CodingActionResult; kind: "inspect" | "proposal" }>) {
@@ -208,6 +229,9 @@ function RepositorySurface({ workspaceId }: Readonly<{ workspaceId: string | nul
   const refreshGeneration = useRef(0);
   const treeReadGeneration = useRef(0);
   const searchGeneration = useRef(0);
+  const fileViewport = useRef<HTMLDivElement>(null);
+
+  useEffect(() => { fileViewport.current?.scrollTo(0, 0); }, [selectedPath, preview, rendered]);
 
   const resolvedSha = truth?.resolved_sha ?? null;
   const anyPartial = truth?.partial || Object.values(partial).some(Boolean);
@@ -234,6 +258,7 @@ function RepositorySurface({ workspaceId }: Readonly<{ workspaceId: string | nul
     setInspectResult(null);
     setContextBinding(null);
     setProposal(null);
+    setIntent("");
     setRepositoryErrors(EMPTY_REPOSITORY_ERRORS);
   };
 
@@ -268,11 +293,12 @@ function RepositorySurface({ workspaceId }: Readonly<{ workspaceId: string | nul
     proposalGeneration.current += 1;
     setInspectResult(null);
     setContextBinding(null);
-    setProposal(null); setPendingAction(null);
+    setProposal(null); setPendingAction(null); setIntent("");
     setRepositoryErrors((current) => ({ ...current, inspect: null, context: null, proposal: null }));
   }, [workspaceId]);
 
   const openFile = async (path: string) => {
+    if (path !== selectedPath) setIntent("");
     const requestGeneration = ++fileReadGeneration.current;
     proposalGeneration.current += 1;
     contextPreviewGeneration.current += 1;
@@ -472,7 +498,7 @@ function RepositorySurface({ workspaceId }: Readonly<{ workspaceId: string | nul
     <Panel title="Repository Inspector" status={evidenceError ? "Read error" : anyPartial ? "PARTIAL · READ only" : "READ only"}>
       <div className="final-fusion__toolbar-line"><span>Selected path · {selectedPath || "None"}</span>{safeUrl ? <a href={safeUrl} target="_blank" rel="noreferrer">Open on GitHub</a> : null}</div>
       {selectedPath.endsWith(".md") && preview && <div className="file-view-tabs" role="group" aria-label="Markdown view"><button aria-pressed={rendered} onClick={() => setRendered(true)}>Rendered</button><button aria-pressed={!rendered} onClick={() => setRendered(false)}>Raw</button></div>}
-      <div className="repository-file-viewport" tabIndex={0} aria-label="File content">{!selectedPath ? <div className="repository-empty"><h3>Open a file to begin</h3><p>Choose a file in the repository tree, or search for text inside files.</p></div> : fileLoading ? <p className="repository-empty" role="status">Loading file…</p> : repositoryErrors.file ? <p className="repository-empty">File content is unavailable. Reopen the file to retry.</p> : !preview ? <p className="repository-empty">This file contains no readable text.</p> : selectedPath.endsWith(".md") && rendered ? <article className="markdown-preview"><ReactMarkdown remarkPlugins={[remarkGfm]} components={{img: ({alt}) => <span>[Image: {alt || "image"} · open on GitHub]</span>}}>{preview}</ReactMarkdown></article> : <pre>{preview || "No readable text returned for this file."}</pre>}</div>
+      <div ref={fileViewport} className="repository-file-viewport" tabIndex={0} aria-label="File content">{!selectedPath ? <div className="repository-empty"><h3>Open a file to begin</h3><p>Choose a file in the repository tree, or search for text inside files.</p></div> : fileLoading ? <p className="repository-empty" role="status">Loading file…</p> : repositoryErrors.file ? <p className="repository-empty">File content is unavailable. Reopen the file to retry.</p> : !preview ? <p className="repository-empty">This file contains no readable text.</p> : selectedPath.endsWith(".md") && rendered ? <article className="markdown-preview"><ReactMarkdown remarkPlugins={[remarkGfm]} components={{img: ({alt}) => <span>[Image: {alt || "image"} · open on GitHub]</span>, a: ({href, children}) => { const target = repositoryMarkdownLink(href, safeUrl); return target ? <a href={target} target="_blank" rel="noreferrer">{children}</a> : <span title="Link unavailable at this repository commit">{children}</span>; }}}>{preview}</ReactMarkdown></article> : <pre>{preview || "No readable text returned for this file."}</pre>}</div>
       {repositoryErrors.file ? <div className="final-fusion__source-empty" role="status"><strong>File preview refused / unavailable</strong><span>{readableReason(repositoryErrors.file)}</span></div> : null}
       <details className="repository-pr-evidence"><summary>Pull request evidence</summary><div className="final-fusion__toolbar-line"><input aria-label="Pull request number" inputMode="numeric" value={prInput} onChange={(event) => { prEvidenceGeneration.current += 1; setPrInput(event.target.value); setPrEvidence(null); setRepositoryErrors((current) => ({ ...current, pr: null, checks: null, reviews: null })); setPartial((current) => ({ ...current, pr: false, checks: false, reviews: false })); }} placeholder="PR number"/><button type="button" onClick={() => void loadPr()} disabled={!prInput}>Load PR evidence</button></div>
       {repositoryErrors.pr ? <div className="final-fusion__source-empty" role="status"><strong>PR evidence refused / unavailable</strong><span>{readableReason(repositoryErrors.pr)}</span></div> : null}

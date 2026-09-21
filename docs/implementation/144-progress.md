@@ -1,5 +1,51 @@
 # Spec 144 persistent implementation checkpoint
 
+## Coding-only checkpoint and requested stop — 2026-09-21
+
+Maintainer requested Coding, then stop. Continued PR #661 from
+`265b243d6d99239a51d537a1ba4e2eabbf14de9b`; master remains
+`f49d2203943cc85cf772401faa198fa930c10a4c`. The spec-144 automation remains
+paused, with no enabled repository implementation automation. No merge.
+
+- Fixed rendered Markdown navigation: relative/root-relative links resolve to
+  the inspected GitHub commit, not the local SPA. Links escaping that repository
+  commit path are inert; supported external links open separately without embedding
+  external content. Image content remains unembedded.
+- Changing the selected file clears the old modification intent; refresh and
+  workspace changes also clear it. Opening a file or changing its rendered/raw
+  view resets the content viewport to the beginning. Directory navigation keeps
+  the explicitly selected file, as expected for an inspector; it does not silently
+  change the target. Repository reads are global, while actions remain workspace-bound.
+- Added actionable explanations for authentication, missing/private content,
+  rate limiting, timeout, protected/binary target and policy refusal. No credential,
+  provider, budget or arbitrary execution authority was changed.
+
+Evidence on final code:
+
+- `npm run build`: PASS, including frontend contract gates, TypeScript and Vite.
+- Six existing Coding backend suites: **111 passed**, one existing Starlette/AnyIO
+  deprecation warning. These tests use controlled providers, not live GitHub/model proof.
+- `scripts/144-coding-browser-smoke.mjs`: PASS before and after the repair.
+  Actual FastAPI repository-ref endpoint returned **503 / provider_unavailable**;
+  actual runtime endpoint returned 200 with local observation and unknown remote
+  alignment. Browser showed unavailable state and disabled actions at 1600/1280.
+- Supplementary browser fixtures (explicitly NOT live-provider success): long
+  Markdown/raw/code scrolling, commit-bound relative links, rejected path escape,
+  file-change intent/scroll reset, inspect/context add/remove, digest dispatch,
+  stale in-flight proposal discard, proposal rendering/refusal, search and partial
+  evidence refusal. Zero page errors or horizontal document overflow.
+- Evidence images: `coding-actual-unavailable-2026-09-21.png` and
+  `coding-FIXTURE-markdown-links-2026-09-21.png` under `144-evidence/`.
+
+Unresolved live prerequisite: the app's fixed-host GitHub reader cannot reach its
+provider in this environment. Its transport intentionally sends no credentials;
+the chat GitHub connector is a different capability, not proof of app connectivity.
+No connector credentials were extracted or repurposed. Real file reads plus a
+successful governed local-model proposal must still be exercised on a configured
+operator installation. Coding is not claimed end-to-end accepted. Stopped after
+publishing this bounded checkpoint as requested; do not resume other surfaces or
+the automation without a new maintainer instruction.
+
 ## Existing surface recovery — 2026-09-21
 
 Continued draft PR #661 from `21b1384d47979673d463eb861a3ab69beb76da2b`.
