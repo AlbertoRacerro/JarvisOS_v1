@@ -8,13 +8,14 @@ import {
   listProjectKnowledgeRevisions,
   previewProjectKnowledgeImpact,
   reconcileProjectKnowledge,
+  type ProjectKnowledgeOperation,
   type ProjectKnowledgeDraft,
   type ProjectKnowledgeImpact,
   type ProjectKnowledgeRevalidation,
   type ProjectKnowledgeRevision
 } from "../../api/projectKnowledge";
 
-type Props = Readonly<{ workspaceId: string | null; readOnly?: boolean }>;
+type Props = Readonly<{ workspaceId: string | null; readOnly?: boolean; onChanged?: () => void }>;
 
 function shortId(value: string | null | undefined): string {
   return value ? `${value.slice(0, 8)}…` : "None";
@@ -34,7 +35,15 @@ function recomputationHref(revision: ProjectKnowledgeRevision, revalidation: Pro
   return `/design/process?${params.toString()}`;
 }
 
-export default function ProjectKnowledgePanel({ workspaceId, readOnly = false }: Props) {
+function ChangeList({ operations }: { operations: ProjectKnowledgeOperation[] }) {
+  return <ul className="basis-change-list">{operations.map((operation, index) => <li key={operation.operation_id ?? index}>
+    <strong>{operation.operation_kind.replace(/_/g, " ")} {operation.owner_kind.replace(/_/g, " ")}</strong>
+    <p>{String(operation.fields.statement ?? operation.fields.title ?? operation.fields.name ?? operation.owner_id ?? "Project record")}</p>
+    <details><summary>All proposed fields</summary><pre>{JSON.stringify(operation.fields, null, 2)}</pre></details>
+  </li>)}</ul>;
+}
+
+export default function ProjectKnowledgePanel({ workspaceId, readOnly = false, onChanged }: Props) {
   const [revisions, setRevisions] = useState<ProjectKnowledgeRevision[]>([]);
   const [selectedRevisionId, setSelectedRevisionId] = useState<string | null>(null);
   const [statement, setStatement] = useState("");
@@ -165,6 +174,7 @@ export default function ProjectKnowledgePanel({ workspaceId, readOnly = false }:
     setKnownFailAck("");
     setRevalidation(null);
     await reload();
+    onChanged?.();
   });
 
   if (!workspaceId) {
@@ -172,20 +182,21 @@ export default function ProjectKnowledgePanel({ workspaceId, readOnly = false }:
   }
 
   return <section className="final-fusion__panel final-fusion__basis" aria-label="Project Knowledge">
-    <header className="final-fusion__panel-head"><h2>Project Knowledge</h2><span>{readOnly ? "112 · exact lifecycle read" : "112 · server-owned"}</span></header>
-    <div className="final-fusion__dossier-top"><strong>Current reconciled snapshot · {shortId(currentReconciled?.reconciled_snapshot_id)}</strong><span>Working revisions · {working.length}</span></div>
+    <header className="final-fusion__panel-head"><h2>Project Knowledge</h2><span>{readOnly ? "Revision history" : "Changes & revisions"}</span></header>
+    <div className="final-fusion__dossier-top"><strong>{currentReconciled ? "Reconciled project basis" : "No reconciled revision yet"}</strong><span>Working revisions · {working.length}</span></div>
     {error && <div className="final-fusion__source-empty"><strong>Transition rejected</strong><span>{error}</span></div>}
     <div className="final-fusion__toolbar-line">
-      <span>Exact revision / historical chain</span>
+      <span>Revision history</span>
       <select aria-label="Project Knowledge revision" value={selectedRevision?.id ?? ""} onChange={(event) => setSelectedRevisionId(event.target.value || null)} disabled={busy || !revisions.length}>
         <option value="">Current reconciled basis</option>
-        {revisions.map((revision) => <option key={revision.id} value={revision.id}>{shortId(revision.id)} · {revision.state} · {revision.origin}</option>)}
+        {revisions.map((revision) => <option key={revision.id} value={revision.id}>{revision.state} · {new Date(revision.created_at).toLocaleString()}</option>)}
       </select>
     </div>
-    {selectedRevision && <div className="final-fusion__facts"><div>Revision · {selectedRevision.id}</div><div>State · {selectedRevision.state}</div><div>Parent · {selectedRevision.parent_kind}:{shortId(selectedRevision.parent_revision_id)}</div><div>Change-set digest · {selectedRevision.change_set_digest}</div><div>Projected state digest · {selectedRevision.projected_state_digest}</div><div>Snapshot · {shortId(selectedRevision.reconciled_snapshot_id)}</div>{selectedRevision.superseded_by_revision_id && <div>Superseded by · {selectedRevision.superseded_by_revision_id}</div>}</div>}
-    {!readOnly && <div className="final-fusion__toolbar-line"><span>{selectedParent ? `Stage one server-supported Requirement on exact ${selectedParent.state} parent ${shortId(selectedParent.id)}.` : "Selected lifecycle state is inspect-only and cannot own a new draft."}</span><input aria-label="Requirement statement" value={statement} onChange={(event) => setStatement(event.target.value)} disabled={busy || !selectedParent} placeholder="Requirement statement" /><button type="button" disabled={busy || !selectedParent || !statement.trim()} onClick={stageRequirement}>Preview impact</button></div>}
-    {draft && impact && <div className="final-fusion__source-list"><div className="final-fusion__disclosure-row"><span>›</span><strong>Draft {shortId(draft.id)} · token {shortId(draft.revision_token)}</strong><em>{impact.complete ? "Impact complete" : "Impact incomplete"}</em></div><div className="final-fusion__facts"><div>Affected refs · {impact.affected_refs.length ? impact.affected_refs.join(", ") : "None"}</div><div>Owner tokens · {Object.entries(impact.owner_tokens).map(([ref, token]) => `${ref}=${token}`).join(" · ") || "None"}</div><div>Diagnostics · {impact.diagnostics.join(", ") || "None"}</div><div>Impact digest · {impact.digest}</div></div><div className="final-fusion__toolbar-line"><span>Approve all creates an immutable working revision; it does not reconcile canonical truth.</span><button type="button" disabled={busy || !impact.complete} onClick={approve}>Approve all</button></div></div>}
-    {selectedWorking && revalidation && <div className="final-fusion__source-list"><div className="final-fusion__disclosure-row"><span>›</span><strong>Deterministic revalidation</strong><em>{revalidation.complete ? "Terminal" : "Blocked"}</em></div><div className="final-fusion__facts"><div>PASS/current evidence · {revalidation.current_validation_ids.length}</div><div>Blocking criteria · {revalidation.blocking_requirement_ids.join(", ") || "None"}</div><div>Known FAIL · {revalidation.known_fail_requirement_ids.join(", ") || "None"}</div><div>Recomputation required · {revalidation.recomputation_required.join(", ") || "None"}</div><div>Diagnostics · {revalidation.diagnostics.join(" · ") || "None"}</div><div>Validation-set digest · {revalidation.selected_validation_set_digest}</div></div>{revalidation.recomputation_required.length > 0 && <div className="final-fusion__toolbar-line"><span>Recomputation remains owned by Process; the handoff carries this exact revision, basis digest, validation-set digest and requirement refs.</span><a href={recomputationHref(selectedWorking, revalidation)}>Open Process with context</a></div>}{!readOnly && revalidation.known_fail_requirement_ids.length > 0 && <div className="final-fusion__toolbar-line"><span>Known mandatory FAIL requires explicit acknowledgement.</span><input aria-label="Known fail acknowledgement" value={knownFailAck} onChange={(event) => setKnownFailAck(event.target.value)} disabled={busy} placeholder="Acknowledge known FAIL evidence" /></div>}{!readOnly && <div className="final-fusion__toolbar-line"><button type="button" disabled={busy} onClick={discard}>Discard working revision</button><button type="button" disabled={busy || !revalidation.complete || (revalidation.known_fail_requirement_ids.length > 0 && !knownFailAck.trim())} onClick={reconcile}>Final reconcile</button></div>}</div>}
+    {selectedRevision && <div className="basis-revision-summary"><p>{selectedRevision.state === "working" ? "Approved changes waiting to be reconciled into the current project basis." : selectedRevision.state === "reconciled" ? "These changes have been reconciled into the project basis." : "Historical revision, retained for inspection."}</p><ChangeList operations={selectedRevision.operations} /></div>}
+    {selectedRevision && <details><summary>Technical revision details</summary><div className="final-fusion__facts"><div>Revision · {selectedRevision.id}</div><div>State · {selectedRevision.state}</div><div>Parent · {selectedRevision.parent_kind}:{shortId(selectedRevision.parent_revision_id)}</div><div>Change-set digest · {selectedRevision.change_set_digest}</div><div>Projected state digest · {selectedRevision.projected_state_digest}</div><div>Snapshot · {shortId(selectedRevision.reconciled_snapshot_id)}</div>{selectedRevision.superseded_by_revision_id && <div>Superseded by · {selectedRevision.superseded_by_revision_id}</div>}</div></details>}
+    {!readOnly && <div className="final-fusion__toolbar-line"><span>{selectedParent ? `Add a requirement based on the selected ${selectedParent.state} revision.` : "Add a requirement to the project. Preview the change before accepting it."}</span><input aria-label="Requirement statement" value={statement} onChange={(event) => setStatement(event.target.value)} disabled={busy || (revisions.length > 0 && !selectedParent)} placeholder="Requirement statement" /><button type="button" disabled={busy || (revisions.length > 0 && !selectedParent) || !statement.trim()} onClick={stageRequirement}>Preview impact</button></div>}
+    {draft && impact && <div className="final-fusion__source-list"><div className="final-fusion__disclosure-row"><strong>Review proposed changes</strong><em>{impact.complete ? "Impact complete" : "Impact incomplete"}</em></div><ChangeList operations={draft.operations} /><details><summary>Impact details</summary><div className="final-fusion__facts"><div>Affected refs · {impact.affected_refs.length ? impact.affected_refs.join(", ") : "None"}</div><div>Owner tokens · {Object.entries(impact.owner_tokens).map(([ref, token]) => `${ref}=${token}`).join(" · ") || "None"}</div><div>Diagnostics · {impact.diagnostics.join(", ") || "None"}</div><div>Impact digest · {impact.digest}</div></div></details><div className="final-fusion__toolbar-line"><span>Approve all creates an immutable working revision; it does not reconcile canonical truth.</span><button type="button" disabled={busy || !impact.complete} onClick={approve}>Approve all</button></div></div>}
+    {selectedWorking && revalidation && <div className="final-fusion__source-list"><div className="final-fusion__disclosure-row"><strong>Deterministic revalidation</strong><em>{revalidation.complete ? "Terminal" : "Blocked"}</em></div><div className="final-fusion__facts"><div>PASS/current evidence · {revalidation.current_validation_ids.length}</div><div>Blocking criteria · {revalidation.blocking_requirement_ids.join(", ") || "None"}</div><div>Known FAIL · {revalidation.known_fail_requirement_ids.join(", ") || "None"}</div><div>Recomputation required · {revalidation.recomputation_required.join(", ") || "None"}</div><div>Diagnostics · {revalidation.diagnostics.join(" · ") || "None"}</div><div>Validation-set digest · {revalidation.selected_validation_set_digest}</div></div>{revalidation.recomputation_required.length > 0 && <div className="final-fusion__toolbar-line"><span>Recomputation remains owned by Process; the handoff carries this exact revision, basis digest, validation-set digest and requirement refs.</span><a href={recomputationHref(selectedWorking, revalidation)}>Open Process with context</a></div>}{!readOnly && revalidation.known_fail_requirement_ids.length > 0 && <div className="final-fusion__toolbar-line"><span>Known mandatory FAIL requires explicit acknowledgement.</span><input aria-label="Known fail acknowledgement" value={knownFailAck} onChange={(event) => setKnownFailAck(event.target.value)} disabled={busy} placeholder="Acknowledge known FAIL evidence" /></div>}{!readOnly && <div className="final-fusion__toolbar-line"><button type="button" disabled={busy} onClick={discard}>Discard working revision</button><button type="button" disabled={busy || !revalidation.complete || (revalidation.known_fail_requirement_ids.length > 0 && !knownFailAck.trim())} onClick={reconcile}>Final reconcile</button></div>}</div>}
     <div className="final-fusion__context-strip">Frontend state is non-canonical. Historical reconciled revisions remain selectable as exact branch parents; discarded and superseded revisions remain inspectable but cannot be reused as writable parents.</div>
   </section>;
 }

@@ -23,7 +23,7 @@ export type ProjectSearchResult = {
   route: "/memory/project-basis" | "/memory/models" | "/memory/literature";
   route_params: Record<string, string>;
   match_fields: string[];
-  match_tier: "exact" | "prefix" | "contains";
+  match_tier: "exact" | "prefix" | "contains" | "normalized" | "tokens";
 };
 
 export type ProjectSearchResponse = {

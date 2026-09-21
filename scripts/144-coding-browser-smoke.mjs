@@ -1,0 +1,64 @@
+import { spawn, spawnSync } from 'node:child_process';
+import { mkdir, writeFile, mkdtemp } from 'node:fs/promises';
+import assert from 'node:assert/strict';
+import path from 'node:path';
+import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
+const { chromium } = await import(process.env.JARVIS_PLAYWRIGHT_MODULE || 'playwright');
+const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const python=process.env.JARVIS_TEST_PYTHON || 'python';
+const data=await mkdtemp(path.join(tmpdir(),'jarvis-coding-144-'));
+const evidence=process.env.JARVIS_BROWSER_EVIDENCE || path.join(data,'evidence');
+await mkdir(evidence,{recursive:true});
+const env={...process.env,JARVISOS_DATA_ROOT:data,JARVISOS_CORS_ORIGINS:'http://127.0.0.1:5192'};
+const init=spawnSync(python,['-c','from app.core.database import initialize_database; initialize_database()'],{cwd:root+'/backend',env,encoding:'utf8'});assert.equal(init.status,0,init.stderr);
+const backend=spawn(python,['-m','uvicorn','app.main:app','--port','8022'],{cwd:root+'/backend',env,stdio:['ignore','ignore','pipe']});
+const frontend=spawn('node',['node_modules/vite/bin/vite.js','--host','127.0.0.1','--port','5192'],{cwd:root+'/frontend',env:{...process.env,VITE_API_BASE_URL:'http://127.0.0.1:8022'},stdio:['ignore','ignore','pipe']});
+let browser;
+try {
+for(const url of ['http://127.0.0.1:8022/health','http://127.0.0.1:5192']){let ready=false;for(let i=0;i<80;i++){try{if((await fetch(url)).ok){ready=true;break}}catch{}await new Promise(r=>setTimeout(r,250));}assert(ready,url);}
+const created=await fetch('http://127.0.0.1:8022/workspaces',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'Coding browser acceptance',slug:'coding-144'})});assert.equal(created.status,201);
+const real=[];for(const endpoint of ['repository/ref?repository=AlbertoRacerro/JarvisOS_v1&ref=master','runtime-truth?repository=AlbertoRacerro/JarvisOS_v1&target_ref=master']){const r=await fetch('http://127.0.0.1:8022/api/coding/'+endpoint);real.push({endpoint,status:r.status,body:await r.json()});}await writeFile(evidence+'/actual-backend.json',JSON.stringify(real,null,2));
+browser=await chromium.launch({executablePath:process.env.JARVIS_CHROMIUM_EXECUTABLE || undefined,args:['--no-sandbox','--disable-dev-shm-usage','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--no-zygote','--single-process']});
+const page=await browser.newPage({viewport:{width:1600,height:1000}}), errors=[];page.on('pageerror',e=>errors.push(e.message));
+for(const mode of ['repository','runtime']){await page.goto('http://127.0.0.1:5192/coding/'+mode);await page.getByTestId('coding-'+mode+'-surface').waitFor();await page.waitForTimeout(1000);for(const size of [{width:1600,height:1000},{width:1280,height:800}]){await page.setViewportSize(size);await page.screenshot({path:evidence+'/actual-'+mode+'-'+size.width+'.png'});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false); }await writeFile(evidence+'/actual-'+mode+'.txt',await page.locator('body').innerText());}
+await page.goto('http://127.0.0.1:5192/coding/repository');await page.getByText('Repository read refused / unavailable',{exact:true}).waitFor();assert.equal(await page.getByRole('button',{name:'Inspect file',exact:true}).isDisabled(),true);assert.equal(await page.getByRole('button',{name:'Add to Jarvis context',exact:true}).isDisabled(),true);
+await page.goto('http://127.0.0.1:5192/coding/runtime');await page.getByLabel('Pipeline PR number').fill('655');await page.getByLabel('Pipeline spec id').fill('144');await page.getByRole('button',{name:'Load pipeline state',exact:true}).click();await page.getByText(/reported stages/).waitFor();await page.screenshot({path:evidence+'/actual-pipeline-1280.png'});await writeFile(evidence+'/actual-pipeline.txt',await page.locator('body').innerText());await page.getByLabel('Pipeline spec id').fill('143');await page.getByText('No pipeline selection',{exact:true}).waitFor();
+console.log('PASS ACTUAL BACKEND: repository unavailable is explicit; actions disabled; runtime observed; 1600/1280 no document overflow');
+// Supplementary fixture-only component interaction tests. This is NOT provider/backend success evidence.
+const sha='a'.repeat(40), md='# Long fixture document\n\n'+Array.from({length:120},(_,i)=>`## Section ${i+1}\n\nThis is browser fixture text, not repository evidence.\n\n| Field | Value |\n|---|---|\n| line | ${i+1} |\n`).join('\n'), code=Array.from({length:180},(_,i)=>`const line${i} = "${'long content '.repeat(35)}";`).join('\n');
+let delayedResolve, suggestionPayloads=[], refused=false, partial=false;
+const result=(operation,payload)=>({provider:'fixture-only',repository:'AlbertoRacerro/JarvisOS_v1',operation,requested_ref:'master',resolved_sha:sha,partial,payload,observed_at:'2026-09-16T00:00:00Z'});
+await page.route('**/api/coding/**',async route=>{const url=new URL(route.request().url()), endpoint=url.pathname.split('/').at(-1);let body;
+if(endpoint==='ref')body=result('ref',{});
+else if(endpoint==='tree')body=result('tree',{entries:[{path:'LONG.md',type:'file',size:md.length},{path:'long-code.ts',type:'file',size:code.length}]});
+else if(endpoint==='file'){const p=url.searchParams.get('path');body=result('file',{path:p,text:p==='LONG.md'?md+'\n[Relative guide](docs/guide.md)\n[Root guide](/docs/root.md)\n[Escaped path](../../outside.md)':code});}
+else if(endpoint==='url')body=result('url',{url:'https://github.com/AlbertoRacerro/JarvisOS_v1/blob/'+sha+'/LONG.md'});
+else if(endpoint==='search')body=result('search',{matches:url.searchParams.get('literal')==='absent'?[]:[{path:'LONG.md',line:5,offset:20}]});
+else if(endpoint==='inspect')body={state:'current',generated_by:'deterministic',base_sha:sha,target_paths:['LONG.md'],evidence:[{path:'LONG.md',sha,payload:{text:md,size:md.length}}]};
+else if(endpoint==='context-preview')body={state:'current',base_sha:sha,target_paths:['LONG.md'],context_digest:'fixture-digest',added_context_refs:[{owner:'coding',id:'LONG.md',version:sha}]};
+else if(endpoint==='suggest-modification'){suggestionPayloads.push(route.request().postDataJSON()); if(delayedResolve!==undefined) await new Promise(r=>delayedResolve=r);body=refused?{state:'refused',reason:'provider_unavailable'}:{state:'proposed',summary:'Fixture: explain the file reader',changes:[{path:'LONG.md',plan:'Add a concise explanation of scrolling and the Raw view.'}],assumptions:['Fixture only: no actual model call.'],warnings:['Review wording before applying.'],expected_checks:['Read rendered Markdown.']};}
+else return route.continue();await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(body)});});
+await page.goto('http://127.0.0.1:5192/coding/repository');await page.getByRole('button',{name:'LONG.md file'}).click();await page.getByRole('heading',{name:'Long fixture document'}).waitFor();
+assert.equal(await page.getByRole('link',{name:'Relative guide',exact:true}).getAttribute('href'),`https://github.com/AlbertoRacerro/JarvisOS_v1/blob/${sha}/docs/guide.md`);
+assert.equal(await page.getByRole('link',{name:'Root guide',exact:true}).getAttribute('href'),`https://github.com/AlbertoRacerro/JarvisOS_v1/blob/${sha}/docs/root.md`);
+assert.equal(await page.getByRole('link',{name:'Relative guide',exact:true}).getAttribute('target'),'_blank');
+assert.equal(await page.getByRole('link',{name:'Escaped path',exact:true}).count(),0);
+for(const size of [{width:1600,height:1000},{width:1280,height:800}]){await page.setViewportSize(size);const box=await page.locator('.repository-file-viewport').evaluate(el=>({height:el.clientHeight,overflow:el.scrollHeight>el.clientHeight}));assert(box.height>=350,JSON.stringify(box));assert(box.overflow);await page.locator('.repository-file-viewport').evaluate(el=>el.scrollTop=el.scrollHeight);await page.getByRole('heading',{name:'Section 120',exact:true}).waitFor();await page.screenshot({path:evidence+'/FIXTURE-markdown-'+size.width+'.png'});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);}
+await page.getByRole('button',{name:'Raw',exact:true}).click();assert(await page.locator('.repository-file-viewport pre').innerText());await page.getByRole('button',{name:'Rendered',exact:true}).click();
+await page.getByRole('button',{name:'Inspect file',exact:true}).click();await page.getByText('File evidence verified',{exact:true}).waitFor();await page.getByRole('button',{name:'Add to Jarvis context',exact:true}).click();await page.getByRole('button',{name:'Remove context',exact:true}).waitFor();
+await page.getByLabel('Suggest modification intent').fill('Explain the reader');await page.getByRole('button',{name:'Suggest modification',exact:true}).click();await page.getByText('Fixture: explain the file reader',{exact:true}).waitFor();assert.equal(suggestionPayloads.at(-1).expected_context_digest,'fixture-digest');await page.getByLabel('Modification proposal result').scrollIntoViewIfNeeded();await page.screenshot({path:evidence+'/FIXTURE-proposal.png'});
+await page.getByRole('button',{name:'Remove context',exact:true}).click();assert.equal(await page.getByLabel('Modification proposal result').count(),0);
+refused=true;await page.getByRole('button',{name:'Suggest modification',exact:true}).click();await page.getByText('Proposal unavailable',{exact:true}).waitFor();assert.equal(suggestionPayloads.at(-1).expected_context_digest,null);assert.equal(suggestionPayloads.at(-1).added_context_refs,undefined);
+refused=false;await page.getByRole('button',{name:'Add to Jarvis context',exact:true}).click();await page.getByRole('button',{name:'Remove context',exact:true}).waitFor();delayedResolve=true;await page.getByRole('button',{name:'Suggest modification',exact:true}).click();while(typeof delayedResolve!=='function')await new Promise(r=>setTimeout(r,25));await page.getByRole('button',{name:'Remove context',exact:true}).click();delayedResolve();delayedResolve=undefined;await page.waitForTimeout(200);assert.equal(await page.getByLabel('Modification proposal result').count(),0);
+await page.getByLabel('Suggest modification intent').fill('Intent only for Markdown');
+await page.locator('.repository-file-viewport').evaluate(el=>el.scrollTop=el.scrollHeight);
+await page.getByRole('button',{name:'long-code.ts file'}).click();await page.locator('.repository-file-viewport pre').waitFor();
+assert.equal(await page.getByLabel('Suggest modification intent').inputValue(),'');
+assert.equal(await page.locator('.repository-file-viewport').evaluate(el=>el.scrollTop),0);
+assert.equal(await page.getByRole('button',{name:'Suggest modification',exact:true}).isDisabled(),true);const scroll=await page.locator('.repository-file-viewport').evaluate(el=>({horizontal:el.scrollWidth>el.clientWidth,vertical:el.scrollHeight>el.clientHeight}));assert(scroll.horizontal&&scroll.vertical);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);await page.screenshot({path:evidence+'/FIXTURE-long-code.png'});
+await page.getByLabel('Literal repository search').fill('absent');await page.getByLabel('Literal repository search').press('Enter');await page.getByText('No matching file contents found.',{exact:true}).waitFor();await page.getByLabel('Literal repository search').fill('reader');await page.getByRole('button',{name:'Search',exact:true}).click();await page.getByRole('button',{name:'LONG.md · line 5',exact:true}).click();await page.getByRole('heading',{name:'Long fixture document'}).waitFor();
+partial=true;await page.getByRole('button',{name:'long-code.ts file'}).click();await page.getByText('Partial evidence · file',{exact:true}).waitFor();assert.equal(await page.getByRole('button',{name:'Add to Jarvis context',exact:true}).isDisabled(),true);assert.equal(await page.getByRole('button',{name:'Suggest modification',exact:true}).isDisabled(),true);
+assert.deepEqual(errors,[]);await writeFile(evidence+'/results.txt','ACTUAL: provider unavailable, truthful runtime/disabled actions; screenshots 1600/1280.\nSUPPLEMENTARY FIXTURE ONLY: long Markdown/raw/code scrolling, inspection details, context add/remove, digest dispatch/removal, late proposal discarded after removal, proposal fields and refusal, search Enter/empty/match, partial evidence disables actions.\nZero page errors or horizontal document overflow.\n');console.log('PASS SUPPLEMENTARY FIXTURE ONLY: reader, context removal/stale proposal, human results/refusal/search/partial');
+console.log('Evidence:',evidence);
+}finally{await browser?.close();backend.kill();frontend.kill();}

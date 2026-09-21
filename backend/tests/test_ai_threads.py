@@ -67,6 +67,8 @@ def test_thread_submit_local_fake_is_durable_and_idempotent() -> None:
     assert first.persistence_state == "captured"
     assert first.flow_state == "complete"
     assert first.attempt_count == 1
+    assert first.execution_class == "synthetic"
+    assert first.model_id is not None
     assert first.assistant_text is not None
 
     with open_sqlite_connection() as connection:
@@ -1116,3 +1118,31 @@ def test_jarvis_request_id_rejects_changed_bound_semantics(
             "SELECT COUNT(*) AS n FROM ai_jobs WHERE flow_id = ?",
             (first.flow_id,),
         ).fetchone()["n"] == 1
+
+
+@pytest.mark.parametrize("owner,kind,content,prompt", [
+    ("modeling", "requirement", "ordinary requirement", "Summarize"),
+    ("literature", "entry", 'api_key="fixture-secret-value"', "Summarize"),
+    ("model-dossier", "model-version", "ordinary model", 'password="fixture-secret-value"'),
+])
+def test_exact_memory_conversation_preserves_owner_sensitivity_refusal_before_dispatch(monkeypatch, owner, kind, content, prompt):
+    _bootstrap_workspace("guarded-memory")
+    thread = create_thread(AIThreadCreate(workspace_id="guarded-memory"))
+    monkeypatch.setattr(thread_service, "require_dispatchable_preview", lambda *_: SimpleNamespace(blocks=[{"content": content}]))
+    dispatched = []
+    monkeypatch.setattr(thread_service, "run_ai_task", lambda **kwargs: dispatched.append(kwargs))
+    route = {"modeling": ("memory-project-basis", "/memory/project-basis"), "literature": ("memory-literature", "/memory/literature"), "model-dossier": ("memory-models", "/memory/models")}[owner]
+    payload = AIThreadSubmit(
+        request_id="guarded-1", prompt=prompt, route_class="local:general",
+        jarvis_context={
+            "workspace_id": "guarded-memory",
+            "route": {"route_id": route[0], "canonical_path": route[1]},
+            "added_context_refs": [{"workspace_id": "guarded-memory", "owner": owner, "kind": kind, "id": "fixture-record", "revision": "r1"}],
+        },
+        expected_jarvis_context_digest="sha256:" + "a" * 64,
+    )
+    with pytest.raises(AIThreadError, match="Project Basis|secret-bearing"):
+        submit_interaction(workspace_id="guarded-memory", thread_id=thread.id, payload=payload)
+    assert dispatched == []
+    with open_sqlite_connection() as connection:
+        assert connection.execute("SELECT COUNT(*) FROM ai_thread_interactions").fetchone()[0] == 0

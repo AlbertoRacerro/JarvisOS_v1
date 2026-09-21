@@ -12,7 +12,7 @@ ProjectSearchKind = Literal[
     "literature_entry",
 ]
 ProjectSearchOwner = Literal["modeling", "model-dossier", "literature"]
-ProjectSearchMatchTier = Literal["exact", "prefix", "contains"]
+ProjectSearchMatchTier = Literal["exact", "prefix", "contains", "normalized", "tokens"]
 
 
 class StrictProjectSearchModel(BaseModel):

@@ -1,0 +1,17 @@
+PASS raw capture persists across reload
+PASS first conversation creates and stores a real interaction (synthetic responder, not AI evidence)
+PASS requirement approval, reconciliation, human search and disclosure
+memory/project-basis horizontal document overflow: false
+development/brainstorm horizontal document overflow: false
+coding/repository horizontal document overflow: false
+development/roadmap/timeline horizontal document overflow: false
+development/roadmap/calendar horizontal document overflow: false
+memory/models horizontal document overflow: false
+memory/literature horizontal document overflow: false
+design/process horizontal document overflow: false
+design/bluecad horizontal document overflow: false
+settings/appearance horizontal document overflow: false
+settings/ai horizontal document overflow: false
+settings/system horizontal document overflow: false
+PASS backend restart retains RAW, reconciled requirement and conversation
+Evidence: /workspace/scratch/61bf444950e2/evidence

@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import Any, cast
 
+from app.core.search_text import match_rank
 from app.modules.memory.literature_search import search_literature_sources
 from app.modules.modeling.model_dossier_search import search_model_dossier_index
 from app.modules.modeling.project_search_owner import search_context_records_literal
@@ -18,7 +19,7 @@ PROJECT_SEARCH_KINDS: tuple[ProjectSearchKind, ...] = (
     "literature_entry",
 )
 _KIND_ORDER = {kind: index for index, kind in enumerate(PROJECT_SEARCH_KINDS)}
-_TIER_ORDER = {"exact": 0, "prefix": 1, "contains": 2}
+_TIER_ORDER = {"exact": 0, "prefix": 1, "contains": 2, "normalized": 3, "tokens": 4}
 _MAX_OWNER_MATCHES = 101
 _MODELING_KINDS = ("requirement", "parameter", "assumption", "decision")
 _MODELING_STATUSES = {
@@ -36,27 +37,11 @@ def _nonempty(values: Iterable[str | None]) -> list[str]:
 
 
 def _match(query: str, fields: dict[str, str | None]) -> tuple[str, list[str]] | None:
-    needle = query.casefold()
-    exact: list[str] = []
-    prefix: list[str] = []
-    contains: list[str] = []
-    for name, raw in fields.items():
-        if not isinstance(raw, str) or not raw:
-            continue
-        value = raw.casefold()
-        if value == needle:
-            exact.append(name)
-        elif value.startswith(needle):
-            prefix.append(name)
-        elif needle in value:
-            contains.append(name)
-    if exact:
-        return "exact", exact
-    if prefix:
-        return "prefix", prefix
-    if contains:
-        return "contains", contains
-    return None
+    ranks = {name: match_rank(query, raw) for name, raw in fields.items()}
+    best = min(ranks.values(), default=99)
+    if best == 99:
+        return None
+    return list(_TIER_ORDER)[best], [name for name, rank in ranks.items() if rank == best]
 
 
 def _summary(*values: str | None) -> str | None:
@@ -114,6 +99,7 @@ def _modeling_results(workspace_id: str, query: str, kinds: list[str]) -> list[P
                 summary = _summary(record.decision_text, record.rationale, record.notes)
                 status = record.status
                 source_refs = []
+            fields["id"] = record.id
             matched = _match(query, fields)
             if matched is None:
                 continue

@@ -71,7 +71,7 @@ function readProjectKnowledgeHandoff(): ProjectKnowledgeHandoff | null {
 }
 
 function ProcessStage({ navigate }: PrimaryStageProps) {
-  const unavailableReason = "Future Process authoring control — unavailable until server-owned topology/evaluator authority is integrated.";
+  const unavailableReason = "The visual process editor is not connected to a topology-authoring service. Existing models and runs can be inspected separately.";
   const handoff = readProjectKnowledgeHandoff();
 
   return (
@@ -82,7 +82,7 @@ function ProcessStage({ navigate }: PrimaryStageProps) {
             <p className="eyebrow">Design</p>
             <h1 id="process-stage-title">Process workspace</h1>
             <p className="panel-subtitle">
-              Process topology editing will activate only when server-owned Process and evaluator contracts are integrated.
+              Inspect existing models and runs while the visual process editor is unavailable.
             </p>
           </div>
           <span className="design-stage__truth-state">Topology · Unavailable</span>
@@ -96,7 +96,7 @@ function ProcessStage({ navigate }: PrimaryStageProps) {
       {handoff && (
         <div className="final-fusion__context-strip" role="status" aria-label="Project Knowledge recomputation handoff">
           {handoff.valid ? (
-            <>Project Knowledge recomputation request context · revision {handoff.revisionId} · basis {handoff.basisDigest} · validation set {handoff.validationSetDigest} · requirements {handoff.requirementIds?.join(", ")}. Context is inspectable only; Process recomputation remains unavailable until its server owner exists.</>
+            <>Project Knowledge recomputation request context · revision {handoff.revisionId} · basis {handoff.basisDigest} · validation set {handoff.validationSetDigest} · requirements {handoff.requirementIds?.join(", ")}. Context is inspectable only; This editor cannot launch recomputation from the handoff.</>
           ) : (
             <>Incomplete Project Knowledge recomputation handoff ignored. No Process action is authorized from partial local URL context.</>
           )}
@@ -125,7 +125,7 @@ function ProcessStage({ navigate }: PrimaryStageProps) {
             <strong>Process equipment</strong>
             <span>Future palette</span>
           </div>
-          <div className="process-stage__palette-search" aria-disabled="true">Search equipment…</div>
+          <div className="process-stage__palette-search" aria-disabled="true">Equipment search unavailable</div>
           <div className="process-stage__palette-filters" aria-label="Equipment categories">
             {['All', 'Flow', 'Heat', 'Separation', 'Reaction'].map((label) => (
               <span key={label} className={label === 'All' ? 'is-active' : undefined}>{label}</span>
@@ -152,9 +152,9 @@ function ProcessStage({ navigate }: PrimaryStageProps) {
           <div className="process-stage__canvas-empty">
             <strong>No process topology is loaded.</strong>
             <p className="panel-subtitle">
-              This canvas becomes authoritative only after Process backends are connected. No topology is fabricated in the frontend.
+              A process calculation kernel exists, but this visual editor cannot create, connect or solve equipment yet. Existing model results remain available in their workspaces.
             </p>
-            <span className="process-stage__empty-badge">Visual scaffold</span>
+            <span className="process-stage__empty-badge">Visual editor unavailable</span><div className="process-stage__available-actions"><button type="button" onClick={() => navigate("/memory/models")}>Inspect models</button><button type="button" onClick={() => navigate("/runs")}>Open runs</button><button type="button" onClick={() => navigate("/engineering-data")}>Engineering data</button></div>
           </div>
         </div>
       </div>

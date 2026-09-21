@@ -102,7 +102,7 @@ function readableCode(value: string | null | undefined, fallback: string): strin
 
 function capabilitySummary(provider: ProviderSettings["providers"][number]): string {
   const location = providerLocation(provider.requires_network, provider.execution_class);
-  return `${location} · ${provider.enabled ? "Available for permitted tasks" : "Disabled"}`;
+  return `${location} · ${provider.enabled ? "Enabled in configuration · runtime availability not verified" : "Disabled in configuration"}`;
 }
 
 function Settings() {
@@ -362,7 +362,7 @@ function Settings() {
           State uncertain. Reload canonical state before another mutation. <button onClick={() => void manuallyReload()}>Reload</button>
         </InlineNotice>
       )}
-      {error && <InlineNotice tone="danger">{error}</InlineNotice>}
+      {error && <InlineNotice tone="danger">{error}{!uncertain && !settings && <button disabled={loading} onClick={() => void manuallyReload()}>Reload settings</button>}</InlineNotice>}
       {message && <InlineNotice tone="success">{message}</InlineNotice>}
 
       <div className="settings-grid">
@@ -407,7 +407,7 @@ function Settings() {
 
         <Surface className="settings-card">
           <h2>AI permission & budget</h2>
-          <p className="settings-card__summary">External calls: <strong>{providers?.external_calls_allowed ? "Allowed" : "Blocked"}</strong>{providers?.blocking_reason ? ` — ${readableCode(providers.blocking_reason, "Blocked by policy")}` : ""}</p>
+          <p className="settings-card__summary">External calls: <strong>{providers ? (providers.external_calls_allowed ? "Allowed" : "Blocked") : (loading ? "Checking" : "Unavailable")}</strong>{providers?.blocking_reason ? ` — ${readableCode(providers.blocking_reason, "Blocked by policy")}` : ""}</p>
           <p className="settings-muted">{settings ? savedPaidAiSummary(settings.paid_ai_enabled, settings.monthly_api_budget_usd) : "Checking budget policy."}</p>
           {settings && draft && (draft.paid_ai_enabled !== settings.paid_ai_enabled || draft.monthly_api_budget_usd !== String(settings.monthly_api_budget_usd)) ? <p className="settings-muted">Pending unsaved draft; current permission is unchanged until Save.</p> : null}
           {providers ? <details><summary>Technical details</summary><p>Policy mode · {providers.policy_mode}</p><p>Blocking reason code · {providers.blocking_reason ?? "none"}</p></details> : null}
@@ -425,7 +425,7 @@ function Settings() {
 
         <Surface className="settings-card">
           <h2>Provider catalogue</h2>
-          <p className="settings-card__summary">Available AI capabilities and the permission required to use them. Credentials are shown only as status.</p>
+          <p className="settings-card__summary">Configured providers and policy permission. Enabled configuration does not prove that a runtime or model is reachable. Credentials are shown only as status.</p>
           <div className="settings-fields" data-provider-settings-list>
             {providers?.providers.map((provider) => (
               <div key={provider.provider_id} data-provider-id={provider.provider_id}>
@@ -465,8 +465,8 @@ function Settings() {
         <Surface className="settings-card">
           <h2>Current usage</h2>
           <dl className="settings-facts">
-            <div><dt>Spend this month</dt><dd>${providers?.spend_month_to_date_usd ?? status?.spend_month_to_date_usd ?? 0}</dd></div>
-            <div><dt>Scaleway token usage</dt><dd>{status?.usage_total_tokens ?? 0}</dd></div>
+            <div><dt>Spend this month</dt><dd>{providers?.spend_month_to_date_usd != null || status?.spend_month_to_date_usd != null ? `$${providers?.spend_month_to_date_usd ?? status?.spend_month_to_date_usd}` : loading ? "Checking" : "Unavailable"}</dd></div>
+            <div><dt>Scaleway token usage</dt><dd>{status?.usage_total_tokens ?? (loading ? "Checking" : "Unavailable")}</dd></div>
             <div><dt>Budget status</dt><dd>{readableCode(status?.budget_status, "Checking")}</dd></div>
             <div><dt>Default provider</dt><dd>{providerName(providers?.default_provider_id ?? status?.provider_id ?? "checking")}</dd></div>
           </dl>

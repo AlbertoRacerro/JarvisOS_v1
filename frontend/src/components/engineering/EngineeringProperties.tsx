@@ -7,7 +7,6 @@ import {
   getBluecadCandidateAggregate,
   listModelImplementations,
   listParameters,
-  listWorkspaces,
   previewModelBindings,
   runRunnerJob,
   type BindingPreviewResponse,
@@ -420,17 +419,6 @@ export function useEngineeringProperties(
     pendingPreviousRunLoadRef.current = null;
     setPreviousRunBaseline(null);
   }, [workspaceId]);
-
-  useEffect(() => {
-    if (workspaceId) return;
-    const generation = ++loadGeneration.current;
-    listWorkspaces()
-      .then((items) => {
-        if (generation !== loadGeneration.current) return;
-        onWorkspaceChange(items[0]?.id ?? null);
-      })
-      .catch(() => undefined);
-  }, [workspaceId, onWorkspaceChange]);
 
   useEffect(() => {
     if (!workspaceId) {
@@ -1150,6 +1138,7 @@ export function EngineeringPropertiesPanel({
 
   return (
     <div className="engineering-properties">
+      {stageContext ? <section className="shell-properties__inspect" aria-label="Stage inspector">{stageContext}</section> : null}
       {controller.implementations.length === 0 ? (
         <InlineNotice tone="neutral">No eligible model input contract is registered in this workspace.</InlineNotice>
       ) : (
@@ -1240,7 +1229,6 @@ export function EngineeringPropertiesPanel({
         </>
       )}
 
-      {stageContext ? <details className="shell-properties__inspect"><summary>Current stage context</summary>{stageContext}</details> : null}
       {controller.semanticSource ? (
         <details className="shell-properties__inspect">
           <summary>Semantic source</summary>

@@ -1,4 +1,12 @@
 import { API_BASE_URL } from "./client";
+import type { KnowledgeContextPreview } from "./knowledgeActions";
+
+export type ConversationRoute = {
+  route_class: string;
+  label: string;
+  model_id: string;
+  execution_class: "local_compute" | "synthetic";
+};
 
 export type ThreadSummary = {
   id: string;
@@ -22,6 +30,8 @@ export type ThreadInteraction = {
   terminal_reason: string | null;
   attempt_count: number;
   terminal_attempt_id: string | null;
+  execution_class?: string | null;
+  model_id?: string | null;
   proposal_ids: string[];
   proposal_count: number;
   proposals_truncated: boolean;
@@ -77,6 +87,10 @@ export async function listThreads(workspaceId: string): Promise<ThreadSummary[]>
   return result.threads;
 }
 
+export function getConversationOptions(): Promise<{routes: ConversationRoute[]; availability: string}> {
+  return requestJson("/ai/threads/conversation-options");
+}
+
 export function getThread(workspaceId: string, threadId: string): Promise<ThreadDetail> {
   return requestJson(
     `/ai/threads/${encodeURIComponent(threadId)}?workspace_id=${encodeURIComponent(workspaceId)}`
@@ -105,7 +119,8 @@ export async function submitThreadInteraction(
   threadId: string,
   requestId: string,
   prompt: string,
-  context?: { selection: ContextSelection; expectedDigest: string }
+  context?: { selection: ContextSelection; expectedDigest: string },
+  options?: { routeClass: string; knowledgeContext?: KnowledgeContextPreview | null }
 ): Promise<ThreadInteraction> {
   const result = await requestJson<{ interaction: ThreadInteraction }>(
     `/ai/threads/${encodeURIComponent(threadId)}/interactions?workspace_id=${encodeURIComponent(workspaceId)}`,
@@ -114,6 +129,22 @@ export async function submitThreadInteraction(
       body: JSON.stringify({
         request_id: requestId,
         prompt,
+        ...(options ? { route_class: options.routeClass } : {}),
+        ...(options?.knowledgeContext ? {
+          jarvis_context: {
+            workspace_id: options.knowledgeContext.workspace_id,
+            route: {
+              route_id: options.knowledgeContext.route_id,
+              canonical_path: {
+                "memory-project-basis": "/memory/project-basis",
+                "memory-models": "/memory/models",
+                "memory-literature": "/memory/literature"
+              }[options.knowledgeContext.route_id]
+            },
+            added_context_refs: options.knowledgeContext.exact_refs
+          },
+          expected_jarvis_context_digest: options.knowledgeContext.context_digest
+        } : {}),
         ...(context
           ? { context_selection: context.selection, expected_context_digest: context.expectedDigest }
           : {})

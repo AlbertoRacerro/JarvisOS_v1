@@ -37,7 +37,7 @@ includesAll(api, [
 check(!/api\.github\.com|github\.com\/api|Authorization|GITHUB_TOKEN|ghp_/i.test(api), "browser API client gained provider/credential authority");
 
 includesAll(workbench, [
-  "Server-owned 118 repository truth",
+  "Exact repository state available",
   "resolvedSha",
   "readRepositoryTree",
   "readRepositoryFile",
@@ -46,7 +46,7 @@ includesAll(workbench, [
   "readChecks",
   "readReviews",
   "readSafeGithubUrl",
-  "Open server-validated GitHub path",
+  "Open on GitHub",
   "Partial evidence",
   "Truncated evidence is not presented as complete.",
   "treePath",
@@ -109,13 +109,13 @@ includesAll(workbench, [
   "No synthetic stages are shown.",
   "inspectCodingTarget",
   "previewCodingContext",
-  "Add selected exact file to proposal context",
+  "Add to Jarvis context",
   "context_digest",
   "added_context_refs",
   "suggestCodingModification",
-  "Repository browsing is context-neutral.",
-  "READ / CONTEXT / PROPOSE only",
-  "they do not commit, apply, execute, push, create a PR, merge, or mutate STATUS"
+  "Browsing has not entered Jarvis context",
+  "Proposals for review",
+  "Suggestions remain proposals for review."
 ], "140 operator contract is incomplete");
 check(
   /if \(next\.state !== "current"[\s\S]*?return;\s*}\s*proposalGeneration\.current \+= 1;\s*setProposal\(null\);\s*setContextBinding\(next\);/.test(workbench),

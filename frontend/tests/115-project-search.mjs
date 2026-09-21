@@ -14,7 +14,7 @@ assert.match(api, /\{ signal \}/);
 
 assert.match(panel, /Enter at least two characters to search this workspace\./);
 assert.match(panel, /Searching project records…/);
-assert.match(panel, /No project records match this literal query\./);
+assert.match(panel, /No records match\. Try fewer words or another term\./);
 assert.match(panel, /Project search unavailable/);
 assert.match(panel, /Showing the first bounded results\./);
 
@@ -25,7 +25,7 @@ assert.match(panel, /\}, \[workspaceId\]\);/);
 
 assert.match(panel, /navigate\(navigationTarget\(result\)\)/);
 assert.match(panel, /Project Basis|Project knowledge/);
-assert.match(panel, /Searching does not add Jarvis context\./);
+assert.doesNotMatch(panel, /context.*append|append.*context/i);
 assert.doesNotMatch(panel, /Add to Jarvis|postJson|putJson|deleteJson|execute|commit/i);
 assert.match(literature, /className="final-fusion__source-list"/, "exact Literature search targets must remain inside the bounded scrolling source list");
 
