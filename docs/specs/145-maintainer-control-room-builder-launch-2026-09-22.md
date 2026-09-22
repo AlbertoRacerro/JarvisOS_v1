@@ -67,7 +67,7 @@ Freeze only these shared shapes:
 
 A. Hermes ↔ Jarvis
 - AgentSessionRef: jarvis_thread_id, hermes_session_id, profile_id, workspace_id, generation, upstream_revision.
-- AgentControlCommand: start/interupt/resume/close, correlation_id, expected_generation, deadline.
+- AgentControlCommand: start/interrupt/resume/close, correlation_id, expected_generation, deadline.
 - AgentEvent: event_id, session_ref, kind, timestamp, bounded payload_ref/digest, evidence_refs.
 - CapabilityGrantRef: server-owned capability id, scope/constraints, expiry/revocation metadata. It is not permission inferred from model output.
 
@@ -116,7 +116,7 @@ Planning merge
   - H 146
   - L 147
   - R 148
-  - K1 102 + 106 engineering contract adoption
+  - K1 102 → 106 engineering contract adoption
 → after 102: P starts 103
 → after 106: C starts 014
 → P: 103 → 104 → 105 → 107 → 108 → 109
@@ -136,11 +136,11 @@ title: Shared contract and engineering-evidence freeze
 
 product outcome: Stable minimal contracts that prevent H/L/R/P/C from inventing incompatible session, inference, tool, decision, retrieval, resource, evidence and evaluator envelopes.
 
-canonical spec/readiness identity: 145 first; then 102 and 106 after 145 merges. All are ready in STATUS.
+canonical spec/readiness identity: 145 first; then 102 followed by 106 after 145 merges. All are ready in STATUS.
 
 exact prerequisite/base SHA: planning authority base 7748b022d4a95f20943444672ba332b4dd69819f. Implementation MUST re-resolve and use the exact master SHA containing this planning PR; K1 must use the exact master SHA containing K0.
 
-dependencies: existing canonical SQL, AI execution, egress/budget, context/action, Project Knowledge, repository-truth and architecture-enforcement owners. K1 additionally depends on merged 145.
+dependencies: existing canonical SQL, AI execution, egress/budget, context/action, Project Knowledge, repository-truth and architecture-enforcement owners. K1 starts after merged 145; 106 additionally waits for merged 102.
 
 existing owners/interfaces to reuse: backend/app/core database/schema/repository/paths; run_ai_task and ai_jobs; 059b/061 flow/egress owners; 111 context/action contracts; 112 Project Knowledge; 118 repository truth; 044/077 evidence.
 
@@ -160,7 +160,7 @@ runtime/browser/hardware/solver evidence: no browser required; one Windows + Lin
 
 scientific qualification requirement: 102/106 may encode qualification metadata only; they must not declare any model qualified.
 
-stop condition: 145 merged, then 102/106 merged with no competing shared schema owners and downstream builders can consume frozen versions.
+stop condition: 145 merged, then 102 and 106 merged with no competing shared schema owners and downstream builders can consume frozen versions.
 
 expected handoff: exact SHAs, schema/module paths, version numbers, migration IDs, tests, compatibility notes.
 
@@ -441,7 +441,7 @@ Group 2 — first real parallel wave after 145 merge:
 - H/146;
 - L/147;
 - R/148;
-- K1/102+106;
+- K1/102→106;
 - P may perform bounded 103 qualification preparation, but implementation using shared engineering contracts waits for 102;
 - no C runtime mutation until 106.
 
