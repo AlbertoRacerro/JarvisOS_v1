@@ -8,9 +8,9 @@ Two jobs:
    (decisions, assumptions, parameters) into context blocks, truncated by a char
    budget. NO retrieval, NO vector search, NO embeddings, NO LLM ranking/summary.
 
-The ContextBundle output shape is the seam where future retrieval plugs in: a
-smarter selector can replace the full-dump while keeping the same contract
-(blocks + digest + source manifest + budget + provenance).
+WorkspaceContextPack is the deterministic non-retrieval pack. Retrieval plugs in
+through the frozen 145 ``retrieval_contracts.ContextBundle`` (authoritatively
+re-read refs + manifest + digest), not by extending this pack.
 """
 
 from __future__ import annotations
@@ -131,7 +131,7 @@ class ContextSelectionSpec:
 
 
 @dataclass
-class ContextBundle:
+class WorkspaceContextPack:
     blocks: list[dict]
     context_digest: str | None
     sources: list[dict]
@@ -187,7 +187,7 @@ def build_workspace_context_bundle(
     workspace_id: str = "bluerev",
     budget_chars: int = DEFAULT_CONTEXT_BUDGET_CHARS,
     selection: ContextSelectionSpec | None = None,
-) -> ContextBundle:
+) -> WorkspaceContextPack:
     """Build project context.
 
     With no selection spec this preserves the legacy full-dump ordering:
@@ -225,7 +225,7 @@ def build_workspace_context_bundle(
             continue
         included.append(block)
 
-    return ContextBundle(
+    return WorkspaceContextPack(
         blocks=included,
         context_digest=canonical_digest(included) if included else None,
         sources=context_sources_manifest(included),
@@ -264,7 +264,7 @@ def _block_for_record(kind: str, record) -> dict:
 
 def _build_selected_workspace_context_bundle(
     workspace_id: str, budget_chars: int, selection: ContextSelectionSpec
-) -> ContextBundle:
+) -> WorkspaceContextPack:
     from app.modules.bluecad.evidence import select_evidence_records
     from app.modules.modeling.service import select_context_records
 
@@ -300,7 +300,7 @@ def _build_selected_workspace_context_bundle(
             key=lambda index: (_CONTEXT_PACK_DROP_PRIORITY.get(kept[index].get("type"), 0), -index),
         )
         kept.pop(drop_index)
-    return ContextBundle(
+    return WorkspaceContextPack(
         blocks=kept,
         context_digest=canonical_digest(kept) if kept else None,
         sources=context_sources_manifest(kept),

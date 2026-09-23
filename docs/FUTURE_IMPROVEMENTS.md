@@ -50,3 +50,21 @@ Each entry must contain:
 - **Expected benefit if revisited:** a future product requirement could choose stronger finalization/visibility semantics for failed calc runs, but that would be a new contract rather than a repair of accepted 043 behavior.
 - **Likely surface:** `backend/app/modules/runner/service.py`, calc-run artifact visibility, and focused `backend/tests/test_python_runner_calc_v0.py` failure fixtures.
 - **Freshness invalidators:** reopen only if a concrete consumer treats failed-run artifacts as successful/authoritative output, a new accepted contract requires transactional artifact+proposal finalization, or evidence shows stale artifacts can cross an existing authority/promotion boundary.
+
+### F11 — retire the `tools/` Tool/ToolResult stub in favor of the 145 tool contracts — PARK
+
+- **Origin:** spec 145 / FOUNDATION-CONTRACTS-1 implementation on base `b623fa863b0e58739a4664f7aadad0202f3f8126`.
+- **Observation:** `backend/app/modules/tools/base.py` still defines an unused placeholder `Tool` protocol and `ToolResult(status, output)` dataclass (only referenced by `tools/registry.py`). 145 freezes the governed `StructuredToolCall`/`StructuredToolResult` in `backend/app/modules/ai/agent_contracts.py`.
+- **Disposition:** PARK / non-blocking. The stub is not a wire contract and has no product consumer; replacing or deleting it belongs with the H-146 capability/tool broker that will actually register executable tools.
+- **Expected benefit if revisited:** one tool-exchange vocabulary; removes a misleading second `ToolResult` shape before any tool is registered.
+- **Likely surface:** `backend/app/modules/tools/`, the H-146 broker.
+- **Freshness invalidators:** drop if H-146 deletes or rewrites `app/modules/tools/`.
+
+### F12 — restart-durable or cross-process resource leases — PARK
+
+- **Origin:** spec 145 / FOUNDATION-CONTRACTS-1 resource-lease decision on base `b623fa863b0e58739a4664f7aadad0202f3f8126`.
+- **Observation:** 145 freezes `RuntimeResourceSnapshot`, `ResourceReservationRequest`, `ResourceLease` and the pure `grant_lease`/`end_lease` generation+version CAS state machine in `backend/app/modules/local_ai/resource_contracts.py`, with no SQLite table. Every local GPU dispatch currently happens inside the single backend process through `run_ai_task`; after a restart the arbiter re-observes runtime truth rather than trusting surviving rows.
+- **Disposition:** PARK / non-blocking. No accepted requirement needs a lease to outlive the backend process, and no existing owner arbitrates local GPU use.
+- **Expected benefit if revisited:** correct admission if L-147/H-146 evidence shows admission spanning independent processes (for example a solver or worker that allocates GPU/RAM outside the backend) or restart-surviving occupancy that runtime observation cannot see.
+- **Likely surface:** a K-owned additive migration storing exactly the frozen lease fields (id, request/owner/correlation, resources, snapshot generation, state, version, granted/expires/ended timestamps, release reason), with `WHERE id=? AND state=? AND version=?` transitions and startup reconciliation against observed runtime state.
+- **Freshness invalidators:** reopen only with concrete L/H evidence of cross-process GPU/RAM admission or unobservable restart-surviving occupancy.
