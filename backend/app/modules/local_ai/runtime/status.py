@@ -18,7 +18,7 @@ LOCAL_RUNTIME_STATUS_TIMEOUT_S = 1.5
 def get_local_ai_runtime_status(*, client: Any | None = None) -> dict[str, Any]:
     configured_route_models = _configured_local_route_models()
     configured_endpoint = configured_ollama_endpoint_raw()
-    status = {
+    status: dict[str, Any] = {
         "ollama_reachable": False,
         "ollama_version": None,
         "installed_models": [],
