@@ -19,7 +19,7 @@ from typing import Annotated, Final, Literal, Protocol
 from pydantic import Field, StringConstraints, field_validator, model_validator
 
 from app.modules.ai.jarvis_context_models import ContractId, FrozenContract, SourceRef, UtcDatetime
-from app.modules.engineering.evidence_contracts import FidelityTier
+from app.modules.engineering.evidence_contracts import FidelityTier, fidelity_rank
 from app.modules.engineering.refs import (
     DynamicModelRef,
     EnvironmentalScenarioRef,
@@ -103,6 +103,12 @@ _KNOWN_BACKEND_CODES: Final[dict[str, FailureCategory]] = {
     "TIMEOUT": "timeout",
     "PARSE_ERROR": "result_parse_error",
     "SOLVE_ERROR": "solver_crash",
+    "SOLVE_DIVERGED": "did_not_converge",
+    "MESH_FAIL": "solver_crash",
+    "MESH_ERROR": "solver_crash",
+    "MESH_GROUP_EMPTY": "invalid_input",
+    "MESH_ELEMENT_ORDER_MISMATCH": "invalid_input",
+    "MESH_HIGH_ORDER_INVALID": "invalid_input",
     # process kernel
     "correlation_not_qualified": "outside_validity_domain",
     "unit_dimension_unsupported": "unsupported_request",
@@ -129,6 +135,13 @@ def _unique_names(values: tuple[NamedQuantity, ...], label: str) -> tuple[NamedQ
     if len(set(names)) != len(names):
         raise ValueError(f"{label} names must be unique")
     return values
+
+
+def _same_project(workspace_id: str, refs: tuple[SourceRef | None, ...], label: str) -> None:
+    """Workspace-scoped refs must stay in the project; global refs (no workspace) are allowed."""
+    for ref in refs:
+        if ref is not None and ref.workspace_id is not None and ref.workspace_id != workspace_id:
+            raise ValueError(f"{label} refs must belong to the request's project")
 
 
 def _bounded_options(value: dict[str, OptionValue]) -> dict[str, OptionValue]:
@@ -206,10 +219,11 @@ class EvaluationRequest(FrozenContract):
 
     @model_validator(mode="after")
     def validate_request(self) -> EvaluationRequest:
-        workspace = self.request_ref.workspace_id
-        for ref in (self.subject_ref, self.study_ref, self.scenario_ref, self.design_envelope_ref):
-            if ref is not None and ref.workspace_id != workspace:
-                raise ValueError("every engineering ref in a request must belong to the request's project")
+        _same_project(
+            self.request_ref.workspace_id,
+            (self.subject_ref, self.study_ref, self.scenario_ref, self.design_envelope_ref, self.backend_case_ref),
+            "request",
+        )
         if self.deadline_at <= self.requested_at:
             raise ValueError("deadline_at must be after requested_at")
         return self
@@ -259,8 +273,11 @@ class EvaluationResult(FrozenContract):
 
     @model_validator(mode="after")
     def status_is_consistent(self) -> EvaluationResult:
-        if self.result_ref.workspace_id != self.request_ref.workspace_id:
-            raise ValueError("result and request must belong to the same project")
+        _same_project(
+            self.request_ref.workspace_id,
+            (self.result_ref, self.validity, self.qualification_record_ref, *self.output_artifacts, *self.evidence_refs),
+            "result",
+        )
         if self.started_at is not None and self.started_at > self.completed_at:
             raise ValueError("started_at must not be after completed_at")
         if self.status == "succeeded":
@@ -292,8 +309,14 @@ def validate_evaluation_result(request: EvaluationRequest, result: EvaluationRes
         raise EvaluatorContractError("result answers a different request")
     if result.evaluator_id != request.evaluator_id:
         raise EvaluatorContractError("result comes from a different evaluator than requested")
-    if result.status == "succeeded" and result.completed_at > request.deadline_at:
+    if result.status != "succeeded":
+        return
+    if result.completed_at > request.deadline_at:
         raise EvaluatorContractError("a result completed after the request deadline cannot be succeeded")
+    if request.requested_fidelity is not None and fidelity_rank(result.fidelity) < fidelity_rank(request.requested_fidelity):
+        raise EvaluatorContractError(
+            "a result below the requested fidelity is not an answer; refuse with unsupported_request instead"
+        )
 
 
 class EngineeringEvaluator(Protocol):

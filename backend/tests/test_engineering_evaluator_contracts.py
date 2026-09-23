@@ -93,6 +93,31 @@ def test_request_and_result_round_trip_and_answer_each_other() -> None:
         evc.validate_evaluation_result(request, _result(completed_at=LATER + timedelta(seconds=1)))
 
 
+def test_lower_fidelity_success_does_not_answer_an_escalation() -> None:
+    escalation = _request(requested_fidelity="field_resolved")
+    with pytest.raises(evc.EvaluatorContractError):
+        evc.validate_evaluation_result(escalation, _result(fidelity="screening"))
+    evc.validate_evaluation_result(escalation, _result(fidelity="field_resolved"))
+    refused = _result("refused", fidelity="screening",
+                      failure={"category": "unsupported_request", "backend_code": "FIDELITY_UNAVAILABLE"})
+    evc.validate_evaluation_result(escalation, refused)
+
+
+def test_case_artifact_and_validity_refs_cannot_cross_projects() -> None:
+    foreign = {"authority_owner": "artifacts", "object_type": "artifact", "object_id": "a1",
+               "workspace_id": "other", "content_digest": "sha256:" + "d" * 64}
+    with pytest.raises(ValidationError):
+        _request(backend_case_ref=foreign)
+    _request(backend_case_ref={k: v for k, v in foreign.items() if k != "workspace_id"})
+    with pytest.raises(ValidationError):
+        _result("succeeded", output_artifacts=[foreign])
+    with pytest.raises(ValidationError):
+        _result("succeeded", evidence_refs=[foreign])
+    with pytest.raises(ValidationError):
+        _result("succeeded", validity={"authority_owner": "evidence", "object_id": "v", "workspace_id": "other",
+                                       "revision": "1", "qualification_status": "candidate"})
+
+
 def test_request_refs_stay_in_one_project_and_inputs_are_typed() -> None:
     with pytest.raises(ValidationError):
         _request(subject_ref=MODEL | {"workspace_id": "other"})
@@ -188,6 +213,12 @@ def test_every_existing_backend_code_maps_to_a_specific_category() -> None:
         assert evc.failure_category_for_code(code) == "not_available"
     assert evc.failure_category_for_code("TIMEOUT") == "timeout"
     assert evc.failure_category_for_code("PARSE_ERROR") == "result_parse_error"
+    adapters_text = "".join((APP / "bluecad" / name).read_text(encoding="utf-8")
+                            for name in ("fem_adapter.py", "fem_adapter_base.py", "mesh_adapter.py"))
+    for code, category in (("SOLVE_DIVERGED", "did_not_converge"), ("MESH_FAIL", "solver_crash"),
+                           ("MESH_GROUP_EMPTY", "invalid_input")):
+        assert f'"{code}"' in adapters_text
+        assert evc.failure_category_for_code(code) == category
     assert evc.failure_category_for_code("totally_new_backend_code") == "internal_error"
 
 
