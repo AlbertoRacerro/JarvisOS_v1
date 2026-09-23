@@ -208,6 +208,54 @@ def test_json_round_trip_preserves_every_contract_family() -> None:
         assert type(sample).model_validate_json(sample.model_dump_json()) == sample
 
 
+@pytest.mark.parametrize(
+    "field, value",
+    [
+        ("command_id", ""),
+        ("command_id", "x" * 129),
+        ("command_id", "-leading"),
+        ("command_id", "has space"),
+        ("command_id", "a/b"),
+        ("command_id", 7),
+        ("requested_at", "2026-09-23T12:00:00"),
+        ("requested_at", "yesterday"),
+        ("expected_generation", -1),
+        ("kind", "restart"),
+        ("workspace_id", ["bluerev"]),
+    ],
+)
+def test_hostile_control_command_fields_are_refused(field: str, value: object) -> None:
+    payload = _command().model_dump(mode="json") | {field: value}
+    with pytest.raises(ValidationError):
+        agent.AgentControlCommand.model_validate(payload)
+
+
+@pytest.mark.parametrize(
+    "digest",
+    ["sha256:" + "A" * 64, "sha256:" + "a" * 63, "a" * 64, "md5:" + "a" * 32, "sha256:" + "g" * 64],
+)
+def test_malformed_digests_are_refused_everywhere(digest: str) -> None:
+    with pytest.raises(ValidationError):
+        _ref(content_digest=digest)
+    with pytest.raises(ValidationError):
+        _envelope(context_bundle_id="bundle-1", context_bundle_digest=digest)
+    with pytest.raises(ValidationError):
+        retrieval.ContextBundleItem(source_ref=_ref(), content_digest=digest, token_estimate=0, expansion_level=0)
+
+
+def test_collection_bounds_are_enforced_at_max_plus_one() -> None:
+    refs = [_ref(object_id=f"dec-{i}") for i in range(agent.MAX_REFS + 1)]
+    _envelope(provenance_refs=refs[: agent.MAX_REFS])
+    with pytest.raises(ValidationError):
+        _envelope(provenance_refs=refs)
+    candidates = [f"c{i}" for i in range(decision.MAX_CANDIDATES + 1)]
+    _decision_request(candidate_set=candidates[: decision.MAX_CANDIDATES])
+    with pytest.raises(ValidationError):
+        _decision_request(candidate_set=candidates)
+    with pytest.raises(ValidationError):
+        _decision_request(candidate_set=["a", "a"])
+
+
 # --- A. session / control / events / grants ----------------------------------
 
 
@@ -231,6 +279,8 @@ def test_control_command_refuses_stale_generation_and_superseded_sessions() -> N
         agent.check_control_target(_command(hermes_session_id="hs-old"), current, now=NOW)
     with pytest.raises(agent.AgentControlTargetError):
         agent.check_control_target(_command(jarvis_thread_id="thread-2"), current, now=NOW)
+    with pytest.raises(agent.AgentControlTargetError):
+        agent.check_control_target(_command(profile_id="other-profile"), current, now=NOW)
     with pytest.raises(agent.AgentControlTargetError):
         agent.check_control_target(_command(), None, now=NOW)
     with pytest.raises(agent.AgentControlTargetError):
@@ -626,6 +676,10 @@ def test_context_bundle_digest_pins_ordered_resolved_items() -> None:
         _bundle([first, second], expansion_level=0)
     with pytest.raises(ValidationError):
         _bundle([first, second], evidence_manifest=[])
+    with pytest.raises(ValidationError):
+        retrieval.ContextBundleItem(
+            source_ref=_ref(content_digest=DIGEST), content_digest=OTHER_DIGEST, token_estimate=1, expansion_level=0
+        )
     envelope = _envelope(context_bundle_id=bundle.bundle_id, context_bundle_digest=bundle.bundle_digest)
     assert envelope.context_bundle_digest == bundle.bundle_digest
 
@@ -633,12 +687,14 @@ def test_context_bundle_digest_pins_ordered_resolved_items() -> None:
 # --- E. engineering envelopes ------------------------------------------------
 
 
-@pytest.mark.parametrize("unit", ["K", "degC", "mol/L", "J/(mol*K)", "1/h", "kg/m3", "gDW", "Pa*s", "1"])
+@pytest.mark.parametrize(
+    "unit", ["K", "degC", "Pa", "m/s", "mol/L", "J/(mol*K)", "W/(m**2*K)", "1/h", "kg/m3", "m2", "gDW", "Pa*s", "1"]
+)
 def test_quantity_accepts_units_from_the_single_pint_owner(unit: str) -> None:
     assert eng.Quantity(value=1.0, unit=unit).unit == unit
 
 
-@pytest.mark.parametrize("value, unit", [(float("nan"), "K"), (float("inf"), "K"), (True, "K"), (1.0, "furlongz"), (1.0, " K"), (1.0, "2*m")])
+@pytest.mark.parametrize("value, unit", [(float("nan"), "K"), (float("inf"), "K"), (True, "K"), (1.0, "furlongz"), (1.0, " K"), (1.0, "2*m"), (1.0, "m2/s")])
 def test_quantity_rejects_non_finite_boolean_or_unknown_units(value: object, unit: str) -> None:
     with pytest.raises(ValidationError):
         eng.Quantity.model_validate({"value": value, "unit": unit})

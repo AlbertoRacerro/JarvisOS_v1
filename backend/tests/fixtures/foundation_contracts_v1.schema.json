@@ -3909,7 +3909,7 @@
         }
       },
       "additionalProperties": false,
-      "description": "A finite magnitude in a unit understood by the single Pint owner.",
+      "description": "A finite magnitude in a unit understood by the single Pint owner.\n\nCompound units use Pint syntax (``W/(m**2*K)``); compact exponents such as\n``m2`` are accepted only as whole reviewed tokens (``m2``, ``kg/m3``).",
       "properties": {
         "basis_ref": {
           "anyOf": [
@@ -5930,7 +5930,7 @@
         },
         "Quantity": {
           "additionalProperties": false,
-          "description": "A finite magnitude in a unit understood by the single Pint owner.",
+          "description": "A finite magnitude in a unit understood by the single Pint owner.\n\nCompound units use Pint syntax (``W/(m**2*K)``); compact exponents such as\n``m2`` are accepted only as whole reviewed tokens (``m2``, ``kg/m3``).",
           "properties": {
             "basis_ref": {
               "anyOf": [

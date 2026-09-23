@@ -148,6 +148,8 @@ def check_control_target(command: AgentControlCommand, current: AgentSessionRef 
             raise AgentControlTargetError(f"{command.kind} requires a bound session")
         if current.hermes_session_id != command.hermes_session_id:
             raise AgentControlTargetError(f"{command.kind} targets a superseded hermes session")
+        if current.profile_id != command.profile_id:
+            raise AgentControlTargetError(f"{command.kind} names a different profile than the bound session")
     if command.expected_generation != current_generation:
         raise StaleAgentGenerationError(
             f"expected generation {command.expected_generation}, current is {current_generation}"
@@ -268,8 +270,11 @@ def run_ai_task_kwargs(
 
     ``context_blocks`` are the blocks the caller materialized from the envelope's
     context bundle after authoritative reread; run_ai_task re-digests them.
-    run_ai_task takes no deadline: the caller refuses an expired envelope before
-    dispatch and cancels through the envelope's flow (``cancelled_terminal``).
+    run_ai_task has no deadline, cancellation or model-override parameter today.
+    The H/L execution adapters own enforcing ``deadline_at``/``cancellation_id``
+    during execution and binding a revalidated ``model_candidate``; a local
+    candidate is admitted only under a ``ResourceLease`` whose request has
+    ``owner_kind="inference_envelope"`` and ``owner_id=envelope_id``.
     """
     return {
         "user_prompt": envelope.prompt,

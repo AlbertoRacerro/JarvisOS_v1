@@ -118,7 +118,11 @@ class StudyRef(EngineeringRef):
 
 
 class Quantity(FrozenContract):
-    """A finite magnitude in a unit understood by the single Pint owner."""
+    """A finite magnitude in a unit understood by the single Pint owner.
+
+    Compound units use Pint syntax (``W/(m**2*K)``); compact exponents such as
+    ``m2`` are accepted only as whole reviewed tokens (``m2``, ``kg/m3``).
+    """
 
     value: float = Field(allow_inf_nan=False)
     unit: str = Field(min_length=1, max_length=64)

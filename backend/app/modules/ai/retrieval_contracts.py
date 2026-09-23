@@ -97,6 +97,12 @@ class ContextBundleItem(FrozenContract):
     token_estimate: int = Field(ge=0)
     expansion_level: int = Field(ge=0, le=MAX_EXPANSION_LEVEL)
 
+    @model_validator(mode="after")
+    def digest_matches_pinned_ref(self) -> ContextBundleItem:
+        if self.source_ref.content_digest is not None and self.source_ref.content_digest != self.content_digest:
+            raise ValueError("item content_digest must equal the ref's pinned content_digest")
+        return self
+
 
 class ContextManifestEntry(FrozenContract):
     source_ref: SourceRef
