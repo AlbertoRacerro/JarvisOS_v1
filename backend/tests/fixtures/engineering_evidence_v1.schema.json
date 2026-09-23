@@ -431,7 +431,7 @@
         }
       },
       "additionalProperties": false,
-      "description": "Evidence behind a qualification status and who promoted it.",
+      "description": "Evidence behind a qualification status and the exact promotion decision, if any.",
       "properties": {
         "benchmark_refs": {
           "default": [],
@@ -692,6 +692,144 @@
           "title": "EvaluationResultRef",
           "type": "object"
         },
+        "MaterialStateRef": {
+          "additionalProperties": false,
+          "properties": {
+            "authority_owner": {
+              "maxLength": 96,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,95}$",
+              "title": "Authority Owner",
+              "type": "string"
+            },
+            "content_digest": {
+              "anyOf": [
+                {
+                  "pattern": "^sha256:[0-9a-f]{64}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Content Digest"
+            },
+            "location": {
+              "default": null,
+              "title": "Location",
+              "type": "null"
+            },
+            "object_id": {
+              "maxLength": 1024,
+              "minLength": 1,
+              "title": "Object Id",
+              "type": "string"
+            },
+            "object_type": {
+              "const": "material_state",
+              "default": "material_state",
+              "title": "Object Type",
+              "type": "string"
+            },
+            "revision": {
+              "anyOf": [
+                {
+                  "maxLength": 256,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Revision"
+            },
+            "workspace_id": {
+              "maxLength": 128,
+              "minLength": 1,
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "authority_owner",
+            "object_id",
+            "workspace_id"
+          ],
+          "title": "MaterialStateRef",
+          "type": "object"
+        },
+        "PhysicsCaseRef": {
+          "additionalProperties": false,
+          "properties": {
+            "authority_owner": {
+              "maxLength": 96,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,95}$",
+              "title": "Authority Owner",
+              "type": "string"
+            },
+            "content_digest": {
+              "anyOf": [
+                {
+                  "pattern": "^sha256:[0-9a-f]{64}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Content Digest"
+            },
+            "location": {
+              "default": null,
+              "title": "Location",
+              "type": "null"
+            },
+            "object_id": {
+              "maxLength": 1024,
+              "minLength": 1,
+              "title": "Object Id",
+              "type": "string"
+            },
+            "object_type": {
+              "const": "physics_case",
+              "default": "physics_case",
+              "title": "Object Type",
+              "type": "string"
+            },
+            "revision": {
+              "anyOf": [
+                {
+                  "maxLength": 256,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Revision"
+            },
+            "workspace_id": {
+              "maxLength": 128,
+              "minLength": 1,
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "authority_owner",
+            "object_id",
+            "workspace_id"
+          ],
+          "title": "PhysicsCaseRef",
+          "type": "object"
+        },
         "ProcessModelIRRef": {
           "additionalProperties": false,
           "properties": {
@@ -931,7 +1069,7 @@
         },
         "QualificationBasis": {
           "additionalProperties": false,
-          "description": "Evidence behind a qualification status and who promoted it.",
+          "description": "Evidence behind a qualification status and the exact promotion decision, if any.",
           "properties": {
             "benchmark_refs": {
               "default": [],
@@ -1380,6 +1518,8 @@
             "mapping": {
               "dynamic_model": "#/$defs/DynamicModelRef",
               "evaluation_result": "#/$defs/EvaluationResultRef",
+              "material_state": "#/$defs/MaterialStateRef",
+              "physics_case": "#/$defs/PhysicsCaseRef",
               "process_model_ir": "#/$defs/ProcessModelIRRef",
               "property_basis": "#/$defs/PropertyBasisRef"
             },
@@ -1394,6 +1534,12 @@
             },
             {
               "$ref": "#/$defs/PropertyBasisRef"
+            },
+            {
+              "$ref": "#/$defs/MaterialStateRef"
+            },
+            {
+              "$ref": "#/$defs/PhysicsCaseRef"
             },
             {
               "$ref": "#/$defs/EvaluationResultRef"

@@ -11,16 +11,18 @@ an explicit operator or deterministic-policy promotion, never model output.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from typing import Final, Literal
 
 from pydantic import Field, model_validator
 
 from app.modules.ai.context_builder import canonical_digest
 from app.modules.ai.jarvis_context_models import FrozenContract, SourceRef, UtcDatetime
+from app.modules.bluecad.evidence import EvidenceRecord
 from app.modules.engineering.refs import (
     DynamicModelRef,
     EvaluationResultRef,
+    MaterialStateRef,
+    PhysicsCaseRef,
     ProcessModelIRRef,
     PropertyBasisRef,
     Quantity,
@@ -59,11 +61,26 @@ QualificationDecider = Literal["operator", "deterministic_policy"]
 
 _CITED_KINDS = frozenset({"literature", "measurement", "vendor_datasheet", "simulation", "derived"})
 
-QualifiableSubjectRef = ProcessModelIRRef | DynamicModelRef | PropertyBasisRef | EvaluationResultRef
+# Physics cases carry CFD/FEM turbulence/boundary/material modelling assumptions;
+# property bases carry correlations.
+QualifiableSubjectRef = (
+    ProcessModelIRRef | DynamicModelRef | PropertyBasisRef | MaterialStateRef | PhysicsCaseRef | EvaluationResultRef
+)
 
 
 def fidelity_rank(tier: FidelityTier) -> int:
     return FIDELITY_ORDER.index(tier)
+
+
+def validity_content_digest(validity: ValidityEnvelopeRef) -> str:
+    """Digest pinning an envelope's identity to its domain, uncertainty, status and evidence."""
+    return canonical_digest(
+        validity.model_dump(
+            mode="json",
+            include={"authority_owner", "object_id", "workspace_id", "domain", "uncertainty",
+                     "qualification_status", "evidence_refs"},
+        )
+    )
 
 
 class ConditionValue(FrozenContract):
@@ -99,7 +116,7 @@ class ProvenanceEntry(FrozenContract):
 
 
 class QualificationBasis(FrozenContract):
-    """Evidence behind a qualification status and who promoted it."""
+    """Evidence behind a qualification status and the exact promotion decision, if any."""
 
     calibration_refs: tuple[SourceRef, ...] = Field(default=(), max_length=MAX_ITEMS)
     benchmark_refs: tuple[SourceRef, ...] = Field(default=(), max_length=MAX_ITEMS)
@@ -109,8 +126,8 @@ class QualificationBasis(FrozenContract):
 
     @model_validator(mode="after")
     def decision_is_complete(self) -> QualificationBasis:
-        if (self.decided_by is None) != (self.decided_at is None):
-            raise ValueError("decided_by and decided_at must be provided together")
+        if len({self.decided_by is None, self.decided_at is None, self.decision_ref is None}) != 1:
+            raise ValueError("decided_by, decided_at and decision_ref must be provided together")
         return self
 
 
@@ -136,6 +153,8 @@ class ScientificQualificationRecord(FrozenContract):
     def status_is_supported(self) -> ScientificQualificationRecord:
         if self.subject_ref.workspace_id != self.validity.workspace_id:
             raise ValueError("subject and validity envelope must belong to the same engineering project")
+        if self.validity.content_digest != validity_content_digest(self.validity):
+            raise ValueError("validity content_digest must pin the envelope content (validity_content_digest)")
         status = self.validity.qualification_status
         if status in {"unqualified", "candidate"}:
             if self.basis.decided_by is not None:
@@ -152,20 +171,16 @@ class ScientificQualificationRecord(FrozenContract):
         return self
 
 
-def evidence_record_ref(row: Mapping[str, object]) -> SourceRef:
+def evidence_record_ref(record: EvidenceRecord) -> SourceRef:
     """Exact ref to one 044 ``evidence_records`` row, pinned to its full current content.
 
     Rows may be relinked to a candidate/attempt after creation, so the digest
     covers every column; a relinked row resolves as stale.
     """
-    missing = {"id", "workspace_id"} - set(row)
-    if missing:
-        raise ValueError(f"evidence row is missing {sorted(missing)}")
     return SourceRef(
         authority_owner=EVIDENCE_RECORD_OWNER,
         object_type=EVIDENCE_RECORD_TYPE,
-        object_id=str(row["id"]),
-        workspace_id=str(row["workspace_id"]),
-        content_digest=canonical_digest(dict(row)),
+        object_id=record.id,
+        workspace_id=record.workspace_id,
+        content_digest=canonical_digest(record.model_dump(mode="json")),
     )
-

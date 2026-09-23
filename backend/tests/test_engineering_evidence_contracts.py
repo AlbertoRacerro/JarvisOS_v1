@@ -16,11 +16,14 @@ from pydantic import ValidationError
 
 from app.modules.ai.jarvis_context_models import SourceRef
 from app.modules.engineering import evidence_contracts as ev
+from app.modules.engineering.refs import ValidityEnvelopeRef
 
 SNAPSHOT_PATH = Path(__file__).parent / "fixtures" / "engineering_evidence_v1.schema.json"
 NOW = datetime(2026, 9, 24, 8, 0, tzinfo=UTC)
 BENCH = {"authority_owner": "bluecad_evidence", "object_type": "evidence_record", "object_id": "e1",
          "workspace_id": "bluerev", "content_digest": "sha256:" + "c" * 64}
+DECISION = {"authority_owner": "project_knowledge", "object_type": "promotion", "object_id": "promo-1",
+            "workspace_id": "bluerev", "revision": "1"}
 CAL = {"authority_owner": "project_knowledge", "object_type": "record", "object_id": "cal-1",
        "workspace_id": "bluerev", "revision": "3"}
 
@@ -40,17 +43,25 @@ def current_snapshot() -> dict[str, object]:
     }
 
 
+def _validity(status: str, **overrides: object) -> dict[str, object]:
+    fields: dict[str, object] = {
+        "authority_owner": "evidence", "object_id": "venv-1", "workspace_id": "bluerev", "revision": "1",
+        "qualification_status": status,
+        "evidence_refs": [BENCH] if status not in {"unqualified", "candidate"} else [],
+        "domain": [{"variable": "T", "lower": {"value": 288.15, "unit": "K"}, "upper": {"value": 303.15, "unit": "K"}}],
+    }
+    fields.update(overrides)
+    envelope = ValidityEnvelopeRef.model_validate(fields)
+    return fields | {"content_digest": ev.validity_content_digest(envelope)}
+
+
 def _record(status: str = "candidate", **overrides: object) -> ev.ScientificQualificationRecord:
     fields: dict[str, object] = {
         "record_id": "qual-pbr-1",
         "subject_ref": {"authority_owner": "process_kernel", "object_type": "dynamic_model", "object_id": "pbr-growth",
                         "workspace_id": "bluerev", "revision": "7"},
         "fidelity": "dynamic_detailed",
-        "validity": {"authority_owner": "evidence", "object_id": "venv-1", "workspace_id": "bluerev", "revision": "1",
-                     "qualification_status": status,
-                     "evidence_refs": [BENCH] if status not in {"unqualified", "candidate"} else [],
-                     "domain": [{"variable": "T", "lower": {"value": 288.15, "unit": "K"},
-                                 "upper": {"value": 303.15, "unit": "K"}}]},
+        "validity": _validity(status),
         "provenance": [{"kind": "literature", "citation": "Author et al. 2020, growth kinetics",
                         "organism": "Nannochloropsis gaditana", "strain": "CCMP526",
                         "conditions": [{"variable": "light", "value": {"value": 200, "unit": "1"}}]}],
@@ -82,15 +93,32 @@ def test_subject_must_be_a_qualifiable_engineering_kind() -> None:
                              "object_id": "pbr", "workspace_id": "other", "revision": "1"})
 
 
+def test_validity_status_is_pinned_to_the_envelope_identity() -> None:
+    pinned = _validity("benchmarked")
+    with pytest.raises(ValidationError):
+        _record("benchmarked", validity=pinned | {"qualification_status": "qualified"},
+                basis={"benchmark_refs": [BENCH], "decided_by": "operator", "decided_at": NOW, "decision_ref": DECISION})
+    with pytest.raises(ValidationError):
+        _record("candidate", validity={k: v for k, v in _validity("candidate").items() if k != "content_digest"})
+
+
+def test_physics_case_and_material_assumptions_are_qualifiable() -> None:
+    case = {"authority_owner": "bluecad", "object_type": "physics_case", "object_id": "k-epsilon-case",
+            "workspace_id": "bluerev", "revision": "4"}
+    assert type(_record(subject_ref=case, fidelity="field_resolved").subject_ref).__name__ == "PhysicsCaseRef"
+    material = case | {"object_type": "material_state", "object_id": "broth-25C"}
+    assert type(_record(subject_ref=material).subject_ref).__name__ == "MaterialStateRef"
+
+
 def test_there_is_no_default_status_and_nothing_is_qualified_without_promotion() -> None:
     with pytest.raises(ValidationError):
         _record("qualified", basis={"benchmark_refs": [BENCH]})
-    promoted = _record("qualified", basis={"benchmark_refs": [BENCH], "decided_by": "operator", "decided_at": NOW})
+    promoted = _record("qualified", basis={"benchmark_refs": [BENCH], "decided_by": "operator", "decided_at": NOW, "decision_ref": DECISION})
     assert promoted.validity.qualification_status == "qualified"
     with pytest.raises(ValidationError):
-        _record("qualified", basis={"benchmark_refs": [BENCH], "decided_by": "model", "decided_at": NOW})
+        _record("qualified", basis={"benchmark_refs": [BENCH], "decided_by": "model", "decided_at": NOW, "decision_ref": DECISION})
     with pytest.raises(ValidationError):
-        _record("qualified", basis={"decided_by": "operator", "decided_at": NOW})
+        _record("qualified", basis={"decided_by": "operator", "decided_at": NOW, "decision_ref": DECISION})
 
 
 @pytest.mark.parametrize(
@@ -100,7 +128,7 @@ def test_there_is_no_default_status_and_nothing_is_qualified_without_promotion()
         ("calibrated", {"calibration_refs": [CAL]}, True),
         ("benchmarked", {"calibration_refs": [CAL]}, False),
         ("benchmarked", {"benchmark_refs": [BENCH]}, True),
-        ("candidate", {"decided_by": "operator", "decided_at": NOW}, False),
+        ("candidate", {"decided_by": "operator", "decided_at": NOW, "decision_ref": DECISION}, False),
     ],
 )
 def test_status_requires_matching_evidence(status: str, basis: dict[str, object], ok: bool) -> None:
@@ -129,6 +157,8 @@ def test_provenance_is_traceable() -> None:
                                            "conditions": [{"variable": "T", "value": {"value": 1, "unit": "furlongz"}}]})
     with pytest.raises(ValidationError):
         ev.QualificationBasis(decided_by="operator")
+    with pytest.raises(ValidationError):
+        ev.QualificationBasis(decided_by="operator", decided_at=NOW)
 
 
 def test_fidelity_order_is_total_and_047_screening_is_lowest() -> None:
@@ -156,18 +186,16 @@ def test_evidence_record_ref_pins_the_044_row_and_detects_relink(tmp_path: Path)
     ).id
     record = get_evidence_record(record_id)
     assert record is not None
-    ref = ev.evidence_record_ref(record.model_dump())
+    ref = ev.evidence_record_ref(record)
     assert (ref.authority_owner, ref.object_type, ref.object_id, ref.workspace_id) == (
         "bluecad_evidence", "evidence_record", record_id, "bluerev")
     assert isinstance(ref, SourceRef) and ref.to_jarvis_exact_ref().content_digest == ref.content_digest
-    assert ev.evidence_record_ref(record.model_dump()) == ref
+    assert ev.evidence_record_ref(record) == ref
     with open_sqlite_connection() as connection:
         connection.execute("UPDATE evidence_records SET verdict = 'fail' WHERE id = ?", (record_id,))
         connection.commit()
     relinked = get_evidence_record(record_id)
-    assert relinked is not None and ev.evidence_record_ref(relinked.model_dump()).content_digest != ref.content_digest
-    with pytest.raises(ValueError):
-        ev.evidence_record_ref({"id": record_id})
+    assert relinked is not None and ev.evidence_record_ref(relinked).content_digest != ref.content_digest
 
 
 if __name__ == "__main__" and "--write-snapshot" in sys.argv:
