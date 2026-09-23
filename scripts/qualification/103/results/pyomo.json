@@ -1,0 +1,9 @@
+{
+  "candidate": "pyomo",
+  "error_source": "prerequisite_check",
+  "license": "BSD-3-Clause",
+  "native_error": "builtins.RuntimeError: No local Pyomo solver available: {'ipopt': False, 'appsi_ipopt': False, 'glpk': False, 'cbc': False, 'highs': False}",
+  "status": "failed",
+  "version": "6.10.1",
+  "wall_time_s": 0.523691
+}

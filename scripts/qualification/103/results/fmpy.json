@@ -1,0 +1,9 @@
+{
+  "candidate": "fmpy",
+  "error_source": "prerequisite_check",
+  "license": "not declared in metadata",
+  "native_error": "builtins.RuntimeError: No offline reference FMU/compiler provided; fmpy=0.3.32, examples=/home/thera/jarvis-control/work/venvs/q103/lib/python3.11/site-packages/fmpy/examples/__init__.py",
+  "status": "failed",
+  "version": "0.3.32",
+  "wall_time_s": 0.034415
+}

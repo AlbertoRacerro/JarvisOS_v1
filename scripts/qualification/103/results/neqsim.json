@@ -1,0 +1,9 @@
+{
+  "candidate": "neqsim",
+  "error_source": "package",
+  "license": "Apache-2.0",
+  "native_error": "neqsim.neqsimpython.NeqSimJVMError: Failed to start Java Virtual Machine (JVM).\n\nCommon solutions:\n1. Install Java JDK 17+ from https://adoptium.net/\n2. Ensure JAVA_HOME environment variable is set\n3. Ensure 64-bit Python matches 64-bit Java (or 32-bit with 32-bit)\n\nSee: https://github.com/equinor/neqsim-python#prerequisites",
+  "status": "failed",
+  "version": "3.20.0",
+  "wall_time_s": 0.005281
+}

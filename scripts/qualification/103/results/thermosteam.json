@@ -1,0 +1,9 @@
+{
+  "candidate": "thermosteam",
+  "error_source": "package",
+  "license": "MIT",
+  "native_error": "builtins.ImportError: Numba needs NumPy 2.0 or less. Got NumPy 2.4.",
+  "status": "failed",
+  "version": "0.51.17",
+  "wall_time_s": 0.436775
+}

@@ -1,0 +1,12 @@
+{
+  "candidate": "do-mpc",
+  "license": "GNU Lesser General Public License version 3",
+  "measurements": {
+    "model_state_count": 1,
+    "mpc_horizon": 3,
+    "solver_execution": "not attempted; requires IPOPT for optimization"
+  },
+  "status": "succeeded",
+  "version": "5.1.2",
+  "wall_time_s": 0.223602
+}

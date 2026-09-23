@@ -1,0 +1,12 @@
+{
+  "candidate": "openmdao",
+  "license": "Apache-2.0",
+  "measurements": {
+    "driver": "ScipyOptimizeDriver",
+    "flow": 0.1000000000006569,
+    "power": 1.2500000000082112
+  },
+  "status": "succeeded",
+  "version": "3.45.1",
+  "wall_time_s": 0.14237
+}

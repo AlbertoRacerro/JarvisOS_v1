@@ -201,6 +201,8 @@ Each disposition must cite current Jarvis code, candidate evidence, exact contra
 
 # Detailed audit index
 
+Targeted REF-038/039/040/042/047 runtime qualification (2026-09-24): `docs/specs/103-process-upstream-bakeoff-evidence.md`. Pure-water property, pipe-correlation, synthetic ODE and small study probes ran; BioSTEAM recycle, equation-oriented solve, FMU round trip and Java specialist remain unproven on this host. Candidate status is unchanged pending compatible runtimes, reference data and 102 scientific qualification.
+
 Core software/runtime:
 
 - `docs/audits/CORE_SOFTWARE_ECOSYSTEM_AUDIT_2026-08-20.md`
