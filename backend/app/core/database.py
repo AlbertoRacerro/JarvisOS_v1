@@ -112,8 +112,8 @@ def get_database_path() -> Path:
 
 
 @contextmanager
-def open_sqlite_connection() -> Iterator[sqlite3.Connection]:
-    database_path = get_database_path()
+def open_sqlite_connection(database_path: Path | None = None) -> Iterator[sqlite3.Connection]:
+    database_path = database_path or get_database_path()
     database_path.parent.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(database_path)
     connection.row_factory = sqlite3.Row
@@ -124,6 +124,13 @@ def open_sqlite_connection() -> Iterator[sqlite3.Connection]:
         yield connection
     finally:
         connection.close()
+
+
+@contextmanager
+def open_retrieval_index_connection() -> Iterator[sqlite3.Connection]:
+    """Open the disposable retrieval database, separate from canonical migrations."""
+    with open_sqlite_connection(build_paths().retrieval_index_file) as connection:
+        yield connection
 
 
 def initialize_database() -> DatabaseInfo:
