@@ -142,6 +142,24 @@ def resolve_unit(token: str) -> ResolvedUnit:
     )
 
 
+def parse_unit_token(token: str) -> str:
+    """Validate any unit token Pint (or the semantic table) understands; returns the Pint unit.
+
+    Unlike ``resolve_unit`` this does not restrict dimensions to the
+    PROCESS-KERNEL-1 set, so cross-workstream envelopes (temperature, amount,
+    energy, ...) share this single Pint owner.
+    """
+    if not isinstance(token, str) or not token or token != token.strip():
+        raise ProcessKernelError("unit_invalid", "Unit token must be a non-empty trimmed string.")
+    semantic = SEMANTIC_UNITS.get(token)
+    if semantic is not None:
+        return semantic.pint_unit
+    try:
+        return str(unit_registry().Unit(_PINT_UNIT_ALIASES.get(token, token)))
+    except Exception as exc:  # Pint raises several parser error types for malformed tokens.
+        raise ProcessKernelError("unit_unknown", f"Unknown unit token: {token}.") from exc
+
+
 def normalize_magnitude(
     value: float,
     *,
