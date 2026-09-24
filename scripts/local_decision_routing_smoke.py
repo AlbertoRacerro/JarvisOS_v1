@@ -67,15 +67,12 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--confirm-live-local", action="store_true")
     parser.add_argument("--out", type=Path, required=True)
-    parser.add_argument("--unload-first", default="qwen3:8b", help="model to unload first for a cold start")
     args = parser.parse_args(argv)
     if not args.confirm_live_local:
         print("Refusing to call local models without --confirm-live-local.", file=sys.stderr)
         return 2
 
     import platform
-
-    import httpx
 
     from app.core.bootstrap import initialize_storage
     from app.core.paths import build_paths
@@ -103,15 +100,13 @@ def main(argv: list[str] | None = None) -> int:
         report["cases"]["unreachable"] = status.get("error_message")
         args.out.write_text(json.dumps(report, indent=2), encoding="utf-8")
         return 1
-    # Cold start: ask the runtime to unload the model (keep_alive=0), then route to it.
-    try:
-        httpx.post(f"{status['endpoint'].rstrip('/')}/api/generate",
-                   json={"model": args.unload_first, "keep_alive": 0}, timeout=30).raise_for_status()
-    except Exception as exc:  # evidence records the failure rather than hiding it
-        report["cases"]["unload_error"] = f"{type(exc).__name__}: {exc}"
 
     arbiter = InProcessResourceArbiter()
-    report["cases"]["snapshot_before"] = _snapshot_summary(arbiter.snapshot())
+    before = arbiter.snapshot()
+    report["cases"]["snapshot_before"] = _snapshot_summary(before)
+    report["cases"]["cold_start_observed"] = not any(
+        model.name == "qwen3:8b" for model in before.loaded_models
+    )
     prompt = "Reply with exactly one short sentence explaining what a photobioreactor is."
     report["cases"]["cold_route"] = _route(run_local_selected_task, arbiter, "fast", prompt)
     report["cases"]["loaded_route"] = _route(run_local_selected_task, arbiter, "fast", prompt)
