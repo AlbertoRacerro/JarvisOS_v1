@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import sqlite3
 import subprocess
 import threading
@@ -36,11 +37,21 @@ _MAPPING_EVENT = "hermes.session_bound"
 _AGENT_EVENT = "hermes.agent_event"
 _CONTROL_EVENT = "hermes.control"
 _MAX_FRAME = 2_000_000
+_SEED_INTERACTIONS = 20
+_SEED_CHARS = 60_000
+# Tool schemas Jarvis admits in a relayed model request. Only the broker tool reaches Jarvis
+# capabilities; the Hermes-native ones act on the worker's own HERMES_HOME (skills read,
+# bounded memory notes, Hermes session search) or spawn children whose inference is relayed.
+HERMES_TOOL_ALLOWLIST = frozenset({"mcp__jarvis__jarvis_context_preview", "delegate_task", "skills_list",
+                                   "skill_view", "memory", "session_search"})
+_BWRAP_PREFIX = ("bwrap", "--dev-bind", "/", "/", "--unshare-net", "--die-with-parent", "--")
 
-PRODUCTION_CAPABILITY_REGISTRY.register(JarvisCapabilityDescriptor(
+_HERMES_CONTEXT_CAPABILITY = JarvisCapabilityDescriptor(
     capability_id="jarvis.context_preview", route_id="ai-threads", action_class="CONTEXT",
     label="Preview exact Jarvis context",
-))
+)
+if _HERMES_CONTEXT_CAPABILITY not in PRODUCTION_CAPABILITY_REGISTRY.for_route("ai-threads"):
+    PRODUCTION_CAPABILITY_REGISTRY.register(_HERMES_CONTEXT_CAPABILITY)
 
 
 def current_mapping(connection: sqlite3.Connection, thread_id: str) -> AgentSessionRef | None:
@@ -102,6 +113,25 @@ def project_event(connection: sqlite3.Connection, event: AgentEvent) -> bool:
     return True
 
 
+def durable_history(connection: sqlite3.Connection, thread_id: str) -> list[dict[str, str]]:
+    """Bounded user/assistant history Jarvis durably captured for a thread (recovery seed)."""
+    rows = connection.execute(
+        "SELECT user_text, assistant_text FROM ai_thread_interactions WHERE thread_id = ? "
+        "AND persistence_state = 'captured' ORDER BY interaction_index DESC LIMIT ?",
+        (thread_id, _SEED_INTERACTIONS),
+    ).fetchall()
+    history: list[dict[str, str]] = []
+    used = 0
+    for row in rows:
+        pair = [{"role": "user", "content": row["user_text"] or ""},
+                {"role": "assistant", "content": row["assistant_text"] or ""}]
+        used += sum(len(item["content"]) for item in pair)
+        if used > _SEED_CHARS:
+            break
+        history[:0] = pair
+    return history
+
+
 def worker_environment(home: Path, backend_root: Path) -> dict[str, str]:
     """Allowlist excludes provider credentials, ambient Python config and user secrets."""
     return {
@@ -140,7 +170,7 @@ def infer_envelope(frame: dict[str, Any], *, deadline_seconds: int = 120,
         if not isinstance(tools, list) or any(
             not isinstance(tool, dict)
             or not isinstance(tool.get("function"), dict)
-            or tool["function"].get("name") != "mcp__jarvis__jarvis_context_preview"
+            or tool["function"].get("name") not in HERMES_TOOL_ALLOWLIST
             for tool in tools
         ):
             raise ValueError("unapproved tool schema")
@@ -218,14 +248,25 @@ class HermesSupervisor:
     def __init__(self, python: str, *, distro: str | None = None,
                  backend_root: Path | None = None, wsl_home: str | None = None,
                  wsl_backend_root: str | None = None,
-                 route_for_task: Callable[[str], str | None] | None = None) -> None:
+                 route_for_task: Callable[[str], str | None] | None = None,
+                 runner: Callable[..., AiTaskOutcome] = run_ai_task,
+                 network_isolation: bool = True) -> None:
         self.python = python
         self.distro = distro
         self.backend_root = backend_root or Path(__file__).resolve().parents[4]
         self.home = build_paths().data_root / "hermes"
         self.wsl_home = wsl_home
         self.wsl_backend_root = wsl_backend_root
+        # Selection is synchronous metadata only; inference still enters through runner,
+        # whose production default is run_ai_task and whose outcomes remain canonical.
         self.route_for_task = route_for_task or (lambda _task_kind: None)
+        self.runner = runner
+        # Linux/WSL: run the worker in an empty network namespace (loopback only) so the
+        # relay is the only reachable inference path. Disable only for diagnosis.
+        self.network_isolation = network_isolation
+        self.send_lock = threading.Lock()
+        self.worker_lost = False
+        self.expected_worker_exit = False
         self.process: subprocess.Popen[str] | None = None
         self.responses: dict[str, dict[str, Any]] = {}
         self.response_ready = threading.Condition()
@@ -236,6 +277,17 @@ class HermesSupervisor:
         self.last_flow: dict[str, str] = {}
 
     def _read_worker(self, process: subprocess.Popen[str]) -> None:
+        assert process.stdout is not None
+        try:
+            self._read_frames(process)
+        finally:
+            with self.response_ready:
+                if process is self.process and not self.expected_worker_exit:
+                    self.worker_lost = True
+                    self.last_error = self.last_error or "worker_lost"
+                self.response_ready.notify_all()
+
+    def _read_frames(self, process: subprocess.Popen[str]) -> None:
         assert process.stdout is not None
         for line in process.stdout:
             if len(line) > _MAX_FRAME:
@@ -263,8 +315,15 @@ class HermesSupervisor:
                 self.last_error = "invalid_worker_frame"
 
     def start(self) -> None:
-        if self.process is not None and self.process.poll() is None:
+        if self._alive():
             return
+        if self.process is not None and self.process.poll() is None:
+            self.process.kill()
+        if self.network_isolation and not self.distro:
+            if os.name == "nt":
+                raise RuntimeError("network-isolated Hermes worker requires the configured WSL distro")
+            if shutil.which("bwrap") is None:
+                raise RuntimeError("network-isolated Hermes worker requires bubblewrap")
         self.home.mkdir(parents=True, exist_ok=True)
         env = worker_environment(self.home, self.backend_root)
         if self.distro:
@@ -275,30 +334,49 @@ class HermesSupervisor:
             env["XDG_CONFIG_HOME"] = self.wsl_home
             env["PYTHONPATH"] = self.wsl_backend_root
             env["PATH"] = "/usr/local/bin:/usr/bin:/bin"
-            command = ["wsl.exe", "-d", self.distro, "--", "env", "-i", *[f"{key}={value}" for key, value in env.items()],
+            command = ["wsl.exe", "-d", self.distro, "--", *(_BWRAP_PREFIX if self.network_isolation else ()),
+                       "env", "-i", *[f"{key}={value}" for key, value in env.items()],
                        self.python, "-m", "app.modules.agents.hermes.worker_shim"]
             process_env = None
         else:
-            command = [self.python, "-m", "app.modules.agents.hermes.worker_shim"]
+            command = [*(_BWRAP_PREFIX if self.network_isolation else ()),
+                       self.python, "-m", "app.modules.agents.hermes.worker_shim"]
             process_env = env
-        self.process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                        stderr=subprocess.DEVNULL, text=True, bufsize=1, env=process_env)
+        with open(self.home / "worker.stderr.log", "w", encoding="utf-8") as stderr_log:
+            process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                       stderr=stderr_log, text=True, bufsize=1, env=process_env)
+        with self.response_ready:
+            self.process = process
+            self.worker_lost = False
+            self.expected_worker_exit = False
+            self.responses.clear()
         threading.Thread(target=self._read_worker, args=(self.process,), daemon=True).start()
         ready = self._await("ready", timeout=30)
         if ready.get("type") != "ready" or ready.get("upstream_revision") != UPSTREAM_REVISION:
             self.process.kill()
             raise RuntimeError("Hermes worker revision/health check failed")
+        self.last_error = None
+
+    def _alive(self) -> bool:
+        return self.process is not None and self.process.poll() is None and not self.worker_lost
 
     def _send(self, frame: dict[str, Any]) -> None:
         if self.process is None or self.process.poll() is not None or self.process.stdin is None:
             raise RuntimeError("Hermes worker unavailable")
-        self.process.stdin.write(json.dumps(frame, separators=(",", ":")) + "\n")
-        self.process.stdin.flush()
+        try:
+            with self.send_lock:
+                self.process.stdin.write(json.dumps(frame, separators=(",", ":")) + "\n")
+                self.process.stdin.flush()
+        except (BrokenPipeError, OSError, ValueError) as exc:
+            raise RuntimeError("Hermes worker unavailable") from exc
 
     def _await(self, request_id: str, *, timeout: float = 180) -> dict[str, Any]:
         with self.response_ready:
-            if not self.response_ready.wait_for(lambda: request_id in self.responses, timeout=timeout):
+            if not self.response_ready.wait_for(
+                    lambda: request_id in self.responses or self.worker_lost, timeout=timeout):
                 raise RuntimeError("Hermes worker timed out")
+            if request_id not in self.responses:
+                raise RuntimeError("Hermes worker lost")
             return self.responses.pop(request_id)
 
     def _handle_relay(self, frame: dict[str, Any]) -> None:
@@ -312,7 +390,8 @@ class HermesSupervisor:
                         self.last_flow[envelope.agent_session.hermes_session_id] = outcome.flow_id
 
                 result = run_governed_inference(
-                    envelope, cancelled=lambda value: value in self.cancelled, on_outcome=record_flow,
+                    envelope, runner=self.runner, cancelled=lambda value: value in self.cancelled,
+                    on_outcome=record_flow,
                 )
         except (ValueError, KeyError):
             result = {"status": "refused"}
@@ -366,7 +445,7 @@ class HermesSupervisor:
                 if recorded["command"] != command.model_dump(mode="json"):
                     raise ValueError("control command id reused with different content")
                 return AgentSessionRef.model_validate(recorded["session_ref"])
-            if command.kind != "start" and current is not None and (self.process is None or self.process.poll() is not None):
+            if command.kind != "start" and current is not None and not self._alive():
                 self._recover(current)
                 current = self.session
             check_control_target(command, current, now=datetime.now(UTC))
@@ -393,9 +472,21 @@ class HermesSupervisor:
                 self.cancelled.discard(ref.hermes_session_id)
                 self._send({"type": "resume", "id": request_id})
             elif command.kind == "close":
-                self._send({"type": "close", "id": request_id})
-            response = self._await(request_id, timeout=30)
+                self.expected_worker_exit = True
+                try:
+                    self._send({"type": "close", "id": request_id})
+                except RuntimeError:
+                    self.expected_worker_exit = False
+                    raise
+            try:
+                response = self._await(request_id, timeout=30)
+            except Exception:
+                if command.kind == "close":
+                    self.expected_worker_exit = False
+                raise
             if response.get("type") != "ack":
+                if command.kind == "close":
+                    self.expected_worker_exit = False
                 raise RuntimeError("Hermes control failed")
             self.session = ref
             log_event(connection, event_type=_CONTROL_EVENT, actor="jarvis", target_type="control_command",
@@ -404,6 +495,8 @@ class HermesSupervisor:
                                "command": command.model_dump(mode="json")})
             connection.commit()
             if command.kind == "close":
+                self.worker_lost = False
+                self.last_error = None
                 self.session = None
             return ref
 
@@ -417,20 +510,24 @@ class HermesSupervisor:
             connection.commit()
         assert self.session is not None
         request_id = str(uuid4())
-        self._send({"type": "bind", "id": request_id, "session_ref": self.session.model_dump(mode="json")})
-        self._await(request_id, timeout=30)
+        with open_sqlite_connection() as connection:
+            history = durable_history(connection, old.jarvis_thread_id)
+        self._send({"type": "bind", "id": request_id, "session_ref": self.session.model_dump(mode="json"),
+                    "history": history})
+        if self._await(request_id, timeout=30).get("type") != "ack":
+            raise RuntimeError("Hermes recovery bind failed")
 
-    def turn(self, prompt: str) -> dict[str, Any]:
+    def turn(self, prompt: str, *, turn_timeout: float = 600) -> dict[str, Any]:
         if self.session is None:
             raise RuntimeError("no bound Hermes session")
         if not prompt or len(prompt) > 12_000:
             raise ValueError("Hermes turn prompt must be 1..12000 characters")
-        if self.process is None or self.process.poll() is not None:
+        if not self._alive():
             self._recover(self.session)
         self.last_flow.pop(self.session.hermes_session_id, None)
         request_id = str(uuid4())
         self._send({"type": "turn", "id": request_id, "prompt": prompt})
-        response = self._await(request_id)
+        response = self._await(request_id, timeout=turn_timeout)
         if response.get("status") == "success" and response.get("completed") is True:
             final = response.get("final_response")
             flow_id = self.last_flow.get(self.session.hermes_session_id)
@@ -451,6 +548,10 @@ class HermesSupervisor:
                     (str(uuid4()), self.session.jarvis_thread_id, request_id,
                      canonical_digest({"prompt": prompt}), index, prompt, final[:131_072],
                      int(len(final) > 131_072), flow_id, now, now),
+                )
+                connection.execute(
+                    "UPDATE ai_threads SET last_activity_at = ? WHERE id = ?",
+                    (now, self.session.jarvis_thread_id),
                 )
                 connection.commit()
         return response

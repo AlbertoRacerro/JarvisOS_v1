@@ -8,6 +8,7 @@ import secrets
 import subprocess
 import sys
 import threading
+import traceback
 import uuid
 from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -60,31 +61,66 @@ def verify_upstream() -> None:
         raise RuntimeError("Hermes source revision is not qualified")
 
 
+# Hermes toolsets reachable through Jarvis boundaries. Inference for every one of them
+# (including delegated children) goes through the relay; the only external-effect tool is
+# the Jarvis broker. Skills/memory/session_search touch only the Jarvis-owned HERMES_HOME.
+ENABLED_TOOLSETS = ["mcp-jarvis", "delegation", "skills", "memory", "session_search"]
+DISABLED_TOOLSETS = ["terminal", "file", "code_execution", "browser", "web", "search", "x_search",
+                     "connections", "cronjob", "computer_use", "image_gen", "video_gen", "vision",
+                     "tts", "kanban", "clarify", "homeassistant", "todo", "project", "coding"]
+# Tools removed from the model-visible schema even though their toolset is enabled:
+# skill_manage writes new instruction files (persistent prompt injection surface).
+WITHHELD_TOOLS = frozenset({"skill_manage"})
+# Tool names Jarvis admits in a relayed request; mirrors supervisor.HERMES_TOOL_ALLOWLIST.
+ADMITTED_TOOLS = frozenset({"mcp__jarvis__jarvis_context_preview", "delegate_task", "skills_list",
+                            "skill_view", "memory", "session_search"})
+
+
 def pinned_config(base_url: str, token: str, python: str | None = None) -> dict[str, Any]:
     route = {"provider": "custom", "model": "jarvis-relay", "base_url": base_url,
              "api_key": token, "api_mode": "chat_completions"}
     return {
-        **route,
+        "model": {**{key: value for key, value in route.items() if key != "model"}, "default": "jarvis-relay"},
+        "providers": {}, "custom_providers": [],
         "auxiliary": {name: {**route, "base_url": base_url + "/aux/" + name,
                               **({"model_upgrade_enabled": False} if name == "title_generation" else {})}
                       for name in AUXILIARY_TASKS},
-        "delegation": {**route, "base_url": base_url + "/delegation", "fallback_providers": []},
+        "delegation": {**route, "base_url": base_url + "/delegation", "fallback_providers": [],
+                       "max_spawn_depth": 1, "orchestrator_enabled": False, "max_concurrent_children": 2,
+                       "subagent_auto_approve": False, "inherit_mcp_toolsets": True},
         "fallback_providers": [], "credential_pool_strategies": {},
+        "moa": {"default_preset": "", "active_preset": "", "presets": {}},
+        "skills": {"external_dirs": [], "project_discovery": False, "trusted_project_dirs": [],
+                   "auto_load": [], "inline_shell": False, "guard_agent_created": True},
+        "memory": {"memory_enabled": True, "user_profile_enabled": False, "provider": "",
+                   "write_approval": False, "nudge_interval": 0},
         "mcp_servers": {"jarvis": {
             "command": python or sys.executable,
-            "args": ["-m", "app.modules.agents.hermes.broker_mcp"],
+            # Script path, not ``-m``: Hermes gives MCP children a filtered env without PYTHONPATH.
+            "args": [str(Path(__file__).with_name("broker_mcp.py"))],
             "env": {"JARVIS_HERMES_BROKER_URL": base_url + "/jarvis/tool",
                     "JARVIS_HERMES_BROKER_TOKEN": token},
             "tools": {"include": ["jarvis_context_preview"]},
         }},
         "model_catalog": {"enabled": False}, "updates": {"check": False},
         "telemetry": {"enabled": False, "send": False},
-        "toolsets": ["mcp-jarvis"],
-        "tools": {"acp": {"enabled_toolsets": ["mcp-jarvis"], "disabled_toolsets": [
-            "terminal", "process", "file", "code_execution", "browser", "web", "skills",
-            "skills_hub", "search", "memory", "session_search", "connections", "cronjob",
-            "computer_use", "image_gen", "vision", "delegation", "tts"]}},
+        "toolsets": list(ENABLED_TOOLSETS),
+        # No tool_search/tool_call bridge: every model-visible tool must be individually admitted.
+        "tools": {"tool_search": {"enabled": "off", "defer": []}},
     }
+
+
+def withhold_tools(agent: Any) -> list[str]:
+    """Drop withheld tools from the model-visible schema; returns the remaining names."""
+    agent.tools = [tool for tool in (agent.tools or [])
+                   if tool.get("function", {}).get("name") not in WITHHELD_TOOLS]
+    names = sorted(tool["function"]["name"] for tool in agent.tools)
+    if hasattr(agent, "valid_tool_names"):
+        agent.valid_tool_names = set(names)
+    if not set(names) <= ADMITTED_TOOLS:
+        raise RuntimeError("Hermes exposed tools outside the Jarvis admission set: "
+                           + ",".join(sorted(set(names) - ADMITTED_TOOLS)))
+    return names
 
 
 class Worker:
@@ -96,6 +132,9 @@ class Worker:
         self.pending_lock = threading.Lock()
         self.turn_lock = threading.Lock()
         self.agent: Any = None
+        self.session_db: Any = None
+        self.tool_names: list[str] = []
+        self.history: list[dict[str, Any]] = []
         self.session: dict[str, Any] | None = None
         self.sequence = 0
         self.sequences: dict[tuple[str, int], int] = {}
@@ -232,6 +271,33 @@ class Worker:
 
         return Relay
 
+    def session_id(self) -> str:
+        assert self.session is not None
+        return str(self.session["hermes_session_id"])
+
+    def _build_agent(self) -> Any:
+        from hermes_state_registry import acquire
+        from run_agent import AIAgent  # Hermes is installed only in its own venv.
+        from tools.mcp_tool_discovery import register_mcp_servers
+
+        registered = register_mcp_servers(pinned_config(self.base_url, self.token)["mcp_servers"])
+        if "mcp__jarvis__jarvis_context_preview" not in registered:
+            raise RuntimeError("Jarvis capability broker unavailable")
+        if self.session_db is None:
+            # Hermes' own non-canonical session store under the Jarvis-owned HERMES_HOME;
+            # it backs session_search. Jarvis ai_thread_interactions stay canonical.
+            self.session_db = acquire()
+        agent = AIAgent(
+            base_url=self.base_url, api_key=self.token, provider="custom",
+            api_mode="chat_completions", model="jarvis-relay", session_id=self.session_id(),
+            enabled_toolsets=list(ENABLED_TOOLSETS), disabled_toolsets=list(DISABLED_TOOLSETS),
+            skip_context_files=True, skip_memory=True, skip_background_review=True,
+            load_soul_identity=False, quiet_mode=True, session_db=self.session_db,
+            fallback_model=[], checkpoints_enabled=False,
+        )
+        self.tool_names = withhold_tools(agent)
+        return agent
+
     def run_turn(self, request_id: str, prompt: str) -> None:
         if not self.turn_lock.acquire(blocking=False):
             self.send({"type": "turn_result", "id": request_id, "status": "failed", "error": "turn_busy"})
@@ -239,29 +305,21 @@ class Worker:
         self.event("turn.started", request_id)
         try:
             if self.agent is None:
-                from run_agent import AIAgent  # Hermes is installed only in its own venv.
-                from tools.mcp_tool_discovery import register_mcp_servers
-
-                assert self.session is not None
-                registered = register_mcp_servers(pinned_config(self.base_url, self.token)["mcp_servers"])
-                if "mcp__jarvis__jarvis_context_preview" not in registered:
-                    raise RuntimeError("Jarvis capability broker unavailable")
-                self.agent = AIAgent(
-                    base_url=self.base_url, api_key=self.token, provider="custom",
-                    api_mode="chat_completions", model="jarvis-relay",
-                    session_id=self.session["hermes_session_id"], enabled_toolsets=["mcp-jarvis"],
-                    disabled_toolsets=["terminal", "process", "file", "code_execution", "browser",
-                                       "web", "skills", "search", "memory", "session_search", "connections",
-                                       "cronjob", "computer_use", "image_gen", "vision", "delegation", "tts"],
-                    skip_context_files=True, skip_memory=True, skip_background_review=True,
-                    load_soul_identity=False, quiet_mode=True,
-                )
-            result = self.agent.run_conversation(prompt)
+                self.agent = self._build_agent()
+            result = self.agent.run_conversation(
+                user_message=prompt, conversation_history=list(self.history), task_id=self.session_id())
+            self.history = list(result.get("messages") or self.history)
+            if result.get("interrupted"):
+                self.event("turn.interrupted", request_id)
+                self.send({"type": "turn_result", "id": request_id, "status": "interrupted",
+                           "final_response": result.get("final_response") or "", "completed": False})
+                return
             self.event("turn.completed", request_id)
             self.send({"type": "turn_result", "id": request_id, "status": "success",
                        "final_response": result.get("final_response", ""),
                        "completed": result.get("completed", True)})
         except Exception as exc:
+            traceback.print_exc(file=sys.stderr)
             self.event("turn.failed", request_id)
             self.send({"type": "turn_result", "id": request_id, "status": "failed",
                        "error": type(exc).__name__})
@@ -281,8 +339,11 @@ class Worker:
         verify_upstream()
         self.send({"type": "ready", "upstream_revision": UPSTREAM_REVISION})
         for line in sys.stdin:
+            frame: dict[str, Any] = {}
             try:
                 frame = json.loads(line)
+                if not isinstance(frame, dict):
+                    raise ValueError("worker command must be an object")
                 kind = frame["type"]
                 if kind in {"relay_result", "tool_result"}:
                     with self.pending_lock:
@@ -293,11 +354,27 @@ class Worker:
                     if self.turn_lock.locked():
                         self.send({"type": "error", "id": frame["id"], "error": "turn_busy"})
                     else:
+                        if self.agent is not None and (self.session or {}).get("hermes_session_id") != \
+                                frame["session_ref"]["hermes_session_id"]:
+                            self.agent.close()
+                            self.agent = None
+                        if self.agent is None:
+                            # A new Hermes session starts only from history Jarvis durably recorded.
+                            seed = frame.get("history") or []
+                            if not isinstance(seed, list) or any(
+                                    not isinstance(item, dict) or item.get("role") not in {"user", "assistant"}
+                                    or not isinstance(item.get("content"), str) for item in seed):
+                                raise ValueError("invalid history seed")
+                            self.history = [{"role": item["role"], "content": item["content"]} for item in seed]
                         self.session = frame["session_ref"]
-                        self.agent = None
                         self.sequence = self.sequences.get(
                             (self.session["hermes_session_id"], self.session["generation"]), 0)
-                        self.send({"type": "ack", "id": frame["id"]})
+                        if self.agent is None:
+                            # Validate the MCP bridge and the complete model-visible tool set
+                            # before acknowledging that this session is ready for turns.
+                            self.agent = self._build_agent()
+                        self.send({"type": "ack", "id": frame["id"], "tools": self.tool_names,
+                                   "history_messages": len(self.history)})
                 elif kind == "turn":
                     threading.Thread(target=self.run_turn, args=(frame["id"], frame["prompt"]), daemon=True).start()
                 elif kind == "interrupt":
@@ -309,11 +386,21 @@ class Worker:
                         self.agent.clear_interrupt()
                     self.send({"type": "ack", "id": frame["id"]})
                 elif kind == "close":
+                    if self.agent is not None:
+                        self.agent.close()
+                        self.agent = None
                     self.server.shutdown()
                     self.send({"type": "ack", "id": frame["id"]})
                     return
             except (ValueError, KeyError, json.JSONDecodeError):
-                self.send({"type": "protocol_error"})
+                self.send({"type": "protocol_error", "id": frame.get("id")
+                           if isinstance(frame, dict) else None})
+            except Exception as exc:
+                # Keep initialization failures observable without exposing exception text or
+                # terminating the stdio control loop. Detailed diagnostics stay on stderr.
+                traceback.print_exc(file=sys.stderr)
+                self.send({"type": "error", "id": frame.get("id") if isinstance(frame, dict) else None,
+                           "error": type(exc).__name__})
 
 
 if __name__ == "__main__":

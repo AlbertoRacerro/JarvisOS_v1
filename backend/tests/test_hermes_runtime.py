@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import json
 import os
 import socket
@@ -13,6 +14,7 @@ from typing import Any
 
 import pytest
 
+import app.modules.agents.hermes.supervisor as hermes_supervisor_module
 from app.modules.agents.hermes.broker_mcp import _reply
 from app.modules.agents.hermes.supervisor import (
     HermesSupervisor,
@@ -46,8 +48,12 @@ SESSION = AgentSessionRef(jarvis_thread_id="thread-1", hermes_session_id="hermes
 def _connection() -> sqlite3.Connection:
     connection = sqlite3.connect(":memory:")
     connection.row_factory = sqlite3.Row
-    connection.execute("CREATE TABLE ai_threads (id TEXT PRIMARY KEY, workspace_id TEXT)")
-    connection.execute("INSERT INTO ai_threads VALUES ('thread-1', 'workspace-1')")
+    connection.execute("CREATE TABLE ai_threads (id TEXT PRIMARY KEY, workspace_id TEXT, last_activity_at TEXT)")
+    connection.execute("INSERT INTO ai_threads VALUES ('thread-1', 'workspace-1', '2000-01-01T00:00:00+00:00')")
+    connection.execute("CREATE TABLE ai_thread_interactions (id TEXT, thread_id TEXT, request_id TEXT, "
+                       "request_digest TEXT, interaction_index INTEGER, user_text TEXT, assistant_text TEXT, "
+                       "assistant_text_truncated INTEGER, flow_id TEXT, persistence_state TEXT, "
+                       "created_at TEXT, updated_at TEXT)")
     connection.execute("CREATE TABLE events (id TEXT PRIMARY KEY, workspace_id TEXT, event_type TEXT, "
                        "actor TEXT, target_type TEXT, target_id TEXT, payload TEXT, created_at TEXT)")
     return connection
@@ -118,7 +124,9 @@ def test_all_auxiliary_routes_and_environment_are_pinned(tmp_path: Path, monkeyp
     monkeypatch.setenv("ANTHROPIC_API_KEY", "provider-secret")
     config = pinned_config("http://127.0.0.1:39876/v1", "per-process-token")
     assert set(config["auxiliary"]) == set(AUXILIARY_TASKS)
-    for route in [config, config["delegation"], *config["auxiliary"].values()]:
+    route = config["model"]
+    assert route["base_url"] == "http://127.0.0.1:39876/v1"
+    for route in [config["delegation"], *config["auxiliary"].values()]:
         assert route["base_url"].startswith("http://127.0.0.1:39876/v1")
         assert route["api_key"] == "per-process-token"
         assert route["api_mode"] == "chat_completions"
@@ -203,6 +211,13 @@ def test_worker_loss_rebinds_without_replaying_old_events(monkeypatch: pytest.Mo
     first = bind_session(connection, thread_id="thread-1", workspace_id="workspace-1",
                          profile_id="profile-1", hermes_session_id="hermes-1")
     connection.commit()
+    connection.execute(
+        "INSERT INTO ai_thread_interactions (id, thread_id, request_id, request_digest, interaction_index, "
+        "user_text, assistant_text, assistant_text_truncated, flow_id, persistence_state, created_at, updated_at) "
+        "VALUES ('interaction-1', 'thread-1', 'request-1', 'digest', 0, 'prior question', 'prior answer', "
+        "0, 'flow-1', 'captured', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')"
+    )
+    connection.commit()
     monkeypatch.setattr("app.modules.agents.hermes.supervisor.open_sqlite_connection",
                         lambda: _existing_connection(connection))
     supervisor = HermesSupervisor("unused")
@@ -214,16 +229,56 @@ def test_worker_loss_rebinds_without_replaying_old_events(monkeypatch: pytest.Mo
     assert supervisor.session is not None and supervisor.session.generation == 2
     assert supervisor.session.hermes_session_id != first.hermes_session_id
     assert sent[0]["type"] == "bind" and sent[0]["session_ref"]["generation"] == 2
+    assert sent[0]["history"] == [
+        {"role": "user", "content": "prior question"},
+        {"role": "assistant", "content": "prior answer"},
+    ]
     assert not project_event(connection, AgentEvent(event_id="old-event", session_ref=first,
                                                     sequence=1, kind="turn.completed", occurred_at=NOW))
 
 
+def test_network_isolation_never_silently_falls_back_without_bwrap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    supervisor = HermesSupervisor("unused", network_isolation=True)
+    monkeypatch.setattr("app.modules.agents.hermes.supervisor.shutil.which", lambda _name: None)
+    with pytest.raises(RuntimeError, match="requires bubblewrap"):
+        supervisor.start()
+
+
+def test_native_windows_requires_the_configured_wsl_worker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    supervisor = HermesSupervisor("unused", network_isolation=True)
+    monkeypatch.setattr("app.modules.agents.hermes.supervisor.os.name", "nt")
+    with pytest.raises(RuntimeError, match="requires the configured WSL distro"):
+        supervisor.start()
+
+
+def test_capability_registration_is_safe_on_module_reload() -> None:
+    importlib.reload(hermes_supervisor_module)
+    importlib.reload(hermes_supervisor_module)
+
+
+def test_expected_worker_exit_is_not_reported_as_worker_loss(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    supervisor = HermesSupervisor("unused")
+
+    class Exited:
+        stdout = object()
+
+    process = Exited()
+    supervisor.process = process  # type: ignore[assignment]
+    supervisor.expected_worker_exit = True
+    monkeypatch.setattr(supervisor, "_read_frames", lambda _process: None)
+    supervisor._read_worker(process)  # type: ignore[arg-type]
+    assert supervisor.worker_lost is False
+    assert supervisor.last_error is None
+
+
 def test_successful_turn_is_captured_in_ai_thread_owner(monkeypatch: pytest.MonkeyPatch) -> None:
     connection = _connection()
-    connection.execute("CREATE TABLE ai_thread_interactions (id TEXT, thread_id TEXT, request_id TEXT, "
-                       "request_digest TEXT, interaction_index INTEGER, user_text TEXT, assistant_text TEXT, "
-                       "assistant_text_truncated INTEGER, flow_id TEXT, persistence_state TEXT, "
-                       "created_at TEXT, updated_at TEXT)")
     connection.commit()
     monkeypatch.setattr("app.modules.agents.hermes.supervisor.open_sqlite_connection",
                         lambda: _existing_connection(connection))
@@ -247,6 +302,10 @@ def test_successful_turn_is_captured_in_ai_thread_owner(monkeypatch: pytest.Monk
     row = connection.execute("SELECT user_text, assistant_text, flow_id, persistence_state "
                              "FROM ai_thread_interactions").fetchone()
     assert tuple(row) == ("question", "Recorded answer", "flow-1", "captured")
+    last_activity = connection.execute(
+        "SELECT last_activity_at FROM ai_threads WHERE id = 'thread-1'"
+    ).fetchone()[0]
+    assert last_activity > "2000-01-01T00:00:00+00:00"
 
 
 @contextmanager
@@ -296,7 +355,13 @@ def test_real_worker_turn_interrupt_relay(tmp_path: Path) -> None:
         assert ready["type"] == "ready"
         process.stdin.write(json.dumps({"type": "bind", "id": "bind-1", "session_ref": SESSION.model_dump(mode="json")}) + "\n")
         process.stdin.flush()
-        assert json.loads(process.stdout.readline())["type"] == "ack"
+        bound = json.loads(process.stdout.readline())
+        assert bound["type"] == "ack"
+        assert bound["tools"]
+        assert set(bound["tools"]) <= {
+            "mcp__jarvis__jarvis_context_preview", "delegate_task", "skills_list",
+            "skill_view", "memory", "session_search",
+        }
         process.stdin.write(json.dumps({"type": "turn", "id": "turn-1", "prompt": "Say hello"}) + "\n")
         process.stdin.flush()
         for _ in range(20):
