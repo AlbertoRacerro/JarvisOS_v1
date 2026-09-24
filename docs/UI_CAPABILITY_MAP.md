@@ -23,7 +23,7 @@ Backend routers registered in `backend/app/main.py`; frontend calls in
 | `GET/POST /workspaces`, `GET /workspaces/{id}` | workspace | partial | primary (selector) | yes | no | no |
 | modeling CRUD: model-specs / assumptions / parameters / decisions / simulation-runs | project data | scattered/partial | primary (Project KB) | yes | no | no |
 | runner: model-implementations / runner-jobs / run / logs / artifacts | local script execution | NONE in UI | advanced/backend | yes | no (local) | no |
-| `GET /engineering/boundary`, `GET /system/info`, `POST /system/initialize`, `GET /health` | meta/diagnostics | partial | diagnostics | (initialize: yes) | no | no |
+| `GET /system/info`, `POST /system/initialize`, `GET /health` | meta/diagnostics | partial | diagnostics | (initialize: yes) | no | no |
 
 ## Real gaps (evidence-based)
 

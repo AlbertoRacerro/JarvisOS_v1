@@ -103,36 +103,6 @@ SCHEMA_STATEMENTS = [
     )
     """,
     """
-    CREATE TABLE IF NOT EXISTS entities (
-        id TEXT PRIMARY KEY,
-        workspace_id TEXT NOT NULL,
-        entity_type TEXT NOT NULL,
-        title TEXT NOT NULL,
-        status TEXT NOT NULL DEFAULT 'active',
-        maturity_status TEXT NOT NULL DEFAULT 'draft',
-        schema_version INTEGER NOT NULL DEFAULT 1,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        raw_payload TEXT,
-        FOREIGN KEY (workspace_id) REFERENCES workspaces(id)
-    )
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS entity_links (
-        id TEXT PRIMARY KEY,
-        workspace_id TEXT NOT NULL,
-        source_entity_id TEXT NOT NULL,
-        target_entity_id TEXT NOT NULL,
-        link_type TEXT NOT NULL,
-        confidence REAL,
-        created_at TEXT NOT NULL,
-        notes TEXT,
-        FOREIGN KEY (workspace_id) REFERENCES workspaces(id),
-        FOREIGN KEY (source_entity_id) REFERENCES entities(id),
-        FOREIGN KEY (target_entity_id) REFERENCES entities(id)
-    )
-    """,
-    """
     CREATE TABLE IF NOT EXISTS events (
         id TEXT PRIMARY KEY,
         workspace_id TEXT,
