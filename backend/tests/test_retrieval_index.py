@@ -249,6 +249,93 @@ def test_new_canonical_owners_rebuild_and_reread(tmp_path: Path, monkeypatch: py
     get_settings.cache_clear()
 
 
+def test_hermes_operational_memory_is_bounded_redacted_and_reread(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = tmp_path / "hermes"
+    memories = home / "memories"
+    memories.mkdir(parents=True)
+    memory_file = memories / "MEMORY.md"
+    memory_file.write_text(
+        "Remember reactor pressure is checked quarterly\n§\n"
+        "api_key = sk-example-secret-value-123456\n§\n"
+        "Keep the ops password: hunter2 private\n",
+        encoding="utf-8",
+    )
+    user_file = memories / "USER.md"
+    user_file.write_text("Prefers concise operating notes", encoding="utf-8")
+    monkeypatch.setattr(retrieval_index, "_hermes_home", lambda: home)
+
+    docs = retrieval_index.hermes_operational_memory_documents()
+
+    assert len(docs) == 4
+    assert all(doc.source_ref.authority_owner == "hermes_operational_memory" for doc in docs)
+    assert all("non-canonical" in doc.title for doc in docs)
+    assert all("non-canonical" in doc.text and "OPERATIONAL MEMORY" in doc.text for doc in docs)
+    assert "sk-example-secret-value-123456" not in "\n".join(doc.text for doc in docs)
+    assert "hunter2" not in "\n".join(doc.text for doc in docs)
+
+    index = SQLiteIndexStore(documents=lambda: docs, embedder=retrieval_index.HashingEmbedder())
+    index.rebuild()
+    ref = docs[0].source_ref
+    assert index.resolve_authoritative(ref).state == "current"
+    bundle = index.build_bundle("reactor pressure quarterly", workspace_id=None, token_budget=300,
+                                expansion_level=1)
+    assert any(item.source_ref.authority_owner == "hermes_operational_memory" for item in bundle.items)
+
+    memory_file.write_text("A changed Hermes operational memory entry", encoding="utf-8")
+    assert index.resolve_authoritative(ref).state == "stale"
+    stale_bundle = index.build_bundle("reactor pressure quarterly", workspace_id=None, token_budget=300,
+                                      expansion_level=1)
+    assert not any(item.source_ref == ref for item in stale_bundle.items)
+    assert any(entry.source_ref == ref and entry.outcome == "stale" for entry in stale_bundle.evidence_manifest)
+    memory_file.unlink()
+    user_file.unlink()
+    assert index.resolve_authoritative(ref).state == "unavailable"
+    assert retrieval_index.hermes_operational_memory_documents() == []
+
+
+def test_hermes_operational_memory_age_entry_and_byte_bounds(tmp_path: Path) -> None:
+    from datetime import UTC, datetime, timedelta
+
+    home = tmp_path / "hermes"
+    memories = home / "memories"
+    memories.mkdir(parents=True)
+    old_file = memories / "MEMORY.md"
+    old_file.write_text("old memory", encoding="utf-8")
+    old_timestamp = (datetime.now(UTC) - timedelta(days=366)).timestamp()
+    import os
+
+    os.utime(old_file, (old_timestamp, old_timestamp))
+    assert retrieval_index.hermes_operational_memory_documents(home) == []
+
+    old_file.write_text("\n§\n".join(f"entry {index}" for index in range(140)), encoding="utf-8")
+    docs = retrieval_index.hermes_operational_memory_documents(home)
+    assert len(docs) == retrieval_index._HERMES_MEMORY_MAX_ENTRIES
+
+    old_file.write_bytes(b"x" * (retrieval_index._HERMES_MEMORY_MAX_BYTES + 1))
+    assert retrieval_index.hermes_operational_memory_documents(home) == []
+
+
+def test_hermes_operational_memory_ranks_below_non_operational_sources() -> None:
+    index = SQLiteIndexStore(documents=lambda: [])
+    refs = [
+        SourceRef(authority_owner="modeling", object_type="decision", object_id="canonical",
+                  content_digest=canonical_digest("shared facts")),
+        SourceRef(authority_owner="hermes_operational_memory", object_type="memory_entry",
+                  object_id="MEMORY.md:0", revision="1", content_digest=canonical_digest("shared facts")),
+    ]
+    hits = [retrieval_index.RetrievalHit(source_ref=ref, lexical_score=1.0, fused_score=0.0,
+                                         index_revision="test") for ref in refs]
+    index.search_lexical = lambda *_args, **_kwargs: hits  # type: ignore[method-assign]
+    index.search_vector = lambda *_args, **_kwargs: hits  # type: ignore[method-assign]
+
+    ranked = index.search_hybrid("shared facts", limit=2)
+
+    assert [hit.source_ref.authority_owner for hit in ranked] == ["modeling", "hermes_operational_memory"]
+    assert ranked[0].fused_score > ranked[1].fused_score
+
+
 def test_e5_embedder_prefixes_query_and_passage_differently() -> None:
     """multilingual-e5 requires distinct "query: "/"passage: " prefixes; injects a fake
     SentenceTransformer-like object so no model download or network happens in tests."""

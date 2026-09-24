@@ -11,6 +11,7 @@ from app.modules.ai.retrieval_index import (
     INDEX_SCHEMA_VERSION,
     SQLiteIndexStore,
     canonical_documents,
+    hermes_operational_memory_documents,
     repository_file_documents,
     repository_symbol_documents,
 )
@@ -27,7 +28,8 @@ def main() -> None:
     files = repository_file_documents(args.repository_root, args.commit_sha, args.path) if args.commit_sha else []
     symbols = repository_symbol_documents(args.repository_root, args.commit_sha, args.path) if args.commit_sha else []
     store = SQLiteIndexStore(
-        documents=lambda: chain(canonical_documents(), files, symbols), repository_root=args.repository_root,
+        documents=lambda: chain(canonical_documents(), hermes_operational_memory_documents(), files, symbols),
+        repository_root=args.repository_root,
     )
     revision = store.rebuild()
     with open_retrieval_index_connection() as db:

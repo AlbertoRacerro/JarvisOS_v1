@@ -10,7 +10,8 @@ import sqlite3
 import struct
 import subprocess
 from collections.abc import Callable, Iterable, Sequence
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from itertools import chain
 from pathlib import Path
 from typing import Protocol
 
@@ -53,6 +54,19 @@ from app.modules.workspaces.service import list_workspaces
 INDEX_SCHEMA_VERSION = "retrieval-index.v4"
 _SQLITE_VEC_CHUNK_SIZE = 8
 _TOKEN = re.compile(r"\w+", re.UNICODE)
+_HERMES_MEMORY_MAX_ENTRIES = 128
+_HERMES_MEMORY_MAX_BYTES = 256_000
+_HERMES_MEMORY_MAX_AGE = timedelta(days=365)
+_HERMES_MEMORY_REDACTIONS = (
+    re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._~+/=-]{8,}"),
+    re.compile(r"\b(?:sk-[A-Za-z0-9_-]{12,}|gh[pousr]_[A-Za-z0-9_]{12,}|github_pat_[A-Za-z0-9_]{12,}|xox[baprs]-[A-Za-z0-9-]{12,})\b"),
+    re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
+    re.compile(r"\bAIza[0-9A-Za-z_-]{30,}\b|\bya29\.[0-9A-Za-z_-]{20,}\b"),
+    re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b"),
+    re.compile(r"(?i)(\b(?:api[_ -]?key|access[_ -]?token|client[_ -]?secret|password|passwd|secret|token)\b\s*[:=]\s*)([^\s,;]+)"),
+    re.compile(r"(?i)(https?://[^:/\s]+:)([^@/\s]+)(@)"),
+    re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----[\s\S]*?-----END (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
+)
 
 
 class Embedder(Protocol):
@@ -199,6 +213,87 @@ def canonical_documents() -> Iterable[IndexDocument]:
             doc = _snapshot_document(snapshot, wid)
             if len(doc.text) <= 200_000:
                 yield doc
+
+
+def _hermes_home() -> Path:
+    from app.core.paths import build_paths
+
+    return build_paths().data_root / "hermes"
+
+
+def _redact_hermes_memory(text: str) -> str:
+    for pattern in _HERMES_MEMORY_REDACTIONS:
+        if pattern.groups:
+            text = pattern.sub(lambda match: match.group(1) + "[REDACTED]" +
+                               (match.group(3) if match.lastindex and match.lastindex >= 3 else ""), text)
+        else:
+            text = pattern.sub("[REDACTED]", text)
+    return text
+
+
+def _hermes_memory_file_documents(home: Path, *, now: datetime | None = None) -> list[IndexDocument]:
+    """Read bounded Hermes built-in memories as operational context, never canonical state.
+
+    Hermes 0.21.4 stores entries in memories/{MEMORY,USER}.md separated by ``\\n§\\n``.
+    The separate state.db session/message store remains owned by Hermes session_search.
+    """
+    now = now or datetime.now(UTC)
+    documents: list[IndexDocument] = []
+    total_bytes = 0
+    for filename, label in (("MEMORY.md", "agent notes"), ("USER.md", "user profile")):
+        path = home / "memories" / filename
+        try:
+            stat = path.stat()
+            modified = datetime.fromtimestamp(stat.st_mtime, UTC)
+            remaining_bytes = _HERMES_MEMORY_MAX_BYTES - total_bytes
+            if stat.st_size <= 0 or stat.st_size > remaining_bytes:
+                continue
+            if now - modified > _HERMES_MEMORY_MAX_AGE or modified > now + timedelta(minutes=5):
+                continue
+            with path.open("rb") as source:
+                raw = source.read(remaining_bytes + 1)
+        except (OSError, ValueError):
+            continue
+        if len(raw) != stat.st_size or total_bytes + len(raw) > _HERMES_MEMORY_MAX_BYTES:
+            continue
+        try:
+            entries = [entry.strip() for entry in raw.decode("utf-8").split("\n§\n") if entry.strip()]
+        except UnicodeDecodeError:
+            continue
+        total_bytes += len(raw)
+        revision = str(stat.st_mtime_ns)
+        for entry_index, entry in enumerate(entries):
+            if len(documents) >= _HERMES_MEMORY_MAX_ENTRIES:
+                return documents
+            safe_entry = _redact_hermes_memory(entry)
+            if not safe_entry.strip():
+                continue
+            text = ("OPERATIONAL MEMORY — Hermes built-in memory; non-canonical, may be outdated, "
+                    "never authoritative JarvisOS state.\n"
+                    f"Source: {label} ({filename})\n{safe_entry}")
+            if len(text.encode("utf-8")) > _HERMES_MEMORY_MAX_BYTES:
+                continue
+            ref = SourceRef(
+                authority_owner="hermes_operational_memory", object_type="memory_entry",
+                object_id=f"{filename}:{entry_index}", revision=revision,
+                content_digest=canonical_digest(text),
+            )
+            documents.append(IndexDocument(
+                source_ref=ref, title=f"Operational memory · Hermes · {label} · non-canonical", text=text,
+            ))
+    return documents
+
+
+def hermes_operational_memory_documents(home: Path | None = None) -> list[IndexDocument]:
+    """Return bounded, redacted Hermes memory entries when the Hermes store exists."""
+    return _hermes_memory_file_documents(home or _hermes_home())
+
+
+def _resolve_hermes_operational_memory(ref: SourceRef) -> IndexDocument | None:
+    if ref.object_type != "memory_entry":
+        return None
+    return next((doc for doc in hermes_operational_memory_documents()
+                 if doc.source_ref.object_id == ref.object_id), None)
 
 
 def _git_show(repo: Path, sha: str, path: str) -> str | None:
@@ -355,6 +450,7 @@ _OWNER_RESOLVERS: dict[tuple[str, str], Callable[[SourceRef], IndexDocument | No
     ("bluecad", "attempt"): _resolve_bluecad,
     ("ai_threads", "thread"): _resolve_thread,
     ("ai_threads", "interaction"): _resolve_thread,
+    ("hermes_operational_memory", "memory_entry"): _resolve_hermes_operational_memory,
 }
 
 
@@ -378,7 +474,8 @@ def _pack_vector(vector: Sequence[float]) -> bytes:
 
 class SQLiteIndexStore:
     def __init__(self, *, embedder: Embedder | None = None,
-                 documents: Callable[[], Iterable[IndexDocument]] = canonical_documents,
+                 documents: Callable[[], Iterable[IndexDocument]] = lambda: chain(
+                     canonical_documents(), hermes_operational_memory_documents()),
                  resolver: Callable[[SourceRef], IndexDocument | None] | None = None,
                  repository_root: Path | None = None) -> None:
         self.embedder = embedder or HashingEmbedder()
@@ -485,14 +582,17 @@ class SQLiteIndexStore:
 
     def rebuild(self) -> str:
         full_docs = sorted(self.documents(), key=lambda item: _key(item.source_ref))
-        summaries = [_document_summary(doc) for doc in full_docs]
+        summaries = {
+            _key(doc.source_ref): _document_summary(doc) for doc in full_docs
+            if doc.source_ref.authority_owner != "hermes_operational_memory"
+        }
         groups: dict[tuple[str, str | None], list[IndexDocument]] = {}
         for doc in full_docs:
             ref = doc.source_ref
             groups.setdefault((ref.authority_owner, ref.workspace_id), []).append(doc)
         group_docs = [_group_summary(items, owner, wid) for (owner, wid), items in sorted(
             groups.items(), key=lambda pair: (pair[0][0], pair[0][1] or ""))]
-        docs = sorted([*full_docs, *summaries, *group_docs], key=lambda item: _key(item.source_ref))
+        docs = sorted([*full_docs, *summaries.values(), *group_docs], key=lambda item: _key(item.source_ref))
         identities = {
             (ref.authority_owner, ref.object_type, ref.object_id, ref.workspace_id): _key(ref)
             for ref in (doc.source_ref for doc in docs)
@@ -517,14 +617,17 @@ class SQLiteIndexStore:
                 _load_vector_extension(db)
                 db.execute("DELETE FROM vec_docs")
             self._upsert(db, docs)
-            for doc, summary in zip(full_docs, summaries, strict=True):
-                db.execute("INSERT INTO edges VALUES (?,?,?,?)",
-                           (_key(summary.source_ref), _key(doc.source_ref), "summary_document", None))
+            for doc in full_docs:
+                summary = summaries.get(_key(doc.source_ref))
+                if summary is not None:
+                    db.execute("INSERT INTO edges VALUES (?,?,?,?)",
+                               (_key(summary.source_ref), _key(doc.source_ref), "summary_document", None))
             for group in group_docs:
                 for doc in groups[(group.source_ref.object_id, group.source_ref.workspace_id)]:
-                    db.execute("INSERT INTO edges VALUES (?,?,?,?)",
-                               (_key(group.source_ref), _key(_document_summary(doc).source_ref),
-                                "group_summary", None))
+                    summary = summaries.get(_key(doc.source_ref))
+                    if summary is not None:
+                        db.execute("INSERT INTO edges VALUES (?,?,?,?)",
+                                   (_key(group.source_ref), _key(summary.source_ref), "group_summary", None))
             for doc in full_docs:
                 ref = doc.source_ref
                 if ref.authority_owner in {"modeling", "bluecad", "ai_threads"}:
@@ -731,8 +834,14 @@ class SQLiteIndexStore:
                     (previous.vector_score if previous else None),
                 })
                 scores[key] = scores.get(key, 0.0) + 1.0 / (60 + rank)
-        ordered = sorted(scores, key=lambda key: (-scores[key], key))[:limit]
-        return [ranked[key].model_copy(update={"fused_score": scores[key]}) for key in ordered]
+        def ranked_score(key: str) -> float:
+            # Hermes memory is useful operational context, but always ranks below canonical
+            # JarvisOS and exact-revision repository sources when their retrieval evidence ties.
+            factor = 0.2 if ranked[key].source_ref.authority_owner == "hermes_operational_memory" else 1.0
+            return scores[key] * factor
+
+        ordered = sorted(scores, key=lambda key: (-ranked_score(key), key))[:limit]
+        return [ranked[key].model_copy(update={"fused_score": ranked_score(key)}) for key in ordered]
 
     def resolve_authoritative(self, ref: SourceRef) -> AuthoritativeResolution:
         doc: IndexDocument | None = None
@@ -804,6 +913,9 @@ class SQLiteIndexStore:
         with open_retrieval_index_connection() as db:
             for hit in direct:
                 ref = hit.source_ref
+                if ref.authority_owner == "hermes_operational_memory":
+                    include(hit, 0)
+                    continue
                 if ref.authority_owner == "retrieval":
                     include(hit, 0)
                     continue
