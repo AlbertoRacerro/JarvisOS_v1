@@ -7,9 +7,11 @@ import hashlib
 import os
 import shlex
 import subprocess
+import time
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
+from threading import Event
 from typing import Any
 
 import yaml
@@ -230,17 +232,45 @@ def resolve_tool(tool_id: str, registry_path: str | Path | None = None) -> ToolE
     return dict(tool)
 
 
-def run_tool(tool_id: str, args: list[str], cwd: str | Path, timeout: float, registry_path: str | Path | None = None) -> ToolRunResult:
+def run_tool(tool_id: str, args: list[str], cwd: str | Path, timeout: float, registry_path: str | Path | None = None, *, cancel: Event | None = None) -> ToolRunResult:
     """Run an enabled subprocess/container registry tool with captured output."""
     tool = resolve_tool(tool_id, registry_path)
     if tool["integration_mode"] not in _HASH_MODES:
         raise ToolRegistryError("TOOL_NOT_SUBPROCESS", "Tool is not configured for subprocess execution", {"tool_id": tool_id})
     command = [tool["entrypoint"], *args]
+    env = dict(_MINIMAL_ENV)
+    if tool_id in {"openfoam", "openfoam_blockmesh"}:
+        prefix = Path(tool["entrypoint"]).resolve().parent.parent
+        env.update({
+            "PATH": str(prefix / "bin"),
+            "LD_LIBRARY_PATH": str(prefix / "lib"),
+            "WM_PROJECT_DIR": str(prefix),
+            "FOAM_CONFIG_ETC": str(prefix / "etc"),
+            "WM_PROJECT_VERSION": tool["version_pin"],
+            "PWD": str(Path(cwd).resolve()),
+        })
+    if cancel is not None:
+        process = subprocess.Popen(  # noqa: S603 - registry-pinned and hash-verified.
+            command, cwd=Path(cwd), env=env, shell=False, text=True,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
+        deadline = time.monotonic() + timeout
+        while True:
+            if cancel.is_set() or time.monotonic() >= deadline:
+                process.kill()
+                stdout, stderr = process.communicate()
+                return ToolRunResult(130 if cancel.is_set() else 124, stdout, stderr,
+                                     timed_out=not cancel.is_set(), code="CANCELLED" if cancel.is_set() else "TIMEOUT")
+            try:
+                stdout, stderr = process.communicate(timeout=min(0.1, max(0.001, deadline - time.monotonic())))
+                return ToolRunResult(process.returncode, stdout, stderr)
+            except subprocess.TimeoutExpired:
+                continue
     try:
         completed = subprocess.run(  # noqa: S603 - command is registry-pinned and hash-verified.
             command,
             cwd=Path(cwd),
-            env=_MINIMAL_ENV,
+            env=env,
             shell=False,
             text=True,
             capture_output=True,
@@ -250,8 +280,8 @@ def run_tool(tool_id: str, args: list[str], cwd: str | Path, timeout: float, reg
     except subprocess.TimeoutExpired as exc:
         return ToolRunResult(
             returncode=124,
-            stdout=exc.stdout or "",
-            stderr=exc.stderr or "",
+            stdout=(exc.stdout or b"").decode(errors="replace") if isinstance(exc.stdout, bytes) else exc.stdout or "",
+            stderr=(exc.stderr or b"").decode(errors="replace") if isinstance(exc.stderr, bytes) else exc.stderr or "",
             timed_out=True,
             code="TIMEOUT",
         )
