@@ -241,7 +241,7 @@ def test_sqlite_vec_matches_python_fallback_ranking(tmp_path: Path, monkeypatch:
     """Optional accelerator: when sqlite-vec loads, vec0 KNN must rank identical embeddings
     the same as the pure-Python brute-force path. Skips where sqlite-vec is not installed
     (the backend venv); must pass in an environment that has it (e.g. the q148 venv)."""
-    pytest.importorskip("sqlite_vec")
+    sqlite_vec = pytest.importorskip("sqlite_vec")
     docs = {
         "a": _doc("a", "w1", "alpha reactor pressure vessel design margin"),
         "b": _doc("b", "w1", "beta pressure vessel safety margin inspection"),
@@ -270,6 +270,18 @@ def test_sqlite_vec_matches_python_fallback_ranking(tmp_path: Path, monkeypatch:
     assert accelerated_hits
     assert accelerated_hits == fallback_hits
     assert "e" not in accelerated_hits
+
+    # An index written without the accelerator (fallback) and later opened with it must
+    # backfill vec_docs from the stored vectors instead of serving an empty/stale vec0 table.
+    fallback.upsert([_doc("f", "w1", "reactor pressure vessel margin extra")])
+    expected = [hit.source_ref.object_id for hit in
+                fallback.search_vector("reactor pressure vessel margin", limit=10, workspace_id="w1")]
+    monkeypatch.setattr(retrieval_index, "sqlite_vec", sqlite_vec)
+    reopened = SQLiteIndexStore(documents=lambda: docs.values(), resolver=lambda ref: docs.get(ref.object_id))
+    assert reopened.use_sqlite_vec is True
+    assert [hit.source_ref.object_id for hit in
+            reopened.search_vector("reactor pressure vessel margin", limit=10, workspace_id="w1")] == expected
+    assert "f" in expected
     get_settings.cache_clear()
 
 

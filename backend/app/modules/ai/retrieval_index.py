@@ -385,6 +385,7 @@ class SQLiteIndexStore:
         self.resolver = resolver
         self.repository_root = repository_root
         self.use_sqlite_vec = False
+        self._vector_dimensions = 0
         self._initialize()
 
     def _initialize(self) -> None:
@@ -395,8 +396,6 @@ class SQLiteIndexStore:
             if version and version[0] != INDEX_SCHEMA_VERSION:
                 for table in ("edges", "docs_fts", "docs"):
                     db.execute(f"DROP TABLE IF EXISTS {table}")
-                if use_vec:
-                    db.execute("DROP TABLE IF EXISTS vec_docs")
                 db.execute("DELETE FROM meta")
             db.execute("INSERT OR IGNORE INTO meta VALUES ('schema_version', ?)", (INDEX_SCHEMA_VERSION,))
             db.execute(
@@ -411,12 +410,33 @@ class SQLiteIndexStore:
             )
             self.use_sqlite_vec = use_vec
             if use_vec:
-                dimensions = len(self.embedder.embed(""))
-                db.execute(
-                    "CREATE VIRTUAL TABLE IF NOT EXISTS vec_docs USING vec0(key TEXT PRIMARY KEY, "
-                    f"workspace_id TEXT PARTITION KEY, embedding FLOAT[{dimensions}] distance_metric=cosine)"
-                )
+                self._sync_vector_table(db)
             db.commit()
+
+    def _sync_vector_table(self, db: sqlite3.Connection) -> None:
+        """Keep the derived vec0 table consistent with ``docs.vector`` (the rebuildable source).
+
+        The index may have been written by a process without sqlite-vec, or with another
+        embedding dimension; any mismatch against the recorded state rebuilds vec_docs from
+        the stored vectors, so the accelerator never serves stale neighbours.
+        """
+        self._vector_dimensions = len(self.embedder.embed(""))
+        row = db.execute("SELECT value FROM meta WHERE name='revision'").fetchone()
+        state = db.execute("SELECT value FROM meta WHERE name='vector_index'").fetchone()
+        if state and state[0] == f"{self._vector_dimensions}:{row[0] if row else ''}":
+            return
+        db.execute("DROP TABLE IF EXISTS vec_docs")
+        db.execute(
+            "CREATE VIRTUAL TABLE vec_docs USING vec0(key TEXT PRIMARY KEY, workspace_id TEXT PARTITION KEY, "
+            f"embedding FLOAT[{self._vector_dimensions}] distance_metric=cosine)"
+        )
+        for key, workspace_id, vector_json in db.execute("SELECT key, workspace_id, vector FROM docs").fetchall():
+            vector = json.loads(vector_json)
+            if len(vector) == self._vector_dimensions:
+                db.execute("INSERT INTO vec_docs(key, workspace_id, embedding) VALUES (?,?,?)",
+                           (key, workspace_id, _pack_vector(vector)))
+        db.execute("INSERT OR REPLACE INTO meta VALUES ('vector_index', ?)",
+                   (f"{self._vector_dimensions}:{row[0] if row else ''}",))
 
     def _revision(self, db: sqlite3.Connection) -> str:
         rows = [tuple(row) for row in db.execute("SELECT key,ref,object_id,title,text,vector FROM docs ORDER BY key")]
@@ -425,6 +445,9 @@ class SQLiteIndexStore:
         ]
         revision = canonical_digest({"documents": rows, "edges": edges})
         db.execute("INSERT OR REPLACE INTO meta VALUES ('revision', ?)", (revision,))
+        if self.use_sqlite_vec:
+            db.execute("INSERT OR REPLACE INTO meta VALUES ('vector_index', ?)",
+                       (f"{self._vector_dimensions}:{revision}",))
         return revision
 
     @property
@@ -627,17 +650,18 @@ class SQLiteIndexStore:
             if self.use_sqlite_vec:
                 _load_vector_extension(db)
                 q_bytes = _pack_vector(q)
+                k = min(limit, 4096)  # vec0 KNN hard limit
                 if workspace_id is None:
                     rows = db.execute(
                         "SELECT d.*, v.distance AS distance FROM vec_docs v JOIN docs d ON d.key = v.key "
                         "WHERE v.embedding MATCH ? AND v.k = ? ORDER BY v.distance, d.key",
-                        (q_bytes, limit),
+                        (q_bytes, k),
                     ).fetchall()
                 else:
                     rows = db.execute(
                         "SELECT d.*, v.distance AS distance FROM vec_docs v JOIN docs d ON d.key = v.key "
                         "WHERE v.embedding MATCH ? AND v.k = ? AND v.workspace_id = ? ORDER BY v.distance, d.key",
-                        (q_bytes, limit, workspace_id),
+                        (q_bytes, k, workspace_id),
                     ).fetchall()
                 scored = [(1.0 - float(row["distance"]), row) for row in rows]
             else:
