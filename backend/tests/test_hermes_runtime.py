@@ -13,6 +13,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from fastapi.testclient import TestClient
 
 import app.modules.agents.hermes.supervisor as hermes_supervisor_module
 from app.modules.agents.hermes.broker_mcp import _reply
@@ -26,7 +27,13 @@ from app.modules.agents.hermes.supervisor import (
     run_governed_inference,
     worker_environment,
 )
-from app.modules.agents.hermes.worker_shim import AUXILIARY_TASKS, completion_message, pinned_config
+from app.modules.agents.hermes.worker_shim import (
+    AUXILIARY_TASKS,
+    DISABLED_TOOLSETS,
+    ENABLED_TOOLSETS,
+    completion_message,
+    pinned_config,
+)
 from app.modules.ai.agent_contracts import (
     AgentControlCommand,
     AgentEvent,
@@ -137,6 +144,8 @@ def test_all_auxiliary_routes_and_environment_are_pinned(tmp_path: Path, monkeyp
     assert "OPENAI_API_KEY" not in env and "ANTHROPIC_API_KEY" not in env
     assert env["HERMES_DISABLE_LAZY_INSTALLS"] == "1"
     assert list(config["mcp_servers"]) == ["jarvis"]
+    assert "delegation" not in ENABLED_TOOLSETS and "delegation" in DISABLED_TOOLSETS
+    assert "skills" not in ENABLED_TOOLSETS and "skills" in DISABLED_TOOLSETS
 
 
 def test_mcp_protocol_discloses_only_broker_tool() -> None:
@@ -260,6 +269,22 @@ def test_capability_registration_is_safe_on_module_reload() -> None:
     importlib.reload(hermes_supervisor_module)
 
 
+def test_hermes_status_is_exposed_on_agent_api(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("JARVISOS_DATA_ROOT", str(tmp_path / "data"))
+    from app.main import create_app
+
+    with TestClient(create_app()) as client:
+        response = client.get("/agents/hermes/status")
+    assert response.status_code == 200
+    assert response.json() == {
+        "worker_pid": None,
+        "state": "stopped",
+        "upstream_revision": SESSION.upstream_revision,
+        "generation": None,
+        "last_error": None,
+    }
+
+
 def test_expected_worker_exit_is_not_reported_as_worker_loss(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -358,9 +383,9 @@ def test_real_worker_turn_interrupt_relay(tmp_path: Path) -> None:
         bound = json.loads(process.stdout.readline())
         assert bound["type"] == "ack"
         assert bound["tools"]
+        assert not {"delegate_task", "skills_list", "skill_view"} & set(bound["tools"])
         assert set(bound["tools"]) <= {
-            "mcp__jarvis__jarvis_context_preview", "delegate_task", "skills_list",
-            "skill_view", "memory", "session_search",
+            "mcp__jarvis__jarvis_context_preview", "memory", "session_search",
         }
         process.stdin.write(json.dumps({"type": "turn", "id": "turn-1", "prompt": "Say hello"}) + "\n")
         process.stdin.flush()

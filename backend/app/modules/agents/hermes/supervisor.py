@@ -40,10 +40,8 @@ _MAX_FRAME = 2_000_000
 _SEED_INTERACTIONS = 20
 _SEED_CHARS = 60_000
 # Tool schemas Jarvis admits in a relayed model request. Only the broker tool reaches Jarvis
-# capabilities; the Hermes-native ones act on the worker's own HERMES_HOME (skills read,
-# bounded memory notes, Hermes session search) or spawn children whose inference is relayed.
-HERMES_TOOL_ALLOWLIST = frozenset({"mcp__jarvis__jarvis_context_preview", "delegate_task", "skills_list",
-                                   "skill_view", "memory", "session_search"})
+# capabilities; memory and session search remain read-only worker-local tools.
+HERMES_TOOL_ALLOWLIST = frozenset({"mcp__jarvis__jarvis_context_preview", "memory", "session_search"})
 _BWRAP_PREFIX = ("bwrap", "--dev-bind", "/", "/", "--unshare-net", "--die-with-parent", "--")
 
 _HERMES_CONTEXT_CAPABILITY = JarvisCapabilityDescriptor(

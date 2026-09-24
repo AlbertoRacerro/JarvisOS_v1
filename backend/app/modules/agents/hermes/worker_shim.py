@@ -61,19 +61,18 @@ def verify_upstream() -> None:
         raise RuntimeError("Hermes source revision is not qualified")
 
 
-# Hermes toolsets reachable through Jarvis boundaries. Inference for every one of them
-# (including delegated children) goes through the relay; the only external-effect tool is
-# the Jarvis broker. Skills/memory/session_search touch only the Jarvis-owned HERMES_HOME.
-ENABLED_TOOLSETS = ["mcp-jarvis", "delegation", "skills", "memory", "session_search"]
+# Only the Jarvis MCP broker is enabled for capabilities. Delegation and skills remain
+# disabled until their actions can be presented to, and authorized by, that broker.
+ENABLED_TOOLSETS = ["mcp-jarvis", "memory", "session_search"]
 DISABLED_TOOLSETS = ["terminal", "file", "code_execution", "browser", "web", "search", "x_search",
                      "connections", "cronjob", "computer_use", "image_gen", "video_gen", "vision",
-                     "tts", "kanban", "clarify", "homeassistant", "todo", "project", "coding"]
+                     "tts", "kanban", "clarify", "homeassistant", "todo", "project", "coding",
+                     "delegation", "skills"]
 # Tools removed from the model-visible schema even though their toolset is enabled:
 # skill_manage writes new instruction files (persistent prompt injection surface).
 WITHHELD_TOOLS = frozenset({"skill_manage"})
 # Tool names Jarvis admits in a relayed request; mirrors supervisor.HERMES_TOOL_ALLOWLIST.
-ADMITTED_TOOLS = frozenset({"mcp__jarvis__jarvis_context_preview", "delegate_task", "skills_list",
-                            "skill_view", "memory", "session_search"})
+ADMITTED_TOOLS = frozenset({"mcp__jarvis__jarvis_context_preview", "memory", "session_search"})
 
 
 def pinned_config(base_url: str, token: str, python: str | None = None) -> dict[str, Any]:
