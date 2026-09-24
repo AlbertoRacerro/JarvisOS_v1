@@ -13,6 +13,10 @@ class JarvisPaths:
     logs_dir: Path
 
     @property
+    def retrieval_index_file(self) -> Path:
+        return self.data_root / "retrieval-index.sqlite3"
+
+    @property
     def secrets_dir(self) -> Path:
         return self.data_root / "secrets"
 

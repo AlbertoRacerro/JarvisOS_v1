@@ -67,6 +67,8 @@ from app.core.token_flow_schema import (
 )
 from app.modules.events.service import utc_now
 
+RETRIEVAL_INDEX_MAX_PAGE_COUNT = 262_144  # 1 GiB at SQLite's default 4 KiB page size.
+
 RUNNER_CREATE_REQUEST_MIGRATION_STATEMENTS = (
     "ALTER TABLE runner_jobs ADD COLUMN request_key TEXT",
 )
@@ -112,8 +114,8 @@ def get_database_path() -> Path:
 
 
 @contextmanager
-def open_sqlite_connection() -> Iterator[sqlite3.Connection]:
-    database_path = get_database_path()
+def open_sqlite_connection(database_path: Path | None = None) -> Iterator[sqlite3.Connection]:
+    database_path = database_path or get_database_path()
     database_path.parent.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(database_path)
     connection.row_factory = sqlite3.Row
@@ -124,6 +126,16 @@ def open_sqlite_connection() -> Iterator[sqlite3.Connection]:
         yield connection
     finally:
         connection.close()
+
+
+@contextmanager
+def open_retrieval_index_connection() -> Iterator[sqlite3.Connection]:
+    """Open the disposable retrieval database, separate from canonical migrations."""
+    with open_sqlite_connection(build_paths().retrieval_index_file) as connection:
+        # Retrieval is rebuildable derived state. Bound its disk footprint so a corpus
+        # or vector-index regression fails explicitly instead of exhausting the data root.
+        connection.execute(f"PRAGMA max_page_count = {RETRIEVAL_INDEX_MAX_PAGE_COUNT}")
+        yield connection
 
 
 def initialize_database() -> DatabaseInfo:
