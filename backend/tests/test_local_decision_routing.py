@@ -179,11 +179,20 @@ def test_cpu_and_memory_observation(monkeypatch: pytest.MonkeyPatch) -> None:
         resource_observation, "query_memory", lambda: parse_linux_meminfo("MemTotal: 16384 kB\nMemAvailable: 8192 kB\n")
     )
     monkeypatch.setattr(resource_observation, "query_gpus", lambda: ())
+    monkeypatch.setattr(resource_observation, "query_cpu_utilization", lambda: 0.25)
     monkeypatch.setattr(resource_observation, "get_local_ai_runtime_status", lambda: {})
     snapshot = resource_observation.observe_resources()
     assert snapshot.cpu.logical_cores == 8
-    assert snapshot.cpu.utilization is None
+    assert snapshot.cpu.utilization == 0.25
     assert snapshot.memory.available_bytes == 8192 * 1024
+
+
+def test_cpu_utilization_uses_observed_interval(monkeypatch: pytest.MonkeyPatch) -> None:
+    readings = iter(((100, 60), (200, 120)))
+    monkeypatch.setattr(resource_observation.sys, "platform", "linux")
+    monkeypatch.setattr(resource_observation, "_linux_cpu_ticks", lambda: next(readings))
+    monkeypatch.setattr(resource_observation.time, "sleep", lambda _seconds: None)
+    assert resource_observation.query_cpu_utilization() == 0.4
 
 
 def test_windows_memory_api_and_unavailable_platform(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -310,6 +319,31 @@ def test_optional_classifier_output_stays_inside_typed_candidate_gate() -> None:
         GlinerDecisionModel(LocalClassifier("local:fast", 0.4), "abc").decide(request, (candidate,)).outcome
         == "abstained"
     )
+    candidate_only = request.model_copy(update={"output_specs": ()})
+    result = GlinerDecisionModel(LocalClassifier("local:fast", 0.9), "abc").decide(candidate_only, (candidate,))
+    assert result.outcome == "decided" and result.selected_candidate == "local:fast" and result.outputs == ()
+    class TypedClassifier:
+        def classify_text(self, task: str, schema: dict[str, list[str]], *, include_confidence: bool) -> dict[str, object]:
+            assert schema == {"answer": ["true", "false"], "category": ["bug", "question"]}
+            return {"answer": {"label": "true"}, "category": {"label": "bug"}}
+
+    from app.modules.local_ai.decision_contracts import BoolDecisionOutput, EnumDecisionOutput
+
+    typed = request.model_copy(
+        update={
+            "candidate_set": (),
+            "output_specs": (
+                DecisionOutputSpec(name="answer", kind="bool"),
+                DecisionOutputSpec(name="category", kind="enum", enum_values=("bug", "question")),
+            ),
+        }
+    )
+    result = GlinerDecisionModel(TypedClassifier(), "abc").decide(typed, ())
+    assert result.outcome == "decided"
+    assert result.outputs == (
+        BoolDecisionOutput(name="answer", value=True),
+        EnumDecisionOutput(name="category", value="bug"),
+    )
 
 
 def test_typed_decision_corpus_scorer() -> None:
@@ -320,7 +354,9 @@ def test_typed_decision_corpus_scorer() -> None:
 
 def test_fallback_after_provider_failure_and_local_only_binding(monkeypatch: pytest.MonkeyPatch) -> None:
     registry = load_default_provider_registry()
-    assert len({candidate.model_name for candidate in local_candidates(registry)}) == len(local_candidates(registry))
+    aliases = [candidate for candidate in local_candidates(registry) if candidate.model_name == "gemma4:12b-it-qat"]
+    assert {candidate.candidate_id for candidate in aliases} == {"local:general", "local:gemma"}
+    assert all("general" not in candidate.capabilities for candidate in aliases if candidate.candidate_id == "local:gemma")
     candidates = (
         LocalCandidate("local:fast", "qwen3:8b", 8192, frozenset({"fast"})),
         LocalCandidate("local:general", "gemma4:12b-it-qat", 8192, frozenset({"general"})),
@@ -359,6 +395,25 @@ def test_fallback_after_provider_failure_and_local_only_binding(monkeypatch: pyt
         installed_sizes={},
             user_prompt="x", task_kind="general", owner_id="env-1", arbiter=arbiter, candidates=(external,)
         )
+
+
+def test_route_alias_keeps_requested_capability_in_execution_evidence(monkeypatch: pytest.MonkeyPatch) -> None:
+    registry = load_default_provider_registry()
+    arbiter = InProcessResourceArbiter(lambda: observed(loaded=("gemma4:12b-it-qat",)))
+    seen: list[str] = []
+
+    def execute(**kwargs: object) -> AiTaskOutcome:
+        route = kwargs["route_class"]
+        assert isinstance(route, str)
+        seen.append(route)
+        return AiTaskOutcome("success", "job-gemma", route, RoutingDecision())
+
+    monkeypatch.setattr(local_router, "run_ai_task", execute)
+    outcome = run_local_selected_task(
+        user_prompt="hello", task_kind="general", owner_id="env-gemma", arbiter=arbiter,
+        registry=registry, candidates=local_candidates(registry), capability="gemma",
+    )
+    assert outcome.status == "success" and seen == ["local:gemma"]
 
 
 def test_cold_models_claim_their_installed_size_instead_of_being_refused() -> None:

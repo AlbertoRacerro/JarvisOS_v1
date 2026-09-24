@@ -7,6 +7,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -110,6 +111,54 @@ def query_memory() -> MemoryState:
     return MemoryState()
 
 
+def _linux_cpu_ticks() -> tuple[int, int] | None:
+    try:
+        line = Path("/proc/stat").read_text(encoding="ascii").splitlines()[0]
+        fields = line.split()
+        if fields[0] != "cpu" or len(fields) < 5:
+            return None
+        ticks = [int(value) for value in fields[1:]]
+        idle = ticks[3] + (ticks[4] if len(ticks) > 4 else 0)
+        return sum(ticks), idle
+    except (OSError, UnicodeError, ValueError, IndexError):
+        return None
+
+
+def _windows_cpu_ticks() -> tuple[int, int] | None:
+    class FileTime(ctypes.Structure):
+        _fields_ = [("low", ctypes.c_ulong), ("high", ctypes.c_ulong)]
+
+        def value(self) -> int:
+            return (self.high << 32) | self.low
+
+    try:
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
+        idle, kernel, user = FileTime(), FileTime(), FileTime()
+        if not kernel32.GetSystemTimes(ctypes.byref(idle), ctypes.byref(kernel), ctypes.byref(user)):
+            return None
+        return kernel.value() + user.value(), idle.value()
+    except (AttributeError, OSError, ValueError):
+        return None
+
+
+def query_cpu_utilization(*, sample_seconds: float = 0.08) -> float | None:
+    """Measure system CPU utilization over a short interval; unknown stays unknown."""
+    read = _linux_cpu_ticks if sys.platform == "linux" else _windows_cpu_ticks if sys.platform == "win32" else None
+    if read is None:
+        return None
+    before = read()
+    if before is None:
+        return None
+    time.sleep(sample_seconds)
+    after = read()
+    if after is None:
+        return None
+    total_delta, idle_delta = after[0] - before[0], after[1] - before[1]
+    if total_delta <= 0 or idle_delta < 0 or idle_delta > total_delta:
+        return None
+    return (total_delta - idle_delta) / total_delta
+
+
 def observe_resources() -> RuntimeResourceSnapshot:
     status = get_local_ai_runtime_status()
     models: list[LoadedModelState] = []
@@ -128,7 +177,7 @@ def observe_resources() -> RuntimeResourceSnapshot:
     return RuntimeResourceSnapshot(
         generation=0,
         observed_at=datetime.now(UTC),
-        cpu=CpuState(logical_cores=os.cpu_count()),
+        cpu=CpuState(logical_cores=os.cpu_count(), utilization=query_cpu_utilization()),
         memory=query_memory(),
         gpus=query_gpus(),
         loaded_models=tuple(models),

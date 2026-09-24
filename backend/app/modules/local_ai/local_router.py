@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
+from threading import Lock
+from time import perf_counter
 from uuid import uuid4
 
 from app.modules.ai.contracts import AIProviderAdapter
@@ -43,10 +45,13 @@ class LocalRouteOutcome:
     attempts: tuple[LocalRouteAttempt, ...]
 
 
+_LATENCY_LOCK = Lock()
+_OBSERVED_LATENCY_MS: dict[str, int] = {}
+
+
 def local_candidates(registry: ProviderRegistry | None = None) -> tuple[LocalCandidate, ...]:
     registry = registry or load_default_provider_registry()
     candidates: list[LocalCandidate] = []
-    model_positions: dict[str, int] = {}
     for route, binding in registry.bindings.items():
         if binding.execution_class != "local_compute" or binding.requires_network or not route.startswith("local:"):
             continue
@@ -54,14 +59,16 @@ def local_candidates(registry: ProviderRegistry | None = None) -> tuple[LocalCan
         if model is None or binding.context_window_tokens is None:
             continue
         capability = route.removeprefix("local:")
-        if model.provider_model_name in model_positions:
-            index = model_positions[model.provider_model_name]
-            existing = candidates[index]
-            candidates[index] = replace(existing, capabilities=existing.capabilities | {capability})
-            continue
-        model_positions[model.provider_model_name] = len(candidates)
+        # Keep route identity: two route classes may intentionally bind the same
+        # model, and execution/evidence must retain the requested route.
         candidates.append(
-            LocalCandidate(route, model.provider_model_name, binding.context_window_tokens, frozenset({capability}))
+            LocalCandidate(
+                route,
+                model.provider_model_name,
+                binding.context_window_tokens,
+                frozenset({capability}),
+                latency_ms=_OBSERVED_LATENCY_MS.get(model.provider_model_name),
+            )
         )
     return tuple(candidates)
 
@@ -145,7 +152,10 @@ def run_local_selected_task(
         if context_tokens + binding.max_output_tokens > binding.context_window_tokens:
             continue
         model_config = registry.models[(binding.provider_id, binding.model_id)]
-        if capability and f"local:{capability}" not in model_config.route_classes:
+        if capability and (
+            binding.route_class != f"local:{capability}"
+            or f"local:{capability}" not in model_config.route_classes
+        ):
             continue
         remaining.append(candidate)
     model = decision_model or RuleDecisionModel()
@@ -214,6 +224,7 @@ def run_local_selected_task(
             attempts.append(LocalRouteAttempt(decision, None, None, "reservation_refused"))
             return LocalRouteOutcome("reservation_refused", last_outcome, tuple(attempts))
         outcome: AiTaskOutcome | None = None
+        started = perf_counter()
         try:
             outcome = run_ai_task(
                 user_prompt=user_prompt,
@@ -224,6 +235,9 @@ def run_local_selected_task(
             )
             last_outcome = outcome
         finally:
+            elapsed_ms = max(1, round((perf_counter() - started) * 1000))
+            with _LATENCY_LOCK:
+                _OBSERVED_LATENCY_MS[candidate.model_name] = elapsed_ms
             arbiter.end(
                 lease.lease_id,
                 expected_version=lease.version,

@@ -7,8 +7,10 @@ from datetime import UTC, datetime
 from typing import Any, Protocol
 
 from app.modules.local_ai.decision_contracts import (
+    BoolDecisionOutput,
     DecisionRequest,
     DecisionResult,
+    EnumDecisionOutput,
     ScoreDecisionOutput,
     validate_decision_result,
 )
@@ -80,15 +82,22 @@ class RuleDecisionModel:
             score, candidate = ranked[0]
             # This ranker answers the local routing score only. Other typed tasks
             # require a configured decision model and cannot be guessed here.
-            if tuple((spec.name, spec.kind) for spec in request.output_specs) != (("fit", "score"),):
+            if tuple((spec.name, spec.kind) for spec in request.output_specs) not in (
+                (), (("fit", "score"),)
+            ):
                 result = DecisionResult(
                     decision_id=request.decision_id, outcome="abstained", model_ref=self.model_ref,
                     reason_code="unsupported_outputs", decided_at=now,
                 )
             else:
+                outputs = (
+                    (ScoreDecisionOutput(name="fit", value=score),)
+                    if request.output_specs
+                    else ()
+                )
                 result = DecisionResult(
                     decision_id=request.decision_id, outcome="decided", selected_candidate=candidate.candidate_id,
-                    outputs=(ScoreDecisionOutput(name="fit", value=score),), model_ref=self.model_ref,
+                    outputs=outputs, model_ref=self.model_ref,
                     reason_code="ranked", decided_at=now,
                 )
         validate_decision_result(request, result)
@@ -126,23 +135,53 @@ class GlinerDecisionModel:
         task = request.constraints.get("task_text")
         label: str | None = None
         confidence: float | None = None
-        if fit and isinstance(task, str) and task and not request.is_expired(now):
-            raw: object = self.model.classify_text(task, {"local_model": list(fit)}, include_confidence=True)
+        schema: dict[str, list[str]] = {}
+        if request.candidate_set:
+            schema["local_model"] = list(fit)
+        for spec in request.output_specs:
+            if spec.kind == "bool":
+                schema[spec.name] = ["true", "false"]
+            elif spec.kind == "enum":
+                schema[spec.name] = list(spec.enum_values)
+        predictions: dict[str, object] = {}
+        if (fit or schema) and isinstance(task, str) and task and not request.is_expired(now):
+            raw: object = self.model.classify_text(task, schema, include_confidence=True)
             if isinstance(raw, dict):
-                choice = raw.get("local_model")
-                if isinstance(choice, dict):
-                    candidate_label = choice.get("label")
-                    candidate_confidence = choice.get("confidence")
-                    if isinstance(candidate_label, str) and isinstance(candidate_confidence, (float, int)) and not isinstance(candidate_confidence, bool):
-                        label, confidence = candidate_label, float(candidate_confidence)
-        selected = label in fit and confidence is not None and self.threshold <= confidence <= 1
+                for name in schema:
+                    choice = raw.get(name)
+                    if isinstance(choice, dict):
+                        predictions[name] = choice
+        choice = predictions.get("local_model")
+        if isinstance(choice, dict):
+            candidate_label = choice.get("label")
+            candidate_confidence = choice.get("confidence")
+            if isinstance(candidate_label, str) and isinstance(candidate_confidence, (float, int)) and not isinstance(candidate_confidence, bool):
+                label, confidence = candidate_label, float(candidate_confidence)
+        selected = (
+            not request.candidate_set or (label in fit and confidence is not None and self.threshold <= confidence <= 1)
+        )
+        outputs: list[BoolDecisionOutput | EnumDecisionOutput | ScoreDecisionOutput] = []
+        for spec in request.output_specs:
+            prediction = predictions.get(spec.name)
+            value = prediction.get("label", prediction.get("value")) if isinstance(prediction, dict) else None
+            score = prediction.get("confidence") if isinstance(prediction, dict) else None
+            if spec.kind == "score":
+                score = confidence if spec.name == "fit" and request.candidate_set else score
+                if isinstance(score, (int, float)) and not isinstance(score, bool) and 0 <= score <= 1:
+                    outputs.append(ScoreDecisionOutput(name=spec.name, value=float(score)))
+            elif spec.kind == "bool" and isinstance(value, str) and value.lower() in {"true", "false"}:
+                outputs.append(BoolDecisionOutput(name=spec.name, value=value.lower() == "true"))
+            elif spec.kind == "enum" and isinstance(value, str) and value in spec.enum_values:
+                outputs.append(EnumDecisionOutput(name=spec.name, value=value))
+        complete = len(outputs) == len(request.output_specs)
+        selected = selected and complete and (confidence is None or self.threshold <= confidence <= 1)
         result = DecisionResult(
             decision_id=request.decision_id,
             outcome="decided" if selected else "abstained",
             selected_candidate=label if selected else None,
-            outputs=(ScoreDecisionOutput(name="fit", value=confidence),) if selected and confidence is not None else (),
+            outputs=tuple(outputs) if selected else (),
             model_ref=f"fastino/gliner2.5-multi-v1@{self.revision}",
-            reason_code="ranked" if selected else "low_confidence",
+            reason_code="classified" if selected else "low_confidence",
             decided_at=now,
         )
         validate_decision_result(request, result)
