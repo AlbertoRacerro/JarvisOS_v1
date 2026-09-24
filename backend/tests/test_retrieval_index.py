@@ -177,6 +177,31 @@ def test_summary_progression_and_source_deletion(store: tuple[SQLiteIndexStore, 
     assert all(entry.outcome == "unavailable" for entry in stale.evidence_manifest)
 
 
+def test_bundle_does_not_expand_group_summary_by_rereading_entire_owner(
+    store: tuple[SQLiteIndexStore, dict[str, IndexDocument]],
+) -> None:
+    index, docs = store
+    index.rebuild()
+    with open_retrieval_index_connection() as db:
+        rows = db.execute("SELECT * FROM docs").fetchall()
+    hits = {row["ref"]: index._hit(row, index.revision, lexical=1.0) for row in rows}
+    by_kind = {hit.source_ref.object_type: hit for hit in hits.values()}
+    group_hit = by_kind["group_summary"]
+    summary_hit = next(hit for hit in hits.values()
+                       if hit.source_ref.object_type == "document_summary"
+                       and hit.source_ref.object_id == retrieval_index._key(docs["a"].source_ref))
+    index.search_hybrid = lambda *_args, **_kwargs: [group_hit, summary_hit]  # type: ignore[method-assign]
+    index.documents = lambda: pytest.fail("a bundle must not reread every record to validate a group summary")
+    resolved: list[SourceRef] = []
+    index.resolver = lambda ref: resolved.append(ref) or docs.get(ref.object_id)
+
+    bundle = index.build_bundle("alpha reactor", workspace_id="w1", token_budget=100)
+
+    assert [item.source_ref.object_type for item in bundle.items] == ["document_summary"]
+    assert resolved == [docs["a"].source_ref]
+    assert index.resolve_authoritative(group_hit.source_ref).state == "unavailable"
+
+
 def test_owner_dispatch_refuses_digest_mismatch_for_every_indexed_kind(
     store: tuple[SQLiteIndexStore, dict[str, IndexDocument]], monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -255,6 +280,9 @@ def test_sqlite_vec_matches_python_fallback_ranking(tmp_path: Path, monkeypatch:
     accelerated = SQLiteIndexStore(documents=lambda: docs.values(), resolver=lambda ref: docs.get(ref.object_id))
     assert accelerated.use_sqlite_vec is True
     accelerated.rebuild()
+    with open_retrieval_index_connection() as db:
+        vector_bytes = db.execute("SELECT SUM(length(vectors)) FROM vec_docs_vector_chunks00").fetchone()[0]
+    assert vector_bytes <= accelerated._vector_dimensions * 4 * retrieval_index._SQLITE_VEC_CHUNK_SIZE * 20
     accelerated_hits = [hit.source_ref.object_id for hit in
                         accelerated.search_vector("reactor pressure vessel margin", limit=10, workspace_id="w1")]
 

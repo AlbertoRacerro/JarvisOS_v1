@@ -51,6 +51,7 @@ from app.modules.project_knowledge.service import get_snapshot
 from app.modules.workspaces.service import list_workspaces
 
 INDEX_SCHEMA_VERSION = "retrieval-index.v4"
+_SQLITE_VEC_CHUNK_SIZE = 8
 _TOKEN = re.compile(r"\w+", re.UNICODE)
 
 
@@ -423,12 +424,14 @@ class SQLiteIndexStore:
         self._vector_dimensions = len(self.embedder.embed(""))
         row = db.execute("SELECT value FROM meta WHERE name='revision'").fetchone()
         state = db.execute("SELECT value FROM meta WHERE name='vector_index'").fetchone()
-        if state and state[0] == f"{self._vector_dimensions}:{row[0] if row else ''}":
+        expected_state = f"{self._vector_dimensions}:{_SQLITE_VEC_CHUNK_SIZE}:{row[0] if row else ''}"
+        if state and state[0] == expected_state:
             return
         db.execute("DROP TABLE IF EXISTS vec_docs")
         db.execute(
             "CREATE VIRTUAL TABLE vec_docs USING vec0(key TEXT PRIMARY KEY, workspace_id TEXT PARTITION KEY, "
-            f"embedding FLOAT[{self._vector_dimensions}] distance_metric=cosine)"
+            f"embedding FLOAT[{self._vector_dimensions}] distance_metric=cosine, "
+            f"chunk_size={_SQLITE_VEC_CHUNK_SIZE})"
         )
         for key, workspace_id, vector_json in db.execute("SELECT key, workspace_id, vector FROM docs").fetchall():
             vector = json.loads(vector_json)
@@ -436,7 +439,7 @@ class SQLiteIndexStore:
                 db.execute("INSERT INTO vec_docs(key, workspace_id, embedding) VALUES (?,?,?)",
                            (key, workspace_id, _pack_vector(vector)))
         db.execute("INSERT OR REPLACE INTO meta VALUES ('vector_index', ?)",
-                   (f"{self._vector_dimensions}:{row[0] if row else ''}",))
+                   (expected_state,))
 
     def _revision(self, db: sqlite3.Connection) -> str:
         rows = [tuple(row) for row in db.execute("SELECT key,ref,object_id,title,text,vector FROM docs ORDER BY key")]
@@ -447,7 +450,7 @@ class SQLiteIndexStore:
         db.execute("INSERT OR REPLACE INTO meta VALUES ('revision', ?)", (revision,))
         if self.use_sqlite_vec:
             db.execute("INSERT OR REPLACE INTO meta VALUES ('vector_index', ?)",
-                       (f"{self._vector_dimensions}:{revision}",))
+                       (f"{self._vector_dimensions}:{_SQLITE_VEC_CHUNK_SIZE}:{revision}",))
         return revision
 
     @property
@@ -742,13 +745,9 @@ class SQLiteIndexStore:
                 if source is not None:
                     doc = _document_summary(source)
         elif ref.authority_owner == "retrieval" and ref.object_type == "group_summary":
-            source_refs = [item.source_ref for item in self.documents()
-                           if item.source_ref.authority_owner == ref.object_id
-                           and item.source_ref.workspace_id == ref.workspace_id]
-            members = [self._resolve_document(source_ref) for source_ref in source_refs]
-            if source_refs and all(member is not None for member in members):
-                doc = _group_summary([member for member in members if member is not None],
-                                     ref.object_id, ref.workspace_id)
+            # A group summary is an index navigation aid, not an authoritative record.
+            # Resolving it by enumerating its whole owner can trigger unbounded rereads.
+            return AuthoritativeResolution(ref=ref, state="unavailable")
         else:
             doc = self._resolve_document(ref)
         if doc is None:
@@ -782,7 +781,16 @@ class SQLiteIndexStore:
                      expansion_level: int = 0, limit: int = 12) -> ContextBundle:
         if token_budget < 0 or not 0 <= expansion_level <= 8 or limit < 0:
             raise ValueError("invalid bundle bounds")
-        direct = self.search_hybrid(query, limit=limit, workspace_id=workspace_id)
+        # Group summaries are index navigation aids, not evidence. Re-resolving one by
+        # walking every canonical record in its owner can turn a small context request
+        # into an unbounded repository reread (including reparsing every Python file).
+        # Retrieve a wider candidate window, then fill the requested slots with
+        # individually authoritative document summaries or source records.
+        direct = [
+            hit for hit in self.search_hybrid(query, limit=limit * 4, workspace_id=workspace_id)
+            if not (hit.source_ref.authority_owner == "retrieval"
+                    and hit.source_ref.object_type == "group_summary")
+        ][:limit]
         candidates: list[tuple[RetrievalHit, int]] = []
         seen: set[str] = set()
 
