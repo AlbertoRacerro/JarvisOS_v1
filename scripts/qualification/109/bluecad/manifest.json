@@ -1,0 +1,137 @@
+{
+  "artifacts": {
+    "model.glb": {
+      "bytes": 32556,
+      "sha256": "dbcae00754c6031318152c5a7e911558b306a6a922c9a16a0f1c6c0fb3e29903"
+    },
+    "model.step": {
+      "bytes": 10942,
+      "sha256": "bc5d9eed382c703d167e707114da75195e6e562c9a3cb64639960e917360c14f"
+    },
+    "model.stl": {
+      "bytes": 50484,
+      "sha256": "a6b24d2199af161860cfdd3c2959a5b2a491b6cd178ce250d08b76133e7aa72a"
+    }
+  },
+  "assembly": {
+    "bbox_mm": {
+      "max": [
+        100000.0,
+        27.0,
+        27.0
+      ],
+      "min": [
+        0.0,
+        -27.0,
+        -27.0
+      ]
+    },
+    "kernel_checks": {
+      "process_tube": {
+        "brep_valid": true,
+        "manifold": true
+      }
+    },
+    "total_volume_mm3": 32672563.597333852
+  },
+  "manifest_digest": "bb697ec04972066fca66d4bee17851bd1d34c67f8e72261d68cb52b4f1a98fd9",
+  "manifest_version": "bluecad_manifest_v0_1",
+  "parts": {
+    "process_tube": {
+      "bbox_mm": {
+        "max": [
+          100000.0,
+          27.0,
+          27.0
+        ],
+        "min": [
+          0.0,
+          -27.0,
+          -27.0
+        ]
+      },
+      "kind": "tube_run",
+      "ports": {
+        "port_a": {
+          "direction": [
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "interface": "tube",
+          "origin": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "outer_d": 54.0,
+          "wall_t": 2.0
+        },
+        "port_b": {
+          "direction": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "interface": "tube",
+          "origin": [
+            100000.0,
+            0.0,
+            0.0
+          ],
+          "outer_d": 54.0,
+          "wall_t": 2.0
+        }
+      },
+      "volume_mm3": 32672563.597333852
+    }
+  },
+  "resolved_ports": {
+    "process_tube": {
+      "port_a": {
+        "direction": [
+          -1.0,
+          0.0,
+          0.0
+        ],
+        "interface": "tube",
+        "origin": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "outer_d": 54.0,
+        "wall_t": 2.0
+      },
+      "port_b": {
+        "direction": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "interface": "tube",
+        "origin": [
+          100000.0,
+          0.0,
+          0.0
+        ],
+        "outer_d": 54.0,
+        "wall_t": 2.0
+      }
+    }
+  },
+  "scene_binding": {
+    "artifact": "model.glb",
+    "objects": {
+      "bluecad-part-sha256-e242db70434f00bbe74fbb5089bd47228b7d8f8739b524fd8f97a33b8e1a7517": {
+        "part_id": "process_tube"
+      }
+    },
+    "spec_id": "sha256:258b9b12eba576c6053272d4370c0ce9722d17e401bedb301feddb20d0737921",
+    "version": "bluecad_scene_binding_v0_1"
+  },
+  "spec_id": "sha256:258b9b12eba576c6053272d4370c0ce9722d17e401bedb301feddb20d0737921",
+  "tool_versions": {
+    "build123d": "0.11.1"
+  }
+}
