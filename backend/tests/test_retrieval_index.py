@@ -202,6 +202,13 @@ def test_bundle_does_not_expand_group_summary_by_rereading_entire_owner(
     assert index.resolve_authoritative(group_hit.source_ref).state == "unavailable"
 
 
+def test_retrieval_index_database_has_a_bounded_page_limit() -> None:
+    from app.core.database import RETRIEVAL_INDEX_MAX_PAGE_COUNT, open_retrieval_index_connection
+
+    with open_retrieval_index_connection() as db:
+        assert db.execute("PRAGMA max_page_count").fetchone()[0] == RETRIEVAL_INDEX_MAX_PAGE_COUNT
+
+
 def test_owner_dispatch_refuses_digest_mismatch_for_every_indexed_kind(
     store: tuple[SQLiteIndexStore, dict[str, IndexDocument]], monkeypatch: pytest.MonkeyPatch,
 ) -> None:
