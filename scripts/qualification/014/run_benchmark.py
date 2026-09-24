@@ -15,13 +15,13 @@ import yaml
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "backend"))
 
-from app.modules.bluecad.cfd_adapter import (  # noqa: E402
+from app.modules.bluecad.cfd_adapter import (
     generate_case,
     parse_probes,
     parse_residuals,
     parse_velocity_probes,
 )
-from app.modules.bluecad.registry import run_tool  # noqa: E402
+from app.modules.bluecad.registry import run_tool
 
 
 def main() -> None:
@@ -57,8 +57,8 @@ def main() -> None:
         banner = re.search(r"Build\s+: (v\d+)", logs["openfoam"])
         if banner is None:
             raise RuntimeError("OpenFOAM version banner missing")
-        probe_dir = sorted((case / "postProcessing/probes").iterdir(), key=lambda path: float(path.name))[-1]
-        fixture = ROOT / "scripts/qualification/014/solver_tail.log"
+        probe_dir = max((case / "postProcessing/probes").iterdir(), key=lambda path: float(path.name))
+        fixture = ROOT / "scripts/qualification/014/solver_tail.txt"
         fixture.write_text("\n".join(logs["openfoam"].splitlines()[-35:]) + "\n")
         for field in ("p", "U"):
             source = probe_dir / field

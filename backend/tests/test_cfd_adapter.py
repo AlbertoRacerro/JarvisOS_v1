@@ -103,7 +103,7 @@ def test_cancel_and_deadline() -> None:
 
 
 def test_real_captured_parser_and_hostile_fields(tmp_path: Path) -> None:
-    numerical = parse_residuals((FIXTURES / "solver_tail.log").read_text())
+    numerical = parse_residuals((FIXTURES / "solver_tail.txt").read_text())
     assert numerical.iterations > 0 and numerical.final_residual is not None
     p0, p1 = parse_probes(FIXTURES / "probe_p.txt")
     assert p0 > p1
