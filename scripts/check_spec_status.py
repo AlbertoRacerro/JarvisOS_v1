@@ -22,15 +22,15 @@ STATUSES = {
 NO_PR = {"planned", "blocked", "ready", "in_progress"}
 DEFINITION = {"planned", "blocked", "ready"}
 SPEC = r"\d{3}[a-z]?"
-SPEC_RE = re.compile(rf"^{SPEC}$", re.IGNORECASE)
+SPEC_RE = re.compile(rf"^{SPEC}$", re.I)
 PR_RE = re.compile(r"/pull/(\d+)")
-DEP_RE = re.compile(rf"\b({SPEC})\b", re.IGNORECASE)
+DEP_RE = re.compile(rf"\b({SPEC})\b", re.I)
 DECL_RE = re.compile(
     rf"^\s*\*\*Spec gate:\*\*\s*"
     rf"(?:(implementation|definition)\s+({SPEC})|(N/A))\s*$",
-    re.IGNORECASE | re.MULTILINE,
+    re.I | re.M,
 )
-TITLE_RE = re.compile(rf"implement(?:ation of)?\s+spec\s+({SPEC})\b", re.IGNORECASE)
+TITLE_RE = re.compile(rf"implement(?:ation of)?\s+spec\s+({SPEC})\b", re.I)
 
 
 class GateError(ValueError):
