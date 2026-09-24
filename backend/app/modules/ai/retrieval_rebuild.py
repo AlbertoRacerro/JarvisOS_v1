@@ -11,6 +11,7 @@ from app.modules.ai.retrieval_index import (
     INDEX_SCHEMA_VERSION,
     SQLiteIndexStore,
     canonical_documents,
+    repository_file_documents,
     repository_symbol_documents,
 )
 
@@ -23,8 +24,11 @@ def main() -> None:
     args = parser.parse_args()
     if bool(args.repository_root) != bool(args.commit_sha) or (args.path and not args.commit_sha):
         parser.error("repository root and exact commit SHA are required together")
+    files = repository_file_documents(args.repository_root, args.commit_sha, args.path) if args.commit_sha else []
     symbols = repository_symbol_documents(args.repository_root, args.commit_sha, args.path) if args.commit_sha else []
-    store = SQLiteIndexStore(documents=lambda: chain(canonical_documents(), symbols), repository_root=args.repository_root)
+    store = SQLiteIndexStore(
+        documents=lambda: chain(canonical_documents(), files, symbols), repository_root=args.repository_root,
+    )
     revision = store.rebuild()
     with open_retrieval_index_connection() as db:
         count = int(db.execute("SELECT COUNT(*) FROM docs").fetchone()[0])
