@@ -133,16 +133,18 @@ class DwsimMcpClient:
             raise DwsimExecutableMismatch("DWSIM MCP executable SHA-256 does not match")
 
     def _read_stdout(self) -> None:
-        assert self._process is not None and self._process.stdout is not None
+        process = self._process
+        assert process is not None and process.stdout is not None
         try:
-            for line in self._process.stdout:
+            for line in process.stdout:
                 self._responses.put(line)
         finally:
             self._responses.put(None)
 
     def _discard_stderr(self) -> None:
-        assert self._process is not None and self._process.stderr is not None
-        while self._process.stderr.read(4096):
+        process = self._process
+        assert process is not None and process.stderr is not None
+        while process.stderr.read(4096):
             pass
 
     def _request(self, method: str, params: dict[str, Any], timeout_s: float) -> Any:
