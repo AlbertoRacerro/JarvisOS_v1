@@ -13,16 +13,6 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(ROOT / "backend"))
-
-from app.modules.bluerev.pbr_evaluator import (
-    EVALUATOR_ID,
-    PbrDayNightEvaluator,
-)
-from app.modules.engineering.evaluator_contracts import (
-    EvaluationRequest,
-    validate_evaluation_result,
-)
 
 FIXTURE_PATH = Path(__file__).with_name("synthetic-parameters.json")
 DEFAULT_OUTPUT = Path(__file__).with_name("pbr_day_night.v2.runtime-evidence.json")
@@ -36,6 +26,10 @@ MODEL = {
 
 
 def run(output: Path) -> None:
+    sys.path.insert(0, str(ROOT / "backend"))
+    from app.modules.bluerev.pbr_evaluator import EVALUATOR_ID, PbrDayNightEvaluator
+    from app.modules.engineering.evaluator_contracts import EvaluationRequest, validate_evaluation_result
+
     fixture = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
     now = datetime.now(UTC)
     inputs = []
