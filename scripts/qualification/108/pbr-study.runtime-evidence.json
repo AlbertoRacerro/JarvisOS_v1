@@ -1,0 +1,2104 @@
+{
+  "evidence_kind": "real_runtime_execution",
+  "study_method": "latin_hypercube",
+  "seed": 108,
+  "source_sha": "1dfde03c10496576434e7f047fafceaf81525229",
+  "executed_at": "2026-09-24T21:27:15.068448+00:00",
+  "runtime": {
+    "python": "3.11.16",
+    "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+    "packages": {
+      "numpy": "2.4.6",
+      "scipy": "1.17.1",
+      "scikit-sundae": "1.1.3",
+      "CoolProp": "8.0.0",
+      "fluids": "1.3.1",
+      "Pint": "0.25.3"
+    }
+  },
+  "fixture": {
+    "path": "scripts/qualification/107/synthetic-parameters.json",
+    "sha256": "0cd0ac091c78bce141d33f45afbfd6b8440f6bfb72d23c1c20b96d7ac6fa9271",
+    "provenance": {
+      "kind": "synthetic_fixture",
+      "source": "NONE",
+      "organism": "Nannochloropsis gaditana (intended model target; coefficients are not species measurements)",
+      "strain": "unspecified",
+      "conditions": {
+        "note": "Synthetic solver exercise only; no culture, measurement, literature, calibration, or benchmark basis."
+      },
+      "note": "Every coefficient is a synthetic placeholder. The values only exercise the evaluator and cannot establish biological or physical validity."
+    }
+  },
+  "evaluator": {
+    "descriptor": {
+      "schema_version": "engineering_evaluator.v1",
+      "evaluator_id": "bluerev.pbr_day_night",
+      "backend_kind": "dynamic_simulator",
+      "backend_name": "scikit-sundae",
+      "backend_version": "pbr_day_night.v2+sksundae-1.1.3",
+      "tool_registry_id": null,
+      "fidelity": "reduced_order",
+      "capabilities": [
+        "day_night_light",
+        "self_shading",
+        "photoinhibition",
+        "cardinal_temperature",
+        "nitrogen_limitation",
+        "oxygen_degassing",
+        "semi_continuous_harvest",
+        "loop_hydraulics"
+      ],
+      "qualification_record_ref": {
+        "authority_owner": "repository",
+        "object_type": "scientific_qualification_record",
+        "object_id": "scripts/qualification/107/pbr_day_night.v2.ledger.json",
+        "workspace_id": "bluerev",
+        "revision": "pbr_day_night.v2",
+        "content_digest": null,
+        "location": null
+      }
+    },
+    "availability": {
+      "evaluator_id": "bluerev.pbr_day_night",
+      "state": "available",
+      "checked_at": "2026-09-24T21:27:14.124141Z",
+      "backend_version": "pbr_day_night.v2+sksundae-1.1.3",
+      "reason_code": null
+    }
+  },
+  "study": {
+    "study_ref": {
+      "authority_owner": "bluerev",
+      "object_type": "study",
+      "object_id": "pbr-synthetic-study",
+      "workspace_id": "bluerev",
+      "revision": "108.synthetic.1",
+      "content_digest": null,
+      "location": null
+    },
+    "definition_digest": "sha256:1c7a59a8729722b6209512bba3583f926cbfd98f75b66ab340c53f92278b72af",
+    "content_digest": "sha256:0588398ac30db99e8d851faa44b0c3b5a06c5005dca962cc60c718a2c56ff5ef",
+    "evaluator_id": "bluerev.pbr_day_night",
+    "status": "succeeded",
+    "availability_state": "available",
+    "availability_reason": null,
+    "failure": null,
+    "points": [
+      {
+        "index": 0,
+        "inputs": [
+          {
+            "name": "max_specific_growth_rate",
+            "value": {
+              "value": 0.0625,
+              "unit": "1/h",
+              "basis_ref": {
+                "authority_owner": "repository",
+                "object_type": "synthetic_parameter_set",
+                "object_id": "scripts/qualification/107/synthetic-parameters.json",
+                "workspace_id": null,
+                "revision": "pbr_day_night.v2-synthetic-1",
+                "content_digest": null,
+                "location": null
+              }
+            }
+          },
+          {
+            "name": "light_saturation_constant",
+            "value": {
+              "value": 150.0,
+              "unit": "umol/(m**2*s)",
+              "basis_ref": {
+                "authority_owner": "repository",
+                "object_type": "synthetic_parameter_set",
+                "object_id": "scripts/qualification/107/synthetic-parameters.json",
+                "workspace_id": null,
+                "revision": "pbr_day_night.v2-synthetic-1",
+                "content_digest": null,
+                "location": null
+              }
+            }
+          },
+          {
+            "name": "light_inhibition_constant",
+            "value": {
+              "value": 2000.0,
+              "unit": "umol/(m**2*s)",
+              "basis_ref": {
+                "authority_owner": "repository",
+                "object_type": "synthetic_parameter_set",
+                "object_id": "scripts/qualification/107/synthetic-parameters.json",
+                "workspace_id": null,
+                "revision": "pbr_day_night.v2-synthetic-1",
+                "content_digest": null,
+                "location": null
+              }
+            }
+          },
+          {
+            "name": "specific_light_extinction",
+            "value": {
+              "value": 150.0,
+              "unit": "m**2/kg",
+              "basis_ref": {
+                "authority_owner": "repository",
+                "object_type": "synthetic_parameter_set",
+                "object_id": "scripts/qualification/107/synthetic-parameters.json",
+                "workspace_id": null,
+                "revision": "pbr_day_night.v2-synthetic-1",
+                "content_digest": null,
+                "location": null
+              }
+            }
+          },
+          {
+            "name": "biomass_loss_rate",
+            "value": {
+              "value": 0.004166666666666667,
+              "unit": "1/h",
+              "basis_ref": {
+                "authority_owner": "repository",
+                "object_type": "synthetic_parameter_set",
+                "object_id": "scripts/qualification/107/synthetic-parameters.json",
+                "workspace_id": null,
+                "revision": "pbr_day_night.v2-synthetic-1",
+                "content_digest": null,
+                "location": null
+              }
+            }
+          },
+          {
+            "name": "nitrogen_half_saturation",
+            "value": {
+              "value": 0.001,
+              "unit": "kg/m3",
+              "basis_ref": {
+                "authority_owner": "repository",
+                "object_type": "synthetic_parameter_set",
+                "object_id": "scripts/qualification/107/synthetic-parameters.json",
+                "workspace_id": null,
+                "revision": "pbr_day_night.v2-synthetic-1",
+                "content_digest": null,
+                "location": null
+              }
+            }
+          },
+          {
+            "name": "biomass_nitrogen_fraction",
+            "value": {
+              "value": 0.07,
+              "unit": "1",
+              "basis_ref": {
+                "authority_owner": "repository",
+                "object_type": "synthetic_parameter_set",
+                "object_id": "scripts/qualification/107/synthetic-parameters.json",
+                "workspace_id": null,
+                "revision": "pbr_day_night.v2-synthetic-1",
+                "content_digest": null,
+                "location": null
+              }
+            }
+          },
+          {
+            "name": "oxygen_yield",
+            "value": {
+              "value": 1.4,
+              "unit": "1",
+              "basis_ref": {
+                "authority_owner": "repository",
+                "object_type": "synthetic_parameter_set",
+                "object_id": "scripts/qualification/107/synthetic-parameters.json",
+                "workspace_id": null,
+                "revision": "pbr_day_night.v2-synthetic-1",
+                "content_digest": null,
+                "location": null
+              }
+            }
+          },
+          {
+            "name": "oxygen_kla",
+            "value": {
+              "value": 5.0,
+              "unit": "1/h",
+              "basis_ref": {
+                "authority_owner": "repository",
+                "object_type": "synthetic_parameter_set",
+                "object_id": "scripts/qualification/107/synthetic-parameters.json",
+                "workspace_id": null,
+                "revision": "pbr_day_night.v2-synthetic-1",
+                "content_digest": null,
+                "location": null
+              }
+            }
+          },
+          {
+            "name": "oxygen_saturation",
+            "value": {
+              "value": 0.0075,
+              "unit": "kg/m3",
+              "basis_ref": {
+                "authority_owner": "repository",
+                "object_type": "synthetic_parameter_set",
+                "object_id": "scripts/qualification/107/synthetic-parameters.json",
+                "workspace_id": null,
+                "revision": "pbr_day_night.v2-synthetic-1",
+                "content_digest": null,
+                "location": null
+              }
+            }
+          },
+          {
+            "name": "temperature_min",
+            "value": {
+              "value": 278.15,
+              "unit": "K",
+              "basis_ref": {
+                "authority_owner": "repository",
+                "object_type": "synthetic_parameter_set",
+                "object_id": "scripts/qualification/107/synthetic-parameters.json",
+                "workspace_id": null,
+                "revision": "pbr_day_night.v2-synthetic-1",
+                "content_digest": null,
+                "location": null
+              }
+            }
+          },
+          {
+            "name": "temperature_opt",
+            "value": {
+              "value": 298.15,
+              "unit": "K",
+              "basis_ref": {
+                "authority_owner": "repository",
+                "object_type": "synthetic_parameter_set",
+                "object_id": "scripts/qualification/107/synthetic-parameters.json",
+                "workspace_id": null,
+                "revision": "pbr_day_night.v2-synthetic-1",
+                "content_digest": null,
+                "location": null
+              }
+            }
+          },
+          {
+            "name": "temperature_max",
+            "value": {
+              "value": 308.15,
+              "unit": "K",
+              "basis_ref": {
+                "authority_owner": "repository",
+                "object_type": "synthetic_parameter_set",
+                "object_id": "scripts/qualification/107/synthetic-parameters.json",
+                "workspace_id": null,
+                "revision": "pbr_day_night.v2-synthetic-1",
+                "content_digest": null,
+                "location": null
+              }
+            }
+          },
+          {
+            "name": "initial_biomass",
+            "value": {
+              "value": 0.5,
+              "unit": "kg/m3",
+              "basis_ref": null
+            }
+          },
+          {
+            "name": "initial_nitrogen",
+            "value": {
+              "value": 0.05,
+              "unit": "kg/m3",
+              "basis_ref": null
+            }
+          },
+          {
+            "name": "initial_dissolved_oxygen",
+            "value": {
+              "value": 0.0075,
+              "unit": "kg/m3",
+              "basis_ref": null
+            }
+          },
+          {
+            "name": "photoperiod",
+            "value": {
+              "value": 14.0,
+              "unit": "h",
+              "basis_ref": null
+            }
+          },
+          {
+            "name": "temperature_mean",
+            "value": {
+              "value": 295.15,
+              "unit": "K",
+              "basis_ref": null
+            }
+          },
+          {
+            "name": "temperature_amplitude",
+            "value": {
+              "value": 3.0,
+              "unit": "K",
+              "basis_ref": null
+            }
+          },
+          {
+            "name": "duration",
+            "value": {
+              "value": 1.0,
+              "unit": "d",
+              "basis_ref": null
+            }
+          },
+          {
+            "name": "tube_inner_diameter",
+            "value": {
+              "value": 0.05,
+              "unit": "m",
+              "basis_ref": null
+            }
+          },
+          {
+            "name": "loop_length",
+            "value": {
+              "value": 100.0,
+              "unit": "m",
+              "basis_ref": null
+            }
+          },
+          {
+            "name": "liquid_velocity",
+            "value": {
+              "value": 0.5,
+              "unit": "m/s",
+              "basis_ref": null
+            }
+          },
+          {
+            "name": "pump_efficiency",
+            "value": {
+              "value": 0.6,
+              "unit": "1",
+              "basis_ref": null
+            }
+          },
+          {
+            "name": "harvest_fraction",
+            "value": {
+              "value": 0.2,
+              "unit": "1",
+              "basis_ref": null
+            }
+          },
+          {
+            "name": "harvest_hour",
+            "value": {
+              "value": 10.0,
+              "unit": "h",
+              "basis_ref": null
+            }
+          },
+          {
+            "name": "medium_nitrogen",
+            "value": {
+              "value": 0.05,
+              "unit": "kg/m3",
+              "basis_ref": null
+            }
+          },
+          {
+            "name": "peak_par",
+            "value": {
+              "value": 1428.801236534281,
+              "unit": "umol/(m**2*s)",
+              "basis_ref": null
+            }
+          }
+        ],
+        "request_ref": {
+          "authority_owner": "bluerev",
+          "object_type": "evaluation_request",
+          "object_id": "pbr-synthetic-study/point-0",
+          "workspace_id": "bluerev",
+          "revision": "108.synthetic.1",
+          "content_digest": null,
+          "location": null
+        },
+        "status": "succeeded",
+        "evaluation": {
+          "schema_version": "engineering_evaluator.v1",
+          "result_ref": {
+            "authority_owner": "process_stack",
+            "object_type": "evaluation_result",
+            "object_id": "pbr-synthetic-study/point-0/bluerev.pbr_day_night",
+            "workspace_id": "bluerev",
+            "revision": "108.synthetic.1",
+            "content_digest": null,
+            "location": null
+          },
+          "request_ref": {
+            "authority_owner": "bluerev",
+            "object_type": "evaluation_request",
+            "object_id": "pbr-synthetic-study/point-0",
+            "workspace_id": "bluerev",
+            "revision": "108.synthetic.1",
+            "content_digest": null,
+            "location": null
+          },
+          "evaluator_id": "bluerev.pbr_day_night",
+          "backend_version": "pbr_day_night.v2+sksundae-1.1.3",
+          "status": "succeeded",
+          "failure": null,
+          "fidelity": "reduced_order",
+          "outputs": [
+            {
+              "name": "final_biomass",
+              "value": {
+                "value": 0.507614869968982,
+                "unit": "kg/m3",
+                "basis_ref": null
+              }
+            },
+            {
+              "name": "mean_biomass",
+              "value": {
+                "value": 0.49409572053496964,
+                "unit": "kg/m3",
+                "basis_ref": null
+              }
+            },
+            {
+              "name": "harvested_biomass",
+              "value": {
+                "value": 0.106047204531903,
+                "unit": "kg/m3",
+                "basis_ref": null
+              }
+            },
+            {
+              "name": "volumetric_productivity",
+              "value": {
+                "value": 0.11366207450088495,
+                "unit": "kg/(m**3*d)",
+                "basis_ref": null
+              }
+            },
+            {
+              "name": "final_nitrogen",
+              "value": {
+                "value": 0.04246695910217122,
+                "unit": "kg/m3",
+                "basis_ref": null
+              }
+            },
+            {
+              "name": "min_nitrogen",
+              "value": {
+                "value": 0.041712473590207126,
+                "unit": "kg/m3",
+                "basis_ref": null
+              }
+            },
+            {
+              "name": "nitrogen_balance_error",
+              "value": {
+                "value": 2.7755575615628914e-17,
+                "unit": "kg/m3",
+                "basis_ref": null
+              }
+            },
+            {
+              "name": "final_dissolved_oxygen",
+              "value": {
+                "value": 0.006907288710177114,
+                "unit": "kg/m3",
+                "basis_ref": null
+              }
+            },
+            {
+              "name": "max_dissolved_oxygen",
+              "value": {
+                "value": 0.010981572991171473,
+                "unit": "kg/m3",
+                "basis_ref": null
+              }
+            },
+            {
+              "name": "max_oxygen_saturation_ratio",
+              "value": {
+                "value": 1.4642097321561964,
+                "unit": "1",
+                "basis_ref": null
+              }
+            },
+            {
+              "name": "degassed_oxygen",
+              "value": {
+                "value": 0.15904623180086744,
+                "unit": "kg/m3",
+                "basis_ref": null
+              }
+            },
+            {
+              "name": "oxygen_balance_error",
+              "value": {
+                "value": 1.2490009027033011e-15,
+                "unit": "kg/m3",
+                "basis_ref": null
+              }
+            },
+            {
+              "name": "reynolds_number",
+              "value": {
+                "value": 26136.249831644673,
+                "unit": "1",
+                "basis_ref": null
+              }
+            },
+            {
+              "name": "pressure_drop",
+              "value": {
+                "value": 6051.927057012215,
+                "unit": "Pa",
+                "basis_ref": null
+              }
+            },
+            {
+              "name": "pumping_power",
+              "value": {
+                "value": 9.902442490818164,
+                "unit": "W",
+                "basis_ref": null
+              }
+            }
+          ],
+          "output_artifacts": [],
+          "numerical": {
+            "converged": true,
+            "final_residual": 1.2490009027033011e-15,
+            "iterations": 680,
+            "wall_time_s": 0.021858997002709657
+          },
+          "validity": {
+            "authority_owner": "bluerev",
+            "object_type": "validity_envelope",
+            "object_id": "bluerev.pbr_day_night.pbr_day_night.v2",
+            "workspace_id": "bluerev",
+            "revision": "pbr_day_night.v2",
+            "content_digest": "sha256:34e5dd2065c8d8e499bb4dcba5f343c7691e288f99571b69bf2d3e87277eb6c9",
+            "location": null,
+            "domain": [
+              {
+                "variable": "duration",
+                "lower": {
+                  "value": 0.0,
+                  "unit": "d",
+                  "basis_ref": null
+                },
+                "upper": {
+                  "value": 366.0,
+                  "unit": "d",
+                  "basis_ref": null
+                }
+              },
+              {
+                "variable": "photoperiod",
+                "lower": {
+                  "value": 0.0,
+                  "unit": "h",
+                  "basis_ref": null
+                },
+                "upper": {
+                  "value": 24.0,
+                  "unit": "h",
+                  "basis_ref": null
+                }
+              }
+            ],
+            "uncertainty": [],
+            "qualification_status": "unqualified",
+            "evidence_refs": []
+          },
+          "qualification_record_ref": {
+            "authority_owner": "repository",
+            "object_type": "scientific_qualification_record",
+            "object_id": "scripts/qualification/107/pbr_day_night.v2.ledger.json",
+            "workspace_id": "bluerev",
+            "revision": "pbr_day_night.v2",
+            "content_digest": null,
+            "location": null
+          },
+          "evidence_refs": [],
+          "started_at": "2026-09-24T21:27:14.998469Z",
+          "completed_at": "2026-09-24T21:27:15.020478Z"
+        },
+        "failure": null,
+        "feasible": true,
+        "pareto_optimal": false
+      },
+      {
+        "index": 1,
+        "inputs": [
+          {
+            "name": "max_specific_growth_rate",
+            "value": {
+              "value": 0.0625,
+              "unit": "1/h",
+              "basis_ref": {
+                "authority_owner": "repository",
+                "object_type": "synthetic_parameter_set",
+                "object_id": "scripts/qualification/107/synthetic-parameters.json",
+                "workspace_id": null,
+                "revision": "pbr_day_night.v2-synthetic-1",
+                "content_digest": null,
+                "location": null
+              }
+            }
+          },
+          {
+            "name": "light_saturation_constant",
+            "value": {
+              "value": 150.0,
+              "unit": "umol/(m**2*s)",
+              "basis_ref": {
+                "authority_owner": "repository",
+                "object_type": "synthetic_parameter_set",
+                "object_id": "scripts/qualification/107/synthetic-parameters.json",
+                "workspace_id": null,
+                "revision": "pbr_day_night.v2-synthetic-1",
+                "content_digest": null,
+                "location": null
+              }
+            }
+          },
+          {
+            "name": "light_inhibition_constant",
+            "value": {
+              "value": 2000.0,
+              "unit": "umol/(m**2*s)",
+              "basis_ref": {
+                "authority_owner": "repository",
+                "object_type": "synthetic_parameter_set",
+                "object_id": "scripts/qualification/107/synthetic-parameters.json",
+                "workspace_id": null,
+                "revision": "pbr_day_night.v2-synthetic-1",
+                "content_digest": null,
+                "location": null
+              }
+            }
+          },
+          {
+            "name": "specific_light_extinction",
+            "value": {
+              "value": 150.0,
+              "unit": "m**2/kg",
+              "basis_ref": {
+                "authority_owner": "repository",
+                "object_type": "synthetic_parameter_set",
+                "object_id": "scripts/qualification/107/synthetic-parameters.json",
+                "workspace_id": null,
+                "revision": "pbr_day_night.v2-synthetic-1",
+                "content_digest": null,
+                "location": null
+              }
+            }
+          },
+          {
+            "name": "biomass_loss_rate",
+            "value": {
+              "value": 0.004166666666666667,
+              "unit": "1/h",
+              "basis_ref": {
+                "authority_owner": "repository",
+                "object_type": "synthetic_parameter_set",
+                "object_id": "scripts/qualification/107/synthetic-parameters.json",
+                "workspace_id": null,
+                "revision": "pbr_day_night.v2-synthetic-1",
+                "content_digest": null,
+                "location": null
+              }
+            }
+          },
+          {
+            "name": "nitrogen_half_saturation",
+            "value": {
+              "value": 0.001,
+              "unit": "kg/m3",
+              "basis_ref": {
+                "authority_owner": "repository",
+                "object_type": "synthetic_parameter_set",
+                "object_id": "scripts/qualification/107/synthetic-parameters.json",
+                "workspace_id": null,
+                "revision": "pbr_day_night.v2-synthetic-1",
+                "content_digest": null,
+                "location": null
+              }
+            }
+          },
+          {
+            "name": "biomass_nitrogen_fraction",
+            "value": {
+              "value": 0.07,
+              "unit": "1",
+              "basis_ref": {
+                "authority_owner": "repository",
+                "object_type": "synthetic_parameter_set",
+                "object_id": "scripts/qualification/107/synthetic-parameters.json",
+                "workspace_id": null,
+                "revision": "pbr_day_night.v2-synthetic-1",
+                "content_digest": null,
+                "location": null
+              }
+            }
+          },
+          {
+            "name": "oxygen_yield",
+            "value": {
+              "value": 1.4,
+              "unit": "1",
+              "basis_ref": {
+                "authority_owner": "repository",
+                "object_type": "synthetic_parameter_set",
+                "object_id": "scripts/qualification/107/synthetic-parameters.json",
+                "workspace_id": null,
+                "revision": "pbr_day_night.v2-synthetic-1",
+                "content_digest": null,
+                "location": null
+              }
+            }
+          },
+          {
+            "name": "oxygen_kla",
+            "value": {
+              "value": 5.0,
+              "unit": "1/h",
+              "basis_ref": {
+                "authority_owner": "repository",
+                "object_type": "synthetic_parameter_set",
+                "object_id": "scripts/qualification/107/synthetic-parameters.json",
+                "workspace_id": null,
+                "revision": "pbr_day_night.v2-synthetic-1",
+                "content_digest": null,
+                "location": null
+              }
+            }
+          },
+          {
+            "name": "oxygen_saturation",
+            "value": {
+              "value": 0.0075,
+              "unit": "kg/m3",
+              "basis_ref": {
+                "authority_owner": "repository",
+                "object_type": "synthetic_parameter_set",
+                "object_id": "scripts/qualification/107/synthetic-parameters.json",
+                "workspace_id": null,
+                "revision": "pbr_day_night.v2-synthetic-1",
+                "content_digest": null,
+                "location": null
+              }
+            }
+          },
+          {
+            "name": "temperature_min",
+            "value": {
+              "value": 278.15,
+              "unit": "K",
+              "basis_ref": {
+                "authority_owner": "repository",
+                "object_type": "synthetic_parameter_set",
+                "object_id": "scripts/qualification/107/synthetic-parameters.json",
+                "workspace_id": null,
+                "revision": "pbr_day_night.v2-synthetic-1",
+                "content_digest": null,
+                "location": null
+              }
+            }
+          },
+          {
+            "name": "temperature_opt",
+            "value": {
+              "value": 298.15,
+              "unit": "K",
+              "basis_ref": {
+                "authority_owner": "repository",
+                "object_type": "synthetic_parameter_set",
+                "object_id": "scripts/qualification/107/synthetic-parameters.json",
+                "workspace_id": null,
+                "revision": "pbr_day_night.v2-synthetic-1",
+                "content_digest": null,
+                "location": null
+              }
+            }
+          },
+          {
+            "name": "temperature_max",
+            "value": {
+              "value": 308.15,
+              "unit": "K",
+              "basis_ref": {
+                "authority_owner": "repository",
+                "object_type": "synthetic_parameter_set",
+                "object_id": "scripts/qualification/107/synthetic-parameters.json",
+                "workspace_id": null,
+                "revision": "pbr_day_night.v2-synthetic-1",
+                "content_digest": null,
+                "location": null
+              }
+            }
+          },
+          {
+            "name": "initial_biomass",
+            "value": {
+              "value": 0.5,
+              "unit": "kg/m3",
+              "basis_ref": null
+            }
+          },
+          {
+            "name": "initial_nitrogen",
+            "value": {
+              "value": 0.05,
+              "unit": "kg/m3",
+              "basis_ref": null
+            }
+          },
+          {
+            "name": "initial_dissolved_oxygen",
+            "value": {
+              "value": 0.0075,
+              "unit": "kg/m3",
+              "basis_ref": null
+            }
+          },
+          {
+            "name": "photoperiod",
+            "value": {
+              "value": 14.0,
+              "unit": "h",
+              "basis_ref": null
+            }
+          },
+          {
+            "name": "temperature_mean",
+            "value": {
+              "value": 295.15,
+              "unit": "K",
+              "basis_ref": null
+            }
+          },
+          {
+            "name": "temperature_amplitude",
+            "value": {
+              "value": 3.0,
+              "unit": "K",
+              "basis_ref": null
+            }
+          },
+          {
+            "name": "duration",
+            "value": {
+              "value": 1.0,
+              "unit": "d",
+              "basis_ref": null
+            }
+          },
+          {
+            "name": "tube_inner_diameter",
+            "value": {
+              "value": 0.05,
+              "unit": "m",
+              "basis_ref": null
+            }
+          },
+          {
+            "name": "loop_length",
+            "value": {
+              "value": 100.0,
+              "unit": "m",
+              "basis_ref": null
+            }
+          },
+          {
+            "name": "liquid_velocity",
+            "value": {
+              "value": 0.5,
+              "unit": "m/s",
+              "basis_ref": null
+            }
+          },
+          {
+            "name": "pump_efficiency",
+            "value": {
+              "value": 0.6,
+              "unit": "1",
+              "basis_ref": null
+            }
+          },
+          {
+            "name": "harvest_fraction",
+            "value": {
+              "value": 0.2,
+              "unit": "1",
+              "basis_ref": null
+            }
+          },
+          {
+            "name": "harvest_hour",
+            "value": {
+              "value": 10.0,
+              "unit": "h",
+              "basis_ref": null
+            }
+          },
+          {
+            "name": "medium_nitrogen",
+            "value": {
+              "value": 0.05,
+              "unit": "kg/m3",
+              "basis_ref": null
+            }
+          },
+          {
+            "name": "peak_par",
+            "value": {
+              "value": 1673.5449689460868,
+              "unit": "umol/(m**2*s)",
+              "basis_ref": null
+            }
+          }
+        ],
+        "request_ref": {
+          "authority_owner": "bluerev",
+          "object_type": "evaluation_request",
+          "object_id": "pbr-synthetic-study/point-1",
+          "workspace_id": "bluerev",
+          "revision": "108.synthetic.1",
+          "content_digest": null,
+          "location": null
+        },
+        "status": "succeeded",
+        "evaluation": {
+          "schema_version": "engineering_evaluator.v1",
+          "result_ref": {
+            "authority_owner": "process_stack",
+            "object_type": "evaluation_result",
+            "object_id": "pbr-synthetic-study/point-1/bluerev.pbr_day_night",
+            "workspace_id": "bluerev",
+            "revision": "108.synthetic.1",
+            "content_digest": null,
+            "location": null
+          },
+          "request_ref": {
+            "authority_owner": "bluerev",
+            "object_type": "evaluation_request",
+            "object_id": "pbr-synthetic-study/point-1",
+            "workspace_id": "bluerev",
+            "revision": "108.synthetic.1",
+            "content_digest": null,
+            "location": null
+          },
+          "evaluator_id": "bluerev.pbr_day_night",
+          "backend_version": "pbr_day_night.v2+sksundae-1.1.3",
+          "status": "succeeded",
+          "failure": null,
+          "fidelity": "reduced_order",
+          "outputs": [
+            {
+              "name": "final_biomass",
+              "value": {
+                "value": 0.5143092128299506,
+                "unit": "kg/m3",
+                "basis_ref": null
+              }
+            },
+            {
+              "name": "mean_biomass",
+              "value": {
+                "value": 0.49738238448930305,
+                "unit": "kg/m3",
+                "basis_ref": null
+              }
+            },
+            {
+              "name": "harvested_biomass",
+              "value": {
+                "value": 0.10659764014462154,
+                "unit": "kg/m3",
+                "basis_ref": null
+              }
+            },
+            {
+              "name": "volumetric_productivity",
+              "value": {
+                "value": 0.12090685297457215,
+                "unit": "kg/(m**3*d)",
+                "basis_ref": null
+              }
+            },
+            {
+              "name": "final_nitrogen",
+              "value": {
+                "value": 0.0419983551019034,
+                "unit": "kg/m3",
+                "basis_ref": null
+              }
+            },
+            {
+              "name": "min_nitrogen",
+              "value": {
+                "value": 0.04123805760680381,
+                "unit": "kg/m3",
+                "basis_ref": null
+              }
+            },
+            {
+              "name": "nitrogen_balance_error",
+              "value": {
+                "value": 5.551115123125783e-17,
+                "unit": "kg/m3",
+                "basis_ref": null
+              }
+            },
+            {
+              "name": "final_dissolved_oxygen",
+              "value": {
+                "value": 0.006899472158821957,
+                "unit": "kg/m3",
+                "basis_ref": null
+              }
+            },
+            {
+              "name": "max_dissolved_oxygen",
+              "value": {
+                "value": 0.01110177677986486,
+                "unit": "kg/m3",
+                "basis_ref": null
+              }
+            },
+            {
+              "name": "max_oxygen_saturation_ratio",
+              "value": {
+                "value": 1.4802369039819814,
+                "unit": "1",
+                "basis_ref": null
+              }
+            },
+            {
+              "name": "degassed_oxygen",
+              "value": {
+                "value": 0.16916751262758412,
+                "unit": "kg/m3",
+                "basis_ref": null
+              }
+            },
+            {
+              "name": "oxygen_balance_error",
+              "value": {
+                "value": 1.6653345369377348e-16,
+                "unit": "kg/m3",
+                "basis_ref": null
+              }
+            },
+            {
+              "name": "reynolds_number",
+              "value": {
+                "value": 26136.249831644673,
+                "unit": "1",
+                "basis_ref": null
+              }
+            },
+            {
+              "name": "pressure_drop",
+              "value": {
+                "value": 6051.927057012215,
+                "unit": "Pa",
+                "basis_ref": null
+              }
+            },
+            {
+              "name": "pumping_power",
+              "value": {
+                "value": 9.902442490818164,
+                "unit": "W",
+                "basis_ref": null
+              }
+            }
+          ],
+          "output_artifacts": [],
+          "numerical": {
+            "converged": true,
+            "final_residual": 1.6653345369377348e-16,
+            "iterations": 623,
+            "wall_time_s": 0.013203408001572825
+          },
+          "validity": {
+            "authority_owner": "bluerev",
+            "object_type": "validity_envelope",
+            "object_id": "bluerev.pbr_day_night.pbr_day_night.v2",
+            "workspace_id": "bluerev",
+            "revision": "pbr_day_night.v2",
+            "content_digest": "sha256:34e5dd2065c8d8e499bb4dcba5f343c7691e288f99571b69bf2d3e87277eb6c9",
+            "location": null,
+            "domain": [
+              {
+                "variable": "duration",
+                "lower": {
+                  "value": 0.0,
+                  "unit": "d",
+                  "basis_ref": null
+                },
+                "upper": {
+                  "value": 366.0,
+                  "unit": "d",
+                  "basis_ref": null
+                }
+              },
+              {
+                "variable": "photoperiod",
+                "lower": {
+                  "value": 0.0,
+                  "unit": "h",
+                  "basis_ref": null
+                },
+                "upper": {
+                  "value": 24.0,
+                  "unit": "h",
+                  "basis_ref": null
+                }
+              }
+            ],
+            "uncertainty": [],
+            "qualification_status": "unqualified",
+            "evidence_refs": []
+          },
+          "qualification_record_ref": {
+            "authority_owner": "repository",
+            "object_type": "scientific_qualification_record",
+            "object_id": "scripts/qualification/107/pbr_day_night.v2.ledger.json",
+            "workspace_id": "bluerev",
+            "revision": "pbr_day_night.v2",
+            "content_digest": null,
+            "location": null
+          },
+          "evidence_refs": [],
+          "started_at": "2026-09-24T21:27:15.022023Z",
+          "completed_at": "2026-09-24T21:27:15.035284Z"
+        },
+        "failure": null,
+        "feasible": true,
+        "pareto_optimal": false
+      },
+      {
+        "index": 2,
+        "inputs": [
+          {
+            "name": "max_specific_growth_rate",
+            "value": {
+              "value": 0.0625,
+              "unit": "1/h",
+              "basis_ref": {
+                "authority_owner": "repository",
+                "object_type": "synthetic_parameter_set",
+                "object_id": "scripts/qualification/107/synthetic-parameters.json",
+                "workspace_id": null,
+                "revision": "pbr_day_night.v2-synthetic-1",
+                "content_digest": null,
+                "location": null
+              }
+            }
+          },
+          {
+            "name": "light_saturation_constant",
+            "value": {
+              "value": 150.0,
+              "unit": "umol/(m**2*s)",
+              "basis_ref": {
+                "authority_owner": "repository",
+                "object_type": "synthetic_parameter_set",
+                "object_id": "scripts/qualification/107/synthetic-parameters.json",
+                "workspace_id": null,
+                "revision": "pbr_day_night.v2-synthetic-1",
+                "content_digest": null,
+                "location": null
+              }
+            }
+          },
+          {
+            "name": "light_inhibition_constant",
+            "value": {
+              "value": 2000.0,
+              "unit": "umol/(m**2*s)",
+              "basis_ref": {
+                "authority_owner": "repository",
+                "object_type": "synthetic_parameter_set",
+                "object_id": "scripts/qualification/107/synthetic-parameters.json",
+                "workspace_id": null,
+                "revision": "pbr_day_night.v2-synthetic-1",
+                "content_digest": null,
+                "location": null
+              }
+            }
+          },
+          {
+            "name": "specific_light_extinction",
+            "value": {
+              "value": 150.0,
+              "unit": "m**2/kg",
+              "basis_ref": {
+                "authority_owner": "repository",
+                "object_type": "synthetic_parameter_set",
+                "object_id": "scripts/qualification/107/synthetic-parameters.json",
+                "workspace_id": null,
+                "revision": "pbr_day_night.v2-synthetic-1",
+                "content_digest": null,
+                "location": null
+              }
+            }
+          },
+          {
+            "name": "biomass_loss_rate",
+            "value": {
+              "value": 0.004166666666666667,
+              "unit": "1/h",
+              "basis_ref": {
+                "authority_owner": "repository",
+                "object_type": "synthetic_parameter_set",
+                "object_id": "scripts/qualification/107/synthetic-parameters.json",
+                "workspace_id": null,
+                "revision": "pbr_day_night.v2-synthetic-1",
+                "content_digest": null,
+                "location": null
+              }
+            }
+          },
+          {
+            "name": "nitrogen_half_saturation",
+            "value": {
+              "value": 0.001,
+              "unit": "kg/m3",
+              "basis_ref": {
+                "authority_owner": "repository",
+                "object_type": "synthetic_parameter_set",
+                "object_id": "scripts/qualification/107/synthetic-parameters.json",
+                "workspace_id": null,
+                "revision": "pbr_day_night.v2-synthetic-1",
+                "content_digest": null,
+                "location": null
+              }
+            }
+          },
+          {
+            "name": "biomass_nitrogen_fraction",
+            "value": {
+              "value": 0.07,
+              "unit": "1",
+              "basis_ref": {
+                "authority_owner": "repository",
+                "object_type": "synthetic_parameter_set",
+                "object_id": "scripts/qualification/107/synthetic-parameters.json",
+                "workspace_id": null,
+                "revision": "pbr_day_night.v2-synthetic-1",
+                "content_digest": null,
+                "location": null
+              }
+            }
+          },
+          {
+            "name": "oxygen_yield",
+            "value": {
+              "value": 1.4,
+              "unit": "1",
+              "basis_ref": {
+                "authority_owner": "repository",
+                "object_type": "synthetic_parameter_set",
+                "object_id": "scripts/qualification/107/synthetic-parameters.json",
+                "workspace_id": null,
+                "revision": "pbr_day_night.v2-synthetic-1",
+                "content_digest": null,
+                "location": null
+              }
+            }
+          },
+          {
+            "name": "oxygen_kla",
+            "value": {
+              "value": 5.0,
+              "unit": "1/h",
+              "basis_ref": {
+                "authority_owner": "repository",
+                "object_type": "synthetic_parameter_set",
+                "object_id": "scripts/qualification/107/synthetic-parameters.json",
+                "workspace_id": null,
+                "revision": "pbr_day_night.v2-synthetic-1",
+                "content_digest": null,
+                "location": null
+              }
+            }
+          },
+          {
+            "name": "oxygen_saturation",
+            "value": {
+              "value": 0.0075,
+              "unit": "kg/m3",
+              "basis_ref": {
+                "authority_owner": "repository",
+                "object_type": "synthetic_parameter_set",
+                "object_id": "scripts/qualification/107/synthetic-parameters.json",
+                "workspace_id": null,
+                "revision": "pbr_day_night.v2-synthetic-1",
+                "content_digest": null,
+                "location": null
+              }
+            }
+          },
+          {
+            "name": "temperature_min",
+            "value": {
+              "value": 278.15,
+              "unit": "K",
+              "basis_ref": {
+                "authority_owner": "repository",
+                "object_type": "synthetic_parameter_set",
+                "object_id": "scripts/qualification/107/synthetic-parameters.json",
+                "workspace_id": null,
+                "revision": "pbr_day_night.v2-synthetic-1",
+                "content_digest": null,
+                "location": null
+              }
+            }
+          },
+          {
+            "name": "temperature_opt",
+            "value": {
+              "value": 298.15,
+              "unit": "K",
+              "basis_ref": {
+                "authority_owner": "repository",
+                "object_type": "synthetic_parameter_set",
+                "object_id": "scripts/qualification/107/synthetic-parameters.json",
+                "workspace_id": null,
+                "revision": "pbr_day_night.v2-synthetic-1",
+                "content_digest": null,
+                "location": null
+              }
+            }
+          },
+          {
+            "name": "temperature_max",
+            "value": {
+              "value": 308.15,
+              "unit": "K",
+              "basis_ref": {
+                "authority_owner": "repository",
+                "object_type": "synthetic_parameter_set",
+                "object_id": "scripts/qualification/107/synthetic-parameters.json",
+                "workspace_id": null,
+                "revision": "pbr_day_night.v2-synthetic-1",
+                "content_digest": null,
+                "location": null
+              }
+            }
+          },
+          {
+            "name": "initial_biomass",
+            "value": {
+              "value": 0.5,
+              "unit": "kg/m3",
+              "basis_ref": null
+            }
+          },
+          {
+            "name": "initial_nitrogen",
+            "value": {
+              "value": 0.05,
+              "unit": "kg/m3",
+              "basis_ref": null
+            }
+          },
+          {
+            "name": "initial_dissolved_oxygen",
+            "value": {
+              "value": 0.0075,
+              "unit": "kg/m3",
+              "basis_ref": null
+            }
+          },
+          {
+            "name": "photoperiod",
+            "value": {
+              "value": 14.0,
+              "unit": "h",
+              "basis_ref": null
+            }
+          },
+          {
+            "name": "temperature_mean",
+            "value": {
+              "value": 295.15,
+              "unit": "K",
+              "basis_ref": null
+            }
+          },
+          {
+            "name": "temperature_amplitude",
+            "value": {
+              "value": 3.0,
+              "unit": "K",
+              "basis_ref": null
+            }
+          },
+          {
+            "name": "duration",
+            "value": {
+              "value": 1.0,
+              "unit": "d",
+              "basis_ref": null
+            }
+          },
+          {
+            "name": "tube_inner_diameter",
+            "value": {
+              "value": 0.05,
+              "unit": "m",
+              "basis_ref": null
+            }
+          },
+          {
+            "name": "loop_length",
+            "value": {
+              "value": 100.0,
+              "unit": "m",
+              "basis_ref": null
+            }
+          },
+          {
+            "name": "liquid_velocity",
+            "value": {
+              "value": 0.5,
+              "unit": "m/s",
+              "basis_ref": null
+            }
+          },
+          {
+            "name": "pump_efficiency",
+            "value": {
+              "value": 0.6,
+              "unit": "1",
+              "basis_ref": null
+            }
+          },
+          {
+            "name": "harvest_fraction",
+            "value": {
+              "value": 0.2,
+              "unit": "1",
+              "basis_ref": null
+            }
+          },
+          {
+            "name": "harvest_hour",
+            "value": {
+              "value": 10.0,
+              "unit": "h",
+              "basis_ref": null
+            }
+          },
+          {
+            "name": "medium_nitrogen",
+            "value": {
+              "value": 0.05,
+              "unit": "kg/m3",
+              "basis_ref": null
+            }
+          },
+          {
+            "name": "peak_par",
+            "value": {
+              "value": 1376.418888608072,
+              "unit": "umol/(m**2*s)",
+              "basis_ref": null
+            }
+          }
+        ],
+        "request_ref": {
+          "authority_owner": "bluerev",
+          "object_type": "evaluation_request",
+          "object_id": "pbr-synthetic-study/point-2",
+          "workspace_id": "bluerev",
+          "revision": "108.synthetic.1",
+          "content_digest": null,
+          "location": null
+        },
+        "status": "succeeded",
+        "evaluation": {
+          "schema_version": "engineering_evaluator.v1",
+          "result_ref": {
+            "authority_owner": "process_stack",
+            "object_type": "evaluation_result",
+            "object_id": "pbr-synthetic-study/point-2/bluerev.pbr_day_night",
+            "workspace_id": "bluerev",
+            "revision": "108.synthetic.1",
+            "content_digest": null,
+            "location": null
+          },
+          "request_ref": {
+            "authority_owner": "bluerev",
+            "object_type": "evaluation_request",
+            "object_id": "pbr-synthetic-study/point-2",
+            "workspace_id": "bluerev",
+            "revision": "108.synthetic.1",
+            "content_digest": null,
+            "location": null
+          },
+          "evaluator_id": "bluerev.pbr_day_night",
+          "backend_version": "pbr_day_night.v2+sksundae-1.1.3",
+          "status": "succeeded",
+          "failure": null,
+          "fidelity": "reduced_order",
+          "outputs": [
+            {
+              "name": "final_biomass",
+              "value": {
+                "value": 0.5059693514379873,
+                "unit": "kg/m3",
+                "basis_ref": null
+              }
+            },
+            {
+              "name": "mean_biomass",
+              "value": {
+                "value": 0.49328646815624094,
+                "unit": "kg/m3",
+                "basis_ref": null
+              }
+            },
+            {
+              "name": "harvested_biomass",
+              "value": {
+                "value": 0.10591409241519399,
+                "unit": "kg/m3",
+                "basis_ref": null
+              }
+            },
+            {
+              "name": "volumetric_productivity",
+              "value": {
+                "value": 0.11188344385318127,
+                "unit": "kg/(m**3*d)",
+                "basis_ref": null
+              }
+            },
+            {
+              "name": "final_nitrogen",
+              "value": {
+                "value": 0.04258214539934102,
+                "unit": "kg/m3",
+                "basis_ref": null
+              }
+            },
+            {
+              "name": "min_nitrogen",
+              "value": {
+                "value": 0.04182920645509559,
+                "unit": "kg/m3",
+                "basis_ref": null
+              }
+            },
+            {
+              "name": "nitrogen_balance_error",
+              "value": {
+                "value": 1.3877787807814457e-16,
+                "unit": "kg/m3",
+                "basis_ref": null
+              }
+            },
+            {
+              "name": "final_dissolved_oxygen",
+              "value": {
+                "value": 0.006909210070355597,
+                "unit": "kg/m3",
+                "basis_ref": null
+              }
+            },
+            {
+              "name": "max_dissolved_oxygen",
+              "value": {
+                "value": 0.010950822202119011,
+                "unit": "kg/m3",
+                "basis_ref": null
+              }
+            },
+            {
+              "name": "max_oxygen_saturation_ratio",
+              "value": {
+                "value": 1.4601096269492015,
+                "unit": "1",
+                "basis_ref": null
+              }
+            },
+            {
+              "name": "degassed_oxygen",
+              "value": {
+                "value": 0.15656155969852492,
+                "unit": "kg/m3",
+                "basis_ref": null
+              }
+            },
+            {
+              "name": "oxygen_balance_error",
+              "value": {
+                "value": 2.0816681711721685e-15,
+                "unit": "kg/m3",
+                "basis_ref": null
+              }
+            },
+            {
+              "name": "reynolds_number",
+              "value": {
+                "value": 26136.249831644673,
+                "unit": "1",
+                "basis_ref": null
+              }
+            },
+            {
+              "name": "pressure_drop",
+              "value": {
+                "value": 6051.927057012215,
+                "unit": "Pa",
+                "basis_ref": null
+              }
+            },
+            {
+              "name": "pumping_power",
+              "value": {
+                "value": 9.902442490818164,
+                "unit": "W",
+                "basis_ref": null
+              }
+            }
+          ],
+          "output_artifacts": [],
+          "numerical": {
+            "converged": true,
+            "final_residual": 2.0816681711721685e-15,
+            "iterations": 696,
+            "wall_time_s": 0.011291901988442987
+          },
+          "validity": {
+            "authority_owner": "bluerev",
+            "object_type": "validity_envelope",
+            "object_id": "bluerev.pbr_day_night.pbr_day_night.v2",
+            "workspace_id": "bluerev",
+            "revision": "pbr_day_night.v2",
+            "content_digest": "sha256:34e5dd2065c8d8e499bb4dcba5f343c7691e288f99571b69bf2d3e87277eb6c9",
+            "location": null,
+            "domain": [
+              {
+                "variable": "duration",
+                "lower": {
+                  "value": 0.0,
+                  "unit": "d",
+                  "basis_ref": null
+                },
+                "upper": {
+                  "value": 366.0,
+                  "unit": "d",
+                  "basis_ref": null
+                }
+              },
+              {
+                "variable": "photoperiod",
+                "lower": {
+                  "value": 0.0,
+                  "unit": "h",
+                  "basis_ref": null
+                },
+                "upper": {
+                  "value": 24.0,
+                  "unit": "h",
+                  "basis_ref": null
+                }
+              }
+            ],
+            "uncertainty": [],
+            "qualification_status": "unqualified",
+            "evidence_refs": []
+          },
+          "qualification_record_ref": {
+            "authority_owner": "repository",
+            "object_type": "scientific_qualification_record",
+            "object_id": "scripts/qualification/107/pbr_day_night.v2.ledger.json",
+            "workspace_id": "bluerev",
+            "revision": "pbr_day_night.v2",
+            "content_digest": null,
+            "location": null
+          },
+          "evidence_refs": [],
+          "started_at": "2026-09-24T21:27:15.036276Z",
+          "completed_at": "2026-09-24T21:27:15.047616Z"
+        },
+        "failure": null,
+        "feasible": true,
+        "pareto_optimal": false
+      }
+    ],
+    "feasible_count": 3,
+    "failed_count": 0,
+    "infeasible_count": 0,
+    "best_point_index": 1,
+    "pareto_point_indices": [],
+    "output_summaries": [
+      {
+        "output": "degassed_oxygen",
+        "mean": {
+          "value": 0.16159176804232547,
+          "unit": "kg/m3",
+          "basis_ref": null
+        },
+        "standard_deviation": {
+          "value": 0.006677374362715207,
+          "unit": "kg/m3",
+          "basis_ref": null
+        },
+        "percentile_05": {
+          "value": 0.15681002690875917,
+          "unit": "kg/m3",
+          "basis_ref": null
+        },
+        "percentile_95": {
+          "value": 0.16815538454491244,
+          "unit": "kg/m3",
+          "basis_ref": null
+        }
+      },
+      {
+        "output": "final_biomass",
+        "mean": {
+          "value": 0.5092978114123066,
+          "unit": "kg/m3",
+          "basis_ref": null
+        },
+        "standard_deviation": {
+          "value": 0.004417300186260234,
+          "unit": "kg/m3",
+          "basis_ref": null
+        },
+        "percentile_05": {
+          "value": 0.5061339032910868,
+          "unit": "kg/m3",
+          "basis_ref": null
+        },
+        "percentile_95": {
+          "value": 0.5136397785438537,
+          "unit": "kg/m3",
+          "basis_ref": null
+        }
+      },
+      {
+        "output": "final_dissolved_oxygen",
+        "mean": {
+          "value": 0.006905323646451557,
+          "unit": "kg/m3",
+          "basis_ref": null
+        },
+        "standard_deviation": {
+          "value": 5.15779379612836e-06,
+          "unit": "kg/m3",
+          "basis_ref": null
+        },
+        "percentile_05": {
+          "value": 0.006900253813957473,
+          "unit": "kg/m3",
+          "basis_ref": null
+        },
+        "percentile_95": {
+          "value": 0.006909017934337749,
+          "unit": "kg/m3",
+          "basis_ref": null
+        }
+      },
+      {
+        "output": "final_nitrogen",
+        "mean": {
+          "value": 0.042349153201138544,
+          "unit": "kg/m3",
+          "basis_ref": null
+        },
+        "standard_deviation": {
+          "value": 0.00030921101303829347,
+          "unit": "kg/m3",
+          "basis_ref": null
+        },
+        "percentile_05": {
+          "value": 0.04204521550193018,
+          "unit": "kg/m3",
+          "basis_ref": null
+        },
+        "percentile_95": {
+          "value": 0.04257062676962404,
+          "unit": "kg/m3",
+          "basis_ref": null
+        }
+      },
+      {
+        "output": "harvested_biomass",
+        "mean": {
+          "value": 0.10618631236390619,
+          "unit": "kg/m3",
+          "basis_ref": null
+        },
+        "standard_deviation": {
+          "value": 0.000362384624804722,
+          "unit": "kg/m3",
+          "basis_ref": null
+        },
+        "percentile_05": {
+          "value": 0.1059274036268649,
+          "unit": "kg/m3",
+          "basis_ref": null
+        },
+        "percentile_95": {
+          "value": 0.10654259658334969,
+          "unit": "kg/m3",
+          "basis_ref": null
+        }
+      },
+      {
+        "output": "max_dissolved_oxygen",
+        "mean": {
+          "value": 0.01101139065771845,
+          "unit": "kg/m3",
+          "basis_ref": null
+        },
+        "standard_deviation": {
+          "value": 7.977243298493989e-05,
+          "unit": "kg/m3",
+          "basis_ref": null
+        },
+        "percentile_05": {
+          "value": 0.010953897281024258,
+          "unit": "kg/m3",
+          "basis_ref": null
+        },
+        "percentile_95": {
+          "value": 0.01108975640099552,
+          "unit": "kg/m3",
+          "basis_ref": null
+        }
+      },
+      {
+        "output": "max_oxygen_saturation_ratio",
+        "mean": {
+          "value": 1.4681854210291263,
+          "unit": "1",
+          "basis_ref": null
+        },
+        "standard_deviation": {
+          "value": 0.010636324397992067,
+          "unit": "1",
+          "basis_ref": null
+        },
+        "percentile_05": {
+          "value": 1.460519637469901,
+          "unit": "1",
+          "basis_ref": null
+        },
+        "percentile_95": {
+          "value": 1.4786341867994028,
+          "unit": "1",
+          "basis_ref": null
+        }
+      },
+      {
+        "output": "mean_biomass",
+        "mean": {
+          "value": 0.49492152439350456,
+          "unit": "kg/m3",
+          "basis_ref": null
+        },
+        "standard_deviation": {
+          "value": 0.002169238728549625,
+          "unit": "kg/m3",
+          "basis_ref": null
+        },
+        "percentile_05": {
+          "value": 0.49336739339411384,
+          "unit": "kg/m3",
+          "basis_ref": null
+        },
+        "percentile_95": {
+          "value": 0.4970537180938697,
+          "unit": "kg/m3",
+          "basis_ref": null
+        }
+      },
+      {
+        "output": "min_nitrogen",
+        "mean": {
+          "value": 0.041593245884035505,
+          "unit": "kg/m3",
+          "basis_ref": null
+        },
+        "standard_deviation": {
+          "value": 0.0003130905214923998,
+          "unit": "kg/m3",
+          "basis_ref": null
+        },
+        "percentile_05": {
+          "value": 0.04128549920514414,
+          "unit": "kg/m3",
+          "basis_ref": null
+        },
+        "percentile_95": {
+          "value": 0.041817533168606744,
+          "unit": "kg/m3",
+          "basis_ref": null
+        }
+      },
+      {
+        "output": "nitrogen_balance_error",
+        "mean": {
+          "value": 7.401486830834377e-17,
+          "unit": "kg/m3",
+          "basis_ref": null
+        },
+        "standard_deviation": {
+          "value": 5.777783805466599e-17,
+          "unit": "kg/m3",
+          "basis_ref": null
+        },
+        "percentile_05": {
+          "value": 3.053113317719181e-17,
+          "unit": "kg/m3",
+          "basis_ref": null
+        },
+        "percentile_95": {
+          "value": 1.3045120539345587e-16,
+          "unit": "kg/m3",
+          "basis_ref": null
+        }
+      },
+      {
+        "output": "oxygen_balance_error",
+        "mean": {
+          "value": 1.1657341758564144e-15,
+          "unit": "kg/m3",
+          "basis_ref": null
+        },
+        "standard_deviation": {
+          "value": 9.602787394150765e-16,
+          "unit": "kg/m3",
+          "basis_ref": null
+        },
+        "percentile_05": {
+          "value": 2.7478019859472625e-16,
+          "unit": "kg/m3",
+          "basis_ref": null
+        },
+        "percentile_95": {
+          "value": 1.9984014443252818e-15,
+          "unit": "kg/m3",
+          "basis_ref": null
+        }
+      },
+      {
+        "output": "pressure_drop",
+        "mean": {
+          "value": 6051.927057012214,
+          "unit": "Pa",
+          "basis_ref": null
+        },
+        "standard_deviation": {
+          "value": 1.1138989715542165e-12,
+          "unit": "Pa",
+          "basis_ref": null
+        },
+        "percentile_05": {
+          "value": 6051.927057012215,
+          "unit": "Pa",
+          "basis_ref": null
+        },
+        "percentile_95": {
+          "value": 6051.927057012215,
+          "unit": "Pa",
+          "basis_ref": null
+        }
+      },
+      {
+        "output": "pumping_power",
+        "mean": {
+          "value": 9.902442490818164,
+          "unit": "W",
+          "basis_ref": null
+        },
+        "standard_deviation": {
+          "value": 0.0,
+          "unit": "W",
+          "basis_ref": null
+        },
+        "percentile_05": {
+          "value": 9.902442490818164,
+          "unit": "W",
+          "basis_ref": null
+        },
+        "percentile_95": {
+          "value": 9.902442490818164,
+          "unit": "W",
+          "basis_ref": null
+        }
+      },
+      {
+        "output": "reynolds_number",
+        "mean": {
+          "value": 26136.249831644673,
+          "unit": "1",
+          "basis_ref": null
+        },
+        "standard_deviation": {
+          "value": 0.0,
+          "unit": "1",
+          "basis_ref": null
+        },
+        "percentile_05": {
+          "value": 26136.249831644673,
+          "unit": "1",
+          "basis_ref": null
+        },
+        "percentile_95": {
+          "value": 26136.249831644673,
+          "unit": "1",
+          "basis_ref": null
+        }
+      },
+      {
+        "output": "volumetric_productivity",
+        "mean": {
+          "value": 0.1154841237762128,
+          "unit": "kg/(m**3*d)",
+          "basis_ref": null
+        },
+        "standard_deviation": {
+          "value": 0.004779683641653711,
+          "unit": "kg/(m**3*d)",
+          "basis_ref": null
+        },
+        "percentile_05": {
+          "value": 0.11206130691795164,
+          "unit": "kg/(m**3*d)",
+          "basis_ref": null
+        },
+        "percentile_95": {
+          "value": 0.12018237512720344,
+          "unit": "kg/(m**3*d)",
+          "basis_ref": null
+        }
+      }
+    ],
+    "qualification_status": "unqualified",
+    "fidelity": "reduced_order"
+  },
+  "interpretation": "Three real CVODE-backed evaluator calls, each one full diel cycle, completed over the synthetic 107 fixture. All source coefficients are synthetic; these runs do not establish biological or physical validity."
+}
