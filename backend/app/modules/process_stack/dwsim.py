@@ -389,9 +389,10 @@ class DwsimEvaluator:
                     suffix = f"; {details}" if details else ""
                     raise DwsimEvaluationError(code, f"DWSIM has uncalculated/error objects: {object_names}{suffix}")
                 mass_residual, boundary = _mass_balance(client, flowsheet_id, case_path, projection["objects"])
-                if abs(mass_residual) > _MASS_RESIDUAL_TOLERANCE_KG_S:
+                # Dynamic holdup legitimately accumulates mass; only steady state must close.
+                if dynamic is None and abs(mass_residual) > _MASS_RESIDUAL_TOLERANCE_KG_S:
                     raise DwsimEvaluationError("DWSIM_MASS_RESIDUAL", "flowsheet boundary mass residual exceeds tolerance")
-                numerical = NumericalDiagnostics(converged=True, final_residual=abs(mass_residual))
+                numerical = NumericalDiagnostics(converged=True, final_residual=abs(mass_residual) if dynamic is None else None)
                 output_values = [NamedQuantity(name="mass_residual", value=Quantity(value=mass_residual, unit="kg/s"))]
                 if dynamic is not None:
                     output_values.append(NamedQuantity(name="dynamic_end_time", value=Quantity(value=dynamic["series_end_s"], unit="s")))
