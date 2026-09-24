@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import ctypes
+import os
 import shutil
 import subprocess
+import sys
 from datetime import UTC, datetime
+from pathlib import Path
 
 from app.modules.local_ai.resource_contracts import (
     CpuState,
@@ -52,6 +56,60 @@ def query_gpus() -> tuple[GpuState, ...]:
     return parse_nvidia_smi(result.stdout) if result.returncode == 0 else ()
 
 
+def parse_linux_meminfo(text: str) -> MemoryState:
+    """Read physical RAM capacity in kB; malformed or missing values stay unknown."""
+    values: dict[str, int] = {}
+    for line in text.splitlines():
+        key, separator, value = line.partition(":")
+        if not separator or key not in {"MemTotal", "MemAvailable"}:
+            continue
+        parts = value.split()
+        if len(parts) != 2 or parts[1] != "kB" or not parts[0].isdecimal():
+            continue
+        values[key] = int(parts[0]) * 1024
+    total = values.get("MemTotal")
+    available = values.get("MemAvailable")
+    if total is not None and available is not None and available > total:
+        available = None
+    return MemoryState(total_bytes=total, available_bytes=available)
+
+
+def _windows_memory() -> MemoryState:
+    class MemoryStatus(ctypes.Structure):
+        _fields_ = [
+            ("dwLength", ctypes.c_ulong),
+            ("dwMemoryLoad", ctypes.c_ulong),
+            ("ullTotalPhys", ctypes.c_ulonglong),
+            ("ullAvailPhys", ctypes.c_ulonglong),
+            ("ullTotalPageFile", ctypes.c_ulonglong),
+            ("ullAvailPageFile", ctypes.c_ulonglong),
+            ("ullTotalVirtual", ctypes.c_ulonglong),
+            ("ullAvailVirtual", ctypes.c_ulonglong),
+            ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
+        ]
+
+    try:
+        status = MemoryStatus()
+        status.dwLength = ctypes.sizeof(MemoryStatus)
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
+        if not kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
+            return MemoryState()
+        return MemoryState(total_bytes=status.ullTotalPhys, available_bytes=status.ullAvailPhys)
+    except (AttributeError, OSError, ValueError):
+        return MemoryState()
+
+
+def query_memory() -> MemoryState:
+    if sys.platform == "linux":
+        try:
+            return parse_linux_meminfo(Path("/proc/meminfo").read_text(encoding="ascii"))
+        except (OSError, UnicodeError):
+            return MemoryState()
+    if sys.platform == "win32":
+        return _windows_memory()
+    return MemoryState()
+
+
 def observe_resources() -> RuntimeResourceSnapshot:
     status = get_local_ai_runtime_status()
     models: list[LoadedModelState] = []
@@ -67,12 +125,11 @@ def observe_resources() -> RuntimeResourceSnapshot:
                         keep_alive_until=item.get("until"),
                     )
                 )
-    # RAM/CPU availability is not exposed by the current runtime probe.
     return RuntimeResourceSnapshot(
         generation=0,
         observed_at=datetime.now(UTC),
-        cpu=CpuState(),
-        memory=MemoryState(),
+        cpu=CpuState(logical_cores=os.cpu_count()),
+        memory=query_memory(),
         gpus=query_gpus(),
         loaded_models=tuple(models),
     )

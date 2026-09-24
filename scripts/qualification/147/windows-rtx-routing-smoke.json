@@ -1,0 +1,102 @@
+{
+  "cases": {
+    "cold_route": {
+      "attempts": [
+        {
+          "decision_id": "4476ade3-c779-413f-8df6-b97bd337517f",
+          "lease_id": "7a11e0bd-3de1-4566-be52-dea67c6c5071",
+          "ledger_id": "670ebdd9-c882-4707-874d-b284ae797b78",
+          "model_ref": "jarvis.rule-local-ranker.v1",
+          "outcome": "decided",
+          "reason_code": "ranked",
+          "selected": "local:fast",
+          "status": "success"
+        }
+      ],
+      "capability": "fast",
+      "elapsed_s": 15.685,
+      "model_id": "qwen3:8b",
+      "status": "success",
+      "text_head": "A photobioreactor is a controlled system that uses light to cultivate photosynthetic organisms for producing biofuels or"
+    },
+    "loaded_route": {
+      "attempts": [
+        {
+          "decision_id": "6b1eb3ff-5264-4855-bf72-1d7a99b16411",
+          "lease_id": "aea17207-1eba-4eb4-b406-51846b59d759",
+          "ledger_id": "ffbaf05e-d66f-4fb1-84c6-0f813eb8c851",
+          "model_ref": "jarvis.rule-local-ranker.v1",
+          "outcome": "decided",
+          "reason_code": "ranked",
+          "selected": "local:fast",
+          "status": "success"
+        }
+      ],
+      "capability": "fast",
+      "elapsed_s": 6.249,
+      "model_id": "qwen3:8b",
+      "status": "success",
+      "text_head": "A photobioreactor is a system that uses light to cultivate photosynthetic organisms for producing biofuels and other val"
+    },
+    "pressure": {
+      "detail": "observed capacity does not fit reservation",
+      "refused": "ResourceCapacityError"
+    },
+    "race": {
+      "model": "qwen3:8b",
+      "results": [
+        "79220b6a-a74f-48e1-9e74-f25fcf15d857",
+        "ResourceLeaseError",
+        "ResourceLeaseError",
+        "ResourceLeaseError",
+        "ResourceLeaseError",
+        "ResourceLeaseError"
+      ],
+      "winners": 1
+    },
+    "snapshot_after": {
+      "active_lease_ids": [],
+      "generation": 6,
+      "gpus": [
+        {
+          "index": 0,
+          "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+          "vram_total_bytes": 12820938752,
+          "vram_used_bytes": 5817499648
+        }
+      ],
+      "loaded_models": [
+        "qwen3:8b"
+      ],
+      "logical_cores": 24,
+      "memory_available_bytes": 4177764352,
+      "memory_total_bytes": 33752997888
+    },
+    "snapshot_before": {
+      "active_lease_ids": [],
+      "generation": 1,
+      "gpus": [
+        {
+          "index": 0,
+          "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+          "vram_total_bytes": 12820938752,
+          "vram_used_bytes": 0
+        }
+      ],
+      "loaded_models": [],
+      "logical_cores": 24,
+      "memory_available_bytes": 3820740608,
+      "memory_total_bytes": 33752997888
+    }
+  },
+  "data_root": "C:\\Users\\thera\\AppData\\Local\\jarvis-work\\smoke147-data",
+  "generated_at": "2026-09-23T22:48:15.381280+00:00",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "python": "3.12.10",
+  "runtime": {
+    "endpoint": "http://127.0.0.1:11434",
+    "error_type": null,
+    "ollama_reachable": true,
+    "ollama_version": "0.34.2"
+  }
+}

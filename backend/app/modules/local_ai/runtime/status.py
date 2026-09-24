@@ -22,6 +22,7 @@ def get_local_ai_runtime_status(*, client: Any | None = None) -> dict[str, Any]:
         "ollama_reachable": False,
         "ollama_version": None,
         "installed_models": [],
+        "installed_model_sizes": {},
         "loaded_models": [],
         "configured_route_models": configured_route_models,
         "missing_models": dict(configured_route_models),
@@ -62,7 +63,9 @@ def get_local_ai_runtime_status(*, client: Any | None = None) -> dict[str, Any]:
         try:
             tags_response = client_obj.get(_api_url(urls.base_url, "/api/tags"), timeout=LOCAL_RUNTIME_STATUS_TIMEOUT_S)
             tags_response.raise_for_status()
-            status["installed_models"] = _parse_installed_models(tags_response.json())
+            tags_payload = tags_response.json()
+            status["installed_models"] = _parse_installed_models(tags_payload)
+            status["installed_model_sizes"] = _parse_installed_model_sizes(tags_payload)
             installed = set(status["installed_models"])
             status["missing_models"] = {
                 route_class: model_id
@@ -113,6 +116,20 @@ def _parse_installed_models(payload: object) -> list[str]:
         if isinstance(value, str) and value not in installed:
             installed.append(value)
     return installed
+
+
+def _parse_installed_model_sizes(payload: object) -> dict[str, int]:
+    """On-disk size per installed model; the lower bound a cold load must fit."""
+    sizes: dict[str, int] = {}
+    models = payload.get("models") if isinstance(payload, dict) else None
+    for item in models if isinstance(models, list) else []:
+        if not isinstance(item, dict):
+            continue
+        name = item.get("name") if isinstance(item.get("name"), str) else item.get("model")
+        size = _optional_int(item.get("size"))
+        if isinstance(name, str) and size is not None and size > 0:
+            sizes.setdefault(name, size)
+    return sizes
 
 
 def _parse_loaded_models(payload: object) -> list[dict[str, Any]]:

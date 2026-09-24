@@ -40,6 +40,19 @@ class InProcessResourceArbiter:
         self._leases: dict[str, ResourceLease] = {}
         self._generation = 0
 
+    @staticmethod
+    def _identity(snapshot: RuntimeResourceSnapshot) -> tuple[object, ...]:
+        """Only changes to admission identity invalidate a ranked snapshot."""
+        return (
+            snapshot.cpu.logical_cores,
+            snapshot.memory.total_bytes,
+            frozenset((gpu.index, gpu.name, gpu.vram_total_bytes) for gpu in snapshot.gpus),
+            frozenset(model.name for model in snapshot.loaded_models),
+            frozenset(
+                (worker.worker_id, worker.worker_kind, worker.state, worker.lease_ids) for worker in snapshot.workers
+            ),
+        )
+
     def _refresh(self, now: datetime) -> RuntimeResourceSnapshot:
         for lease_id, lease in tuple(self._leases.items()):
             if lease.state == "active" and not lease.is_live(now):
@@ -47,8 +60,7 @@ class InProcessResourceArbiter:
                 self._generation += 1
         observed = self._observe()
         previous = self._snapshot
-        fields = ("cpu", "memory", "gpus", "loaded_models", "workers")
-        if previous is None or any(getattr(previous, field) != getattr(observed, field) for field in fields):
+        if previous is None or self._identity(previous) != self._identity(observed):
             self._generation += 1
         active = tuple(key for key, lease in self._leases.items() if lease.state == "active")
         self._snapshot = observed.model_copy(update={"generation": self._generation, "active_lease_ids": active})
@@ -63,7 +75,8 @@ class InProcessResourceArbiter:
         cpu = snapshot.cpu.logical_cores
         utilization = snapshot.cpu.utilization
         if request.cpu_cores and (
-            cpu is None or utilization is None
+            cpu is None
+            or utilization is None
             or request.cpu_cores + sum(r.cpu_cores for r in active) > int(cpu * (1 - utilization))
         ):
             return False
@@ -84,7 +97,9 @@ class InProcessResourceArbiter:
             if not loaded and not (request.ram_bytes or request.vram_bytes):
                 return False
         if request.worker_kind:
-            idle = sum(1 for worker in snapshot.workers if worker.worker_kind == request.worker_kind and worker.state == "idle")
+            idle = sum(
+                1 for worker in snapshot.workers if worker.worker_kind == request.worker_kind and worker.state == "idle"
+            )
             reserved = sum(1 for r in active if r.worker_kind == request.worker_kind)
             if reserved >= idle:
                 return False
