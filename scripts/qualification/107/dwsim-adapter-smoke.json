@@ -1,0 +1,75 @@
+{
+  "executable": "/home/thera/jarvis-control/work/tools/dwsim-10.2.9/mcp-root/opt/dwsim-mcp/dwsim-mcp",
+  "executable_sha256": "d20f97426c264ac91114240b085b3c4e7877dfda83ecb487c0125f838cf66cfa",
+  "results": [
+    {
+      "case": "mixer.dwxmz",
+      "case_sha256": "5c7e16dc5d037ae8b70e717d2d0d62c3c40fc1f68fba835ad8af24512575d0c2",
+      "status": "succeeded",
+      "failure": null,
+      "backend_version": "10.2.9",
+      "validity": "unqualified",
+      "outputs": {
+        "mass_residual": {
+          "value": 0.0,
+          "unit": "kg/s",
+          "basis_ref": null
+        }
+      },
+      "evidence_refs": [
+        {
+          "authority_owner": "dwsim_runtime",
+          "object_type": "flowsheet_case_file",
+          "object_id": "mixer.dwxmz",
+          "workspace_id": "dwsim-test",
+          "revision": "5c7e16dc5d037ae8b70e717d2d0d62c3c40fc1f68fba835ad8af24512575d0c2",
+          "content_digest": "sha256:5c7e16dc5d037ae8b70e717d2d0d62c3c40fc1f68fba835ad8af24512575d0c2",
+          "location": null
+        },
+        {
+          "authority_owner": "dwsim_runtime",
+          "object_type": "mcp_executable",
+          "object_id": "dwsim-mcp",
+          "workspace_id": "dwsim-test",
+          "revision": "10.2.9",
+          "content_digest": "sha256:d20f97426c264ac91114240b085b3c4e7877dfda83ecb487c0125f838cf66cfa",
+          "location": null
+        }
+      ]
+    },
+    {
+      "case": "tank-event-restart.dwxmz",
+      "case_sha256": "cc3c6542a906404ca2233a27cf6db1a4ef32d3ef5059bbbb2509c2309d852ab3",
+      "status": "failed",
+      "failure": {
+        "category": "did_not_converge",
+        "backend_code": "DWSIM_OBJECT_UNCALCULATED",
+        "retryable": false,
+        "message": "DWSIM has uncalculated/error objects: LG-007; nested summary duration 25.0 s differs from time-series end 20.0 s"
+      },
+      "backend_version": "10.2.9",
+      "validity": "unqualified",
+      "outputs": {},
+      "evidence_refs": [
+        {
+          "authority_owner": "dwsim_runtime",
+          "object_type": "flowsheet_case_file",
+          "object_id": "tank-event-restart.dwxmz",
+          "workspace_id": "dwsim-test",
+          "revision": "cc3c6542a906404ca2233a27cf6db1a4ef32d3ef5059bbbb2509c2309d852ab3",
+          "content_digest": "sha256:cc3c6542a906404ca2233a27cf6db1a4ef32d3ef5059bbbb2509c2309d852ab3",
+          "location": null
+        },
+        {
+          "authority_owner": "dwsim_runtime",
+          "object_type": "mcp_executable",
+          "object_id": "dwsim-mcp",
+          "workspace_id": "dwsim-test",
+          "revision": "10.2.9",
+          "content_digest": "sha256:d20f97426c264ac91114240b085b3c4e7877dfda83ecb487c0125f838cf66cfa",
+          "location": null
+        }
+      ]
+    }
+  ]
+}
