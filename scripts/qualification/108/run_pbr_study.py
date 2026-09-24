@@ -42,7 +42,7 @@ def run(output: Path) -> None:
         if name == "peak_par":
             continue
         if name == "duration":
-            value = 0.25
+            value = 1.0  # one full diel cycle (days)
         fixed.append({"name": name, "value": {"value": value, "unit": unit}})
 
     definition = StudyDefinition(
@@ -93,7 +93,7 @@ def run(output: Path) -> None:
                       "availability": availability.model_dump(mode="json")},
         "study": study.model_dump(mode="json"),
         "interpretation": (
-            "Three real CVODE-backed evaluator calls completed over the synthetic 107 fixture. "
+            "Three real CVODE-backed evaluator calls, each one full diel cycle, completed over the synthetic 107 fixture. "
             "All source coefficients are synthetic; these runs do not establish biological or physical validity."
         ),
     }
