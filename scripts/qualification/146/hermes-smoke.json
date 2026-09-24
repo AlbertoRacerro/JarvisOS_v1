@@ -1,0 +1,26 @@
+{
+  "qualification": "146 Hermes real-worker loopback smoke",
+  "inference_mode": "deterministic loopback inference stub; no model or provider",
+  "native_tool_disposition": "Delegation and skills toolsets remain disabled until their actions are routed through the Jarvis capability broker.",
+  "hermes_version": "0.21.4",
+  "hermes_revision": "d337b736aa1e8ebecfab043842d13e4a2d2f48a3",
+  "initial_turn": "success",
+  "broker_tool_result_projected": true,
+  "agent_events_projected": 6,
+  "interrupt_acknowledged": true,
+  "interrupted_turn_returned": true,
+  "worker_crash_recovered": true,
+  "recovered_turn": "success",
+  "ai_thread_interactions": 2,
+  "inference_stub_calls": 4,
+  "elapsed_seconds": 8.211,
+  "event_types": [
+    "hermes.agent_event",
+    "hermes.tool_result",
+    "hermes.agent_event",
+    "hermes.agent_event",
+    "hermes.agent_event",
+    "hermes.agent_event",
+    "hermes.agent_event"
+  ]
+}
