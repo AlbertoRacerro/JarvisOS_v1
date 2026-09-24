@@ -8,7 +8,7 @@ Lettore: dev esperto, ignaro del progetto. Obiettivo: capire tutto da zero.
 
 Piattaforma **local-first** che unisce tre cose per il lavoro tecnico privato dell'utente:
 
-1. **Domain Foundation** — knowledge base ingegneristica strutturata (assunzioni, parametri, decisioni, model spec, entità + grafo di link).
+1. **Domain Foundation** — knowledge base ingegneristica strutturata (assunzioni, parametri, decisioni, model spec, grafo di progetto).
 2. **Modeling + Runner** — modelli ingegneristici versionati eseguiti come **simulazioni** in sandbox Python locale.
 3. **AI layer** — assistente AI con routing semantico locale (+ esterno controllato, pianificato).
 
@@ -31,7 +31,7 @@ Python + **FastAPI** (single-process, serve anche il frontend buildato) · **SQL
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
 │ A. DOMAIN FOUNDATION (knowledge)                                          │
-│    workspaces → entities + entity_links (grafo)                           │
+│    workspaces → flowsheet graph (050) · Project Knowledge (112)           │
 │    assumptions · parameters · decisions · model_specs · artifacts · events│
 ├─────────────────────────────────────────────────────────────────────────┤
 │ B. MODELING + RUNNER (simulazione)                                        │
@@ -49,7 +49,7 @@ Python + **FastAPI** (single-process, serve anche il frontend buildato) · **SQL
 
 ### A. Domain Foundation — knowledge base
 Conoscenza di progetto strutturata e tipizzata, per workspace (es. `bluerev`):
-- **entities** (generiche, `entity_type`, `raw_payload`) + **entity_links** (grafo: source→target, `link_type`, `confidence`).
+- Grafo di progetto: flowsheet/dependency graph (050) e Project Knowledge (112). Le vecchie tabelle generiche `entities`/`entity_links` non hanno più owner e non vengono più create (105); DB esistenti le conservano inerti.
 - **assumptions** (statement, scope, confidence, status).
 - **parameters** (name, symbol, value, unit, source_ref, confidence).
 - **decisions** (decision_text, rationale, status, link a run).
@@ -83,7 +83,6 @@ Vedi §7–§9 (flow + moduli).
 ```
 schema_migrations                     ← versioning schema
 workspaces
-  ├─ entities ── entity_links         ← knowledge graph
   ├─ assumptions · parameters · decisions
   ├─ model_specs ── model_versions ── simulation_runs
   │                                     ├─ runner_jobs (sandbox exec)
@@ -213,7 +212,7 @@ RouterPolicy producer = motore a **regole first-match** deterministico. Tier: `L
 ## 11. Stato attuale (implementato + validato su Ollama reale)
 
 ```
-DOMINIO  : workspaces/entities/assumptions/parameters/decisions/model_specs (schema + CRUD)
+DOMINIO  : workspaces/assumptions/parameters/decisions/model_specs (schema + CRUD)
 MODELING : model_specs/versions/simulation_runs + runner sandbox
 AI LOCALE: model routing → runtime status → resolver → default → lifecycle → launcher desktop
 ROUTER   : producer canonico → baseline → BRIDGE-1a (Auto→locale by task_kind)
