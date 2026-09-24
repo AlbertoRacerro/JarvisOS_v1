@@ -1,0 +1,300 @@
+{
+  "evidence_kind": "real_runtime_execution",
+  "source_sha": "35f099e6fe0dcf56d0cce715c42099c3b22f8643",
+  "executed_at": "2026-09-24T21:55:14.449685+00:00",
+  "runtime": {
+    "python": "3.11.16",
+    "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+    "packages": {
+      "build123d": "0.11.1",
+      "numpy": "2.4.6",
+      "scipy": "1.17.1",
+      "Pint": "0.25.3"
+    }
+  },
+  "input": {
+    "path": "scripts/qualification/108/pbr-study.runtime-evidence.json",
+    "sha256": "22141341f84b845fa1252611854e8e93c2febf4d1795288d5ebac3fbf0de9778",
+    "study_content_digest": "sha256:0588398ac30db99e8d851faa44b0c3b5a06c5005dca962cc60c718a2c56ff5ef",
+    "definition_digest": "sha256:1c7a59a8729722b6209512bba3583f926cbfd98f75b66ab340c53f92278b72af",
+    "selected_point_index": 1,
+    "qualification_status": "unqualified",
+    "envelope_digest": "sha256:b003c55f8ca4cd66c567c6d5d85c2937b859b79072112bff69d746338b44889b",
+    "envelope_quantities": {
+      "tube_inner_diameter": {
+        "value": 0.05,
+        "unit": "m",
+        "basis_ref": null
+      },
+      "loop_length": {
+        "value": 100.0,
+        "unit": "m",
+        "basis_ref": null
+      }
+    }
+  },
+  "cad_mapping": {
+    "geometry_spec_id": "sha256:69e80ddbd2f5d601326650dd95096be55690402e2166967ee33809e4bea21007",
+    "cad_only_wall_allowance_mm": 2.0,
+    "mapped_bore_mm": 50.0,
+    "mapped_length_mm": 100000.0,
+    "wall_allowance_note": "CAD construction allowance; not a process/scientific input or physical qualification."
+  },
+  "bluecad": {
+    "verdict": "pass",
+    "manifest": {
+      "manifest_version": "bluecad_manifest_v0_1",
+      "spec_id": "sha256:69e80ddbd2f5d601326650dd95096be55690402e2166967ee33809e4bea21007",
+      "tool_versions": {
+        "build123d": "0.11.1"
+      },
+      "parts": {
+        "process_tube": {
+          "kind": "tube_run",
+          "volume_mm3": 32672563.597333852,
+          "bbox_mm": {
+            "min": [
+              0.0,
+              -27.0,
+              -27.0
+            ],
+            "max": [
+              100000.0,
+              27.0,
+              27.0
+            ]
+          },
+          "ports": {
+            "port_a": {
+              "origin": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "direction": [
+                -1.0,
+                0.0,
+                0.0
+              ],
+              "interface": "tube",
+              "outer_d": 54.0,
+              "wall_t": 2.0
+            },
+            "port_b": {
+              "origin": [
+                100000.0,
+                0.0,
+                0.0
+              ],
+              "direction": [
+                1.0,
+                0.0,
+                0.0
+              ],
+              "interface": "tube",
+              "outer_d": 54.0,
+              "wall_t": 2.0
+            }
+          }
+        }
+      },
+      "resolved_ports": {
+        "process_tube": {
+          "port_a": {
+            "origin": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "direction": [
+              -1.0,
+              0.0,
+              0.0
+            ],
+            "interface": "tube",
+            "outer_d": 54.0,
+            "wall_t": 2.0
+          },
+          "port_b": {
+            "origin": [
+              100000.0,
+              0.0,
+              0.0
+            ],
+            "direction": [
+              1.0,
+              0.0,
+              0.0
+            ],
+            "interface": "tube",
+            "outer_d": 54.0,
+            "wall_t": 2.0
+          }
+        }
+      },
+      "assembly": {
+        "total_volume_mm3": 32672563.597333852,
+        "bbox_mm": {
+          "min": [
+            0.0,
+            -27.0,
+            -27.0
+          ],
+          "max": [
+            100000.0,
+            27.0,
+            27.0
+          ]
+        },
+        "kernel_checks": {
+          "process_tube": {
+            "brep_valid": true,
+            "manifold": true
+          }
+        }
+      },
+      "scene_binding": {
+        "version": "bluecad_scene_binding_v0_1",
+        "artifact": "model.glb",
+        "spec_id": "sha256:69e80ddbd2f5d601326650dd95096be55690402e2166967ee33809e4bea21007",
+        "objects": {
+          "bluecad-part-sha256-e242db70434f00bbe74fbb5089bd47228b7d8f8739b524fd8f97a33b8e1a7517": {
+            "part_id": "process_tube"
+          }
+        }
+      },
+      "artifacts": {
+        "model.step": {
+          "sha256": "bc5d9eed382c703d167e707114da75195e6e562c9a3cb64639960e917360c14f",
+          "bytes": 10942
+        },
+        "model.stl": {
+          "sha256": "a6b24d2199af161860cfdd3c2959a5b2a491b6cd178ce250d08b76133e7aa72a",
+          "bytes": 50484
+        },
+        "model.glb": {
+          "sha256": "dbcae00754c6031318152c5a7e911558b306a6a922c9a16a0f1c6c0fb3e29903",
+          "bytes": 32556
+        }
+      },
+      "manifest_digest": "90cec8a676c790df717f946d914e71dcd763f115d903f6952e14deaa99dd2a0a"
+    },
+    "validation_report": {
+      "report_version": "bluecad_validation_report_v0_1",
+      "spec_id": "sha256:69e80ddbd2f5d601326650dd95096be55690402e2166967ee33809e4bea21007",
+      "manifest_sha256": "190cd183cf59e43489d1bb5b3af365a814f97f6b3dcd23111fdb810be5de738d",
+      "verdict": "pass",
+      "checks": [
+        {
+          "id": "T0_ARTIFACT_MODEL_STEP",
+          "tier": 0,
+          "status": "pass",
+          "detail": {
+            "artifact": "model.step",
+            "present": true,
+            "bytes": 10942
+          }
+        },
+        {
+          "id": "T0_ARTIFACT_MODEL_STL",
+          "tier": 0,
+          "status": "pass",
+          "detail": {
+            "artifact": "model.stl",
+            "present": true,
+            "bytes": 50484
+          }
+        },
+        {
+          "id": "T0_ARTIFACT_MODEL_GLB",
+          "tier": 0,
+          "status": "pass",
+          "detail": {
+            "artifact": "model.glb",
+            "present": true,
+            "bytes": 32556
+          }
+        },
+        {
+          "id": "T0_ARTIFACT_MANIFEST_JSON",
+          "tier": 0,
+          "status": "pass",
+          "detail": {
+            "artifact": "manifest.json",
+            "present": true,
+            "bytes": 2850
+          }
+        },
+        {
+          "id": "T1_ASSEMBLY_CONNECTEDNESS",
+          "tier": 1,
+          "status": "pass",
+          "detail": {
+            "part_count": 1,
+            "connection_count": 0
+          }
+        },
+        {
+          "id": "T1_PORT_CONFORMITY",
+          "tier": 1,
+          "status": "pass",
+          "detail": {
+            "connection_count": 0
+          }
+        },
+        {
+          "id": "T1_BREP_VALID",
+          "tier": 1,
+          "status": "pass",
+          "detail": {
+            "failures": [],
+            "parts": {
+              "process_tube": {
+                "brep_valid": true,
+                "manifold": true
+              }
+            }
+          }
+        },
+        {
+          "id": "T1_WATERTIGHT",
+          "tier": 1,
+          "status": "pass",
+          "detail": {
+            "failures": [],
+            "parts": {
+              "process_tube": {
+                "brep_valid": true,
+                "manifold": true
+              }
+            }
+          }
+        }
+      ],
+      "errors": []
+    },
+    "artifacts": {
+      "manifest.json": {
+        "bytes": 2850,
+        "sha256": "190cd183cf59e43489d1bb5b3af365a814f97f6b3dcd23111fdb810be5de738d"
+      },
+      "model.glb": {
+        "bytes": 32556,
+        "sha256": "dbcae00754c6031318152c5a7e911558b306a6a922c9a16a0f1c6c0fb3e29903"
+      },
+      "model.step": {
+        "bytes": 10942,
+        "sha256": "bc5d9eed382c703d167e707114da75195e6e562c9a3cb64639960e917360c14f"
+      },
+      "model.stl": {
+        "bytes": 50484,
+        "sha256": "a6b24d2199af161860cfdd3c2959a5b2a491b6cd178ce250d08b76133e7aa72a"
+      },
+      "validation_report.json": {
+        "bytes": 1936,
+        "sha256": "0e36f1e7c9bca191b6a0d60e18003d326ae79aef9cce1e04b3cf6293c7f3ac98"
+      }
+    }
+  },
+  "interpretation": "BLUECAD built and exported geometry from the selected best point in the 108 runtime artifact. The underlying study uses synthetic PBR coefficients and is unqualified; Tier 0/1 CAD validation does not establish process, material, pressure, biological, or physical validity."
+}

@@ -1,0 +1,94 @@
+{
+  "checks": [
+    {
+      "detail": {
+        "artifact": "model.step",
+        "bytes": 10942,
+        "present": true
+      },
+      "id": "T0_ARTIFACT_MODEL_STEP",
+      "status": "pass",
+      "tier": 0
+    },
+    {
+      "detail": {
+        "artifact": "model.stl",
+        "bytes": 50484,
+        "present": true
+      },
+      "id": "T0_ARTIFACT_MODEL_STL",
+      "status": "pass",
+      "tier": 0
+    },
+    {
+      "detail": {
+        "artifact": "model.glb",
+        "bytes": 32556,
+        "present": true
+      },
+      "id": "T0_ARTIFACT_MODEL_GLB",
+      "status": "pass",
+      "tier": 0
+    },
+    {
+      "detail": {
+        "artifact": "manifest.json",
+        "bytes": 2850,
+        "present": true
+      },
+      "id": "T0_ARTIFACT_MANIFEST_JSON",
+      "status": "pass",
+      "tier": 0
+    },
+    {
+      "detail": {
+        "connection_count": 0,
+        "part_count": 1
+      },
+      "id": "T1_ASSEMBLY_CONNECTEDNESS",
+      "status": "pass",
+      "tier": 1
+    },
+    {
+      "detail": {
+        "connection_count": 0
+      },
+      "id": "T1_PORT_CONFORMITY",
+      "status": "pass",
+      "tier": 1
+    },
+    {
+      "detail": {
+        "failures": [],
+        "parts": {
+          "process_tube": {
+            "brep_valid": true,
+            "manifold": true
+          }
+        }
+      },
+      "id": "T1_BREP_VALID",
+      "status": "pass",
+      "tier": 1
+    },
+    {
+      "detail": {
+        "failures": [],
+        "parts": {
+          "process_tube": {
+            "brep_valid": true,
+            "manifold": true
+          }
+        }
+      },
+      "id": "T1_WATERTIGHT",
+      "status": "pass",
+      "tier": 1
+    }
+  ],
+  "errors": [],
+  "manifest_sha256": "190cd183cf59e43489d1bb5b3af365a814f97f6b3dcd23111fdb810be5de738d",
+  "report_version": "bluecad_validation_report_v0_1",
+  "spec_id": "sha256:69e80ddbd2f5d601326650dd95096be55690402e2166967ee33809e4bea21007",
+  "verdict": "pass"
+}
