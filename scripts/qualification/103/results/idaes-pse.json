@@ -1,9 +1,15 @@
 {
   "candidate": "idaes-pse",
-  "error_source": "prerequisite_check",
+  "environment": "base",
+  "interpreter": "/home/thera/jarvis-control/work/venvs/q103/bin/python",
   "license": "BSD",
-  "native_error": "builtins.RuntimeError: IDAES IPOPT unavailable locally; idaes get-extensions requires network",
-  "status": "failed",
+  "measurements": {
+    "equation_recycle_owner": "pyomo probe; IDAES process model not solved",
+    "idaes_version": "2.13.0",
+    "ipopt_available": true
+  },
+  "numba_disable_jit": false,
+  "status": "succeeded",
   "version": "2.13.0",
-  "wall_time_s": 2.057285
+  "wall_time_s": 1.543178
 }

@@ -20,6 +20,9 @@ def test_qualification_results_are_complete() -> None:
         assert result["candidate"] == name
         assert isinstance(result["version"], str) and result["version"]
         assert isinstance(result["license"], str) and result["license"]
+        assert isinstance(result["interpreter"], str) and result["interpreter"]
+        assert result["environment"] in {"base", "bio"}
+        assert isinstance(result["numba_disable_jit"], bool)
         assert result["status"] in {"succeeded", "failed"}
         assert math.isfinite(result["wall_time_s"]) and result["wall_time_s"] >= 0
         if result["status"] == "succeeded":

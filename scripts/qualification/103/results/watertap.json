@@ -1,9 +1,14 @@
 {
   "candidate": "watertap",
-  "error_source": "prerequisite_check",
+  "environment": "base",
+  "interpreter": "/home/thera/jarvis-control/work/venvs/q103/bin/python",
   "license": "BSD-3-Clause",
-  "native_error": "builtins.RuntimeError: WaterTAP flowsheet solve unavailable: IPOPT binary absent",
-  "status": "failed",
+  "measurements": {
+    "imported": true,
+    "ipopt_available": true
+  },
+  "numba_disable_jit": false,
+  "status": "succeeded",
   "version": "1.7.0",
-  "wall_time_s": 0.00083
+  "wall_time_s": 0.001587
 }

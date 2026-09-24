@@ -1,9 +1,19 @@
 {
   "candidate": "biosteam",
-  "error_source": "package",
+  "environment": "bio",
+  "interpreter": "/home/thera/jarvis-control/work/venvs/q103bio/bin/python",
   "license": "MIT",
-  "native_error": "builtins.ImportError: Numba needs NumPy 2.0 or less. Got NumPy 2.4.",
-  "status": "failed",
-  "version": "2.51.19",
-  "wall_time_s": 0.00085
+  "measurements": {
+    "expected_recycle_kg_hr": 400.0,
+    "fresh_kg_hr": 100.0,
+    "mass_balance_error_kg_hr": -7.993605777301127e-14,
+    "mixed_kg_hr": 500.00000000000034,
+    "product_kg_hr": 90.00000000000007,
+    "purge_kg_hr": 10.000000000000009,
+    "recycle_kg_hr": 400.0000000000003
+  },
+  "numba_disable_jit": true,
+  "status": "succeeded",
+  "version": "2.54.0",
+  "wall_time_s": 0.91887
 }

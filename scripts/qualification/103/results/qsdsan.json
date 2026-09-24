@@ -1,9 +1,14 @@
 {
   "candidate": "qsdsan",
-  "error_source": "package",
-  "license": "UIUC",
-  "native_error": "builtins.ImportError: Numba needs NumPy 2.0 or less. Got NumPy 2.4.",
-  "status": "failed",
-  "version": "1.4.3",
-  "wall_time_s": 0.031238
+  "environment": "bio",
+  "interpreter": "/home/thera/jarvis-control/work/venvs/q103bio/bin/python",
+  "license": "NCSA",
+  "measurements": {
+    "total_mass_flow_kg_hr": 100.0,
+    "water_mass_flow_kg_hr": 100.0
+  },
+  "numba_disable_jit": true,
+  "status": "succeeded",
+  "version": "1.5.3",
+  "wall_time_s": 0.028829
 }

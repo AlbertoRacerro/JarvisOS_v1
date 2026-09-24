@@ -1,12 +1,15 @@
 """Offline, synthetic spec 103 qualification probes.
 
-Run with /home/thera/jarvis-control/work/venvs/q103/bin/python
-scripts/qualification/103/probe.py. Each candidate gets an independent result.
+Run from the repository root with an isolated candidate venv (see
+docs/specs/103-process-upstream-bakeoff-evidence.md). Local tool locations come
+from Q103_FMU, Q103_SOLVER_LIB and Q103_JAVA_HOME. Each candidate gets an
+independent result.
 These probes measure numerical/API feasibility, not scientific validity.
 """
 
 from __future__ import annotations
 
+import argparse
 import json
 import math
 import os
@@ -52,9 +55,10 @@ def thermo():
 
 
 def fluids():
+    from fluids.friction import friction_factor
+
     from app.modules.process_kernel.blocks import Pipe
     from app.modules.process_kernel.streams import MaterialStream
-    from fluids.friction import friction_factor
 
     density, mu, velocity, diameter, length = 997.0, 0.00089, 1.0, 0.05, 10.0
     incumbent = Pipe().solve({"inlet": MaterialStream("water", density_kg_m3=density,
@@ -96,13 +100,17 @@ def biosteam():
     fresh = bst.Stream("fresh103", Water=100, units="kg/hr")
     recycle = bst.Stream("recycle103")
     mixer = bst.Mixer("mix103", ins=(fresh, recycle))
-    splitter = bst.Splitter("split103", ins=mixer-0, outs=("product103", recycle), split=0.2)
-    # A splitter is the synthetic separator: 20% product, 80% recycled.
-    system = bst.System("recycle_system103", path=(mixer, splitter), recycle=recycle)
+    unit = bst.Mixer("unit103", ins=(mixer-0,))  # identity process unit for mass closure
+    splitter = bst.Splitter("split103", ins=unit-0, outs=("to_separator103", recycle), split=0.2)
+    separator = bst.Splitter("separator103", ins=splitter-0,
+                             outs=("product103", "purge103"), split=0.9)
+    system = bst.System("recycle_system103", path=(mixer, unit, splitter, separator), recycle=recycle)
     system.simulate()
+    closure = fresh.F_mass - separator.outs[0].F_mass - separator.outs[1].F_mass
+    assert abs(closure) < 1e-5
     return {"fresh_kg_hr": fresh.F_mass, "mixed_kg_hr": mixer.outs[0].F_mass,
-            "product_kg_hr": splitter.outs[0].F_mass, "recycle_kg_hr": recycle.F_mass,
-            "mass_balance_error_kg_hr": fresh.F_mass-splitter.outs[0].F_mass,
+            "product_kg_hr": separator.outs[0].F_mass, "purge_kg_hr": separator.outs[1].F_mass,
+            "recycle_kg_hr": recycle.F_mass, "mass_balance_error_kg_hr": closure,
             "expected_recycle_kg_hr": 400.0}
 
 
@@ -122,12 +130,23 @@ def pyomo():
     if not any(available.values()):
         raise RuntimeError(f"No local Pyomo solver available: {available}")
     model = pyo.ConcreteModel()
-    model.x = pyo.Var(bounds=(0, 10), initialize=2)
-    model.obj = pyo.Objective(expr=(model.x-3)**2)
+    model.recycle = pyo.Var(initialize=400, bounds=(0, 1000))
+    model.mixed = pyo.Var(initialize=500, bounds=(0, 2000))
+    model.product = pyo.Var(initialize=90, bounds=(0, 200))
+    model.purge = pyo.Var(initialize=10, bounds=(0, 200))
+    model.mix_balance = pyo.Constraint(expr=model.mixed == 100 + model.recycle)
+    model.recycle_split = pyo.Constraint(expr=model.recycle == 0.8 * model.mixed)
+    model.separator_product = pyo.Constraint(expr=model.product == 0.18 * model.mixed)
+    model.separator_purge = pyo.Constraint(expr=model.purge == 0.02 * model.mixed)
+    model.obj = pyo.Objective(expr=(model.recycle - 400)**2)
     solver = next(name for name, ok in available.items() if ok)
     result = pyo.SolverFactory(solver).solve(model)
+    closure = 100 - pyo.value(model.product) - pyo.value(model.purge)
+    assert str(result.solver.termination_condition) == "optimal" and abs(closure) < 1e-5
     return {"solver": solver, "termination": str(result.solver.termination_condition),
-            "x": pyo.value(model.x), "solvers_available": available}
+            "recycle_kg_hr": pyo.value(model.recycle), "mixed_kg_hr": pyo.value(model.mixed),
+            "product_kg_hr": pyo.value(model.product), "purge_kg_hr": pyo.value(model.purge),
+            "mass_balance_error_kg_hr": closure, "solvers_available": available}
 
 
 def idaes():
@@ -138,7 +157,8 @@ def idaes():
     available = pyo.SolverFactory("ipopt").available(exception_flag=False)
     if not available:
         raise RuntimeError("IDAES IPOPT unavailable locally; idaes get-extensions requires network")
-    return {"idaes_version": idaes.__version__, "ipopt_available": available}
+    return {"idaes_version": idaes.__version__, "ipopt_available": available,
+            "equation_recycle_owner": "pyomo probe; IDAES process model not solved"}
 
 
 def watertap():
@@ -193,9 +213,12 @@ def casadi():
     dae_state = 1.0
     dae_residual = 0.0
     dt = 0.25
+
+    def illumination(hour):
+        return max(0.0, math.sin(2 * math.pi * hour / 24))
+
     for step in range(192):
         t = step * dt
-        illumination = lambda hour: max(0.0, math.sin(2 * math.pi * hour / 24))
         k1 = float(f(state, illumination(t)))
         k2 = float(f(state + dt*k1/2, illumination(t+dt/2)))
         k3 = float(f(state + dt*k2/2, illumination(t+dt/2)))
@@ -211,11 +234,13 @@ def casadi():
 
 def dompc():
     import do_mpc
+    import numpy as np
 
     model = do_mpc.model.Model("discrete")
     x = model.set_variable("_x", "inventory")
     u = model.set_variable("_u", "harvest")
-    model.set_rhs("inventory", x + 0.1 - u)
+    light = model.set_variable("_tvp", "light")
+    model.set_rhs("inventory", x + (0.08*light - 0.025)*x - u)
     model.setup()
     mpc = do_mpc.controller.MPC(model)
     mpc.set_param(n_horizon=3, t_step=1, store_full_solution=False)
@@ -223,17 +248,49 @@ def dompc():
     mpc.set_rterm(harvest=0.1)
     mpc.bounds["lower", "_u", "harvest"] = 0
     mpc.bounds["upper", "_u", "harvest"] = 0.2
+    tvp = mpc.get_tvp_template()
+    def light_schedule(t_now):
+        for k in range(4):
+            tvp["_tvp", k, "light"] = max(0.0, math.sin(2 * math.pi * (np.asarray(t_now).item() + k) / 24))
+        return tvp
+    mpc.set_tvp_fun(light_schedule)
     mpc.setup()
+    mpc.x0 = 1.0
+    mpc.set_initial_guess()
+    estimator = do_mpc.estimator.StateFeedback(model)
+    state = 1.0
+    controls = []
+    for k in range(4):
+        estimate = estimator.make_step(np.array([[state]]))
+        control = float(mpc.make_step(estimate)[0, 0])
+        controls.append(control)
+        state += (0.08 * max(0.0, math.sin(2*math.pi*k/24)) - 0.025)*state - control
     return {"model_state_count": model.n_x, "mpc_horizon": 3,
-            "solver_execution": "not attempted; requires IPOPT for optimization"}
+            "solver_execution": "four closed-loop IPOPT steps", "controls": controls,
+            "final_inventory_arbitrary": state, "estimator": "StateFeedback",
+            "fixture": "synthetic day/night; not biology validation"}
 
 
 def fmpy():
-    import fmpy
-    from fmpy import examples
+    from zipfile import ZipFile
 
-    # An installed reference FMU would be needed for a real round trip.
-    raise RuntimeError(f"No offline reference FMU/compiler provided; fmpy={fmpy.__version__}, examples={examples.__file__}")
+    import fmpy
+    fmu = Path(os.environ['Q103_FMU'])  # Reference-FMUs 2.0 Dahlquist.fmu
+    result = fmpy.simulate_fmu(str(fmu), stop_time=1.0, output_interval=0.1)
+    me_result = fmpy.simulate_fmu(str(fmu), fmi_type='ModelExchange',
+                                  stop_time=1.0, output_interval=0.1)
+    with ZipFile(fmu) as archive:
+        references = [name for name in archive.namelist() if 'reference' in name.lower()]
+        documentation = archive.read('documentation/index.html').decode('utf-8')
+    assert 'x(t) = exp(-k * t)' in documentation
+    analytical = math.exp(-1.0)  # documented k=1, x(0)=1
+    return {"fmu": fmu.name, "samples": len(result), "final_time_s": float(result['time'][-1]),
+            "output_names": list(result.dtype.names), "reference_files_in_fmu": references,
+            "documented_analytical_x_at_1": analytical,
+            "analytical_absolute_error": abs(float(result['x'][-1]) - analytical),
+            "model_exchange_final_x": float(me_result['x'][-1]),
+            "model_exchange_analytical_absolute_error": abs(float(me_result['x'][-1]) - analytical),
+            "last_values": {name: float(result[name][-1]) for name in result.dtype.names if name != 'time'}}
 
 
 def openmdao():
@@ -253,15 +310,24 @@ def openmdao():
 
 
 def neqsim():
-    from neqsim.thermo import fluid
-
-    system = fluid("srk")
-    system.addComponent("water", 1.0)
-    system.addComponent("CO2", 0.01)
-    system.setTemperature(T)
-    system.setPressure(P / 100000)
-    system.init(0)
-    return {"components": 2, "phase_count": int(system.getNumberOfPhases())}
+    from CoolProp.CoolProp import PropsSI
+    from neqsim.thermo import TPflash, fluid
+    values = {}
+    for component in ('water', 'CO2'):
+        system = fluid('srk')
+        system.addComponent(component, 1.0)
+        system.setTemperature(T)
+        system.setPressure(P / 100000)
+        TPflash(system)
+        system.initPhysicalProperties()
+        density = float(system.getPhase(0).getDensity('kg/m3'))
+        reference = PropsSI('D', 'T', T, 'P', P, 'Water' if component == 'water' else 'CO2')
+        values[component] = {"neqsim_density_kg_m3": density,
+                             "coolprop_density_kg_m3": reference,
+                             "relative_difference": (density-reference)/reference,
+                             "phase_count": int(system.getNumberOfPhases()),
+                             "phase": str(system.getPhase(0).getPhaseTypeName())}
+    return values
 
 
 PROBES = {
@@ -276,15 +342,28 @@ PREREQUISITE_CHECKS = {"pyomo", "idaes-pse", "watertap", "fmpy"}
 
 
 def run():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--only', nargs='+', choices=PROBES)
+    parser.add_argument('--venv-role', choices=('base', 'bio'), default='base')
+    args = parser.parse_args()
+    os.environ['PATH'] = str(Path.home() / '.idaes' / 'bin') + os.pathsep + os.environ['PATH']
+    if solver_lib := os.environ.get('Q103_SOLVER_LIB'):  # Fortran runtime for IPOPT
+        os.environ['LD_LIBRARY_PATH'] = solver_lib + os.pathsep + os.environ.get('LD_LIBRARY_PATH', '')
+    if java_home := os.environ.get('Q103_JAVA_HOME'):
+        os.environ['JAVA_HOME'] = java_home
     OUT.mkdir(exist_ok=True)
     for name, probe in PROBES.items():
+        if args.only and name not in args.only:
+            continue
         dist = metadata.distribution(name)
         license_text = (dist.metadata.get("License-Expression") or dist.metadata.get("License")
                         or next((c.rsplit("::", 1)[-1].strip() for c in dist.metadata.get_all("Classifier", [])
                                  if c.startswith("License ::")), "not declared in metadata"))
         started = time.perf_counter()
         record = {"candidate": name, "version": dist.version, "license": license_text,
-                  "status": "succeeded", "wall_time_s": 0.0}
+                  "status": "succeeded", "wall_time_s": 0.0,
+                  "interpreter": sys.executable, "environment": args.venv_role,
+                  "numba_disable_jit": os.environ.get('NUMBA_DISABLE_JIT') == '1'}
         try:
             record["measurements"] = probe()
         except Exception as exc:  # noqa: BLE001 - preserve each package's native failure
