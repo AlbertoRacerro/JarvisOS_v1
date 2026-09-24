@@ -1,0 +1,44 @@
+{
+  "provenance": {
+    "kind": "synthetic_fixture",
+    "note": "Order-of-magnitude placeholders chosen to exercise the 107 evaluator and its solver path. They are NOT Nannochloropsis gaditana parameters, have no literature or measurement basis, and can never support a qualification above candidate (102 ledger rule)."
+  },
+  "basis_ref": {
+    "authority_owner": "repository",
+    "object_type": "synthetic_parameter_set",
+    "object_id": "scripts/qualification/107/synthetic-parameters.json",
+    "revision": "pbr_day_night.v1-synthetic-1"
+  },
+  "sourced": {
+    "max_specific_growth_rate": [1.5, "1/d"],
+    "light_saturation_constant": [150.0, "umol/(m**2*s)"],
+    "light_inhibition_constant": [2000.0, "umol/(m**2*s)"],
+    "specific_light_extinction": [150.0, "m**2/kg"],
+    "respiration_rate": [0.1, "1/d"],
+    "nitrogen_half_saturation": [1.0, "mg/L"],
+    "biomass_nitrogen_fraction": [0.07, "1"],
+    "oxygen_yield": [1.4, "1"],
+    "temperature_min": [5.0, "degC"],
+    "temperature_opt": [25.0, "degC"],
+    "temperature_max": [35.0, "degC"],
+    "oxygen_kla": [5.0, "1/h"],
+    "oxygen_saturation": [7.5, "mg/L"]
+  },
+  "design": {
+    "initial_biomass": [0.5, "g/L"],
+    "initial_nitrogen": [50.0, "mg/L"],
+    "initial_dissolved_oxygen": [7.5, "mg/L"],
+    "peak_par": [1500.0, "umol/(m**2*s)"],
+    "photoperiod": [14.0, "h"],
+    "temperature_mean": [22.0, "degC"],
+    "temperature_amplitude": [3.0, "K"],
+    "duration": [10.0, "d"],
+    "tube_inner_diameter": [50.0, "mm"],
+    "loop_length": [100.0, "m"],
+    "liquid_velocity": [0.5, "m/s"],
+    "pump_efficiency": [0.6, "1"],
+    "harvest_fraction": [0.2, "1"],
+    "harvest_hour": [10.0, "h"],
+    "medium_nitrogen": [50.0, "mg/L"]
+  }
+}
