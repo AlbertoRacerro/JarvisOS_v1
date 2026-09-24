@@ -40,3 +40,31 @@ tools:
     provenance_url: null
     capabilities: [static, modal, thermal]
     health_check: null
+  - id: openfoam_blockmesh
+    kind: mesher
+    integration_mode: subprocess
+    version_pin: "v2412"
+    license:
+      spdx: GPL-3.0-or-later
+      boundary: C
+      verified_date: "2026-09-24"
+    enabled: false
+    entrypoint: null
+    binary_sha256: null
+    provenance_url: null
+    capabilities: [structured_channel_mesh]
+    health_check: null
+  - id: openfoam
+    kind: cfd_solver
+    integration_mode: subprocess
+    version_pin: "v2412"
+    license:
+      spdx: GPL-3.0-or-later
+      boundary: C
+      verified_date: "2026-09-24"
+    enabled: false
+    entrypoint: null
+    binary_sha256: null
+    provenance_url: null
+    capabilities: [laminar_channel_flow]
+    health_check: null
