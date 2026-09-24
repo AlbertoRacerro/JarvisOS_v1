@@ -1,0 +1,178 @@
+{
+  "evidence_kind": "real_runtime_execution",
+  "evaluator_id": "bluerev.pbr_day_night",
+  "model_version": "pbr_day_night.v2",
+  "source_sha": "805afc3d8af3eb86e66116151b308d168bb2021c",
+  "source_note": "SHA identifies the committed evaluator and scenario runner used for this execution.",
+  "executed_at": "2026-09-24T20:12:17.660731+00:00",
+  "runtime": {
+    "python": "3.11.16",
+    "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+    "packages": {
+      "scikit-sundae": "1.1.3",
+      "numpy": "2.4.6",
+      "scipy": "1.17.1",
+      "CoolProp": "8.0.0",
+      "fluids": "1.3.1",
+      "Pint": "0.25.3"
+    }
+  },
+  "backend": {
+    "name": "scikit-sundae",
+    "version": "pbr_day_night.v2+sksundae-1.1.3",
+    "availability": {
+      "evaluator_id": "bluerev.pbr_day_night",
+      "state": "available",
+      "checked_at": "2026-09-24T20:12:17.665540Z",
+      "backend_version": "pbr_day_night.v2+sksundae-1.1.3",
+      "reason_code": null
+    }
+  },
+  "fixture": {
+    "path": "scripts/qualification/107/synthetic-parameters.json",
+    "sha256": "0cd0ac091c78bce141d33f45afbfd6b8440f6bfb72d23c1c20b96d7ac6fa9271",
+    "provenance": {
+      "kind": "synthetic_fixture",
+      "source": "NONE",
+      "organism": "Nannochloropsis gaditana (intended model target; coefficients are not species measurements)",
+      "strain": "unspecified",
+      "conditions": {
+        "note": "Synthetic solver exercise only; no culture, measurement, literature, calibration, or benchmark basis."
+      },
+      "note": "Every coefficient is a synthetic placeholder. The values only exercise the evaluator and cannot establish biological or physical validity."
+    }
+  },
+  "scenario": {
+    "duration_days": 10.0,
+    "peak_par": {
+      "value": 1500.0,
+      "unit": "umol/(m**2*s)"
+    },
+    "photoperiod": {
+      "value": 14.0,
+      "unit": "h"
+    },
+    "day_night_model": "sinusoidal PAR each photoperiod; zero PAR for remaining daily hours",
+    "harvest_events": [
+      {
+        "time": 10.0,
+        "unit": "h from simulation start"
+      },
+      {
+        "time": 34.0,
+        "unit": "h from simulation start"
+      },
+      {
+        "time": 58.0,
+        "unit": "h from simulation start"
+      },
+      {
+        "time": 82.0,
+        "unit": "h from simulation start"
+      },
+      {
+        "time": 106.0,
+        "unit": "h from simulation start"
+      },
+      {
+        "time": 130.0,
+        "unit": "h from simulation start"
+      },
+      {
+        "time": 154.0,
+        "unit": "h from simulation start"
+      },
+      {
+        "time": 178.0,
+        "unit": "h from simulation start"
+      },
+      {
+        "time": 202.0,
+        "unit": "h from simulation start"
+      },
+      {
+        "time": 226.0,
+        "unit": "h from simulation start"
+      }
+    ]
+  },
+  "result": {
+    "status": "succeeded",
+    "fidelity": "reduced_order",
+    "qualification_status": "unqualified",
+    "outputs": {
+      "final_biomass": {
+        "value": 0.5288700576231845,
+        "unit": "kg/m3"
+      },
+      "mean_biomass": {
+        "value": 0.5137282797016839,
+        "unit": "kg/m3"
+      },
+      "harvested_biomass": {
+        "value": 1.104313560601974,
+        "unit": "kg/m3"
+      },
+      "volumetric_productivity": {
+        "value": 0.11331836182251584,
+        "unit": "kg/(m**3*d)"
+      },
+      "final_nitrogen": {
+        "value": 0.01673719235037699,
+        "unit": "kg/m3"
+      },
+      "min_nitrogen": {
+        "value": 0.015611836386637332,
+        "unit": "kg/m3"
+      },
+      "nitrogen_balance_error": {
+        "value": 5.551115123125783e-17,
+        "unit": "kg/m3"
+      },
+      "final_dissolved_oxygen": {
+        "value": 0.0068824703096007816,
+        "unit": "kg/m3"
+      },
+      "max_dissolved_oxygen": {
+        "value": 0.011027462161955963,
+        "unit": "kg/m3"
+      },
+      "max_oxygen_saturation_ratio": {
+        "value": 1.470328288260795,
+        "unit": "1"
+      },
+      "degassed_oxygen": {
+        "value": 1.580368984434963,
+        "unit": "kg/m3"
+      },
+      "oxygen_balance_error": {
+        "value": 2.220446049250313e-16,
+        "unit": "kg/m3"
+      },
+      "reynolds_number": {
+        "value": 26136.249831644673,
+        "unit": "1"
+      },
+      "pressure_drop": {
+        "value": 6051.927057012215,
+        "unit": "Pa"
+      },
+      "pumping_power": {
+        "value": 9.902442490818164,
+        "unit": "W"
+      }
+    },
+    "balances": {
+      "nitrogen_error_kg_m3": 5.551115123125783e-17,
+      "oxygen_error_kg_m3": 2.220446049250313e-16,
+      "oxygen_degassed_kg_m3": 1.580368984434963
+    },
+    "numerical_diagnostics": {
+      "converged": true,
+      "final_residual": 2.220446049250313e-16,
+      "iterations": 5373,
+      "wall_time_s": 0.03635721000318881
+    }
+  },
+  "interpretation": "This proves runtime execution and numerical closure for a synthetic fixture, not biological or physical qualification."
+}
