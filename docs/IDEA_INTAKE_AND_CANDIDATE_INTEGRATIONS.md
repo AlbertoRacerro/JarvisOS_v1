@@ -201,6 +201,8 @@ Each disposition must cite current Jarvis code, candidate evidence, exact contra
 
 # Detailed audit index
 
+Targeted REF-038/039/040/042/047 runtime qualification (2026-09-24): `docs/specs/103-process-upstream-bakeoff-evidence.md`. On WSL2, property, pipe/heat-transfer correlation, synthetic day/night ODE/DAE, BioSTEAM and Pyomo/IPOPT recycle, do-mpc, reference-FMU, NeqSim and small-study probes ran; native Windows 11 import/single-call smoke passed except BioSTEAM install and IPOPT availability. Results are synthetic feasibility, not scientific qualification; the role matrix selects WRAP candidates for 104 and deletes no incumbent owner.
+
 Core software/runtime:
 
 - `docs/audits/CORE_SOFTWARE_ECOSYSTEM_AUDIT_2026-08-20.md`
