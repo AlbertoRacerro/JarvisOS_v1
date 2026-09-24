@@ -1,7 +1,7 @@
 {
   "evidence_kind": "real_runtime_execution",
-  "source_sha": "35f099e6fe0dcf56d0cce715c42099c3b22f8643",
-  "executed_at": "2026-09-24T21:55:14.449685+00:00",
+  "source_sha": "4409071ab08d8b7eb40ed7e1f596bb5a3f28cc61",
+  "executed_at": "2026-09-24T22:03:11.596171+00:00",
   "runtime": {
     "python": "3.11.16",
     "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.39",
@@ -19,7 +19,7 @@
     "definition_digest": "sha256:1c7a59a8729722b6209512bba3583f926cbfd98f75b66ab340c53f92278b72af",
     "selected_point_index": 1,
     "qualification_status": "unqualified",
-    "envelope_digest": "sha256:b003c55f8ca4cd66c567c6d5d85c2937b859b79072112bff69d746338b44889b",
+    "envelope_digest": "sha256:86d30903f841ee0a06bd7eb0200ce5c0c04216fd8b96af5d8e28ea65f4b098fb",
     "envelope_quantities": {
       "tube_inner_diameter": {
         "value": 0.05,
@@ -34,7 +34,7 @@
     }
   },
   "cad_mapping": {
-    "geometry_spec_id": "sha256:69e80ddbd2f5d601326650dd95096be55690402e2166967ee33809e4bea21007",
+    "geometry_spec_id": "sha256:258b9b12eba576c6053272d4370c0ce9722d17e401bedb301feddb20d0737921",
     "cad_only_wall_allowance_mm": 2.0,
     "mapped_bore_mm": 50.0,
     "mapped_length_mm": 100000.0,
@@ -44,7 +44,7 @@
     "verdict": "pass",
     "manifest": {
       "manifest_version": "bluecad_manifest_v0_1",
-      "spec_id": "sha256:69e80ddbd2f5d601326650dd95096be55690402e2166967ee33809e4bea21007",
+      "spec_id": "sha256:258b9b12eba576c6053272d4370c0ce9722d17e401bedb301feddb20d0737921",
       "tool_versions": {
         "build123d": "0.11.1"
       },
@@ -156,7 +156,7 @@
       "scene_binding": {
         "version": "bluecad_scene_binding_v0_1",
         "artifact": "model.glb",
-        "spec_id": "sha256:69e80ddbd2f5d601326650dd95096be55690402e2166967ee33809e4bea21007",
+        "spec_id": "sha256:258b9b12eba576c6053272d4370c0ce9722d17e401bedb301feddb20d0737921",
         "objects": {
           "bluecad-part-sha256-e242db70434f00bbe74fbb5089bd47228b7d8f8739b524fd8f97a33b8e1a7517": {
             "part_id": "process_tube"
@@ -177,12 +177,12 @@
           "bytes": 32556
         }
       },
-      "manifest_digest": "90cec8a676c790df717f946d914e71dcd763f115d903f6952e14deaa99dd2a0a"
+      "manifest_digest": "bb697ec04972066fca66d4bee17851bd1d34c67f8e72261d68cb52b4f1a98fd9"
     },
     "validation_report": {
       "report_version": "bluecad_validation_report_v0_1",
-      "spec_id": "sha256:69e80ddbd2f5d601326650dd95096be55690402e2166967ee33809e4bea21007",
-      "manifest_sha256": "190cd183cf59e43489d1bb5b3af365a814f97f6b3dcd23111fdb810be5de738d",
+      "spec_id": "sha256:258b9b12eba576c6053272d4370c0ce9722d17e401bedb301feddb20d0737921",
+      "manifest_sha256": "2bbac20788f9b1601cd37a68748cc19e38d8d3758a02730f21fe1de8e8faf668",
       "verdict": "pass",
       "checks": [
         {
@@ -276,7 +276,7 @@
     "artifacts": {
       "manifest.json": {
         "bytes": 2850,
-        "sha256": "190cd183cf59e43489d1bb5b3af365a814f97f6b3dcd23111fdb810be5de738d"
+        "sha256": "2bbac20788f9b1601cd37a68748cc19e38d8d3758a02730f21fe1de8e8faf668"
       },
       "model.glb": {
         "bytes": 32556,
@@ -292,7 +292,7 @@
       },
       "validation_report.json": {
         "bytes": 1936,
-        "sha256": "0e36f1e7c9bca191b6a0d60e18003d326ae79aef9cce1e04b3cf6293c7f3ac98"
+        "sha256": "3af1df9c2da13c0d004f743fb0340ef7009a7d4cb353a36f063f02d07f844d1a"
       }
     }
   },

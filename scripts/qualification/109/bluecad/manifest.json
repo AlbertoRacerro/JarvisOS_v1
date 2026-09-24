@@ -34,7 +34,7 @@
     },
     "total_volume_mm3": 32672563.597333852
   },
-  "manifest_digest": "90cec8a676c790df717f946d914e71dcd763f115d903f6952e14deaa99dd2a0a",
+  "manifest_digest": "bb697ec04972066fca66d4bee17851bd1d34c67f8e72261d68cb52b4f1a98fd9",
   "manifest_version": "bluecad_manifest_v0_1",
   "parts": {
     "process_tube": {
@@ -127,10 +127,10 @@
         "part_id": "process_tube"
       }
     },
-    "spec_id": "sha256:69e80ddbd2f5d601326650dd95096be55690402e2166967ee33809e4bea21007",
+    "spec_id": "sha256:258b9b12eba576c6053272d4370c0ce9722d17e401bedb301feddb20d0737921",
     "version": "bluecad_scene_binding_v0_1"
   },
-  "spec_id": "sha256:69e80ddbd2f5d601326650dd95096be55690402e2166967ee33809e4bea21007",
+  "spec_id": "sha256:258b9b12eba576c6053272d4370c0ce9722d17e401bedb301feddb20d0737921",
   "tool_versions": {
     "build123d": "0.11.1"
   }

@@ -87,8 +87,8 @@
     }
   ],
   "errors": [],
-  "manifest_sha256": "190cd183cf59e43489d1bb5b3af365a814f97f6b3dcd23111fdb810be5de738d",
+  "manifest_sha256": "2bbac20788f9b1601cd37a68748cc19e38d8d3758a02730f21fe1de8e8faf668",
   "report_version": "bluecad_validation_report_v0_1",
-  "spec_id": "sha256:69e80ddbd2f5d601326650dd95096be55690402e2166967ee33809e4bea21007",
+  "spec_id": "sha256:258b9b12eba576c6053272d4370c0ce9722d17e401bedb301feddb20d0737921",
   "verdict": "pass"
 }
