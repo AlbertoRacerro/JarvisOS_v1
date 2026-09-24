@@ -126,10 +126,9 @@ def process_design_envelope(
     inputs = {item.name: item.value for item in point.inputs}
     if any(name not in inputs for name in GEOMETRY_INPUTS):
         raise ValueError("selected study point is missing tubular geometry inputs")
-    selected_bounds = bounds or tuple(
-        DomainBound(variable=name, lower=value, upper=value)
-        for name, value in ((name, inputs[name]) for name in GEOMETRY_INPUTS)
-    )
+    # Without explicit tolerances the envelope claims none; a degenerate point bound
+    # would make every later tightening proposal impossible.
+    selected_bounds = bounds
     validity = point.evaluation.validity
     qualification = run.qualification_status
     if qualification not in {"unqualified", "candidate", "calibrated", "benchmarked", "qualified"}:
@@ -215,8 +214,8 @@ def evaluate_physical_verification(
             raise ValueError(f"verification unit for {name} must match the envelope unit")
         bound = bounds.get(name)
         if bound is not None and (
-            bound.lower is not None and actual.value < bound.lower.value
-            or bound.upper is not None and actual.value > bound.upper.value
+            bound.lower is not None and actual.value < _convert_length(bound.lower, actual.unit)
+            or bound.upper is not None and actual.value > _convert_length(bound.upper, actual.unit)
         ):
             violated.append(name)
     if result.status == "passed" and not violated:

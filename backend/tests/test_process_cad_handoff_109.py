@@ -104,3 +104,24 @@ def test_physical_verification_happy_path_is_accepted() -> None:
                                     workspace_id="pbr", revision="1"),),
     )
     assert evaluate_physical_verification(envelope, result).status == "accepted"
+
+
+def test_unbounded_envelope_failed_verification_still_reopens_study() -> None:
+    envelope = process_design_envelope(_run(), 2)
+    assert envelope.bounds == ()
+    evidence = SourceRef(authority_owner="bluecad", object_type="fem_result", object_id="verification-2",
+                         workspace_id="pbr", revision="1")
+    tightened = DomainBound(variable="loop_length", lower=Quantity(value=50, unit="m"),
+                            upper=Quantity(value=80, unit="m"))
+    result = PhysicalVerificationResult(
+        result_ref=SourceRef(authority_owner="bluecad", object_type="verification", object_id="v2",
+                             workspace_id="pbr", revision="1"),
+        status="failed", measured_quantities=(
+            ("tube_inner_diameter", Quantity(value=0.05, unit="m")),
+            ("loop_length", Quantity(value=100, unit="m")),
+        ), evidence_refs=(evidence,), tightened_bounds=(tightened,),
+    )
+    decision = evaluate_physical_verification(envelope, result)
+    assert decision.status == "reopen_requested"
+    assert decision.reopen_request is not None
+    assert decision.reopen_request.tightened_bounds == (tightened,)
