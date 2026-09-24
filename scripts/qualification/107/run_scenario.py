@@ -15,8 +15,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "backend"))
 
-from app.modules.bluerev.pbr_evaluator import EVALUATOR_ID, PbrDayNightEvaluator  # noqa: E402
-from app.modules.engineering.evaluator_contracts import EvaluationRequest, validate_evaluation_result  # noqa: E402
+from app.modules.bluerev.pbr_evaluator import (
+    EVALUATOR_ID,
+    PbrDayNightEvaluator,
+)
+from app.modules.engineering.evaluator_contracts import (
+    EvaluationRequest,
+    validate_evaluation_result,
+)
 
 FIXTURE_PATH = Path(__file__).with_name("synthetic-parameters.json")
 DEFAULT_OUTPUT = Path(__file__).with_name("pbr_day_night.v2.runtime-evidence.json")
@@ -65,7 +71,7 @@ def run(output: Path) -> None:
         harvests.append(harvest_hour)
         harvest_hour += 24.0
     package_versions = {}
-    for package in ("sksundae", "numpy", "scipy", "CoolProp", "fluids", "Pint"):
+    for package in ("scikit-sundae", "numpy", "scipy", "CoolProp", "fluids", "Pint"):
         try:
             package_versions[package] = importlib.metadata.version(package)
         except importlib.metadata.PackageNotFoundError:
