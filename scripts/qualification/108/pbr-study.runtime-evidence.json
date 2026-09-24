@@ -2,8 +2,8 @@
   "evidence_kind": "real_runtime_execution",
   "study_method": "latin_hypercube",
   "seed": 108,
-  "source_sha": "21e2e3285c1909bd5b4d8bcdb041d9a66a3187c3",
-  "executed_at": "2026-09-24T21:20:20.604435+00:00",
+  "source_sha": "1dfde03c10496576434e7f047fafceaf81525229",
+  "executed_at": "2026-09-24T21:27:15.068448+00:00",
   "runtime": {
     "python": "3.11.16",
     "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.39",
@@ -62,7 +62,7 @@
     "availability": {
       "evaluator_id": "bluerev.pbr_day_night",
       "state": "available",
-      "checked_at": "2026-09-24T21:20:19.728442Z",
+      "checked_at": "2026-09-24T21:27:14.124141Z",
       "backend_version": "pbr_day_night.v2+sksundae-1.1.3",
       "reason_code": null
     }
@@ -77,8 +77,8 @@
       "content_digest": null,
       "location": null
     },
-    "definition_digest": "sha256:c5bb42f9a4a7d00df5dd75b96ffd67371c5e2a15fb9c6fcea65285bffd4e8401",
-    "content_digest": "sha256:a66f06cb5eb129e1a707643031b86a56ae2acbfe293984c7b2eb90e6bff6ac3f",
+    "definition_digest": "sha256:1c7a59a8729722b6209512bba3583f926cbfd98f75b66ab340c53f92278b72af",
+    "content_digest": "sha256:0588398ac30db99e8d851faa44b0c3b5a06c5005dca962cc60c718a2c56ff5ef",
     "evaluator_id": "bluerev.pbr_day_night",
     "status": "succeeded",
     "availability_state": "available",
@@ -347,7 +347,7 @@
           {
             "name": "duration",
             "value": {
-              "value": 0.25,
+              "value": 1.0,
               "unit": "d",
               "basis_ref": null
             }
@@ -456,7 +456,7 @@
             {
               "name": "final_biomass",
               "value": {
-                "value": 0.4919519620470726,
+                "value": 0.507614869968982,
                 "unit": "kg/m3",
                 "basis_ref": null
               }
@@ -464,7 +464,7 @@
             {
               "name": "mean_biomass",
               "value": {
-                "value": 0.49407106555069036,
+                "value": 0.49409572053496964,
                 "unit": "kg/m3",
                 "basis_ref": null
               }
@@ -472,7 +472,7 @@
             {
               "name": "harvested_biomass",
               "value": {
-                "value": 0.0,
+                "value": 0.106047204531903,
                 "unit": "kg/m3",
                 "basis_ref": null
               }
@@ -480,7 +480,7 @@
             {
               "name": "volumetric_productivity",
               "value": {
-                "value": -0.032192151811709646,
+                "value": 0.11366207450088495,
                 "unit": "kg/(m**3*d)",
                 "basis_ref": null
               }
@@ -488,7 +488,7 @@
             {
               "name": "final_nitrogen",
               "value": {
-                "value": 0.050563362656704976,
+                "value": 0.04246695910217122,
                 "unit": "kg/m3",
                 "basis_ref": null
               }
@@ -496,7 +496,7 @@
             {
               "name": "min_nitrogen",
               "value": {
-                "value": 0.05,
+                "value": 0.041712473590207126,
                 "unit": "kg/m3",
                 "basis_ref": null
               }
@@ -504,7 +504,7 @@
             {
               "name": "nitrogen_balance_error",
               "value": {
-                "value": 5.551115123125783e-17,
+                "value": 2.7755575615628914e-17,
                 "unit": "kg/m3",
                 "basis_ref": null
               }
@@ -512,7 +512,7 @@
             {
               "name": "final_dissolved_oxygen",
               "value": {
-                "value": 0.00866264230169664,
+                "value": 0.006907288710177114,
                 "unit": "kg/m3",
                 "basis_ref": null
               }
@@ -520,7 +520,7 @@
             {
               "name": "max_dissolved_oxygen",
               "value": {
-                "value": 0.00866264230169664,
+                "value": 0.010981572991171473,
                 "unit": "kg/m3",
                 "basis_ref": null
               }
@@ -528,7 +528,7 @@
             {
               "name": "max_oxygen_saturation_ratio",
               "value": {
-                "value": 1.155018973559552,
+                "value": 1.4642097321561964,
                 "unit": "1",
                 "basis_ref": null
               }
@@ -536,7 +536,7 @@
             {
               "name": "degassed_oxygen",
               "value": {
-                "value": -0.012429895435795285,
+                "value": 0.15904623180086744,
                 "unit": "kg/m3",
                 "basis_ref": null
               }
@@ -544,7 +544,7 @@
             {
               "name": "oxygen_balance_error",
               "value": {
-                "value": 2.688821387764051e-16,
+                "value": 1.2490009027033011e-15,
                 "unit": "kg/m3",
                 "basis_ref": null
               }
@@ -577,9 +577,9 @@
           "output_artifacts": [],
           "numerical": {
             "converged": true,
-            "final_residual": 2.688821387764051e-16,
-            "iterations": 280,
-            "wall_time_s": 0.013126735997502692
+            "final_residual": 1.2490009027033011e-15,
+            "iterations": 680,
+            "wall_time_s": 0.021858997002709657
           },
           "validity": {
             "authority_owner": "bluerev",
@@ -631,8 +631,8 @@
             "location": null
           },
           "evidence_refs": [],
-          "started_at": "2026-09-24T21:20:20.553994Z",
-          "completed_at": "2026-09-24T21:20:20.567200Z"
+          "started_at": "2026-09-24T21:27:14.998469Z",
+          "completed_at": "2026-09-24T21:27:15.020478Z"
         },
         "failure": null,
         "feasible": true,
@@ -900,7 +900,7 @@
           {
             "name": "duration",
             "value": {
-              "value": 0.25,
+              "value": 1.0,
               "unit": "d",
               "basis_ref": null
             }
@@ -1009,7 +1009,7 @@
             {
               "name": "final_biomass",
               "value": {
-                "value": 0.49240479795795,
+                "value": 0.5143092128299506,
                 "unit": "kg/m3",
                 "basis_ref": null
               }
@@ -1017,7 +1017,7 @@
             {
               "name": "mean_biomass",
               "value": {
-                "value": 0.4941022129257447,
+                "value": 0.49738238448930305,
                 "unit": "kg/m3",
                 "basis_ref": null
               }
@@ -1025,7 +1025,7 @@
             {
               "name": "harvested_biomass",
               "value": {
-                "value": 0.0,
+                "value": 0.10659764014462154,
                 "unit": "kg/m3",
                 "basis_ref": null
               }
@@ -1033,7 +1033,7 @@
             {
               "name": "volumetric_productivity",
               "value": {
-                "value": -0.03038080816819999,
+                "value": 0.12090685297457215,
                 "unit": "kg/(m**3*d)",
                 "basis_ref": null
               }
@@ -1041,7 +1041,7 @@
             {
               "name": "final_nitrogen",
               "value": {
-                "value": 0.05053166414294352,
+                "value": 0.0419983551019034,
                 "unit": "kg/m3",
                 "basis_ref": null
               }
@@ -1049,7 +1049,7 @@
             {
               "name": "min_nitrogen",
               "value": {
-                "value": 0.05,
+                "value": 0.04123805760680381,
                 "unit": "kg/m3",
                 "basis_ref": null
               }
@@ -1057,7 +1057,7 @@
             {
               "name": "nitrogen_balance_error",
               "value": {
-                "value": 1.3877787807814457e-17,
+                "value": 5.551115123125783e-17,
                 "unit": "kg/m3",
                 "basis_ref": null
               }
@@ -1065,7 +1065,7 @@
             {
               "name": "final_dissolved_oxygen",
               "value": {
-                "value": 0.008823714870657669,
+                "value": 0.006899472158821957,
                 "unit": "kg/m3",
                 "basis_ref": null
               }
@@ -1073,7 +1073,7 @@
             {
               "name": "max_dissolved_oxygen",
               "value": {
-                "value": 0.008823714870657669,
+                "value": 0.01110177677986486,
                 "unit": "kg/m3",
                 "basis_ref": null
               }
@@ -1081,7 +1081,7 @@
             {
               "name": "max_oxygen_saturation_ratio",
               "value": {
-                "value": 1.1764953160876892,
+                "value": 1.4802369039819814,
                 "unit": "1",
                 "basis_ref": null
               }
@@ -1089,7 +1089,7 @@
             {
               "name": "degassed_oxygen",
               "value": {
-                "value": -0.011956997729528183,
+                "value": 0.16916751262758412,
                 "unit": "kg/m3",
                 "basis_ref": null
               }
@@ -1097,7 +1097,7 @@
             {
               "name": "oxygen_balance_error",
               "value": {
-                "value": 5.169475958410885e-16,
+                "value": 1.6653345369377348e-16,
                 "unit": "kg/m3",
                 "basis_ref": null
               }
@@ -1130,9 +1130,9 @@
           "output_artifacts": [],
           "numerical": {
             "converged": true,
-            "final_residual": 5.169475958410885e-16,
-            "iterations": 239,
-            "wall_time_s": 0.007271990994922817
+            "final_residual": 1.6653345369377348e-16,
+            "iterations": 623,
+            "wall_time_s": 0.013203408001572825
           },
           "validity": {
             "authority_owner": "bluerev",
@@ -1184,8 +1184,8 @@
             "location": null
           },
           "evidence_refs": [],
-          "started_at": "2026-09-24T21:20:20.568055Z",
-          "completed_at": "2026-09-24T21:20:20.575375Z"
+          "started_at": "2026-09-24T21:27:15.022023Z",
+          "completed_at": "2026-09-24T21:27:15.035284Z"
         },
         "failure": null,
         "feasible": true,
@@ -1453,7 +1453,7 @@
           {
             "name": "duration",
             "value": {
-              "value": 0.25,
+              "value": 1.0,
               "unit": "d",
               "basis_ref": null
             }
@@ -1562,7 +1562,7 @@
             {
               "name": "final_biomass",
               "value": {
-                "value": 0.491848565095971,
+                "value": 0.5059693514379873,
                 "unit": "kg/m3",
                 "basis_ref": null
               }
@@ -1570,7 +1570,7 @@
             {
               "name": "mean_biomass",
               "value": {
-                "value": 0.4940640294541378,
+                "value": 0.49328646815624094,
                 "unit": "kg/m3",
                 "basis_ref": null
               }
@@ -1578,7 +1578,7 @@
             {
               "name": "harvested_biomass",
               "value": {
-                "value": 0.0,
+                "value": 0.10591409241519399,
                 "unit": "kg/m3",
                 "basis_ref": null
               }
@@ -1586,7 +1586,7 @@
             {
               "name": "volumetric_productivity",
               "value": {
-                "value": -0.0326057396161159,
+                "value": 0.11188344385318127,
                 "unit": "kg/(m**3*d)",
                 "basis_ref": null
               }
@@ -1594,7 +1594,7 @@
             {
               "name": "final_nitrogen",
               "value": {
-                "value": 0.05057060044328205,
+                "value": 0.04258214539934102,
                 "unit": "kg/m3",
                 "basis_ref": null
               }
@@ -1602,7 +1602,7 @@
             {
               "name": "min_nitrogen",
               "value": {
-                "value": 0.05,
+                "value": 0.04182920645509559,
                 "unit": "kg/m3",
                 "basis_ref": null
               }
@@ -1610,7 +1610,7 @@
             {
               "name": "nitrogen_balance_error",
               "value": {
-                "value": 1.3877787807814457e-17,
+                "value": 1.3877787807814457e-16,
                 "unit": "kg/m3",
                 "basis_ref": null
               }
@@ -1618,7 +1618,7 @@
             {
               "name": "final_dissolved_oxygen",
               "value": {
-                "value": 0.008625319868023727,
+                "value": 0.006909210070355597,
                 "unit": "kg/m3",
                 "basis_ref": null
               }
@@ -1626,7 +1626,7 @@
             {
               "name": "max_dissolved_oxygen",
               "value": {
-                "value": 0.008625319868023727,
+                "value": 0.010950822202119011,
                 "unit": "kg/m3",
                 "basis_ref": null
               }
@@ -1634,7 +1634,7 @@
             {
               "name": "max_oxygen_saturation_ratio",
               "value": {
-                "value": 1.1500426490698303,
+                "value": 1.4601096269492015,
                 "unit": "1",
                 "basis_ref": null
               }
@@ -1642,7 +1642,7 @@
             {
               "name": "degassed_oxygen",
               "value": {
-                "value": -0.012537328733664749,
+                "value": 0.15656155969852492,
                 "unit": "kg/m3",
                 "basis_ref": null
               }
@@ -1650,7 +1650,7 @@
             {
               "name": "oxygen_balance_error",
               "value": {
-                "value": 4.562322741819003e-16,
+                "value": 2.0816681711721685e-15,
                 "unit": "kg/m3",
                 "basis_ref": null
               }
@@ -1683,9 +1683,9 @@
           "output_artifacts": [],
           "numerical": {
             "converged": true,
-            "final_residual": 4.562322741819003e-16,
-            "iterations": 272,
-            "wall_time_s": 0.008197924005798995
+            "final_residual": 2.0816681711721685e-15,
+            "iterations": 696,
+            "wall_time_s": 0.011291901988442987
           },
           "validity": {
             "authority_owner": "bluerev",
@@ -1737,8 +1737,8 @@
             "location": null
           },
           "evidence_refs": [],
-          "started_at": "2026-09-24T21:20:20.575952Z",
-          "completed_at": "2026-09-24T21:20:20.584191Z"
+          "started_at": "2026-09-24T21:27:15.036276Z",
+          "completed_at": "2026-09-24T21:27:15.047616Z"
         },
         "failure": null,
         "feasible": true,
@@ -1754,22 +1754,22 @@
       {
         "output": "degassed_oxygen",
         "mean": {
-          "value": -0.012308073966329406,
+          "value": 0.16159176804232547,
           "unit": "kg/m3",
           "basis_ref": null
         },
         "standard_deviation": {
-          "value": 0.00030874969053856294,
+          "value": 0.006677374362715207,
           "unit": "kg/m3",
           "basis_ref": null
         },
         "percentile_05": {
-          "value": -0.012526585403877803,
+          "value": 0.15681002690875917,
           "unit": "kg/m3",
           "basis_ref": null
         },
         "percentile_95": {
-          "value": -0.012004287500154894,
+          "value": 0.16815538454491244,
           "unit": "kg/m3",
           "basis_ref": null
         }
@@ -1777,22 +1777,22 @@
       {
         "output": "final_biomass",
         "mean": {
-          "value": 0.4920684417003312,
+          "value": 0.5092978114123066,
           "unit": "kg/m3",
           "basis_ref": null
         },
         "standard_deviation": {
-          "value": 0.0002958451983787583,
+          "value": 0.004417300186260234,
           "unit": "kg/m3",
           "basis_ref": null
         },
         "percentile_05": {
-          "value": 0.4918589047910812,
+          "value": 0.5061339032910868,
           "unit": "kg/m3",
           "basis_ref": null
         },
         "percentile_95": {
-          "value": 0.49235951436686226,
+          "value": 0.5136397785438537,
           "unit": "kg/m3",
           "basis_ref": null
         }
@@ -1800,22 +1800,22 @@
       {
         "output": "final_dissolved_oxygen",
         "mean": {
-          "value": 0.008703892346792677,
+          "value": 0.006905323646451557,
           "unit": "kg/m3",
           "basis_ref": null
         },
         "standard_deviation": {
-          "value": 0.00010543395531255293,
+          "value": 5.15779379612836e-06,
           "unit": "kg/m3",
           "basis_ref": null
         },
         "percentile_05": {
-          "value": 0.008629052111391018,
+          "value": 0.006900253813957473,
           "unit": "kg/m3",
           "basis_ref": null
         },
         "percentile_95": {
-          "value": 0.008807607613761566,
+          "value": 0.006909017934337749,
           "unit": "kg/m3",
           "basis_ref": null
         }
@@ -1823,22 +1823,22 @@
       {
         "output": "final_nitrogen",
         "mean": {
-          "value": 0.05055520908097685,
+          "value": 0.042349153201138544,
           "unit": "kg/m3",
           "basis_ref": null
         },
         "standard_deviation": {
-          "value": 2.0709163886519808e-05,
+          "value": 0.00030921101303829347,
           "unit": "kg/m3",
           "basis_ref": null
         },
         "percentile_05": {
-          "value": 0.05053483399431967,
+          "value": 0.04204521550193018,
           "unit": "kg/m3",
           "basis_ref": null
         },
         "percentile_95": {
-          "value": 0.05056987666462434,
+          "value": 0.04257062676962404,
           "unit": "kg/m3",
           "basis_ref": null
         }
@@ -1846,22 +1846,22 @@
       {
         "output": "harvested_biomass",
         "mean": {
-          "value": 0.0,
+          "value": 0.10618631236390619,
           "unit": "kg/m3",
           "basis_ref": null
         },
         "standard_deviation": {
-          "value": 0.0,
+          "value": 0.000362384624804722,
           "unit": "kg/m3",
           "basis_ref": null
         },
         "percentile_05": {
-          "value": 0.0,
+          "value": 0.1059274036268649,
           "unit": "kg/m3",
           "basis_ref": null
         },
         "percentile_95": {
-          "value": 0.0,
+          "value": 0.10654259658334969,
           "unit": "kg/m3",
           "basis_ref": null
         }
@@ -1869,22 +1869,22 @@
       {
         "output": "max_dissolved_oxygen",
         "mean": {
-          "value": 0.008703892346792677,
+          "value": 0.01101139065771845,
           "unit": "kg/m3",
           "basis_ref": null
         },
         "standard_deviation": {
-          "value": 0.00010543395531255293,
+          "value": 7.977243298493989e-05,
           "unit": "kg/m3",
           "basis_ref": null
         },
         "percentile_05": {
-          "value": 0.008629052111391018,
+          "value": 0.010953897281024258,
           "unit": "kg/m3",
           "basis_ref": null
         },
         "percentile_95": {
-          "value": 0.008807607613761566,
+          "value": 0.01108975640099552,
           "unit": "kg/m3",
           "basis_ref": null
         }
@@ -1892,22 +1892,22 @@
       {
         "output": "max_oxygen_saturation_ratio",
         "mean": {
-          "value": 1.1605189795723572,
+          "value": 1.4681854210291263,
           "unit": "1",
           "basis_ref": null
         },
         "standard_deviation": {
-          "value": 0.014057860708340355,
+          "value": 0.010636324397992067,
           "unit": "1",
           "basis_ref": null
         },
         "percentile_05": {
-          "value": 1.1505402815188024,
+          "value": 1.460519637469901,
           "unit": "1",
           "basis_ref": null
         },
         "percentile_95": {
-          "value": 1.1743476818348755,
+          "value": 1.4786341867994028,
           "unit": "1",
           "basis_ref": null
         }
@@ -1915,22 +1915,22 @@
       {
         "output": "mean_biomass",
         "mean": {
-          "value": 0.4940791026435243,
+          "value": 0.49492152439350456,
           "unit": "kg/m3",
           "basis_ref": null
         },
         "standard_deviation": {
-          "value": 2.0320938017334852e-05,
+          "value": 0.002169238728549625,
           "unit": "kg/m3",
           "basis_ref": null
         },
         "percentile_05": {
-          "value": 0.49406473306379306,
+          "value": 0.49336739339411384,
           "unit": "kg/m3",
           "basis_ref": null
         },
         "percentile_95": {
-          "value": 0.49409909818823927,
+          "value": 0.4970537180938697,
           "unit": "kg/m3",
           "basis_ref": null
         }
@@ -1938,22 +1938,22 @@
       {
         "output": "min_nitrogen",
         "mean": {
-          "value": 0.05000000000000001,
+          "value": 0.041593245884035505,
           "unit": "kg/m3",
           "basis_ref": null
         },
         "standard_deviation": {
-          "value": 8.498374721940739e-18,
+          "value": 0.0003130905214923998,
           "unit": "kg/m3",
           "basis_ref": null
         },
         "percentile_05": {
-          "value": 0.05,
+          "value": 0.04128549920514414,
           "unit": "kg/m3",
           "basis_ref": null
         },
         "percentile_95": {
-          "value": 0.05,
+          "value": 0.041817533168606744,
           "unit": "kg/m3",
           "basis_ref": null
         }
@@ -1961,22 +1961,22 @@
       {
         "output": "nitrogen_balance_error",
         "mean": {
-          "value": 2.7755575615628914e-17,
+          "value": 7.401486830834377e-17,
           "unit": "kg/m3",
           "basis_ref": null
         },
         "standard_deviation": {
-          "value": 2.4037033579794548e-17,
+          "value": 5.777783805466599e-17,
           "unit": "kg/m3",
           "basis_ref": null
         },
         "percentile_05": {
-          "value": 1.3877787807814457e-17,
+          "value": 3.053113317719181e-17,
           "unit": "kg/m3",
           "basis_ref": null
         },
         "percentile_95": {
-          "value": 5.1347814888913486e-17,
+          "value": 1.3045120539345587e-16,
           "unit": "kg/m3",
           "basis_ref": null
         }
@@ -1984,22 +1984,22 @@
       {
         "output": "oxygen_balance_error",
         "mean": {
-          "value": 4.1402066959979794e-16,
+          "value": 1.1657341758564144e-15,
           "unit": "kg/m3",
           "basis_ref": null
         },
         "standard_deviation": {
-          "value": 1.2930770440396965e-16,
+          "value": 9.602787394150765e-16,
           "unit": "kg/m3",
           "basis_ref": null
         },
         "percentile_05": {
-          "value": 2.8761715231695464e-16,
+          "value": 2.7478019859472625e-16,
           "unit": "kg/m3",
           "basis_ref": null
         },
         "percentile_95": {
-          "value": 5.108760636751697e-16,
+          "value": 1.9984014443252818e-15,
           "unit": "kg/m3",
           "basis_ref": null
         }
@@ -2076,22 +2076,22 @@
       {
         "output": "volumetric_productivity",
         "mean": {
-          "value": -0.03172623319867518,
+          "value": 0.1154841237762128,
           "unit": "kg/(m**3*d)",
           "basis_ref": null
         },
         "standard_deviation": {
-          "value": 0.0011833807935150331,
+          "value": 0.004779683641653711,
           "unit": "kg/(m**3*d)",
           "basis_ref": null
         },
         "percentile_05": {
-          "value": -0.032564380835675276,
+          "value": 0.11206130691795164,
           "unit": "kg/(m**3*d)",
           "basis_ref": null
         },
         "percentile_95": {
-          "value": -0.030561942532550956,
+          "value": 0.12018237512720344,
           "unit": "kg/(m**3*d)",
           "basis_ref": null
         }
@@ -2100,5 +2100,5 @@
     "qualification_status": "unqualified",
     "fidelity": "reduced_order"
   },
-  "interpretation": "Three real CVODE-backed evaluator calls completed over the synthetic 107 fixture. All source coefficients are synthetic; these runs do not establish biological or physical validity."
+  "interpretation": "Three real CVODE-backed evaluator calls, each one full diel cycle, completed over the synthetic 107 fixture. All source coefficients are synthetic; these runs do not establish biological or physical validity."
 }
