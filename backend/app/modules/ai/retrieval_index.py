@@ -7,6 +7,7 @@ import json
 import math
 import re
 import sqlite3
+import struct
 import subprocess
 from collections.abc import Callable, Iterable, Sequence
 from datetime import UTC, datetime
@@ -14,6 +15,11 @@ from pathlib import Path
 from typing import Protocol
 
 from pydantic import BaseModel
+
+try:
+    import sqlite_vec
+except ImportError:  # pragma: no cover - optional accelerator, absent in the backend venv
+    sqlite_vec = None
 
 from app.core.database import open_retrieval_index_connection, open_sqlite_connection
 from app.modules.ai.context_builder import canonical_digest
@@ -44,12 +50,14 @@ from app.modules.modeling.service import (
 from app.modules.project_knowledge.service import get_snapshot
 from app.modules.workspaces.service import list_workspaces
 
-INDEX_SCHEMA_VERSION = "retrieval-index.v3"
+INDEX_SCHEMA_VERSION = "retrieval-index.v4"
 _TOKEN = re.compile(r"\w+", re.UNICODE)
 
 
 class Embedder(Protocol):
     def embed(self, text: str) -> tuple[float, ...]: ...
+
+    def embed_query(self, text: str) -> tuple[float, ...]: ...
 
 
 class HashingEmbedder:
@@ -68,6 +76,10 @@ class HashingEmbedder:
         norm = math.sqrt(sum(value * value for value in values))
         return tuple(value / norm for value in values) if norm else tuple(values)
 
+    def embed_query(self, text: str) -> tuple[float, ...]:
+        # The hashing fixture has no document/query asymmetry.
+        return self.embed(text)
+
 
 class E5Embedder:
     """Optional sentence-transformers adapter; import occurs only on explicit construction."""
@@ -78,10 +90,18 @@ class E5Embedder:
         self.model: object = SentenceTransformer(model_name)
 
     def embed(self, text: str) -> tuple[float, ...]:
+        return self._encode("passage: " + text)
+
+    def embed_query(self, text: str) -> tuple[float, ...]:
+        # multilingual-e5 requires the "query: " prefix for queries and "passage: " for
+        # documents; using "passage: " for both degrades asymmetric retrieval quality.
+        return self._encode("query: " + text)
+
+    def _encode(self, text: str) -> tuple[float, ...]:
         from typing import Any
 
         model: Any = self.model
-        return tuple(float(value) for value in model.encode("passage: " + text, normalize_embeddings=True))
+        return tuple(float(value) for value in model.encode(text, normalize_embeddings=True))
 
 
 def _key(ref: SourceRef) -> str:
@@ -337,6 +357,24 @@ _OWNER_RESOLVERS: dict[tuple[str, str], Callable[[SourceRef], IndexDocument | No
 }
 
 
+def _load_vector_extension(db: sqlite3.Connection) -> bool:
+    """Load the optional sqlite-vec accelerator into this connection, when installed.
+
+    SQLite extensions are per-connection, so every fresh connection that touches the
+    vec0 virtual table must reload it; this is cheap and local (no network).
+    """
+    if sqlite_vec is None:
+        return False
+    db.enable_load_extension(True)
+    sqlite_vec.load(db)
+    db.enable_load_extension(False)
+    return True
+
+
+def _pack_vector(vector: Sequence[float]) -> bytes:
+    return struct.pack(f"<{len(vector)}f", *vector)
+
+
 class SQLiteIndexStore:
     def __init__(self, *, embedder: Embedder | None = None,
                  documents: Callable[[], Iterable[IndexDocument]] = canonical_documents,
@@ -346,15 +384,19 @@ class SQLiteIndexStore:
         self.documents = documents
         self.resolver = resolver
         self.repository_root = repository_root
+        self.use_sqlite_vec = False
         self._initialize()
 
     def _initialize(self) -> None:
         with open_retrieval_index_connection() as db:
+            use_vec = _load_vector_extension(db)
             db.execute("CREATE TABLE IF NOT EXISTS meta (name TEXT PRIMARY KEY, value TEXT NOT NULL)")
             version = db.execute("SELECT value FROM meta WHERE name='schema_version'").fetchone()
             if version and version[0] != INDEX_SCHEMA_VERSION:
                 for table in ("edges", "docs_fts", "docs"):
                     db.execute(f"DROP TABLE IF EXISTS {table}")
+                if use_vec:
+                    db.execute("DROP TABLE IF EXISTS vec_docs")
                 db.execute("DELETE FROM meta")
             db.execute("INSERT OR IGNORE INTO meta VALUES ('schema_version', ?)", (INDEX_SCHEMA_VERSION,))
             db.execute(
@@ -367,6 +409,13 @@ class SQLiteIndexStore:
                 "CREATE TABLE IF NOT EXISTS edges (source_key TEXT NOT NULL, target_key TEXT NOT NULL, "
                 "kind TEXT NOT NULL, valid_from TEXT, PRIMARY KEY(source_key,target_key,kind))"
             )
+            self.use_sqlite_vec = use_vec
+            if use_vec:
+                dimensions = len(self.embedder.embed(""))
+                db.execute(
+                    "CREATE VIRTUAL TABLE IF NOT EXISTS vec_docs USING vec0(key TEXT PRIMARY KEY, "
+                    f"workspace_id TEXT PARTITION KEY, embedding FLOAT[{dimensions}] distance_metric=cosine)"
+                )
             db.commit()
 
     def _revision(self, db: sqlite3.Connection) -> str:
@@ -385,19 +434,28 @@ class SQLiteIndexStore:
             return str(row[0]) if row else self._revision(db)
 
     def _upsert(self, db: sqlite3.Connection, documents: Sequence[IndexDocument]) -> None:
+        if self.use_sqlite_vec:
+            _load_vector_extension(db)
         for document in documents:
             ref = document.source_ref
             key = _key(ref)
+            vector = self.embedder.embed(document.text)
             db.execute("DELETE FROM docs_fts WHERE key=?", (key,))
             db.execute(
                 "INSERT OR REPLACE INTO docs VALUES (?,?,?,?,?,?,?)",
                 (key, ref.model_dump_json(), ref.object_id, document.title, document.text,
-                 json.dumps(self.embedder.embed(document.text)), ref.workspace_id),
+                 json.dumps(vector), ref.workspace_id),
             )
             db.execute(
                 "INSERT INTO docs_fts(key,object_id,title,text) VALUES (?,?,?,?)",
                 (key, ref.object_id, document.title or "", document.text),
             )
+            if self.use_sqlite_vec:
+                db.execute("DELETE FROM vec_docs WHERE key=?", (key,))
+                db.execute(
+                    "INSERT INTO vec_docs(key, workspace_id, embedding) VALUES (?,?,?)",
+                    (key, ref.workspace_id, _pack_vector(vector)),
+                )
 
     def rebuild(self) -> str:
         full_docs = sorted(self.documents(), key=lambda item: _key(item.source_ref))
@@ -429,6 +487,9 @@ class SQLiteIndexStore:
             db.execute("DELETE FROM edges")
             db.execute("DELETE FROM docs_fts")
             db.execute("DELETE FROM docs")
+            if self.use_sqlite_vec:
+                _load_vector_extension(db)
+                db.execute("DELETE FROM vec_docs")
             self._upsert(db, docs)
             for doc, summary in zip(full_docs, summaries, strict=True):
                 db.execute("INSERT INTO edges VALUES (?,?,?,?)",
@@ -471,6 +532,8 @@ class SQLiteIndexStore:
 
     def delete(self, refs: Sequence[SourceRef]) -> None:
         with open_retrieval_index_connection() as db:
+            if self.use_sqlite_vec:
+                _load_vector_extension(db)
             for ref in refs:
                 key = _key(ref)
                 stored = db.execute("SELECT ref FROM docs WHERE key=?", (key,)).fetchone()
@@ -478,10 +541,14 @@ class SQLiteIndexStore:
                     continue
                 db.execute("DELETE FROM docs WHERE key=?", (key,))
                 db.execute("DELETE FROM docs_fts WHERE key=?", (key,))
+                if self.use_sqlite_vec:
+                    db.execute("DELETE FROM vec_docs WHERE key=?", (key,))
                 db.execute("DELETE FROM edges WHERE source_key=? OR target_key=?", (key, key))
                 summary_key = _key(_document_summary(IndexDocument(source_ref=ref, text="deleted")).source_ref)
                 db.execute("DELETE FROM docs WHERE key=?", (summary_key,))
                 db.execute("DELETE FROM docs_fts WHERE key=?", (summary_key,))
+                if self.use_sqlite_vec:
+                    db.execute("DELETE FROM vec_docs WHERE key=?", (summary_key,))
                 db.execute("DELETE FROM edges WHERE source_key=? OR target_key=?", (summary_key, summary_key))
                 group_ref = SourceRef(
                     authority_owner="retrieval", object_type="group_summary",
@@ -491,6 +558,8 @@ class SQLiteIndexStore:
                 group_key = _key(group_ref)
                 db.execute("DELETE FROM docs WHERE key=?", (group_key,))
                 db.execute("DELETE FROM docs_fts WHERE key=?", (group_key,))
+                if self.use_sqlite_vec:
+                    db.execute("DELETE FROM vec_docs WHERE key=?", (group_key,))
                 db.execute("DELETE FROM edges WHERE source_key=? OR target_key=?", (group_key, group_key))
             self._revision(db)
             db.commit()
@@ -553,16 +622,33 @@ class SQLiteIndexStore:
     def search_vector(self, query: str, *, limit: int, workspace_id: str | None = None) -> list[RetrievalHit]:
         if limit <= 0:
             return []
-        q = self.embedder.embed(query)
+        q = self.embedder.embed_query(query)
         with open_retrieval_index_connection() as db:
-            rows = db.execute(
-                "SELECT * FROM docs WHERE (? IS NULL OR workspace_id=?)", (workspace_id, workspace_id),
-            ).fetchall()
+            if self.use_sqlite_vec:
+                _load_vector_extension(db)
+                q_bytes = _pack_vector(q)
+                if workspace_id is None:
+                    rows = db.execute(
+                        "SELECT d.*, v.distance AS distance FROM vec_docs v JOIN docs d ON d.key = v.key "
+                        "WHERE v.embedding MATCH ? AND v.k = ? ORDER BY v.distance, d.key",
+                        (q_bytes, limit),
+                    ).fetchall()
+                else:
+                    rows = db.execute(
+                        "SELECT d.*, v.distance AS distance FROM vec_docs v JOIN docs d ON d.key = v.key "
+                        "WHERE v.embedding MATCH ? AND v.k = ? AND v.workspace_id = ? ORDER BY v.distance, d.key",
+                        (q_bytes, limit, workspace_id),
+                    ).fetchall()
+                scored = [(1.0 - float(row["distance"]), row) for row in rows]
+            else:
+                rows = db.execute(
+                    "SELECT * FROM docs WHERE (? IS NULL OR workspace_id=?)", (workspace_id, workspace_id),
+                ).fetchall()
+                scored = [
+                    (sum(a * b for a, b in zip(q, json.loads(row["vector"], parse_float=float), strict=True)), row)
+                    for row in rows
+                ]
         revision = self.revision
-        scored = [
-            (sum(a * b for a, b in zip(q, json.loads(row["vector"], parse_float=float), strict=True)), row)
-            for row in rows
-        ]
         scored.sort(key=lambda pair: (-pair[0], pair[1]["key"]))
         return [self._hit(row, revision, vector=score) for score, row in scored[:limit] if score > 0]
 

@@ -217,6 +217,62 @@ def test_new_canonical_owners_rebuild_and_reread(tmp_path: Path, monkeypatch: py
     get_settings.cache_clear()
 
 
+def test_e5_embedder_prefixes_query_and_passage_differently() -> None:
+    """multilingual-e5 requires distinct "query: "/"passage: " prefixes; injects a fake
+    SentenceTransformer-like object so no model download or network happens in tests."""
+
+    class _RecordingModel:
+        def __init__(self) -> None:
+            self.calls: list[str] = []
+
+        def encode(self, text: str, normalize_embeddings: bool = True) -> list[float]:
+            self.calls.append(text)
+            return [1.0, 0.0]
+
+    embedder = object.__new__(retrieval_index.E5Embedder)
+    model = _RecordingModel()
+    embedder.model = model
+    assert embedder.embed("hello") == (1.0, 0.0)
+    assert embedder.embed_query("hello") == (1.0, 0.0)
+    assert model.calls == ["passage: hello", "query: hello"]
+
+
+def test_sqlite_vec_matches_python_fallback_ranking(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Optional accelerator: when sqlite-vec loads, vec0 KNN must rank identical embeddings
+    the same as the pure-Python brute-force path. Skips where sqlite-vec is not installed
+    (the backend venv); must pass in an environment that has it (e.g. the q148 venv)."""
+    pytest.importorskip("sqlite_vec")
+    docs = {
+        "a": _doc("a", "w1", "alpha reactor pressure vessel design margin"),
+        "b": _doc("b", "w1", "beta pressure vessel safety margin inspection"),
+        "c": _doc("c", "w1", "gamma unrelated budget zero paid provider policy"),
+        "d": _doc("d", "w1", "delta reactor heat transfer coefficient analysis"),
+        "e": _doc("e", "w2", "alpha secret workspace isolated document reactor"),
+    }
+
+    monkeypatch.setenv("JARVISOS_DATA_ROOT", str(tmp_path / "accelerated"))
+    get_settings.cache_clear()
+    accelerated = SQLiteIndexStore(documents=lambda: docs.values(), resolver=lambda ref: docs.get(ref.object_id))
+    assert accelerated.use_sqlite_vec is True
+    accelerated.rebuild()
+    accelerated_hits = [hit.source_ref.object_id for hit in
+                        accelerated.search_vector("reactor pressure vessel margin", limit=10, workspace_id="w1")]
+
+    monkeypatch.setattr(retrieval_index, "sqlite_vec", None)
+    monkeypatch.setenv("JARVISOS_DATA_ROOT", str(tmp_path / "fallback"))
+    get_settings.cache_clear()
+    fallback = SQLiteIndexStore(documents=lambda: docs.values(), resolver=lambda ref: docs.get(ref.object_id))
+    assert fallback.use_sqlite_vec is False
+    fallback.rebuild()
+    fallback_hits = [hit.source_ref.object_id for hit in
+                     fallback.search_vector("reactor pressure vessel margin", limit=10, workspace_id="w1")]
+
+    assert accelerated_hits
+    assert accelerated_hits == fallback_hits
+    assert "e" not in accelerated_hits
+    get_settings.cache_clear()
+
+
 def test_typed_temporal_edges_and_workspace_isolation(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
