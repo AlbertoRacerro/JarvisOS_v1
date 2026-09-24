@@ -40,6 +40,7 @@ from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
 from typing import Final
 
+from app.modules.ai.jarvis_context_models import SourceRef
 from app.modules.engineering.evaluator_contracts import (
     EvaluationRequest,
     EvaluationResult,
@@ -91,6 +92,7 @@ SOURCED_ALWAYS: Final[Mapping[str, str]] = {
     "biomass_loss_rate": "1/h",
     "biomass_nitrogen_fraction": "1",
     "oxygen_yield": "1",
+    "oxygen_kla": "1/h",
     "oxygen_saturation": "kg/m3",
 }
 SOURCED_BY_OPTION: Final[Mapping[tuple[str, str], Mapping[str, str]]] = {
@@ -113,7 +115,6 @@ DESIGN: Final[Mapping[str, str]] = {
     "loop_length": "m",
     "liquid_velocity": "m/s",
     "pump_efficiency": "1",
-    "oxygen_kla": "1/h",
     "harvest_fraction": "1",
     "harvest_hour": "h",
     "medium_nitrogen": "kg/m3",
@@ -149,6 +150,11 @@ class PbrDayNightEvaluator:
             fidelity="reduced_order",
             capabilities=("day_night_light", "self_shading", "photoinhibition", "cardinal_temperature",
                           "nitrogen_limitation", "oxygen_degassing", "semi_continuous_harvest", "loop_hydraulics"),
+            qualification_record_ref=SourceRef(
+                authority_owner="repository", object_type="scientific_qualification_record",
+                object_id="scripts/qualification/107/pbr_day_night.v2.ledger.json",
+                workspace_id="bluerev", revision=MODEL_VERSION,
+            ),
         )
 
     def availability(self) -> EvaluatorAvailability:
@@ -169,7 +175,7 @@ def _validity(request: EvaluationRequest) -> ValidityEnvelopeRef:
     """Structural domain of this model version; always ``unqualified`` (availability is not qualification)."""
     envelope = ValidityEnvelopeRef(
         authority_owner="bluerev", object_id=f"{EVALUATOR_ID}.{MODEL_VERSION}",
-        workspace_id=request.request_ref.workspace_id, qualification_status="unqualified",
+        workspace_id=request.request_ref.workspace_id, revision=MODEL_VERSION, qualification_status="unqualified",
         domain=(
             DomainBound(variable="duration", lower=Quantity(value=0.0, unit="d"),
                         upper=Quantity(value=float(MAX_DAYS), unit="d")),
@@ -361,7 +367,7 @@ def _simulate(request: EvaluationRequest) -> tuple[tuple[NamedQuantity, ...], Nu
                      state[1] * (1.0 - fraction) + fraction * x["medium_nitrogen"],
                      state[2] * (1.0 - fraction) + fraction * x["oxygen_saturation"],
                      state[3])
-    if modes["nitrogen_response"] == "replete" and minimum[1] < _NEGATIVE_TOLERANCE:
+    if modes["nitrogen_response"] == "replete" and minimum[1] <= _NEGATIVE_TOLERANCE:
         raise EvaluationRefusal("outside_validity_domain", "nitrogen_exhausted",
                                 "dissolved nitrogen was exhausted; the nitrogen-replete assumption does not hold")
     if minimum[0] < -_NEGATIVE_TOLERANCE or minimum[1] < -_NEGATIVE_TOLERANCE:
@@ -396,19 +402,3 @@ def _simulate(request: EvaluationRequest) -> tuple[tuple[NamedQuantity, ...], Nu
         "pressure_drop": (hydraulics["pressure_drop"], "Pa"),
         "pumping_power": (hydraulics["pumping_power"], "W"),
     }), NumericalDiagnostics(converged=True, iterations=evaluations, final_residual=max(nitrogen_error, oxygen_error))
-
-
-def seawater_oxygen_solubility(practical_salinity: float, temperature_c: float) -> float:
-    """Air-saturated O2 in seawater at 1 atm incl. water vapour, umol/kg (Garcia & Gordon 1992, Benson-Krause fit).
-
-    Same coefficients and IPTS-68 scaling as TEOS-10 ``gsw_O2sol_SP_pt``; stated fit range
-    t_freezing <= t <= 40 degC, 0 <= S <= 42.
-    """
-    a = (5.80871, 3.20291, 4.17887, 5.10006, -9.86643e-2, 3.80369)
-    b = (-7.01577e-3, -7.70028e-3, -1.13864e-2, -9.51519e-3)
-    t68 = temperature_c * 1.00024
-    ts = math.log((298.15 - t68) / (273.15 + t68))
-    exponent = (sum(coef * ts**i for i, coef in enumerate(a))
-                + practical_salinity * sum(coef * ts**i for i, coef in enumerate(b))
-                - 2.75915e-7 * practical_salinity**2)
-    return math.exp(exponent)
