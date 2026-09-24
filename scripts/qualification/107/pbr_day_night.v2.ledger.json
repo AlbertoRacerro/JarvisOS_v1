@@ -1,0 +1,1385 @@
+{
+  "artifact_schema": "jarvisos.qualification_ledger_artifact.v1",
+  "contract": "engineering_evidence.v1 (spec 102 ScientificQualificationRecord)",
+  "model_version": "pbr_day_night.v2",
+  "qualification_record": {
+    "schema_version": "engineering_evidence.v1",
+    "record_id": "bluerev.pbr_day_night.v2.synthetic-unqualified",
+    "subject_ref": {
+      "authority_owner": "bluerev",
+      "object_type": "dynamic_model",
+      "object_id": "bluerev.pbr_day_night",
+      "workspace_id": "bluerev",
+      "revision": "pbr_day_night.v2",
+      "content_digest": null,
+      "location": null
+    },
+    "fidelity": "reduced_order",
+    "validity": {
+      "authority_owner": "bluerev",
+      "object_type": "validity_envelope",
+      "object_id": "bluerev.pbr_day_night.pbr_day_night.v2",
+      "workspace_id": "bluerev",
+      "revision": "pbr_day_night.v2",
+      "content_digest": "sha256:34e5dd2065c8d8e499bb4dcba5f343c7691e288f99571b69bf2d3e87277eb6c9",
+      "location": null,
+      "domain": [
+        {
+          "variable": "duration",
+          "lower": {
+            "value": 0.0,
+            "unit": "d",
+            "basis_ref": null
+          },
+          "upper": {
+            "value": 366.0,
+            "unit": "d",
+            "basis_ref": null
+          }
+        },
+        {
+          "variable": "photoperiod",
+          "lower": {
+            "value": 0.0,
+            "unit": "h",
+            "basis_ref": null
+          },
+          "upper": {
+            "value": 24.0,
+            "unit": "h",
+            "basis_ref": null
+          }
+        }
+      ],
+      "uncertainty": [],
+      "qualification_status": "unqualified",
+      "evidence_refs": []
+    },
+    "provenance": [
+      {
+        "kind": "synthetic_fixture",
+        "source_ref": null,
+        "citation": null,
+        "organism": "Nannochloropsis gaditana (intended model target; coefficients are not species measurements)",
+        "strain": "unspecified",
+        "conditions": [
+          {
+            "variable": "temperature_mean",
+            "value": {
+              "value": 295.15,
+              "unit": "K",
+              "basis_ref": null
+            }
+          },
+          {
+            "variable": "peak_par",
+            "value": {
+              "value": 1500.0,
+              "unit": "umol/(m**2*s)",
+              "basis_ref": null
+            }
+          },
+          {
+            "variable": "photoperiod",
+            "value": {
+              "value": 14.0,
+              "unit": "h",
+              "basis_ref": null
+            }
+          }
+        ],
+        "note": "max_specific_growth_rate: source NONE; synthetic fixture placeholder only"
+      },
+      {
+        "kind": "synthetic_fixture",
+        "source_ref": null,
+        "citation": null,
+        "organism": "Nannochloropsis gaditana (intended model target; coefficients are not species measurements)",
+        "strain": "unspecified",
+        "conditions": [
+          {
+            "variable": "temperature_mean",
+            "value": {
+              "value": 295.15,
+              "unit": "K",
+              "basis_ref": null
+            }
+          },
+          {
+            "variable": "peak_par",
+            "value": {
+              "value": 1500.0,
+              "unit": "umol/(m**2*s)",
+              "basis_ref": null
+            }
+          },
+          {
+            "variable": "photoperiod",
+            "value": {
+              "value": 14.0,
+              "unit": "h",
+              "basis_ref": null
+            }
+          }
+        ],
+        "note": "light_saturation_constant: source NONE; synthetic fixture placeholder only"
+      },
+      {
+        "kind": "synthetic_fixture",
+        "source_ref": null,
+        "citation": null,
+        "organism": "Nannochloropsis gaditana (intended model target; coefficients are not species measurements)",
+        "strain": "unspecified",
+        "conditions": [
+          {
+            "variable": "temperature_mean",
+            "value": {
+              "value": 295.15,
+              "unit": "K",
+              "basis_ref": null
+            }
+          },
+          {
+            "variable": "peak_par",
+            "value": {
+              "value": 1500.0,
+              "unit": "umol/(m**2*s)",
+              "basis_ref": null
+            }
+          },
+          {
+            "variable": "photoperiod",
+            "value": {
+              "value": 14.0,
+              "unit": "h",
+              "basis_ref": null
+            }
+          }
+        ],
+        "note": "light_inhibition_constant: source NONE; synthetic fixture placeholder only"
+      },
+      {
+        "kind": "synthetic_fixture",
+        "source_ref": null,
+        "citation": null,
+        "organism": "Nannochloropsis gaditana (intended model target; coefficients are not species measurements)",
+        "strain": "unspecified",
+        "conditions": [
+          {
+            "variable": "temperature_mean",
+            "value": {
+              "value": 295.15,
+              "unit": "K",
+              "basis_ref": null
+            }
+          },
+          {
+            "variable": "peak_par",
+            "value": {
+              "value": 1500.0,
+              "unit": "umol/(m**2*s)",
+              "basis_ref": null
+            }
+          },
+          {
+            "variable": "photoperiod",
+            "value": {
+              "value": 14.0,
+              "unit": "h",
+              "basis_ref": null
+            }
+          }
+        ],
+        "note": "specific_light_extinction: source NONE; synthetic fixture placeholder only"
+      },
+      {
+        "kind": "synthetic_fixture",
+        "source_ref": null,
+        "citation": null,
+        "organism": "Nannochloropsis gaditana (intended model target; coefficients are not species measurements)",
+        "strain": "unspecified",
+        "conditions": [
+          {
+            "variable": "temperature_mean",
+            "value": {
+              "value": 295.15,
+              "unit": "K",
+              "basis_ref": null
+            }
+          },
+          {
+            "variable": "peak_par",
+            "value": {
+              "value": 1500.0,
+              "unit": "umol/(m**2*s)",
+              "basis_ref": null
+            }
+          },
+          {
+            "variable": "photoperiod",
+            "value": {
+              "value": 14.0,
+              "unit": "h",
+              "basis_ref": null
+            }
+          }
+        ],
+        "note": "biomass_loss_rate: source NONE; synthetic fixture placeholder only"
+      },
+      {
+        "kind": "synthetic_fixture",
+        "source_ref": null,
+        "citation": null,
+        "organism": "Nannochloropsis gaditana (intended model target; coefficients are not species measurements)",
+        "strain": "unspecified",
+        "conditions": [
+          {
+            "variable": "temperature_mean",
+            "value": {
+              "value": 295.15,
+              "unit": "K",
+              "basis_ref": null
+            }
+          },
+          {
+            "variable": "peak_par",
+            "value": {
+              "value": 1500.0,
+              "unit": "umol/(m**2*s)",
+              "basis_ref": null
+            }
+          },
+          {
+            "variable": "photoperiod",
+            "value": {
+              "value": 14.0,
+              "unit": "h",
+              "basis_ref": null
+            }
+          }
+        ],
+        "note": "nitrogen_half_saturation: source NONE; synthetic fixture placeholder only"
+      },
+      {
+        "kind": "synthetic_fixture",
+        "source_ref": null,
+        "citation": null,
+        "organism": "Nannochloropsis gaditana (intended model target; coefficients are not species measurements)",
+        "strain": "unspecified",
+        "conditions": [
+          {
+            "variable": "temperature_mean",
+            "value": {
+              "value": 295.15,
+              "unit": "K",
+              "basis_ref": null
+            }
+          },
+          {
+            "variable": "peak_par",
+            "value": {
+              "value": 1500.0,
+              "unit": "umol/(m**2*s)",
+              "basis_ref": null
+            }
+          },
+          {
+            "variable": "photoperiod",
+            "value": {
+              "value": 14.0,
+              "unit": "h",
+              "basis_ref": null
+            }
+          }
+        ],
+        "note": "biomass_nitrogen_fraction: source NONE; synthetic fixture placeholder only"
+      },
+      {
+        "kind": "synthetic_fixture",
+        "source_ref": null,
+        "citation": null,
+        "organism": "Nannochloropsis gaditana (intended model target; coefficients are not species measurements)",
+        "strain": "unspecified",
+        "conditions": [
+          {
+            "variable": "temperature_mean",
+            "value": {
+              "value": 295.15,
+              "unit": "K",
+              "basis_ref": null
+            }
+          },
+          {
+            "variable": "peak_par",
+            "value": {
+              "value": 1500.0,
+              "unit": "umol/(m**2*s)",
+              "basis_ref": null
+            }
+          },
+          {
+            "variable": "photoperiod",
+            "value": {
+              "value": 14.0,
+              "unit": "h",
+              "basis_ref": null
+            }
+          }
+        ],
+        "note": "oxygen_yield: source NONE; synthetic fixture placeholder only"
+      },
+      {
+        "kind": "synthetic_fixture",
+        "source_ref": null,
+        "citation": null,
+        "organism": "Nannochloropsis gaditana (intended model target; coefficients are not species measurements)",
+        "strain": "unspecified",
+        "conditions": [
+          {
+            "variable": "temperature_mean",
+            "value": {
+              "value": 295.15,
+              "unit": "K",
+              "basis_ref": null
+            }
+          },
+          {
+            "variable": "peak_par",
+            "value": {
+              "value": 1500.0,
+              "unit": "umol/(m**2*s)",
+              "basis_ref": null
+            }
+          },
+          {
+            "variable": "photoperiod",
+            "value": {
+              "value": 14.0,
+              "unit": "h",
+              "basis_ref": null
+            }
+          }
+        ],
+        "note": "oxygen_kla: source NONE; synthetic fixture placeholder only"
+      },
+      {
+        "kind": "synthetic_fixture",
+        "source_ref": null,
+        "citation": null,
+        "organism": "Nannochloropsis gaditana (intended model target; coefficients are not species measurements)",
+        "strain": "unspecified",
+        "conditions": [
+          {
+            "variable": "temperature_mean",
+            "value": {
+              "value": 295.15,
+              "unit": "K",
+              "basis_ref": null
+            }
+          },
+          {
+            "variable": "peak_par",
+            "value": {
+              "value": 1500.0,
+              "unit": "umol/(m**2*s)",
+              "basis_ref": null
+            }
+          },
+          {
+            "variable": "photoperiod",
+            "value": {
+              "value": 14.0,
+              "unit": "h",
+              "basis_ref": null
+            }
+          }
+        ],
+        "note": "oxygen_saturation: source NONE; synthetic fixture placeholder only"
+      },
+      {
+        "kind": "synthetic_fixture",
+        "source_ref": null,
+        "citation": null,
+        "organism": "Nannochloropsis gaditana (intended model target; coefficients are not species measurements)",
+        "strain": "unspecified",
+        "conditions": [
+          {
+            "variable": "temperature_mean",
+            "value": {
+              "value": 295.15,
+              "unit": "K",
+              "basis_ref": null
+            }
+          },
+          {
+            "variable": "peak_par",
+            "value": {
+              "value": 1500.0,
+              "unit": "umol/(m**2*s)",
+              "basis_ref": null
+            }
+          },
+          {
+            "variable": "photoperiod",
+            "value": {
+              "value": 14.0,
+              "unit": "h",
+              "basis_ref": null
+            }
+          }
+        ],
+        "note": "temperature_min: source NONE; synthetic fixture placeholder only"
+      },
+      {
+        "kind": "synthetic_fixture",
+        "source_ref": null,
+        "citation": null,
+        "organism": "Nannochloropsis gaditana (intended model target; coefficients are not species measurements)",
+        "strain": "unspecified",
+        "conditions": [
+          {
+            "variable": "temperature_mean",
+            "value": {
+              "value": 295.15,
+              "unit": "K",
+              "basis_ref": null
+            }
+          },
+          {
+            "variable": "peak_par",
+            "value": {
+              "value": 1500.0,
+              "unit": "umol/(m**2*s)",
+              "basis_ref": null
+            }
+          },
+          {
+            "variable": "photoperiod",
+            "value": {
+              "value": 14.0,
+              "unit": "h",
+              "basis_ref": null
+            }
+          }
+        ],
+        "note": "temperature_opt: source NONE; synthetic fixture placeholder only"
+      },
+      {
+        "kind": "synthetic_fixture",
+        "source_ref": null,
+        "citation": null,
+        "organism": "Nannochloropsis gaditana (intended model target; coefficients are not species measurements)",
+        "strain": "unspecified",
+        "conditions": [
+          {
+            "variable": "temperature_mean",
+            "value": {
+              "value": 295.15,
+              "unit": "K",
+              "basis_ref": null
+            }
+          },
+          {
+            "variable": "peak_par",
+            "value": {
+              "value": 1500.0,
+              "unit": "umol/(m**2*s)",
+              "basis_ref": null
+            }
+          },
+          {
+            "variable": "photoperiod",
+            "value": {
+              "value": 14.0,
+              "unit": "h",
+              "basis_ref": null
+            }
+          }
+        ],
+        "note": "temperature_max: source NONE; synthetic fixture placeholder only"
+      }
+    ],
+    "uncertainty": [],
+    "basis": {
+      "calibration_refs": [],
+      "benchmark_refs": [],
+      "decided_by": null,
+      "decided_at": null,
+      "decision_ref": null
+    },
+    "recorded_at": "2026-09-24T20:06:45.143350Z"
+  },
+  "coefficients": [
+    {
+      "name": "max_specific_growth_rate",
+      "value": 0.0625,
+      "unit": "1/h",
+      "source": "NONE",
+      "provenance_kind": "synthetic_fixture",
+      "organism": "Nannochloropsis gaditana (intended model target; coefficients are not species measurements)",
+      "strain": "unspecified",
+      "conditions": [
+        {
+          "variable": "peak_par",
+          "value": 1500.0,
+          "unit": "umol/(m**2*s)"
+        },
+        {
+          "variable": "photoperiod",
+          "value": 14.0,
+          "unit": "h"
+        },
+        {
+          "variable": "temperature_mean",
+          "value": 295.15,
+          "unit": "K"
+        }
+      ],
+      "uncertainty": {
+        "status": "unknown",
+        "reason": "No sourced or measured uncertainty; no estimate assigned."
+      },
+      "calibration": {
+        "status": "none",
+        "refs": []
+      },
+      "validity_domain": {
+        "status": "not_established",
+        "model_structural_domain": [
+          {
+            "variable": "duration",
+            "lower": {
+              "value": 0.0,
+              "unit": "d"
+            },
+            "upper": {
+              "value": 366.0,
+              "unit": "d"
+            }
+          },
+          {
+            "variable": "photoperiod",
+            "lower": {
+              "value": 0.0,
+              "unit": "h"
+            },
+            "upper": {
+              "value": 24.0,
+              "unit": "h"
+            }
+          }
+        ]
+      },
+      "benchmark": {
+        "status": "none",
+        "refs": []
+      },
+      "qualification_status": "unqualified"
+    },
+    {
+      "name": "light_saturation_constant",
+      "value": 150.0,
+      "unit": "umol/(m**2*s)",
+      "source": "NONE",
+      "provenance_kind": "synthetic_fixture",
+      "organism": "Nannochloropsis gaditana (intended model target; coefficients are not species measurements)",
+      "strain": "unspecified",
+      "conditions": [
+        {
+          "variable": "peak_par",
+          "value": 1500.0,
+          "unit": "umol/(m**2*s)"
+        },
+        {
+          "variable": "photoperiod",
+          "value": 14.0,
+          "unit": "h"
+        },
+        {
+          "variable": "temperature_mean",
+          "value": 295.15,
+          "unit": "K"
+        }
+      ],
+      "uncertainty": {
+        "status": "unknown",
+        "reason": "No sourced or measured uncertainty; no estimate assigned."
+      },
+      "calibration": {
+        "status": "none",
+        "refs": []
+      },
+      "validity_domain": {
+        "status": "not_established",
+        "model_structural_domain": [
+          {
+            "variable": "duration",
+            "lower": {
+              "value": 0.0,
+              "unit": "d"
+            },
+            "upper": {
+              "value": 366.0,
+              "unit": "d"
+            }
+          },
+          {
+            "variable": "photoperiod",
+            "lower": {
+              "value": 0.0,
+              "unit": "h"
+            },
+            "upper": {
+              "value": 24.0,
+              "unit": "h"
+            }
+          }
+        ]
+      },
+      "benchmark": {
+        "status": "none",
+        "refs": []
+      },
+      "qualification_status": "unqualified"
+    },
+    {
+      "name": "light_inhibition_constant",
+      "value": 2000.0,
+      "unit": "umol/(m**2*s)",
+      "source": "NONE",
+      "provenance_kind": "synthetic_fixture",
+      "organism": "Nannochloropsis gaditana (intended model target; coefficients are not species measurements)",
+      "strain": "unspecified",
+      "conditions": [
+        {
+          "variable": "peak_par",
+          "value": 1500.0,
+          "unit": "umol/(m**2*s)"
+        },
+        {
+          "variable": "photoperiod",
+          "value": 14.0,
+          "unit": "h"
+        },
+        {
+          "variable": "temperature_mean",
+          "value": 295.15,
+          "unit": "K"
+        }
+      ],
+      "uncertainty": {
+        "status": "unknown",
+        "reason": "No sourced or measured uncertainty; no estimate assigned."
+      },
+      "calibration": {
+        "status": "none",
+        "refs": []
+      },
+      "validity_domain": {
+        "status": "not_established",
+        "model_structural_domain": [
+          {
+            "variable": "duration",
+            "lower": {
+              "value": 0.0,
+              "unit": "d"
+            },
+            "upper": {
+              "value": 366.0,
+              "unit": "d"
+            }
+          },
+          {
+            "variable": "photoperiod",
+            "lower": {
+              "value": 0.0,
+              "unit": "h"
+            },
+            "upper": {
+              "value": 24.0,
+              "unit": "h"
+            }
+          }
+        ]
+      },
+      "benchmark": {
+        "status": "none",
+        "refs": []
+      },
+      "qualification_status": "unqualified"
+    },
+    {
+      "name": "specific_light_extinction",
+      "value": 150.0,
+      "unit": "m**2/kg",
+      "source": "NONE",
+      "provenance_kind": "synthetic_fixture",
+      "organism": "Nannochloropsis gaditana (intended model target; coefficients are not species measurements)",
+      "strain": "unspecified",
+      "conditions": [
+        {
+          "variable": "peak_par",
+          "value": 1500.0,
+          "unit": "umol/(m**2*s)"
+        },
+        {
+          "variable": "photoperiod",
+          "value": 14.0,
+          "unit": "h"
+        },
+        {
+          "variable": "temperature_mean",
+          "value": 295.15,
+          "unit": "K"
+        }
+      ],
+      "uncertainty": {
+        "status": "unknown",
+        "reason": "No sourced or measured uncertainty; no estimate assigned."
+      },
+      "calibration": {
+        "status": "none",
+        "refs": []
+      },
+      "validity_domain": {
+        "status": "not_established",
+        "model_structural_domain": [
+          {
+            "variable": "duration",
+            "lower": {
+              "value": 0.0,
+              "unit": "d"
+            },
+            "upper": {
+              "value": 366.0,
+              "unit": "d"
+            }
+          },
+          {
+            "variable": "photoperiod",
+            "lower": {
+              "value": 0.0,
+              "unit": "h"
+            },
+            "upper": {
+              "value": 24.0,
+              "unit": "h"
+            }
+          }
+        ]
+      },
+      "benchmark": {
+        "status": "none",
+        "refs": []
+      },
+      "qualification_status": "unqualified"
+    },
+    {
+      "name": "biomass_loss_rate",
+      "value": 0.004166666666666667,
+      "unit": "1/h",
+      "source": "NONE",
+      "provenance_kind": "synthetic_fixture",
+      "organism": "Nannochloropsis gaditana (intended model target; coefficients are not species measurements)",
+      "strain": "unspecified",
+      "conditions": [
+        {
+          "variable": "peak_par",
+          "value": 1500.0,
+          "unit": "umol/(m**2*s)"
+        },
+        {
+          "variable": "photoperiod",
+          "value": 14.0,
+          "unit": "h"
+        },
+        {
+          "variable": "temperature_mean",
+          "value": 295.15,
+          "unit": "K"
+        }
+      ],
+      "uncertainty": {
+        "status": "unknown",
+        "reason": "No sourced or measured uncertainty; no estimate assigned."
+      },
+      "calibration": {
+        "status": "none",
+        "refs": []
+      },
+      "validity_domain": {
+        "status": "not_established",
+        "model_structural_domain": [
+          {
+            "variable": "duration",
+            "lower": {
+              "value": 0.0,
+              "unit": "d"
+            },
+            "upper": {
+              "value": 366.0,
+              "unit": "d"
+            }
+          },
+          {
+            "variable": "photoperiod",
+            "lower": {
+              "value": 0.0,
+              "unit": "h"
+            },
+            "upper": {
+              "value": 24.0,
+              "unit": "h"
+            }
+          }
+        ]
+      },
+      "benchmark": {
+        "status": "none",
+        "refs": []
+      },
+      "qualification_status": "unqualified"
+    },
+    {
+      "name": "nitrogen_half_saturation",
+      "value": 0.001,
+      "unit": "kg/m3",
+      "source": "NONE",
+      "provenance_kind": "synthetic_fixture",
+      "organism": "Nannochloropsis gaditana (intended model target; coefficients are not species measurements)",
+      "strain": "unspecified",
+      "conditions": [
+        {
+          "variable": "peak_par",
+          "value": 1500.0,
+          "unit": "umol/(m**2*s)"
+        },
+        {
+          "variable": "photoperiod",
+          "value": 14.0,
+          "unit": "h"
+        },
+        {
+          "variable": "temperature_mean",
+          "value": 295.15,
+          "unit": "K"
+        }
+      ],
+      "uncertainty": {
+        "status": "unknown",
+        "reason": "No sourced or measured uncertainty; no estimate assigned."
+      },
+      "calibration": {
+        "status": "none",
+        "refs": []
+      },
+      "validity_domain": {
+        "status": "not_established",
+        "model_structural_domain": [
+          {
+            "variable": "duration",
+            "lower": {
+              "value": 0.0,
+              "unit": "d"
+            },
+            "upper": {
+              "value": 366.0,
+              "unit": "d"
+            }
+          },
+          {
+            "variable": "photoperiod",
+            "lower": {
+              "value": 0.0,
+              "unit": "h"
+            },
+            "upper": {
+              "value": 24.0,
+              "unit": "h"
+            }
+          }
+        ]
+      },
+      "benchmark": {
+        "status": "none",
+        "refs": []
+      },
+      "qualification_status": "unqualified"
+    },
+    {
+      "name": "biomass_nitrogen_fraction",
+      "value": 0.07,
+      "unit": "1",
+      "source": "NONE",
+      "provenance_kind": "synthetic_fixture",
+      "organism": "Nannochloropsis gaditana (intended model target; coefficients are not species measurements)",
+      "strain": "unspecified",
+      "conditions": [
+        {
+          "variable": "peak_par",
+          "value": 1500.0,
+          "unit": "umol/(m**2*s)"
+        },
+        {
+          "variable": "photoperiod",
+          "value": 14.0,
+          "unit": "h"
+        },
+        {
+          "variable": "temperature_mean",
+          "value": 295.15,
+          "unit": "K"
+        }
+      ],
+      "uncertainty": {
+        "status": "unknown",
+        "reason": "No sourced or measured uncertainty; no estimate assigned."
+      },
+      "calibration": {
+        "status": "none",
+        "refs": []
+      },
+      "validity_domain": {
+        "status": "not_established",
+        "model_structural_domain": [
+          {
+            "variable": "duration",
+            "lower": {
+              "value": 0.0,
+              "unit": "d"
+            },
+            "upper": {
+              "value": 366.0,
+              "unit": "d"
+            }
+          },
+          {
+            "variable": "photoperiod",
+            "lower": {
+              "value": 0.0,
+              "unit": "h"
+            },
+            "upper": {
+              "value": 24.0,
+              "unit": "h"
+            }
+          }
+        ]
+      },
+      "benchmark": {
+        "status": "none",
+        "refs": []
+      },
+      "qualification_status": "unqualified"
+    },
+    {
+      "name": "oxygen_yield",
+      "value": 1.4,
+      "unit": "1",
+      "source": "NONE",
+      "provenance_kind": "synthetic_fixture",
+      "organism": "Nannochloropsis gaditana (intended model target; coefficients are not species measurements)",
+      "strain": "unspecified",
+      "conditions": [
+        {
+          "variable": "peak_par",
+          "value": 1500.0,
+          "unit": "umol/(m**2*s)"
+        },
+        {
+          "variable": "photoperiod",
+          "value": 14.0,
+          "unit": "h"
+        },
+        {
+          "variable": "temperature_mean",
+          "value": 295.15,
+          "unit": "K"
+        }
+      ],
+      "uncertainty": {
+        "status": "unknown",
+        "reason": "No sourced or measured uncertainty; no estimate assigned."
+      },
+      "calibration": {
+        "status": "none",
+        "refs": []
+      },
+      "validity_domain": {
+        "status": "not_established",
+        "model_structural_domain": [
+          {
+            "variable": "duration",
+            "lower": {
+              "value": 0.0,
+              "unit": "d"
+            },
+            "upper": {
+              "value": 366.0,
+              "unit": "d"
+            }
+          },
+          {
+            "variable": "photoperiod",
+            "lower": {
+              "value": 0.0,
+              "unit": "h"
+            },
+            "upper": {
+              "value": 24.0,
+              "unit": "h"
+            }
+          }
+        ]
+      },
+      "benchmark": {
+        "status": "none",
+        "refs": []
+      },
+      "qualification_status": "unqualified"
+    },
+    {
+      "name": "oxygen_kla",
+      "value": 5.0,
+      "unit": "1/h",
+      "source": "NONE",
+      "provenance_kind": "synthetic_fixture",
+      "organism": "Nannochloropsis gaditana (intended model target; coefficients are not species measurements)",
+      "strain": "unspecified",
+      "conditions": [
+        {
+          "variable": "peak_par",
+          "value": 1500.0,
+          "unit": "umol/(m**2*s)"
+        },
+        {
+          "variable": "photoperiod",
+          "value": 14.0,
+          "unit": "h"
+        },
+        {
+          "variable": "temperature_mean",
+          "value": 295.15,
+          "unit": "K"
+        }
+      ],
+      "uncertainty": {
+        "status": "unknown",
+        "reason": "No sourced or measured uncertainty; no estimate assigned."
+      },
+      "calibration": {
+        "status": "none",
+        "refs": []
+      },
+      "validity_domain": {
+        "status": "not_established",
+        "model_structural_domain": [
+          {
+            "variable": "duration",
+            "lower": {
+              "value": 0.0,
+              "unit": "d"
+            },
+            "upper": {
+              "value": 366.0,
+              "unit": "d"
+            }
+          },
+          {
+            "variable": "photoperiod",
+            "lower": {
+              "value": 0.0,
+              "unit": "h"
+            },
+            "upper": {
+              "value": 24.0,
+              "unit": "h"
+            }
+          }
+        ]
+      },
+      "benchmark": {
+        "status": "none",
+        "refs": []
+      },
+      "qualification_status": "unqualified"
+    },
+    {
+      "name": "oxygen_saturation",
+      "value": 0.0075,
+      "unit": "kg/m3",
+      "source": "NONE",
+      "provenance_kind": "synthetic_fixture",
+      "organism": "Nannochloropsis gaditana (intended model target; coefficients are not species measurements)",
+      "strain": "unspecified",
+      "conditions": [
+        {
+          "variable": "peak_par",
+          "value": 1500.0,
+          "unit": "umol/(m**2*s)"
+        },
+        {
+          "variable": "photoperiod",
+          "value": 14.0,
+          "unit": "h"
+        },
+        {
+          "variable": "temperature_mean",
+          "value": 295.15,
+          "unit": "K"
+        }
+      ],
+      "uncertainty": {
+        "status": "unknown",
+        "reason": "No sourced or measured uncertainty; no estimate assigned."
+      },
+      "calibration": {
+        "status": "none",
+        "refs": []
+      },
+      "validity_domain": {
+        "status": "not_established",
+        "model_structural_domain": [
+          {
+            "variable": "duration",
+            "lower": {
+              "value": 0.0,
+              "unit": "d"
+            },
+            "upper": {
+              "value": 366.0,
+              "unit": "d"
+            }
+          },
+          {
+            "variable": "photoperiod",
+            "lower": {
+              "value": 0.0,
+              "unit": "h"
+            },
+            "upper": {
+              "value": 24.0,
+              "unit": "h"
+            }
+          }
+        ]
+      },
+      "benchmark": {
+        "status": "none",
+        "refs": []
+      },
+      "qualification_status": "unqualified"
+    },
+    {
+      "name": "temperature_min",
+      "value": 278.15,
+      "unit": "K",
+      "source": "NONE",
+      "provenance_kind": "synthetic_fixture",
+      "organism": "Nannochloropsis gaditana (intended model target; coefficients are not species measurements)",
+      "strain": "unspecified",
+      "conditions": [
+        {
+          "variable": "peak_par",
+          "value": 1500.0,
+          "unit": "umol/(m**2*s)"
+        },
+        {
+          "variable": "photoperiod",
+          "value": 14.0,
+          "unit": "h"
+        },
+        {
+          "variable": "temperature_mean",
+          "value": 295.15,
+          "unit": "K"
+        }
+      ],
+      "uncertainty": {
+        "status": "unknown",
+        "reason": "No sourced or measured uncertainty; no estimate assigned."
+      },
+      "calibration": {
+        "status": "none",
+        "refs": []
+      },
+      "validity_domain": {
+        "status": "not_established",
+        "model_structural_domain": [
+          {
+            "variable": "duration",
+            "lower": {
+              "value": 0.0,
+              "unit": "d"
+            },
+            "upper": {
+              "value": 366.0,
+              "unit": "d"
+            }
+          },
+          {
+            "variable": "photoperiod",
+            "lower": {
+              "value": 0.0,
+              "unit": "h"
+            },
+            "upper": {
+              "value": 24.0,
+              "unit": "h"
+            }
+          }
+        ]
+      },
+      "benchmark": {
+        "status": "none",
+        "refs": []
+      },
+      "qualification_status": "unqualified"
+    },
+    {
+      "name": "temperature_opt",
+      "value": 298.15,
+      "unit": "K",
+      "source": "NONE",
+      "provenance_kind": "synthetic_fixture",
+      "organism": "Nannochloropsis gaditana (intended model target; coefficients are not species measurements)",
+      "strain": "unspecified",
+      "conditions": [
+        {
+          "variable": "peak_par",
+          "value": 1500.0,
+          "unit": "umol/(m**2*s)"
+        },
+        {
+          "variable": "photoperiod",
+          "value": 14.0,
+          "unit": "h"
+        },
+        {
+          "variable": "temperature_mean",
+          "value": 295.15,
+          "unit": "K"
+        }
+      ],
+      "uncertainty": {
+        "status": "unknown",
+        "reason": "No sourced or measured uncertainty; no estimate assigned."
+      },
+      "calibration": {
+        "status": "none",
+        "refs": []
+      },
+      "validity_domain": {
+        "status": "not_established",
+        "model_structural_domain": [
+          {
+            "variable": "duration",
+            "lower": {
+              "value": 0.0,
+              "unit": "d"
+            },
+            "upper": {
+              "value": 366.0,
+              "unit": "d"
+            }
+          },
+          {
+            "variable": "photoperiod",
+            "lower": {
+              "value": 0.0,
+              "unit": "h"
+            },
+            "upper": {
+              "value": 24.0,
+              "unit": "h"
+            }
+          }
+        ]
+      },
+      "benchmark": {
+        "status": "none",
+        "refs": []
+      },
+      "qualification_status": "unqualified"
+    },
+    {
+      "name": "temperature_max",
+      "value": 308.15,
+      "unit": "K",
+      "source": "NONE",
+      "provenance_kind": "synthetic_fixture",
+      "organism": "Nannochloropsis gaditana (intended model target; coefficients are not species measurements)",
+      "strain": "unspecified",
+      "conditions": [
+        {
+          "variable": "peak_par",
+          "value": 1500.0,
+          "unit": "umol/(m**2*s)"
+        },
+        {
+          "variable": "photoperiod",
+          "value": 14.0,
+          "unit": "h"
+        },
+        {
+          "variable": "temperature_mean",
+          "value": 295.15,
+          "unit": "K"
+        }
+      ],
+      "uncertainty": {
+        "status": "unknown",
+        "reason": "No sourced or measured uncertainty; no estimate assigned."
+      },
+      "calibration": {
+        "status": "none",
+        "refs": []
+      },
+      "validity_domain": {
+        "status": "not_established",
+        "model_structural_domain": [
+          {
+            "variable": "duration",
+            "lower": {
+              "value": 0.0,
+              "unit": "d"
+            },
+            "upper": {
+              "value": 366.0,
+              "unit": "d"
+            }
+          },
+          {
+            "variable": "photoperiod",
+            "lower": {
+              "value": 0.0,
+              "unit": "h"
+            },
+            "upper": {
+              "value": 24.0,
+              "unit": "h"
+            }
+          }
+        ]
+      },
+      "benchmark": {
+        "status": "none",
+        "refs": []
+      },
+      "qualification_status": "unqualified"
+    }
+  ],
+  "model_gaps": [
+    "heat_balance: liquid temperature is prescribed; no solar/ambient/pump heat balance or cooling duty",
+    "seawater_properties: loop hydraulics use pure-water CoolProp properties at the mean temperature",
+    "tube_light_geometry: one-side-lit slab of depth = tube diameter; no circular/multi-side/diffuse light",
+    "photoacclimation_and_light_dark_cycling: no pigment adaptation or flashing-light effect",
+    "oxygen_inhibition: dissolved O2 does not inhibit growth; only reported as saturation ratio",
+    "carbon_ph: no CO2/bicarbonate/pH balance; carbon assumed non-limiting",
+    "nutrient_quota: fixed biomass N quota (no Droop/storage); phosphorus not modelled",
+    "loss_temperature_dependence: biomass loss rate is temperature independent",
+    "hydraulic_losses: straight smooth tube only; no bends, fittings, degasser or manifold losses",
+    "storage: no post-harvest storage/degradation model"
+  ],
+  "qualification_limit": "synthetic_fixture provenance cannot support a status above candidate under spec 102; this record is unqualified"
+}

@@ -1,0 +1,50 @@
+{
+  "provenance": {
+    "kind": "synthetic_fixture",
+    "source": "NONE",
+    "organism": "Nannochloropsis gaditana (intended model target; coefficients are not species measurements)",
+    "strain": "unspecified",
+    "conditions": {
+      "note": "Synthetic solver exercise only; no culture, measurement, literature, calibration, or benchmark basis."
+    },
+    "note": "Every coefficient is a synthetic placeholder. The values only exercise the evaluator and cannot establish biological or physical validity."
+  },
+  "basis_ref": {
+    "authority_owner": "repository",
+    "object_type": "synthetic_parameter_set",
+    "object_id": "scripts/qualification/107/synthetic-parameters.json",
+    "revision": "pbr_day_night.v2-synthetic-1"
+  },
+  "coefficients": {
+    "max_specific_growth_rate": [0.0625, "1/h"],
+    "light_saturation_constant": [150.0, "umol/(m**2*s)"],
+    "light_inhibition_constant": [2000.0, "umol/(m**2*s)"],
+    "specific_light_extinction": [150.0, "m**2/kg"],
+    "biomass_loss_rate": [0.004166666666666667, "1/h"],
+    "nitrogen_half_saturation": [0.001, "kg/m3"],
+    "biomass_nitrogen_fraction": [0.07, "1"],
+    "oxygen_yield": [1.4, "1"],
+    "oxygen_kla": [5.0, "1/h"],
+    "oxygen_saturation": [0.0075, "kg/m3"],
+    "temperature_min": [278.15, "K"],
+    "temperature_opt": [298.15, "K"],
+    "temperature_max": [308.15, "K"]
+  },
+  "design": {
+    "initial_biomass": [0.5, "kg/m3"],
+    "initial_nitrogen": [0.05, "kg/m3"],
+    "initial_dissolved_oxygen": [0.0075, "kg/m3"],
+    "peak_par": [1500.0, "umol/(m**2*s)"],
+    "photoperiod": [14.0, "h"],
+    "temperature_mean": [295.15, "K"],
+    "temperature_amplitude": [3.0, "K"],
+    "duration": [10.0, "d"],
+    "tube_inner_diameter": [0.05, "m"],
+    "loop_length": [100.0, "m"],
+    "liquid_velocity": [0.5, "m/s"],
+    "pump_efficiency": [0.6, "1"],
+    "harvest_fraction": [0.2, "1"],
+    "harvest_hour": [10.0, "h"],
+    "medium_nitrogen": [0.05, "kg/m3"]
+  }
+}
