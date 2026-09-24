@@ -1,0 +1,463 @@
+"""Jarvis-owned Hermes process, session projection and governed relay."""
+from __future__ import annotations
+
+import json
+import os
+import sqlite3
+import subprocess
+import threading
+from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from typing import Any
+from uuid import uuid4
+
+from app.core.database import open_sqlite_connection
+from app.core.paths import build_paths
+from app.modules.ai.agent_contracts import (
+    AgentControlCommand,
+    AgentEvent,
+    AgentSessionRef,
+    CapabilityGrantRef,
+    InferenceEnvelope,
+    StructuredToolCall,
+    StructuredToolResult,
+    check_control_target,
+    run_ai_task_kwargs,
+)
+from app.modules.ai.context_builder import canonical_digest
+from app.modules.ai.execution import AiTaskOutcome, run_ai_task
+from app.modules.ai.jarvis_context import PRODUCTION_CAPABILITY_REGISTRY, build_jarvis_context_preview
+from app.modules.ai.jarvis_context_models import JarvisCapabilityDescriptor, JarvisContextRequest
+from app.modules.events.service import log_event
+
+UPSTREAM_REVISION = "d337b736aa1e8ebecfab043842d13e4a2d2f48a3"
+_MAPPING_EVENT = "hermes.session_bound"
+_AGENT_EVENT = "hermes.agent_event"
+_CONTROL_EVENT = "hermes.control"
+_MAX_FRAME = 2_000_000
+
+PRODUCTION_CAPABILITY_REGISTRY.register(JarvisCapabilityDescriptor(
+    capability_id="jarvis.context_preview", route_id="ai-threads", action_class="CONTEXT",
+    label="Preview exact Jarvis context",
+))
+
+
+def current_mapping(connection: sqlite3.Connection, thread_id: str) -> AgentSessionRef | None:
+    row = connection.execute(
+        "SELECT payload FROM events WHERE event_type = ? AND target_id = ? "
+        "ORDER BY rowid DESC LIMIT 1", (_MAPPING_EVENT, thread_id),
+    ).fetchone()
+    return AgentSessionRef.model_validate(json.loads(row["payload"])["session_ref"]) if row else None
+
+
+def bind_session(
+    connection: sqlite3.Connection, *, thread_id: str, workspace_id: str,
+    profile_id: str, hermes_session_id: str,
+) -> AgentSessionRef:
+    """Idempotent binding; recovery with a new session increments generation."""
+    thread = connection.execute(
+        "SELECT workspace_id FROM ai_threads WHERE id = ?", (thread_id,),
+    ).fetchone()
+    if thread is None or thread["workspace_id"] != workspace_id:
+        raise ValueError("thread/workspace mapping does not exist")
+    current = current_mapping(connection, thread_id)
+    if current is not None and current.hermes_session_id == hermes_session_id:
+        if current.profile_id != profile_id:
+            raise ValueError("Hermes session already bound to another profile")
+        return current
+    ref = AgentSessionRef(
+        jarvis_thread_id=thread_id, hermes_session_id=hermes_session_id,
+        profile_id=profile_id, workspace_id=workspace_id,
+        generation=1 if current is None else current.generation + 1,
+        upstream_revision=UPSTREAM_REVISION,
+    )
+    log_event(connection, event_type=_MAPPING_EVENT, actor="jarvis", target_type="ai_thread",
+              target_id=thread_id, workspace_id=workspace_id,
+              payload={"session_ref": ref.model_dump(mode="json")})
+    return ref
+
+
+def project_event(connection: sqlite3.Connection, event: AgentEvent) -> bool:
+    """Project only ordered, current, unique event metadata into the canonical event owner."""
+    ref = event.session_ref
+    if current_mapping(connection, ref.jarvis_thread_id) != ref:
+        return False
+    existing = connection.execute(
+        "SELECT 1 FROM events WHERE event_type = ? AND target_id = ?", (_AGENT_EVENT, event.event_id),
+    ).fetchone()
+    if existing:
+        return False
+    row = connection.execute(
+        "SELECT payload FROM events WHERE event_type = ? AND workspace_id = ? "
+        "ORDER BY rowid DESC", (_AGENT_EVENT, ref.workspace_id),
+    ).fetchall()
+    last_sequence = max((int(json.loads(item["payload"])["sequence"]) for item in row
+                         if json.loads(item["payload"])["session_ref"] == ref.model_dump(mode="json")), default=-1)
+    if event.sequence <= last_sequence:
+        return False
+    log_event(connection, event_type=_AGENT_EVENT, actor="hermes", target_type="agent_event",
+              target_id=event.event_id, workspace_id=ref.workspace_id,
+              payload=event.model_dump(mode="json"))
+    return True
+
+
+def worker_environment(home: Path, backend_root: Path) -> dict[str, str]:
+    """Allowlist excludes provider credentials, ambient Python config and user secrets."""
+    return {
+        "PATH": os.environ.get("PATH", ""), "PYTHONPATH": str(backend_root),
+        "HERMES_HOME": str(home), "PYTHONUNBUFFERED": "1",
+        "HERMES_DISABLE_LAZY_INSTALLS": "1", "HERMES_ACP_SKIP_CONFIGURED_MCP": "1",
+        "HTTP_PROXY": "http://127.0.0.1:9", "HTTPS_PROXY": "http://127.0.0.1:9",
+        "http_proxy": "http://127.0.0.1:9", "https_proxy": "http://127.0.0.1:9",
+        "NO_PROXY": "127.0.0.1,localhost", "no_proxy": "127.0.0.1,localhost",
+        "HOME": str(home), "XDG_CONFIG_HOME": str(home),
+    }
+
+
+def infer_envelope(frame: dict[str, Any], *, deadline_seconds: int = 120,
+                   route_class: str | None = None) -> InferenceEnvelope:
+    """Untrusted OpenAI request becomes a bounded frozen Jarvis envelope."""
+    ref = AgentSessionRef.model_validate(frame["session_ref"])
+    messages = frame["messages"]
+    if not isinstance(messages, list) or not messages:
+        raise ValueError("messages must be a nonempty array")
+    for message in messages:
+        if not isinstance(message, dict) or message.get("role") not in {"system", "developer", "user", "assistant", "tool"}:
+            raise ValueError("invalid message role")
+        content = message.get("content")
+        if not isinstance(content, str) and not (
+            message["role"] == "assistant" and content is None
+            and isinstance(message.get("tool_calls"), list)
+        ):
+            raise ValueError("only text and assistant tool-call messages are admitted")
+        if "base_url" in message or "provider" in message:
+            raise ValueError("direct provider override refused")
+    if "base_url" in frame or "provider" in frame:
+        raise ValueError("direct provider override refused")
+    tools = frame.get("tools")
+    if tools is not None:
+        if not isinstance(tools, list) or any(
+            not isinstance(tool, dict)
+            or not isinstance(tool.get("function"), dict)
+            or tool["function"].get("name") != "mcp__jarvis__jarvis_context_preview"
+            for tool in tools
+        ):
+            raise ValueError("unapproved tool schema")
+    now = datetime.now(UTC)
+    return InferenceEnvelope(
+        envelope_id=str(uuid4()), correlation_id=str(frame["id"]),
+        task_kind=str(frame.get("task_kind", "general")),
+        workspace_id=ref.workspace_id,
+        prompt=json.dumps({"messages": messages, "tools": tools}, ensure_ascii=False) if tools else
+               json.dumps(messages, ensure_ascii=False),
+        route_class=route_class,
+        model_candidate=str(frame["model_candidate"])[:256] if frame.get("model_candidate") else None,
+        max_output_tokens=frame.get("max_output_tokens"), agent_session=ref,
+        cancellation_id=ref.hermes_session_id, requested_at=now,
+        deadline_at=now + timedelta(seconds=deadline_seconds),
+    )
+
+
+def run_governed_inference(
+    envelope: InferenceEnvelope, *,
+    runner: Callable[..., AiTaskOutcome] = run_ai_task,
+    cancelled: Callable[[str], bool] | None = None,
+    on_outcome: Callable[[AiTaskOutcome], None] | None = None,
+) -> dict[str, str]:
+    if envelope.agent_session is None:
+        return {"status": "refused"}
+    if envelope.is_expired(datetime.now(UTC)) or (cancelled and envelope.cancellation_id and cancelled(envelope.cancellation_id)):
+        return {"status": "cancelled"}
+    outcome = runner(**run_ai_task_kwargs(envelope))
+    if on_outcome is not None:
+        on_outcome(outcome)
+    if envelope.is_expired(datetime.now(UTC)) or (cancelled and envelope.cancellation_id and cancelled(envelope.cancellation_id)):
+        return {"status": "cancelled"}
+    if outcome.status != "success" or outcome.response is None or outcome.response.text is None:
+        return {"status": "refused"}
+    return {"status": "success", "text": outcome.response.text}
+
+
+def dispatch_tool(
+    call: StructuredToolCall, *, live_grants: dict[str, CapabilityGrantRef],
+) -> StructuredToolResult:
+    now = datetime.now(UTC)
+    grant = live_grants.get(call.grant_id)
+    error = "capability_denied"
+    result: dict[str, Any] | None = None
+    if call.session_ref is not None and grant is not None and grant.is_active(now) and not call.is_expired(now):
+        scope = grant.scope
+        if (grant.capability_id == call.capability_id and scope.workspace_id == call.session_ref.workspace_id
+                and scope.jarvis_thread_id in (None, call.session_ref.jarvis_thread_id)):
+            descriptors = PRODUCTION_CAPABILITY_REGISTRY.for_route("ai-threads")
+            descriptor = next((item for item in descriptors if item.capability_id == call.capability_id), None)
+            if descriptor is not None and descriptor.action_class in {"READ", "CONTEXT", "PROPOSE"}:
+                if call.capability_id == "jarvis.context_preview":
+                    try:
+                        request = JarvisContextRequest.model_validate(call.arguments)
+                        allowed_refs = {(item.authority_owner, item.object_type, item.object_id)
+                                        for item in scope.object_refs}
+                        requested_refs = {(item.owner, item.kind, item.id)
+                                          for item in [*request.selected_refs, *request.added_context_refs]}
+                        if request.workspace_id == scope.workspace_id and (not allowed_refs or requested_refs <= allowed_refs):
+                            result = build_jarvis_context_preview(request).model_dump(mode="json")
+                    except ValueError:
+                        error = "invalid_arguments"
+    return StructuredToolResult(
+        call_id=call.call_id, capability_id=call.capability_id,
+        status="succeeded" if result is not None else "refused",
+        result=result, error_code=None if result is not None else error,
+        completed_at=now,
+    )
+
+
+class HermesSupervisor:
+    """One worker per backend instance; caller serializes state-changing operations."""
+
+    def __init__(self, python: str, *, distro: str | None = None,
+                 backend_root: Path | None = None, wsl_home: str | None = None,
+                 wsl_backend_root: str | None = None,
+                 route_for_task: Callable[[str], str | None] | None = None) -> None:
+        self.python = python
+        self.distro = distro
+        self.backend_root = backend_root or Path(__file__).resolve().parents[4]
+        self.home = build_paths().data_root / "hermes"
+        self.wsl_home = wsl_home
+        self.wsl_backend_root = wsl_backend_root
+        self.route_for_task = route_for_task or (lambda _task_kind: None)
+        self.process: subprocess.Popen[str] | None = None
+        self.responses: dict[str, dict[str, Any]] = {}
+        self.response_ready = threading.Condition()
+        self.session: AgentSessionRef | None = None
+        self.last_error: str | None = None
+        self.cancelled: set[str] = set()
+        self.live_grants: dict[str, CapabilityGrantRef] = {}
+        self.last_flow: dict[str, str] = {}
+
+    def _read_worker(self, process: subprocess.Popen[str]) -> None:
+        assert process.stdout is not None
+        for line in process.stdout:
+            if len(line) > _MAX_FRAME:
+                continue
+            try:
+                frame = json.loads(line)
+                if isinstance(frame, dict):
+                    if frame.get("type") == "relay_request":
+                        threading.Thread(target=self._handle_relay, args=(frame,), daemon=True).start()
+                    elif frame.get("type") == "tool_call":
+                        threading.Thread(target=self._handle_tool, args=(frame,), daemon=True).start()
+                    elif frame.get("type") == "agent_event":
+                        try:
+                            event = AgentEvent.model_validate(frame["event"])
+                            with open_sqlite_connection() as connection:
+                                project_event(connection, event)
+                                connection.commit()
+                        except (ValueError, KeyError, sqlite3.Error):
+                            self.last_error = "invalid_agent_event"
+                    else:
+                        with self.response_ready:
+                            self.responses[str(frame.get("id", "ready"))] = frame
+                            self.response_ready.notify_all()
+            except json.JSONDecodeError:
+                self.last_error = "invalid_worker_frame"
+
+    def start(self) -> None:
+        if self.process is not None and self.process.poll() is None:
+            return
+        self.home.mkdir(parents=True, exist_ok=True)
+        env = worker_environment(self.home, self.backend_root)
+        if self.distro:
+            if not self.wsl_home or not self.wsl_backend_root:
+                raise ValueError("WSL requires explicit Linux HERMES_HOME and backend paths")
+            env["HERMES_HOME"] = self.wsl_home
+            env["HOME"] = self.wsl_home
+            env["XDG_CONFIG_HOME"] = self.wsl_home
+            env["PYTHONPATH"] = self.wsl_backend_root
+            env["PATH"] = "/usr/local/bin:/usr/bin:/bin"
+            command = ["wsl.exe", "-d", self.distro, "--", "env", "-i", *[f"{key}={value}" for key, value in env.items()],
+                       self.python, "-m", "app.modules.agents.hermes.worker_shim"]
+            process_env = None
+        else:
+            command = [self.python, "-m", "app.modules.agents.hermes.worker_shim"]
+            process_env = env
+        self.process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                        stderr=subprocess.DEVNULL, text=True, bufsize=1, env=process_env)
+        threading.Thread(target=self._read_worker, args=(self.process,), daemon=True).start()
+        ready = self._await("ready", timeout=30)
+        if ready.get("type") != "ready" or ready.get("upstream_revision") != UPSTREAM_REVISION:
+            self.process.kill()
+            raise RuntimeError("Hermes worker revision/health check failed")
+
+    def _send(self, frame: dict[str, Any]) -> None:
+        if self.process is None or self.process.poll() is not None or self.process.stdin is None:
+            raise RuntimeError("Hermes worker unavailable")
+        self.process.stdin.write(json.dumps(frame, separators=(",", ":")) + "\n")
+        self.process.stdin.flush()
+
+    def _await(self, request_id: str, *, timeout: float = 180) -> dict[str, Any]:
+        with self.response_ready:
+            if not self.response_ready.wait_for(lambda: request_id in self.responses, timeout=timeout):
+                raise RuntimeError("Hermes worker timed out")
+            return self.responses.pop(request_id)
+
+    def _handle_relay(self, frame: dict[str, Any]) -> None:
+        try:
+            envelope = infer_envelope(frame, route_class=self.route_for_task(str(frame.get("task_kind", "general"))))
+            if envelope.agent_session != self.session:
+                result = {"status": "refused"}
+            else:
+                def record_flow(outcome: AiTaskOutcome) -> None:
+                    if outcome.flow_id and envelope.agent_session is not None and envelope.task_kind == "general":
+                        self.last_flow[envelope.agent_session.hermes_session_id] = outcome.flow_id
+
+                result = run_governed_inference(
+                    envelope, cancelled=lambda value: value in self.cancelled, on_outcome=record_flow,
+                )
+        except (ValueError, KeyError):
+            result = {"status": "refused"}
+        try:
+            self._send({"type": "relay_result", "id": frame.get("id"), **result})
+        except RuntimeError:
+            self.last_error = "worker_lost_during_inference"
+
+    def _handle_tool(self, frame: dict[str, Any]) -> None:
+        now = datetime.now(UTC)
+        try:
+            ref = AgentSessionRef.model_validate(frame["session_ref"])
+            arguments = frame["arguments"]
+            if ref != self.session or not isinstance(arguments, dict):
+                raise ValueError("stale or malformed tool call")
+            call = StructuredToolCall(
+                call_id=str(frame["id"]), capability_id="jarvis.context_preview",
+                grant_id=arguments["grant_id"], correlation_id=str(frame["id"]),
+                session_ref=ref, arguments=arguments["request"],
+                requested_at=now, deadline_at=now + timedelta(seconds=120),
+            )
+            result = dispatch_tool(call, live_grants=self.live_grants)
+            with open_sqlite_connection() as connection:
+                log_event(connection, event_type="hermes.tool_result", actor="jarvis",
+                          target_type="agent_tool_call", target_id=call.call_id,
+                          workspace_id=ref.workspace_id,
+                          payload={"call_id": call.call_id, "capability_id": call.capability_id,
+                                   "status": result.status, "error_code": result.error_code,
+                                   "session_ref": ref.model_dump(mode="json")})
+                connection.commit()
+        except (ValueError, KeyError, sqlite3.Error):
+            result = StructuredToolResult(
+                call_id=str(frame.get("id", "unknown")), capability_id="jarvis.context_preview",
+                status="refused", error_code="capability_denied", completed_at=now,
+            )
+        try:
+            self._send({"type": "tool_result", "id": frame.get("id"),
+                        "tool_result": result.model_dump(mode="json")})
+        except RuntimeError:
+            self.last_error = "worker_lost_during_tool"
+
+    def control(self, command: AgentControlCommand) -> AgentSessionRef | None:
+        with open_sqlite_connection() as connection:
+            current = current_mapping(connection, command.jarvis_thread_id)
+            previous = connection.execute(
+                "SELECT payload FROM events WHERE event_type = ? AND target_id = ? ORDER BY rowid DESC LIMIT 1",
+                (_CONTROL_EVENT, command.command_id),
+            ).fetchone()
+            if previous:
+                recorded = json.loads(previous["payload"])
+                if recorded["command"] != command.model_dump(mode="json"):
+                    raise ValueError("control command id reused with different content")
+                return AgentSessionRef.model_validate(recorded["session_ref"])
+            if command.kind != "start" and current is not None and (self.process is None or self.process.poll() is not None):
+                self._recover(current)
+                current = self.session
+            check_control_target(command, current, now=datetime.now(UTC))
+            if command.kind == "start":
+                self.start()
+                ref = bind_session(connection, thread_id=command.jarvis_thread_id,
+                                   workspace_id=command.workspace_id, profile_id=command.profile_id,
+                                   hermes_session_id=str(uuid4()))
+            else:
+                assert current is not None
+                ref = current
+            request_id = command.command_id
+            if command.kind == "start":
+                self._send({"type": "bind", "id": request_id, "session_ref": ref.model_dump(mode="json")})
+            elif self.session != ref:
+                bind_id = str(uuid4())
+                self._send({"type": "bind", "id": bind_id, "session_ref": ref.model_dump(mode="json")})
+                if self._await(bind_id, timeout=30).get("type") != "ack":
+                    raise RuntimeError("Hermes session switch failed")
+            if command.kind == "interrupt":
+                self.cancelled.add(ref.hermes_session_id)
+                self._send({"type": "interrupt", "id": request_id})
+            elif command.kind == "resume":
+                self.cancelled.discard(ref.hermes_session_id)
+                self._send({"type": "resume", "id": request_id})
+            elif command.kind == "close":
+                self._send({"type": "close", "id": request_id})
+            response = self._await(request_id, timeout=30)
+            if response.get("type") != "ack":
+                raise RuntimeError("Hermes control failed")
+            self.session = ref
+            log_event(connection, event_type=_CONTROL_EVENT, actor="jarvis", target_type="control_command",
+                      target_id=command.command_id, workspace_id=command.workspace_id,
+                      payload={"session_ref": ref.model_dump(mode="json"),
+                               "command": command.model_dump(mode="json")})
+            connection.commit()
+            if command.kind == "close":
+                self.session = None
+            return ref
+
+    def _recover(self, old: AgentSessionRef) -> None:
+        self.last_error = "worker_lost"
+        self.start()
+        with open_sqlite_connection() as connection:
+            self.session = bind_session(connection, thread_id=old.jarvis_thread_id,
+                                        workspace_id=old.workspace_id, profile_id=old.profile_id,
+                                        hermes_session_id=str(uuid4()))
+            connection.commit()
+        assert self.session is not None
+        request_id = str(uuid4())
+        self._send({"type": "bind", "id": request_id, "session_ref": self.session.model_dump(mode="json")})
+        self._await(request_id, timeout=30)
+
+    def turn(self, prompt: str) -> dict[str, Any]:
+        if self.session is None:
+            raise RuntimeError("no bound Hermes session")
+        if not prompt or len(prompt) > 12_000:
+            raise ValueError("Hermes turn prompt must be 1..12000 characters")
+        if self.process is None or self.process.poll() is not None:
+            self._recover(self.session)
+        self.last_flow.pop(self.session.hermes_session_id, None)
+        request_id = str(uuid4())
+        self._send({"type": "turn", "id": request_id, "prompt": prompt})
+        response = self._await(request_id)
+        if response.get("status") == "success" and response.get("completed") is True:
+            final = response.get("final_response")
+            flow_id = self.last_flow.get(self.session.hermes_session_id)
+            if not isinstance(final, str) or not isinstance(flow_id, str):
+                raise RuntimeError("Hermes turn lacks a durable Jarvis inference flow")
+            with open_sqlite_connection() as connection:
+                connection.execute("BEGIN IMMEDIATE")
+                index = connection.execute(
+                    "SELECT COALESCE(MAX(interaction_index), -1) + 1 FROM ai_thread_interactions WHERE thread_id = ?",
+                    (self.session.jarvis_thread_id,),
+                ).fetchone()[0]
+                now = datetime.now(UTC).isoformat()
+                connection.execute(
+                    "INSERT INTO ai_thread_interactions (id, thread_id, request_id, request_digest, "
+                    "interaction_index, user_text, assistant_text, assistant_text_truncated, flow_id, "
+                    "persistence_state, created_at, updated_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'captured', ?, ?)",
+                    (str(uuid4()), self.session.jarvis_thread_id, request_id,
+                     canonical_digest({"prompt": prompt}), index, prompt, final[:131_072],
+                     int(len(final) > 131_072), flow_id, now, now),
+                )
+                connection.commit()
+        return response
+
+    def status(self) -> dict[str, str | int | None]:
+        return {"worker_pid": self.process.pid if self.process and self.process.poll() is None else None,
+                "state": "running" if self.process and self.process.poll() is None else "stopped",
+                "upstream_revision": UPSTREAM_REVISION,
+                "generation": self.session.generation if self.session else None,
+                "last_error": self.last_error}
