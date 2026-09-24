@@ -39,7 +39,7 @@ warn_redundant_casts = true
 # Focus on the running backend; the offline local_ai evaluation harness is
 # research scaffolding and is excluded for now, except the frozen 145 shared
 # contracts in local_ai (the directory itself must stay unmatched to be walked).
-exclude = '(^|/)local_ai_eval/|(^|/)local_ai/(?!(decision|resource)_contracts\.py$).+'
+exclude = '(^|/)local_ai_eval/|(^|/)local_ai/(?!(decision|resource)_contracts\.py$|(?:decision_service|resource_arbiter|local_router)\.py$|runtime/resource_observation\.py$).+'
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
