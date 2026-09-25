@@ -308,6 +308,11 @@ try {
   page.on("console", (message) => { if (message.type() === "error") consoleErrors.push(message.text()); });
   page.on("pageerror", (error) => pageErrors.push(String(error)));
   await startBackend(isLlamaCpp ? "" : "http://127.0.0.1:11436/api/generate");
+  const firstPassStatus = isLlamaCpp ? await runtimeRequest("") : null;
+  if (isLlamaCpp) {
+    assert(!firstPassStatus.runtime_reachable && !firstPassStatus.pid && !firstPassStatus.spawned_by_jarvis,
+      `llama.cpp runtime was expected to be stopped in pass 1: ${JSON.stringify(firstPassStatus)}`);
+  }
   const workspaceResponse = await fetch(`${backendUrl}/workspaces`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: "151 Sidecar Operator Proof", slug: `sidecar-${Date.now()}` }) });
   assert(workspaceResponse.ok, `workspace creation failed: ${workspaceResponse.status}`);
   workspaceId = (await workspaceResponse.json()).id;
@@ -315,7 +320,7 @@ try {
   await openSidecar();
   const unreachableOptions = await optionRecords();
   const unreachable = unreachableOptions.find((item) => item.value === route);
-  assert(unreachable?.disabled && /not reachable/i.test(unreachable.text), `unreachable route not disabled with reason: ${JSON.stringify(unreachableOptions)}`);
+  assert(unreachable?.disabled && /not reachable|loading/i.test(unreachable.text), `unreachable route not disabled with reason: ${JSON.stringify(unreachableOptions)}`);
   const testResponder = unreachableOptions.find((item) => item.value === "local:fake");
   assert(testResponder && /test responder/i.test(testResponder.text), `test responder is not labelled test-only: ${JSON.stringify(testResponder)}`);
   await page.getByLabel("Jarvis responder").selectOption("local:fake");
@@ -429,6 +434,7 @@ try {
     model_id: isLlamaCpp ? "qwen3.8-27b-q4kxl" : model,
     runtime_configuration: isLlamaCpp ? llamaConfig : undefined,
     runtime_actions: runtimeActions,
+    first_pass_runtime_status: firstPassStatus,
     runtime_status_snapshots: runtimeSnapshots,
     loading_snapshots: loadingSnapshots,
     cold_load: loadedEvidence,
