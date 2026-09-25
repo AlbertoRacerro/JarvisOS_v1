@@ -6,11 +6,13 @@ This is the canonical current architecture source for JarvisOS.
 
 Last architecture reconciliation: **2026-08-21**.
 
+Maintainer product-target clarification: **2026-09-25**.
+
 ---
 
 ## 1. Product principle
 
-JarvisOS is a local-first engineering workspace. It is not a general numerical solver, not a model provider, and not an autonomous engineering authority.
+JarvisOS is a local-first, human-operated engineering workstation for designing, simulating, dimensioning, optimizing, inspecting, and validating a floating offshore *Nannochloropsis gaditana* production plant. Jarvis Sidecar accelerates the engineer's work under the same domain and command authority. JarvisOS is not a general numerical solver, a model provider, or an autonomous engineering authority.
 
 The intended separation is:
 
@@ -554,3 +556,27 @@ After the current functional queue and global visual identity, the intended corr
 The exact rows and authorization state live only in `docs/specs/STATUS.md`.
 
 See `docs/strategy/JARVISOS_ARCHITECTURE_RECONCILIATION_2026-08-21.md` for the audit rationale and zero-sunk-cost disposition rules.
+
+---
+
+## 19. Human-operated engineering target and calculation authority
+
+This section records the maintainer's product target. It does not claim that every capability below is implemented or grant implementation authority outside `docs/specs/STATUS.md` and accepted readiness. Spec 149 provides a real operator integration boundary; full plant coverage and the calculation workspace require subsequent evidence and bounded slices.
+
+### One engineering command surface
+
+The engineer must be able to perform important visual engineering operations personally: edit and restore flowsheets; configure equipment, dynamics, studies, design variables, constraints, CAD, CFD, and FEM; choose fidelity; and inspect results, assumptions, sources, validity, and revisions. Visual work is **human-first, AI-enabled**. Sidecar must use the same governed Jarvis command/domain surfaces for the corresponding actions. Interaction mode may differ; engineering authority may not. DWSIM, BLUECAD, and specialist engines own their native models and numerical state. Jarvis owns project authority, revisions, policy, provenance, and evidence. Neither the browser nor Sidecar owns a second flowsheet, calculation store, or hidden engineering mutation path.
+
+### Agent-first, human-verifiable analytics
+
+Routine equation construction, unit conversion, sensitivity tables, fitting code, and plotting should be agent-first so the engineer reviews the reasoning rather than transcribing arithmetic. The AI may author or propose a calculation or scientific model; a deterministic engine executes it, validators check it, and a governed transition records the result. AI prose and mental arithmetic are never the numerical result of record. A fitted model remains a revisioned proposal until the required human or deterministic promotion.
+
+A serious calculation should have one canonical structured artifact containing identity and revision; typed inputs and symbols with units and authoritative source revisions; first-class assumptions with scope, status, uncertainty, and affected results; a selected model and fidelity with known omissions and validity range; an ordered equation/expression graph; executable operations; validation rules; outputs, margins, qualification, provenance, and dependencies. The readable LaTeX derivation, substitutions, executable expressions, and dependency graph must come from that same structure. What the engineer sees as an equation must be what the computer executed; a separately generated explanation or free-form LaTeX parser cannot be the authority.
+
+The normal operator view is a concise derivation with input/source tables, assumptions, model limits, ordered equations, numerical substitutions, results, margins, and validation. The engineer can also inspect sources, code or semantic expressions, dependencies, and history, and edit the real executable model. Such an edit creates a new revision, preserves the old one, invalidates dependent results and evidence, and requires deterministic rerun and revalidation. Dependencies use semantic engineering identities rather than spreadsheet cell addresses. Values are typed quantities: incompatible dimensions fail before promotion, and conversions remain inspectable.
+
+Validation is specific to the model and risk. It may include dimensional and unit consistency, sign/range and correlation-domain checks, conservation and boundary consistency, limiting cases, uncertainty, independent solver/correlation comparisons, and benchmark evidence. Successful Python execution alone does not establish engineering validity. Sidecar should be able to explain or compare a selected calculation step from this artifact and its sources, then propose a revision through the same path available to the engineer.
+
+### Upstream ownership and next evidence boundary
+
+Wrap qualified whole engines before building generic replacements: DWSIM for process simulation, SUNDIALS/CVODE where the direct dynamic evaluator owns time, OpenFOAM for CFD, Gmsh/CalculiX for mesh and structural analysis, and suitable specialist libraries for other domains. Jarvis owns the BlueRev-specific model delta, coupling, scientific qualification, revisions, and operator experience. The next completeness audit must work outward from the physical offshore plant and the human workflow, checking engine, domain model, scientific qualification, manual UI, Sidecar command, visualization, provenance, revision/undo, and study support for each material capability. It must distinguish real, partial, qualified candidate, unaudited upstream, and BlueRev-specific work without silently equating solver execution with validated physics.
