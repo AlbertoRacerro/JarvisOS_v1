@@ -162,12 +162,14 @@ const send = async (prompt) => {
   await page.getByLabel("Message", { exact: true }).fill(prompt);
   await page.getByRole("button", { name: /Send without project context/ }).click();
   const transcript = page.getByRole("list", { name: "Jarvis thread transcript" });
-  const entry = transcript.locator("li").filter({ hasText: prompt });
+  const promptMarker = prompt.replace(/\s+/g, " ").trim().slice(0, 120);
+  const entry = transcript.locator("li").filter({ hasText: promptMarker });
   await entry.waitFor({ state: "visible", timeout: 900_000 });
   await page.waitForFunction((text) => {
-    const item = [...document.querySelectorAll('[aria-label="Jarvis thread transcript"] li')].find((node) => node.textContent?.includes(text));
+    const item = [...document.querySelectorAll('[aria-label="Jarvis thread transcript"] li')]
+      .find((node) => (node.textContent ?? "").replace(/\s+/g, " ").includes(text));
     return Boolean(item && item.querySelector("details") && /Canonical state/.test(item.textContent ?? "") && !/Submitting/.test(item.textContent ?? ""));
-  }, prompt, { timeout: 900_000 });
+  }, promptMarker, { timeout: 900_000 });
   const details = entry.getByText("Interaction details", { exact: true });
   await details.click();
   await entry.getByText("Canonical state", { exact: true }).waitFor();
