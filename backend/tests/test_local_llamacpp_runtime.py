@@ -7,7 +7,7 @@ import httpx
 import pytest
 
 from app.modules.ai.contracts import AIRequest, AITaskType
-from app.modules.ai.provider_registry import load_default_provider_registry
+from app.modules.ai.provider_registry import load_default_provider_registry, registry_bindings
 from app.modules.ai.providers import local_llamacpp_adapter as adapter_module
 from app.modules.ai.providers.local_llamacpp_adapter import LocalLlamaCppAdapter
 from app.modules.ai.thread_routes import _llamacpp_route_availability
@@ -140,6 +140,23 @@ def test_registry_classifies_llamacpp_as_local_compute() -> None:
     assert provider.api_key_ref is None
     assert binding.provider_id == "local_llamacpp"
     assert binding.max_output_tokens == 2048
+
+
+def test_registry_binding_reports_configured_llamacpp_model_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    configured_model_id = "qwen3.8-27b-iq2m"
+    monkeypatch.setattr(
+        "app.modules.local_ai.runtime.llama_cpp.llama_cpp_runtime_config",
+        lambda: _config(model_id=configured_model_id),
+    )
+
+    binding = registry_bindings()["local:llamacpp"]
+
+    assert binding.model_id == configured_model_id
+    assert binding.provider_id == "local_llamacpp"
+    assert binding.max_output_tokens == 2048
+    assert binding.context_window_tokens == 8192
 
 
 class _FakeProcess:

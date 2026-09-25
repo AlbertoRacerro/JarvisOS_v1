@@ -406,6 +406,11 @@ try {
     await page.waitForFunction((selectedRoute) => [...document.querySelectorAll('[aria-label="Jarvis responder"] option')].some((option) => option.value === selectedRoute && !option.disabled), route, { timeout: 60_000 });
   }
   reachableOptions = await optionRecords();
+  if (isLlamaCpp) {
+    const configuredRoute = reachableOptions.find((item) => item.value === route);
+    assert(configuredRoute?.text.includes(llamaConfig.model_id),
+      `Sidecar route did not report configured llama.cpp model ${llamaConfig.model_id}: ${JSON.stringify(reachableOptions)}`);
+  }
   const localRoute = page.getByLabel("Jarvis responder");
   await localRoute.selectOption(route);
   await page.getByLabel("Message", { exact: true }).waitFor();

@@ -232,6 +232,21 @@ def _bindings_with_env_overrides(
     registry: ProviderRegistry,
 ) -> dict[str, ProviderBinding]:
     result = dict(registry.bindings)
+    llama_binding = result.get("local:llamacpp")
+    if llama_binding is not None:
+        from app.modules.local_ai.runtime.llama_cpp import llama_cpp_runtime_config
+
+        configured_model_id = llama_cpp_runtime_config().model_id.strip()
+        if configured_model_id:
+            result["local:llamacpp"] = ProviderBinding(
+                route_class=llama_binding.route_class,
+                provider_id=llama_binding.provider_id,
+                model_id=configured_model_id,
+                requires_network=llama_binding.requires_network,
+                max_output_tokens=llama_binding.max_output_tokens,
+                execution_class=llama_binding.execution_class,
+                context_window_tokens=llama_binding.context_window_tokens,
+            )
     overrides = {
         "local:fake": ("AI_ROUTE_FAKE_MODEL",),
         "local:fast": ("AI_ROUTE_LOCAL_FAST_MODEL",),
