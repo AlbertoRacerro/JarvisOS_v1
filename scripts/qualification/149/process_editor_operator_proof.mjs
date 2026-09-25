@@ -480,6 +480,28 @@ try {
     server_mass_balance_status: projection.last_solve.mass_balance_status,
   });
   await screenshot(page, "solved");
+  await saveState.click();
+  projection = await waitCommand(page);
+  assert(
+    projection.dynamics.saved_states.includes("operator-proof"),
+    "DWSIM did not persist the saved dynamic state",
+  );
+  const savedRevision = projection.revision;
+  await dynamics.getByLabel("Restore state").selectOption("operator-proof");
+  await dynamics.getByRole("button", { name: "Restore state" }).click();
+  projection = await waitCommand(page);
+  assert(
+    projection.revision !== savedRevision &&
+      projection.dynamics.saved_states.includes("operator-proof"),
+    "DWSIM state restore did not return a persisted new revision",
+  );
+  actions.push({
+    action: "dynamics_state_roundtrip",
+    state: "operator-proof",
+    saved_revision: savedRevision,
+    restored_revision: projection.revision,
+    object_count: projection.objects.length,
+  });
 
   otherContext = await browser.newContext({
     viewport: { width: 1280, height: 900 },

@@ -388,6 +388,7 @@ def _dynamic_projection(client: DwsimMcpClient, flow: str, record: dict[str, Any
         if isinstance(states.get("stored_states"), list):
             result["saved_states"] = [str(item) for item in states["stored_states"]]
         schedule = config.get("current_schedule")
+        result["current_schedule"] = schedule if isinstance(schedule, str) else None
         sets = config.get("event_sets", [])
         if isinstance(sets, list):
             for event_set in sets[:25]:

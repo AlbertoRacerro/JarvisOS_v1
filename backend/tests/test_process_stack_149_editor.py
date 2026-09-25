@@ -318,6 +318,7 @@ def test_dynamic_projection_reports_read_only_tool_data():
             raise AssertionError(name)
 
     result = editor._dynamic_projection(ProjectionClient(), "flow", {"command_kind": "create_case"})
+    assert result["current_schedule"] == "S"
     assert result["controllers"] == [{"tag": "PID"}]
     assert result["saved_states"] == ["Initial"]
     assert result["event_sets"] == [{"event_set": "E", "events": ["t = 1 s"]}]

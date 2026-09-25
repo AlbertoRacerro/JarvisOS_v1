@@ -459,6 +459,8 @@ function ProcessStage({
       : null;
   const canDynamic = (kind: string) =>
     !dynamicsUnavailableReason && can(kind);
+  const dynamicDraftDisabled =
+    !projection || loading || Boolean(runtimeUnavailable) || Boolean(dynamicsUnavailableReason);
   const projectedSavedStates = Array.isArray(dynamicsProjection.saved_states)
     ? dynamicsProjection.saved_states.filter(
         (name): name is string => typeof name === "string",
@@ -1631,6 +1633,7 @@ function ProcessStage({
           <p role="status">Dynamics projection unavailable · {dynamicsUnavailableReason}</p>
         ) : (
           <div className="dwsim-dynamics__readback">
+            <div><strong>Current schedule</strong><pre>{display(dynamicsProjection.current_schedule)}</pre></div>
             <div><strong>Controllers</strong><pre>{JSON.stringify(Array.isArray(dynamicsProjection.controllers) ? dynamicsProjection.controllers : [], null, 2)}</pre></div>
             <div><strong>Event sets</strong><pre>{JSON.stringify(Array.isArray(dynamicsProjection.event_sets) ? dynamicsProjection.event_sets : [], null, 2)}</pre></div>
             <div><strong>Saved states</strong><pre>{JSON.stringify(projectedSavedStates, null, 2)}</pre></div>
@@ -1638,16 +1641,16 @@ function ProcessStage({
           </div>
         )}
         <div className="dwsim-dynamics__controls">
-          <fieldset>
+          <fieldset disabled={dynamicDraftDisabled}>
             <legend>Controller</legend>
             <label>Tag<input value={controllerTag} onChange={(e) => setControllerTag(e.target.value)} /></label>
             <label>Set point<input type="number" value={controllerSp} onChange={(e) => setControllerSp(e.target.value)} /></label>
             <label>Kp<input type="number" value={controllerKp} onChange={(e) => setControllerKp(e.target.value)} /></label>
             <label>Ki<input type="number" value={controllerKi} onChange={(e) => setControllerKi(e.target.value)} /></label>
             <label>Kd<input type="number" value={controllerKd} onChange={(e) => setControllerKd(e.target.value)} /></label>
-            <button type="button" disabled={!canDynamic("controller_set") || !controllerTag.trim()} title={!canDynamic("controller_set") ? dynamicsUnavailableReason ?? unsupported("controller_set") : "Apply controller settings"} onClick={() => void command({ kind: "controller_set", tag: controllerTag.trim(), sp: optionalNumber(controllerSp), kp: optionalNumber(controllerKp), ki: optionalNumber(controllerKi), kd: optionalNumber(controllerKd), out_min: null, out_max: null, reverse_acting: null, active: null, manual_override: null, execution_order: null })}>Apply controller</button>
+            <button type="button" disabled={!canDynamic("controller_set") || !controllerTag.trim() || [controllerSp, controllerKp, controllerKi, controllerKd].every((value) => optionalNumber(value) === null)} title={!canDynamic("controller_set") ? dynamicsUnavailableReason ?? unsupported("controller_set") : "Apply controller settings"} onClick={() => void command({ kind: "controller_set", tag: controllerTag.trim(), sp: optionalNumber(controllerSp), kp: optionalNumber(controllerKp), ki: optionalNumber(controllerKi), kd: optionalNumber(controllerKd), out_min: null, out_max: null, reverse_acting: null, active: null, manual_override: null, execution_order: null })}>Apply controller</button>
           </fieldset>
-          <fieldset>
+          <fieldset disabled={dynamicDraftDisabled}>
             <legend>Schedule event</legend>
             <label>Event set<input value={eventSet} onChange={(e) => setEventSet(e.target.value)} /></label>
             <label>Event target<input value={eventTag} onChange={(e) => setEventTag(e.target.value)} /></label>
@@ -1655,19 +1658,19 @@ function ProcessStage({
             <label>Value<input type="number" value={eventValue} onChange={(e) => setEventValue(e.target.value)} /></label>
             <label>At (s)<input type="number" min="0" value={eventAt} onChange={(e) => setEventAt(e.target.value)} /></label>
             <label>Description<input value={eventDescription} onChange={(e) => setEventDescription(e.target.value)} /></label>
-            <button type="button" disabled={!canDynamic("event_add") || !eventSet.trim() || !eventTag.trim() || !eventProperty.trim() || optionalNumber(eventValue) === null || optionalNumber(eventAt) === null} title={!canDynamic("event_add") ? dynamicsUnavailableReason ?? unsupported("event_add") : "Add event to the DWSIM schedule"} onClick={() => void command({ kind: "event_add", event_set: eventSet.trim(), schedule: null, tag: eventTag.trim(), property: eventProperty.trim(), value: optionalNumber(eventValue) ?? 0, units: null, at_s: optionalNumber(eventAt) ?? 0, transition: "step", description: eventDescription.trim() || null })}>Add event</button>
+            <button type="button" disabled={!canDynamic("event_add") || !eventSet.trim() || !eventTag.trim() || !eventProperty.trim() || optionalNumber(eventValue) === null || (optionalNumber(eventAt) ?? -1) < 0} title={!canDynamic("event_add") ? dynamicsUnavailableReason ?? unsupported("event_add") : "Add event to the DWSIM schedule"} onClick={() => void command({ kind: "event_add", event_set: eventSet.trim(), schedule: null, tag: eventTag.trim(), property: eventProperty.trim(), value: optionalNumber(eventValue) ?? 0, units: null, at_s: optionalNumber(eventAt) ?? 0, transition: "step", description: eventDescription.trim() || null })}>Add event</button>
             <label>Remove by description<input aria-label="Event description to remove" value={eventDescription} onChange={(e) => setEventDescription(e.target.value)} /></label>
             <button type="button" disabled={!canDynamic("event_remove") || !eventSet.trim() || !eventDescription.trim()} title={!canDynamic("event_remove") ? dynamicsUnavailableReason ?? unsupported("event_remove") : "Remove matching event"} onClick={() => void command({ kind: "event_remove", event_set: eventSet.trim(), schedule: null, description: eventDescription.trim() })}>Remove event</button>
           </fieldset>
-          <fieldset>
+          <fieldset disabled={dynamicDraftDisabled}>
             <legend>Run dynamics</legend>
             <label>Schedule (optional)<input value={runSchedule} onChange={(e) => setRunSchedule(e.target.value)} /></label>
-            <label>Duration (s)<input type="number" min="0.001" value={runDuration} onChange={(e) => setRunDuration(e.target.value)} /></label>
+            <label>Duration (s)<input type="number" min="0.001" max="3600" value={runDuration} onChange={(e) => setRunDuration(e.target.value)} /></label>
             <label>Step (s, optional)<input type="number" min="0.001" value={runStep} onChange={(e) => setRunStep(e.target.value)} /></label>
             <label>Integration method<select value={runMethod} onChange={(e) => setRunMethod(e.target.value as typeof runMethod)}><option value="">Use DWSIM current setup</option><option>ExplicitEuler</option><option>RungeKutta4</option><option>ImplicitEuler</option><option>AdaptiveRK45</option></select></label>
-            <button type="button" disabled={!canDynamic("dynamics_run") || (optionalNumber(runDuration) ?? 0) <= 0 || (runStep.trim() !== "" && (optionalNumber(runStep) ?? 0) <= 0)} title={!canDynamic("dynamics_run") ? dynamicsUnavailableReason ?? unsupported("dynamics_run") : "Run using DWSIM dynamics"} onClick={() => void command({ kind: "dynamics_run", schedule: runSchedule.trim() || null, duration_s: optionalNumber(runDuration) ?? 60, step_s: optionalNumber(runStep), integrator: null, method: runMethod || null, max_wall_time_s: 120, max_steps: 20000, variables: null })}>Run dynamics</button>
+            <button type="button" disabled={!canDynamic("dynamics_run") || (optionalNumber(runDuration) ?? 0) <= 0 || (optionalNumber(runDuration) ?? 0) > 3600 || (runStep.trim() !== "" && (optionalNumber(runStep) ?? 0) <= 0)} title={!canDynamic("dynamics_run") ? dynamicsUnavailableReason ?? unsupported("dynamics_run") : "Run using DWSIM dynamics"} onClick={() => void command({ kind: "dynamics_run", schedule: runSchedule.trim() || null, duration_s: optionalNumber(runDuration) ?? 60, step_s: optionalNumber(runStep), integrator: null, method: runMethod || null, max_wall_time_s: 120, max_steps: 20000, variables: null })}>Run dynamics</button>
           </fieldset>
-          <fieldset>
+          <fieldset disabled={dynamicDraftDisabled}>
             <legend>Stored states</legend>
             <label>New state name<input value={stateName} onChange={(e) => setStateName(e.target.value)} /></label>
             <button type="button" disabled={!canDynamic("state_save") || !stateName.trim()} title={!canDynamic("state_save") ? dynamicsUnavailableReason ?? unsupported("state_save") : "Save state through DWSIM"} onClick={() => void command({ kind: "state_save", name: stateName.trim() })}>Save current state</button>
