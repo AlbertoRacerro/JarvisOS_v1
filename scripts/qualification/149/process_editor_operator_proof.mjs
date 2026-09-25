@@ -116,26 +116,62 @@ const loaded = async (currentPage) => {
 };
 const waitCommand = async (currentPage) => {
   const started = Date.now();
-  await currentPage
-    .getByRole("status")
-    .filter({ hasText: /read back as revision/ })
-    .waitFor({ timeout: 180_000 });
-  const status = await currentPage
+  const message = currentPage.locator(".dwsim-message[role=status]");
+  await currentPage.waitForFunction(
+    () =>
+      (
+        document.querySelector(".dwsim-message[role=status]")?.textContent ?? ""
+      ).startsWith("Applying "),
+    null,
+    { timeout: 30_000 },
+  );
+  await currentPage.waitForFunction(
+    () => {
+      const text =
+        document.querySelector(".dwsim-message[role=status]")?.textContent ??
+        "";
+      return text.length > 0 && !text.startsWith("Applying ");
+    },
+    null,
+    { timeout: 180_000 },
+  );
+  const text = (await message.textContent()) ?? "";
+  if (!/read back as revision/.test(text))
+    throw new Error(`operator command failed in UI: ${text}`);
+  const success = await currentPage
     .getByRole("status")
     .filter({ hasText: /read back as revision/ })
     .textContent();
   timings.push({
-    operation: status?.split(" read back")[0] ?? "command",
+    operation: success?.split(" read back")[0] ?? "command",
     duration_ms: Date.now() - started,
   });
   return loaded(currentPage);
 };
 const waitRestore = async (currentPage) => {
   const started = Date.now();
-  await currentPage
-    .getByRole("status")
-    .filter({ hasText: /Restored as revision/ })
-    .waitFor({ timeout: 180_000 });
+  const message = currentPage.locator(".dwsim-message[role=status]");
+  await currentPage.waitForFunction(
+    () =>
+      (
+        document.querySelector(".dwsim-message[role=status]")?.textContent ?? ""
+      ).startsWith("Restoring revision"),
+    null,
+    { timeout: 30_000 },
+  );
+  await currentPage.waitForFunction(
+    () => {
+      const text =
+        document.querySelector(".dwsim-message[role=status]")?.textContent ??
+        "";
+      return text.length > 0 && !text.startsWith("Restoring revision");
+    },
+    null,
+    { timeout: 180_000 },
+  );
+  const text = (await message.textContent()) ?? "";
+  if (!/Restored as revision/.test(text))
+    throw new Error(`operator restore failed in UI: ${text}`);
   timings.push({ operation: "restore", duration_ms: Date.now() - started });
   return loaded(currentPage);
 };
@@ -185,7 +221,20 @@ const setStreamValues = async (currentPage, tag, flow) => {
   await currentPage
     .getByRole("button", { name: "Apply stream conditions", exact: true })
     .click();
-  await waitCommand(currentPage);
+  const projection = await waitCommand(currentPage);
+  const stream = renderedObject(projection, tag);
+  assert(
+    Number(massFlow(stream)) === flow,
+    `${tag} mass flow read back as ${massFlow(stream)}, expected ${flow}`,
+  );
+  assert(
+    stream.results?.temperature_K === 298.15,
+    `${tag} temperature was not read back in K`,
+  );
+  assert(
+    stream.results?.pressure_Pa === 101325,
+    `${tag} pressure was not read back in Pa`,
+  );
 };
 const renderedObject = (projection, tag) =>
   projection.objects.find((item) => item.tag === tag);

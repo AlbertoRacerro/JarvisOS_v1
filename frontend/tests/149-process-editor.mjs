@@ -56,6 +56,7 @@ has(
   "invalidCount > 0",
   "invalid connection records must produce a visible warning",
 );
+has(stage, "Math.hypot(", "a click must not be treated as a drag gesture");
 has(
   stage,
   "runtimeUnavailable",

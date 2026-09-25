@@ -946,7 +946,13 @@ function ProcessStage({
                 setGhost(null);
                 setDrag(null);
                 event.currentTarget.releasePointerCapture?.(event.pointerId);
+                const dragged =
+                  Math.hypot(
+                    event.clientX - drag.pointer.x,
+                    event.clientY - drag.pointer.y,
+                  ) > 3;
                 if (
+                  dragged &&
                   drag.id &&
                   (p.x !== drag.origin.x || p.y !== drag.origin.y)
                 ) {
