@@ -1,0 +1,129 @@
+{
+  "capabilities": [
+    {
+      "capability_id": "hermes",
+      "reason_code": "HERMES_WORKER_STOPPED",
+      "state": "unavailable"
+    },
+    {
+      "capability_id": "local_decision_routing",
+      "reason_code": "LOCAL_MODEL_RUNTIME_UNAVAILABLE",
+      "state": "unavailable"
+    },
+    {
+      "capability_id": "retrieval",
+      "reason_code": "RETRIEVAL_INDEX_NOT_BUILT",
+      "state": "not_configured"
+    },
+    {
+      "capability_id": "dwsim",
+      "reason_code": null,
+      "state": "available"
+    },
+    {
+      "capability_id": "openfoam",
+      "reason_code": null,
+      "state": "available"
+    },
+    {
+      "capability_id": "pbr",
+      "reason_code": null,
+      "state": "available"
+    }
+  ],
+  "data_root": "/tmp/jarvis-149-operator-c88v4vrp",
+  "envelope": {
+    "digest": "sha256:693add4c365a49cb12a98b87834d2b620bea93ff6c62715bf345adbe974b1d82",
+    "point_index": 1,
+    "qualification_status": "unqualified"
+  },
+  "escalation": {
+    "content_digest": "sha256:5b5f3f58dcf5cfd42820001ee2e388a22e75dc41e3fad81fcb64e4cac5f8e7cb",
+    "reason": "No compatible higher-fidelity evaluator selected for the PBR input contract.",
+    "statuses": [
+      "escalation_unavailable"
+    ]
+  },
+  "evaluators": [
+    {
+      "backend_kind": "specialist",
+      "backend_name": "fluids",
+      "backend_version": "1.3.1",
+      "evaluator_id": "fluids.pipe_pressure_drop",
+      "fidelity": "screening",
+      "reason_code": null,
+      "state": "available"
+    },
+    {
+      "backend_kind": "specialist",
+      "backend_name": "ht",
+      "backend_version": "1.2.0",
+      "evaluator_id": "ht.internal_convection",
+      "fidelity": "screening",
+      "reason_code": null,
+      "state": "available"
+    },
+    {
+      "backend_kind": "property_package",
+      "backend_name": "CoolProp",
+      "backend_version": "8.0.0",
+      "evaluator_id": "coolprop.pure_fluid_properties",
+      "fidelity": "steady_state_detailed",
+      "reason_code": null,
+      "state": "available"
+    },
+    {
+      "backend_kind": "dynamic_simulator",
+      "backend_name": "DWSIM",
+      "backend_version": "10.2.9",
+      "evaluator_id": "dwsim.flowsheet",
+      "fidelity": "dynamic_detailed",
+      "reason_code": null,
+      "state": "available"
+    },
+    {
+      "backend_kind": "cfd_solver",
+      "backend_name": "OpenFOAM",
+      "backend_version": "v2412",
+      "evaluator_id": "openfoam_channel_v1",
+      "fidelity": "field_resolved",
+      "reason_code": null,
+      "state": "available"
+    },
+    {
+      "backend_kind": "dynamic_simulator",
+      "backend_name": "scikit-sundae",
+      "backend_version": "pbr_day_night.v2+sksundae-1.1.3",
+      "evaluator_id": "bluerev.pbr_day_night",
+      "fidelity": "reduced_order",
+      "reason_code": null,
+      "state": "available"
+    }
+  ],
+  "evidence_kind": "real_runtime_execution",
+  "fixture": {
+    "path": "scripts/qualification/107/synthetic-parameters.json",
+    "qualification": "synthetic/unqualified",
+    "sha256": "0cd0ac091c78bce141d33f45afbfd6b8440f6bfb72d23c1c20b96d7ac6fa9271"
+  },
+  "interpretation": "FastAPI TestClient exercised the real local PBR evaluator with the committed synthetic 107 parameters; this is unqualified software/runtime evidence only.",
+  "runtime_tools": {
+    "dwsim_mcp_path": "/home/thera/jarvis-control/work/tools/dwsim-10.2.9/mcp-root/opt/dwsim-mcp/dwsim-mcp",
+    "dwsim_mcp_sha256": "d20f97426c264ac91114240b085b3c4e7877dfda83ecb487c0125f838cf66cfa",
+    "openfoam_binaries": {
+      "blockMesh": "61929db77c637f0b394b7aef85b0f5ab42af8185a72c234270e4a03e2a13257b",
+      "icoFoam": "59bc5059ef2a3376d6c16b5e6a4f26a37443189598749d7ab6096035d966746e"
+    },
+    "openfoam_prefix": "/home/thera/jarvis-control/work/tools/mamba/envs/cfd"
+  },
+  "source_sha": "2c951b98ccd9d6b795cae32d4de45d133a7f1bea",
+  "study": {
+    "best_point_index": 1,
+    "content_digest": "sha256:167ecf9edf74c9295a0a1711a2d467c65c7fedb99e8b1401963dfa3412e41f79",
+    "feasible_count": 3,
+    "point_count": 3,
+    "qualification_status": "unqualified",
+    "status": "succeeded"
+  },
+  "workspace_id": "bluerev"
+}

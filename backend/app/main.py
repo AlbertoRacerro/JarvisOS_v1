@@ -26,6 +26,7 @@ from app.modules.coding.runtime_truth import (
 )
 from app.modules.development.brainstorm_routes import router as brainstorm_router
 from app.modules.development.routes import router as development_router
+from app.modules.engineering.operator_routes import router as engineering_operator_router
 from app.modules.flowsheet.routes import router as flowsheet_router
 from app.modules.local_ai.runtime.lifecycle import create_local_ai_runtime_lifecycle_from_env
 from app.modules.memory.literature_routes import router as literature_router
@@ -155,6 +156,7 @@ def create_app() -> FastAPI:
     app.include_router(project_search_router)
     app.include_router(runner_router)
     app.include_router(flowsheet_router)
+    app.include_router(engineering_operator_router)
     app.include_router(project_knowledge_router)
     app.include_router(coding_runtime_router)
     app.include_router(development_router)
