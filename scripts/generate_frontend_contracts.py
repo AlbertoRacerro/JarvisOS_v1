@@ -131,6 +131,7 @@ def render_editor_contracts() -> str:
     from app.modules.process_stack import editor_models
     from app.modules.process_stack.editor_models import (
         CommandResult,
+        DynamicsProjectionRead,
         EditorCaseRead,
         EditorConnectionRead,
         EditorObjectRead,
@@ -141,6 +142,7 @@ def render_editor_contracts() -> str:
 
     models = [
         EditorQuantity,
+        DynamicsProjectionRead,
         EditorCaseRead,
         RevisionRead,
         EditorObjectRead,

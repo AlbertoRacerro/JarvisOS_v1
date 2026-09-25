@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import re
 import tempfile
@@ -25,17 +26,22 @@ from app.modules.process_stack.dwsim_mcp import DwsimMcpClient, DwsimMcpError
 from app.modules.process_stack.editor_models import (
     AddCompounds,
     Connect,
+    ControllerSet,
     CreateEnergyStream,
     CreateMaterialStream,
     CreateUnit,
     DeleteObject,
     Disconnect,
+    DynamicsProjectionRead,
+    DynamicsRun,
     EditorCaseRead,
     EditorCommand,
     EditorConnectionRead,
     EditorObjectRead,
     EditorProjectionRead,
     EditorQuantity,
+    EventAdd,
+    EventRemove,
     Move,
     Rename,
     RevisionRead,
@@ -43,7 +49,8 @@ from app.modules.process_stack.editor_models import (
     SetStreamConditions,
     SetUnitProperties,
     Solve,
-    UnsupportedCommand,
+    StateRestore,
+    StateSave,
 )
 from app.modules.workspaces.service import get_workspace
 
@@ -51,6 +58,10 @@ _guard = threading.Lock()
 _locks: dict[str, threading.RLock] = {}
 _TOL = 1e-8
 MAX_IMPORT_BYTES = 64 * 1024 * 1024
+MAX_DYNAMIC_DURATION_S = 3600
+MAX_DYNAMIC_WALL_TIME_S = 120
+MAX_DYNAMIC_STEPS = 20000
+MAX_DYNAMIC_POINTS = 200
 SUPPORTED = [
     "create_unit",
     "create_material_stream",
@@ -63,16 +74,16 @@ SUPPORTED = [
     "add_compounds",
     "set_property_package",
     "solve",
+    "controller_set",
+    "event_add",
+    "event_remove",
+    "dynamics_run",
+    "state_save",
+    "state_restore",
 ]
 UNSUPPORTED = {
     "delete_object": "DWSIM MCP has no simulation-object delete API; graphic_remove leaves an orphaned simulation object.",
     "disconnect": "DWSIM MCP has no connector detach API; graphic edits do not safely detach the process graph.",
-    "controller_set": "Controller mutation is not implemented in this editor slice.",
-    "event_add": "Dynamic event mutation is not implemented in this editor slice.",
-    "event_remove": "Dynamic event mutation is not implemented in this editor slice.",
-    "dynamics_run": "Bounded dynamic-run controls are not implemented in this editor slice.",
-    "state_save": "Dynamic state save/restore controls are not implemented in this editor slice.",
-    "state_restore": "Dynamic state save/restore controls are not implemented in this editor slice.",
 }
 
 
@@ -207,6 +218,7 @@ def _write_revision(
         "dwsim_version": version,
         "mcp_sha256": mcp_sha,
         "last_solve": readback if command == "solve" else (prior.get("last_solve") if prior else None),
+        "last_dynamic_run": readback if command == "dynamics_run" else (prior.get("last_dynamic_run") if prior else None),
     }
     record_dir = directory / "records"
     record_dir.mkdir(exist_ok=True)
@@ -278,7 +290,123 @@ def _q(value: EditorQuantity | None, unit: str) -> float | None:
         raise EditorError("quantity_invalid", "Quantity unit is unknown or dimensionally incompatible", 422) from exc
 
 
-def _apply(client: DwsimMcpClient, flow: str, command: EditorCommand, scratch: Path) -> dict[str, Any]:
+def _same(actual: object, expected: object) -> bool:
+    if isinstance(expected, bool) or not isinstance(expected, (int, float, str)):
+        return actual == expected
+    if not isinstance(actual, (int, float, str)) or isinstance(actual, bool):
+        return actual == expected
+    try:
+        return math.isclose(float(actual), float(expected), rel_tol=_TOL, abs_tol=1e-9)
+    except ValueError:
+        return actual == expected
+
+
+def _controller_mismatch(controllers: object, tag: str, requested: dict[str, Any]) -> str | None:
+    item = next(
+        (entry for entry in controllers if isinstance(entry, dict) and entry.get("tag") == tag),
+        None,
+    ) if isinstance(controllers, list) else None
+    if item is None:
+        return "controller"
+    return next(
+        (key for key, value in requested.items() if not _same(item.get("manual" if key == "manual_override" else key), value)),
+        None,
+    )
+
+
+def _snapshot_mismatch(actual: dict[str, dict[str, str]], expected: dict[str, dict[str, str]]) -> str | None:
+    for tag, properties in expected.items():
+        for property_id, value in properties.items():
+            if not _same(actual.get(tag, {}).get(property_id), value):
+                return f"{tag}.{property_id}"
+    return None
+
+
+def _event_list(client: DwsimMcpClient, flow: str, event_set: str, schedule: str | None) -> list[Any]:
+    listed = client.call(
+        "dwsim_dynamics_event",
+        {"flowsheet_id": flow, "action": "list", "event_set": event_set, **({"schedule": schedule} if schedule else {})},
+        30,
+    )
+    events = listed.get("events")
+    if not isinstance(events, list):
+        raise EditorError("DWSIM_READBACK_MISMATCH", "DWSIM event list is unavailable", 502)
+    return events
+
+
+def _event_count(events: list[Any], description: str) -> int:
+    return sum(description in str(item) for item in events)
+
+
+def _dynamic_values(client: DwsimMcpClient, flow: str, tags: list[str]) -> dict[str, dict[str, str]]:
+    values: dict[str, dict[str, str]] = {}
+    for tag in tags:
+        response = client.call("dwsim_dynamics_properties", {"flowsheet_id": flow, "tag": tag}, 30)
+        properties = response.get("properties")
+        if not isinstance(properties, list):
+            raise EditorError("DWSIM_DYNAMIC_READBACK_INVALID", "DWSIM dynamic properties are unavailable", 502)
+        values[tag] = {
+            str(item["id"]): str(item["value"])
+            for item in properties
+            if isinstance(item, dict) and item.get("id") is not None and item.get("value") is not None
+        }
+    return values
+
+
+def _saved_state_snapshot(directory: Path, name: str) -> dict[str, dict[str, str]] | None:
+    head = _head(directory)
+    for seq in range(head["seq"], 0, -1):
+        record_path = directory / "records" / f"{seq}.json"
+        if not record_path.exists():
+            continue
+        try:
+            readback = json.loads(record_path.read_text(encoding="utf-8")).get("readback", {})
+        except (OSError, json.JSONDecodeError):
+            continue
+        if readback.get("state_name") == name and isinstance(readback.get("state_snapshot"), dict):
+            return readback["state_snapshot"]
+    return None
+
+
+def _dynamic_projection(client: DwsimMcpClient, flow: str, record: dict[str, Any]) -> dict[str, Any]:
+    result: dict[str, Any] = {"controllers": [], "event_sets": [], "saved_states": [], "last_dynamic_run": None}
+    try:
+        config = client.call("dwsim_dynamics_inspect", {"flowsheet_id": flow, "detail": "full"}, 30)
+        controllers = client.call("dwsim_dynamics_controller", {"flowsheet_id": flow, "action": "list"}, 30)
+        states = client.call("dwsim_dynamics_state", {"flowsheet_id": flow, "action": "list"}, 30)
+        if any("error" in response for response in (config, controllers, states)):
+            raise DwsimMcpError("DWSIM dynamics read returned an error")
+        missing: list[str] = []
+        if not isinstance(controllers.get("controllers"), list):
+            missing.append("controllers")
+        if not isinstance(states.get("stored_states"), list):
+            missing.append("saved states")
+        if not isinstance(config.get("event_sets"), list):
+            missing.append("event sets")
+        if isinstance(controllers.get("controllers"), list):
+            result["controllers"] = controllers["controllers"]
+        if isinstance(states.get("stored_states"), list):
+            result["saved_states"] = [str(item) for item in states["stored_states"]]
+        schedule = config.get("current_schedule")
+        sets = config.get("event_sets", [])
+        if isinstance(sets, list):
+            for event_set in sets[:25]:
+                if isinstance(event_set, str):
+                    events = client.call("dwsim_dynamics_event", {
+                        "flowsheet_id": flow, "action": "list", "event_set": event_set,
+                        **({"schedule": schedule} if isinstance(schedule, str) else {}),
+                    }, 30)
+                    result["event_sets"].append(events)
+        result["last_dynamic_run"] = record.get("last_dynamic_run")
+        if missing:
+            result["unavailable_reason"] = "DWSIM did not provide: " + ", ".join(missing)
+        return result
+    except DwsimMcpError as exc:
+        result["unavailable_reason"] = f"DWSIM dynamics projection unavailable ({type(exc).__name__})"
+        return result
+
+
+def _apply(client: DwsimMcpClient, flow: str, command: EditorCommand, scratch: Path, directory: Path) -> dict[str, Any]:
     readback: dict[str, Any]
     if isinstance(command, CreateUnit):
         client.call("dwsim_unitop_add", {"flowsheet_id": flow, "type": command.unit_type, "name": command.tag}, 30)
@@ -383,19 +511,123 @@ def _apply(client: DwsimMcpClient, flow: str, command: EditorCommand, scratch: P
             "check": client.call("dwsim_flowsheet_check", {"flowsheet_id": flow}, 30),
             "solve": client.call("dwsim_solve_run", {"flowsheet_id": flow}, 180),
         }
-    elif isinstance(command, DeleteObject | Disconnect | UnsupportedCommand):
+    elif isinstance(command, ControllerSet):
+        requested = {key: value for key, value in command.model_dump(exclude={"kind", "expected_revision", "tag"}).items() if value is not None}
+        if not requested:
+            raise EditorError("empty_command", "At least one controller field is required")
+        client.call("dwsim_dynamics_controller", {"flowsheet_id": flow, "action": "set", "tag": command.tag, **requested}, 30)
+        listed = client.call("dwsim_dynamics_controller", {"flowsheet_id": flow, "action": "list"}, 30).get("controllers")
+        mismatch = _controller_mismatch(listed, command.tag, requested)
+        if mismatch:
+            raise EditorError("DWSIM_READBACK_MISMATCH", f"Controller {mismatch} read-back did not match", 502)
+        assert isinstance(listed, list)
+        match = next(item for item in listed if isinstance(item, dict) and item.get("tag") == command.tag)
+        readback = {"controller": match, "requested": requested}
+    elif isinstance(command, EventAdd | EventRemove):
+        adding = isinstance(command, EventAdd)
+        args = {"flowsheet_id": flow, "action": "add" if adding else "remove", "event_set": command.event_set}
+        if command.schedule:
+            args["schedule"] = command.schedule
+        if isinstance(command, EventAdd):
+            description: str = command.description or f"{command.tag}.{command.property} at {command.at_s:g} s"
+            args.update({"tag": command.tag, "property": command.property, "value": command.value, "at_s": command.at_s,
+                         "transition": command.transition, "description": description})
+            if command.units:
+                args["units"] = command.units
+        else:
+            assert isinstance(command, EventRemove)
+            description = command.description
+            args["description"] = description
+        before = _event_count(_event_list(client, flow, command.event_set, command.schedule), description)
+        if not adding and before == 0:
+            raise EditorError("event_not_found", "No event with this description exists in the event set", 404)
+        client.call("dwsim_dynamics_event", args, 30)
+        events = _event_list(client, flow, command.event_set, command.schedule)
+        after = _event_count(events, description)
+        if (adding and after != before + 1) or (not adding and after >= before):
+            raise EditorError("DWSIM_READBACK_MISMATCH", "DWSIM event list did not match the requested change", 502)
+        readback = {"event_set": command.event_set, "schedule": command.schedule,
+                    "description" if adding else "removed": description, "matching_events": after, "events": events}
+    elif isinstance(command, DynamicsRun):
+        if command.step_s is not None or command.integrator is not None or command.method is not None:
+            schedule = command.schedule
+            config = client.call("dwsim_dynamics_inspect", {"flowsheet_id": flow, "detail": "config"}, 30)
+            schedule = schedule or config.get("current_schedule")
+            if not isinstance(schedule, str) or not schedule:
+                raise EditorError("DWSIM_DYNAMIC_SCHEDULE_UNAVAILABLE", "No current dynamics schedule is available", 422)
+            checked = client.call("dwsim_dynamics_check", {"flowsheet_id": flow, "schedule": schedule}, 30)
+            step_s = command.step_s if command.step_s is not None else checked.get("step_s")
+            if not isinstance(step_s, (int, float)) or step_s <= 0:
+                raise EditorError("DWSIM_DYNAMIC_STEP_UNAVAILABLE", "DWSIM did not report a valid integration step", 422)
+            setup = {"flowsheet_id": flow, "schedule": schedule,
+                     "step_s": step_s, "duration_s": command.duration_s,
+                     "enable_dynamic_mode": True, "make_current": True}
+            if command.integrator:
+                setup["integrator"] = command.integrator
+            if command.method:
+                setup["method"] = command.method
+            client.call("dwsim_dynamics_setup", setup, 30)
+        args = {"flowsheet_id": flow, "duration_s": command.duration_s, "max_wall_time_s": command.max_wall_time_s,
+                "max_steps": command.max_steps, "wait": True}
+        if command.schedule:
+            args["schedule"] = command.schedule
+        started = client.call("dwsim_dynamics_run", args, command.max_wall_time_s + 30)
+        run_id = started.get("run_id")
+        if not isinstance(run_id, str):
+            raise EditorError("DWSIM_DYNAMIC_RUN_INVALID", "DWSIM did not return a dynamic run id", 502)
+        status = client.call("dwsim_dynamics_status", {"run_id": run_id, "include_summary": True}, 30)
+        series_args: dict[str, Any] = {"run_id": run_id, "max_points": MAX_DYNAMIC_POINTS}
+        if command.variables:
+            series_args["variables"] = command.variables
+        series = client.call("dwsim_dynamics_series", series_args, 30)
+        raw_times = series.get("t_s", [])
+        times = [float(value) for value in raw_times if isinstance(value, (str, int, float))]
+        if not times or len(times) > MAX_DYNAMIC_POINTS:
+            raise EditorError("DWSIM_READBACK_MISMATCH", "DWSIM returned no bounded dynamic time-series", 502)
+        state = status.get("state", started.get("state"))
+        if not isinstance(state, str):
+            raise EditorError("DWSIM_READBACK_MISMATCH", "DWSIM returned no dynamic run status", 502)
+        summary = status.get("summary") or started.get("summary") or {}
+        summary_end = summary.get("simulated_s") if isinstance(summary, dict) else None
+        series_end = times[-1] if times else None
+        readback = {"run_id": run_id, "status": state,
+                    "requested_duration_s": command.duration_s, "simulated_end_s": status.get("simulated_s", started.get("simulated_s")),
+                    "summary_simulated_end_s": summary_end, "series_end_s": series_end,
+                    "time_reconciliation": "match" if series_end is not None and summary_end is not None and math.isclose(series_end, float(summary_end), abs_tol=1e-9) else "mismatch_or_unavailable",
+                    "summary": summary, "series": series,
+                    "objects": [{"tag": item.get("name"), "calculated": item.get("calculated"), "errors": item.get("error", "")} for item in _objects(client, flow)]}
+    elif isinstance(command, StateSave):
+        config = client.call("dwsim_dynamics_inspect", {"flowsheet_id": flow, "detail": "objects"}, 30)
+        tags = [str(item["tag"]) for item in config.get("objects", []) if isinstance(item, dict) and item.get("tag")]
+        snapshot = _dynamic_values(client, flow, tags)
+        client.call("dwsim_dynamics_state", {"flowsheet_id": flow, "action": "save", "name": command.name}, 30)
+        listed = client.call("dwsim_dynamics_state", {"flowsheet_id": flow, "action": "list"}, 30)
+        if command.name not in listed.get("stored_states", []):
+            raise EditorError("DWSIM_READBACK_MISMATCH", "Saved state was absent from DWSIM state list", 502)
+        readback = {"state_name": command.name, "state_snapshot": snapshot, "stored_states": listed.get("stored_states", [])}
+    elif isinstance(command, StateRestore):
+        expected = _saved_state_snapshot(directory, command.name)
+        if expected is None:
+            raise EditorError("state_snapshot_unavailable", "No revisioned read-back snapshot exists for this state", 422)
+        client.call("dwsim_dynamics_state", {"flowsheet_id": flow, "action": "restore", "name": command.name}, 30)
+        actual = _dynamic_values(client, flow, list(expected))
+        mismatch = _snapshot_mismatch(actual, expected)
+        if mismatch:
+            raise EditorError("DWSIM_READBACK_MISMATCH", f"Restored state did not restore {mismatch}", 502)
+        readback = {"restored_state": command.name, "state_snapshot": actual, "verified_objects": len(expected)}
+    elif isinstance(command, DeleteObject | Disconnect):
         raise EditorError("unsupported_upstream", UNSUPPORTED[command.kind], 422)
     else:
         raise EditorError("unsupported_upstream", "This command is unsupported by the DWSIM MCP runtime", 422)
     _save(client, flow, scratch)
     if isinstance(command, Connect):
-        _native, tags, available = _connector_records(scratch)
+        _native, connector_tags, available = _connector_records(scratch)
         objects = _objects(client, flow)
         unit_id = next((item.get("id") for item in objects if item.get("name") == command.unit), None)
         stream_id = next((item.get("id") for item in objects if item.get("name") == command.stream), None)
         connector_group = "input" if command.role == "feed" else "output" if command.role == "product" else "energy"
-        direct = (tags.get(command.unit) or {}).get(connector_group, [])
-        opposite = (tags.get(command.stream) or {}).get("output" if command.role == "feed" else "input", [])
+        direct = (connector_tags.get(command.unit) or {}).get(connector_group, [])
+        opposite = (connector_tags.get(command.stream) or {}).get("output" if command.role == "feed" else "input", [])
         attached = direct[command.port] if command.port < len(direct) else None
         reciprocal = next(
             (
@@ -605,6 +837,7 @@ def _projection(
         last_solve=record.get("last_solve"),
         editable_commands=SUPPORTED,
         unsupported_commands=UNSUPPORTED,
+        dynamics=DynamicsProjectionRead.model_validate(_dynamic_projection(client, flow, record)),
     )
 
 
@@ -751,7 +984,45 @@ def restore(workspace_id: str, case_id: str, expected_revision: str, source_revi
     return {"case": _case_read(workspace_id, case_id, row), "projection": projected, "readback": readback}
 
 
+def _verify_persisted(client: DwsimMcpClient, target: Path, command: EditorCommand, readback: dict[str, Any]) -> None:
+    """Reload the saved case and prove the dynamic change survived DWSIM persistence."""
+    flow = _load(client, target)
+    if isinstance(command, ControllerSet):
+        controllers = client.call("dwsim_dynamics_controller", {"flowsheet_id": flow, "action": "list"}, 30).get("controllers")
+        if _controller_mismatch(controllers, command.tag, readback["requested"]):
+            raise EditorError("DWSIM_PERSISTENCE_MISMATCH", "Saved case did not preserve controller settings", 502)
+    elif isinstance(command, EventAdd | EventRemove):
+        description = readback.get("description", readback.get("removed", ""))
+        events = _event_list(client, flow, command.event_set, command.schedule)
+        if _event_count(events, description) != readback["matching_events"]:
+            raise EditorError("DWSIM_PERSISTENCE_MISMATCH", "Saved case did not preserve the event change", 502)
+    elif isinstance(command, StateSave | StateRestore):
+        states = client.call("dwsim_dynamics_state", {"flowsheet_id": flow, "action": "list"}, 30).get("stored_states", [])
+        if command.name not in states:
+            raise EditorError("DWSIM_PERSISTENCE_MISMATCH", "Saved case did not preserve the dynamic state", 502)
+    if isinstance(command, DynamicsRun):
+        objects = _objects(client, flow)
+        readback["persisted_objects"] = [
+            {"tag": item.get("name"), "calculated": item.get("calculated"), "errors": item.get("error", "")}
+            for item in objects
+        ]
+        tags = [str(item["name"]) for item in objects if item.get("name")]
+        readback["persisted_dynamic_values"] = _dynamic_values(client, flow, tags)
+    if isinstance(command, StateRestore):
+        persisted = _dynamic_values(client, flow, list(readback["state_snapshot"]))
+        mismatch = _snapshot_mismatch(persisted, readback["state_snapshot"])
+        if mismatch:
+            raise EditorError("DWSIM_PERSISTENCE_MISMATCH", f"Saved restore did not preserve {mismatch}", 502)
+        readback["persisted_state_snapshot"] = persisted
+
+
 def execute(workspace_id: str, case_id: str, command: EditorCommand) -> dict[str, Any]:
+    if isinstance(command, DynamicsRun) and (
+        command.duration_s > MAX_DYNAMIC_DURATION_S
+        or command.max_wall_time_s > MAX_DYNAMIC_WALL_TIME_S
+        or command.max_steps > MAX_DYNAMIC_STEPS
+    ):
+        raise EditorError("dynamic_run_cap_exceeded", "Dynamic run exceeds a server-side duration, wall-time, or step cap", 422)
     directory = _directory(workspace_id, case_id)
     with _lock(directory):
         current = _head(directory)
@@ -764,7 +1035,9 @@ def execute(workspace_id: str, case_id: str, command: EditorCommand) -> dict[str
             try:
                 with client:
                     flow = _load(client, source)
-                    readback = _apply(client, flow, command, target)
+                    readback = _apply(client, flow, command, target, directory)
+                    if isinstance(command, ControllerSet | EventAdd | EventRemove | StateSave | StateRestore | DynamicsRun):
+                        _verify_persisted(client, target, command, readback)
                 row = _write_revision(
                     directory,
                     target,

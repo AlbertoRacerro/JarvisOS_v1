@@ -229,6 +229,100 @@ def test_import_size_is_bounded(monkeypatch):
     assert error.value.status == 413
 
 
+class _DynamicsMismatchClient(_FakeClient):
+    def call(self, name, args, timeout):
+        self.calls.append(name)
+        if name == "dwsim_flowsheet_load":
+            return {"flowsheet_id": "flow"}
+        if name == "dwsim_dynamics_controller":
+            return {"controllers": [{"tag": args.get("tag", "PID"), "sp": "9"}]}
+        if name == "dwsim_dynamics_event":
+            if args.get("action") == "list" and args.get("event_set") == "events":
+                return {"events": ["remove me"]}
+            return {"events": []}
+        if name == "dwsim_dynamics_inspect":
+            return {"objects": [{"tag": "Unit1"}]}
+        if name == "dwsim_dynamics_properties":
+            return {"properties": [{"id": "P", "value": "1"}]}
+        if name == "dwsim_dynamics_state":
+            return {"stored_states": []}
+        if name == "dwsim_dynamics_run":
+            return {"run_id": "run", "state": "completed"}
+        if name == "dwsim_dynamics_status":
+            return {"state": "completed", "summary": {"simulated_s": "1"}}
+        if name == "dwsim_dynamics_series":
+            return {"t_s": [], "series": {}, "points": 0}
+        return super().call(name, args, timeout)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"kind": "controller_set", "tag": "PID", "sp": 2},
+        {"kind": "event_add", "event_set": "events", "tag": "Feed", "property": "P", "value": 2, "at_s": 1},
+        {"kind": "event_remove", "event_set": "events", "description": "remove me"},
+        {"kind": "state_save", "name": "snapshot"},
+        {"kind": "dynamics_run", "duration_s": 1},
+    ],
+)
+def test_dynamic_readback_mismatch_does_not_create_revision(tmp_path, monkeypatch, payload):
+    directory = tmp_path / "case"
+    record = _initial(directory)
+    fake = _DynamicsMismatchClient()
+    monkeypatch.setattr(editor, "_directory", lambda *_args: directory)
+    monkeypatch.setattr(editor, "_client", lambda: (fake, "a" * 64, "10.2.9"))
+    command = TypeAdapter(EditorCommand).validate_python({**payload, "expected_revision": record["revision"]})
+    with pytest.raises(editor.EditorError):
+        editor.execute("workspace", "case", command)
+    assert editor._head(directory)["revision"] == record["revision"]
+    assert len(list((directory / "revisions").iterdir())) == 1
+
+
+def test_dynamics_caps_reject_before_mcp(monkeypatch):
+    command = TypeAdapter(EditorCommand).validate_python(
+        {"kind": "dynamics_run", "expected_revision": "stale", "duration_s": editor.MAX_DYNAMIC_DURATION_S + 1}
+    )
+    monkeypatch.setattr(editor, "_client", lambda: pytest.fail("capped command must not start MCP"))
+    with pytest.raises(editor.EditorError) as error:
+        editor.execute("workspace", "case", command)
+    assert error.value.status == 422
+
+
+def test_state_restore_readback_mismatch_does_not_create_revision(tmp_path, monkeypatch):
+    directory = tmp_path / "case"
+    record = _initial(directory)
+    fake = _DynamicsMismatchClient()
+    monkeypatch.setattr(editor, "_directory", lambda *_args: directory)
+    monkeypatch.setattr(editor, "_client", lambda: (fake, "a" * 64, "10.2.9"))
+    monkeypatch.setattr(editor, "_saved_state_snapshot", lambda *_args: {"Unit1": {"P": "9"}})
+    command = TypeAdapter(EditorCommand).validate_python(
+        {"kind": "state_restore", "expected_revision": record["revision"], "name": "snapshot"}
+    )
+    with pytest.raises(editor.EditorError, match="Restored state"):
+        editor.execute("workspace", "case", command)
+    assert editor._head(directory)["revision"] == record["revision"]
+    assert len(list((directory / "revisions").iterdir())) == 1
+
+
+def test_dynamic_projection_reports_read_only_tool_data():
+    class ProjectionClient:
+        def call(self, name, args, _timeout):
+            if name == "dwsim_dynamics_inspect":
+                return {"current_schedule": "S", "event_sets": ["E"]}
+            if name == "dwsim_dynamics_controller":
+                return {"controllers": [{"tag": "PID"}]}
+            if name == "dwsim_dynamics_state":
+                return {"stored_states": ["Initial"]}
+            if name == "dwsim_dynamics_event":
+                return {"event_set": "E", "events": ["t = 1 s"]}
+            raise AssertionError(name)
+
+    result = editor._dynamic_projection(ProjectionClient(), "flow", {"command_kind": "create_case"})
+    assert result["controllers"] == [{"tag": "PID"}]
+    assert result["saved_states"] == ["Initial"]
+    assert result["event_sets"] == [{"event_set": "E", "events": ["t = 1 s"]}]
+
+
 @pytest.mark.skipif(
     not os.environ.get("JARVISOS_DWSIM_MCP_PATH"), reason="set JARVISOS_DWSIM_MCP_PATH to opt in to DWSIM runtime"
 )
@@ -251,3 +345,31 @@ def test_opt_in_runtime_creates_editor_case(tmp_path, monkeypatch):
         assert response.status_code == 200, response.text
         assert response.json()["revision"].endswith(":1")
     get_settings.cache_clear()
+
+
+class _StaticEventClient(_FakeClient):
+    """DWSIM accepts the add call but its event list never changes."""
+
+    def call(self, name, args, timeout):
+        if name == "dwsim_dynamics_event":
+            self.calls.append(f"event:{args['action']}")
+            return {"events": [{"description": "Feed step"}]} if args["action"] == "list" else {"ok": True}
+        return super().call(name, args, timeout)
+
+
+def test_event_add_with_preexisting_description_requires_a_new_event(tmp_path, monkeypatch):
+    directory = tmp_path / "case"
+    record = _initial(directory)
+    monkeypatch.setattr(editor, "_directory", lambda *_args: directory)
+    monkeypatch.setattr(editor, "_client", lambda: (_StaticEventClient(), "a" * 64, "10.2.9"))
+    command = TypeAdapter(EditorCommand).validate_python(
+        {"kind": "event_add", "expected_revision": record["revision"], "event_set": "S1", "tag": "FEED",
+         "property": "PROP_MS_2", "value": 5, "at_s": 10, "description": "Feed step"}
+    )
+    with pytest.raises(editor.EditorError, match="event list did not match"):
+        editor.execute("workspace", "case", command)
+    assert editor._head(directory)["revision"] == record["revision"]
+    with pytest.raises(ValueError):
+        TypeAdapter(EditorCommand).validate_python(
+            {"kind": "event_remove", "expected_revision": "x", "event_set": "S1", "description": ""}
+        )

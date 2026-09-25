@@ -1,0 +1,1023 @@
+{
+  "case_id": "5ec6a263-884e-4b15-a3eb-baec997b75f4",
+  "controller_after_restore": {
+    "active": true,
+    "controls": "TANK-df1d421c-48ed-4662-a19c-346a5d637b4b.Liquid Level",
+    "execution_order": 0,
+    "kd": "16.3382",
+    "ki": "4.52784",
+    "kp": "119.455",
+    "manipulates": "VALVE-9792610b-f81f-4368-a952-be3943e502b3.PROP_VA_5",
+    "manual": false,
+    "mv": "31.8203",
+    "out_max": "1000",
+    "out_min": "-1000",
+    "pv": "1.70004",
+    "reverse_acting": true,
+    "sp": "0.5",
+    "tag": "PID-008",
+    "wired": true
+  },
+  "controller_readback": {
+    "active": true,
+    "controls": "TANK-df1d421c-48ed-4662-a19c-346a5d637b4b.Liquid Level",
+    "execution_order": 0,
+    "kd": "16.3382",
+    "ki": "4.52784",
+    "kp": "119.455",
+    "manipulates": "VALVE-9792610b-f81f-4368-a952-be3943e502b3.PROP_VA_5",
+    "manual": false,
+    "mv": "31.8203",
+    "out_max": "1000",
+    "out_min": "-1000",
+    "pv": "1.70004",
+    "reverse_acting": true,
+    "sp": "0.5",
+    "tag": "PID-008",
+    "wired": true
+  },
+  "controller_requested_sp": 0.5,
+  "dwsim_version": "10.2.9",
+  "dynamic_run": {
+    "objects": [
+      {
+        "calculated": true,
+        "errors": "",
+        "tag": "PID-008"
+      },
+      {
+        "calculated": false,
+        "errors": "",
+        "tag": "LG-007"
+      },
+      {
+        "calculated": true,
+        "errors": "",
+        "tag": "V-02"
+      },
+      {
+        "calculated": true,
+        "errors": "",
+        "tag": "V-01"
+      },
+      {
+        "calculated": true,
+        "errors": "",
+        "tag": "ms03"
+      },
+      {
+        "calculated": true,
+        "errors": "",
+        "tag": "ms02"
+      },
+      {
+        "calculated": true,
+        "errors": "",
+        "tag": "T-01"
+      },
+      {
+        "calculated": true,
+        "errors": "",
+        "tag": "outlet"
+      },
+      {
+        "calculated": true,
+        "errors": "",
+        "tag": "inlet"
+      }
+    ],
+    "persisted_dynamic_values": {
+      "LG-007": {
+        "Monitored Value": "0.160474"
+      },
+      "PID-008": {
+        "CumulativeError": "4.04719",
+        "CurrentError": "-0.679052",
+        "Kd": "16.3382",
+        "Ki": "4.52784",
+        "Kp": "119.455",
+        "LastError": "-0.7292",
+        "Output": "-171.509",
+        "OutputAbs": "-85.2546",
+        "OutputMax": "1000",
+        "OutputMin": "-1000",
+        "SetPointAbs": "0.5"
+      },
+      "T-01": {
+        "Ambient Temperature": "298.15",
+        "Ambient UA Product": "0",
+        "Closed Tank": "0",
+        "Height": "2",
+        "Initialize using Inlet Stream": "1",
+        "Liquid Level": "0.160474",
+        "Minimum Pressure": "101325",
+        "Operating Pressure": "101325",
+        "PROP_TK_0": "0",
+        "PROP_TK_1": "2",
+        "PROP_TK_2": "199.411",
+        "Reset Content": "0"
+      },
+      "V-01": {
+        "Actual Flow Coefficient": "100",
+        "Actuator Delay": "0",
+        "Actuator Time Constant": "0",
+        "Cavitation Alarm": "0",
+        "Liquid Pressure Recovery Factor FL": "0.9",
+        "Opening Setpoint": "100",
+        "PROP_VA_0": "2",
+        "PROP_VA_1": "3249.57",
+        "PROP_VA_2": "117002",
+        "PROP_VA_3": "0.00288076",
+        "PROP_VA_4": "100",
+        "PROP_VA_5": "50",
+        "PROP_VA_6": "50"
+      },
+      "V-02": {
+        "Actual Flow Coefficient": "0",
+        "Actuator Delay": "0",
+        "Actuator Time Constant": "0",
+        "Cavitation Alarm": "0",
+        "Liquid Pressure Recovery Factor FL": "0.9",
+        "Opening Setpoint": "100",
+        "PROP_VA_0": "2",
+        "PROP_VA_1": "-7016.26",
+        "PROP_VA_2": "109909",
+        "PROP_VA_3": "0.00157288",
+        "PROP_VA_4": "400",
+        "PROP_VA_5": "0",
+        "PROP_VA_6": "50"
+      },
+      "inlet": {
+        "PROP_MS_0": "298.154",
+        "PROP_MS_1": "120251",
+        "PROP_MS_10": "6.61677",
+        "PROP_MS_11": "0.607211",
+        "PROP_MS_12": "0",
+        "PROP_MS_13": "0",
+        "PROP_MS_14": "0",
+        "PROP_MS_15": "0",
+        "PROP_MS_16": "0",
+        "PROP_MS_17": "0",
+        "PROP_MS_18": "0",
+        "PROP_MS_19": "0",
+        "PROP_MS_2": "5",
+        "PROP_MS_3": "277.542",
+        "PROP_MS_4": "0.00501477",
+        "PROP_MS_5": "997.055",
+        "PROP_MS_6": "18.0153",
+        "PROP_MS_7": "104.965",
+        "PROP_MS_8": "0.367286",
+        "PROP_MS_9": "1890.97"
+      },
+      "ms02": {
+        "PROP_MS_0": "298.155",
+        "PROP_MS_1": "117002",
+        "PROP_MS_10": "6.61696",
+        "PROP_MS_11": "0.607211",
+        "PROP_MS_12": "0",
+        "PROP_MS_13": "0",
+        "PROP_MS_14": "0",
+        "PROP_MS_15": "0",
+        "PROP_MS_16": "0",
+        "PROP_MS_17": "0",
+        "PROP_MS_18": "0",
+        "PROP_MS_19": "0",
+        "PROP_MS_2": "5",
+        "PROP_MS_3": "277.542",
+        "PROP_MS_4": "0.00501477",
+        "PROP_MS_5": "997.054",
+        "PROP_MS_6": "18.0153",
+        "PROP_MS_7": "104.965",
+        "PROP_MS_8": "0.367297",
+        "PROP_MS_9": "1890.97"
+      },
+      "ms03": {
+        "PROP_MS_0": "298.158",
+        "PROP_MS_1": "102893",
+        "PROP_MS_10": "6.61782",
+        "PROP_MS_11": "0.60721",
+        "PROP_MS_12": "0",
+        "PROP_MS_13": "0",
+        "PROP_MS_14": "0",
+        "PROP_MS_15": "0",
+        "PROP_MS_16": "0",
+        "PROP_MS_17": "0",
+        "PROP_MS_18": "0",
+        "PROP_MS_19": "0",
+        "PROP_MS_2": "0",
+        "PROP_MS_3": "0",
+        "PROP_MS_4": "0",
+        "PROP_MS_5": "997.047",
+        "PROP_MS_6": "18.0153",
+        "PROP_MS_7": "104.965",
+        "PROP_MS_8": "0.367345",
+        "PROP_MS_9": "1890.97"
+      },
+      "outlet": {
+        "PROP_MS_0": "298.157",
+        "PROP_MS_1": "109909",
+        "PROP_MS_10": "6.61739",
+        "PROP_MS_11": "0.60721",
+        "PROP_MS_12": "0",
+        "PROP_MS_13": "0",
+        "PROP_MS_14": "0",
+        "PROP_MS_15": "0",
+        "PROP_MS_16": "0",
+        "PROP_MS_17": "0",
+        "PROP_MS_18": "0",
+        "PROP_MS_19": "0",
+        "PROP_MS_2": "0",
+        "PROP_MS_3": "0",
+        "PROP_MS_4": "0",
+        "PROP_MS_5": "997.05",
+        "PROP_MS_6": "18.0153",
+        "PROP_MS_7": "104.965",
+        "PROP_MS_8": "0.367321",
+        "PROP_MS_9": "1890.97"
+      }
+    },
+    "persisted_objects": [
+      {
+        "calculated": true,
+        "errors": "",
+        "tag": "inlet"
+      },
+      {
+        "calculated": true,
+        "errors": "",
+        "tag": "outlet"
+      },
+      {
+        "calculated": true,
+        "errors": "",
+        "tag": "T-01"
+      },
+      {
+        "calculated": true,
+        "errors": "",
+        "tag": "ms02"
+      },
+      {
+        "calculated": true,
+        "errors": "",
+        "tag": "ms03"
+      },
+      {
+        "calculated": true,
+        "errors": "",
+        "tag": "V-01"
+      },
+      {
+        "calculated": true,
+        "errors": "",
+        "tag": "V-02"
+      },
+      {
+        "calculated": false,
+        "errors": "",
+        "tag": "LG-007"
+      },
+      {
+        "calculated": true,
+        "errors": "",
+        "tag": "PID-008"
+      }
+    ],
+    "requested_duration_s": 20.0,
+    "run_id": "dyn_fa3f7fdf",
+    "series": {
+      "decimated_from": 5,
+      "note": "Decimated preview. Call dwsim_dynamics_export for the full series.",
+      "points": 5,
+      "run_id": "dyn_fa3f7fdf",
+      "series": {
+        "Level": {
+          "units": "m",
+          "values": [
+            "0.0100296",
+            "0.0601778",
+            "0.110326",
+            "0.1354",
+            "0.160474"
+          ]
+        },
+        "V1": {
+          "units": "%",
+          "values": [
+            "50",
+            "50",
+            "50",
+            "50",
+            "50"
+          ]
+        },
+        "V2": {
+          "units": "%",
+          "values": [
+            "33.8441",
+            "0",
+            "0",
+            "0",
+            "0"
+          ]
+        }
+      },
+      "t_s": [
+        "0",
+        "5",
+        "10",
+        "15",
+        "20"
+      ]
+    },
+    "series_end_s": 20.0,
+    "simulated_end_s": "20",
+    "status": "completed",
+    "summary": {
+      "aborted": false,
+      "completed": true,
+      "errors": [],
+      "integrator": "Int1",
+      "schedule": "Sch1",
+      "simulated_s": "25",
+      "steps": 5,
+      "variables": [
+        {
+          "diverged": false,
+          "first": "0.0100296",
+          "last": "0.160474",
+          "max": "0.160474",
+          "min": "0.0100296",
+          "settled": false,
+          "units": "m",
+          "variable": "Level"
+        },
+        {
+          "diverged": false,
+          "first": "50",
+          "last": "50",
+          "max": "50",
+          "min": "50",
+          "settled": true,
+          "units": "%",
+          "variable": "V1"
+        },
+        {
+          "diverged": false,
+          "first": "33.8441",
+          "last": "0",
+          "max": "33.8441",
+          "min": "0",
+          "settled": true,
+          "units": "%",
+          "variable": "V2"
+        }
+      ],
+      "wall_clock_s": "0.379785"
+    },
+    "summary_simulated_end_s": "25",
+    "time_reconciliation": "mismatch_or_unavailable"
+  },
+  "elapsed_seconds_by_command": {
+    "controller_set": 4.62645589299791,
+    "dynamics_run": 7.347265010001138,
+    "event_add": 5.322072363996995,
+    "state_restore": 6.021103844992467,
+    "state_save": 5.823557120995247
+  },
+  "event_effect_inlet_mass_flow_kg_s": 5.0,
+  "event_readback": {
+    "description": "Jarvis dynamics smoke inlet step",
+    "event_set": "JarvisSmoke",
+    "events": [
+      "t = 10 s: Jarvis dynamics smoke inlet step"
+    ],
+    "matching_events": 1,
+    "schedule": "Sch1"
+  },
+  "inlet_object_after_run": {
+    "calculated": true,
+    "category": "material_stream",
+    "errors": "",
+    "height": 30.0,
+    "native_id": "MS-9b4a798d-db79-483a-bbd2-ac6c521dca6f",
+    "results": {
+      "mass_flow_kg_s": 5.0,
+      "molar_flow_mol_s": 277.54217530895994,
+      "name": "inlet",
+      "phases": [
+        {
+          "compounds": {
+            "Water": {
+              "mass_fraction": 1.0,
+              "mole_fraction": 1.0
+            }
+          },
+          "density_kg_m3": 997.0554541312482,
+          "enthalpy_kJ_kg": 104.96476160987122,
+          "entropy_kJ_kgK": 0.36728630539663365,
+          "fraction": 1.0,
+          "name": "Mixture",
+          "pressure_Pa": 120251.35891793623,
+          "temperature_K": 298.1542896756512
+        },
+        {
+          "compounds": {
+            "Water": {
+              "mass_fraction": 1.0,
+              "mole_fraction": 1.0
+            }
+          },
+          "density_kg_m3": 997.0554541312482,
+          "enthalpy_kJ_kg": 104.96476160987122,
+          "entropy_kJ_kgK": 0.36728630539663365,
+          "fraction": 1.0,
+          "name": "OverallLiquid",
+          "pressure_Pa": 0.0,
+          "temperature_K": 0.0
+        },
+        {
+          "compounds": {
+            "Water": {
+              "mass_fraction": 0.0,
+              "mole_fraction": 0.0
+            }
+          },
+          "density_kg_m3": 0.0,
+          "enthalpy_kJ_kg": 0.0,
+          "entropy_kJ_kgK": 0.0,
+          "fraction": 0.0,
+          "name": "Vapor",
+          "pressure_Pa": 0.0,
+          "temperature_K": 0.0
+        },
+        {
+          "compounds": {
+            "Water": {
+              "mass_fraction": 1.0,
+              "mole_fraction": 1.0
+            }
+          },
+          "density_kg_m3": 997.0554541312482,
+          "enthalpy_kJ_kg": 104.96476160987122,
+          "entropy_kJ_kgK": 0.36728630539663365,
+          "fraction": 1.0,
+          "name": "Liquid1",
+          "pressure_Pa": 0.0,
+          "temperature_K": 0.0
+        },
+        {
+          "compounds": {
+            "Water": {
+              "mass_fraction": 0.0,
+              "mole_fraction": 0.0
+            }
+          },
+          "density_kg_m3": 0.0,
+          "enthalpy_kJ_kg": 0.0,
+          "entropy_kJ_kgK": 0.0,
+          "fraction": 0.0,
+          "name": "Liquid2",
+          "pressure_Pa": 0.0,
+          "temperature_K": 0.0
+        },
+        {
+          "compounds": {
+            "Water": {
+              "mass_fraction": 0.0,
+              "mole_fraction": 0.0
+            }
+          },
+          "density_kg_m3": 0.0,
+          "enthalpy_kJ_kg": 0.0,
+          "entropy_kJ_kgK": 0.0,
+          "fraction": 0.0,
+          "name": "Liquid3",
+          "pressure_Pa": 0.0,
+          "temperature_K": 0.0
+        },
+        {
+          "compounds": {
+            "Water": {
+              "mass_fraction": 0.0,
+              "mole_fraction": 0.0
+            }
+          },
+          "density_kg_m3": 0.0,
+          "enthalpy_kJ_kg": 0.0,
+          "entropy_kJ_kgK": 0.0,
+          "fraction": 0.0,
+          "name": "Aqueous",
+          "pressure_Pa": 0.0,
+          "temperature_K": 0.0
+        },
+        {
+          "compounds": {
+            "Water": {
+              "mass_fraction": 0.0,
+              "mole_fraction": 0.0
+            }
+          },
+          "density_kg_m3": 0.0,
+          "enthalpy_kJ_kg": 0.0,
+          "entropy_kJ_kgK": 0.0,
+          "fraction": 0.0,
+          "name": "Solid",
+          "pressure_Pa": 0.0,
+          "temperature_K": 0.0
+        }
+      ],
+      "pressure_Pa": 120251.35891793623,
+      "temperature_K": 298.1542896756512
+    },
+    "tag": "inlet",
+    "type": "MaterialStream",
+    "width": 30.0,
+    "x": 106.6142,
+    "y": 132.0043
+  },
+  "mcp_sha256": "d20f97426c264ac91114240b085b3c4e7877dfda83ecb487c0125f838cf66cfa",
+  "restored_inlet_mass_flow_kg_s": 10.0,
+  "restored_state_readback": {
+    "persisted_state_snapshot": {
+      "LG-007": {
+        "Monitored Value": "1.70004"
+      },
+      "PID-008": {
+        "CumulativeError": "22.689",
+        "CurrentError": "2.5654E-05",
+        "Kd": "16.3382",
+        "Ki": "4.52784",
+        "Kp": "119.455",
+        "LastError": "3.32914E-05",
+        "Output": "17.7178",
+        "OutputAbs": "31.8203",
+        "OutputMax": "1000",
+        "OutputMin": "-1000",
+        "SetPointAbs": "0.5"
+      },
+      "T-01": {
+        "Ambient Temperature": "298.15",
+        "Ambient UA Product": "0",
+        "Closed Tank": "0",
+        "Height": "2",
+        "Initialize using Inlet Stream": "1",
+        "Liquid Level": "1.70004",
+        "Minimum Pressure": "101325",
+        "Operating Pressure": "101325",
+        "PROP_TK_0": "0",
+        "PROP_TK_1": "2",
+        "PROP_TK_2": "199.411",
+        "Reset Content": "0"
+      },
+      "V-01": {
+        "Actual Flow Coefficient": "100",
+        "Actuator Delay": "0",
+        "Actuator Time Constant": "0",
+        "Cavitation Alarm": "0",
+        "Liquid Pressure Recovery Factor FL": "0.9",
+        "Opening Setpoint": "100",
+        "PROP_VA_0": "2",
+        "PROP_VA_1": "12998.2",
+        "PROP_VA_2": "117002",
+        "PROP_VA_3": "0.00288076",
+        "PROP_VA_4": "100",
+        "PROP_VA_5": "50",
+        "PROP_VA_6": "50"
+      },
+      "V-02": {
+        "Actual Flow Coefficient": "127.283",
+        "Actuator Delay": "0",
+        "Actuator Time Constant": "0",
+        "Cavitation Alarm": "0",
+        "Liquid Pressure Recovery Factor FL": "0.9",
+        "Opening Setpoint": "100",
+        "PROP_VA_0": "2",
+        "PROP_VA_1": "8026.96",
+        "PROP_VA_2": "109909",
+        "PROP_VA_3": "0.00157288",
+        "PROP_VA_4": "400",
+        "PROP_VA_5": "31.8203",
+        "PROP_VA_6": "50"
+      },
+      "inlet": {
+        "PROP_MS_0": "298.152",
+        "PROP_MS_1": "130000",
+        "PROP_MS_10": "6.61624",
+        "PROP_MS_11": "0.607212",
+        "PROP_MS_12": "0",
+        "PROP_MS_13": "0",
+        "PROP_MS_14": "0",
+        "PROP_MS_15": "0",
+        "PROP_MS_16": "0",
+        "PROP_MS_17": "0",
+        "PROP_MS_18": "0",
+        "PROP_MS_19": "0",
+        "PROP_MS_2": "10",
+        "PROP_MS_3": "555.084",
+        "PROP_MS_4": "0.0100295",
+        "PROP_MS_5": "997.06",
+        "PROP_MS_6": "18.0153",
+        "PROP_MS_7": "104.966",
+        "PROP_MS_8": "0.367257",
+        "PROP_MS_9": "1890.99"
+      },
+      "ms02": {
+        "PROP_MS_0": "298.155",
+        "PROP_MS_1": "117002",
+        "PROP_MS_10": "6.61703",
+        "PROP_MS_11": "0.607211",
+        "PROP_MS_12": "0",
+        "PROP_MS_13": "0",
+        "PROP_MS_14": "0",
+        "PROP_MS_15": "0",
+        "PROP_MS_16": "0",
+        "PROP_MS_17": "0",
+        "PROP_MS_18": "0",
+        "PROP_MS_19": "0",
+        "PROP_MS_2": "10",
+        "PROP_MS_3": "555.084",
+        "PROP_MS_4": "0.0100295",
+        "PROP_MS_5": "997.054",
+        "PROP_MS_6": "18.0153",
+        "PROP_MS_7": "104.966",
+        "PROP_MS_8": "0.367301",
+        "PROP_MS_9": "1890.99"
+      },
+      "ms03": {
+        "PROP_MS_0": "298.152",
+        "PROP_MS_1": "117936",
+        "PROP_MS_10": "6.6161",
+        "PROP_MS_11": "0.607206",
+        "PROP_MS_12": "0",
+        "PROP_MS_13": "0",
+        "PROP_MS_14": "0",
+        "PROP_MS_15": "0",
+        "PROP_MS_16": "0",
+        "PROP_MS_17": "0",
+        "PROP_MS_18": "0",
+        "PROP_MS_19": "0",
+        "PROP_MS_2": "10.0024",
+        "PROP_MS_3": "555.218",
+        "PROP_MS_4": "0.010032",
+        "PROP_MS_5": "997.055",
+        "PROP_MS_6": "18.0153",
+        "PROP_MS_7": "104.951",
+        "PROP_MS_8": "0.367249",
+        "PROP_MS_9": "1890.73"
+      },
+      "outlet": {
+        "PROP_MS_0": "298.153",
+        "PROP_MS_1": "109909",
+        "PROP_MS_10": "6.61658",
+        "PROP_MS_11": "0.607205",
+        "PROP_MS_12": "0",
+        "PROP_MS_13": "0",
+        "PROP_MS_14": "0",
+        "PROP_MS_15": "0",
+        "PROP_MS_16": "0",
+        "PROP_MS_17": "0",
+        "PROP_MS_18": "0",
+        "PROP_MS_19": "0",
+        "PROP_MS_2": "10.0024",
+        "PROP_MS_3": "555.218",
+        "PROP_MS_4": "0.010032",
+        "PROP_MS_5": "997.051",
+        "PROP_MS_6": "18.0153",
+        "PROP_MS_7": "104.951",
+        "PROP_MS_8": "0.367276",
+        "PROP_MS_9": "1890.73"
+      }
+    },
+    "restored_state": "JarvisDynamicsSmokeBeforeRun",
+    "state_snapshot": {
+      "LG-007": {
+        "Monitored Value": "1.70004"
+      },
+      "PID-008": {
+        "CumulativeError": "22.689",
+        "CurrentError": "2.5654E-05",
+        "Kd": "16.3382",
+        "Ki": "4.52784",
+        "Kp": "119.455",
+        "LastError": "3.32914E-05",
+        "Output": "17.7178",
+        "OutputAbs": "31.8203",
+        "OutputMax": "1000",
+        "OutputMin": "-1000",
+        "SetPointAbs": "0.5"
+      },
+      "T-01": {
+        "Ambient Temperature": "298.15",
+        "Ambient UA Product": "0",
+        "Closed Tank": "0",
+        "Height": "2",
+        "Initialize using Inlet Stream": "1",
+        "Liquid Level": "1.70004",
+        "Minimum Pressure": "101325",
+        "Operating Pressure": "101325",
+        "PROP_TK_0": "0",
+        "PROP_TK_1": "2",
+        "PROP_TK_2": "199.411",
+        "Reset Content": "0"
+      },
+      "V-01": {
+        "Actual Flow Coefficient": "100",
+        "Actuator Delay": "0",
+        "Actuator Time Constant": "0",
+        "Cavitation Alarm": "0",
+        "Liquid Pressure Recovery Factor FL": "0.9",
+        "Opening Setpoint": "100",
+        "PROP_VA_0": "2",
+        "PROP_VA_1": "12998.2",
+        "PROP_VA_2": "117002",
+        "PROP_VA_3": "0.00288076",
+        "PROP_VA_4": "100",
+        "PROP_VA_5": "50",
+        "PROP_VA_6": "50"
+      },
+      "V-02": {
+        "Actual Flow Coefficient": "127.283",
+        "Actuator Delay": "0",
+        "Actuator Time Constant": "0",
+        "Cavitation Alarm": "0",
+        "Liquid Pressure Recovery Factor FL": "0.9",
+        "Opening Setpoint": "100",
+        "PROP_VA_0": "2",
+        "PROP_VA_1": "8026.96",
+        "PROP_VA_2": "109909",
+        "PROP_VA_3": "0.00157288",
+        "PROP_VA_4": "400",
+        "PROP_VA_5": "31.8203",
+        "PROP_VA_6": "50"
+      },
+      "inlet": {
+        "PROP_MS_0": "298.152",
+        "PROP_MS_1": "130000",
+        "PROP_MS_10": "6.61624",
+        "PROP_MS_11": "0.607212",
+        "PROP_MS_12": "0",
+        "PROP_MS_13": "0",
+        "PROP_MS_14": "0",
+        "PROP_MS_15": "0",
+        "PROP_MS_16": "0",
+        "PROP_MS_17": "0",
+        "PROP_MS_18": "0",
+        "PROP_MS_19": "0",
+        "PROP_MS_2": "10",
+        "PROP_MS_3": "555.084",
+        "PROP_MS_4": "0.0100295",
+        "PROP_MS_5": "997.06",
+        "PROP_MS_6": "18.0153",
+        "PROP_MS_7": "104.966",
+        "PROP_MS_8": "0.367257",
+        "PROP_MS_9": "1890.99"
+      },
+      "ms02": {
+        "PROP_MS_0": "298.155",
+        "PROP_MS_1": "117002",
+        "PROP_MS_10": "6.61703",
+        "PROP_MS_11": "0.607211",
+        "PROP_MS_12": "0",
+        "PROP_MS_13": "0",
+        "PROP_MS_14": "0",
+        "PROP_MS_15": "0",
+        "PROP_MS_16": "0",
+        "PROP_MS_17": "0",
+        "PROP_MS_18": "0",
+        "PROP_MS_19": "0",
+        "PROP_MS_2": "10",
+        "PROP_MS_3": "555.084",
+        "PROP_MS_4": "0.0100295",
+        "PROP_MS_5": "997.054",
+        "PROP_MS_6": "18.0153",
+        "PROP_MS_7": "104.966",
+        "PROP_MS_8": "0.367301",
+        "PROP_MS_9": "1890.99"
+      },
+      "ms03": {
+        "PROP_MS_0": "298.152",
+        "PROP_MS_1": "117936",
+        "PROP_MS_10": "6.6161",
+        "PROP_MS_11": "0.607206",
+        "PROP_MS_12": "0",
+        "PROP_MS_13": "0",
+        "PROP_MS_14": "0",
+        "PROP_MS_15": "0",
+        "PROP_MS_16": "0",
+        "PROP_MS_17": "0",
+        "PROP_MS_18": "0",
+        "PROP_MS_19": "0",
+        "PROP_MS_2": "10.0024",
+        "PROP_MS_3": "555.218",
+        "PROP_MS_4": "0.010032",
+        "PROP_MS_5": "997.055",
+        "PROP_MS_6": "18.0153",
+        "PROP_MS_7": "104.951",
+        "PROP_MS_8": "0.367249",
+        "PROP_MS_9": "1890.73"
+      },
+      "outlet": {
+        "PROP_MS_0": "298.153",
+        "PROP_MS_1": "109909",
+        "PROP_MS_10": "6.61658",
+        "PROP_MS_11": "0.607205",
+        "PROP_MS_12": "0",
+        "PROP_MS_13": "0",
+        "PROP_MS_14": "0",
+        "PROP_MS_15": "0",
+        "PROP_MS_16": "0",
+        "PROP_MS_17": "0",
+        "PROP_MS_18": "0",
+        "PROP_MS_19": "0",
+        "PROP_MS_2": "10.0024",
+        "PROP_MS_3": "555.218",
+        "PROP_MS_4": "0.010032",
+        "PROP_MS_5": "997.051",
+        "PROP_MS_6": "18.0153",
+        "PROP_MS_7": "104.951",
+        "PROP_MS_8": "0.367276",
+        "PROP_MS_9": "1890.73"
+      }
+    },
+    "verified_objects": 9
+  },
+  "revision_chain": [
+    "14274604177101b7718fedc7b7111b2e292c72a4b37a80acbf1c50db1931e97a:1",
+    "5917ffa578686b2b215be1ed343d224ff64557017562f34d0f45c24e43fd1c32:2",
+    "ccfc20b43e39bed76e0ab1b72ee362b8efa6ef8db23dd5879760a53a039a11e0:3",
+    "94efe96264e65dbcc75513b82ba8657410221edb876e62a6ac782417980822e5:4",
+    "e380eebbd7b5023f9232f5ba8136b971352ae47b01b1d6a408a7b81b9d12a12d:5",
+    "4f9f1a9e2b9de4aeb2df82916c5c649567b4ea9840835ff7c9d9a7208e2e5cac:6"
+  ],
+  "revision_sha256s": [
+    "14274604177101b7718fedc7b7111b2e292c72a4b37a80acbf1c50db1931e97a",
+    "5917ffa578686b2b215be1ed343d224ff64557017562f34d0f45c24e43fd1c32",
+    "ccfc20b43e39bed76e0ab1b72ee362b8efa6ef8db23dd5879760a53a039a11e0",
+    "94efe96264e65dbcc75513b82ba8657410221edb876e62a6ac782417980822e5",
+    "e380eebbd7b5023f9232f5ba8136b971352ae47b01b1d6a408a7b81b9d12a12d",
+    "4f9f1a9e2b9de4aeb2df82916c5c649567b4ea9840835ff7c9d9a7208e2e5cac"
+  ],
+  "runtime": "/home/thera/jarvis-control/work/tools/dwsim-10.2.9/mcp-root/opt/dwsim-mcp/dwsim-mcp",
+  "sample_case": "/home/thera/jarvis-control/work/tools/dwsim-10.2.9/samples/samples/Dynamic Simulation - Water Tank Level Control.dwxmz",
+  "saved_state_readback": {
+    "state_name": "JarvisDynamicsSmokeBeforeRun",
+    "state_snapshot": {
+      "LG-007": {
+        "Monitored Value": "1.70004"
+      },
+      "PID-008": {
+        "CumulativeError": "22.689",
+        "CurrentError": "2.5654E-05",
+        "Kd": "16.3382",
+        "Ki": "4.52784",
+        "Kp": "119.455",
+        "LastError": "3.32914E-05",
+        "Output": "17.7178",
+        "OutputAbs": "31.8203",
+        "OutputMax": "1000",
+        "OutputMin": "-1000",
+        "SetPointAbs": "0.5"
+      },
+      "T-01": {
+        "Ambient Temperature": "298.15",
+        "Ambient UA Product": "0",
+        "Closed Tank": "0",
+        "Height": "2",
+        "Initialize using Inlet Stream": "1",
+        "Liquid Level": "1.70004",
+        "Minimum Pressure": "101325",
+        "Operating Pressure": "101325",
+        "PROP_TK_0": "0",
+        "PROP_TK_1": "2",
+        "PROP_TK_2": "199.411",
+        "Reset Content": "0"
+      },
+      "V-01": {
+        "Actual Flow Coefficient": "100",
+        "Actuator Delay": "0",
+        "Actuator Time Constant": "0",
+        "Cavitation Alarm": "0",
+        "Liquid Pressure Recovery Factor FL": "0.9",
+        "Opening Setpoint": "100",
+        "PROP_VA_0": "2",
+        "PROP_VA_1": "12998.2",
+        "PROP_VA_2": "117002",
+        "PROP_VA_3": "0.00288076",
+        "PROP_VA_4": "100",
+        "PROP_VA_5": "50",
+        "PROP_VA_6": "50"
+      },
+      "V-02": {
+        "Actual Flow Coefficient": "127.283",
+        "Actuator Delay": "0",
+        "Actuator Time Constant": "0",
+        "Cavitation Alarm": "0",
+        "Liquid Pressure Recovery Factor FL": "0.9",
+        "Opening Setpoint": "100",
+        "PROP_VA_0": "2",
+        "PROP_VA_1": "8026.96",
+        "PROP_VA_2": "109909",
+        "PROP_VA_3": "0.00157288",
+        "PROP_VA_4": "400",
+        "PROP_VA_5": "31.8203",
+        "PROP_VA_6": "50"
+      },
+      "inlet": {
+        "PROP_MS_0": "298.152",
+        "PROP_MS_1": "130000",
+        "PROP_MS_10": "6.61624",
+        "PROP_MS_11": "0.607212",
+        "PROP_MS_12": "0",
+        "PROP_MS_13": "0",
+        "PROP_MS_14": "0",
+        "PROP_MS_15": "0",
+        "PROP_MS_16": "0",
+        "PROP_MS_17": "0",
+        "PROP_MS_18": "0",
+        "PROP_MS_19": "0",
+        "PROP_MS_2": "10",
+        "PROP_MS_3": "555.084",
+        "PROP_MS_4": "0.0100295",
+        "PROP_MS_5": "997.06",
+        "PROP_MS_6": "18.0153",
+        "PROP_MS_7": "104.966",
+        "PROP_MS_8": "0.367257",
+        "PROP_MS_9": "1890.99"
+      },
+      "ms02": {
+        "PROP_MS_0": "298.155",
+        "PROP_MS_1": "117002",
+        "PROP_MS_10": "6.61703",
+        "PROP_MS_11": "0.607211",
+        "PROP_MS_12": "0",
+        "PROP_MS_13": "0",
+        "PROP_MS_14": "0",
+        "PROP_MS_15": "0",
+        "PROP_MS_16": "0",
+        "PROP_MS_17": "0",
+        "PROP_MS_18": "0",
+        "PROP_MS_19": "0",
+        "PROP_MS_2": "10",
+        "PROP_MS_3": "555.084",
+        "PROP_MS_4": "0.0100295",
+        "PROP_MS_5": "997.054",
+        "PROP_MS_6": "18.0153",
+        "PROP_MS_7": "104.966",
+        "PROP_MS_8": "0.367301",
+        "PROP_MS_9": "1890.99"
+      },
+      "ms03": {
+        "PROP_MS_0": "298.152",
+        "PROP_MS_1": "117936",
+        "PROP_MS_10": "6.6161",
+        "PROP_MS_11": "0.607206",
+        "PROP_MS_12": "0",
+        "PROP_MS_13": "0",
+        "PROP_MS_14": "0",
+        "PROP_MS_15": "0",
+        "PROP_MS_16": "0",
+        "PROP_MS_17": "0",
+        "PROP_MS_18": "0",
+        "PROP_MS_19": "0",
+        "PROP_MS_2": "10.0024",
+        "PROP_MS_3": "555.218",
+        "PROP_MS_4": "0.010032",
+        "PROP_MS_5": "997.055",
+        "PROP_MS_6": "18.0153",
+        "PROP_MS_7": "104.951",
+        "PROP_MS_8": "0.367249",
+        "PROP_MS_9": "1890.73"
+      },
+      "outlet": {
+        "PROP_MS_0": "298.153",
+        "PROP_MS_1": "109909",
+        "PROP_MS_10": "6.61658",
+        "PROP_MS_11": "0.607205",
+        "PROP_MS_12": "0",
+        "PROP_MS_13": "0",
+        "PROP_MS_14": "0",
+        "PROP_MS_15": "0",
+        "PROP_MS_16": "0",
+        "PROP_MS_17": "0",
+        "PROP_MS_18": "0",
+        "PROP_MS_19": "0",
+        "PROP_MS_2": "10.0024",
+        "PROP_MS_3": "555.218",
+        "PROP_MS_4": "0.010032",
+        "PROP_MS_5": "997.051",
+        "PROP_MS_6": "18.0153",
+        "PROP_MS_7": "104.951",
+        "PROP_MS_8": "0.367276",
+        "PROP_MS_9": "1890.73"
+      }
+    },
+    "stored_states": [
+      "NewState1",
+      "JarvisDynamicsSmokeBeforeRun"
+    ]
+  },
+  "source_sha": "ed2c616e438fb0eee6499960492f6a9155cf827d",
+  "stale_revision_status": 409,
+  "workspace_id": "328d32c0-377a-4cfa-ab1f-afac6f4da5bc"
+}
