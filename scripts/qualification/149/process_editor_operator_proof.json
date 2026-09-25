@@ -1,0 +1,287 @@
+{
+  "schema": "jarvisos.149-process-editor-operator-proof.v1",
+  "source_sha": "90dd558302170f0d2c6c8af7d600e6c0ff889d58",
+  "workspace_id": "15e7e322-8feb-4142-b53b-0a20f41a2d94",
+  "case_id": "0a2e330e-6e0a-42f4-b2e5-a86430ea431b",
+  "imported_case_id": "6a3d6f59-6003-4af0-9eed-330c1b2ce914",
+  "dwsim_version": "10.2.9",
+  "mcp_sha256": "d20f97426c264ac91114240b085b3c4e7877dfda83ecb487c0125f838cf66cfa",
+  "revision_chain": [
+    "63d03fac4b7cc1f30f066b5b851f6c9fe1ce19f2b5bb7b67699e1ba6f4d32e81:1",
+    "55bfb8e7640b5daff07ac8cfa9f2bcf775ce2ea860c4c960a6b0f81c59b704c2:2",
+    "bc49b05e66f337f91ab0140263dc698c2c39d80b8feb9085fb9eeafbf8e28a7e:3",
+    "787d0fdd38e828761a56189839befe2be6e191f04773f8a09c8e236019b4bc05:4",
+    "7cd245b42785a58acba2726c5835321a6564b03990866c3dde48f9eeb47b62bd:5",
+    "612f0702f1212117af0da92ea6679ac702118b6b95e74345bd02879a148b5e31:6",
+    "0eff68d4782264fcd721540531314eb9aae0082a76edd136107fb8567361154f:7",
+    "79727eccca4edcec8a1b180c318aa7bc2098ba718c70649f30c311d4fa0e2d30:8",
+    "e1b2e093cad6d9ed314d6e7ffb3661cfbd3912d87e3411aeed2c17d18d658c14:9",
+    "0d4a8412012e76a7730d7dc824828c8a72255920afda0872837b3034a5ceddab:10",
+    "376bf49956e06107b0c2b74e5304fad9c441bae82a081a15649466994d1273e6:11",
+    "faf90fd5af3e0bed644c20554765e4a366d1d9f8f3c136cb673697025d3333ec:12",
+    "d92241d931c8698b5bb3fa20115e25a5cde54bb20aa9c9de0881c111eba6061d:13",
+    "bc144d8a191ee5faf9e8e9faf8d3e3e5422e529298f78b72724fafc7f5910062:14",
+    "cc5eaf561ee1290f998df26b50f2ecc9ba8479d253a550e9736c33a9a8a4bb4c:15",
+    "3cc19c55746cc0eb04e5ee1c417d6f39010ba97bab66588ac3c31b85535adebc:16",
+    "8bdb60a2a731167ba21545f42a273a54334fe782628f109a37106220e16c746a:17",
+    "ddef81f6dee554e272633dcf51d96a0e91691c9d1057b8637e8ab98c6a8dc808:18",
+    "8b4e550ba4a0497c34cc4204f36c7b65419a1533f18d73c368b1f4f8de236b02:1",
+    "63d03fac4b7cc1f30f066b5b851f6c9fe1ce19f2b5bb7b67699e1ba6f4d32e81:19"
+  ],
+  "projection_digests_rendered_by_ui": [
+    {
+      "revision": "63d03fac4b7cc1f30f066b5b851f6c9fe1ce19f2b5bb7b67699e1ba6f4d32e81:1",
+      "sha256": "f9ab0eacb9b4a03ab817ff263fefcf4275a399abd281bb9e7559634602da1b30"
+    },
+    {
+      "revision": "55bfb8e7640b5daff07ac8cfa9f2bcf775ce2ea860c4c960a6b0f81c59b704c2:2",
+      "sha256": "4b2b0bcdf883ac6d0bbafee531d92d5270a64e1a53c686e92ae4bbea9edf64e6"
+    },
+    {
+      "revision": "bc49b05e66f337f91ab0140263dc698c2c39d80b8feb9085fb9eeafbf8e28a7e:3",
+      "sha256": "406ef1836238930fdab09a8cd9b5640c3dcaf6255201f7089a1ade6e39026c8a"
+    },
+    {
+      "revision": "787d0fdd38e828761a56189839befe2be6e191f04773f8a09c8e236019b4bc05:4",
+      "sha256": "6638386c668d8527966a6d9e5efc636c859be263c6a134150c440dbc1f44ca4d"
+    },
+    {
+      "revision": "7cd245b42785a58acba2726c5835321a6564b03990866c3dde48f9eeb47b62bd:5",
+      "sha256": "c19c6d68f323c23d27bdcbce2b6a837a28ff521c909d93c958f2130313c53098"
+    },
+    {
+      "revision": "612f0702f1212117af0da92ea6679ac702118b6b95e74345bd02879a148b5e31:6",
+      "sha256": "7c34ce08e79babefe38e10641831371483d07ecead7c75620fe3fa7b220fe9d2"
+    },
+    {
+      "revision": "0eff68d4782264fcd721540531314eb9aae0082a76edd136107fb8567361154f:7",
+      "sha256": "608846e18afbeda644a8369e6284c40a329381d8690ab3338128edbe80d1cfe5"
+    },
+    {
+      "revision": "79727eccca4edcec8a1b180c318aa7bc2098ba718c70649f30c311d4fa0e2d30:8",
+      "sha256": "140ae1d03775c5e590bd91b28d0e42e48b81dd56639e6246c28a92e095c4f0c2"
+    },
+    {
+      "revision": "e1b2e093cad6d9ed314d6e7ffb3661cfbd3912d87e3411aeed2c17d18d658c14:9",
+      "sha256": "f75c73191064c0e5917d70780a5e8bb822d2bf9ecc6293f6f5aaf510428b6b71"
+    },
+    {
+      "revision": "0d4a8412012e76a7730d7dc824828c8a72255920afda0872837b3034a5ceddab:10",
+      "sha256": "649b014cb4e63b9c72b2721fb1f1e6aff3accb27caa6a5ee4ae7ee5a1245d27b"
+    },
+    {
+      "revision": "376bf49956e06107b0c2b74e5304fad9c441bae82a081a15649466994d1273e6:11",
+      "sha256": "c6f3fcc89e93f1d314ce01a43ef4675323504086e774453477ef8c39f65a7a69"
+    },
+    {
+      "revision": "faf90fd5af3e0bed644c20554765e4a366d1d9f8f3c136cb673697025d3333ec:12",
+      "sha256": "bc97ac418c1d5edc0082123c8ef09aa34490a77e7de7dc3b231abb7c65e12cff"
+    },
+    {
+      "revision": "d92241d931c8698b5bb3fa20115e25a5cde54bb20aa9c9de0881c111eba6061d:13",
+      "sha256": "61eac19880dc8801a9875f2b6989c3240475a0d439062fc8364e3746d1b26812"
+    },
+    {
+      "revision": "bc144d8a191ee5faf9e8e9faf8d3e3e5422e529298f78b72724fafc7f5910062:14",
+      "sha256": "94f305152281a5dc0bf91a8fdb92a5dd17ddaf47aca6f16135f6ecc2b04104c1"
+    },
+    {
+      "revision": "cc5eaf561ee1290f998df26b50f2ecc9ba8479d253a550e9736c33a9a8a4bb4c:15",
+      "sha256": "1f149ba7faa5dd8e37ebb963dfe540727c055fd3b39f1285ca9f4687a88ebd6f"
+    },
+    {
+      "revision": "3cc19c55746cc0eb04e5ee1c417d6f39010ba97bab66588ac3c31b85535adebc:16",
+      "sha256": "58f9e9aad8750f9303c6d43f73fcf53f1e69d4d542ff50a2cde979ee351cf938"
+    },
+    {
+      "revision": "8bdb60a2a731167ba21545f42a273a54334fe782628f109a37106220e16c746a:17",
+      "sha256": "c3c89cc29bd8638b23580d8ba25fe9fe88d71cc3cb7bfa42f3da451cc7b35b04"
+    },
+    {
+      "revision": "ddef81f6dee554e272633dcf51d96a0e91691c9d1057b8637e8ab98c6a8dc808:18",
+      "sha256": "2de8f485c4cb51ca0e7e239cc8ba5671dc54d679d12cd82d7296da0ff5709e48"
+    },
+    {
+      "revision": "8b4e550ba4a0497c34cc4204f36c7b65419a1533f18d73c368b1f4f8de236b02:1",
+      "sha256": "ec5e28950581dbf2ba5ff2014ff0572bc04bc487905342f28951cd4a8fa06831"
+    },
+    {
+      "revision": "63d03fac4b7cc1f30f066b5b851f6c9fe1ce19f2b5bb7b67699e1ba6f4d32e81:19",
+      "sha256": "e6b15ac825539675ab9afd4bbf91eaf2e3f35ca5a328db4e79a87d1b8fb88e3a"
+    }
+  ],
+  "actions": [
+    {
+      "action": "create_case",
+      "case_id": "0a2e330e-6e0a-42f4-b2e5-a86430ea431b",
+      "revision": "63d03fac4b7cc1f30f066b5b851f6c9fe1ce19f2b5bb7b67699e1ba6f4d32e81:1"
+    },
+    {
+      "action": "dynamics_availability",
+      "unavailable_reason": null,
+      "run_enabled": true,
+      "state_save_enabled": true
+    },
+    {
+      "action": "thermodynamics",
+      "compounds": [
+        "Water"
+      ],
+      "property_package": "Steam Tables (IAPWS-IF97)"
+    },
+    {
+      "action": "drag_move",
+      "from": {
+        "x": 230,
+        "y": 135
+      },
+      "readback": {
+        "x": 399,
+        "y": 224
+      },
+      "canvas_transform": "translate(399,224)"
+    },
+    {
+      "action": "solve",
+      "solve_status": "completed",
+      "feed_mass_flow_kg_s": 2,
+      "product_mass_flow_kg_s": 2,
+      "mass_balance_residual_kg_s": 0,
+      "mass_balance_residual_source": "last_solve.mass_balance_residual_kg_s",
+      "server_mass_balance_status": "calculated"
+    },
+    {
+      "action": "dynamics_state_roundtrip",
+      "state": "operator-proof",
+      "saved_revision": "3cc19c55746cc0eb04e5ee1c417d6f39010ba97bab66588ac3c31b85535adebc:16",
+      "restored_revision": "8bdb60a2a731167ba21545f42a273a54334fe782628f109a37106220e16c746a:17",
+      "object_count": 4
+    },
+    {
+      "action": "stale_edit",
+      "status": 409,
+      "message": "Changed elsewhere; stale edit discarded",
+      "refreshed_revision": "ddef81f6dee554e272633dcf51d96a0e91691c9d1057b8637e8ab98c6a8dc808:18"
+    },
+    {
+      "action": "download_reimport",
+      "imported_case_id": "6a3d6f59-6003-4af0-9eed-330c1b2ce914",
+      "imported_revision": "8b4e550ba4a0497c34cc4204f36c7b65419a1533f18d73c368b1f4f8de236b02:1",
+      "object_count": 5,
+      "connection_count": 3,
+      "layout_and_connections_match": true
+    },
+    {
+      "action": "restore",
+      "revision": "63d03fac4b7cc1f30f066b5b851f6c9fe1ce19f2b5bb7b67699e1ba6f4d32e81:19",
+      "restored_object_count": 0
+    }
+  ],
+  "final_ui_projection_sha256": "e6b15ac825539675ab9afd4bbf91eaf2e3f35ca5a328db4e79a87d1b8fb88e3a",
+  "elapsed_seconds": 110.631,
+  "timings_ms": [
+    {
+      "operation": "add_compounds",
+      "duration_ms": 3683
+    },
+    {
+      "operation": "set_property_package",
+      "duration_ms": 5505
+    },
+    {
+      "operation": "create_material_stream",
+      "duration_ms": 4302
+    },
+    {
+      "operation": "create_material_stream",
+      "duration_ms": 4014
+    },
+    {
+      "operation": "create_material_stream",
+      "duration_ms": 4815
+    },
+    {
+      "operation": "create_unit",
+      "duration_ms": 5031
+    },
+    {
+      "operation": "connect",
+      "duration_ms": 4643
+    },
+    {
+      "operation": "connect",
+      "duration_ms": 4801
+    },
+    {
+      "operation": "connect",
+      "duration_ms": 6741
+    },
+    {
+      "operation": "move",
+      "duration_ms": 4650
+    },
+    {
+      "operation": "rename",
+      "duration_ms": 3529
+    },
+    {
+      "operation": "set_stream_conditions",
+      "duration_ms": 3952
+    },
+    {
+      "operation": "set_stream_conditions",
+      "duration_ms": 5309
+    },
+    {
+      "operation": "solve",
+      "duration_ms": 4665
+    },
+    {
+      "operation": "state_save",
+      "duration_ms": 5028
+    },
+    {
+      "operation": "state_restore",
+      "duration_ms": 7114
+    },
+    {
+      "operation": "create_material_stream",
+      "duration_ms": 5275
+    },
+    {
+      "operation": "download_reimport",
+      "duration_ms": 5560
+    },
+    {
+      "operation": "restore",
+      "duration_ms": 4533
+    }
+  ],
+  "screenshots": [
+    {
+      "path": "scripts/qualification/149/process-editor-blank-case.png",
+      "size_bytes": 91726
+    },
+    {
+      "path": "scripts/qualification/149/process-editor-native-graph.png",
+      "size_bytes": 98672
+    },
+    {
+      "path": "scripts/qualification/149/process-editor-solved.png",
+      "size_bytes": 94467
+    },
+    {
+      "path": "scripts/qualification/149/process-editor-revision-conflict.png",
+      "size_bytes": 98331
+    },
+    {
+      "path": "scripts/qualification/149/process-editor-roundtrip.png",
+      "size_bytes": 96650
+    },
+    {
+      "path": "scripts/qualification/149/process-editor-restored.png",
+      "size_bytes": 88215
+    }
+  ],
+  "page_errors": []
+}

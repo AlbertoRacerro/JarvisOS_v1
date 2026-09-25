@@ -18,6 +18,7 @@ const fusionCss = read("src/styles/final-fusion.css");
 const shellOverlay = read("src/styles/final-fusion-shell-overrides.css");
 const canonicalOverlay = read("src/styles/final-fusion-canonical-overrides.css");
 const processStage = read("src/stages/ProcessStage.tsx");
+const processCss = read("src/stages/ProcessStage.css");
 const contextNav = read("src/components/shell/ContextualNavigator.tsx");
 const pkg = JSON.parse(read("package.json"));
 const failures = [];
@@ -127,16 +128,14 @@ includesAll(shellOverlay, [
 ], "canonical rail/shell geometry or visual language missing");
 
 includesAll(processStage, [
-  'label: "Select"', 'label: "Pan"', 'label: "Add equipment"', 'label: "Connect"', 'label: "Disconnect"',
-  'label: "Multi-select"', 'label: "Duplicate"', 'label: "Delete"', 'label: "Fit view"', 'label: "Zoom"',
-  'label: "Undo"', 'label: "Redo"', 'label: "Auto-layout"', 'label: "Validate"', 'label: "Solve"',
-  'disabled', 'No process topology is loaded.'
-], "canonical Process future affordances or fail-closed empty state missing");
-check(!/useState|fetch\(|axios|localStorage|sessionStorage/i.test(processStage), "Process scaffold gained frontend topology/API authority");
-includesAll(canonicalOverlay, [
-  ".process-stage__toolbar", ".process-stage__palette", ".process-stage__canvas",
-  "grid-template-columns: 240px minmax(0, 1fr)", "background-size: 24px 24px"
-], "canonical Process workstation composition missing");
+  'aria-label="DWSIM process canvas', 'runDwsimCommand', 'expected_revision', 'Changed elsewhere. The stale edit was discarded',
+  'unsupported_commands', 'Read-back evidence', 'Solve', 'Revision history', 'No process topology is loaded.'
+], "revisioned Process editor boundary or truthful empty state missing");
+check(!/fetch\(|axios|localStorage|sessionStorage/i.test(processStage), "Process editor gained direct network or local persistence authority");
+includesAll(processCss, [
+  ".dwsim-workbench", ".dwsim-palette", ".dwsim-canvas", ".dwsim-inspector",
+  "grid-template-columns: 180px minmax(300px, 1fr) 230px", "background-size: 18px 18px"
+], "DWSIM Process workstation composition missing");
 
 includesAll(fusion, [
   'title="Project search"', 'title="Project Basis"', 'title="Jarvis"',

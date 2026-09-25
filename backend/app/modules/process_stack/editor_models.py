@@ -38,6 +38,7 @@ class EditorConnectionRead(BaseModel):
 
 
 class DynamicsProjectionRead(BaseModel):
+    current_schedule: str | None = None
     controllers: list[dict[str, object]] = Field(default_factory=list)
     event_sets: list[dict[str, object]] = Field(default_factory=list)
     saved_states: list[str] = Field(default_factory=list)

@@ -8,6 +8,7 @@ export type EditorQuantity = {
 };
 
 export type DynamicsProjectionRead = {
+  current_schedule: string | null;
   controllers: Record<string, unknown>[];
   event_sets: Record<string, unknown>[];
   saved_states: string[];

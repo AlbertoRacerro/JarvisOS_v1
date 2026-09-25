@@ -58,7 +58,7 @@ for (const route of [
 ]) {
   assert(routes.includes(`path: "${route}"`), `canonical route must remain present: ${route}`);
 }
-assert(processStage.includes("process-stage__palette"), "Process operational palette must remain structurally distinct from the workspace header repair");
+assert(processStage.includes("dwsim-palette") && read("src/stages/ProcessStage.css").includes(".dwsim-palette"), "DWSIM operational palette must remain structurally distinct from the workspace header repair");
 assert(processStage.includes("design-stage__tabs") && bluecadStage.includes("design-stage__tabs"), "Process and BLUECAD must preserve their shared peer selector");
 assert(settingsSurface.includes("final-settings__tabs"), "Settings must preserve its peer selector semantics");
 
