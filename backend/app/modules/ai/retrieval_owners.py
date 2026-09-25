@@ -174,7 +174,7 @@ def _filesystem_documents(workspace_id: str, *, owners: set[str] | None = None) 
             data = {"case_id": case.case_id, "revision": rev.revision, "seq": rev.seq,
                     "case_sha256": rev.case_sha256, "command_kind": rev.command_kind,
                     "created_at": rev.created_at, "readback": rev.readback,
-                    "projection_summary": "DWSIM projection is available through the process owner."}
+                    "projection_summary": rev.readback}
             yield _doc("process_stack", "case_revision", f"{case.case_id}:{rev.seq}",
                         workspace_id, data, revision=rev.revision)
 
