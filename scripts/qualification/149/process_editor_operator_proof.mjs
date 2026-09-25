@@ -435,16 +435,12 @@ try {
     "solve status missing from returned projection",
   );
   assert(
-    projection.last_solve?.mass_balance_status,
-    "mass balance status missing from returned solve read-back",
+    projection.last_solve?.mass_balance_status === "calculated",
+    "server did not calculate the mass balance from native boundary streams",
   );
   const returnedResidual = projection.last_solve?.mass_balance_residual_kg_s;
-  const residual =
-    typeof returnedResidual === "number" ? returnedResidual : feedFlow - productFlow;
-  const residualSource =
-    typeof returnedResidual === "number"
-      ? "last_solve.mass_balance_residual_kg_s"
-      : "projected boundary streams (inlet total - outlet total)";
+  const residual = returnedResidual;
+  const residualSource = "last_solve.mass_balance_residual_kg_s";
   assert(Number.isFinite(residual), "operator residual is not numeric");
   assert(
     (await page.getByText(/Residual · .* kg\/s · source:/).count()) === 1,

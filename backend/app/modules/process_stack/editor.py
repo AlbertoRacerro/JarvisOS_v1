@@ -662,12 +662,15 @@ def _apply(client: DwsimMcpClient, flow: str, command: EditorCommand, scratch: P
     if isinstance(command, Solve):
         objects = _objects(client, flow)
         try:
-            residual, boundary = _mass_balance(client, flow, scratch, objects)
+            # list_objects names the tag "name"; the shared balance helper keys objects by "tag".
+            tagged = [{**item, "tag": item.get("name")} for item in objects]
+            residual, boundary = _mass_balance(client, flow, scratch, tagged)
             readback["mass_balance_residual_kg_s"] = residual
             readback["boundary_mass_flows_kg_s"] = boundary
+            readback["mass_balance_status"] = "calculated"
         except Exception as exc:
             readback["mass_balance_status"] = "unavailable"
-            readback["mass_balance_error"] = type(exc).__name__
+            readback["mass_balance_error"] = getattr(exc, "code", type(exc).__name__)
         solve_result = readback["solve"]
         diagnostics = [solve_result.get(key) for key in ("blockers", "errors")]
         result_objects = solve_result.get("objects", [])
