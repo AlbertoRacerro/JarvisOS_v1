@@ -359,17 +359,18 @@ def test_capability_live_grant_denials() -> None:
 
 
 def test_retrieval_tool_pins_workspace_and_enforces_granted_source_scope(monkeypatch: pytest.MonkeyPatch) -> None:
+    now = datetime.now(UTC)  # the module-level clock can be minutes old in a sharded run
     ref = SourceRef(authority_owner="modeling", object_type="decision", object_id="decision-1",
                     workspace_id=SESSION.workspace_id, revision="1", content_digest=canonical_digest("decision"))
     call = StructuredToolCall(call_id="query-1", capability_id="jarvis.retrieval_query", grant_id="grant-1",
                               correlation_id="query-1", session_ref=SESSION,
                               arguments={"query": "pump", "source_scope": ["modeling"], "limit": 8,
-                                         "token_budget": 1024}, requested_at=NOW,
-                              deadline_at=NOW + timedelta(minutes=1))
+                                         "token_budget": 1024}, requested_at=now,
+                              deadline_at=now + timedelta(minutes=1))
     grant = CapabilityGrantRef(grant_id="grant-1", capability_id=call.capability_id,
                                issuer="operator", scope=CapabilityScope(workspace_id=SESSION.workspace_id,
                                                                         object_refs=(ref,)),
-                               issued_at=NOW - timedelta(minutes=1), expires_at=NOW + timedelta(minutes=1))
+                               issued_at=now - timedelta(minutes=1), expires_at=now + timedelta(minutes=1))
     observed: dict[str, Any] = {}
 
     def query_context(query: str, **kwargs: Any) -> dict[str, Any]:
