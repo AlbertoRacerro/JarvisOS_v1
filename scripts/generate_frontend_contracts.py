@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import difflib
 import json
+import typing
 import sys
 import tempfile
 import types
@@ -127,7 +128,9 @@ def render_engineering_reads() -> str:
 
 
 def render_editor_contracts() -> str:
+    from app.modules.process_stack import editor_models
     from app.modules.process_stack.editor_models import (
+        CommandResult,
         EditorCaseRead,
         EditorConnectionRead,
         EditorObjectRead,
@@ -143,11 +146,15 @@ def render_editor_contracts() -> str:
         EditorObjectRead,
         EditorConnectionRead,
         EditorProjectionRead,
+        CommandResult,
     ]
-    return "\n".join(
+    commands = typing.get_args(editor_models.EditorCommand)
+    rendered = [
         render_model(model, model.__name__, header=EDITOR_HEADER if index == 0 else "")
-        for index, model in enumerate(models)
-    )
+        for index, model in enumerate([*models, *commands])
+    ]
+    union = "export type EditorCommand =\n" + "".join(f"  | {model.__name__}\n" for model in commands)
+    return "\n".join(rendered) + "\n" + union.rstrip("\n") + ";\n"
 
 
 def _matches(path: Path, expected: str, *, report: bool = False) -> bool:

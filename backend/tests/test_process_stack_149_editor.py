@@ -155,6 +155,80 @@ def test_unknown_workspace_is_scoped_404():
     assert response.json()["detail"]["code"] == "workspace_not_found"
 
 
+
+class _StreamClient(_FakeClient):
+    def call(self, name, args, timeout):
+        if name == "dwsim_flowsheet_list_objects":
+            self.calls.append(name)
+            return {"objects": [{"id": "id-2", "name": "F1", "type": "MaterialStream", "x": 5, "y": 6}]}
+        if name == "dwsim_stream_get_results":
+            self.calls.append(name)
+            return {"temperature_K": 280.0, "pressure_Pa": 101325.0}
+        return super().call(name, args, timeout)
+
+
+def test_create_stream_condition_mismatch_creates_no_revision(tmp_path, monkeypatch):
+    directory = tmp_path / "case"
+    record = _initial(directory)
+    monkeypatch.setattr(editor, "_directory", lambda *_args: directory)
+    monkeypatch.setattr(editor, "_client", lambda: (_StreamClient(), "a" * 64, "10.2.9"))
+    command = TypeAdapter(EditorCommand).validate_python(
+        {"kind": "create_material_stream", "expected_revision": record["revision"], "tag": "F1", "x": 5, "y": 6,
+         "temperature": {"value": 300, "unit": "K"}}
+    )
+    with pytest.raises(editor.EditorError, match="temperature_K read-back"):
+        editor.execute("workspace", "case", command)
+    assert editor._head(directory)["revision"] == record["revision"]
+    assert len(list((directory / "revisions").iterdir())) == 1
+
+
+class _StaleRenameClient(_FakeClient):
+    def call(self, name, args, timeout):
+        if name == "dwsim_flowsheet_list_objects":
+            self.calls.append(name)
+            return {"objects": [{"id": "id-1", "name": "Unit1", "type": "Mixer"},
+                                {"id": "id-9", "name": "M-100", "type": "Mixer"}]}
+        return super().call(name, args, timeout)
+
+
+def test_rename_requires_previous_tag_to_disappear(tmp_path, monkeypatch):
+    directory = tmp_path / "case"
+    record = _initial(directory)
+    monkeypatch.setattr(editor, "_directory", lambda *_args: directory)
+    monkeypatch.setattr(editor, "_client", lambda: (_StaleRenameClient(), "a" * 64, "10.2.9"))
+    command = TypeAdapter(EditorCommand).validate_python(
+        {"kind": "rename", "expected_revision": record["revision"], "object": "Unit1", "new_tag": "M-100"}
+    )
+    with pytest.raises(editor.EditorError, match="previous tag"):
+        editor.execute("workspace", "case", command)
+    assert editor._head(directory)["revision"] == record["revision"]
+
+
+def test_revision_listing_ignores_uncommitted_orphans(tmp_path, monkeypatch):
+    directory = tmp_path / "case"
+    record = _initial(directory)
+    (directory / "revisions" / f"2-{'b' * 64}.dwxmz").write_bytes(b"orphan")
+    (directory / "records" / "2.json").write_text(json.dumps({**record, "seq": 2}), encoding="utf-8")
+    monkeypatch.setattr(editor, "_directory", lambda *_args: directory)
+    assert [row.revision for row in editor.list_revisions("workspace", "case")] == [record["revision"]]
+
+
+def test_workspace_path_segments_are_rejected_before_lookup(monkeypatch):
+    monkeypatch.setattr(editor, "get_workspace", lambda _workspace_id: pytest.fail("lookup must not run"))
+    for workspace_id in ("..", "a/b", "a\\b", ""):
+        with pytest.raises(editor.EditorError) as error:
+            editor._directory(workspace_id)
+        assert error.value.status == 404
+
+
+def test_import_size_is_bounded(monkeypatch):
+    monkeypatch.setattr(editor, "MAX_IMPORT_BYTES", 4)
+    monkeypatch.setattr(editor, "_directory", lambda *_args: pytest.fail("oversized upload must not touch storage"))
+    with pytest.raises(editor.EditorError) as error:
+        editor.import_case("workspace", "case.dwxmz", b"12345")
+    assert error.value.status == 413
+
+
 @pytest.mark.skipif(
     not os.environ.get("JARVISOS_DWSIM_MCP_PATH"), reason="set JARVISOS_DWSIM_MCP_PATH to opt in to DWSIM runtime"
 )

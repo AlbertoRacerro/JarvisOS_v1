@@ -5,6 +5,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Body, HTTPException, Query, Request
 from fastapi.responses import FileResponse
+from starlette.concurrency import run_in_threadpool
 
 from app.modules.process_stack import editor
 from app.modules.process_stack.editor_models import (
@@ -43,8 +44,11 @@ def create_case(workspace_id: str, name: str = "DWSIM case") -> EditorCaseRead:
 
 @router.post("/cases/import", response_model=EditorCaseRead)
 async def import_case(workspace_id: str, request: Request, filename: str = Query(...)) -> EditorCaseRead:
+    declared = request.headers.get("content-length", "")
+    if declared.isdigit() and int(declared) > editor.MAX_IMPORT_BYTES:
+        raise HTTPException(413, detail={"code": "case_size_invalid", "message": "Uploaded case is larger than 64 MiB"})
     try:
-        return editor.import_case(workspace_id, Path(filename).name, await request.body())
+        return await run_in_threadpool(editor.import_case, workspace_id, Path(filename).name, await request.body())
     except editor.EditorError as exc:
         raise _error(exc) from exc
 

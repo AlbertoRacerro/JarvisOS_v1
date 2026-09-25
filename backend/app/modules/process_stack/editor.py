@@ -50,6 +50,7 @@ from app.modules.workspaces.service import get_workspace
 _guard = threading.Lock()
 _locks: dict[str, threading.RLock] = {}
 _TOL = 1e-8
+MAX_IMPORT_BYTES = 64 * 1024 * 1024
 SUPPORTED = [
     "create_unit",
     "create_material_stream",
@@ -90,7 +91,9 @@ def _sha(path: Path) -> str:
 
 
 def _directory(workspace_id: str, case_id: str | None = None) -> Path:
-    if get_workspace(workspace_id) is None:
+    if not re.fullmatch(r"[A-Za-z0-9_.-]{1,128}", workspace_id) or workspace_id in {".", ".."} or (
+        get_workspace(workspace_id) is None
+    ):
         raise EditorError("workspace_not_found", "Workspace was not found", 404)
     if case_id is not None and not re.fullmatch(r"[a-f0-9-]{36}", case_id):
         raise EditorError("case_not_found", "DWSIM case was not found", 404)
@@ -253,6 +256,19 @@ def _verify_position(item: dict[str, Any], x: int, y: int) -> None:
         raise EditorError("DWSIM_READBACK_MISMATCH", "DWSIM position read-back did not match", 502)
 
 
+def _verify_stream(readback: dict[str, Any], args: dict[str, Any]) -> None:
+    for key, expected in args.items():
+        if key.endswith(("_K", "_Pa", "_kg_s", "_mol_s")) and (
+            not isinstance(readback.get(key), (int, float))
+            or abs(float(readback[key]) - expected) > max(1e-9, abs(expected) * _TOL)
+        ):
+            raise EditorError(
+                "DWSIM_READBACK_MISMATCH",
+                f"DWSIM {key} read-back did not match (requested {expected!r}, received {readback.get(key)!r})",
+                502,
+            )
+
+
 def _q(value: EditorQuantity | None, unit: str) -> float | None:
     if value is None:
         return None
@@ -290,6 +306,7 @@ def _apply(client: DwsimMcpClient, flow: str, command: EditorCommand, scratch: P
         readback = _object(client, flow, command.tag, "MaterialStream")
         _verify_position(readback, command.x, command.y)
         readback.update(client.call("dwsim_stream_get_results", {"flowsheet_id": flow, "name": command.tag}, 30))
+        _verify_stream(readback, args)
     elif isinstance(command, CreateEnergyStream):
         client.call("dwsim_stream_add_energy", {"flowsheet_id": flow, "name": command.tag}, 30)
         client.call(
@@ -309,6 +326,10 @@ def _apply(client: DwsimMcpClient, flow: str, command: EditorCommand, scratch: P
             "dwsim_object_rename", {"flowsheet_id": flow, "name": command.object, "new_name": command.new_tag}, 30
         )
         readback = _object(client, flow, command.new_tag)
+        if command.new_tag != command.object and any(
+            item.get("name") == command.object for item in _objects(client, flow)
+        ):
+            raise EditorError("DWSIM_READBACK_MISMATCH", "DWSIM still reports the previous tag", 502)
     elif isinstance(command, Connect):
         connector_fields = {
             "feed": ("feed_stream", "feed_port"),
@@ -344,16 +365,7 @@ def _apply(client: DwsimMcpClient, flow: str, command: EditorCommand, scratch: P
             raise EditorError("empty_command", "At least one stream value is required")
         client.call("dwsim_stream_set_conditions", args, 30)
         readback = client.call("dwsim_stream_get_results", {"flowsheet_id": flow, "name": command.stream}, 30)
-        for key, expected in args.items():
-            if key.endswith(("_K", "_Pa", "_kg_s", "_mol_s")) and (
-                not isinstance(readback.get(key), (int, float))
-                or abs(float(readback[key]) - expected) > max(1e-9, abs(expected) * _TOL)
-            ):
-                raise EditorError(
-                    "DWSIM_READBACK_MISMATCH",
-                    f"DWSIM {key} read-back did not match (requested {expected!r}, received {readback.get(key)!r})",
-                    502,
-                )
+        _verify_stream(readback, args)
     elif isinstance(command, SetUnitProperties):
         client.call(
             "dwsim_unitop_set", {"flowsheet_id": flow, "name": command.unit, "properties": command.properties}, 30
@@ -638,6 +650,8 @@ def import_case(workspace_id: str, filename: str, content: bytes) -> EditorCaseR
     suffix = Path(filename).suffix.lower()
     if suffix not in {".dwxml", ".dwxmz"}:
         raise EditorError("invalid_case_format", "Upload a .dwxml or .dwxmz case", 422)
+    if not content or len(content) > MAX_IMPORT_BYTES:
+        raise EditorError("case_size_invalid", "Uploaded case is empty or larger than 64 MiB", 413)
     case_id = str(uuid4())
     directory = _directory(workspace_id, case_id)
     client, digest, version = _client()
@@ -687,18 +701,15 @@ def projection(workspace_id: str, case_id: str) -> EditorProjectionRead:
 
 def list_revisions(workspace_id: str, case_id: str) -> list[RevisionRead]:
     directory = _directory(workspace_id, case_id)
-    _head(directory)
+    head = _head(directory)
     result = []
-    paths = [
-        path
-        for path in (directory / "revisions").iterdir()
-        if re.fullmatch(r"\d+-[0-9a-f]{64}\.(?:dwxml|dwxmz)", path.name)
-    ]
-    for path in sorted(paths, key=lambda item: int(item.name.split("-", 1)[0])):
-        seq = int(path.name.split("-", 1)[0])
+    for seq in range(1, head["seq"] + 1):
         manifest = directory / "records" / f"{seq}.json"
-        if manifest.exists():
-            result.append(RevisionRead.model_validate_json(manifest.read_text(encoding="utf-8")))
+        if not manifest.exists():
+            continue
+        row = RevisionRead.model_validate_json(manifest.read_text(encoding="utf-8"))
+        if list((directory / "revisions").glob(f"{seq}-{row.case_sha256}.*")):
+            result.append(row)
     return result
 
 
