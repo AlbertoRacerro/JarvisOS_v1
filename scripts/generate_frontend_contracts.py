@@ -23,10 +23,15 @@ BACKEND_ROOT = REPO_ROOT / "backend"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
+from app.modules.engineering.operator_models import (  # noqa: E402
+    CapabilityRead,
+    EvaluatorRead,
+)
 from app.modules.modeling.models import ParameterRead  # noqa: E402
 
 SOURCE_LABEL = "backend/app/modules/modeling/models.py::ParameterRead"
 TARGET = REPO_ROOT / "frontend" / "src" / "api" / "generated" / "modeling.ts"
+ENGINEERING_TARGET = REPO_ROOT / "frontend" / "src" / "api" / "generated" / "engineering.ts"
 HEADER = (
     "// GENERATED FILE — DO NOT EDIT.\n"
     f"// Source: {SOURCE_LABEL}\n"
@@ -91,6 +96,13 @@ def render_model(model: type[BaseModel], export_name: str) -> str:
 
 def render_parameter_read() -> str:
     return render_model(ParameterRead, "ParameterRead")
+
+
+def render_engineering_reads() -> str:
+    return (HEADER.replace(SOURCE_LABEL, "backend/app/modules/engineering/operator_models.py")
+            + render_model(EvaluatorRead, "EvaluatorRead").split("\n\n", 1)[1]
+            + "\n"
+            + render_model(CapabilityRead, "CapabilityRead").split("\n\n", 1)[1])
 
 
 def _matches(path: Path, expected: str, *, report: bool = False) -> bool:
@@ -188,8 +200,9 @@ def main() -> int:
         return 0
 
     expected = render_parameter_read()
+    engineering_expected = render_engineering_reads()
     if args.check:
-        if _matches(TARGET, expected, report=True):
+        if _matches(TARGET, expected, report=True) and _matches(ENGINEERING_TARGET, engineering_expected, report=True):
             print("frontend generated contracts are current")
             return 0
         print("frontend generated contracts are stale; regenerate before committing", file=sys.stderr)
@@ -197,6 +210,7 @@ def main() -> int:
 
     TARGET.parent.mkdir(parents=True, exist_ok=True)
     TARGET.write_text(expected, encoding="utf-8", newline="\n")
+    ENGINEERING_TARGET.write_text(engineering_expected, encoding="utf-8", newline="\n")
     print(f"wrote {TARGET.relative_to(REPO_ROOT)}")
     return 0
 
