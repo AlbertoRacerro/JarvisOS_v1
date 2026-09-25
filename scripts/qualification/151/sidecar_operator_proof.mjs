@@ -429,7 +429,22 @@ try {
   await snap("complete-answers");
 
   if (isLlamaCpp) {
-    const truncated = await send("Scrivi i numeri da 1 a 3000, uno per riga, senza commenti.");
+    // A reasoning model may spend the whole bound on hidden reasoning. Record that
+    // outcome honestly (it must say so, not blame the runtime), then ask more directly.
+    const budgetExhausted = [];
+    let truncated;
+    for (const prompt of [
+      "Scrivi i numeri da 1 a 3000, uno per riga, senza commenti.",
+      "Senza ragionare, inizia subito: scrivi i numeri da 1 a 3000, uno per riga.",
+      "Rispondi subito senza pensare. Elenca i numeri da 1 a 3000, uno per riga.",
+    ]) {
+      truncated = await send(prompt);
+      if ((truncated.flow.answer && !/^No answer was produced/.test(truncated.flow.answer)) || truncated.flow.finish_reason !== "length") break;
+      const text = await truncated.entry.innerText();
+      const truthful = /whole output budget/i.test(text) && !/Check that the configured local model is running/i.test(text);
+      if (!truthful) proofFailures.push("budget-exhausted answer did not render the truthful budget message");
+      budgetExhausted.push({ flow: truncated.flow, truthful_message_rendered: truthful });
+    }
     const truncatedText = await truncated.entry.innerText();
     const continueButton = truncated.entry.getByRole("button", { name: "Continue as a new message" });
     const continueButtonRendered = await continueButton.isVisible().catch(() => false);
@@ -451,6 +466,7 @@ try {
       status: truncated.flow.state !== "complete" && truncated.flow.finish_reason === "length" ? "observed" : "not_observed",
       interaction: truncated.flow,
       hidden_reasoning_empty_visible_answer: !truncated.flow.answer,
+      budget_exhausted_attempts: budgetExhausted,
       incomplete_warning_rendered: incompleteWarningRendered,
       continue_button_rendered: continueButtonRendered,
       continuation_clicked: continueButtonRendered,

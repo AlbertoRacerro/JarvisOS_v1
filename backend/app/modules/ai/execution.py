@@ -376,6 +376,9 @@ def _chain_metadata(
 def _response_status(response: AIResponse) -> tuple[str, str | None]:
     if response.error is None and response.text:
         return "success", None
+    if response.error is None and response.finish_reason == "length":
+        # The output bound was reached with no visible text (e.g. spent on hidden reasoning).
+        return "provider_error", "output_budget_exhausted"
     return "provider_error", response.error.code.value if response.error is not None else "empty_response"
 
 
@@ -810,7 +813,7 @@ def _run_local_continuations(
         ledger_response: AIResponse | None = response
         input_tokens_override = None
         output_tokens_override = None
-        if error_type == "empty_response":
+        if error_type in {"empty_response", "output_budget_exhausted"}:
             # Preserve usage and finish metadata while preventing an empty visible
             # body from becoming an output digest that cannot own a protected segment.
             ledger_response = None
