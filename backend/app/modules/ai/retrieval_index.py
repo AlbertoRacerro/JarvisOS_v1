@@ -6,6 +6,7 @@ import hashlib
 import json
 import math
 import re
+import shutil
 import sqlite3
 import struct
 import subprocess
@@ -13,7 +14,7 @@ from collections.abc import Callable, Iterable, Sequence
 from datetime import UTC, datetime, timedelta
 from itertools import chain
 from pathlib import Path
-from typing import Protocol
+from typing import Literal, Protocol
 
 from pydantic import BaseModel
 
@@ -76,6 +77,21 @@ class Embedder(Protocol):
     def embed_query(self, text: str) -> tuple[float, ...]: ...
 
 
+class IndexFreshness(BaseModel):
+    indexed_sha: str | None
+    master_sha: str | None
+    state: Literal["current", "caught_up", "behind", "unavailable"]
+    generation: int
+    reason: str | None = None
+
+
+class IndexIntegrityReport(BaseModel):
+    ok: bool
+    issues: tuple[str, ...]
+    indexed_sha: str | None
+    generation: int
+
+
 class HashingEmbedder:
     """Offline, deterministic semantic-path fixture. Real embeddings are optional."""
 
@@ -83,6 +99,7 @@ class HashingEmbedder:
         if dimensions < 1:
             raise ValueError("dimensions must be positive")
         self.dimensions = dimensions
+        self.identity = f"hashing-v1:{dimensions}"
 
     def embed(self, text: str) -> tuple[float, ...]:
         values = [0.0] * self.dimensions
@@ -104,6 +121,7 @@ class E5Embedder:
         from sentence_transformers import SentenceTransformer
 
         self.model: object = SentenceTransformer(model_name)
+        self.identity = f"e5:{model_name}"
 
     def embed(self, text: str) -> tuple[float, ...]:
         return self._encode("passage: " + text)
@@ -301,8 +319,13 @@ def _git_show(repo: Path, sha: str, path: str) -> str | None:
     if not re.fullmatch(r"[0-9a-f]{40}", sha) or Path(path).is_absolute() or ".." in Path(path).parts:
         raise ValueError("exact SHA and relative repository path required")
     result = subprocess.run(["git", "-C", str(repo), "show", f"{sha}:{path}"], capture_output=True,
-                            text=True, check=False, timeout=10)
-    return result.stdout if result.returncode == 0 else None
+                            check=False, timeout=10)
+    if result.returncode:
+        return None
+    try:
+        return result.stdout.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
 
 
 def repository_symbol_documents(repo: Path, sha: str, paths: Sequence[str]) -> list[IndexDocument]:
@@ -478,11 +501,12 @@ class SQLiteIndexStore:
                  documents: Callable[[], Iterable[IndexDocument]] = lambda: chain(
                      canonical_documents(), hermes_operational_memory_documents()),
                  resolver: Callable[[SourceRef], IndexDocument | None] | None = None,
-                 repository_root: Path | None = None) -> None:
+                 repository_root: Path | None = None, master_ref: str = "refs/remotes/origin/master") -> None:
         self.embedder = embedder or HashingEmbedder()
         self.documents = documents
         self.resolver = resolver
         self.repository_root = repository_root
+        self.master_ref = master_ref
         self.use_sqlite_vec = False
         self._vector_dimensions = 0
         self._initialize()
@@ -491,14 +515,7 @@ class SQLiteIndexStore:
         with open_retrieval_index_connection() as db:
             use_vec = _load_vector_extension(db)
             db.execute("CREATE TABLE IF NOT EXISTS meta (name TEXT PRIMARY KEY, value TEXT NOT NULL)")
-            version = db.execute("SELECT value FROM meta WHERE name='schema_version'").fetchone()
-            if version and version[0] != INDEX_SCHEMA_VERSION:
-                for table in ("edges", "docs_fts", "docs"):
-                    db.execute(f"DROP TABLE IF EXISTS {table}")
-                db.execute("DELETE FROM meta")
             db.execute("INSERT OR IGNORE INTO meta VALUES ('schema_version', ?)", (INDEX_SCHEMA_VERSION,))
-            db.execute("INSERT OR IGNORE INTO meta VALUES ('extractor_identity', ?)",
-                       (_REPOSITORY_EXTRACTOR_ID,))
             db.execute(
                 "CREATE TABLE IF NOT EXISTS docs (key TEXT PRIMARY KEY, ref TEXT NOT NULL, "
                 "object_id TEXT NOT NULL, title TEXT, text TEXT NOT NULL, vector TEXT NOT NULL, workspace_id TEXT)"
@@ -521,7 +538,7 @@ class SQLiteIndexStore:
         embedding dimension; any mismatch against the recorded state rebuilds vec_docs from
         the stored vectors, so the accelerator never serves stale neighbours.
         """
-        self._vector_dimensions = len(self.embedder.embed(""))
+        self._vector_dimensions = len(self.embedder.embed_query(""))
         row = db.execute("SELECT value FROM meta WHERE name='revision'").fetchone()
         state = db.execute("SELECT value FROM meta WHERE name='vector_index'").fetchone()
         expected_state = f"{self._vector_dimensions}:{_SQLITE_VEC_CHUNK_SIZE}:{row[0] if row else ''}"
@@ -559,25 +576,50 @@ class SQLiteIndexStore:
             row = db.execute("SELECT value FROM meta WHERE name='revision'").fetchone()
             return str(row[0]) if row else self._revision(db)
 
-    def _upsert(self, db: sqlite3.Connection, documents: Sequence[IndexDocument]) -> None:
+    def _embedder_identity(self) -> str:
+        identity = getattr(self.embedder, "identity", None)
+        return str(identity) if identity else f"{type(self.embedder).__module__}.{type(self.embedder).__qualname__}"
+
+    def _upsert(self, db: sqlite3.Connection, documents: Sequence[IndexDocument], *,
+                reusable_vectors: dict[str, str] | None = None) -> int:
         if self.use_sqlite_vec:
             _load_vector_extension(db)
+        reusable: dict[str, str] = {}
+        reusable_text: dict[str, str] = {}
+        for row in db.execute("SELECT title,text,vector FROM docs"):
+            reusable.setdefault(canonical_digest((row[0], row[1])), str(row[2]))
+            reusable_text.setdefault(canonical_digest(row[1]), str(row[2]))
+        if reusable_vectors:
+            for digest, vector_json in reusable_vectors.items():
+                reusable_text.setdefault(digest, vector_json)
+        embedded = 0
         for document in documents:
             ref = document.source_ref
             key = _key(ref)
-            old = db.execute("SELECT ref,title,text FROM docs WHERE key=?", (key,)).fetchone()
+            old = db.execute("SELECT ref,title,text,vector FROM docs WHERE key=?", (key,)).fetchone()
             if old is not None and old[1] == document.title and old[2] == document.text:
                 previous_ref = SourceRef.model_validate_json(old[0])
                 if previous_ref.content_digest == ref.content_digest:
                     # A new commit changes the provenance revision, not the indexed body.
                     db.execute("UPDATE docs SET ref=? WHERE key=?", (ref.model_dump_json(), key))
                     continue
-            vector = self.embedder.embed(document.text)
+            cached = reusable.get(canonical_digest((document.title, document.text)))
+            if cached is None:
+                cached = reusable_text.get(canonical_digest(document.text))
+            if cached is not None:
+                vector_json = cached
+                vector = json.loads(cached)
+            else:
+                vector = self.embedder.embed(document.text)
+                vector_json = json.dumps(vector)
+                reusable[canonical_digest((document.title, document.text))] = vector_json
+                reusable_text[canonical_digest(document.text)] = vector_json
+                embedded += 1
             db.execute("DELETE FROM docs_fts WHERE key=?", (key,))
             db.execute(
                 "INSERT OR REPLACE INTO docs VALUES (?,?,?,?,?,?,?)",
                 (key, ref.model_dump_json(), ref.object_id, document.title, document.text,
-                 json.dumps(vector), ref.workspace_id),
+                 vector_json, ref.workspace_id),
             )
             db.execute(
                 "INSERT INTO docs_fts(key,object_id,title,text) VALUES (?,?,?,?)",
@@ -589,19 +631,18 @@ class SQLiteIndexStore:
                     "INSERT INTO vec_docs(key, workspace_id, embedding) VALUES (?,?,?)",
                     (key, ref.workspace_id, _pack_vector(vector)),
                 )
+        return embedded
 
     def rebuild(self) -> str:
         full_docs = sorted(self.documents(), key=lambda item: _key(item.source_ref))
+        master_sha = self.resolve_master_sha() if self.repository_root else None
         if self.repository_root:
-            head = subprocess.run(["git", "-C", str(self.repository_root), "rev-parse", "HEAD"],
-                                  capture_output=True, text=True, check=False, timeout=10)
-            if head.returncode == 0:
-                sha = head.stdout.strip()
+            if master_sha:
                 names = subprocess.run(["git", "-C", str(self.repository_root), "ls-tree", "-r",
-                                        "--name-only", sha], capture_output=True, text=True,
+                                        "--name-only", master_sha], capture_output=True, text=True,
                                        check=True, timeout=30).stdout.splitlines()
-                full_docs.extend(repository_file_documents(self.repository_root, sha, names))
-                full_docs.extend(repository_symbol_documents(self.repository_root, sha, names))
+                full_docs.extend(repository_file_documents(self.repository_root, master_sha, names))
+                full_docs.extend(repository_symbol_documents(self.repository_root, master_sha, names))
                 full_docs = sorted({_key(doc.source_ref): doc for doc in full_docs}.values(),
                                    key=lambda item: _key(item.source_ref))
         summaries = {
@@ -638,7 +679,7 @@ class SQLiteIndexStore:
             if self.use_sqlite_vec:
                 _load_vector_extension(db)
                 db.execute("DELETE FROM vec_docs")
-            self._upsert(db, docs)
+            embedded = self._upsert(db, docs)
             for doc in full_docs:
                 summary = summaries.get(_key(doc.source_ref))
                 if summary is not None:
@@ -672,17 +713,31 @@ class SQLiteIndexStore:
                     link(db, doc, "repository", "file", ref.object_id.split("::", 1)[0],
                          "symbol_file", ref.revision)
             revision = self._revision(db)
-            if self.repository_root:
-                head = subprocess.run(["git", "-C", str(self.repository_root), "rev-parse", "HEAD"],
-                                      capture_output=True, text=True, check=False, timeout=10)
-                if head.returncode == 0:
-                    db.execute("INSERT OR REPLACE INTO meta VALUES ('indexed_master_sha', ?)",
-                               (head.stdout.strip(),))
+            if master_sha:
+                db.execute("INSERT OR REPLACE INTO meta VALUES ('indexed_master_sha', ?)", (master_sha,))
+            db.execute("INSERT OR REPLACE INTO meta VALUES ('generation', ?)",
+                       (str(int((db.execute("SELECT value FROM meta WHERE name='generation'").fetchone() or ["0"])[0]) + 1),))
+            db.execute("INSERT OR REPLACE INTO meta VALUES ('schema_version', ?)", (INDEX_SCHEMA_VERSION,))
+            db.execute("INSERT OR REPLACE INTO meta VALUES ('extractor_identity', ?)",
+                       (_REPOSITORY_EXTRACTOR_ID,))
             db.execute("INSERT OR REPLACE INTO meta VALUES ('embedder_identity', ?)",
-                       (f"{type(self.embedder).__module__}.{type(self.embedder).__qualname__}:"
-                        f"{len(self.embedder.embed(''))}",))
+                       (self._embedder_identity(),))
             db.commit()
+            self._last_result: dict[str, int | str] = {
+                "indexed_sha": master_sha or "", "changed_paths": len(names) if self.repository_root else 0,
+                "embedded_documents": embedded, "deleted_documents": 0,
+            }
             return revision
+
+    def resolve_master_sha(self) -> str:
+        if self.repository_root is None:
+            raise ValueError("repository root is required")
+        for ref in (self.master_ref, "refs/heads/master") if self.master_ref != "refs/heads/master" else (self.master_ref,):
+            result = subprocess.run(["git", "-C", str(self.repository_root), "rev-parse", "--verify",
+                                     f"{ref}^{{commit}}"], capture_output=True, text=True, check=False, timeout=10)
+            if result.returncode == 0:
+                return result.stdout.strip()
+        raise RuntimeError(f"cannot resolve master ref {self.master_ref}")
 
     @property
     def indexed_master_sha(self) -> str | None:
@@ -691,129 +746,190 @@ class SQLiteIndexStore:
             return str(row[0]) if row else None
 
     def synchronize_repository(self, new_sha: str) -> dict[str, int | str]:
-        """Apply one exact Git delta atomically; unchanged document vectors are retained."""
+        """Apply one exact Git delta in an atomic generation; retry races twice."""
         if self.repository_root is None or not re.fullmatch(r"[0-9a-f]{40}", new_sha):
             raise ValueError("repository root and exact commit SHA are required")
         repo = self.repository_root
-        check = subprocess.run(["git", "-C", str(repo), "cat-file", "-e", f"{new_sha}^{{commit}}"],
-                               capture_output=True, check=False, timeout=10)
-        if check.returncode:
+        if subprocess.run(["git", "-C", str(repo), "rev-parse", "--verify", f"{new_sha}^{{commit}}"],
+                          capture_output=True, check=False, timeout=10).returncode:
             raise ValueError("target commit is unavailable")
-        old_sha = self.indexed_master_sha
-        if old_sha == new_sha:
-            return {"indexed_sha": new_sha, "changed_paths": 0, "embedded_documents": 0}
-        paths: set[str] = set()
-        if old_sha:
-            diff = subprocess.run(["git", "-C", str(repo), "diff", "--name-status", "-M", old_sha, new_sha],
-                                  capture_output=True, text=True, check=True, timeout=30)
-            rows = [line.split("\t") for line in diff.stdout.splitlines()]
-            for row in rows:
-                if row[0].startswith("R"):
-                    paths.update(row[1:3])
-                else:
-                    paths.add(row[-1])
-        else:
-            listing = subprocess.run(["git", "-C", str(repo), "ls-tree", "-r", "--name-only", new_sha],
-                                     capture_output=True, text=True, check=True, timeout=30)
-            paths.update(listing.stdout.splitlines())
-        source_docs = [*repository_file_documents(repo, new_sha, sorted(paths)),
-                       *repository_symbol_documents(repo, new_sha, sorted(paths))]
-        old_docs: list[SourceRef] = []
-        with open_retrieval_index_connection() as db:
-            for row in db.execute("SELECT ref FROM docs"):
-                ref = SourceRef.model_validate_json(row[0])
-                if ref.authority_owner == "repository":
-                    path = ref.object_id.split("::", 1)[0]
-                    if path in paths:
-                        old_docs.append(ref)
-        # Drop stale derived summaries for touched documents and regenerate only that
-        # bounded set, then refresh the one repository group summary and symbol edges.
-        summary_refs = [SourceRef(authority_owner="retrieval", object_type="document_summary",
-                                  object_id=_key(ref), workspace_id=ref.workspace_id,
-                                  content_digest=canonical_digest(ref.model_dump(mode="json")))
-                        for ref in old_docs]
-        old_docs.extend(summary_refs)
-        target_keys = {_key(doc.source_ref) for doc in source_docs}
-        deletes = [ref for ref in old_docs if _key(ref) not in target_keys]
-        new_docs = [*source_docs, *(_document_summary(doc) for doc in source_docs)]
-        with open_retrieval_index_connection() as db:
-            repository_refs = [SourceRef.model_validate_json(row[0]) for row in db.execute("SELECT ref FROM docs")
-                               if SourceRef.model_validate_json(row[0]).authority_owner == "repository"
-                               and SourceRef.model_validate_json(row[0]).object_type in {"file", "symbol"}
-                               and SourceRef.model_validate_json(row[0]).object_id.split("::", 1)[0] not in paths]
-        repository_refs.extend(doc.source_ref for doc in source_docs)
-        pseudo_docs = [IndexDocument(source_ref=ref, text=" ") for ref in repository_refs]
-        new_docs.append(_group_summary(pseudo_docs, "repository", None))
-        target_keys |= {_key(doc.source_ref) for doc in new_docs}
-        deletes = [ref for ref in deletes if _key(ref) not in target_keys]
-        with open_retrieval_index_connection() as db:
-            db.execute("BEGIN IMMEDIATE")
-            if self.use_sqlite_vec:
-                _load_vector_extension(db)
-            embedded_documents = 0
-            for doc in new_docs:
-                row = db.execute("SELECT ref,title,text FROM docs WHERE key=?", (_key(doc.source_ref),)).fetchone()
-                if row is None or row[1] != doc.title or row[2] != doc.text or (
-                        SourceRef.model_validate_json(row[0]).content_digest != doc.source_ref.content_digest):
-                    embedded_documents += 1
-            for ref in old_docs:
-                if ref.authority_owner == "repository":
-                    key = _key(ref)
-                    db.execute("DELETE FROM edges WHERE source_key=? OR target_key=?", (key, key))
-            for path in paths:
-                db.execute("DELETE FROM edges WHERE kind='symbol_file' AND target_key IN "
-                           "(SELECT key FROM docs WHERE object_id=?)", (path,))
-            for ref in deletes:
-                key = _key(ref)
-                db.execute("DELETE FROM docs WHERE key=?", (key,))
-                db.execute("DELETE FROM docs_fts WHERE key=?", (key,))
-                db.execute("DELETE FROM edges WHERE source_key=? OR target_key=?", (key, key))
+        for attempt in range(3):
+            with open_retrieval_index_connection() as db:
+                indexed_row = db.execute("SELECT value FROM meta WHERE name='indexed_master_sha'").fetchone()
+                generation_row = db.execute("SELECT value FROM meta WHERE name='generation'").fetchone()
+                old_sha = str(indexed_row[0]) if indexed_row else None
+                observed_generation = int(generation_row[0]) if generation_row else 0
+            if old_sha == new_sha:
+                return {"indexed_sha": new_sha, "changed_paths": 0, "embedded_documents": 0,
+                        "deleted_documents": 0, "generation": observed_generation}
+            paths: set[str] = set()
+            full = not old_sha
+            if old_sha:
+                ancestor = subprocess.run(["git", "-C", str(repo), "merge-base", "--is-ancestor", old_sha, new_sha],
+                                          capture_output=True, check=False, timeout=10)
+                full = ancestor.returncode != 0
+            if not full and old_sha:
+                diff = subprocess.run(["git", "-C", str(repo), "diff", "--name-status", "-z", "-M",
+                                       old_sha, new_sha], capture_output=True, check=True, timeout=30).stdout
+                fields = diff.decode("utf-8", "surrogateescape").split("\0")
+                cursor = 0
+                while cursor < len(fields) and fields[cursor]:
+                    status = fields[cursor]
+                    cursor += 1
+                    count = 2 if status.startswith(("R", "C")) else 1
+                    paths.update(fields[cursor:cursor + count])
+                    cursor += count
+            if full:
+                tree = subprocess.run(["git", "-C", str(repo), "ls-tree", "-r", "--name-only", "-z", new_sha],
+                                      capture_output=True, check=True, timeout=30).stdout
+                paths.update(p for p in tree.decode("utf-8", "surrogateescape").split("\0") if p)
+                with open_retrieval_index_connection() as db:
+                    for row in db.execute("SELECT ref FROM docs"):
+                        ref = SourceRef.model_validate_json(row[0])
+                        if ref.authority_owner == "repository":
+                            paths.add(ref.object_id.split("::", 1)[0])
+            source_docs = [*repository_file_documents(repo, new_sha, sorted(paths)),
+                           *repository_symbol_documents(repo, new_sha, sorted(paths))]
+            with open_retrieval_index_connection() as db:
+                db.execute("BEGIN IMMEDIATE")
+                stored = db.execute("SELECT value FROM meta WHERE name='indexed_master_sha'").fetchone()
+                generation = db.execute("SELECT value FROM meta WHERE name='generation'").fetchone()
+                actual_sha = str(stored[0]) if stored else None
+                actual_generation = int(generation[0]) if generation else 0
+                if actual_sha == new_sha:
+                    db.rollback()
+                    return {"indexed_sha": new_sha, "changed_paths": 0, "embedded_documents": 0,
+                            "deleted_documents": 0, "generation": actual_generation}
+                if actual_sha != old_sha or actual_generation != observed_generation:
+                    db.rollback()
+                    if attempt < 2:
+                        continue
+                    raise RuntimeError("repository index changed concurrently; retry synchronization")
                 if self.use_sqlite_vec:
-                    db.execute("DELETE FROM vec_docs WHERE key=?", (key,))
-            before = int(db.execute("SELECT COUNT(*) FROM docs").fetchone()[0])
-            self._upsert(db, new_docs)
-            for doc in source_docs:
-                if doc.source_ref.object_type == "symbol":
-                    file_ref = next((item.source_ref for item in source_docs
-                                     if item.source_ref.object_type == "file"
-                                     and item.source_ref.object_id == doc.source_ref.object_id.split("::", 1)[0]), None)
-                    if file_ref:
-                        db.execute("INSERT OR REPLACE INTO edges VALUES (?,?,?,?)",
-                                   (_key(doc.source_ref), _key(file_ref), "symbol_file", new_sha))
-            after = int(db.execute("SELECT COUNT(*) FROM docs").fetchone()[0])
-            db.execute("INSERT OR REPLACE INTO meta VALUES ('indexed_master_sha', ?)", (new_sha,))
-            db.execute("INSERT OR REPLACE INTO meta VALUES ('extractor_identity', ?)",
-                       (_REPOSITORY_EXTRACTOR_ID,))
-            db.execute("INSERT OR REPLACE INTO meta VALUES ('embedder_identity', ?)",
-                       (f"{type(self.embedder).__module__}.{type(self.embedder).__qualname__}:"
-                        f"{len(self.embedder.embed(''))}",))
-            self._revision(db)
-            db.commit()
-        return {"indexed_sha": new_sha, "changed_paths": len(paths),
-                "embedded_documents": embedded_documents, "deleted_documents": len(deletes),
-                "document_count_delta": after - before}
+                    _load_vector_extension(db)
+                before = int(db.execute("SELECT COUNT(*) FROM docs").fetchone()[0])
+                preserved_vectors = {canonical_digest(row[0]): str(row[1])
+                                     for row in db.execute("SELECT text,vector FROM docs")}
+                old_refs: list[SourceRef] = []
+                for row in db.execute("SELECT ref FROM docs"):
+                    ref = SourceRef.model_validate_json(row[0])
+                    if ref.authority_owner == "repository" and ref.object_id.split("::", 1)[0] in paths:
+                        old_refs.append(ref)
+                old_keys = {_key(ref) for ref in old_refs}
+                summary_keys = {_key(SourceRef(authority_owner="retrieval", object_type="document_summary",
+                                               object_id=_key(ref), workspace_id=ref.workspace_id,
+                                               content_digest=canonical_digest(ref.model_dump(mode="json"))))
+                                for ref in old_refs}
+                delete_keys = old_keys | summary_keys
+                for key in delete_keys:
+                    db.execute("DELETE FROM docs WHERE key=?", (key,))
+                    db.execute("DELETE FROM docs_fts WHERE key=?", (key,))
+                    db.execute("DELETE FROM edges WHERE source_key=? OR target_key=?", (key, key))
+                    if self.use_sqlite_vec:
+                        db.execute("DELETE FROM vec_docs WHERE key=?", (key,))
+                refreshed_summaries: list[IndexDocument] = []
+                for row in db.execute("SELECT key,ref,title,text FROM docs").fetchall():
+                    ref = SourceRef.model_validate_json(row[1])
+                    if ref.authority_owner != "repository" or ref.object_type not in {"file", "symbol"}:
+                        continue
+                    refreshed_ref = ref.model_copy(update={"revision": new_sha})
+                    db.execute("UPDATE docs SET ref=? WHERE key=?", (refreshed_ref.model_dump_json(), row[0]))
+                    if ref.object_type == "symbol":
+                        db.execute("UPDATE edges SET valid_from=? WHERE source_key=? AND kind='symbol_file'",
+                                   (new_sha, row[0]))
+                    refreshed_summaries.append(_document_summary(IndexDocument(
+                        source_ref=refreshed_ref, title=row[2], text=row[3])))
+                new_docs = [*source_docs, *(_document_summary(doc) for doc in source_docs),
+                            *refreshed_summaries]
+                current_refs = [SourceRef.model_validate_json(row[0]) for row in db.execute("SELECT ref FROM docs")
+                                if SourceRef.model_validate_json(row[0]).authority_owner == "repository"
+                                and SourceRef.model_validate_json(row[0]).object_type in {"file", "symbol"}]
+                current_refs.extend(doc.source_ref for doc in source_docs)
+                group = _group_summary([IndexDocument(source_ref=ref, text=" ") for ref in current_refs], "repository", None)
+                new_docs.append(group)
+                target_keys = {_key(doc.source_ref) for doc in new_docs}
+                embedded = self._upsert(db, new_docs, reusable_vectors=preserved_vectors)
+                # Replace the repository summary edges and all touched symbol-file edges.
+                group_key = _key(group.source_ref)
+                db.execute("DELETE FROM edges WHERE source_key=?", (group_key,))
+                for doc in source_docs:
+                    summary = _document_summary(doc)
+                    db.execute("INSERT OR REPLACE INTO edges VALUES (?,?,?,?)",
+                               (_key(summary.source_ref), _key(doc.source_ref), "summary_document", None))
+                for ref in current_refs:
+                    summary_ref = SourceRef(authority_owner="retrieval", object_type="document_summary",
+                                            object_id=_key(ref), workspace_id=ref.workspace_id,
+                                            content_digest=canonical_digest(ref.model_dump(mode="json")))
+                    db.execute("INSERT OR REPLACE INTO edges VALUES (?,?,?,?)",
+                               (group_key, _key(summary_ref), "group_summary", None))
+                for source in source_docs:
+                    if source.source_ref.object_type == "symbol":
+                        file_ref = next((item.source_ref for item in source_docs if item.source_ref.object_type == "file"
+                                         and item.source_ref.object_id == source.source_ref.object_id.split("::", 1)[0]), None)
+                        if file_ref:
+                            db.execute("INSERT OR REPLACE INTO edges VALUES (?,?,?,?)",
+                                       (_key(source.source_ref), _key(file_ref), "symbol_file", new_sha))
+                deleted = len(delete_keys - target_keys)
+                db.execute("INSERT OR REPLACE INTO meta VALUES ('indexed_master_sha', ?)", (new_sha,))
+                db.execute("INSERT OR REPLACE INTO meta VALUES ('extractor_identity', ?)", (_REPOSITORY_EXTRACTOR_ID,))
+                db.execute("INSERT OR REPLACE INTO meta VALUES ('embedder_identity', ?)", (self._embedder_identity(),))
+                db.execute("INSERT OR REPLACE INTO meta VALUES ('generation', ?)", (str(actual_generation + 1),))
+                self._revision(db)
+                after = int(db.execute("SELECT COUNT(*) FROM docs").fetchone()[0])
+                db.commit()
+                result: dict[str, int | str] = {
+                    "indexed_sha": new_sha, "changed_paths": len(paths), "embedded_documents": embedded,
+                    "deleted_documents": deleted, "generation": actual_generation + 1,
+                    "document_count_delta": after - before,
+                }
+                self._last_result = result
+                return result
+        raise RuntimeError("repository synchronization retries exhausted")
 
     def ensure_repository_fresh(self, master_sha: str | None = None) -> None:
-        """Catch up before a bundle is offered; failure propagates instead of serving stale hits."""
+        """Best-effort catch-up used by retrieval methods; freshness gates filter stale hits."""
         if self.repository_root is None:
             return
-        identity = (f"{type(self.embedder).__module__}.{type(self.embedder).__qualname__}:"
-                    f"{len(self.embedder.embed(''))}")
-        with open_retrieval_index_connection() as db:
-            stored = db.execute("SELECT value FROM meta WHERE name='embedder_identity'").fetchone()
-            extractor = db.execute("SELECT value FROM meta WHERE name='extractor_identity'").fetchone()
-        if (stored and stored[0] != identity) or (extractor and extractor[0] != _REPOSITORY_EXTRACTOR_ID):
-            self.rebuild()
+        try:
+            master_sha = master_sha or self.resolve_master_sha()
+            with open_retrieval_index_connection() as db:
+                schema = db.execute("SELECT value FROM meta WHERE name='schema_version'").fetchone()
+                embedder = db.execute("SELECT value FROM meta WHERE name='embedder_identity'").fetchone()
+                extractor = db.execute("SELECT value FROM meta WHERE name='extractor_identity'").fetchone()
+            indexed_sha = self.indexed_master_sha
+            if (not indexed_sha or schema is None or schema[0] != INDEX_SCHEMA_VERSION or
+                    embedder is None or embedder[0] != self._embedder_identity() or
+                    extractor is None or extractor[0] != _REPOSITORY_EXTRACTOR_ID):
+                self.rebuild()
+                return
+            if self.indexed_master_sha != master_sha:
+                self.synchronize_repository(master_sha)
+        except (OSError, RuntimeError, sqlite3.Error, subprocess.SubprocessError, ValueError):
             return
-        if master_sha is None:
-            result = subprocess.run(["git", "-C", str(self.repository_root), "rev-parse",
-                                     "refs/remotes/origin/master"], capture_output=True, text=True,
-                                    check=False, timeout=10)
-            if result.returncode:
-                result = subprocess.run(["git", "-C", str(self.repository_root), "rev-parse", "master"],
-                                        capture_output=True, text=True, check=True, timeout=10)
-            master_sha = result.stdout.strip()
-        self.synchronize_repository(master_sha)
+
+    def freshness(self) -> IndexFreshness:
+        indexed: str | None = None
+        try:
+            indexed = self.indexed_master_sha
+            master = self.resolve_master_sha() if self.repository_root else None
+            needed_catchup = bool(master and indexed != master)
+            if master and indexed != master:
+                self.ensure_repository_fresh(master)
+                indexed = self.indexed_master_sha
+            state: Literal["current", "caught_up", "behind", "unavailable"] = (
+                "unavailable" if master is None else "caught_up" if needed_catchup and indexed == master
+                else "current" if indexed == master else "behind")
+            with open_retrieval_index_connection() as db:
+                row = db.execute("SELECT value FROM meta WHERE name='generation'").fetchone()
+            return IndexFreshness(indexed_sha=indexed, master_sha=master, state=state,
+                                  generation=int(row[0]) if row else 0,
+                                  reason=None if state in {"current", "caught_up"} else
+                                  f"repository index not at current master {(master or '')[:12]}")
+        except (OSError, RuntimeError, sqlite3.Error, subprocess.SubprocessError, ValueError) as exc:
+            with open_retrieval_index_connection() as db:
+                row = db.execute("SELECT value FROM meta WHERE name='generation'").fetchone()
+            return IndexFreshness(indexed_sha=indexed, master_sha=None, state="unavailable",
+                                  generation=int(row[0]) if row else 0, reason=str(exc))
 
     def upsert(self, documents: Sequence[IndexDocument]) -> None:
         with open_retrieval_index_connection() as db:
@@ -874,8 +990,125 @@ class SQLiteIndexStore:
                             vector_score=vector, graph_score=graph, fused_score=0.0,
                             excerpt=row["text"][:500], index_revision=revision)
 
+    def _fresh_hits(self, hits: list[RetrievalHit], freshness: IndexFreshness) -> list[RetrievalHit]:
+        if freshness.master_sha is None:
+            if self.repository_root is None:
+                return hits
+            return [hit for hit in hits if hit.source_ref.authority_owner != "repository"]
+        if freshness.indexed_sha == freshness.master_sha:
+            return hits
+        return [hit for hit in hits if hit.source_ref.authority_owner != "repository"
+                or hit.source_ref.revision == freshness.master_sha]
+
+    def verify(self) -> IndexIntegrityReport:
+        issues: list[str] = []
+        try:
+            with open_retrieval_index_connection() as db:
+                check = str(db.execute("PRAGMA quick_check").fetchone()[0])
+                if check != "ok":
+                    issues.append(f"quick_check: {check}")
+                try:
+                    db.execute("INSERT INTO docs_fts(docs_fts) VALUES ('integrity-check')")
+                    db.rollback()
+                except sqlite3.DatabaseError as exc:
+                    db.rollback()
+                    issues.append(f"fts integrity: {exc}")
+                docs = {str(row[0]) for row in db.execute("SELECT key FROM docs")}
+                fts = {str(row[0]) for row in db.execute("SELECT key FROM docs_fts")}
+                if docs != fts:
+                    issues.append("docs/FTS key sets differ")
+                if self.use_sqlite_vec:
+                    _load_vector_extension(db)
+                    vectors = {str(row[0]) for row in db.execute("SELECT key FROM vec_docs")}
+                    if docs != vectors:
+                        issues.append("docs/vector key sets differ")
+                dangling = int(db.execute("SELECT COUNT(*) FROM edges e LEFT JOIN docs s ON s.key=e.source_key "
+                                          "LEFT JOIN docs t ON t.key=e.target_key WHERE s.key IS NULL OR t.key IS NULL").fetchone()[0])
+                if dangling:
+                    issues.append(f"dangling edges: {dangling}")
+                meta = {str(row[0]): str(row[1]) for row in db.execute("SELECT name,value FROM meta")}
+                for required in ("schema_version", "extractor_identity", "embedder_identity", "generation"):
+                    if required not in meta:
+                        issues.append(f"missing meta: {required}")
+                if self.repository_root and "indexed_master_sha" not in meta:
+                    issues.append("missing meta: indexed_master_sha")
+                mismatched = sum(1 for row in db.execute("SELECT ref FROM docs")
+                                 if (lambda ref: ref.authority_owner == "repository" and
+                                     ref.revision != meta.get("indexed_master_sha"))(
+                                         SourceRef.model_validate_json(row[0])))
+                if mismatched:
+                    issues.append(f"repository revision mismatch: {mismatched}")
+                if meta.get("schema_version") != INDEX_SCHEMA_VERSION:
+                    issues.append("schema identity mismatch")
+                if meta.get("extractor_identity") != _REPOSITORY_EXTRACTOR_ID:
+                    issues.append("extractor identity mismatch")
+                if meta.get("embedder_identity") != self._embedder_identity():
+                    issues.append("embedder identity mismatch")
+                indexed = meta.get("indexed_master_sha")
+                generation = int(meta.get("generation", "0"))
+        except (sqlite3.DatabaseError, OSError, ValueError) as exc:
+            issues.append(f"structural corruption: {exc}")
+            indexed, generation = None, 0
+        return IndexIntegrityReport(ok=not issues, issues=tuple(issues), indexed_sha=indexed, generation=generation)
+
+    def repair(self) -> IndexIntegrityReport:
+        report = self.verify()
+        if report.ok:
+            return report
+        if any("repository revision mismatch" in issue for issue in report.issues):
+            self.rebuild()
+            return self.verify()
+        identity_mismatch = any("identity mismatch" in issue or issue.startswith("missing meta")
+                                for issue in report.issues)
+        corruption = any(issue.startswith("structural corruption") or issue.startswith("quick_check")
+                         for issue in report.issues)
+        if identity_mismatch or corruption:
+            if corruption:
+                from app.core.paths import build_paths
+
+                index_path = build_paths().retrieval_index_file
+                stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+                aside = index_path.with_name(f"{index_path.name}.corrupt-{stamp}")
+                if index_path.exists():
+                    shutil.move(index_path, aside)
+                for suffix in ("-wal", "-shm"):
+                    sidecar = Path(str(index_path) + suffix)
+                    if sidecar.exists():
+                        shutil.move(sidecar, Path(str(aside) + suffix))
+                self._initialize()
+            self.rebuild()
+            return self.verify()
+        with open_retrieval_index_connection() as db:
+            db.execute("BEGIN IMMEDIATE")
+            if self.use_sqlite_vec:
+                _load_vector_extension(db)
+            db.execute("DELETE FROM docs_fts")
+            db.execute("INSERT INTO docs_fts(key,object_id,title,text) "
+                       "SELECT key,object_id,COALESCE(title,''),text FROM docs")
+            db.execute("DELETE FROM edges WHERE source_key NOT IN (SELECT key FROM docs) "
+                       "OR target_key NOT IN (SELECT key FROM docs)")
+            if self.use_sqlite_vec:
+                expected = {str(row[0]) for row in db.execute("SELECT key FROM docs")}
+                existing = {str(row[0]) for row in db.execute("SELECT key FROM vec_docs")}
+                for key in existing - expected:
+                    db.execute("DELETE FROM vec_docs WHERE key=?", (key,))
+                for key, workspace_id, vector_json in db.execute("SELECT key,workspace_id,vector FROM docs"):
+                    if str(key) not in existing:
+                        vector = json.loads(vector_json)
+                        db.execute("INSERT INTO vec_docs(key,workspace_id,embedding) VALUES (?,?,?)",
+                                   (key, workspace_id, _pack_vector(vector)))
+            generation = int((db.execute("SELECT value FROM meta WHERE name='generation'").fetchone() or ["0"])[0])
+            db.execute("INSERT OR REPLACE INTO meta VALUES ('generation', ?)", (str(generation + 1),))
+            self._revision(db)
+            db.commit()
+        if self.repository_root:
+            fresh = self.freshness()
+            if fresh.master_sha and fresh.indexed_sha != fresh.master_sha:
+                self.synchronize_repository(fresh.master_sha)
+        return self.verify()
+
     def search_lexical(self, query: str, *, limit: int, workspace_id: str | None = None) -> list[RetrievalHit]:
-        self.ensure_repository_fresh()
+        fresh = self.freshness()
         if limit <= 0:
             return []
         with open_retrieval_index_connection() as db:
@@ -885,7 +1118,7 @@ class SQLiteIndexStore:
                 (query, workspace_id, workspace_id, limit),
             ).fetchall()
         if exact:
-            return [self._hit(row, revision, lexical=-1000.0) for row in exact]
+            return self._fresh_hits([self._hit(row, revision, lexical=-1000.0) for row in exact], fresh)
         if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", query):
             suffix = "::" + query
             with open_retrieval_index_connection() as db:
@@ -895,7 +1128,7 @@ class SQLiteIndexStore:
                     (suffix, suffix, workspace_id, workspace_id, limit),
                 ).fetchall()
             if symbols:
-                return [self._hit(row, revision, lexical=-900.0) for row in symbols]
+                return self._fresh_hits([self._hit(row, revision, lexical=-900.0) for row in symbols], fresh)
         tokens = _TOKEN.findall(query)
         if not tokens:
             return []
@@ -909,10 +1142,10 @@ class SQLiteIndexStore:
                 "WHERE docs_fts MATCH ? AND (? IS NULL OR d.workspace_id=?) ORDER BY score, d.key LIMIT ?",
                 (expression, workspace_id, workspace_id, limit),
             ).fetchall()
-        return [self._hit(row, revision, lexical=float(row["score"])) for row in rows]
+        return self._fresh_hits([self._hit(row, revision, lexical=float(row["score"])) for row in rows], fresh)
 
     def search_vector(self, query: str, *, limit: int, workspace_id: str | None = None) -> list[RetrievalHit]:
-        self.ensure_repository_fresh()
+        fresh = self.freshness()
         if limit <= 0:
             return []
         q = self.embedder.embed_query(query)
@@ -944,9 +1177,11 @@ class SQLiteIndexStore:
                 ]
         revision = self.revision
         scored.sort(key=lambda pair: (-pair[0], pair[1]["key"]))
-        return [self._hit(row, revision, vector=score) for score, row in scored[:limit] if score > 0]
+        hits = [self._hit(row, revision, vector=score) for score, row in scored[:limit] if score > 0]
+        return self._fresh_hits(hits, fresh)
 
     def expand_graph(self, refs: Sequence[SourceRef], *, depth: int, limit: int) -> list[RetrievalHit]:
+        fresh = self.freshness()
         if depth <= 0 or limit <= 0:
             return []
         seen = {_key(ref) for ref in refs}
@@ -978,7 +1213,7 @@ class SQLiteIndexStore:
                 frontier = following
                 if not frontier:
                     break
-        return found
+        return self._fresh_hits(found, fresh)
 
     def search_hybrid(self, query: str, *, limit: int, workspace_id: str | None = None) -> list[RetrievalHit]:
         """Merge lexical and vector ranks with reciprocal-rank fusion (k=60)."""
@@ -1052,7 +1287,7 @@ class SQLiteIndexStore:
 
     def build_bundle(self, query: str, *, workspace_id: str | None, token_budget: int,
                      expansion_level: int = 0, limit: int = 12) -> ContextBundle:
-        self.ensure_repository_fresh()
+        freshness = self.freshness()
         if token_budget < 0 or not 0 <= expansion_level <= 8 or limit < 0:
             raise ValueError("invalid bundle bounds")
         # Group summaries are index navigation aids, not evidence. Re-resolving one by
@@ -1060,6 +1295,18 @@ class SQLiteIndexStore:
         # into an unbounded repository reread (including reparsing every Python file).
         # Retrieve a wider candidate window, then fill the requested slots with
         # individually authoritative document summaries or source records.
+        stale_repository_hits: list[RetrievalHit] = []
+        if self.repository_root and (freshness.master_sha is None or freshness.indexed_sha != freshness.master_sha):
+            tokens = _TOKEN.findall(query)
+            if tokens:
+                expression = " AND ".join('"' + token + '"' for token in tokens)
+                with open_retrieval_index_connection() as db:
+                    rows = db.execute("SELECT d.* FROM docs_fts JOIN docs d ON d.key=docs_fts.key "
+                                      "WHERE docs_fts MATCH ? AND d.object_id IS NOT NULL AND "
+                                      "json_extract(d.ref,'$.authority_owner')='repository' "
+                                      "AND (? IS NULL OR json_extract(d.ref,'$.revision') != ?) LIMIT ?",
+                                      (expression, freshness.master_sha, freshness.master_sha, limit * 4)).fetchall()
+                stale_repository_hits = [self._hit(row, self.revision, lexical=-1.0) for row in rows]
         direct = [
             hit for hit in self.search_hybrid(query, limit=limit * 4, workspace_id=workspace_id)
             if not (hit.source_ref.authority_owner == "retrieval"
@@ -1096,7 +1343,10 @@ class SQLiteIndexStore:
             for hit in self.expand_graph(refs, depth=expansion_level - 1, limit=limit):
                 include(hit, min(expansion_level, 1 + round(1.0 / (hit.graph_score or 1.0))))
         items: list[ContextBundleItem] = []
-        manifest: list[ContextManifestEntry] = []
+        manifest: list[ContextManifestEntry] = [
+            ContextManifestEntry(source_ref=hit.source_ref, outcome="stale",
+                                 reason=(freshness.reason or "repository index freshness unavailable")[:256])
+            for hit in stale_repository_hits]
         used = 0
         for hit, level in candidates[:256]:
             resolution = self.resolve_authoritative(hit.source_ref)
