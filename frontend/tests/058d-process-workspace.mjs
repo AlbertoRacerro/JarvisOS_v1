@@ -12,6 +12,7 @@ const registry = read("src/stages/registry.ts");
 const processStage = read("src/stages/ProcessStage.tsx");
 const lineageStage = read("src/stages/LineageStage.tsx");
 const app = read("src/App.tsx");
+const editorApi = read("src/api/dwsimEditor.ts");
 
 // 100f supersedes the visible 058d Design peer IA while preserving Process and deterministic historical aliases.
 includesAll(routes, [
@@ -43,23 +44,13 @@ assert((lineageStage.match(/acceptsLineageResponse/g) ?? []).length >= 5, "Linea
 
 // 100f adds presentation-only Phosphor icons before the type import; keep the authority boundary rather than enforcing import order.
 assert(processStage.includes('import type { PrimaryStageProps } from "./registry";'), "ProcessStage lost its type-only stage contract");
-assert(!/from\s+["'][^"']*(?:api|lineage|runner|provider)/i.test(processStage), "ProcessStage imports runtime/domain authority");
-assert(!/\b(?:fetch|localStorage|sessionStorage|onSelectionChange|onWorkspaceChange|useEffect|useState)\b/.test(processStage), "ProcessStage gained state, storage, fetch, or selection authority");
-assert((processStage.match(/\bdisabled\b/g) ?? []).length >= 2, "Process controls are not deterministically disabled");
-// 144 adds navigation to existing inspection owners, not Process authoring.
-const processClickHandlers = processStage.match(/\bonClick\s*=\{[^}]+\}/g) ?? [];
-assert(
-  processClickHandlers.length === 4 && processClickHandlers.every(handler =>
-    /^onClick=\{\(\) => navigate\("\/(design\/bluecad|memory\/models|runs|engineering-data)"\)\}$/.test(handler)),
-  "Process scaffold exposes a non-navigation click handler"
-);
-// 100f supersedes the old 058d literal copy while preserving the same fail-closed server-authority boundary.
-includesAll(processStage, [
-  "The visual process editor is not connected to a topology-authoring service.",
-  "Inspect existing models and runs while the visual process editor is unavailable.",
-  "No process topology is loaded.",
-  "A process calculation kernel exists, but this visual editor cannot create, connect or solve equipment yet."
-], "truthful Process empty-state contract");
+includesAll(processStage, ["runDwsimCommand", "expected_revision", "cause.status === 409", "setProjection(result.projection)", "unsupported_commands"], "revisioned DWSIM operator boundary");
+includesAll(editorApi, ["/process/dwsim", "EditorCommand", "DwsimEditorError", "restoreDwsimRevision"], "typed DWSIM API boundary");
+assert(!/\b(?:localStorage|sessionStorage)\b/.test(processStage), "Process editor persists graph state locally");
+assert(!/from\s+["'][^"']*(?:provider|runner|filesystem|ollama)/i.test(processStage + editorApi), "Process editor imports direct execution authority");
+assert((processStage.match(/\bdisabled\b/g) ?? []).length >= 8, "Process controls lack availability and single-flight guards");
+assert(processStage.includes("Changed elsewhere. The stale edit was discarded"), "Process editor does not discard stale edits visibly");
+assert(processStage.includes("projection?.connections") && processStage.includes("geometryIds.has(edge.source_native_id)"), "Canvas does not validate native connection endpoints");
 
 const routeReset = app.match(/useEffect\(\(\) => \{([\s\S]*?)\}, \[route\.id\]\);/)?.[1] ?? "";
 includesAll(routeReset, ["setSelection(null)", "setShellRegions({})", "setShellRegionRequest(null)"], "route-id stale-context reset");

@@ -1,0 +1,378 @@
+.process-stage {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: #273126;
+}
+.process-stage__header {
+  flex: 0 0 auto;
+}
+.dwsim-truth,
+.dwsim-truth__meta {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+.dwsim-truth label,
+.dwsim-palette label,
+.dwsim-inspector label {
+  display: grid;
+  gap: 3px;
+  font-size: 11px;
+  color: #687068;
+}
+.dwsim-truth input,
+.dwsim-truth select,
+.dwsim-palette input,
+.dwsim-palette select,
+.dwsim-inspector input,
+.dwsim-inspector select,
+.dwsim-inspector textarea {
+  min-width: 0;
+  min-height: 29px;
+  padding: 5px 7px;
+  border: 1px solid #d9d4c9;
+  border-radius: 4px;
+  background: #fffefa;
+  color: #293228;
+  font: inherit;
+}
+.dwsim-truth button,
+.dwsim-palette button,
+.dwsim-inspector button,
+.dwsim-canvas-toolbar button,
+.dwsim-revisions button {
+  min-height: 29px;
+  padding: 5px 8px;
+  border: 1px solid #d8d1c5;
+  border-radius: 4px;
+  background: #fffefa;
+  color: #334431;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.dwsim-truth button:disabled,
+.dwsim-palette button:disabled,
+.dwsim-inspector button:disabled,
+.dwsim-canvas-toolbar button:disabled,
+.dwsim-revisions button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.dwsim-truth__meta {
+  align-items: center;
+  gap: 16px;
+  color: #70776e;
+  font-size: 10px;
+}
+.dwsim-truth__meta code {
+  color: #354a31;
+}
+.dwsim-solve-results {
+  flex: 0 0 auto;
+  padding: 7px 10px;
+  border: 1px solid #e2ddd3;
+  border-radius: 4px;
+  background: #fffefa;
+  color: #596258;
+  font-size: 10px;
+}
+.dwsim-solve-results ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 16px;
+  margin: 7px 0;
+  padding-left: 16px;
+}
+.dwsim-solve-results p {
+  margin: 5px 0 0;
+}
+.dwsim-error,
+.dwsim-message,
+.dwsim-warning {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid #dec795;
+  border-radius: 4px;
+  background: #fff8e9;
+  color: #6f572d;
+  font-size: 11px;
+}
+.dwsim-error {
+  border-color: #dbb2a9;
+  background: #fff2ef;
+  color: #853e32;
+}
+.dwsim-workbench {
+  display: grid;
+  grid-template-columns: 180px minmax(300px, 1fr) 230px;
+  min-height: 400px;
+  flex: 1 1 auto;
+  border: 1px solid #ddd5c8;
+  border-radius: 5px;
+  overflow: hidden;
+  background: #fffefa;
+}
+.dwsim-palette,
+.dwsim-inspector {
+  min-width: 0;
+  overflow: auto;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 7px;
+  background: #fcfaf5;
+}
+.dwsim-palette {
+  border-right: 1px solid #e4ddd1;
+}
+.dwsim-inspector {
+  border-left: 1px solid #e4ddd1;
+}
+.dwsim-palette h2,
+.dwsim-inspector h2,
+.dwsim-revisions h2 {
+  margin: 0 0 3px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.dwsim-palette h3,
+.dwsim-inspector h3 {
+  margin: 10px 0 0;
+  font-size: 11px;
+}
+.dwsim-palette__types {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+}
+.dwsim-palette__types button {
+  padding: 4px;
+  font-size: 10px;
+}
+.dwsim-command-catalogue {
+  display: grid;
+  gap: 4px;
+  color: #64705e;
+  font-size: 9px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.dwsim-canvas-wrap {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+.dwsim-canvas-toolbar {
+  height: 38px;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 4px 8px;
+  border-bottom: 1px solid #e4ddd1;
+}
+.dwsim-canvas {
+  width: 100%;
+  height: 100%;
+  min-height: 300px;
+  flex: 1;
+  touch-action: none;
+  background-color: #fbfaf7;
+  background-image: radial-gradient(#d6d2c9 0.7px, transparent 0.7px);
+  background-size: 18px 18px;
+}
+.dwsim-edge {
+  fill: none;
+  stroke: #56714d;
+  stroke-width: 2.4;
+}
+.dwsim-edge--energy {
+  stroke: #b5803c;
+  stroke-dasharray: 6 4;
+}
+.dwsim-node {
+  cursor: grab;
+  outline: none;
+}
+.dwsim-node:active {
+  cursor: grabbing;
+}
+.dwsim-node rect {
+  fill: #edf2e9;
+  stroke: #829477;
+  stroke-width: 1.5;
+  filter: drop-shadow(0 2px 2px #26301d1c);
+}
+.dwsim-node--material_stream rect {
+  fill: #edf4f7;
+  stroke: #7b9ba6;
+}
+.dwsim-node--energy_stream rect {
+  fill: #fbf0dd;
+  stroke: #c99b57;
+}
+.dwsim-node--other rect {
+  fill: #eee9f4;
+  stroke: #9782a9;
+}
+.dwsim-node rect.is-selected,
+.dwsim-node:focus rect {
+  stroke: #2768a1;
+  stroke-width: 3;
+}
+.dwsim-node text {
+  fill: #273126;
+  font-size: 11px;
+  pointer-events: none;
+}
+.dwsim-node .dwsim-node__type {
+  fill: #71796f;
+  font-size: 8px;
+}
+.dwsim-node .dwsim-node__badge {
+  fill: #477742;
+  font-size: 12px;
+  font-weight: 700;
+}
+.dwsim-node .dwsim-node__badge--error {
+  fill: #ba4436;
+}
+.dwsim-empty {
+  flex: 1;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 8px;
+  min-height: 300px;
+  color: #6f786f;
+  font-size: 12px;
+  text-align: center;
+}
+.dwsim-warning {
+  margin: 6px;
+}
+.dwsim-evidence {
+  flex: 0 0 auto;
+  max-height: 110px;
+  overflow: auto;
+  padding: 6px 9px;
+  border-top: 1px solid #e2ddd3;
+  font-size: 10px;
+}
+.dwsim-evidence pre,
+.dwsim-inspector pre {
+  overflow: auto;
+  max-height: 150px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.dwsim-inspector dl {
+  display: grid;
+  grid-template-columns: 70px minmax(0, 1fr);
+  gap: 4px;
+  margin: 0;
+  font-size: 10px;
+}
+.dwsim-inspector dt {
+  color: #788077;
+}
+.dwsim-inspector dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.dwsim-sidecar-inspector dl {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0;
+  font-size: 10px;
+}
+.dwsim-sidecar-inspector dl div {
+  display: grid;
+  gap: 2px;
+}
+.dwsim-sidecar-inspector dt {
+  color: #788077;
+}
+.dwsim-sidecar-inspector dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.dwsim-inspector p {
+  margin: 0;
+  color: #778076;
+  font-size: 10px;
+  line-height: 1.4;
+}
+.dwsim-error-text {
+  color: #a53427;
+}
+.dwsim-revisions {
+  flex: 0 0 auto;
+  max-height: 120px;
+  overflow: auto;
+  padding: 8px 10px;
+  border: 1px solid #e1dacf;
+  border-radius: 4px;
+  background: #fffefa;
+}
+.dwsim-revisions > div {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 30px;
+  font-size: 10px;
+}
+.dwsim-revisions > div span {
+  flex: 1;
+  color: #596258;
+}
+.dwsim-revisions a {
+  color: #34614b;
+}
+@media (max-width: 1000px) {
+  .dwsim-workbench {
+    grid-template-columns: 150px minmax(250px, 1fr);
+  }
+  .dwsim-inspector {
+    grid-column: 1 / -1;
+    border: 0;
+    border-top: 1px solid #e4ddd1;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: end;
+  }
+  .dwsim-inspector h2,
+  .dwsim-inspector h3 {
+    grid-column: 1 / -1;
+  }
+}
+@media (max-width: 650px) {
+  .dwsim-workbench {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .dwsim-palette {
+    border: 0;
+    border-bottom: 1px solid #e4ddd1;
+  }
+  .dwsim-palette__types {
+    grid-template-columns: repeat(4, 1fr);
+  }
+  .dwsim-inspector {
+    grid-template-columns: 1fr;
+  }
+  .dwsim-canvas {
+    min-height: 280px;
+  }
+}

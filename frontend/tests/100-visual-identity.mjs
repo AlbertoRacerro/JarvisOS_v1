@@ -144,19 +144,13 @@ check(settings.includes('option === "custom" ? customAccentSwatch'), "Custom swa
 check(settingsCss.includes("var(--color-status-danger-text)"), "invalid custom HEX lacks non-accent error semantics");
 check(!/saveAISetting\([^\n]*(accent|appearance)/i.test(settings), "visual preferences must not use canonical settings API");
 
-// 100f supersedes the old blanket ban on equipment names: the canonical Process target
-// requires a visible future palette, but every authoring affordance must remain inert.
-for (const label of ["Heat exchanger", "Pump", "Compressor", "Reactor"]) {
-  check(processStage.includes(`"${label}"`), `final Process future palette is missing ${label}`);
+// U-149 replaces the inert scaffold with a projection-only editor and typed DWSIM commands.
+for (const label of ["HeatExchanger", "Pump", "Valve", "Mixer"]) {
+  check(processStage.includes(`"${label}"`), `Process palette is missing supported unit ${label}`);
 }
-check((processStage.match(/\bdisabled\b/g) ?? []).length >= 2, "final Process future palette/toolbar is not deterministically disabled");
-const processClickHandlers = processStage.match(/\bonClick\s*=\{[^}]+\}/g) ?? [];
-check(
-  processClickHandlers.length === 4 && processClickHandlers.every(handler =>
-    /^onClick=\{\(\) => navigate\("\/(design\/bluecad|memory\/models|runs|engineering-data)"\)\}$/.test(handler)),
-  "final Process scaffold exposes a non-navigation click handler"
-);
-check(!/\buseState\b|\buseEffect\b|\bfetch\s*\(/.test(processStage), "Process future affordances gained frontend mutation/runtime authority");
+check((processStage.match(/\bdisabled\b/g) ?? []).length >= 8, "Process authoring controls lack server availability guards");
+check(processStage.includes("runDwsimCommand") && processStage.includes("expected_revision"), "Process commands do not use the revisioned DWSIM API");
+check(!/\b(?:localStorage|sessionStorage)\b|fetch\s*\(/.test(processStage), "Process editor gained direct network or local persistence authority");
 check(!/fetch\(|axios|provider|runner/i.test(theme), "visual preference owner gained runtime execution/API authority");
 check(pkg.scripts?.["test:058d"] === "node tests/058d-process-workspace.mjs", "058d deterministic gate changed");
 check(pkg.scripts?.["test:100"] === "node tests/100-visual-identity.mjs", "100 deterministic gate not wired");

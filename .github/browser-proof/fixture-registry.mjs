@@ -17,6 +17,10 @@ const FIXTURE_REGISTRY = Object.freeze({
     script: "engineering_workspace.py",
     phases: Object.freeze(["workspace"]),
   }),
+  "dwsim-editor-unavailable": Object.freeze({
+    script: "dwsim_editor_unavailable.py",
+    phases: Object.freeze(["workspace", "case"]),
+  }),
 });
 
 export const FIXTURE_IDS = new Set(["none", ...Object.keys(FIXTURE_REGISTRY)]);
