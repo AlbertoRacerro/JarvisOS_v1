@@ -807,7 +807,7 @@ def _run_local_continuations(
             ),
             continuation,
         )
-        ledger_response = response
+        ledger_response: AIResponse | None = response
         input_tokens_override = None
         output_tokens_override = None
         if error_type == "empty_response":
