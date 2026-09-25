@@ -997,6 +997,22 @@ def execute(workspace_id: str, case_id: str, command: EditorCommand) -> dict[str
                                 {"tag": item.get("name"), "calculated": item.get("calculated"), "errors": item.get("error", "")}
                                 for item in persisted_objects
                             ]
+                            tags = [str(item["name"]) for item in persisted_objects if item.get("name")]
+                            readback["persisted_dynamic_values"] = _dynamic_values(client, persisted_flow, tags)
+                        if isinstance(command, StateRestore):
+                            persisted_values = _dynamic_values(client, persisted_flow, list(readback["state_snapshot"]))
+                            for tag, properties in readback["state_snapshot"].items():
+                                for property_id, expected_value in properties.items():
+                                    actual_value = persisted_values.get(tag, {}).get(property_id)
+                                    try:
+                                        matches = actual_value is not None and math.isclose(
+                                            float(actual_value), float(expected_value), rel_tol=_TOL, abs_tol=1e-9
+                                        )
+                                    except (TypeError, ValueError):
+                                        matches = actual_value == expected_value
+                                    if not matches:
+                                        raise EditorError("DWSIM_PERSISTENCE_MISMATCH", f"Saved restore did not preserve {tag}.{property_id}", 502)
+                            readback["persisted_state_snapshot"] = persisted_values
                 row = _write_revision(
                     directory,
                     target,
