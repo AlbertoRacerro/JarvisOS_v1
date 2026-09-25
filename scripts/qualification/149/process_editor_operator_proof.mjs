@@ -54,6 +54,7 @@ const actions = [];
 const timings = [];
 const projectionDigests = [];
 const revisionChain = [];
+const commandTrace = [];
 const startedAt = Date.now();
 let workspaceId = "";
 let originalCaseId = "";
@@ -63,6 +64,25 @@ let otherContext;
 
 const assert = (condition, message) => {
   if (!condition) throw new Error(message);
+};
+const traceCommands = (currentPage) => {
+  currentPage.on("request", (request) => {
+    if (request.method() === "POST" && request.url().includes("/commands"))
+      commandTrace.push({ request: request.postDataJSON() });
+  });
+  currentPage.on("response", async (response) => {
+    if (response.request().method() !== "POST" || !response.url().includes("/commands"))
+      return;
+    const entry = commandTrace.at(-1);
+    if (entry) {
+      entry.status = response.status();
+      try {
+        entry.response = await response.json();
+      } catch {
+        entry.response = "<non-json response>";
+      }
+    }
+  });
 };
 const waitForHttp = async (url, timeoutMs = 60_000) => {
   const deadline = Date.now() + timeoutMs;
@@ -137,7 +157,9 @@ const waitCommand = async (currentPage) => {
   );
   const text = (await message.textContent()) ?? "";
   if (!/read back as revision/.test(text))
-    throw new Error(`operator command failed in UI: ${text}`);
+    throw new Error(
+      `operator command failed in UI: ${text}; last command ${JSON.stringify(commandTrace.at(-1))}`,
+    );
   const success = await currentPage
     .getByRole("status")
     .filter({ hasText: /read back as revision/ })
@@ -181,6 +203,11 @@ const selectObject = async (currentPage, tag) => {
   });
   await object.waitFor({ state: "visible" });
   await object.click();
+  await currentPage.waitForFunction(
+    (expected) =>
+      document.querySelector(".dwsim-node.is-selected")?.getAttribute("aria-label")?.startsWith(`${expected},`) ?? false,
+    tag,
+  );
 };
 const setPlacement = async (currentPage, tag, x, y) => {
   await currentPage.getByLabel("Object tag").fill(tag);
@@ -261,6 +288,7 @@ try {
     acceptDownloads: true,
   });
   const page = await browserContext.newPage();
+  traceCommands(page);
   page.on("pageerror", (error) => pageErrors.push(String(error)));
   await page.goto("http://127.0.0.1:8000/design/process", {
     waitUntil: "networkidle",
@@ -408,6 +436,7 @@ try {
     viewport: { width: 1280, height: 900 },
   });
   const otherPage = await otherContext.newPage();
+  traceCommands(otherPage);
   otherPage.on("pageerror", (error) => pageErrors.push(String(error)));
   await otherPage.goto("http://127.0.0.1:8000/design/process", {
     waitUntil: "networkidle",
