@@ -330,6 +330,30 @@ try {
     case_id: originalCaseId,
     revision: projection.revision,
   });
+  const dynamics = page.getByRole("region", {
+    name: "DWSIM dynamics controls",
+  });
+  await dynamics.getByRole("heading", { name: "Dynamics" }).waitFor();
+  const dynamicsUnavailable = Boolean(projection.dynamics?.unavailable_reason);
+  const runDynamics = dynamics.getByRole("button", { name: "Run dynamics" });
+  assert(
+    (await runDynamics.isDisabled()) === dynamicsUnavailable,
+    "dynamics run availability does not match the server projection",
+  );
+  await dynamics.getByLabel("New state name").fill("operator-proof");
+  const saveState = dynamics.getByRole("button", {
+    name: "Save current state",
+  });
+  assert(
+    (await saveState.isDisabled()) === dynamicsUnavailable,
+    "state-save availability does not match the server projection",
+  );
+  actions.push({
+    action: "dynamics_availability",
+    unavailable_reason: projection.dynamics?.unavailable_reason ?? null,
+    run_enabled: !dynamicsUnavailable,
+    state_save_enabled: !dynamicsUnavailable,
+  });
   await screenshot(page, "blank-case");
 
   await page.getByLabel("Compounds (comma separated)").fill("Water");

@@ -457,6 +457,8 @@ function ProcessStage({
     typeof dynamicsProjection.unavailable_reason === "string"
       ? dynamicsProjection.unavailable_reason
       : null;
+  const canDynamic = (kind: string) =>
+    !dynamicsUnavailableReason && can(kind);
   const projectedSavedStates = Array.isArray(dynamicsProjection.saved_states)
     ? dynamicsProjection.saved_states.filter(
         (name): name is string => typeof name === "string",
@@ -1643,7 +1645,7 @@ function ProcessStage({
             <label>Kp<input type="number" value={controllerKp} onChange={(e) => setControllerKp(e.target.value)} /></label>
             <label>Ki<input type="number" value={controllerKi} onChange={(e) => setControllerKi(e.target.value)} /></label>
             <label>Kd<input type="number" value={controllerKd} onChange={(e) => setControllerKd(e.target.value)} /></label>
-            <button type="button" disabled={!can("controller_set") || !controllerTag.trim()} title={!can("controller_set") ? unsupported("controller_set") : "Apply controller settings"} onClick={() => void command({ kind: "controller_set", tag: controllerTag.trim(), sp: optionalNumber(controllerSp), kp: optionalNumber(controllerKp), ki: optionalNumber(controllerKi), kd: optionalNumber(controllerKd), out_min: null, out_max: null, reverse_acting: null, active: null, manual_override: null, execution_order: null })}>Apply controller</button>
+            <button type="button" disabled={!canDynamic("controller_set") || !controllerTag.trim()} title={!canDynamic("controller_set") ? dynamicsUnavailableReason ?? unsupported("controller_set") : "Apply controller settings"} onClick={() => void command({ kind: "controller_set", tag: controllerTag.trim(), sp: optionalNumber(controllerSp), kp: optionalNumber(controllerKp), ki: optionalNumber(controllerKi), kd: optionalNumber(controllerKd), out_min: null, out_max: null, reverse_acting: null, active: null, manual_override: null, execution_order: null })}>Apply controller</button>
           </fieldset>
           <fieldset>
             <legend>Schedule event</legend>
@@ -1653,9 +1655,9 @@ function ProcessStage({
             <label>Value<input type="number" value={eventValue} onChange={(e) => setEventValue(e.target.value)} /></label>
             <label>At (s)<input type="number" min="0" value={eventAt} onChange={(e) => setEventAt(e.target.value)} /></label>
             <label>Description<input value={eventDescription} onChange={(e) => setEventDescription(e.target.value)} /></label>
-            <button type="button" disabled={!can("event_add") || !eventSet.trim() || !eventTag.trim() || !eventProperty.trim() || optionalNumber(eventValue) === null || optionalNumber(eventAt) === null} title={!can("event_add") ? unsupported("event_add") : "Add event to the DWSIM schedule"} onClick={() => void command({ kind: "event_add", event_set: eventSet.trim(), schedule: null, tag: eventTag.trim(), property: eventProperty.trim(), value: optionalNumber(eventValue) ?? 0, units: null, at_s: optionalNumber(eventAt) ?? 0, transition: "step", description: eventDescription.trim() || null })}>Add event</button>
+            <button type="button" disabled={!canDynamic("event_add") || !eventSet.trim() || !eventTag.trim() || !eventProperty.trim() || optionalNumber(eventValue) === null || optionalNumber(eventAt) === null} title={!canDynamic("event_add") ? dynamicsUnavailableReason ?? unsupported("event_add") : "Add event to the DWSIM schedule"} onClick={() => void command({ kind: "event_add", event_set: eventSet.trim(), schedule: null, tag: eventTag.trim(), property: eventProperty.trim(), value: optionalNumber(eventValue) ?? 0, units: null, at_s: optionalNumber(eventAt) ?? 0, transition: "step", description: eventDescription.trim() || null })}>Add event</button>
             <label>Remove by description<input aria-label="Event description to remove" value={eventDescription} onChange={(e) => setEventDescription(e.target.value)} /></label>
-            <button type="button" disabled={!can("event_remove") || !eventSet.trim() || !eventDescription.trim()} title={!can("event_remove") ? unsupported("event_remove") : "Remove matching event"} onClick={() => void command({ kind: "event_remove", event_set: eventSet.trim(), schedule: null, description: eventDescription.trim() })}>Remove event</button>
+            <button type="button" disabled={!canDynamic("event_remove") || !eventSet.trim() || !eventDescription.trim()} title={!canDynamic("event_remove") ? dynamicsUnavailableReason ?? unsupported("event_remove") : "Remove matching event"} onClick={() => void command({ kind: "event_remove", event_set: eventSet.trim(), schedule: null, description: eventDescription.trim() })}>Remove event</button>
           </fieldset>
           <fieldset>
             <legend>Run dynamics</legend>
@@ -1663,14 +1665,14 @@ function ProcessStage({
             <label>Duration (s)<input type="number" min="0.001" value={runDuration} onChange={(e) => setRunDuration(e.target.value)} /></label>
             <label>Step (s, optional)<input type="number" min="0.001" value={runStep} onChange={(e) => setRunStep(e.target.value)} /></label>
             <label>Integration method<select value={runMethod} onChange={(e) => setRunMethod(e.target.value as typeof runMethod)}><option value="">Use DWSIM current setup</option><option>ExplicitEuler</option><option>RungeKutta4</option><option>ImplicitEuler</option><option>AdaptiveRK45</option></select></label>
-            <button type="button" disabled={!can("dynamics_run") || (optionalNumber(runDuration) ?? 0) <= 0 || (runStep.trim() !== "" && (optionalNumber(runStep) ?? 0) <= 0)} title={!can("dynamics_run") ? unsupported("dynamics_run") : "Run using DWSIM dynamics"} onClick={() => void command({ kind: "dynamics_run", schedule: runSchedule.trim() || null, duration_s: optionalNumber(runDuration) ?? 60, step_s: optionalNumber(runStep), integrator: null, method: runMethod || null, max_wall_time_s: 120, max_steps: 20000, variables: null })}>Run dynamics</button>
+            <button type="button" disabled={!canDynamic("dynamics_run") || (optionalNumber(runDuration) ?? 0) <= 0 || (runStep.trim() !== "" && (optionalNumber(runStep) ?? 0) <= 0)} title={!canDynamic("dynamics_run") ? dynamicsUnavailableReason ?? unsupported("dynamics_run") : "Run using DWSIM dynamics"} onClick={() => void command({ kind: "dynamics_run", schedule: runSchedule.trim() || null, duration_s: optionalNumber(runDuration) ?? 60, step_s: optionalNumber(runStep), integrator: null, method: runMethod || null, max_wall_time_s: 120, max_steps: 20000, variables: null })}>Run dynamics</button>
           </fieldset>
           <fieldset>
             <legend>Stored states</legend>
             <label>New state name<input value={stateName} onChange={(e) => setStateName(e.target.value)} /></label>
-            <button type="button" disabled={!can("state_save") || !stateName.trim()} title={!can("state_save") ? unsupported("state_save") : "Save state through DWSIM"} onClick={() => void command({ kind: "state_save", name: stateName.trim() })}>Save current state</button>
+            <button type="button" disabled={!canDynamic("state_save") || !stateName.trim()} title={!canDynamic("state_save") ? dynamicsUnavailableReason ?? unsupported("state_save") : "Save state through DWSIM"} onClick={() => void command({ kind: "state_save", name: stateName.trim() })}>Save current state</button>
             <label>Restore state<select value={restoreState} onChange={(e) => setRestoreState(e.target.value)}><option value="">Select a projected saved state</option>{projectedSavedStates.map((name) => <option key={name}>{name}</option>)}</select></label>
-            <button type="button" disabled={!can("state_restore") || !restoreState} title={!can("state_restore") ? unsupported("state_restore") : "Restore selected projected state"} onClick={() => void command({ kind: "state_restore", name: restoreState })}>Restore state</button>
+            <button type="button" disabled={!canDynamic("state_restore") || !restoreState} title={!canDynamic("state_restore") ? dynamicsUnavailableReason ?? unsupported("state_restore") : "Restore selected projected state"} onClick={() => void command({ kind: "state_restore", name: restoreState })}>Restore state</button>
           </fieldset>
         </div>
       </section>
