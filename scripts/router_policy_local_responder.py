@@ -8,12 +8,12 @@ from __future__ import annotations
 
 import json
 import math
+import re
 import urllib.error
 import urllib.parse
 import urllib.request
 from collections.abc import Callable
 from typing import Any
-
 
 DEFAULT_MODEL = "qwen3:8b"
 DEFAULT_ENDPOINT = "http://127.0.0.1:11434/api/generate"
@@ -26,6 +26,7 @@ TIMING_KEYS = (
     "eval_count",
     "eval_duration",
 )
+_INLINE_THINK_RE = re.compile(r"<think>(.*?)</think>", re.IGNORECASE | re.DOTALL)
 
 
 class LocalResponderError(Exception):
@@ -213,14 +214,36 @@ def _call_local_ollama_generate_result(
     response_text = raw.get("response")
     if not isinstance(response_text, str):
         raise LocalResponderResponseError("localhost Ollama response missing string response")
-    bounded = response_text[:max_output_chars]
+    inline_thinking: list[str] = []
+
+    def discard_thinking(match: re.Match[str]) -> str:
+        inline_thinking.append(match.group(1))
+        return ""
+
+    visible_text = _INLINE_THINK_RE.sub(discard_thinking, response_text)
+    thinking = raw.get("thinking") if isinstance(raw.get("thinking"), str) else ""
+    thinking_char_count = len(thinking) + sum(len(part) for part in inline_thinking)
+    bounded = visible_text[:max_output_chars]
     result = {
         "response": bounded,
-        "response_truncated": len(response_text) > max_output_chars,
+        "response_truncated": len(visible_text) > max_output_chars,
         "response_char_count_returned": len(bounded),
         "response_char_limit": max_output_chars,
         "response_limit_source": "local_responder_max_output_chars",
+        "finish_reason": "length" if len(visible_text) > max_output_chars else raw.get("done_reason"),
+        "thinking_char_count": thinking_char_count,
     }
+    if isinstance(raw.get("thinking_token_count"), int) and not isinstance(raw.get("thinking_token_count"), bool):
+        result["thinking_token_count"] = raw["thinking_token_count"]
+    prompt_eval_count = raw.get("prompt_eval_count")
+    eval_count = raw.get("eval_count")
+    if isinstance(prompt_eval_count, int) and prompt_eval_count >= 0 and isinstance(eval_count, int) and eval_count >= 0:
+        result["usage"] = {
+            "input_tokens": prompt_eval_count,
+            "output_tokens": eval_count,
+            "total_tokens": prompt_eval_count + eval_count,
+        }
+        result["usage_source"] = "actual"
     if _raw_has_timing_metadata(raw):
         result["local_responder_timing"] = _extract_timing_metadata(raw)
     return result

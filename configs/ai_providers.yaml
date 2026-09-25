@@ -33,17 +33,17 @@ providers:
         route_classes: [local:fast]
         # Conservative JarvisOS operating bound, not a vendor maximum claim.
         context_window_tokens: 8192
-        max_output_tokens: 512
+        max_output_tokens: 2048
       gemma4:12b-it-qat:
         provider_model_name: gemma4:12b-it-qat
         route_classes: [local:general, local:gemma]
         context_window_tokens: 8192
-        max_output_tokens: 512
+        max_output_tokens: 2048
       deepseek-coder-v2:16b:
         provider_model_name: deepseek-coder-v2:16b
         route_classes: [local:coder]
         context_window_tokens: 8192
-        max_output_tokens: 512
+        max_output_tokens: 2048
       qwen3-coder:30b:
         provider_model_name: qwen3-coder:30b
         route_classes: [local:coder_heavy]
