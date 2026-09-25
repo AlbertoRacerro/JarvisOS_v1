@@ -7,6 +7,14 @@ export type EditorQuantity = {
   unit: string;
 };
 
+export type DynamicsProjectionRead = {
+  controllers: Record<string, unknown>[];
+  event_sets: Record<string, unknown>[];
+  saved_states: string[];
+  last_dynamic_run: Record<string, unknown> | null;
+  unavailable_reason: string | null;
+};
+
 export type EditorCaseRead = {
   workspace_id: string;
   case_id: string;

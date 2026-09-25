@@ -24,11 +24,11 @@ BACKEND_ROOT = REPO_ROOT / "backend"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
-from app.modules.engineering.operator_models import (  # noqa: E402
+from app.modules.engineering.operator_models import (
     CapabilityRead,
     EvaluatorRead,
 )
-from app.modules.modeling.models import ParameterRead  # noqa: E402
+from app.modules.modeling.models import ParameterRead
 
 SOURCE_LABEL = "backend/app/modules/modeling/models.py::ParameterRead"
 TARGET = REPO_ROOT / "frontend" / "src" / "api" / "generated" / "modeling.ts"
@@ -131,6 +131,7 @@ def render_editor_contracts() -> str:
     from app.modules.process_stack import editor_models
     from app.modules.process_stack.editor_models import (
         CommandResult,
+        DynamicsProjectionRead,
         EditorCaseRead,
         EditorConnectionRead,
         EditorObjectRead,
@@ -141,6 +142,7 @@ def render_editor_contracts() -> str:
 
     models = [
         EditorQuantity,
+        DynamicsProjectionRead,
         EditorCaseRead,
         RevisionRead,
         EditorObjectRead,
