@@ -6,6 +6,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import time
@@ -193,6 +194,10 @@ def main() -> int:
                     "dwsim_version": case["dwsim_version"],
                     "mcp_sha256": digest,
                     "workspace_id": workspace_id,
+                    "source_sha": subprocess.run(
+                        ["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True,
+                        cwd=Path(__file__).resolve().parent,
+                    ).stdout.strip(),
                     "case_id": case_id,
                     "revision_chain": revisions,
                     "revision_sha256s": [
