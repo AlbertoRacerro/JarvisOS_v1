@@ -345,3 +345,31 @@ def test_opt_in_runtime_creates_editor_case(tmp_path, monkeypatch):
         assert response.status_code == 200, response.text
         assert response.json()["revision"].endswith(":1")
     get_settings.cache_clear()
+
+
+class _StaticEventClient(_FakeClient):
+    """DWSIM accepts the add call but its event list never changes."""
+
+    def call(self, name, args, timeout):
+        if name == "dwsim_dynamics_event":
+            self.calls.append(f"event:{args['action']}")
+            return {"events": [{"description": "Feed step"}]} if args["action"] == "list" else {"ok": True}
+        return super().call(name, args, timeout)
+
+
+def test_event_add_with_preexisting_description_requires_a_new_event(tmp_path, monkeypatch):
+    directory = tmp_path / "case"
+    record = _initial(directory)
+    monkeypatch.setattr(editor, "_directory", lambda *_args: directory)
+    monkeypatch.setattr(editor, "_client", lambda: (_StaticEventClient(), "a" * 64, "10.2.9"))
+    command = TypeAdapter(EditorCommand).validate_python(
+        {"kind": "event_add", "expected_revision": record["revision"], "event_set": "S1", "tag": "FEED",
+         "property": "PROP_MS_2", "value": 5, "at_s": 10, "description": "Feed step"}
+    )
+    with pytest.raises(editor.EditorError, match="event list did not match"):
+        editor.execute("workspace", "case", command)
+    assert editor._head(directory)["revision"] == record["revision"]
+    with pytest.raises(ValueError):
+        TypeAdapter(EditorCommand).validate_python(
+            {"kind": "event_remove", "expected_revision": "x", "event_set": "S1", "description": ""}
+        )

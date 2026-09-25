@@ -290,6 +290,54 @@ def _q(value: EditorQuantity | None, unit: str) -> float | None:
         raise EditorError("quantity_invalid", "Quantity unit is unknown or dimensionally incompatible", 422) from exc
 
 
+def _same(actual: object, expected: object) -> bool:
+    if isinstance(expected, bool) or not isinstance(expected, (int, float, str)):
+        return actual == expected
+    if not isinstance(actual, (int, float, str)) or isinstance(actual, bool):
+        return actual == expected
+    try:
+        return math.isclose(float(actual), float(expected), rel_tol=_TOL, abs_tol=1e-9)
+    except ValueError:
+        return actual == expected
+
+
+def _controller_mismatch(controllers: object, tag: str, requested: dict[str, Any]) -> str | None:
+    item = next(
+        (entry for entry in controllers if isinstance(entry, dict) and entry.get("tag") == tag),
+        None,
+    ) if isinstance(controllers, list) else None
+    if item is None:
+        return "controller"
+    return next(
+        (key for key, value in requested.items() if not _same(item.get("manual" if key == "manual_override" else key), value)),
+        None,
+    )
+
+
+def _snapshot_mismatch(actual: dict[str, dict[str, str]], expected: dict[str, dict[str, str]]) -> str | None:
+    for tag, properties in expected.items():
+        for property_id, value in properties.items():
+            if not _same(actual.get(tag, {}).get(property_id), value):
+                return f"{tag}.{property_id}"
+    return None
+
+
+def _event_list(client: DwsimMcpClient, flow: str, event_set: str, schedule: str | None) -> list[Any]:
+    listed = client.call(
+        "dwsim_dynamics_event",
+        {"flowsheet_id": flow, "action": "list", "event_set": event_set, **({"schedule": schedule} if schedule else {})},
+        30,
+    )
+    events = listed.get("events")
+    if not isinstance(events, list):
+        raise EditorError("DWSIM_READBACK_MISMATCH", "DWSIM event list is unavailable", 502)
+    return events
+
+
+def _event_count(events: list[Any], description: str) -> int:
+    return sum(description in str(item) for item in events)
+
+
 def _dynamic_values(client: DwsimMcpClient, flow: str, tags: list[str]) -> dict[str, dict[str, str]]:
     values: dict[str, dict[str, str]] = {}
     for tag in tags:
@@ -468,23 +516,12 @@ def _apply(client: DwsimMcpClient, flow: str, command: EditorCommand, scratch: P
         if not requested:
             raise EditorError("empty_command", "At least one controller field is required")
         client.call("dwsim_dynamics_controller", {"flowsheet_id": flow, "action": "set", "tag": command.tag, **requested}, 30)
-        listed = client.call("dwsim_dynamics_controller", {"flowsheet_id": flow, "action": "list"}, 30).get("controllers", [])
-        match = next((item for item in listed if isinstance(item, dict) and item.get("tag") == command.tag), None)
-        if match is None:
-            raise EditorError("DWSIM_READBACK_MISMATCH", "Controller read-back did not contain the requested controller", 502)
-        for key, expected in requested.items():
-            actual = match.get("manual" if key == "manual_override" else key)
-            try:
-                valid = (
-                    isinstance(actual, (str, int, float))
-                    and math.isclose(float(actual), float(expected), rel_tol=_TOL, abs_tol=1e-9)
-                    if isinstance(expected, (int, float)) and not isinstance(expected, bool)
-                    else actual is expected
-                )
-            except (TypeError, ValueError):
-                valid = False
-            if not valid:
-                raise EditorError("DWSIM_READBACK_MISMATCH", f"Controller field {key} did not match", 502)
+        listed = client.call("dwsim_dynamics_controller", {"flowsheet_id": flow, "action": "list"}, 30).get("controllers")
+        mismatch = _controller_mismatch(listed, command.tag, requested)
+        if mismatch:
+            raise EditorError("DWSIM_READBACK_MISMATCH", f"Controller {mismatch} read-back did not match", 502)
+        assert isinstance(listed, list)
+        match = next(item for item in listed if isinstance(item, dict) and item.get("tag") == command.tag)
         readback = {"controller": match, "requested": requested}
     elif isinstance(command, EventAdd | EventRemove):
         adding = isinstance(command, EventAdd)
@@ -501,18 +538,17 @@ def _apply(client: DwsimMcpClient, flow: str, command: EditorCommand, scratch: P
             assert isinstance(command, EventRemove)
             description = command.description
             args["description"] = description
+        before = _event_count(_event_list(client, flow, command.event_set, command.schedule), description)
+        if not adding and before == 0:
+            raise EditorError("event_not_found", "No event with this description exists in the event set", 404)
         client.call("dwsim_dynamics_event", args, 30)
-        listed = client.call("dwsim_dynamics_event", {"flowsheet_id": flow, "action": "list", "event_set": command.event_set,
-                          **({"schedule": command.schedule} if command.schedule else {})}, 30)
-        events = listed.get("events")
-        present = isinstance(events, list) and any(description in str(item) for item in events)
-        if not isinstance(events, list) or present != adding:
+        events = _event_list(client, flow, command.event_set, command.schedule)
+        after = _event_count(events, description)
+        if (adding and after != before + 1) or (not adding and after >= before):
             raise EditorError("DWSIM_READBACK_MISMATCH", "DWSIM event list did not match the requested change", 502)
         readback = {"event_set": command.event_set, "schedule": command.schedule,
-                    "description" if adding else "removed": description, "events": events}
+                    "description" if adding else "removed": description, "matching_events": after, "events": events}
     elif isinstance(command, DynamicsRun):
-        if command.duration_s > MAX_DYNAMIC_DURATION_S or command.max_wall_time_s > MAX_DYNAMIC_WALL_TIME_S or command.max_steps > MAX_DYNAMIC_STEPS:
-            raise EditorError("dynamic_run_cap_exceeded", "Dynamic run exceeds a server-side duration, wall-time, or step cap", 422)
         if command.step_s is not None or command.integrator is not None or command.method is not None:
             schedule = command.schedule
             config = client.call("dwsim_dynamics_inspect", {"flowsheet_id": flow, "detail": "config"}, 30)
@@ -575,14 +611,9 @@ def _apply(client: DwsimMcpClient, flow: str, command: EditorCommand, scratch: P
             raise EditorError("state_snapshot_unavailable", "No revisioned read-back snapshot exists for this state", 422)
         client.call("dwsim_dynamics_state", {"flowsheet_id": flow, "action": "restore", "name": command.name}, 30)
         actual = _dynamic_values(client, flow, list(expected))
-        for tag, properties in expected.items():
-            for property_id, expected_value in properties.items():
-                try:
-                    valid = math.isclose(float(actual[tag][property_id]), float(expected_value), rel_tol=_TOL, abs_tol=1e-9)
-                except (KeyError, TypeError, ValueError):
-                    valid = actual.get(tag, {}).get(property_id) == expected_value
-                if not valid:
-                    raise EditorError("DWSIM_READBACK_MISMATCH", f"Restored state did not restore {tag}.{property_id}", 502)
+        mismatch = _snapshot_mismatch(actual, expected)
+        if mismatch:
+            raise EditorError("DWSIM_READBACK_MISMATCH", f"Restored state did not restore {mismatch}", 502)
         readback = {"restored_state": command.name, "state_snapshot": actual, "verified_objects": len(expected)}
     elif isinstance(command, DeleteObject | Disconnect):
         raise EditorError("unsupported_upstream", UNSUPPORTED[command.kind], 422)
@@ -953,6 +984,38 @@ def restore(workspace_id: str, case_id: str, expected_revision: str, source_revi
     return {"case": _case_read(workspace_id, case_id, row), "projection": projected, "readback": readback}
 
 
+def _verify_persisted(client: DwsimMcpClient, target: Path, command: EditorCommand, readback: dict[str, Any]) -> None:
+    """Reload the saved case and prove the dynamic change survived DWSIM persistence."""
+    flow = _load(client, target)
+    if isinstance(command, ControllerSet):
+        controllers = client.call("dwsim_dynamics_controller", {"flowsheet_id": flow, "action": "list"}, 30).get("controllers")
+        if _controller_mismatch(controllers, command.tag, readback["requested"]):
+            raise EditorError("DWSIM_PERSISTENCE_MISMATCH", "Saved case did not preserve controller settings", 502)
+    elif isinstance(command, EventAdd | EventRemove):
+        description = readback.get("description", readback.get("removed", ""))
+        events = _event_list(client, flow, command.event_set, command.schedule)
+        if _event_count(events, description) != readback["matching_events"]:
+            raise EditorError("DWSIM_PERSISTENCE_MISMATCH", "Saved case did not preserve the event change", 502)
+    elif isinstance(command, StateSave | StateRestore):
+        states = client.call("dwsim_dynamics_state", {"flowsheet_id": flow, "action": "list"}, 30).get("stored_states", [])
+        if command.name not in states:
+            raise EditorError("DWSIM_PERSISTENCE_MISMATCH", "Saved case did not preserve the dynamic state", 502)
+    if isinstance(command, DynamicsRun):
+        objects = _objects(client, flow)
+        readback["persisted_objects"] = [
+            {"tag": item.get("name"), "calculated": item.get("calculated"), "errors": item.get("error", "")}
+            for item in objects
+        ]
+        tags = [str(item["name"]) for item in objects if item.get("name")]
+        readback["persisted_dynamic_values"] = _dynamic_values(client, flow, tags)
+    if isinstance(command, StateRestore):
+        persisted = _dynamic_values(client, flow, list(readback["state_snapshot"]))
+        mismatch = _snapshot_mismatch(persisted, readback["state_snapshot"])
+        if mismatch:
+            raise EditorError("DWSIM_PERSISTENCE_MISMATCH", f"Saved restore did not preserve {mismatch}", 502)
+        readback["persisted_state_snapshot"] = persisted
+
+
 def execute(workspace_id: str, case_id: str, command: EditorCommand) -> dict[str, Any]:
     if isinstance(command, DynamicsRun) and (
         command.duration_s > MAX_DYNAMIC_DURATION_S
@@ -974,45 +1037,7 @@ def execute(workspace_id: str, case_id: str, command: EditorCommand) -> dict[str
                     flow = _load(client, source)
                     readback = _apply(client, flow, command, target, directory)
                     if isinstance(command, ControllerSet | EventAdd | EventRemove | StateSave | StateRestore | DynamicsRun):
-                        persisted_flow = _load(client, target)
-                        if isinstance(command, ControllerSet):
-                            persisted = client.call("dwsim_dynamics_controller", {"flowsheet_id": persisted_flow, "action": "list"}, 30).get("controllers", [])
-                            item = next((entry for entry in persisted if isinstance(entry, dict) and entry.get("tag") == command.tag), None)
-                            if item is None or any(item.get("manual" if key == "manual_override" else key) != value and not (isinstance(value, (int, float)) and math.isclose(float(item.get(key, "nan")), value, rel_tol=_TOL, abs_tol=1e-9)) for key, value in readback["requested"].items()):
-                                raise EditorError("DWSIM_PERSISTENCE_MISMATCH", "Saved case did not preserve controller settings", 502)
-                        elif isinstance(command, EventAdd | EventRemove):
-                            events = client.call("dwsim_dynamics_event", {"flowsheet_id": persisted_flow, "action": "list", "event_set": command.event_set,
-                                                    **({"schedule": command.schedule} if command.schedule else {})}, 30).get("events", [])
-                            text = readback.get("description", readback.get("removed", ""))
-                            present = any(text in str(entry) for entry in events)
-                            if present != isinstance(command, EventAdd):
-                                raise EditorError("DWSIM_PERSISTENCE_MISMATCH", "Saved case did not preserve the event change", 502)
-                        elif isinstance(command, StateSave | StateRestore):
-                            states = client.call("dwsim_dynamics_state", {"flowsheet_id": persisted_flow, "action": "list"}, 30).get("stored_states", [])
-                            if command.name not in states:
-                                raise EditorError("DWSIM_PERSISTENCE_MISMATCH", "Saved case did not preserve the dynamic state", 502)
-                        if isinstance(command, DynamicsRun):
-                            persisted_objects = _objects(client, persisted_flow)
-                            readback["persisted_objects"] = [
-                                {"tag": item.get("name"), "calculated": item.get("calculated"), "errors": item.get("error", "")}
-                                for item in persisted_objects
-                            ]
-                            tags = [str(item["name"]) for item in persisted_objects if item.get("name")]
-                            readback["persisted_dynamic_values"] = _dynamic_values(client, persisted_flow, tags)
-                        if isinstance(command, StateRestore):
-                            persisted_values = _dynamic_values(client, persisted_flow, list(readback["state_snapshot"]))
-                            for tag, properties in readback["state_snapshot"].items():
-                                for property_id, expected_value in properties.items():
-                                    actual_value = persisted_values.get(tag, {}).get(property_id)
-                                    try:
-                                        matches = actual_value is not None and math.isclose(
-                                            float(actual_value), float(expected_value), rel_tol=_TOL, abs_tol=1e-9
-                                        )
-                                    except (TypeError, ValueError):
-                                        matches = actual_value == expected_value
-                                    if not matches:
-                                        raise EditorError("DWSIM_PERSISTENCE_MISMATCH", f"Saved restore did not preserve {tag}.{property_id}", 502)
-                            readback["persisted_state_snapshot"] = persisted_values
+                        _verify_persisted(client, target, command, readback)
                 row = _write_revision(
                     directory,
                     target,

@@ -231,7 +231,7 @@ class EventRemove(CommandBase):
     kind: Literal["event_remove"]
     event_set: str
     schedule: str | None = None
-    description: str
+    description: str = Field(min_length=1)
 
 
 class DynamicsRun(CommandBase):
@@ -243,7 +243,7 @@ class DynamicsRun(CommandBase):
     method: Literal["ExplicitEuler", "RungeKutta4", "ImplicitEuler", "AdaptiveRK45"] | None = None
     max_wall_time_s: int = Field(default=120, ge=1)
     max_steps: int = Field(default=20000, ge=1)
-    variables: list[str] | None = None
+    variables: list[str] | None = Field(default=None, max_length=32)
 
 
 class StateSave(CommandBase):
