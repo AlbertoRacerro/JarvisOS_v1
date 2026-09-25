@@ -1,5 +1,5 @@
 {
-  "case_id": "111e1fc0-1aee-4ca1-bf43-2696404eb91c",
+  "case_id": "5ec6a263-884e-4b15-a3eb-baec997b75f4",
   "controller_after_restore": {
     "active": true,
     "controls": "TANK-df1d421c-48ed-4662-a19c-346a5d637b4b.Liquid Level",
@@ -284,12 +284,12 @@
       }
     ],
     "requested_duration_s": 20.0,
-    "run_id": "dyn_5edaa88a",
+    "run_id": "dyn_fa3f7fdf",
     "series": {
       "decimated_from": 5,
       "note": "Decimated preview. Call dwsim_dynamics_export for the full series.",
       "points": 5,
-      "run_id": "dyn_5edaa88a",
+      "run_id": "dyn_fa3f7fdf",
       "series": {
         "Level": {
           "units": "m",
@@ -373,17 +373,17 @@
           "variable": "V2"
         }
       ],
-      "wall_clock_s": "0.405203"
+      "wall_clock_s": "0.379785"
     },
     "summary_simulated_end_s": "25",
     "time_reconciliation": "mismatch_or_unavailable"
   },
   "elapsed_seconds_by_command": {
-    "controller_set": 5.2527280380018055,
-    "dynamics_run": 6.65758206800092,
-    "event_add": 4.993767034000484,
-    "state_restore": 5.863324439997086,
-    "state_save": 5.7293861499929335
+    "controller_set": 4.62645589299791,
+    "dynamics_run": 7.347265010001138,
+    "event_add": 5.322072363996995,
+    "state_restore": 6.021103844992467,
+    "state_save": 5.823557120995247
   },
   "event_effect_inlet_mass_flow_kg_s": 5.0,
   "event_readback": {
@@ -392,6 +392,7 @@
     "events": [
       "t = 10 s: Jarvis dynamics smoke inlet step"
     ],
+    "matching_events": 1,
     "schedule": "Sch1"
   },
   "inlet_object_after_run": {
@@ -842,20 +843,20 @@
     "verified_objects": 9
   },
   "revision_chain": [
-    "dd36e50243b89c6a831cc80dd95b49f567c8ad5bae9a053d5a2a2c219b215911:1",
-    "10d51e66834db85b2dde12fa216d4ea3165af618758176e656d6a8d7607ae22b:2",
-    "ce181e39f311fa7ba388bc5dd4910d9796fc1d4bee1489d71e317e0fbdaef8ce:3",
-    "e3055b9196afc6abf7fecbcf02bc7461dad5b20dd50758e5e2750e709e999ada:4",
-    "fa7ffb16b5243dd00d4efdce1097499cc68e12a71610985692ca8e7eb8196ea1:5",
-    "4df5da67f5cfeb5ab2822920749f8c247c9aefb5226de9561eced16e737f66e2:6"
+    "14274604177101b7718fedc7b7111b2e292c72a4b37a80acbf1c50db1931e97a:1",
+    "5917ffa578686b2b215be1ed343d224ff64557017562f34d0f45c24e43fd1c32:2",
+    "ccfc20b43e39bed76e0ab1b72ee362b8efa6ef8db23dd5879760a53a039a11e0:3",
+    "94efe96264e65dbcc75513b82ba8657410221edb876e62a6ac782417980822e5:4",
+    "e380eebbd7b5023f9232f5ba8136b971352ae47b01b1d6a408a7b81b9d12a12d:5",
+    "4f9f1a9e2b9de4aeb2df82916c5c649567b4ea9840835ff7c9d9a7208e2e5cac:6"
   ],
   "revision_sha256s": [
-    "dd36e50243b89c6a831cc80dd95b49f567c8ad5bae9a053d5a2a2c219b215911",
-    "10d51e66834db85b2dde12fa216d4ea3165af618758176e656d6a8d7607ae22b",
-    "ce181e39f311fa7ba388bc5dd4910d9796fc1d4bee1489d71e317e0fbdaef8ce",
-    "e3055b9196afc6abf7fecbcf02bc7461dad5b20dd50758e5e2750e709e999ada",
-    "fa7ffb16b5243dd00d4efdce1097499cc68e12a71610985692ca8e7eb8196ea1",
-    "4df5da67f5cfeb5ab2822920749f8c247c9aefb5226de9561eced16e737f66e2"
+    "14274604177101b7718fedc7b7111b2e292c72a4b37a80acbf1c50db1931e97a",
+    "5917ffa578686b2b215be1ed343d224ff64557017562f34d0f45c24e43fd1c32",
+    "ccfc20b43e39bed76e0ab1b72ee362b8efa6ef8db23dd5879760a53a039a11e0",
+    "94efe96264e65dbcc75513b82ba8657410221edb876e62a6ac782417980822e5",
+    "e380eebbd7b5023f9232f5ba8136b971352ae47b01b1d6a408a7b81b9d12a12d",
+    "4f9f1a9e2b9de4aeb2df82916c5c649567b4ea9840835ff7c9d9a7208e2e5cac"
   ],
   "runtime": "/home/thera/jarvis-control/work/tools/dwsim-10.2.9/mcp-root/opt/dwsim-mcp/dwsim-mcp",
   "sample_case": "/home/thera/jarvis-control/work/tools/dwsim-10.2.9/samples/samples/Dynamic Simulation - Water Tank Level Control.dwxmz",
@@ -1016,7 +1017,7 @@
       "JarvisDynamicsSmokeBeforeRun"
     ]
   },
-  "source_sha": "7a50dd66860e02855eaa9c1def83fa489e9c923c",
+  "source_sha": "ed2c616e438fb0eee6499960492f6a9155cf827d",
   "stale_revision_status": 409,
-  "workspace_id": "0dc21d97-3639-41bb-a839-e9d51a61be14"
+  "workspace_id": "328d32c0-377a-4cfa-ab1f-afac6f4da5bc"
 }
