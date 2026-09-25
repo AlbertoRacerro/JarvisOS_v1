@@ -10,10 +10,10 @@ from __future__ import annotations
 import argparse
 import difflib
 import json
-import typing
 import sys
 import tempfile
 import types
+import typing
 from pathlib import Path
 from typing import Literal, Union, get_args, get_origin
 
