@@ -54,7 +54,7 @@ providers:
     execution_class: local_compute
     enabled: true
     requires_network: false
-    base_url: http://127.0.0.1:8080/v1
+    base_url: null  # endpoint is owned by the llama.cpp runtime owner config
     api_key_ref: null
     timeout_seconds: 0
     monthly_token_cap: 0

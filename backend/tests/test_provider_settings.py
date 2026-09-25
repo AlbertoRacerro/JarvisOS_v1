@@ -113,7 +113,7 @@ def test_provider_settings_uses_registry_identity_and_never_serializes_secret_re
         assert forbidden not in text
 
     providers = {provider["provider_id"]: provider for provider in response.json()["providers"]}
-    assert set(providers) == {"fake", "local_ollama", "scaleway", "deepseek", "glm", "kimi"}
+    assert set(providers) == {"fake", "local_ollama", "local_llamacpp", "scaleway", "deepseek", "glm", "kimi"}
     assert providers["fake"]["credential"] == {
         "key_present": False,
         "effective_source": "not_required",
