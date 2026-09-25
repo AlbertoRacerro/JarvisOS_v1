@@ -13,6 +13,10 @@ const FIXTURE_REGISTRY = Object.freeze({
     script: "project_search.py",
     phases: Object.freeze(["workspace", "records"]),
   }),
+  "engineering-workspace": Object.freeze({
+    script: "engineering_workspace.py",
+    phases: Object.freeze(["workspace"]),
+  }),
 });
 
 export const FIXTURE_IDS = new Set(["none", ...Object.keys(FIXTURE_REGISTRY)]);
