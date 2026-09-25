@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import re
 from typing import Any
 from urllib.parse import urlparse
@@ -19,6 +20,8 @@ from app.modules.ai.contracts import (
     ModelRegistryEntry,
 )
 from app.modules.local_ai.runtime.llama_cpp import get_llama_cpp_runtime_owner, llama_cpp_runtime_config
+
+logger = logging.getLogger(__name__)
 
 LOCAL_LLAMACPP_PROVIDER_ID = "local_llamacpp"
 _THINK_RE = re.compile(r"<think>(.*?)</think>", re.DOTALL | re.IGNORECASE)
@@ -83,13 +86,17 @@ class LocalLlamaCppAdapter:
             if not isinstance(body_raw, dict):
                 raise ValueError("llama-server response must be an object")
             body: dict[str, Any] = body_raw
-        except Exception:
+        except Exception as exc:
+            # Bounded cause only (HTTP status or exception class); never prompt or body text.
+            cause = (f"HTTP {exc.response.status_code}" if isinstance(exc, httpx.HTTPStatusError)
+                     else type(exc).__name__)
+            logger.warning("llama-server request failed: %s", cause)
             return AIResponse(
                 provider_id=self.provider_id, model_id=model_id, request_id=request.request_id,
                 correlation_id=request.correlation_id, finish_reason="error", safety_status="allowed",
                 usage=AIUsage(provider_id=self.provider_id, model_id=model_id),
                 error=AIProviderError(code=AIProviderErrorCode.provider_unavailable,
-                                      message="Local llama-server request failed.", retryable=True),
+                                      message=f"Local llama-server request failed ({cause}).", retryable=True),
             )
         finally:
             close = getattr(client, "close", None)

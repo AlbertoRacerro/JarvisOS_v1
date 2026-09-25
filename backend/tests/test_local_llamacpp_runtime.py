@@ -73,6 +73,26 @@ def test_finish_reason_mapping(finish: str, expected: str, monkeypatch: pytest.M
     assert (result.error is not None) == (expected == "error")
 
 
+def _refuse(request: httpx.Request) -> httpx.Response:
+    raise httpx.ConnectError("refused", request=request)
+
+
+@pytest.mark.parametrize(("handler", "cause"), [
+    (lambda _: httpx.Response(401, json={"error": "secret prompt echo"}), "HTTP 401"),
+    (lambda _: httpx.Response(503, json={"error": "Loading model"}), "HTTP 503"),
+    (_refuse, "ConnectError"),
+])
+def test_request_failure_reports_bounded_cause(handler, cause: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(adapter_module, "llama_cpp_runtime_config", lambda: _config())
+    transport = httpx.MockTransport(handler)
+    result = LocalLlamaCppAdapter(client_factory=lambda: httpx.Client(transport=transport)).complete(
+        AIRequest(task_type=AITaskType.synthesis, prompt="hello")
+    )
+    assert result.error is not None
+    assert result.error.message == f"Local llama-server request failed ({cause})."
+    assert "secret" not in result.error.message
+
+
 def test_loopback_validation_and_digest_cache(tmp_path) -> None:
     assert validate_loopback_host("127.0.0.1") is None
     assert validate_loopback_host("10.0.0.1") == "LLAMACPP_NON_LOOPBACK_ENDPOINT"

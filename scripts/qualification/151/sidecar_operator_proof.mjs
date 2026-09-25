@@ -471,7 +471,7 @@ try {
       restartEvidence = await waitForLlamaLoaded("warm_restart");
       restartEvidence.duration_ms += Date.now() - restartAt;
     }
-    const restartCiao = await send("ciao");
+    const restartCiao = await send("ciao dopo il riavvio");
     assert(restartCiao.flow.state === "complete" && restartCiao.flow.finish_reason === "stop",
       `post-restart ciao did not complete: ${JSON.stringify(restartCiao.flow)}`);
   }
