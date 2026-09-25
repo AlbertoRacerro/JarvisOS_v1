@@ -48,6 +48,11 @@ const display = (value: unknown) =>
     : value == null
       ? "—"
       : JSON.stringify(value);
+const optionalNumber = (value: string) => {
+  if (!value.trim()) return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+};
 const projectedBoundaryResidual = (projection: EditorProjectionRead) => {
   const objects = Array.isArray(projection.objects) ? projection.objects : [];
   const units = new Set(
@@ -155,6 +160,23 @@ function ProcessStage({
     "feed" | "product" | "energy_feed" | "energy_product"
   >("feed");
   const [connectPort, setConnectPort] = useState("0");
+  const [controllerTag, setControllerTag] = useState("");
+  const [controllerSp, setControllerSp] = useState("");
+  const [controllerKp, setControllerKp] = useState("");
+  const [controllerKi, setControllerKi] = useState("");
+  const [controllerKd, setControllerKd] = useState("");
+  const [eventSet, setEventSet] = useState("default");
+  const [eventTag, setEventTag] = useState("");
+  const [eventProperty, setEventProperty] = useState("");
+  const [eventValue, setEventValue] = useState("");
+  const [eventAt, setEventAt] = useState("0");
+  const [eventDescription, setEventDescription] = useState("");
+  const [runDuration, setRunDuration] = useState("60");
+  const [runStep, setRunStep] = useState("");
+  const [runMethod, setRunMethod] = useState<"" | "ExplicitEuler" | "RungeKutta4" | "ImplicitEuler" | "AdaptiveRK45">("");
+  const [runSchedule, setRunSchedule] = useState("");
+  const [stateName, setStateName] = useState("");
+  const [restoreState, setRestoreState] = useState("");
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState<Point>({ x: 0, y: 0 });
   const [placeX, setPlaceX] = useState("40");
@@ -430,6 +452,16 @@ function ProcessStage({
     (runtimeUnavailable
       ? `${runtimeUnavailable.code}: ${runtimeUnavailable.message}`
       : "Command is not available in this projection.");
+  const dynamicsProjection = record(projection?.dynamics);
+  const dynamicsUnavailableReason =
+    typeof dynamicsProjection.unavailable_reason === "string"
+      ? dynamicsProjection.unavailable_reason
+      : null;
+  const projectedSavedStates = Array.isArray(dynamicsProjection.saved_states)
+    ? dynamicsProjection.saved_states.filter(
+        (name): name is string => typeof name === "string",
+      )
+    : [];
   const pointAt = (event: ReactPointerEvent<SVGSVGElement>) => {
     const bounds = event.currentTarget.getBoundingClientRect();
     return {
@@ -1585,6 +1617,63 @@ function ProcessStage({
           </button>
         </aside>
       </div>
+      <section className="dwsim-dynamics" aria-label="DWSIM dynamics controls">
+        <h2>Dynamics</h2>
+        <p>
+          Dynamics data is read from the current server projection. Commands use
+          its revision and replace this view with persisted readback.
+        </p>
+        {!projection ? (
+          <p role="status">Dynamics unavailable · no process projection loaded.</p>
+        ) : dynamicsUnavailableReason ? (
+          <p role="status">Dynamics projection unavailable · {dynamicsUnavailableReason}</p>
+        ) : (
+          <div className="dwsim-dynamics__readback">
+            <div><strong>Controllers</strong><pre>{JSON.stringify(Array.isArray(dynamicsProjection.controllers) ? dynamicsProjection.controllers : [], null, 2)}</pre></div>
+            <div><strong>Event sets</strong><pre>{JSON.stringify(Array.isArray(dynamicsProjection.event_sets) ? dynamicsProjection.event_sets : [], null, 2)}</pre></div>
+            <div><strong>Saved states</strong><pre>{JSON.stringify(projectedSavedStates, null, 2)}</pre></div>
+            <div><strong>Last dynamic run</strong><pre>{JSON.stringify(dynamicsProjection.last_dynamic_run ?? null, null, 2)}</pre></div>
+          </div>
+        )}
+        <div className="dwsim-dynamics__controls">
+          <fieldset>
+            <legend>Controller</legend>
+            <label>Tag<input value={controllerTag} onChange={(e) => setControllerTag(e.target.value)} /></label>
+            <label>Set point<input type="number" value={controllerSp} onChange={(e) => setControllerSp(e.target.value)} /></label>
+            <label>Kp<input type="number" value={controllerKp} onChange={(e) => setControllerKp(e.target.value)} /></label>
+            <label>Ki<input type="number" value={controllerKi} onChange={(e) => setControllerKi(e.target.value)} /></label>
+            <label>Kd<input type="number" value={controllerKd} onChange={(e) => setControllerKd(e.target.value)} /></label>
+            <button type="button" disabled={!can("controller_set") || !controllerTag.trim()} title={!can("controller_set") ? unsupported("controller_set") : "Apply controller settings"} onClick={() => void command({ kind: "controller_set", tag: controllerTag.trim(), sp: optionalNumber(controllerSp), kp: optionalNumber(controllerKp), ki: optionalNumber(controllerKi), kd: optionalNumber(controllerKd), out_min: null, out_max: null, reverse_acting: null, active: null, manual_override: null, execution_order: null })}>Apply controller</button>
+          </fieldset>
+          <fieldset>
+            <legend>Schedule event</legend>
+            <label>Event set<input value={eventSet} onChange={(e) => setEventSet(e.target.value)} /></label>
+            <label>Object tag<input value={eventTag} onChange={(e) => setEventTag(e.target.value)} /></label>
+            <label>Property<input value={eventProperty} onChange={(e) => setEventProperty(e.target.value)} /></label>
+            <label>Value<input type="number" value={eventValue} onChange={(e) => setEventValue(e.target.value)} /></label>
+            <label>At (s)<input type="number" min="0" value={eventAt} onChange={(e) => setEventAt(e.target.value)} /></label>
+            <label>Description<input value={eventDescription} onChange={(e) => setEventDescription(e.target.value)} /></label>
+            <button type="button" disabled={!can("event_add") || !eventSet.trim() || !eventTag.trim() || !eventProperty.trim() || optionalNumber(eventValue) === null || optionalNumber(eventAt) === null} title={!can("event_add") ? unsupported("event_add") : "Add event to the DWSIM schedule"} onClick={() => void command({ kind: "event_add", event_set: eventSet.trim(), schedule: null, tag: eventTag.trim(), property: eventProperty.trim(), value: optionalNumber(eventValue) ?? 0, units: null, at_s: optionalNumber(eventAt) ?? 0, transition: "step", description: eventDescription.trim() || null })}>Add event</button>
+            <label>Remove by description<input aria-label="Event description to remove" value={eventDescription} onChange={(e) => setEventDescription(e.target.value)} /></label>
+            <button type="button" disabled={!can("event_remove") || !eventSet.trim() || !eventDescription.trim()} title={!can("event_remove") ? unsupported("event_remove") : "Remove matching event"} onClick={() => void command({ kind: "event_remove", event_set: eventSet.trim(), schedule: null, description: eventDescription.trim() })}>Remove event</button>
+          </fieldset>
+          <fieldset>
+            <legend>Run dynamics</legend>
+            <label>Schedule (optional)<input value={runSchedule} onChange={(e) => setRunSchedule(e.target.value)} /></label>
+            <label>Duration (s)<input type="number" min="0.001" value={runDuration} onChange={(e) => setRunDuration(e.target.value)} /></label>
+            <label>Step (s, optional)<input type="number" min="0.001" value={runStep} onChange={(e) => setRunStep(e.target.value)} /></label>
+            <label>Integration method<select value={runMethod} onChange={(e) => setRunMethod(e.target.value as typeof runMethod)}><option value="">Use DWSIM current setup</option><option>ExplicitEuler</option><option>RungeKutta4</option><option>ImplicitEuler</option><option>AdaptiveRK45</option></select></label>
+            <button type="button" disabled={!can("dynamics_run") || (optionalNumber(runDuration) ?? 0) <= 0 || (runStep.trim() !== "" && (optionalNumber(runStep) ?? 0) <= 0)} title={!can("dynamics_run") ? unsupported("dynamics_run") : "Run using DWSIM dynamics"} onClick={() => void command({ kind: "dynamics_run", schedule: runSchedule.trim() || null, duration_s: optionalNumber(runDuration) ?? 60, step_s: optionalNumber(runStep), integrator: null, method: runMethod || null, max_wall_time_s: 120, max_steps: 20000, variables: null })}>Run dynamics</button>
+          </fieldset>
+          <fieldset>
+            <legend>Stored states</legend>
+            <label>New state name<input value={stateName} onChange={(e) => setStateName(e.target.value)} /></label>
+            <button type="button" disabled={!can("state_save") || !stateName.trim()} title={!can("state_save") ? unsupported("state_save") : "Save state through DWSIM"} onClick={() => void command({ kind: "state_save", name: stateName.trim() })}>Save current state</button>
+            <label>Restore state<select value={restoreState} onChange={(e) => setRestoreState(e.target.value)}><option value="">Select a projected saved state</option>{projectedSavedStates.map((name) => <option key={name}>{name}</option>)}</select></label>
+            <button type="button" disabled={!can("state_restore") || !restoreState} title={!can("state_restore") ? unsupported("state_restore") : "Restore selected projected state"} onClick={() => void command({ kind: "state_restore", name: restoreState })}>Restore state</button>
+          </fieldset>
+        </div>
+      </section>
       <section className="dwsim-revisions">
         <h2>Revision history</h2>
         {[...revisions].reverse().map((revision) => (

@@ -327,6 +327,64 @@
   border-radius: 4px;
   background: #fffefa;
 }
+.dwsim-dynamics {
+  flex: 0 0 auto;
+  max-height: 330px;
+  overflow: auto;
+  padding: 9px 10px;
+  border: 1px solid #e1dacf;
+  border-radius: 4px;
+  background: #fffefa;
+  font-size: 10px;
+}
+.dwsim-dynamics h2 { margin: 0; font-size: 13px; }
+.dwsim-dynamics > p { margin: 5px 0; color: #687068; }
+.dwsim-dynamics__readback,
+.dwsim-dynamics__controls {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 7px;
+  margin-top: 8px;
+}
+.dwsim-dynamics__readback > div,
+.dwsim-dynamics fieldset {
+  min-width: 0;
+  padding: 7px;
+  border: 1px solid #e4ddd1;
+  border-radius: 4px;
+}
+.dwsim-dynamics pre {
+  max-height: 72px;
+  overflow: auto;
+  margin: 4px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.dwsim-dynamics fieldset { display: grid; align-content: start; gap: 5px; }
+.dwsim-dynamics legend { padding: 0 3px; color: #596258; }
+.dwsim-dynamics label { display: grid; gap: 2px; color: #687068; }
+.dwsim-dynamics input,
+.dwsim-dynamics select {
+  width: 100%;
+  min-height: 26px;
+  padding: 4px 6px;
+  border: 1px solid #d9d4c9;
+  border-radius: 4px;
+  background: #fffefa;
+  color: #293228;
+  font: inherit;
+}
+.dwsim-dynamics button {
+  min-height: 27px;
+  padding: 4px 7px;
+  border: 1px solid #d8d1c5;
+  border-radius: 4px;
+  background: #fffefa;
+  color: #334431;
+  font: inherit;
+  cursor: pointer;
+}
+.dwsim-dynamics button:disabled { opacity: .55; cursor: not-allowed; }
 .dwsim-revisions > div {
   display: flex;
   align-items: center;
@@ -342,6 +400,8 @@
   color: #34614b;
 }
 @media (max-width: 1000px) {
+  .dwsim-dynamics__readback,
+  .dwsim-dynamics__controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .dwsim-workbench {
     grid-template-columns: 150px minmax(250px, 1fr);
   }
@@ -359,6 +419,8 @@
   }
 }
 @media (max-width: 650px) {
+  .dwsim-dynamics__readback,
+  .dwsim-dynamics__controls { grid-template-columns: minmax(0, 1fr); }
   .dwsim-workbench {
     grid-template-columns: minmax(0, 1fr);
   }
