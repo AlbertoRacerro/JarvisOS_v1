@@ -294,7 +294,7 @@ try {
     llamaLogPath = join(dataRoot, "logs", "llama-server.log");
     await writeFile(join(dataRoot, "settings", "llama_cpp.json"), `${JSON.stringify({
       ...llamaConfig,
-      manage: true,
+      manage: false,
       startup_wait_s: 0.1,
       request_timeout_s: 900,
       log_path: llamaLogPath,
