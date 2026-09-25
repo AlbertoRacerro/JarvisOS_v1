@@ -1,0 +1,131 @@
+{
+  "schema": "jarvisos.151-sidecar-operator-proof.v1",
+  "source_sha": "30a208c4359a765655fd7f51d56654eefdf95b98",
+  "workspace_id": "09f1b728-3bd9-461a-875e-4324cfcede2e",
+  "runtime_endpoint_kind": "Windows Ollama via temporary dev bridge",
+  "runtime_endpoint": "http://127.0.0.1:11435/api/generate",
+  "route_class": "local:general",
+  "model_id": "gemma4:12b-it-qat",
+  "browser": "Chromium via Playwright",
+  "route_options": {
+    "unreachable": [
+      {
+        "text": "Local assistant — Ollama is not reachable; start the configured local runtime.",
+        "value": "local:general",
+        "disabled": true
+      },
+      {
+        "text": "Local fast assistant — Ollama is not reachable; start the configured local runtime.",
+        "value": "local:fast",
+        "disabled": true
+      },
+      {
+        "text": "Local coding assistant — Ollama is not reachable; start the configured local runtime.",
+        "value": "local:coder",
+        "disabled": true
+      },
+      {
+        "text": "Test responder (synthetic)",
+        "value": "local:fake",
+        "disabled": false
+      }
+    ],
+    "reachable": [
+      {
+        "text": "Local assistant",
+        "value": "local:general",
+        "disabled": false
+      },
+      {
+        "text": "Local fast assistant",
+        "value": "local:fast",
+        "disabled": false
+      },
+      {
+        "text": "Local coding assistant",
+        "value": "local:coder",
+        "disabled": false
+      },
+      {
+        "text": "Test responder (synthetic)",
+        "value": "local:fake",
+        "disabled": false
+      }
+    ]
+  },
+  "flows": [
+    {
+      "prompt": "funzioni jarvis?",
+      "answer": "Sono JarvisOS, il tuo assistente tecnico locale per l'ingegneria di processo e di impianto. Il mio ruolo è supportarti nelle attività di progettazione e analisi, operando all'interno della workstation JarvisOS.\n\nEcco una panoramica delle mie funzioni e dei miei limiti:\n\n**Cosa posso fare:**\n*   **Assistenza Tecnica:** Fornire consulenza, spiegazioni e supporto tecnico relativo all'ingegneria di processo e di impianto.\n*   **Routing delle Decisioni:** Gestire il routing delle decisioni locali (disponibile).\n*   **Conversazione Generale:** Rispondere a domande e fornire informazioni basate sulla mia conoscenza tecnica.\n\n**Cosa NON posso fare (Azioni riservate all'utente tramite l'interfaccia JarvisOS):**\n*   **Esecuzione di Solver:** Non posso eseguire direttamente i calcoli dei solver.\n*   **Modifica Modelli:** Non posso modificare direttamente i modelli di processo.\n*   **Cambio Stato Progetto:** Non posso cambiare lo stato del progetto o eseguire azioni dirette sul sistema.\n*   **Esecuzione Diretta:** Non posso dichiarare di aver eseguito o modificato nulla; il mio compito è fornire proposte che l'utente deve revisionare e promuovere manualmente tramite l'interfaccia grafica dedicata.\n\n**Stato attuale delle capacità:**\n*   **Disponibili:** `local_decision_routing`.\n*   **Non disponibili / Non configurate:** `hermes`, `dwsim`, `openfoam`, `pbr`, `retrieval`.\n\nIn sintesi, agisco come un consulente tecnico: fornisco le informazioni e le proposte necessarie, mentre tu esegui le azioni operative attraverso gli strumenti della workstation.",
+      "state": "complete",
+      "finish_reason": "stop",
+      "eval_counts": {
+        "prompt": 472,
+        "output": 1134,
+        "source": "actual"
+      },
+      "usage_totals": {
+        "cache_read_tokens": 0,
+        "input_tokens": 472,
+        "latency_ms": 32537,
+        "output_tokens": 1134,
+        "reasoning_tokens": 0,
+        "total_tokens": 1606,
+        "usage_source_counts": {
+          "actual": 1
+        }
+      },
+      "duration_ms": 33233
+    },
+    {
+      "prompt": "ciao",
+      "answer": "Ciao! Sono JarvisOS, il tuo assistente tecnico di ingegneria locale. Come posso aiutarti oggi con il tuo progetto?",
+      "state": "complete",
+      "finish_reason": "stop",
+      "eval_counts": {
+        "prompt": 469,
+        "output": 359,
+        "source": "actual"
+      },
+      "usage_totals": {
+        "cache_read_tokens": 0,
+        "input_tokens": 469,
+        "latency_ms": 8386,
+        "output_tokens": 359,
+        "reasoning_tokens": 0,
+        "total_tokens": 828,
+        "usage_source_counts": {
+          "actual": 1
+        }
+      },
+      "duration_ms": 9000
+    }
+  ],
+  "length_finish": {
+    "status": "skipped",
+    "reason": "No existing config/env override exposes a smaller local route budget; product code and registry config were left unchanged."
+  },
+  "screenshots": [
+    {
+      "path": "scripts/qualification/151/sidecar-unreachable-routes.jpg",
+      "size_bytes": 92641
+    },
+    {
+      "path": "scripts/qualification/151/sidecar-complete-answers.jpg",
+      "size_bytes": 92113
+    }
+  ],
+  "console_errors": [],
+  "page_errors": [],
+  "timings_ms": [
+    {
+      "prompt": "funzioni jarvis?",
+      "duration_ms": 33233
+    },
+    {
+      "prompt": "ciao",
+      "duration_ms": 9000
+    }
+  ],
+  "elapsed_seconds": 46.627
+}
