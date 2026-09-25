@@ -61,6 +61,18 @@ let workspaceId;
 let succeeded = false;
 let runtimeStarted = false;
 let llamaLogPath;
+let proofFailure;
+let evidenceWritten = false;
+const proofFailures = [];
+let firstPassStatus;
+let unreachableOptions = [];
+let reachableOptions = [];
+let loadedEvidence;
+let restartEvidence;
+let gpuGate;
+let ollamaUnload = null;
+let launchArguments = null;
+let length;
 const proofStartedAt = Date.now();
 
 const assert = (condition, message) => { if (!condition) throw new Error(message); };
@@ -317,7 +329,7 @@ try {
   page.on("console", (message) => { if (message.type() === "error") consoleErrors.push(message.text()); });
   page.on("pageerror", (error) => pageErrors.push(String(error)));
   await startBackend(isLlamaCpp ? "" : "http://127.0.0.1:11436/api/generate");
-  const firstPassStatus = isLlamaCpp ? await runtimeRequest("") : null;
+  firstPassStatus = isLlamaCpp ? await runtimeRequest("") : null;
   if (isLlamaCpp) {
     assert(!firstPassStatus.runtime_reachable && !firstPassStatus.pid && !firstPassStatus.spawned_by_jarvis,
       `llama.cpp runtime was expected to be stopped in pass 1: ${JSON.stringify(firstPassStatus)}`);
@@ -327,7 +339,7 @@ try {
   workspaceId = (await workspaceResponse.json()).id;
   await page.goto(`${backendUrl}/design/process`, { waitUntil: "networkidle" });
   await openSidecar();
-  const unreachableOptions = await optionRecords();
+  unreachableOptions = await optionRecords();
   const unreachable = unreachableOptions.find((item) => item.value === route);
   assert(unreachable?.disabled && /not reachable/i.test(unreachable.text), `unreachable route not disabled with an actionable reason: ${JSON.stringify(unreachableOptions)}`);
   if (isLlamaCpp) {
@@ -341,11 +353,6 @@ try {
   await page.getByText("Test responder only — synthetic output, not an AI answer.", { exact: true }).waitFor();
   await snap("unreachable-routes");
 
-  let loadedEvidence;
-  let restartEvidence;
-  let ollamaUnload = null;
-  let gpuGate = null;
-  let launchArguments = null;
   if (isLlamaCpp) {
     gpuGate = await waitForGpuGate();
     ollamaUnload = await unloadOllamaModels();
@@ -370,7 +377,7 @@ try {
     await openSidecar();
     await page.waitForFunction((selectedRoute) => [...document.querySelectorAll('[aria-label="Jarvis responder"] option')].some((option) => option.value === selectedRoute && !option.disabled), route, { timeout: 60_000 });
   }
-  const reachableOptions = await optionRecords();
+  reachableOptions = await optionRecords();
   const localRoute = page.getByLabel("Jarvis responder");
   await localRoute.selectOption(route);
   await page.getByLabel("Message", { exact: true }).waitFor();
@@ -385,29 +392,34 @@ try {
   assert(/[àèéìòù]|\b(ciao|buongiorno|salve|sono|posso|come|aiutarti|aiuto)\b/i.test(ciao.flow.answer), `Italian response not observed: ${ciao.flow.answer}`);
   await snap("complete-answers");
 
-  let length;
   if (isLlamaCpp) {
     const truncated = await send("Scrivi i numeri da 1 a 3000, uno per riga, senza commenti.");
     const truncatedText = await truncated.entry.innerText();
-    assert(truncated.flow.state !== "complete", `long answer unexpectedly complete: ${JSON.stringify(truncated.flow)}`);
-    assert(truncated.flow.finish_reason === "length", `long answer finish was ${truncated.flow.finish_reason}`);
-    assert(/This answer is incomplete/i.test(truncatedText), "length-finished answer did not render the incomplete warning");
     const continueButton = truncated.entry.getByRole("button", { name: "Continue as a new message" });
-    await continueButton.waitFor({ state: "visible", timeout: 10_000 });
+    const continueButtonRendered = await continueButton.isVisible().catch(() => false);
+    if (truncated.flow.state === "complete") proofFailures.push("long answer unexpectedly completed");
+    if (truncated.flow.finish_reason !== "length") proofFailures.push(`long answer finish was ${truncated.flow.finish_reason}`);
+    const incompleteWarningRendered = /This answer is incomplete/i.test(truncatedText);
+    if (!incompleteWarningRendered) proofFailures.push("length-finished answer did not render the incomplete warning");
+    if (!continueButtonRendered) proofFailures.push("continue button was not rendered for the long answer");
     await snap("incomplete-answer");
-    await continueButton.click();
-    const continuationPrompt = await page.getByLabel("Message", { exact: true }).inputValue();
-    assert(continuationPrompt.length > 0, "continue button did not populate the next-message prompt");
-    const continuation = await send(continuationPrompt);
+    let continuationPrompt = "";
+    let continuation;
+    if (continueButtonRendered) {
+      await continueButton.click();
+      continuationPrompt = await page.getByLabel("Message", { exact: true }).inputValue();
+      if (!continuationPrompt) proofFailures.push("continue button did not populate the next-message prompt");
+      else continuation = await send(continuationPrompt);
+    }
     length = {
-      status: "observed",
+      status: truncated.flow.state !== "complete" && truncated.flow.finish_reason === "length" ? "observed" : "not_observed",
       interaction: truncated.flow,
       hidden_reasoning_empty_visible_answer: !truncated.flow.answer,
-      incomplete_warning_rendered: true,
-      continue_button_rendered: true,
-      continuation_clicked: true,
+      incomplete_warning_rendered: incompleteWarningRendered,
+      continue_button_rendered: continueButtonRendered,
+      continuation_clicked: continueButtonRendered,
       continuation_prompt: continuationPrompt,
-      continuation_result: continuation.flow,
+      continuation_result: continuation?.flow ?? null,
     };
   } else {
     // Preserve the existing Ollama proof behavior while marking this lane-specific observation N/A.
@@ -427,8 +439,8 @@ try {
     assert(restartCiao.flow.state === "complete" && restartCiao.flow.finish_reason === "stop",
       `post-restart ciao did not complete: ${JSON.stringify(restartCiao.flow)}`);
   }
-  assert(consoleErrors.length === 0, `browser console errors: ${consoleErrors.join(" | ")}`);
-  assert(pageErrors.length === 0, `browser page errors: ${pageErrors.join(" | ")}`);
+  if (consoleErrors.length) proofFailures.push(`browser console errors: ${consoleErrors.join(" | ")}`);
+  if (pageErrors.length) proofFailures.push(`browser page errors: ${pageErrors.join(" | ")}`);
   let llamaLogEvidence = null;
   let remainingLlamaPids = [];
   if (isLlamaCpp) {
@@ -467,11 +479,18 @@ try {
     page_errors: pageErrors,
     timings_ms: timings,
     elapsed_seconds: (Date.now() - proofStartedAt) / 1000,
+    proof_status: proofFailures.length ? "incomplete" : "passed",
+    proof_failures: proofFailures,
   };
   await writeFile(proofFile, `${JSON.stringify(evidence, null, 2)}\n`, "utf8");
+  evidenceWritten = true;
   console.log(JSON.stringify(evidence, null, 2));
+  if (proofFailures.length) throw new Error(`proof did not pass: ${proofFailures.join(" | ")}`);
   succeeded = true;
   await stopBackend();
+} catch (error) {
+  proofFailure = String(error);
+  throw error;
 } finally {
   if (runtimeStarted && isLlamaCpp) {
     await runtimeRequest("stop").catch(() => {});
@@ -479,6 +498,39 @@ try {
   await context?.close().catch(() => {});
   await browser?.close().catch(() => {});
   await stopBackend();
+  if (isLlamaCpp && !evidenceWritten) {
+    const evidence = {
+      schema: "jarvisos.151-sidecar-operator-proof.v1",
+      source_sha: execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim(),
+      workspace_id: workspaceId ?? null,
+      runtime_endpoint_kind: runtimeKind,
+      runtime_endpoint: "Jarvis-owned loopback llama.cpp runtime on port 18081",
+      route_class: route,
+      model_id: "qwen3.8-27b-q4kxl",
+      runtime_configuration: llamaConfig,
+      runtime_actions: runtimeActions,
+      first_pass_runtime_status: firstPassStatus,
+      runtime_status_snapshots: runtimeSnapshots,
+      loading_snapshots: loadingSnapshots,
+      cold_load: loadedEvidence ?? null,
+      warm_restart: restartEvidence ?? null,
+      server_log: await readLlamaLogEvidence(),
+      launch_arguments: launchArguments,
+      remaining_llama_server_pids: processIds(),
+      browser: "Chromium via Playwright",
+      route_options: { unreachable: unreachableOptions, reachable: reachableOptions },
+      flows,
+      length_finish: length ?? null,
+      screenshots,
+      console_errors: consoleErrors,
+      page_errors: pageErrors,
+      timings_ms: timings,
+      elapsed_seconds: (Date.now() - proofStartedAt) / 1000,
+      proof_status: "incomplete",
+      proof_failures: [proofFailure ?? "proof exited before evidence assembly"],
+    };
+    await writeFile(proofFile, `${JSON.stringify(evidence, null, 2)}\n`, "utf8");
+  }
   if (succeeded) {
     await rm(dataRoot, { recursive: true, force: true });
     await rm(tempDir, { recursive: true, force: true });
