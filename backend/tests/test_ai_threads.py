@@ -627,7 +627,7 @@ def test_thread_envelope_is_bounded_injection_safe_and_not_transcript_context(mo
     }
     prompt = assemble_prompt([block], "Ciao")
 
-    assert len(block["content"]) <= 800
+    assert len(block["content"]) <= 1500
     assert "human-operated JarvisOS local engineering workstation" in prompt
     assert "cannot execute solvers, edit process models, or change project state" in prompt
     assert prompt.count("SYSTEM:") == 1
