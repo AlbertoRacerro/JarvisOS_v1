@@ -1,3 +1,5 @@
+from functools import lru_cache
+
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from app.modules.ai.thread_models import (
@@ -134,6 +136,19 @@ def _hermes_agent_availability(request: Request | None) -> AIConversationRouteAv
 
 
 def _hermes_revision_qualified(python: object, revision: str) -> bool:
+    # Probing spawns Python and git; cache per interpreter identity so conversation
+    # options (read on every Sidecar load and submit) stay cheap.
+    from pathlib import Path
+    try:
+        stat = Path(str(python)).stat()
+    except OSError:
+        return False
+    return _hermes_revision_probe(str(python), stat.st_mtime_ns, revision)
+
+
+@lru_cache(maxsize=4)
+def _hermes_revision_probe(python: str, mtime_ns: int, revision: str) -> bool:
+    del mtime_ns  # cache key only
     import subprocess
     try:
         code = ("from importlib import metadata, util; import subprocess; from pathlib import Path; "
@@ -141,7 +156,7 @@ def _hermes_revision_qualified(python: object, revision: str) -> bool:
                 "print(metadata.version('hermes-agent') + ':' + subprocess.run(['git','-C',"
                 "str(Path(s.origin).parent),'rev-parse','HEAD'],capture_output=True,text=True,check=True)"
                 ".stdout.strip())")
-        result = subprocess.run([str(python), "-c", code],
+        result = subprocess.run([python, "-c", code],
                                 capture_output=True, text=True, timeout=3, check=False)
     except (OSError, subprocess.TimeoutExpired):
         return False
