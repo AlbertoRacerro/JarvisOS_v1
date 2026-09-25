@@ -42,18 +42,22 @@ def query_context(
     bundle = index.build_bundle(query, workspace_id=workspace_id, token_budget=token_budget,
                                 limit=limit, source_owners=owners, source_refs=allowed_refs)
     evidence = []
+    # Excerpts share the caller's token budget (about four characters per token).
+    remaining_chars = token_budget * 4
     for item in bundle.items:
         resolution = index.resolve_authoritative(item.source_ref)
         valid = (resolution.state == "current" and resolution.content is not None
                  and resolution.current_content_digest == item.content_digest)
-        if not valid:
+        if not valid or remaining_chars <= 0:
             continue
+        excerpt = (resolution.content or "")[:min(2_000, remaining_chars)]
+        remaining_chars -= len(excerpt)
         evidence.append({
             "source_ref": item.source_ref.model_dump(mode="json"),
             "content_digest": item.content_digest,
             "token_estimate": item.token_estimate,
             "validation": "current",
-            "excerpt": (resolution.content or "")[:2_000],
+            "excerpt": excerpt,
         })
     return {
         "schema_version": SCHEMA_VERSION,
