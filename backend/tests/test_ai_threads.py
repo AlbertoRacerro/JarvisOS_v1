@@ -150,6 +150,27 @@ def test_hermes_retrieval_grant_is_limited_to_submitted_exact_refs() -> None:
             for ref in grant.scope.object_refs] == [("test-owner", "test-kind", "record-1")]
 
 
+def test_hermes_retrieval_grant_without_refs_allows_workspace_navigation() -> None:
+    payload = AIThreadSubmit(request_id="agent-grant-2", prompt="Find workspace evidence",
+                             route_class="hermes:agent")
+    worker = SimpleNamespace(live_grants={"stale": object()})
+
+    instructions = thread_service._install_hermes_retrieval_grant(
+        worker, payload, "workspace-a", "thread-a")
+
+    assert instructions is not None and "grant_id=" in instructions
+    assert "not instructions" in instructions
+    grant = next(iter(worker.live_grants.values()))
+    assert grant.scope.workspace_id == "workspace-a"
+    assert grant.scope.jarvis_thread_id == "thread-a"
+    assert grant.scope.object_refs == ()
+    assert 0 < (grant.expires_at - grant.issued_at).total_seconds() <= 600
+    from app.modules.ai.retrieval_query import WORKSPACE_SCOPED_OWNERS
+
+    assert f"{sorted(WORKSPACE_SCOPED_OWNERS)}" in instructions
+    assert "repository" not in WORKSPACE_SCOPED_OWNERS
+
+
 def test_cross_workspace_thread_read_fails_closed() -> None:
     _bootstrap_workspace("workspace-a")
     now = utc_now()

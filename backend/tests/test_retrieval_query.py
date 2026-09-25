@@ -55,6 +55,20 @@ def test_query_scopes_owner_workspace_caps_and_stable_json(query_store) -> None:
             query_context("pump", store=store, **kwargs)
 
 
+def test_workspace_navigation_returns_only_current_workspace_documents(query_store) -> None:
+    store, _ = query_store
+    store.rebuild()
+
+    result = query_context("pump", workspace_id="w1", source_scope=("decision_fixture",),
+                           allowed_refs=None, limit=8, token_budget=1024, store=store)
+
+    assert result["evidence"]
+    assert all(item["source_ref"]["workspace_id"] == "w1" for item in result["evidence"])
+    assert {item["source_ref"]["object_id"] for item in result["evidence"]} == {
+        "decision", "other_w1",
+    }
+
+
 def test_query_rereads_and_excludes_owner_mutation(query_store) -> None:
     store, documents = query_store
     store.rebuild()

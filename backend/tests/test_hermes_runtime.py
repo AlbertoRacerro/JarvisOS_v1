@@ -469,6 +469,87 @@ def test_retrieval_tool_pins_workspace_and_enforces_granted_source_scope(monkeyp
     assert dispatch_tool(over_budget, live_grants={"grant-1": grant}).status == "refused"
 
 
+def test_workspace_retrieval_grant_navigates_allowed_owners_without_exact_refs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.modules.ai.retrieval_query import WORKSPACE_SCOPED_OWNERS
+
+    now = datetime.now(UTC)
+    call = StructuredToolCall(call_id="workspace-query", capability_id="jarvis.retrieval_query",
+                              grant_id="workspace-grant", correlation_id="workspace-query",
+                              session_ref=SESSION,
+                              arguments={"query": "pump", "source_scope": ["modeling"], "limit": 4,
+                                         "token_budget": 512}, requested_at=now,
+                              deadline_at=now + timedelta(minutes=1))
+    grant = CapabilityGrantRef(grant_id="workspace-grant", capability_id=call.capability_id,
+                               issuer="jarvis_policy",
+                               scope=CapabilityScope(workspace_id=SESSION.workspace_id,
+                                                     jarvis_thread_id=SESSION.jarvis_thread_id),
+                               issued_at=now, expires_at=now + timedelta(minutes=10))
+    observed: dict[str, Any] = {}
+
+    def query_context(query: str, **kwargs: Any) -> dict[str, Any]:
+        observed.update(query=query, **kwargs)
+        return {"evidence": [{"source_ref": {"authority_owner": "modeling", "object_type": "decision",
+                                               "object_id": "decision-1", "workspace_id": SESSION.workspace_id}}]}
+
+    from app.modules.ai import retrieval_query
+
+    monkeypatch.setattr(retrieval_query, "query_context", query_context)
+    assert "modeling" in WORKSPACE_SCOPED_OWNERS
+    result = dispatch_tool(call, live_grants={"workspace-grant": grant})
+
+    assert result.status == "succeeded"
+    assert observed == {"query": "pump", "workspace_id": SESSION.workspace_id,
+                        "source_scope": ("modeling",), "allowed_refs": None,
+                        "limit": 4, "token_budget": 512}
+    over_limit = call.model_copy(update={"arguments": call.arguments | {"limit": 9}})
+    assert dispatch_tool(over_limit, live_grants={"workspace-grant": grant}).status == "refused"
+    over_budget = call.model_copy(update={"arguments": call.arguments | {"token_budget": 1025}})
+    assert dispatch_tool(over_budget, live_grants={"workspace-grant": grant}).status == "refused"
+    denied_owner = call.model_copy(update={"arguments": {"query": "pump", "source_scope": ["repository"]}})
+    assert dispatch_tool(denied_owner, live_grants={"workspace-grant": grant}).error_code == "scope_denied"
+    denied_thread = grant.model_copy(update={
+        "scope": CapabilityScope(workspace_id=SESSION.workspace_id, jarvis_thread_id="different-thread")})
+    assert dispatch_tool(call, live_grants={"workspace-grant": denied_thread}).error_code == "scope_denied"
+    expired = grant.model_copy(update={"expires_at": datetime.now(UTC) - timedelta(seconds=1)})
+    assert dispatch_tool(call, live_grants={"workspace-grant": expired}).status == "refused"
+
+
+def test_workspace_retrieval_event_records_evidence_refs(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.modules.ai import retrieval_query
+
+    connection = _connection()
+    connection.commit()
+    monkeypatch.setattr("app.modules.agents.hermes.supervisor.open_sqlite_connection",
+                        lambda: _existing_connection(connection))
+    monkeypatch.setattr(retrieval_query, "query_context", lambda *_args, **_kwargs: {
+        "evidence": [{"source_ref": {"authority_owner": "modeling", "object_type": "decision",
+                                      "object_id": "decision-1", "workspace_id": SESSION.workspace_id}}]})
+    now = datetime.now(UTC)
+    grant = CapabilityGrantRef(grant_id="event-grant", capability_id="jarvis.retrieval_query",
+                               issuer="jarvis_policy",
+                               scope=CapabilityScope(workspace_id=SESSION.workspace_id,
+                                                     jarvis_thread_id=SESSION.jarvis_thread_id),
+                               issued_at=now, expires_at=now + timedelta(minutes=1))
+    supervisor = HermesSupervisor("unused")
+    supervisor.session = SESSION
+    supervisor.active_interaction_id = "interaction-evidence"
+    supervisor.live_grants[grant.grant_id] = grant
+    monkeypatch.setattr(supervisor, "_send", lambda _frame: None)
+
+    supervisor._handle_tool({"id": "evidence-call", "session_ref": SESSION.model_dump(mode="json"),
+                             "arguments": {"tool_name": "jarvis_retrieval_query", "grant_id": grant.grant_id,
+                                           "query": "pump", "source_scope": ["modeling"]}})
+
+    row = connection.execute("SELECT payload FROM events WHERE event_type = 'hermes.tool_result'").fetchone()
+    assert row is not None
+    payload = json.loads(row["payload"])
+    assert payload["status"] == "succeeded"
+    assert len(payload["evidence_refs"]) == 1
+    assert '"object_id":"decision-1"' in payload["evidence_refs"][0]
+
+
 @pytest.mark.skipif(not os.environ.get("JARVIS_HERMES_VENV"), reason="requires installed Hermes venv")
 def test_real_worker_turn_interrupt_relay(tmp_path: Path) -> None:
     """Opt-in integration: real Hermes, fake Jarvis inference, no provider/network dependency."""

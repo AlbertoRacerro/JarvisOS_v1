@@ -221,6 +221,10 @@ def dispatch_tool(
     grant = live_grants.get(call.grant_id)
     error = "capability_denied"
     result: dict[str, Any] | None = None
+    if (grant is not None and call.capability_id == "jarvis.retrieval_query"
+            and grant.scope.jarvis_thread_id not in (None, call.session_ref.jarvis_thread_id
+                                                      if call.session_ref is not None else None)):
+        error = "scope_denied"
     if call.session_ref is not None and grant is not None and grant.is_active(now) and not call.is_expired(now):
         scope = grant.scope
         if (grant.capability_id == call.capability_id and scope.workspace_id == call.session_ref.workspace_id
@@ -249,9 +253,17 @@ def dispatch_tool(
                         raw_query = requested.pop("query", None)
                         raw_limit = requested.pop("limit", 8)
                         raw_token_budget = requested.pop("token_budget", 1_024)
+                        workspace_scoped = not scope.object_refs
+                        if workspace_scoped:
+                            from app.modules.ai.retrieval_query import WORKSPACE_SCOPED_OWNERS
+
+                            allowed_owners = set(WORKSPACE_SCOPED_OWNERS)
+                            if scope.jarvis_thread_id != call.session_ref.jarvis_thread_id:
+                                error = "scope_denied"
                         if (isinstance(requested_owners, list) and requested_owners
                                 and all(isinstance(owner, str) for owner in requested_owners)
-                                and set(requested_owners) <= allowed_owners):
+                                and set(requested_owners) <= allowed_owners
+                                and (not workspace_scoped or scope.jarvis_thread_id == call.session_ref.jarvis_thread_id)):
                             from app.modules.ai.retrieval_query import query_context
                             if (not requested and isinstance(raw_query, str)
                                     and isinstance(raw_limit, int) and not isinstance(raw_limit, bool)
@@ -260,7 +272,7 @@ def dispatch_tool(
                                     and 1 <= raw_token_budget <= 1_024):
                                 result = query_context(raw_query, workspace_id=scope.workspace_id,
                                                        source_scope=tuple(str(owner) for owner in requested_owners),
-                                                       allowed_refs=granted_refs,
+                                                       allowed_refs=None if workspace_scoped else granted_refs,
                                                        limit=raw_limit,
                                                        token_budget=raw_token_budget)
                         else:
@@ -452,11 +464,12 @@ class HermesSupervisor:
             if ref != self.session or not isinstance(arguments, dict):
                 raise ValueError("stale or malformed tool call")
             tool_name = arguments.pop("tool_name", "")
+            grant_id = arguments.pop("grant_id")
             capability_id = ("jarvis.retrieval_query" if tool_name == "jarvis_retrieval_query"
                              else "jarvis.context_preview")
             call = StructuredToolCall(
                 call_id=str(frame["id"]), capability_id=capability_id,
-                grant_id=arguments["grant_id"], correlation_id=str(frame["id"]),
+                grant_id=grant_id, correlation_id=str(frame["id"]),
                 session_ref=ref, arguments=(arguments if capability_id == "jarvis.retrieval_query"
                                             else arguments["request"]),
                 requested_at=now, deadline_at=now + timedelta(seconds=120),
