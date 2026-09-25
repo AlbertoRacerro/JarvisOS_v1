@@ -673,7 +673,8 @@ function ProcessStage({
             accept=".dwxmz,.dwxml"
             hidden
             onChange={(e) => {
-              const file = e.currentTarget.files?.[0];
+              const input = e.currentTarget;
+              const file = input.files?.[0];
               if (
                 !file ||
                 !workspaceId ||
@@ -704,7 +705,7 @@ function ProcessStage({
                 .finally(() => {
                   flight.current = false;
                   setLoading(false);
-                  e.currentTarget.value = "";
+                  input.value = "";
                 });
             }}
           />

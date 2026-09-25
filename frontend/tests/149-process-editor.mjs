@@ -82,6 +82,11 @@ has(
   "No process topology is loaded",
   "unavailable state must not invent a graph",
 );
+has(
+  stage,
+  "const input = e.currentTarget;",
+  "async import cleanup must retain the file input element",
+);
 if (/\b(?:localStorage|sessionStorage)\b/.test(stage))
   fail("graph state must not be persisted locally");
 if (/fetch\s*\(/.test(stage))
