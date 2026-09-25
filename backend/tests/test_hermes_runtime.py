@@ -17,6 +17,7 @@ from fastapi.testclient import TestClient
 
 import app.modules.agents.hermes.supervisor as hermes_supervisor_module
 from app.modules.agents.hermes.broker_mcp import _reply
+from app.modules.agents.hermes.session_pool import HermesSessionPool
 from app.modules.agents.hermes.supervisor import (
     HermesSupervisor,
     bind_session,
@@ -190,6 +191,31 @@ def test_governed_inference_maps_result_and_cancellation() -> None:
     assert len(calls) == 1
 
 
+def test_relay_defaults_to_explicit_llamacpp_and_accepts_only_explicit_local_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observed: list[str | None] = []
+
+    def governed(envelope: InferenceEnvelope, **_kwargs: Any) -> dict[str, str]:
+        observed.append(envelope.route_class)
+        return {"status": "refused"}
+
+    monkeypatch.setattr(hermes_supervisor_module, "run_governed_inference", governed)
+    supervisor = HermesSupervisor("unused")
+    supervisor.session = SESSION
+    monkeypatch.setattr(supervisor, "_send", lambda _frame: None)
+    supervisor._handle_relay(_frame())
+    assert observed == ["local:llamacpp"]
+
+    supervisor.route_for_task = lambda _task: "local:ollama"
+    supervisor._handle_relay(_frame())
+    assert observed == ["local:llamacpp", "local:ollama"]
+
+    supervisor.route_for_task = lambda _task: "openai:external"
+    supervisor._handle_relay(_frame())
+    assert observed == ["local:llamacpp", "local:ollama"]
+
+
 def test_session_mapping_control_event_order_and_recovery() -> None:
     connection = _connection()
     first = bind_session(connection, thread_id="thread-1", workspace_id="workspace-1",
@@ -258,6 +284,56 @@ def test_network_isolation_never_silently_falls_back_without_bwrap(
         supervisor.start()
 
 
+def test_session_pool_keeps_bounded_per_thread_workers_and_idle_stop() -> None:
+    created = []
+
+    class Worker:
+        process = None
+        session = object()
+
+        def status(self) -> dict[str, Any]:
+            return {"state": "stopped"}
+
+    def factory() -> Worker:
+        worker = Worker()
+        created.append(worker)
+        return worker
+
+    pool = HermesSessionPool(factory, maximum=2, idle_seconds=60)
+    first = pool.for_thread("thread-a")
+    assert pool.for_thread("thread-a") is first
+    second = pool.for_thread("thread-b")
+    assert second is not first
+    pool.for_thread("thread-c")
+    assert len(created) == 3 and first.session is None
+    assert pool.status()["state"] == "stopped"
+
+
+def test_tool_refusal_emits_bounded_correlated_event_without_secrets(monkeypatch: pytest.MonkeyPatch) -> None:
+    connection = _connection()
+    connection.commit()
+    monkeypatch.setattr("app.modules.agents.hermes.supervisor.open_sqlite_connection",
+                        lambda: _existing_connection(connection))
+    supervisor = HermesSupervisor("unused")
+    supervisor.session = SESSION
+    supervisor.active_interaction_id = "interaction-1"
+    monkeypatch.setattr(supervisor, "_send", lambda _frame: None)
+    supervisor._handle_tool({"id": "tool-call-1", "session_ref": SESSION.model_dump(mode="json"),
+                             "arguments": {"tool_name": "jarvis_retrieval_query", "grant_id": "missing",
+                                           "query": "pump", "source_scope": ["modeling"],
+                                           "api_token": "must-not-persist"}})
+    row = connection.execute("SELECT payload FROM events WHERE event_type = 'hermes.tool_result'").fetchone()
+    assert row is not None
+    payload = json.loads(row["payload"])
+    assert payload["call_id"] == "tool-call-1"
+    assert payload["interaction_id"] == "interaction-1"
+    assert payload["correlation_id"] == "interaction-1"
+    assert payload["generation"] == SESSION.generation
+    assert payload["status"] == "refused"
+    assert "api_token" not in payload["arguments"]
+    assert payload["result_digest"].startswith("sha256:")
+
+
 def test_native_windows_requires_the_configured_wsl_worker(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -305,7 +381,7 @@ def test_expected_worker_exit_is_not_reported_as_worker_loss(
     assert supervisor.last_error is None
 
 
-def test_successful_turn_is_captured_in_ai_thread_owner(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_successful_turn_returns_relay_flow_without_creating_a_second_interaction(monkeypatch: pytest.MonkeyPatch) -> None:
     connection = _connection()
     connection.commit()
     monkeypatch.setattr("app.modules.agents.hermes.supervisor.open_sqlite_connection",
@@ -327,13 +403,7 @@ def test_successful_turn_is_captured_in_ai_thread_owner(monkeypatch: pytest.Monk
 
     monkeypatch.setattr(supervisor, "_await", answer)
     assert supervisor.turn("question")["status"] == "success"
-    row = connection.execute("SELECT user_text, assistant_text, flow_id, persistence_state "
-                             "FROM ai_thread_interactions").fetchone()
-    assert tuple(row) == ("question", "Recorded answer", "flow-1", "captured")
-    last_activity = connection.execute(
-        "SELECT last_activity_at FROM ai_threads WHERE id = 'thread-1'"
-    ).fetchone()[0]
-    assert last_activity > "2000-01-01T00:00:00+00:00"
+    assert connection.execute("SELECT COUNT(*) FROM ai_thread_interactions").fetchone()[0] == 0
 
 
 @contextmanager

@@ -71,7 +71,8 @@ export function useJarvisSidecar(
   const contextEnabled = projectPackEnabled && !activeKnowledge;
   const activeRoute = routes.find(route => route.route_class === routeClass);
   const activeRouteAvailable = activeRoute?.execution_class === "synthetic"
-    || Boolean(activeRoute?.availability.runtime_reachable && activeRoute.availability.model_installed);
+    || Boolean(activeRoute?.availability.runtime_reachable && (activeRoute.execution_class === "agent"
+      || activeRoute.availability.model_installed));
 
   useEffect(() => {
     let alive = true;
@@ -357,14 +358,17 @@ export function useJarvisSidecar(
     <label className="jarvis-sidecar__field">Responder<select aria-label="Jarvis responder" value={routeClass} disabled={submitting || !routes.length} onChange={event => { setRouteClass(event.target.value); setPending(null); setError(null); }}>
       {!routes.length && <option value="">Unavailable</option>}
       {routes.map(route => {
-        const unavailable = route.execution_class !== "synthetic" && (!route.availability.runtime_reachable || !route.availability.model_installed);
+        const unavailable = route.execution_class !== "synthetic" && (!route.availability.runtime_reachable
+          || (route.execution_class !== "agent" && !route.availability.model_installed));
         return <option value={route.route_class} key={route.route_class} disabled={unavailable}>{route.label}{unavailable ? ` — ${route.availability.message}` : ""}</option>;
       })}
     </select></label>
     {activeRoute && <p className="jarvis-sidecar__status" role="status">{activeRoute.availability.message}{activeRoute.availability.qualified === "unknown" && activeRoute.execution_class !== "synthetic" ? " Qualification has not been recorded." : ""}</p>}
     </details>
     {routeError && <p role="status">{routeError}</p>}
-    {activeRoute && <small>{activeRoute.execution_class === "synthetic" ? "Test responder only — synthetic output, not an AI answer." : `Uses local model ${activeRoute.model_id}.`}</small>}
+    {activeRoute && <small>{activeRoute.execution_class === "synthetic" ? "Test responder only — synthetic output, not an AI answer."
+      : activeRoute.execution_class === "agent" ? "Hermes orchestrates a Jarvis-routed local model."
+      : `Uses local model ${activeRoute.model_id}.`}</small>}
     {loadingDetail ? <p className="jarvis-sidecar__status">Loading thread…</p> : null}
 
     <details className="jarvis-sidecar__context" aria-label="Project context controls"><summary>{activeKnowledge ? `${activeKnowledge.included_count} selected records` : contextEnabled ? "Project context included" : "Optional project context"}</summary>
