@@ -32,6 +32,7 @@ from app.modules.process_stack.editor_models import (
     CreateUnit,
     DeleteObject,
     Disconnect,
+    DynamicsProjectionRead,
     DynamicsRun,
     EditorCaseRead,
     EditorCommand,
@@ -474,7 +475,12 @@ def _apply(client: DwsimMcpClient, flow: str, command: EditorCommand, scratch: P
         for key, expected in requested.items():
             actual = match.get("manual" if key == "manual_override" else key)
             try:
-                valid = math.isclose(float(actual), float(expected), rel_tol=_TOL, abs_tol=1e-9) if isinstance(expected, (int, float)) and not isinstance(expected, bool) else actual is expected
+                valid = (
+                    isinstance(actual, (str, int, float))
+                    and math.isclose(float(actual), float(expected), rel_tol=_TOL, abs_tol=1e-9)
+                    if isinstance(expected, (int, float)) and not isinstance(expected, bool)
+                    else actual is expected
+                )
             except (TypeError, ValueError):
                 valid = False
             if not valid:
@@ -485,13 +491,14 @@ def _apply(client: DwsimMcpClient, flow: str, command: EditorCommand, scratch: P
         args = {"flowsheet_id": flow, "action": "add" if adding else "remove", "event_set": command.event_set}
         if command.schedule:
             args["schedule"] = command.schedule
-        if adding:
-            description = command.description or f"{command.tag}.{command.property} at {command.at_s:g} s"
+        if isinstance(command, EventAdd):
+            description: str = command.description or f"{command.tag}.{command.property} at {command.at_s:g} s"
             args.update({"tag": command.tag, "property": command.property, "value": command.value, "at_s": command.at_s,
                          "transition": command.transition, "description": description})
             if command.units:
                 args["units"] = command.units
         else:
+            assert isinstance(command, EventRemove)
             description = command.description
             args["description"] = description
         client.call("dwsim_dynamics_event", args, 30)
@@ -569,13 +576,13 @@ def _apply(client: DwsimMcpClient, flow: str, command: EditorCommand, scratch: P
         client.call("dwsim_dynamics_state", {"flowsheet_id": flow, "action": "restore", "name": command.name}, 30)
         actual = _dynamic_values(client, flow, list(expected))
         for tag, properties in expected.items():
-            for prop, value in properties.items():
+            for property_id, expected_value in properties.items():
                 try:
-                    valid = math.isclose(float(actual[tag][prop]), float(value), rel_tol=_TOL, abs_tol=1e-9)
+                    valid = math.isclose(float(actual[tag][property_id]), float(expected_value), rel_tol=_TOL, abs_tol=1e-9)
                 except (KeyError, TypeError, ValueError):
-                    valid = actual.get(tag, {}).get(prop) == value
+                    valid = actual.get(tag, {}).get(property_id) == expected_value
                 if not valid:
-                    raise EditorError("DWSIM_READBACK_MISMATCH", f"Restored state did not restore {tag}.{prop}", 502)
+                    raise EditorError("DWSIM_READBACK_MISMATCH", f"Restored state did not restore {tag}.{property_id}", 502)
         readback = {"restored_state": command.name, "state_snapshot": actual, "verified_objects": len(expected)}
     elif isinstance(command, DeleteObject | Disconnect):
         raise EditorError("unsupported_upstream", UNSUPPORTED[command.kind], 422)
@@ -583,13 +590,13 @@ def _apply(client: DwsimMcpClient, flow: str, command: EditorCommand, scratch: P
         raise EditorError("unsupported_upstream", "This command is unsupported by the DWSIM MCP runtime", 422)
     _save(client, flow, scratch)
     if isinstance(command, Connect):
-        _native, tags, available = _connector_records(scratch)
+        _native, connector_tags, available = _connector_records(scratch)
         objects = _objects(client, flow)
         unit_id = next((item.get("id") for item in objects if item.get("name") == command.unit), None)
         stream_id = next((item.get("id") for item in objects if item.get("name") == command.stream), None)
         connector_group = "input" if command.role == "feed" else "output" if command.role == "product" else "energy"
-        direct = (tags.get(command.unit) or {}).get(connector_group, [])
-        opposite = (tags.get(command.stream) or {}).get("output" if command.role == "feed" else "input", [])
+        direct = (connector_tags.get(command.unit) or {}).get(connector_group, [])
+        opposite = (connector_tags.get(command.stream) or {}).get("output" if command.role == "feed" else "input", [])
         attached = direct[command.port] if command.port < len(direct) else None
         reciprocal = next(
             (
@@ -799,7 +806,7 @@ def _projection(
         last_solve=record.get("last_solve"),
         editable_commands=SUPPORTED,
         unsupported_commands=UNSUPPORTED,
-        dynamics=_dynamic_projection(client, flow, record),
+        dynamics=DynamicsProjectionRead.model_validate(_dynamic_projection(client, flow, record)),
     )
 
 
