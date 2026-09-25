@@ -217,6 +217,7 @@ def _write_revision(
         "dwsim_version": version,
         "mcp_sha256": mcp_sha,
         "last_solve": readback if command == "solve" else (prior.get("last_solve") if prior else None),
+        "last_dynamic_run": readback if command == "dynamics_run" else (prior.get("last_dynamic_run") if prior else None),
     }
     record_dir = directory / "records"
     record_dir.mkdir(exist_ok=True)
@@ -324,6 +325,15 @@ def _dynamic_projection(client: DwsimMcpClient, flow: str, record: dict[str, Any
         config = client.call("dwsim_dynamics_inspect", {"flowsheet_id": flow, "detail": "full"}, 30)
         controllers = client.call("dwsim_dynamics_controller", {"flowsheet_id": flow, "action": "list"}, 30)
         states = client.call("dwsim_dynamics_state", {"flowsheet_id": flow, "action": "list"}, 30)
+        if any("error" in response for response in (config, controllers, states)):
+            raise DwsimMcpError("DWSIM dynamics read returned an error")
+        missing: list[str] = []
+        if not isinstance(controllers.get("controllers"), list):
+            missing.append("controllers")
+        if not isinstance(states.get("stored_states"), list):
+            missing.append("saved states")
+        if not isinstance(config.get("event_sets"), list):
+            missing.append("event sets")
         if isinstance(controllers.get("controllers"), list):
             result["controllers"] = controllers["controllers"]
         if isinstance(states.get("stored_states"), list):
@@ -338,8 +348,9 @@ def _dynamic_projection(client: DwsimMcpClient, flow: str, record: dict[str, Any
                         **({"schedule": schedule} if isinstance(schedule, str) else {}),
                     }, 30)
                     result["event_sets"].append(events)
-        if record.get("command_kind") == "dynamics_run":
-            result["last_dynamic_run"] = record.get("readback")
+        result["last_dynamic_run"] = record.get("last_dynamic_run")
+        if missing:
+            result["unavailable_reason"] = "DWSIM did not provide: " + ", ".join(missing)
         return result
     except DwsimMcpError as exc:
         result["unavailable_reason"] = f"DWSIM dynamics projection unavailable ({type(exc).__name__})"
@@ -955,7 +966,7 @@ def execute(workspace_id: str, case_id: str, command: EditorCommand) -> dict[str
                 with client:
                     flow = _load(client, source)
                     readback = _apply(client, flow, command, target, directory)
-                    if isinstance(command, ControllerSet | EventAdd | EventRemove | StateSave | StateRestore):
+                    if isinstance(command, ControllerSet | EventAdd | EventRemove | StateSave | StateRestore | DynamicsRun):
                         persisted_flow = _load(client, target)
                         if isinstance(command, ControllerSet):
                             persisted = client.call("dwsim_dynamics_controller", {"flowsheet_id": persisted_flow, "action": "list"}, 30).get("controllers", [])
@@ -969,10 +980,16 @@ def execute(workspace_id: str, case_id: str, command: EditorCommand) -> dict[str
                             present = any(text in str(entry) for entry in events)
                             if present != isinstance(command, EventAdd):
                                 raise EditorError("DWSIM_PERSISTENCE_MISMATCH", "Saved case did not preserve the event change", 502)
-                        else:
+                        elif isinstance(command, StateSave | StateRestore):
                             states = client.call("dwsim_dynamics_state", {"flowsheet_id": persisted_flow, "action": "list"}, 30).get("stored_states", [])
                             if command.name not in states:
                                 raise EditorError("DWSIM_PERSISTENCE_MISMATCH", "Saved case did not preserve the dynamic state", 502)
+                        if isinstance(command, DynamicsRun):
+                            persisted_objects = _objects(client, persisted_flow)
+                            readback["persisted_objects"] = [
+                                {"tag": item.get("name"), "calculated": item.get("calculated"), "errors": item.get("error", "")}
+                                for item in persisted_objects
+                            ]
                 row = _write_revision(
                     directory,
                     target,

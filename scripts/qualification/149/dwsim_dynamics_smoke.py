@@ -80,6 +80,9 @@ def main() -> int:
             inlet.raise_for_status()
             # Read the dynamic property directly from the revisioned projection's authoritative object result.
             inlet_object = next(item for item in inlet.json()["objects"] if item.get("tag") == "inlet")
+            event_effect_flow = inlet_object.get("results", {}).get("mass_flow_kg_s")
+            if event_effect_flow != 5.0:
+                raise AssertionError(f"event did not set inlet flow to 5 kg/s: {event_effect_flow!r}")
             run_values = run["readback"].get("series", {}).get("series", {})
             if not run_values:
                 raise AssertionError("DWSIM returned no dynamic series variables")
@@ -88,6 +91,10 @@ def main() -> int:
             final.raise_for_status()
             current = final.json()
             restored_controller = next(item for item in current["dynamics"]["controllers"] if item.get("tag") == "PID-008")
+            restored_inlet = next(item for item in current["objects"] if item.get("tag") == "inlet")
+            restored_flow = restored_inlet.get("results", {}).get("mass_flow_kg_s")
+            if restored_flow != 10.0 or float(restored_controller.get("sp", "nan")) != 0.5:
+                raise AssertionError(f"state restore mismatch: inlet={restored_flow!r}, controller={restored_controller.get('sp')!r}")
             restored_states = client.get(f"{base}/cases/{case_id}/revisions")
             restored_states.raise_for_status()
             stale = client.post(
@@ -112,7 +119,9 @@ def main() -> int:
                 "saved_state_readback": saved["readback"],
                 "dynamic_run": run["readback"],
                 "inlet_object_after_run": inlet_object,
+                "event_effect_inlet_mass_flow_kg_s": event_effect_flow,
                 "restored_state_readback": restored["readback"],
+                "restored_inlet_mass_flow_kg_s": restored_flow,
                 "controller_after_restore": restored_controller,
                 "stale_revision_status": stale.status_code,
                 "elapsed_seconds_by_command": timings,
