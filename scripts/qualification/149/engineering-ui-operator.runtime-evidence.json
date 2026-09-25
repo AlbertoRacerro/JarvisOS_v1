@@ -1,13 +1,13 @@
 {
   "evidence_kind": "real_local_chromium_operator_execution",
   "status": "passed",
-  "source_sha": "bd1451237bd62e4bf58f7b8150762852900938ff",
+  "source_sha": "37b92087aedf7e47146c4e134c05cf68902468f6",
   "urls": {
     "frontend": "http://127.0.0.1:4173/design/studies",
     "backend": "http://127.0.0.1:8000"
   },
   "runtime": {
-    "data_root": "/tmp/jarvisos-149-ui-sbGR35",
+    "data_root": "/tmp/jarvisos-149-ui-sV2kNM",
     "mamba_root_prefix": "/home/thera/jarvis-control/work/tools/mamba",
     "dwsim_mcp_path": "/home/thera/jarvis-control/work/tools/dwsim-10.2.9/mcp-root/opt/dwsim-mcp/dwsim-mcp",
     "dwsim_mcp_sha256": "d20f97426c264ac91114240b085b3c4e7877dfda83ecb487c0125f838cf66cfa"
@@ -18,9 +18,9 @@
     "sha256": "0cd0ac091c78bce141d33f45afbfd6b8440f6bfb72d23c1c20b96d7ac6fa9271"
   },
   "timings_ms": {
-    "open_surface_ms": 2970,
-    "study_ms": 862,
-    "envelope_and_escalation_ms": 145
+    "open_surface_ms": 3016,
+    "study_ms": 860,
+    "envelope_and_escalation_ms": 84
   },
   "responses": {
     "evaluators": [
@@ -623,7 +623,7 @@
               "converged": true,
               "final_residual": 1.2490009027033011e-15,
               "iterations": 680,
-              "wall_time_s": 0.010776801005704328
+              "wall_time_s": 0.009069114006706513
             },
             "validity": {
               "authority_owner": "bluerev",
@@ -675,8 +675,8 @@
               "location": null
             },
             "evidence_refs": [],
-            "started_at": "2026-09-25T07:23:05.932387Z",
-            "completed_at": "2026-09-25T07:23:05.943234Z"
+            "started_at": "2026-09-25T07:27:56.918854Z",
+            "completed_at": "2026-09-25T07:27:56.927998Z"
           },
           "failure": null,
           "feasible": true,
@@ -1176,7 +1176,7 @@
               "converged": true,
               "final_residual": 1.6653345369377348e-16,
               "iterations": 623,
-              "wall_time_s": 0.008015098996111192
+              "wall_time_s": 0.009546075991238467
             },
             "validity": {
               "authority_owner": "bluerev",
@@ -1228,8 +1228,8 @@
               "location": null
             },
             "evidence_refs": [],
-            "started_at": "2026-09-25T07:23:05.943824Z",
-            "completed_at": "2026-09-25T07:23:05.951875Z"
+            "started_at": "2026-09-25T07:27:56.928522Z",
+            "completed_at": "2026-09-25T07:27:56.938098Z"
           },
           "failure": null,
           "feasible": true,
@@ -1729,7 +1729,7 @@
               "converged": true,
               "final_residual": 2.0816681711721685e-15,
               "iterations": 696,
-              "wall_time_s": 0.007402100003673695
+              "wall_time_s": 0.006095636999816634
             },
             "validity": {
               "authority_owner": "bluerev",
@@ -1781,8 +1781,8 @@
               "location": null
             },
             "evidence_refs": [],
-            "started_at": "2026-09-25T07:23:05.952361Z",
-            "completed_at": "2026-09-25T07:23:05.959803Z"
+            "started_at": "2026-09-25T07:27:56.938477Z",
+            "completed_at": "2026-09-25T07:27:56.944603Z"
           },
           "failure": null,
           "feasible": true,
