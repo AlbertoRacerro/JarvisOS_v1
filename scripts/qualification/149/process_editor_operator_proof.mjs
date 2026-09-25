@@ -9,7 +9,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { setTimeout as delay } from "node:timers/promises";
 import { chromium } from "/home/thera/jarvis-control/work/tools/pw/node_modules/playwright/index.mjs";
 
@@ -29,6 +29,13 @@ const env = {
   JARVISOS_DWSIM_MCP_PATH: runtime,
   JARVISOS_DWSIM_MCP_SHA256: runtimeSha,
 };
+const initialized = spawnSync(
+  join(backend, ".venv/bin/python"),
+  ["-c", "from app.core.database import initialize_database; initialize_database()"],
+  { cwd: backend, env, encoding: "utf8" },
+);
+if (initialized.status !== 0)
+  throw new Error(`isolated database initialization failed: ${initialized.stderr}`);
 const backendProc = spawn(
   join(backend, ".venv/bin/python"),
   ["-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8000"],
