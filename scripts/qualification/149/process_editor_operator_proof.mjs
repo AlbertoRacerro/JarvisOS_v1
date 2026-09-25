@@ -205,7 +205,11 @@ const selectObject = async (currentPage, tag) => {
   await object.click();
   await currentPage.waitForFunction(
     (expected) =>
-      document.querySelector(".dwsim-node.is-selected")?.getAttribute("aria-label")?.startsWith(`${expected},`) ?? false,
+      document
+        .querySelector(".dwsim-node rect.is-selected")
+        ?.closest(".dwsim-node")
+        ?.getAttribute("aria-label")
+        ?.startsWith(`${expected},`) ?? false,
     tag,
   );
 };
