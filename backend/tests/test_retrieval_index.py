@@ -163,6 +163,102 @@ def test_repository_symbols_are_bound_to_exact_git_content(tmp_path: Path, monke
     get_settings.cache_clear()
 
 
+def test_repository_delta_tracks_exact_sha_and_only_embeds_changed_documents(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("JARVISOS_DATA_ROOT", str(tmp_path / "data"))
+    get_settings.cache_clear()
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    (repo / "alpha.py").write_text("def alpha():\n    return 1\n", encoding="utf-8")
+    (repo / "keep.txt").write_text("stable corpus token\n", encoding="utf-8")
+
+    def commit(message: str) -> str:
+        subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+        subprocess.run(["git", "-C", str(repo), "-c", "user.name=Test", "-c",
+                        "user.email=test@example.invalid", "commit", "-qm", message], check=True)
+        return subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
+
+    first = commit("first")
+
+    class CountingEmbedder:
+        def __init__(self) -> None:
+            self.calls = 0
+            self.delegate = retrieval_index.HashingEmbedder(16)
+
+        def embed(self, text: str) -> tuple[float, ...]:
+            self.calls += 1
+            return self.delegate.embed(text)
+
+        def embed_query(self, text: str) -> tuple[float, ...]:
+            return self.delegate.embed_query(text)
+
+    embedder = CountingEmbedder()
+    index = SQLiteIndexStore(embedder=embedder, documents=lambda: (), repository_root=repo)
+    first_result = index.synchronize_repository(first)
+    assert index.indexed_master_sha == first
+    assert first_result["embedded_documents"] == 7  # sources, their summaries, and repository group
+    assert embedder.calls == 7
+
+    (repo / "alpha.py").write_text("def alpha():\n    return 2\n\ndef added():\n    return 3\n", encoding="utf-8")
+    (repo / "keep.txt").rename(repo / "renamed.txt")
+    (repo / "gone.txt").write_text("delete me\n", encoding="utf-8")
+    # Add then delete in one commit leaves no indexed document for the transient path.
+    (repo / "gone.txt").unlink()
+    second = commit("delta")
+    delta = index.synchronize_repository(second)
+    assert index.indexed_master_sha == second
+    assert delta["changed_paths"] == 3
+    assert delta["embedded_documents"] == 9  # four changed sources, summaries, and repository summary
+    assert delta["deleted_documents"] == 2  # old file and removed symbol
+    assert embedder.calls == 16
+    assert index.search_lexical("stable corpus token", limit=5)
+    assert index.search_lexical("renamed.txt", limit=5)
+    assert index.search_lexical("added", limit=5)
+    with open_retrieval_index_connection() as db:
+        repository = [SourceRef.model_validate_json(row[0]) for row in db.execute(
+            "SELECT ref FROM docs WHERE json_extract(ref,'$.authority_owner')='repository'")]
+    assert all(ref.revision == second for ref in repository)
+    get_settings.cache_clear()
+
+
+def test_repository_delta_is_atomic_when_embedding_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("JARVISOS_DATA_ROOT", str(tmp_path / "data"))
+    get_settings.cache_clear()
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    (repo / "a.txt").write_text("first", encoding="utf-8")
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(repo), "-c", "user.name=Test", "-c",
+                    "user.email=test@example.invalid", "commit", "-qm", "first"], check=True)
+    first = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
+    index = SQLiteIndexStore(documents=lambda: (), repository_root=repo)
+    index.synchronize_repository(first)
+    (repo / "a.txt").write_text("second", encoding="utf-8")
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(repo), "-c", "user.name=Test", "-c",
+                    "user.email=test@example.invalid", "commit", "-qm", "second"], check=True)
+    second = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
+
+    class FailingEmbedder:
+        def embed(self, _text: str) -> tuple[float, ...]:
+            raise RuntimeError("simulated interruption")
+
+        def embed_query(self, _text: str) -> tuple[float, ...]:
+            return (1.0,)
+
+    index.embedder = FailingEmbedder()
+    with pytest.raises(RuntimeError, match="simulated interruption"):
+        index.synchronize_repository(second)
+    assert index.indexed_master_sha == first
+    with open_retrieval_index_connection() as db:
+        ref = SourceRef.model_validate_json(db.execute("SELECT ref FROM docs WHERE object_id='a.txt'").fetchone()[0])
+        assert ref.revision == first
+    get_settings.cache_clear()
+
+
 def test_summary_progression_and_source_deletion(store: tuple[SQLiteIndexStore, dict[str, IndexDocument]]) -> None:
     index, docs = store
     index.rebuild()
