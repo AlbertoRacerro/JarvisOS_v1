@@ -79,6 +79,7 @@ let gpuGate;
 let ollamaUnload = null;
 let launchArguments = null;
 let length;
+let proofAiSettings;
 const proofStartedAt = Date.now();
 
 const assert = (condition, message) => { if (!condition) throw new Error(message); };
@@ -347,6 +348,15 @@ try {
   page.on("console", (message) => { if (message.type() === "error") consoleErrors.push(message.text()); });
   page.on("pageerror", (error) => pageErrors.push(String(error)));
   await startBackend(isLlamaCpp ? "" : "http://127.0.0.1:11436/api/generate");
+  if (isLlamaCpp) {
+    const settingsResponse = await fetch(`${backendUrl}/ai/settings`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ max_direct_continuations: 1 }),
+    });
+    assert(settingsResponse.ok, `bounded proof continuation setting returned ${settingsResponse.status}`);
+    proofAiSettings = await settingsResponse.json();
+  }
   firstPassStatus = isLlamaCpp ? await runtimeRequest("") : null;
   if (isLlamaCpp) {
     assert(!firstPassStatus.runtime_reachable && !firstPassStatus.pid && !firstPassStatus.spawned_by_jarvis,
@@ -475,6 +485,7 @@ try {
     runtime_endpoint_kind: runtimeKind,
     runtime_endpoint: isLlamaCpp ? "Jarvis-owned loopback llama.cpp runtime on port 18081" : endpoint,
     route_class: route,
+    proof_ai_settings: proofAiSettings,
     model_id: isLlamaCpp ? (process.env.JARVISOS_LLAMACPP_MODEL_ID ?? "qwen3.8-27b-q4kxl") : model,
     runtime_configuration: isLlamaCpp ? llamaConfig : undefined,
     runtime_actions: runtimeActions,
@@ -524,6 +535,7 @@ try {
       runtime_endpoint_kind: runtimeKind,
       runtime_endpoint: "Jarvis-owned loopback llama.cpp runtime on port 18081",
       route_class: route,
+      proof_ai_settings: proofAiSettings,
       model_id: process.env.JARVISOS_LLAMACPP_MODEL_ID ?? "qwen3.8-27b-q4kxl",
       runtime_configuration: llamaConfig,
       runtime_actions: runtimeActions,

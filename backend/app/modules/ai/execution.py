@@ -374,7 +374,7 @@ def _chain_metadata(
 
 
 def _response_status(response: AIResponse) -> tuple[str, str | None]:
-    if response.error is None and response.text is not None:
+    if response.error is None and response.text:
         return "success", None
     return "provider_error", response.error.code.value if response.error is not None else "empty_response"
 
@@ -807,6 +807,15 @@ def _run_local_continuations(
             ),
             continuation,
         )
+        ledger_response = response
+        input_tokens_override = None
+        output_tokens_override = None
+        if error_type == "empty_response":
+            # Preserve usage and finish metadata while preventing an empty visible
+            # body from becoming an output digest that cannot own a protected segment.
+            ledger_response = None
+            input_tokens_override = response.usage.input_tokens
+            output_tokens_override = response.usage.output_tokens
         ledger_id = _write_ai_job(
             status=status,
             task_kind=task_kind,
@@ -816,7 +825,7 @@ def _run_local_continuations(
             prompt_digest=canonical_digest({"prompt": request.prompt or ""}),
             context_digest=context_digest,
             context_sources=context_sources,
-            response=response,
+            response=ledger_response,
             latency_ms=_elapsed_ms(attempt_started),
             error_type=error_type,
             route_metadata=route_metadata,
@@ -824,6 +833,8 @@ def _run_local_continuations(
             flow_id=flow_id,
             evidence=evidence,
             continuation_decision=continuation,
+            input_tokens_override=input_tokens_override,
+            output_tokens_override=output_tokens_override,
         )
         if status != "success" or response.text is None:
             _, assembled = terminalize_assembled_output(
