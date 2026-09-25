@@ -59,6 +59,11 @@ has(
 has(stage, "Math.hypot(", "a click must not be treated as a drag gesture");
 has(
   stage,
+  "setSelectedId(id);\n                        setRename(object.tag ?? \"\");\n                        setDrag",
+  "pointer selection must refresh the inspector rename draft",
+);
+has(
+  stage,
   "runtimeUnavailable",
   "runtime failure must disable mutating controls",
 );

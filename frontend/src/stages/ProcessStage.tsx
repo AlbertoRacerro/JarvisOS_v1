@@ -1049,6 +1049,7 @@ function ProcessStage({
                         e.stopPropagation();
                         const start = { x: object.x ?? 0, y: object.y ?? 0 };
                         setSelectedId(id);
+                        setRename(object.tag ?? "");
                         setDrag({
                           id,
                           origin: start,
