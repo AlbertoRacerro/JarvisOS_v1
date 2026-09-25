@@ -58,4 +58,6 @@ def test_conversation_options_never_offer_a_network_or_external_binding(monkeypa
     app.include_router(router)
     with TestClient(app) as client:
         response = client.get('/threads/conversation-options')
-    assert [route['route_class'] for route in response.json()['routes']] == ['local:fast', 'local:fake']
+    assert [route['route_class'] for route in response.json()['routes']] == [
+        'local:fast', 'local:llamacpp', 'local:fake'
+    ]

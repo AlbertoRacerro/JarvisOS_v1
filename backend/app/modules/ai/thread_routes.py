@@ -34,11 +34,12 @@ def read_conversation_options() -> AIConversationOptions:
     except (OSError, ValueError):
         return AIConversationOptions(routes=[], availability="unavailable")
     routes: list[AIConversationRoute] = []
-    probes = {"local_ollama": _ollama_route_availability}
+    probes = {"local_ollama": _ollama_route_availability, "local_llamacpp": _llamacpp_route_availability}
     for route, label in (
         ("local:general", "Local assistant"),
         ("local:fast", "Local fast assistant"),
         ("local:coder", "Local coding assistant"),
+        ("local:llamacpp", "Local llama.cpp assistant"),
         ("local:fake", "Test responder (synthetic)"),
     ):
         binding = bindings.get(route)
@@ -101,6 +102,22 @@ def _ollama_route_availability(route: str, model_id: str) -> AIConversationRoute
         qualified="unknown",
         reason_code=reason,
         message=message,
+    )
+
+
+def _llamacpp_route_availability(route: str, model_id: str) -> AIConversationRouteAvailability:
+    del route, model_id
+    from app.modules.local_ai.runtime.llama_cpp import get_llama_cpp_runtime_owner
+
+    status = get_llama_cpp_runtime_owner().status()
+    return AIConversationRouteAvailability(
+        configured=bool(status.get("configured")),
+        runtime_reachable=bool(status.get("runtime_reachable")),
+        model_installed=bool(status.get("model_installed")),
+        model_loaded=bool(status.get("model_loaded")),
+        qualified="unknown",
+        reason_code=status.get("reason_code"),
+        message=str(status.get("message", "llama.cpp availability is unknown.")),
     )
 
 

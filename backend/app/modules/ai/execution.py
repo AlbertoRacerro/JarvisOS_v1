@@ -38,6 +38,10 @@ from app.modules.ai.contracts import (
 from app.modules.ai.execution_types import ProviderBinding
 from app.modules.ai.flow_record_capture import capture_final_flow_records
 from app.modules.ai.providers.fake_adapter import FAKE_PROVIDER_ID, FakeProviderAdapter
+from app.modules.ai.providers.local_llamacpp_adapter import (
+    LOCAL_LLAMACPP_PROVIDER_ID,
+    LocalLlamaCppAdapter,
+)
 from app.modules.ai.providers.local_ollama_adapter import (
     LOCAL_OLLAMA_PROVIDER_ID,
     LocalOllamaAdapter,
@@ -144,6 +148,7 @@ def _default_adapters() -> dict[str, AIProviderAdapter]:
     adapters: dict[str, AIProviderAdapter] = {
         FAKE_PROVIDER_ID: FakeProviderAdapter(),
         LOCAL_OLLAMA_PROVIDER_ID: LocalOllamaAdapter(),
+        LOCAL_LLAMACPP_PROVIDER_ID: LocalLlamaCppAdapter(),
         SCALEWAY_PROVIDER_ID: ScalewayProviderAdapter(),
     }
     from app.modules.ai.provider_registry import load_default_provider_registry
