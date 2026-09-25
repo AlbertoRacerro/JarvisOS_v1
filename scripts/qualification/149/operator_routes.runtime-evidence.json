@@ -31,7 +31,7 @@
       "state": "available"
     }
   ],
-  "data_root": "/tmp/jarvis-149-operator-j43d8giy",
+  "data_root": "/tmp/jarvis-149-operator-c88v4vrp",
   "envelope": {
     "digest": "sha256:693add4c365a49cb12a98b87834d2b620bea93ff6c62715bf345adbe974b1d82",
     "point_index": 1,
@@ -116,7 +116,7 @@
     },
     "openfoam_prefix": "/home/thera/jarvis-control/work/tools/mamba/envs/cfd"
   },
-  "source_sha": "b36c0abd8b64d48a7de6aae61e678155e8c7c3e6",
+  "source_sha": "2c951b98ccd9d6b795cae32d4de45d133a7f1bea",
   "study": {
     "best_point_index": 1,
     "content_digest": "sha256:167ecf9edf74c9295a0a1711a2d467c65c7fedb99e8b1401963dfa3412e41f79",
