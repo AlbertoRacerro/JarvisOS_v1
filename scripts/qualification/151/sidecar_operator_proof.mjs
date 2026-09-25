@@ -14,6 +14,7 @@ const backend = join(root, "backend");
 const output = new URL(".", import.meta.url).pathname;
 const backendPort = Number(process.env.JARVISOS_PROOF_BACKEND_PORT ?? 8041);
 const backendUrl = `http://127.0.0.1:${backendPort}`;
+const responseWaitMs = Number(process.env.JARVISOS_PROOF_RESPONSE_TIMEOUT_MS ?? 1_800_000);
 const args = process.argv.slice(2);
 const arg = (name, fallback) => {
   const index = args.indexOf(name);
@@ -38,9 +39,11 @@ const llamaConfig = {
   library_dirs: [llamaBinaryDir, "/home/thera/jarvis-control/work/tools/llama.cpp/b11178/dist/cudart-llama-b11178-bin-ubuntu-cuda-12.8-x64"],
   model_path: process.env.JARVISOS_LLAMACPP_MODEL_PATH ?? "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-UD-Q4_K_XL.gguf",
   model_sha256: process.env.JARVISOS_LLAMACPP_MODEL_SHA256 ?? "bee238bbeb3dc0a34bde4d0dedbaee1f98c009e8bb4226f03070054c12fb1372",
+  model_id: process.env.JARVISOS_LLAMACPP_MODEL_ID ?? "qwen3.8-27b-q4kxl",
   pinned_build_id: "b11178-f9af9be21",
   port: 18081,
   ctx_size: 8192,
+  n_gpu_layers: Number(process.env.JARVISOS_LLAMACPP_N_GPU_LAYERS ?? 99),
 };
 const dataRoot = await mkdtemp(join(tmpdir(), "jarvisos-151p-data-"));
 const tempDir = await mkdtemp(join(tmpdir(), "jarvisos-151p-proof-"));
@@ -179,12 +182,12 @@ const send = async (prompt) => {
   const transcript = page.getByRole("list", { name: "Jarvis thread transcript" });
   const promptMarker = prompt.replace(/\s+/g, " ").trim().slice(0, 120);
   const entry = transcript.locator("li").filter({ hasText: promptMarker });
-  await entry.waitFor({ state: "visible", timeout: 900_000 });
+  await entry.waitFor({ state: "visible", timeout: responseWaitMs });
   await page.waitForFunction((text) => {
     const item = [...document.querySelectorAll('[aria-label="Jarvis thread transcript"] li')]
       .find((node) => (node.textContent ?? "").replace(/\s+/g, " ").includes(text));
     return Boolean(item && item.querySelector("details") && /Canonical state/.test(item.textContent ?? "") && !/Submitting/.test(item.textContent ?? ""));
-  }, promptMarker, { timeout: 900_000 });
+  }, promptMarker, { timeout: responseWaitMs });
   const details = entry.getByText("Interaction details", { exact: true });
   await details.click();
   await entry.getByText("Canonical state", { exact: true }).waitFor();
