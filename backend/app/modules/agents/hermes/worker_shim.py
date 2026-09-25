@@ -72,7 +72,8 @@ DISABLED_TOOLSETS = ["terminal", "file", "code_execution", "browser", "web", "se
 # skill_manage writes new instruction files (persistent prompt injection surface).
 WITHHELD_TOOLS = frozenset({"skill_manage"})
 # Tool names Jarvis admits in a relayed request; mirrors supervisor.HERMES_TOOL_ALLOWLIST.
-ADMITTED_TOOLS = frozenset({"mcp__jarvis__jarvis_context_preview", "memory", "session_search"})
+ADMITTED_TOOLS = frozenset({"mcp__jarvis__jarvis_context_preview",
+                            "mcp__jarvis__jarvis_retrieval_query", "memory", "session_search"})
 
 
 def pinned_config(base_url: str, token: str, python: str | None = None) -> dict[str, Any]:
@@ -99,7 +100,7 @@ def pinned_config(base_url: str, token: str, python: str | None = None) -> dict[
             "args": [str(Path(__file__).with_name("broker_mcp.py"))],
             "env": {"JARVIS_HERMES_BROKER_URL": base_url + "/jarvis/tool",
                     "JARVIS_HERMES_BROKER_TOKEN": token},
-            "tools": {"include": ["jarvis_context_preview"]},
+            "tools": {"include": ["jarvis_context_preview", "jarvis_retrieval_query"]},
         }},
         "model_catalog": {"enabled": False}, "updates": {"check": False},
         "telemetry": {"enabled": False, "send": False},
@@ -280,7 +281,7 @@ class Worker:
         from tools.mcp_tool_discovery import register_mcp_servers
 
         registered = register_mcp_servers(pinned_config(self.base_url, self.token)["mcp_servers"])
-        if "mcp__jarvis__jarvis_context_preview" not in registered:
+        if not {"mcp__jarvis__jarvis_context_preview", "mcp__jarvis__jarvis_retrieval_query"} <= set(registered):
             raise RuntimeError("Jarvis capability broker unavailable")
         if self.session_db is None:
             # Hermes' own non-canonical session store under the Jarvis-owned HERMES_HOME;

@@ -45,6 +45,8 @@ from app.modules.ai.agent_contracts import (
     StructuredToolResult,
     check_control_target,
 )
+from app.modules.ai.context_builder import canonical_digest
+from app.modules.ai.jarvis_context_models import SourceRef
 
 NOW = datetime.now(UTC)
 SESSION = AgentSessionRef(jarvis_thread_id="thread-1", hermes_session_id="hermes-1",
@@ -152,7 +154,8 @@ def test_mcp_protocol_discloses_only_broker_tool() -> None:
     initialized = _reply({"jsonrpc": "2.0", "id": 1, "method": "initialize"})
     listed = _reply({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
     assert initialized is not None and initialized["result"]["serverInfo"]["name"] == "jarvis"
-    assert listed is not None and [tool["name"] for tool in listed["result"]["tools"]] == ["jarvis_context_preview"]
+    assert listed is not None and [tool["name"] for tool in listed["result"]["tools"]] == [
+        "jarvis_context_preview", "jarvis_retrieval_query"]
 
 
 def test_text_tool_proposal_requires_the_registered_broker() -> None:
@@ -355,6 +358,46 @@ def test_capability_live_grant_denials() -> None:
         assert dispatch_tool(call, live_grants=live).status == "refused"
 
 
+def test_retrieval_tool_pins_workspace_and_enforces_granted_source_scope(monkeypatch: pytest.MonkeyPatch) -> None:
+    ref = SourceRef(authority_owner="modeling", object_type="decision", object_id="decision-1",
+                    workspace_id=SESSION.workspace_id, revision="1", content_digest=canonical_digest("decision"))
+    call = StructuredToolCall(call_id="query-1", capability_id="jarvis.retrieval_query", grant_id="grant-1",
+                              correlation_id="query-1", session_ref=SESSION,
+                              arguments={"query": "pump", "source_scope": ["modeling"], "limit": 8,
+                                         "token_budget": 1024}, requested_at=NOW,
+                              deadline_at=NOW + timedelta(minutes=1))
+    grant = CapabilityGrantRef(grant_id="grant-1", capability_id=call.capability_id,
+                               issuer="operator", scope=CapabilityScope(workspace_id=SESSION.workspace_id,
+                                                                        object_refs=(ref,)),
+                               issued_at=NOW - timedelta(minutes=1), expires_at=NOW + timedelta(minutes=1))
+    observed: dict[str, Any] = {}
+
+    def query_context(query: str, **kwargs: Any) -> dict[str, Any]:
+        observed.update(query=query, **kwargs)
+        return {"evidence": []}
+
+    from app.modules.ai import retrieval_query
+
+    monkeypatch.setattr(retrieval_query, "query_context", query_context)
+    assert grant.is_active(datetime.now(UTC)) and not call.is_expired(datetime.now(UTC))
+    assert call.session_ref == SESSION and grant.scope.workspace_id == SESSION.workspace_id
+    assert grant.capability_id == call.capability_id
+    assert grant.scope.jarvis_thread_id in (None, SESSION.jarvis_thread_id)
+    assert any(item.capability_id == call.capability_id for item in hermes_supervisor_module.PRODUCTION_CAPABILITY_REGISTRY.for_route("ai-threads"))
+    result = dispatch_tool(call, live_grants={"grant-1": grant})
+    assert result.status == "succeeded" and result.result == {"evidence": []}, result.model_dump()
+    assert observed == {"query": "pump", "workspace_id": SESSION.workspace_id,
+                        "source_scope": ("modeling",),
+                        "allowed_refs": frozenset({("modeling", "decision", "decision-1")}),
+                        "limit": 8, "token_budget": 1024}
+    denied = call.model_copy(update={"arguments": {"query": "pump", "source_scope": ["literature"]}})
+    assert dispatch_tool(denied, live_grants={"grant-1": grant}).status == "refused"
+    over_limit = call.model_copy(update={"arguments": call.arguments | {"limit": 9}})
+    assert dispatch_tool(over_limit, live_grants={"grant-1": grant}).status == "refused"
+    over_budget = call.model_copy(update={"arguments": call.arguments | {"token_budget": 1025}})
+    assert dispatch_tool(over_budget, live_grants={"grant-1": grant}).status == "refused"
+
+
 @pytest.mark.skipif(not os.environ.get("JARVIS_HERMES_VENV"), reason="requires installed Hermes venv")
 def test_real_worker_turn_interrupt_relay(tmp_path: Path) -> None:
     """Opt-in integration: real Hermes, fake Jarvis inference, no provider/network dependency."""
@@ -385,7 +428,8 @@ def test_real_worker_turn_interrupt_relay(tmp_path: Path) -> None:
         assert bound["tools"]
         assert not {"delegate_task", "skills_list", "skill_view"} & set(bound["tools"])
         assert set(bound["tools"]) <= {
-            "mcp__jarvis__jarvis_context_preview", "memory", "session_search",
+            "mcp__jarvis__jarvis_context_preview", "mcp__jarvis__jarvis_retrieval_query",
+            "memory", "session_search",
         }
         process.stdin.write(json.dumps({"type": "turn", "id": "turn-1", "prompt": "Say hello"}) + "\n")
         process.stdin.flush()
