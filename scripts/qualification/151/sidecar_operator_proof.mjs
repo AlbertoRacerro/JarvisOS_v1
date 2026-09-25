@@ -235,8 +235,15 @@ const readLlamaLogEvidence = async () => {
 };
 
 const processIds = () => {
-  const result = spawnSync("pgrep", ["-x", "llama-server"], { encoding: "utf8" });
-  return result.status === 0 ? result.stdout.trim().split(/\s+/).filter(Boolean).map(Number) : [];
+  const result = spawnSync("pgrep", ["-f", "llama-server"], { encoding: "utf8" });
+  if (result.status !== 0) return [];
+  return result.stdout.trim().split(/\s+/).filter(Boolean).map(Number).filter((pid) => {
+    try {
+      return execFileSync("readlink", ["-f", `/proc/${pid}/exe`], { encoding: "utf8" }).trim().endsWith("/llama-server");
+    } catch {
+      return false;
+    }
+  });
 };
 
 const waitForGpuGate = async () => {
@@ -322,7 +329,12 @@ try {
   await openSidecar();
   const unreachableOptions = await optionRecords();
   const unreachable = unreachableOptions.find((item) => item.value === route);
-  assert(unreachable?.disabled && /not reachable|loading/i.test(unreachable.text), `unreachable route not disabled with reason: ${JSON.stringify(unreachableOptions)}`);
+  assert(unreachable?.disabled && /not reachable/i.test(unreachable.text), `unreachable route not disabled with an actionable reason: ${JSON.stringify(unreachableOptions)}`);
+  if (isLlamaCpp) {
+    assert(firstPassStatus.reason_code === "LLAMACPP_RUNTIME_UNREACHABLE",
+      `stopped llama.cpp runtime did not report unreachable: ${JSON.stringify(firstPassStatus)}`);
+    assert(/not reachable/i.test(firstPassStatus.message), `stopped llama.cpp status has no actionable reason: ${JSON.stringify(firstPassStatus)}`);
+  }
   const testResponder = unreachableOptions.find((item) => item.value === "local:fake");
   assert(testResponder && /test responder/i.test(testResponder.text), `test responder is not labelled test-only: ${JSON.stringify(testResponder)}`);
   await page.getByLabel("Jarvis responder").selectOption("local:fake");
