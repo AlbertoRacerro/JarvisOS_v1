@@ -317,6 +317,25 @@ def list_raw(workspace_id: str) -> list[dict[str, object]]:
         return [_raw_payload(connection, row) for row in rows]
 
 
+def get_raw(workspace_id: str, raw_id: str) -> dict[str, object]:
+    """Read one immutable RAW capture and its owner-mediated discussions."""
+    with open_sqlite_connection() as connection:
+        _workspace_exists(connection, workspace_id)
+        return _raw_payload(connection, _raw_row(connection, workspace_id, raw_id))
+
+
+def get_discussion(workspace_id: str, discussion_id: str) -> dict[str, object]:
+    with open_sqlite_connection() as connection:
+        _workspace_exists(connection, workspace_id)
+        row = connection.execute(
+            "SELECT * FROM brainstorm_discussions WHERE workspace_id=? AND id=?",
+            (workspace_id, discussion_id),
+        ).fetchone()
+    if row is None:
+        raise DevelopmentError("brainstorm_discussion_not_found", "Brainstorm discussion not found.")
+    return _discussion_payload(row)
+
+
 def record_discussion(payload: BrainstormDiscussionRecord) -> dict[str, object]:
     request = payload.model_dump(mode="json")
     request_digest = _digest(request)
@@ -719,3 +738,17 @@ def list_promotions(workspace_id: str, idea_id: str | None = None) -> list[dict[
             value["payload"] = json.loads(str(value.pop("payload_json")))
             result.append(value)
         return result
+
+
+def get_promotion(workspace_id: str, promotion_id: str) -> dict[str, object]:
+    with open_sqlite_connection() as connection:
+        _workspace_exists(connection, workspace_id)
+        row = connection.execute(
+            "SELECT * FROM brainstorm_promotions WHERE workspace_id=? AND id=?",
+            (workspace_id, promotion_id),
+        ).fetchone()
+    if row is None:
+        raise DevelopmentError("brainstorm_promotion_not_found", "Brainstorm promotion proposal not found.")
+    value = dict(row)
+    value["payload"] = json.loads(str(value.pop("payload_json")))
+    return value

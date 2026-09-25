@@ -261,6 +261,19 @@ def get_literature_source(workspace_id: str, source_id: str) -> LiteratureSource
         return _source_read(connection, _source_row(connection, workspace_id, source_id))
 
 
+def get_literature_entry(workspace_id: str, entry_id: str) -> LiteratureEntryRead:
+    """Read one literature claim or datum within its owning workspace."""
+    with open_sqlite_connection() as connection:
+        _require_workspace(connection, workspace_id)
+        row = connection.execute(
+            "SELECT * FROM literature_entries WHERE workspace_id=? AND id=?",
+            (workspace_id, entry_id),
+        ).fetchone()
+        if row is None:
+            raise LiteratureError("literature_entry_not_found", "Literature entry not found.", status_code=404)
+        return _entry_read(connection, row)
+
+
 def _source_payload_matches(row, payload: LiteratureSourceCreate) -> bool:
     return (
         str(row["title"]) == payload.title

@@ -76,9 +76,11 @@ def create_thread(payload: AIThreadCreate) -> AIThreadSummary:
     return _thread_summary(thread_id, workspace_id)
 
 
-def list_threads(*, workspace_id: str, limit: int = _DEFAULT_THREAD_LIMIT) -> AIThreadList:
+def list_threads(*, workspace_id: str, limit: int = _DEFAULT_THREAD_LIMIT, offset: int = 0) -> AIThreadList:
     workspace_id = _safe_id(workspace_id, "workspace_id")
     limit = _bounded_limit(limit, default=_DEFAULT_THREAD_LIMIT, maximum=_MAX_THREAD_LIMIT)
+    if offset < 0:
+        raise AIThreadError("offset must be non-negative")
     with open_sqlite_connection() as connection:
         _require_workspace(connection, workspace_id)
         rows = connection.execute(
@@ -87,9 +89,9 @@ def list_threads(*, workspace_id: str, limit: int = _DEFAULT_THREAD_LIMIT) -> AI
             FROM ai_threads
             WHERE workspace_id = ?
             ORDER BY last_activity_at DESC, id ASC
-            LIMIT ?
+            LIMIT ? OFFSET ?
             """,
-            (workspace_id, limit),
+            (workspace_id, limit, offset),
         ).fetchall()
     return AIThreadList(threads=[_summary_from_row(row) for row in rows])
 
@@ -99,6 +101,7 @@ def get_thread(
     workspace_id: str,
     thread_id: str,
     interaction_limit: int = _DEFAULT_INTERACTION_LIMIT,
+    interaction_offset: int = 0,
 ) -> AIThreadDetail:
     workspace_id = _safe_id(workspace_id, "workspace_id")
     thread_id = _safe_id(thread_id, "thread_id")
@@ -107,12 +110,14 @@ def get_thread(
         default=_DEFAULT_INTERACTION_LIMIT,
         maximum=_MAX_INTERACTION_LIMIT,
     )
+    if interaction_offset < 0:
+        raise AIThreadError("interaction_offset must be non-negative")
     with open_sqlite_connection() as connection:
         thread = _require_thread(connection, workspace_id, thread_id)
         rows = connection.execute(
             _INTERACTION_SELECT + " WHERE interaction.thread_id = ? "
-            "ORDER BY interaction.interaction_index DESC LIMIT ?",
-            (thread_id, interaction_limit + 1),
+            "ORDER BY interaction.interaction_index DESC LIMIT ? OFFSET ?",
+            (thread_id, interaction_limit + 1, interaction_offset),
         ).fetchall()
     has_older = len(rows) > interaction_limit
     rows = rows[:interaction_limit]
@@ -122,6 +127,21 @@ def get_thread(
         interactions=[_interaction_from_row(row) for row in rows],
         has_older=has_older,
     )
+
+
+def get_interaction(*, workspace_id: str, interaction_id: str) -> AIThreadInteractionRead:
+    """Read one interaction by identity within its owning workspace."""
+    workspace_id = _safe_id(workspace_id, "workspace_id")
+    interaction_id = _safe_id(interaction_id, "interaction_id")
+    with open_sqlite_connection() as connection:
+        row = connection.execute(
+            _INTERACTION_SELECT + " JOIN ai_threads AS thread ON thread.id = interaction.thread_id "
+            "WHERE interaction.id = ? AND thread.workspace_id = ?",
+            (interaction_id, workspace_id),
+        ).fetchone()
+    if row is None:
+        raise AIThreadNotFoundError("thread interaction does not exist in the requested workspace")
+    return _interaction_from_row(row)
 
 
 def submit_interaction(

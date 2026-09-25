@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
@@ -160,6 +163,270 @@ def test_repository_symbols_are_bound_to_exact_git_content(tmp_path: Path, monke
     assert index.resolve_authoritative(changed_file).state == "stale"
     (repo / "sample.py").write_text("def alpha():\n    return 2\n", encoding="utf-8")
     assert index.resolve_authoritative(docs[0].source_ref).state == "current"
+    get_settings.cache_clear()
+
+
+def test_repository_delta_tracks_exact_sha_and_only_embeds_changed_documents(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("JARVISOS_DATA_ROOT", str(tmp_path / "data"))
+    get_settings.cache_clear()
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    (repo / "alpha.py").write_text("def alpha():\n    return 1\n\ndef removed():\n    return 0\n", encoding="utf-8")
+    (repo / "keep.txt").write_text("stable corpus token\n", encoding="utf-8")
+    (repo / "gone.txt").write_text("delete this tracked file\n", encoding="utf-8")
+    (repo / "move.txt").write_text("move unchanged content\n", encoding="utf-8")
+    (repo / "binary.png").write_bytes(b"\x89PNG\r\n\x1a\n\x00\xff")
+
+    def commit(message: str) -> str:
+        subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+        subprocess.run(["git", "-C", str(repo), "-c", "user.name=Test", "-c",
+                        "user.email=test@example.invalid", "commit", "-qm", message], check=True)
+        return subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
+
+    first = commit("first")
+
+    class CountingEmbedder:
+        def __init__(self) -> None:
+            self.calls = 0
+            self.delegate = retrieval_index.HashingEmbedder(16)
+
+        def embed(self, text: str) -> tuple[float, ...]:
+            self.calls += 1
+            return self.delegate.embed(text)
+
+        def embed_query(self, text: str) -> tuple[float, ...]:
+            return self.delegate.embed_query(text)
+
+    embedder = CountingEmbedder()
+    index = SQLiteIndexStore(embedder=embedder, documents=lambda: (), repository_root=repo)
+    first_result = index.synchronize_repository(first)
+    assert index.indexed_master_sha == first
+    assert first_result["embedded_documents"] == 13  # sources, summaries, and repository group
+    assert embedder.calls == 13
+
+    (repo / "alpha.py").write_text("def alpha():\n    return 2\n\ndef added():\n    return 3\n", encoding="utf-8")
+    (repo / "keep.txt").rename(repo / "renamed.txt")
+    (repo / "gone.txt").unlink()
+    (repo / "move.txt").rename(repo / "moved.txt")
+    (repo / "moved.txt").write_text("move content edited after rename\n", encoding="utf-8")
+    second = commit("delta")
+    delta = index.synchronize_repository(second)
+    assert index.indexed_master_sha == second
+    assert delta["changed_paths"] == 6
+    assert delta["embedded_documents"] == 10  # unchanged rename content reuses its vector
+    assert delta["deleted_documents"] == 8  # deleted/renamed refs and their summaries
+    assert embedder.calls == 23
+    assert index.search_lexical("stable corpus token", limit=5)
+    assert index.search_lexical("renamed.txt", limit=5)
+    assert index.search_lexical("moved.txt", limit=5)
+    assert index.search_lexical("added", limit=5)
+    assert index.search_lexical("removed", limit=5) == []
+    with open_retrieval_index_connection() as db:
+        repository = [SourceRef.model_validate_json(row[0]) for row in db.execute(
+            "SELECT ref FROM docs WHERE json_extract(ref,'$.authority_owner')='repository'")]
+    assert all(ref.revision == second for ref in repository)
+    get_settings.cache_clear()
+
+
+def test_repository_delta_is_atomic_when_embedding_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("JARVISOS_DATA_ROOT", str(tmp_path / "data"))
+    get_settings.cache_clear()
+
+
+def _commit_repository(repo: Path, message: str) -> str:
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(repo), "-c", "user.name=Test", "-c", "user.email=test@example.invalid",
+                    "commit", "-qm", message], check=True)
+    return subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
+
+
+def _make_repository(path: Path, data_root: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, str]:
+    monkeypatch.setenv("JARVISOS_DATA_ROOT", str(data_root))
+    get_settings.cache_clear()
+    path.mkdir()
+    subprocess.run(["git", "init", "-q", str(path)], check=True)
+    (path / "unit.py").write_text("def steady():\n    return 'known token'\n", encoding="utf-8")
+    first = _commit_repository(path, "first")
+    subprocess.run(["git", "-C", str(path), "update-ref", "refs/remotes/origin/master", first], check=True)
+    return path, first
+
+
+def test_incremental_matches_full_rebuild_and_restart_catches_up(tmp_path: Path,
+                                                                  monkeypatch: pytest.MonkeyPatch) -> None:
+    repo, first = _make_repository(tmp_path / "repo", tmp_path / "data", monkeypatch)
+    index = SQLiteIndexStore(documents=lambda: (), repository_root=repo)
+    index.rebuild()
+    first_snapshot = index.indexed_master_sha
+    (repo / "unit.py").write_text("def steady():\n    return 'known token changed'\n\ndef newer():\n    pass\n",
+                                  encoding="utf-8")
+    _commit_repository(repo, "second")
+    (repo / "unit.py").write_text("def steady():\n    return 'known token changed again'\n\ndef newer():\n    pass\n",
+                                  encoding="utf-8")
+    _commit_repository(repo, "third")
+    (repo / "latest.txt").write_text("restart catches up several revisions", encoding="utf-8")
+    second = _commit_repository(repo, "fourth")
+    subprocess.run(["git", "-C", str(repo), "update-ref", "refs/remotes/origin/master", second], check=True)
+    restarted = SQLiteIndexStore(documents=lambda: (), repository_root=repo)
+    assert restarted.search_lexical("restart catches up", limit=5)
+    assert restarted.indexed_master_sha == second
+    with open_retrieval_index_connection() as db:
+        incremental = ([tuple(row) for row in db.execute("SELECT key,ref,object_id,title,text,vector FROM docs ORDER BY key")],
+                       [tuple(row) for row in db.execute("SELECT source_key,target_key,kind,valid_from FROM edges ORDER BY 1,2,3")])
+    # Rebuilding at this same exact master produces the same document and edge state.
+    restarted.rebuild()
+    with open_retrieval_index_connection() as db:
+        rebuilt = ([tuple(row) for row in db.execute("SELECT key,ref,object_id,title,text,vector FROM docs ORDER BY key")],
+                   [tuple(row) for row in db.execute("SELECT source_key,target_key,kind,valid_from FROM edges ORDER BY 1,2,3")])
+    assert incremental == rebuilt
+    assert first_snapshot == first
+    assert restarted.indexed_master_sha == second
+    get_settings.cache_clear()
+
+
+def test_non_ancestor_rebuild_and_concurrent_sync_increment_once(tmp_path: Path,
+                                                                 monkeypatch: pytest.MonkeyPatch) -> None:
+    repo, first = _make_repository(tmp_path / "repo", tmp_path / "data", monkeypatch)
+    index = SQLiteIndexStore(documents=lambda: (), repository_root=repo)
+    index.synchronize_repository(first)
+    (repo / "unit.py").write_text("def steady():\n    return 'second token'\n", encoding="utf-8")
+    second = _commit_repository(repo, "second")
+    subprocess.run(["git", "-C", str(repo), "update-ref", "refs/remotes/origin/master", second], check=True)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(index.synchronize_repository, [second, second]))
+    assert sum(int(result["generation"]) for result in results) == 4
+    assert sum(int(result["embedded_documents"]) > 0 for result in results) == 1
+    assert sum(int(result["changed_paths"]) == 0 for result in results) == 1
+    assert index.freshness().generation == 2
+    (repo / "unit.py").unlink()
+    (repo / "replacement.txt").write_text("rewritten token\n", encoding="utf-8")
+    _commit_repository(repo, "rewrite")
+    # Orphan history makes the indexed SHA a non-ancestor of the target.
+    subprocess.run(["git", "-C", str(repo), "checkout", "--orphan", "rewritten-history"],
+                   check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(repo), "rm", "-rf", "."], check=True, capture_output=True)
+    (repo / "fresh.txt").write_text("fresh corpus", encoding="utf-8")
+    rewritten = _commit_repository(repo, "orphan")
+    result = index.synchronize_repository(rewritten)
+    assert result["changed_paths"] >= 1
+    with open_retrieval_index_connection() as db:
+        ids = {str(row[0]) for row in db.execute("SELECT object_id FROM docs WHERE "
+                                                "json_extract(ref,'$.authority_owner')='repository'")}
+    assert "fresh.txt" in ids and "unit.py" not in ids and "replacement.txt" not in ids
+    get_settings.cache_clear()
+
+
+def test_concurrent_rebuilds_are_generation_guarded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("JARVISOS_DATA_ROOT", str(tmp_path / "data"))
+    get_settings.cache_clear()
+    barrier = threading.Barrier(2)
+    document = _doc("rebuild-race", "w1", "one deterministic record")
+
+    def documents():
+        barrier.wait(timeout=5)
+        return [document]
+
+    index = SQLiteIndexStore(documents=documents)
+
+    def rebuild():
+        try:
+            return True, index.rebuild()
+        except RuntimeError as exc:
+            return False, str(exc)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        outcomes = list(pool.map(lambda _: rebuild(), range(2)))
+    assert sum(succeeded for succeeded, _ in outcomes) == 1
+    assert sum(not succeeded and "changed during rebuild" in value for succeeded, value in outcomes) == 1
+    with open_retrieval_index_connection() as db:
+        assert db.execute("SELECT value FROM meta WHERE name='generation'").fetchone()[0] == "1"
+
+
+def test_process_exit_rolls_back_and_sync_recovers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo, first = _make_repository(tmp_path / "repo", tmp_path / "data", monkeypatch)
+    index = SQLiteIndexStore(documents=lambda: (), repository_root=repo)
+    index.synchronize_repository(first)
+    (repo / "unit.py").write_text("def steady():\n    return 'next token'\n", encoding="utf-8")
+    second = _commit_repository(repo, "second")
+    code = ("import os; from app.core.database import open_retrieval_index_connection; "
+            "dbctx=open_retrieval_index_connection(); db=dbctx.__enter__(); "
+            "db.execute('BEGIN IMMEDIATE'); db.execute(\"UPDATE meta SET value='" + second +
+            "' WHERE name='indexed_master_sha'\"); db.execute('DELETE FROM docs'); os._exit(19)")
+    env = dict(os.environ, JARVISOS_DATA_ROOT=str(tmp_path / "data"))
+    crashed = subprocess.run([os.sys.executable, "-c", code], cwd=Path(__file__).parents[1], env=env,
+                             check=False)
+    assert crashed.returncode == 19
+    assert index.indexed_master_sha == first
+    with open_retrieval_index_connection() as db:
+        stored = db.execute("SELECT ref FROM docs WHERE object_id='unit.py'").fetchone()
+        generation = db.execute("SELECT value FROM meta WHERE name='generation'").fetchone()
+    assert stored is not None and SourceRef.model_validate_json(stored[0]).revision == first
+    assert generation is not None and generation[0] == "1"
+    result = index.synchronize_repository(second)
+    assert result["indexed_sha"] == second
+    assert index.verify().ok
+    get_settings.cache_clear()
+
+
+def test_integrity_repair_rebuilds_fts_and_drops_dangling_edges(store: tuple[SQLiteIndexStore,
+                                                                           dict[str, IndexDocument]]) -> None:
+    index, docs = store
+    index.rebuild()
+    with open_retrieval_index_connection() as db:
+        db.execute("DELETE FROM docs_fts WHERE key=?", (retrieval_index._key(docs["a"].source_ref),))
+        db.execute("INSERT INTO edges VALUES ('missing-source','missing-target','knowledge_relation',NULL)")
+        db.commit()
+    report = index.verify()
+    assert not report.ok
+    assert any("FTS" in issue or "fts" in issue for issue in report.issues)
+    assert any("dangling" in issue for issue in report.issues)
+    assert index.repair().ok
+    get_settings.cache_clear()
+
+
+def test_stale_repository_hits_are_hidden_but_reported_in_bundle(tmp_path: Path,
+                                                                  monkeypatch: pytest.MonkeyPatch) -> None:
+    repo, first = _make_repository(tmp_path / "repo", tmp_path / "data", monkeypatch)
+    non_repository = _doc("safe-record", "w1", "known token")
+    index = SQLiteIndexStore(documents=lambda: [non_repository], repository_root=repo,
+                             resolver=lambda ref: non_repository if ref.object_id == "safe-record" else None)
+    index.rebuild()
+    (repo / "unit.py").write_text("def stale_symbol():\n    return 'known token'\n", encoding="utf-8")
+    second = _commit_repository(repo, "second")
+    subprocess.run(["git", "-C", str(repo), "update-ref", "refs/remotes/origin/master", second], check=True)
+
+    def fail_sync(_sha: str) -> dict[str, int | str]:
+        raise RuntimeError("simulated busy index")
+
+    monkeypatch.setattr(index, "synchronize_repository", fail_sync)
+    hits = index.search_lexical("known token", limit=10)
+    assert all(hit.source_ref.authority_owner != "repository" for hit in hits)
+    assert any(hit.source_ref.object_id == "safe-record" for hit in hits)
+    bundle = index.build_bundle("known token", workspace_id="w1", token_budget=200)
+    assert any(entry.outcome == "stale" and entry.source_ref.authority_owner == "repository"
+               and "current master" in (entry.reason or "") for entry in bundle.evidence_manifest)
+    assert any(entry.outcome == "included" for entry in bundle.evidence_manifest)
+    get_settings.cache_clear()
+
+
+def test_garbage_index_is_quarantined_and_rebuilt_by_repair_cli(tmp_path: Path,
+                                                                 monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.core.paths import build_paths
+
+    monkeypatch.setenv("JARVISOS_DATA_ROOT", str(tmp_path / "data"))
+    get_settings.cache_clear()
+    initialize_database()
+    index_path = build_paths().retrieval_index_file
+    index_path.write_bytes(b"not a sqlite database")
+    completed = subprocess.run([os.sys.executable, "-m", "app.modules.ai.retrieval_rebuild", "--repair"],
+                               cwd=Path(__file__).parents[1], capture_output=True, text=True, check=True,
+                               env=dict(os.environ, JARVISOS_DATA_ROOT=str(tmp_path / "data")))
+    assert index_path.exists()
+    assert list(index_path.parent.glob(index_path.name + ".corrupt-*"))
+    result = json.loads(completed.stdout)
+    assert result["ok"] is True
     get_settings.cache_clear()
 
 
