@@ -7,11 +7,12 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request
 
 from app.modules.ai.context_builder import canonical_digest
-from app.modules.engineering.multifidelity import EscalationPolicy, MultifidelityStudyRun, escalate_study
-from app.modules.engineering.operator_models import CapabilityRead, EvaluatorRead
+from app.modules.engineering.multifidelity import MultifidelityStudyRun, escalate_study
+from app.modules.engineering.operator_models import CapabilityRead, EscalationRequest, EvaluatorRead
 from app.modules.engineering.operator_service import (
     DIGEST,
     MAX_STUDY_BUDGET,
+    RecordConflictError,
     capability_reads,
     digest_file_name,
     evaluator_reads,
@@ -41,6 +42,13 @@ def _directory(workspace_id: str, study_id: str):
         raise HTTPException(422, detail={"code": "study_id_invalid"}) from exc
 
 
+def _persist(path, model: Any) -> None:
+    try:
+        write_once(path, model)
+    except RecordConflictError as exc:
+        raise HTTPException(409, detail={"code": "engineering_record_conflict"}) from exc
+
+
 @router.get("/evaluators", response_model=list[EvaluatorRead])
 def list_evaluators(workspace_id: str, request: Request) -> list[EvaluatorRead]:
     _directory(workspace_id, "validation")
@@ -65,8 +73,8 @@ def create_study(workspace_id: str, definition: StudyDefinition, request: Reques
         raise HTTPException(404, detail={"code": "evaluator_not_found"})
     run = run_study(definition, evaluator)
     base = _directory(workspace_id, definition.study_ref.object_id)
-    write_once(base / "definitions" / f"{canonical_digest(definition.model_dump(mode='json'))}.json", definition)
-    write_once(base / "runs" / digest_file_name(run.content_digest), run)
+    _persist(base / "definitions" / digest_file_name(canonical_digest(definition.model_dump(mode="json"))), definition)
+    _persist(base / "runs" / digest_file_name(run.content_digest), run)
     return run
 
 
@@ -99,7 +107,7 @@ def create_envelope(workspace_id: str, study_id: str, digest: str, point_index: 
         envelope = process_design_envelope(run, point_index)
     except ValueError as exc:
         raise HTTPException(422, detail={"code": "envelope_point_invalid", "message": str(exc)}) from exc
-    write_once(_directory(workspace_id, study_id) / "envelopes" / digest_file_name(envelope.envelope_digest), envelope)
+    _persist(_directory(workspace_id, study_id) / "envelopes" / digest_file_name(envelope.envelope_digest), envelope)
     return envelope
 
 
@@ -115,10 +123,12 @@ def get_envelope(workspace_id: str, study_id: str, digest: str, envelope_digest:
 
 
 @router.post("/studies/{study_id}/runs/{digest}/escalations", response_model=MultifidelityStudyRun)
-def create_escalation(workspace_id: str, study_id: str, digest: str, payload: dict[str, Any], request: Request) -> MultifidelityStudyRun:
+def create_escalation(
+    workspace_id: str, study_id: str, digest: str, payload: EscalationRequest, request: Request
+) -> MultifidelityStudyRun:
     run = get_run(workspace_id, study_id, digest)
     definition = read_record(
-        _directory(workspace_id, study_id) / "definitions" / f"{run.definition_digest}.json", StudyDefinition
+        _directory(workspace_id, study_id) / "definitions" / digest_file_name(run.definition_digest), StudyDefinition
     )
     if definition is None:
         raise HTTPException(404, detail={"code": "study_definition_not_found"})
@@ -126,14 +136,13 @@ def create_escalation(workspace_id: str, study_id: str, digest: str, payload: di
         raise HTTPException(404, detail={"code": "workspace_scope_mismatch"})
     if definition.evaluator_id != run.evaluator_id or definition.study_ref != run.study_ref:
         raise HTTPException(422, detail={"code": "study_definition_mismatch"})
-    policy = EscalationPolicy.model_validate(payload.get("policy", payload))
-    ids = payload.get("evaluator_ids", [])
-    if not isinstance(ids, list) or not all(isinstance(item, str) for item in ids):
-        raise HTTPException(422, detail={"code": "evaluator_ids_invalid"})
     registry = _registry(request)
-    evaluators = tuple(registry[item] for item in ids if item in registry)
-    result = escalate_study(definition, run, evaluators, policy)
-    write_once(_directory(workspace_id, study_id) / "escalations" / digest_file_name(result.content_digest), result)
+    unknown = sorted(item for item in payload.evaluator_ids if item not in registry)
+    if unknown:
+        raise HTTPException(404, detail={"code": "evaluator_not_found", "evaluator_ids": unknown})
+    evaluators = tuple(registry[item] for item in payload.evaluator_ids)
+    result = escalate_study(definition, run, evaluators, payload.policy)
+    _persist(_directory(workspace_id, study_id) / "escalations" / digest_file_name(result.content_digest), result)
     return result
 
 

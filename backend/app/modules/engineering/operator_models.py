@@ -2,7 +2,9 @@
 
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
+
+from app.modules.engineering.multifidelity import EscalationPolicy
 
 
 class EvaluatorRead(BaseModel):
@@ -20,3 +22,10 @@ class CapabilityRead(BaseModel):
     state: Literal["available", "unavailable", "not_configured"]
     reason_code: str | None
 
+
+
+class EscalationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    policy: EscalationPolicy
+    evaluator_ids: list[str] = Field(default_factory=list, max_length=16)

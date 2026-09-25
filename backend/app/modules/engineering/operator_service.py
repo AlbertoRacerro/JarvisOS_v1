@@ -177,6 +177,10 @@ def _data_path(path: Path) -> Path:
     return resolved
 
 
+class RecordConflictError(Exception):
+    """An immutable record already exists with different content."""
+
+
 def write_once(path: Path, model: Any) -> None:
     _data_path(path.parent)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -194,7 +198,7 @@ def write_once(path: Path, model: Any) -> None:
         ) == identity:
             return
         if canonical_digest(existing) != canonical_digest(current):
-            raise
+            raise RecordConflictError(target.name) from None
 
 
 def read_record(path: Path, model_type: Any) -> Any:

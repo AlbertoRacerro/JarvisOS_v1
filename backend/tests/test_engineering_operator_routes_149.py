@@ -132,3 +132,21 @@ def test_operator_routes_scope_budget_and_write_once_persistence(monkeypatch, tm
         states = {item["capability_id"]: item["state"] for item in capabilities.json()}
         assert states["retrieval"] == "not_configured"
         assert states["dwsim"] == "not_configured"
+
+
+def test_operator_routes_reject_unknown_escalators_and_use_portable_names(monkeypatch, tmp_path):
+    workspace_root = _scope(monkeypatch, tmp_path)
+    app = create_app()
+    app.state.engineering_evaluator_registry = {PIPE_EVALUATOR_ID: GeometryNamedPipeEvaluator()}
+    with TestClient(app) as client:
+        run = client.post("/workspaces/ws-a/engineering/studies", json=_definition()).json()
+        study_root = workspace_root / "ws-a" / "engineering" / "studies" / "pipe-study"
+        assert all(":" not in path.name for path in study_root.rglob("*"))
+        base = f"/workspaces/ws-a/engineering/studies/pipe-study/runs/{run['content_digest']}/escalations"
+        unknown = client.post(base, json={"policy": {"operator_requested_points": [0]}, "evaluator_ids": ["ghost"]})
+        assert unknown.status_code == 404
+        assert unknown.json()["detail"] == {"code": "evaluator_not_found", "evaluator_ids": ["ghost"]}
+        malformed = client.post(base, json={"policy": {"operator_requested_points": "all"}, "evaluator_ids": []})
+        assert malformed.status_code == 422
+        assert client.post(base, json={"operator_requested_points": [0]}).status_code == 422
+
