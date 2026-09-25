@@ -37,6 +37,14 @@ class EditorConnectionRead(BaseModel):
     kind: Literal["material", "energy"]
 
 
+class DynamicsProjectionRead(BaseModel):
+    controllers: list[dict[str, object]] = Field(default_factory=list)
+    event_sets: list[dict[str, object]] = Field(default_factory=list)
+    saved_states: list[str] = Field(default_factory=list)
+    last_dynamic_run: dict[str, object] | None = None
+    unavailable_reason: str | None = None
+
+
 class EditorProjectionRead(BaseModel):
     workspace_id: str
     case_id: str
@@ -52,6 +60,7 @@ class EditorProjectionRead(BaseModel):
     last_solve: dict[str, object] | None = None
     editable_commands: list[str]
     unsupported_commands: dict[str, str]
+    dynamics: DynamicsProjectionRead
 
 
 class EditorCaseRead(BaseModel):
@@ -190,16 +199,61 @@ class Disconnect(CommandBase):
     port: int = Field(ge=0)
 
 
-class UnsupportedCommand(CommandBase):
-    kind: Literal[
-        "controller_set",
-        "event_add",
-        "event_remove",
-        "dynamics_run",
-        "state_save",
-        "state_restore",
-    ]
-    parameters: dict[str, object] = Field(default_factory=dict)
+class ControllerSet(CommandBase):
+    kind: Literal["controller_set"]
+    tag: str
+    sp: float | None = Field(default=None, allow_inf_nan=False)
+    kp: float | None = Field(default=None, allow_inf_nan=False)
+    ki: float | None = Field(default=None, allow_inf_nan=False)
+    kd: float | None = Field(default=None, allow_inf_nan=False)
+    out_min: float | None = Field(default=None, allow_inf_nan=False)
+    out_max: float | None = Field(default=None, allow_inf_nan=False)
+    reverse_acting: bool | None = None
+    active: bool | None = None
+    manual_override: bool | None = None
+    execution_order: int | None = None
+
+
+class EventAdd(CommandBase):
+    kind: Literal["event_add"]
+    event_set: str
+    schedule: str | None = None
+    tag: str
+    property: str
+    value: float = Field(allow_inf_nan=False)
+    units: str | None = None
+    at_s: float = Field(ge=0, allow_inf_nan=False)
+    transition: Literal["step", "linear", "log", "inverse_log"] = "step"
+    description: str | None = None
+
+
+class EventRemove(CommandBase):
+    kind: Literal["event_remove"]
+    event_set: str
+    schedule: str | None = None
+    description: str
+
+
+class DynamicsRun(CommandBase):
+    kind: Literal["dynamics_run"]
+    schedule: str | None = None
+    duration_s: float = Field(gt=0, allow_inf_nan=False)
+    step_s: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+    integrator: str | None = None
+    method: Literal["ExplicitEuler", "RungeKutta4", "ImplicitEuler", "AdaptiveRK45"] | None = None
+    max_wall_time_s: int = Field(default=120, ge=1)
+    max_steps: int = Field(default=20000, ge=1)
+    variables: list[str] | None = None
+
+
+class StateSave(CommandBase):
+    kind: Literal["state_save"]
+    name: str
+
+
+class StateRestore(CommandBase):
+    kind: Literal["state_restore"]
+    name: str
 
 
 EditorCommand = (
@@ -216,7 +270,12 @@ EditorCommand = (
     | Solve
     | DeleteObject
     | Disconnect
-    | UnsupportedCommand
+    | ControllerSet
+    | EventAdd
+    | EventRemove
+    | DynamicsRun
+    | StateSave
+    | StateRestore
 )
 
 

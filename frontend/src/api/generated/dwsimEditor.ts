@@ -63,6 +63,7 @@ export type EditorProjectionRead = {
   last_solve: Record<string, unknown> | null;
   editable_commands: string[];
   unsupported_commands: Record<string, string>;
+  dynamics: DynamicsProjectionRead;
 };
 
 export type CommandResult = {
@@ -174,10 +175,67 @@ export type Disconnect = {
   port: number;
 };
 
-export type UnsupportedCommand = {
-  kind: "controller_set" | "event_add" | "event_remove" | "dynamics_run" | "state_save" | "state_restore";
+export type ControllerSet = {
+  kind: "controller_set";
   expected_revision: string;
-  parameters: Record<string, unknown>;
+  tag: string;
+  sp: number | null;
+  kp: number | null;
+  ki: number | null;
+  kd: number | null;
+  out_min: number | null;
+  out_max: number | null;
+  reverse_acting: boolean | null;
+  active: boolean | null;
+  manual_override: boolean | null;
+  execution_order: number | null;
+};
+
+export type EventAdd = {
+  kind: "event_add";
+  expected_revision: string;
+  event_set: string;
+  schedule: string | null;
+  tag: string;
+  property: string;
+  value: number;
+  units: string | null;
+  at_s: number;
+  transition: "step" | "linear" | "log" | "inverse_log";
+  description: string | null;
+};
+
+export type EventRemove = {
+  kind: "event_remove";
+  expected_revision: string;
+  event_set: string;
+  schedule: string | null;
+  description: string;
+};
+
+export type DynamicsRun = {
+  kind: "dynamics_run";
+  expected_revision: string;
+  schedule: string | null;
+  duration_s: number;
+  step_s: number | null;
+  integrator: string | null;
+  method: "ExplicitEuler" | "RungeKutta4" | "ImplicitEuler" | "AdaptiveRK45" | null;
+  max_wall_time_s: number;
+  max_steps: number;
+  variables: string[] | null;
+};
+
+export type StateSave = {
+  kind: "state_save";
+  expected_revision: string;
+  name: string;
+};
+
+export type StateRestore = {
+  kind: "state_restore";
+  expected_revision: string;
+  name: string;
 };
 
 export type EditorCommand =
@@ -194,4 +252,9 @@ export type EditorCommand =
   | Solve
   | DeleteObject
   | Disconnect
-  | UnsupportedCommand;
+  | ControllerSet
+  | EventAdd
+  | EventRemove
+  | DynamicsRun
+  | StateSave
+  | StateRestore;
