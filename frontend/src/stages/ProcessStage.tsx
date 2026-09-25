@@ -1650,7 +1650,7 @@ function ProcessStage({
           <fieldset>
             <legend>Schedule event</legend>
             <label>Event set<input value={eventSet} onChange={(e) => setEventSet(e.target.value)} /></label>
-            <label>Object tag<input value={eventTag} onChange={(e) => setEventTag(e.target.value)} /></label>
+            <label>Event target<input value={eventTag} onChange={(e) => setEventTag(e.target.value)} /></label>
             <label>Property<input value={eventProperty} onChange={(e) => setEventProperty(e.target.value)} /></label>
             <label>Value<input type="number" value={eventValue} onChange={(e) => setEventValue(e.target.value)} /></label>
             <label>At (s)<input type="number" min="0" value={eventAt} onChange={(e) => setEventAt(e.target.value)} /></label>
