@@ -1,0 +1,158 @@
+{
+  "case_id": "fa27c6cc-474e-49fc-913f-f54d5c83edaa",
+  "compound_names": [
+    "Water"
+  ],
+  "connection_count": 3,
+  "download_sha256": "a07bedd78205f23e9a298baddb633ef079193bd7b960d3739c4abc9c924cacfe",
+  "dwsim_version": "10.2.9",
+  "feed_mass_flow_kg_s": 2.0,
+  "mass_balance_residual_kg_s": 0.0,
+  "mass_balance_residual_source": "authoritative feed stream sum minus product stream result",
+  "mcp_call_seconds_by_command": {
+    "add_compounds": {
+      "dwsim_flowsheet_list_objects": 0.0011145789903821424,
+      "dwsim_flowsheet_load": 0.5256173459929414,
+      "dwsim_flowsheet_save": 0.12387919100001454,
+      "dwsim_flowsheet_summary": 0.0009673399908933789,
+      "dwsim_thermo_add_compounds": 0.0046899560111342
+    },
+    "connect": {
+      "dwsim_flowsheet_list_objects": 0.019321084982948378,
+      "dwsim_flowsheet_load": 2.591207253994071,
+      "dwsim_flowsheet_save": 0.30934181599877775,
+      "dwsim_flowsheet_summary": 0.003039022980374284,
+      "dwsim_stream_get_results": 0.014217969001038,
+      "dwsim_unitop_connect": 0.0122356110077817,
+      "dwsim_unitop_get_results": 0.013801903012790717
+    },
+    "create_case": {
+      "dwsim_flowsheet_create": 1.3594769769988488,
+      "dwsim_flowsheet_list_objects": 0.0011127430043416098,
+      "dwsim_flowsheet_save": 0.0550658639986068
+    },
+    "create_material_stream": {
+      "dwsim_flowsheet_list_objects": 0.010561278031673282,
+      "dwsim_flowsheet_load": 2.5900012420024723,
+      "dwsim_flowsheet_save": 0.34818225698836613,
+      "dwsim_flowsheet_summary": 0.003057898982660845,
+      "dwsim_graphic_edit": 0.00931514699186664,
+      "dwsim_stream_add_material": 0.043833126983372495,
+      "dwsim_stream_get_results": 0.02138271702278871
+    },
+    "create_unit": {
+      "dwsim_flowsheet_list_objects": 0.004322238004533574,
+      "dwsim_flowsheet_load": 0.8231122599972878,
+      "dwsim_flowsheet_save": 0.12281662700115703,
+      "dwsim_flowsheet_summary": 0.0010440909973112866,
+      "dwsim_graphic_edit": 0.0028147779958089814,
+      "dwsim_stream_get_results": 0.004583021989674307,
+      "dwsim_unitop_add": 0.013526079987059347,
+      "dwsim_unitop_get_results": 0.002480808994732797
+    },
+    "head_projection": {
+      "dwsim_flowsheet_list_objects": 0.0027219720068387687,
+      "dwsim_flowsheet_load": 0.5405242249980802,
+      "dwsim_flowsheet_summary": 0.0009728389995871112,
+      "dwsim_stream_get_results": 0.004226545002893545,
+      "dwsim_unitop_get_results": 0.004210191997117363
+    },
+    "move": {
+      "dwsim_flowsheet_list_objects": 0.003742098982911557,
+      "dwsim_flowsheet_load": 0.8809335139958421,
+      "dwsim_flowsheet_save": 0.12157087599916849,
+      "dwsim_flowsheet_summary": 0.00113578699529171,
+      "dwsim_graphic_edit": 0.0023841600050218403,
+      "dwsim_stream_get_results": 0.004727848005131818,
+      "dwsim_unitop_get_results": 0.004860777989961207
+    },
+    "rename": {
+      "dwsim_flowsheet_list_objects": 0.0050335790001554415,
+      "dwsim_flowsheet_load": 0.9641838829993503,
+      "dwsim_flowsheet_save": 0.11770294699817896,
+      "dwsim_flowsheet_summary": 0.0015451289946213365,
+      "dwsim_object_rename": 0.001239750999957323,
+      "dwsim_stream_get_results": 0.003916051995474845,
+      "dwsim_unitop_get_results": 0.0033768260036595166
+    },
+    "roundtrip_import": {
+      "dwsim_flowsheet_list_objects": 0.00543894300062675,
+      "dwsim_flowsheet_load": 1.0798358059983002,
+      "dwsim_flowsheet_save": 0.12280314401141368,
+      "dwsim_flowsheet_summary": 0.0010583730036159977,
+      "dwsim_stream_get_results": 0.0059422149788588285,
+      "dwsim_unitop_get_results": 0.00384485800168477
+    },
+    "set_property_package": {
+      "dwsim_flowsheet_list_objects": 0.0014016539935255423,
+      "dwsim_flowsheet_load": 0.6933015750109917,
+      "dwsim_flowsheet_save": 0.07000652099668514,
+      "dwsim_flowsheet_summary": 0.0012237310002092272,
+      "dwsim_thermo_list_property_packages": 0.0008551420032745227,
+      "dwsim_thermo_set_property_package": 0.025157265001325868
+    },
+    "set_stream_conditions": {
+      "dwsim_flowsheet_list_objects": 0.006682004997855984,
+      "dwsim_flowsheet_load": 1.845346039001015,
+      "dwsim_flowsheet_save": 0.2119778930064058,
+      "dwsim_flowsheet_summary": 0.002611221992992796,
+      "dwsim_stream_get_results": 0.01603153497853782,
+      "dwsim_stream_set_conditions": 0.026914096000837162,
+      "dwsim_unitop_get_results": 0.008950563991675153
+    },
+    "solve": {
+      "dwsim_flowsheet_check": 0.01735552000172902,
+      "dwsim_flowsheet_list_objects": 0.003947801000322215,
+      "dwsim_flowsheet_load": 1.098640828000498,
+      "dwsim_flowsheet_save": 0.12103508399741258,
+      "dwsim_flowsheet_summary": 0.0008783689991105348,
+      "dwsim_solve_run": 0.1342223640094744,
+      "dwsim_stream_get_results": 0.005238700003246777,
+      "dwsim_unitop_get_results": 0.004717232994153164
+    }
+  },
+  "mcp_sha256": "d20f97426c264ac91114240b085b3c4e7877dfda83ecb487c0125f838cf66cfa",
+  "object_count": 4,
+  "product_mass_flow_kg_s": 2.0,
+  "property_package": "Steam Tables (IAPWS-IF97)",
+  "revision_chain": [
+    "7fda17113a3ac6d6fa72717071d88f35b3128f7f61501f0f26752c3e6b633ffe:1",
+    "2d4381bc3f278a80981c7e8e9c165d36de803350e5dd45dd07dc0c152e08d490:2",
+    "e02cbe38421baf7781e540b9de0e88ecb4e7b655115085a16e9cffb11216834c:3",
+    "a2e301741211861792d6c9333401a5fb7e8f573b5fd2fd76d96b983d406681c8:4",
+    "b6255ca0fd3059fd25aed265faec1ac74caff87ad78611b87dc36e8434c057ae:5",
+    "91c386eedb2b62e256e40be9dfe327d58c63970a4688db0eefabee648f613855:6",
+    "91a19b4cf0971c55f54add3d2080f3d6df3d835d23a2f38e2e1f0c0324ac70aa:7",
+    "706def69ca4eee30e36ebf6c38a0fba10134acbd358719101eb0ebe1df7a2cbd:8",
+    "af3d05335e843c0b6c8c902ce2ef794f40cf4d58d0f36cd23ca525ae5b27ccf6:9",
+    "9e9dbc56079a8a4e477f97b7c9a2cee6f3c8bcaee62c80792401af4e4a72d4ec:10",
+    "8f16938c833809bd92bd67f8c3cfef75cd3e570cda3afbc270f8ca47322e9fa5:11",
+    "a7597ce7a5e1c6e4259697365a1c6df7931c3eca30d53571441de652ccb0d66a:12",
+    "e9a923f78855a08c37e83368c3b0fdda43f802f967b443b34ebdad166ace8a95:13",
+    "976b68310a83d8d3872e0592e754177dbf11cddbac6dfaee27073989445195b5:14",
+    "a07bedd78205f23e9a298baddb633ef079193bd7b960d3739c4abc9c924cacfe:15"
+  ],
+  "revision_sha256s": [
+    "7fda17113a3ac6d6fa72717071d88f35b3128f7f61501f0f26752c3e6b633ffe",
+    "2d4381bc3f278a80981c7e8e9c165d36de803350e5dd45dd07dc0c152e08d490",
+    "e02cbe38421baf7781e540b9de0e88ecb4e7b655115085a16e9cffb11216834c",
+    "a2e301741211861792d6c9333401a5fb7e8f573b5fd2fd76d96b983d406681c8",
+    "b6255ca0fd3059fd25aed265faec1ac74caff87ad78611b87dc36e8434c057ae",
+    "91c386eedb2b62e256e40be9dfe327d58c63970a4688db0eefabee648f613855",
+    "91a19b4cf0971c55f54add3d2080f3d6df3d835d23a2f38e2e1f0c0324ac70aa",
+    "706def69ca4eee30e36ebf6c38a0fba10134acbd358719101eb0ebe1df7a2cbd",
+    "af3d05335e843c0b6c8c902ce2ef794f40cf4d58d0f36cd23ca525ae5b27ccf6",
+    "9e9dbc56079a8a4e477f97b7c9a2cee6f3c8bcaee62c80792401af4e4a72d4ec",
+    "8f16938c833809bd92bd67f8c3cfef75cd3e570cda3afbc270f8ca47322e9fa5",
+    "a7597ce7a5e1c6e4259697365a1c6df7931c3eca30d53571441de652ccb0d66a",
+    "e9a923f78855a08c37e83368c3b0fdda43f802f967b443b34ebdad166ace8a95",
+    "976b68310a83d8d3872e0592e754177dbf11cddbac6dfaee27073989445195b5",
+    "a07bedd78205f23e9a298baddb633ef079193bd7b960d3739c4abc9c924cacfe"
+  ],
+  "roundtrip_case_sha256": "4f29b8ff5c4edab8f83b218b66b255187df3855718ad03bfdac60e68c8b32638",
+  "roundtrip_geometry_and_connections_match": true,
+  "runtime": "/home/thera/jarvis-control/work/tools/dwsim-10.2.9/mcp-root/opt/dwsim-mcp/dwsim-mcp",
+  "solve_status": "completed",
+  "stale_revision_status": 409,
+  "workspace_id": "5bc5c2e4-504a-4f28-9980-7760111a76b7"
+}

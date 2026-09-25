@@ -32,9 +32,15 @@ from app.modules.modeling.models import ParameterRead  # noqa: E402
 SOURCE_LABEL = "backend/app/modules/modeling/models.py::ParameterRead"
 TARGET = REPO_ROOT / "frontend" / "src" / "api" / "generated" / "modeling.ts"
 ENGINEERING_TARGET = REPO_ROOT / "frontend" / "src" / "api" / "generated" / "engineering.ts"
+EDITOR_TARGET = REPO_ROOT / "frontend" / "src" / "api" / "generated" / "dwsimEditor.ts"
 HEADER = (
     "// GENERATED FILE — DO NOT EDIT.\n"
     f"// Source: {SOURCE_LABEL}\n"
+    "// Regenerate with: python scripts/generate_frontend_contracts.py\n\n"
+)
+EDITOR_HEADER = (
+    "// GENERATED FILE — DO NOT EDIT.\n"
+    "// Source: backend/app/modules/process_stack/editor_models.py\n"
     "// Regenerate with: python scripts/generate_frontend_contracts.py\n\n"
 )
 
@@ -54,14 +60,29 @@ def _literal(value: object) -> str:
 
 
 def _typescript_type(annotation: object) -> str:
+    if isinstance(annotation, type) and issubclass(annotation, BaseModel):
+        return annotation.__name__
     if annotation is str:
         return "string"
     if annotation in {int, float}:
         return "number"
     if annotation is bool:
         return "boolean"
+    if annotation is object:
+        return "unknown"
 
     origin = get_origin(annotation)
+    if origin is list:
+        args = get_args(annotation)
+        if len(args) != 1:
+            raise ContractGenerationError(f"unsupported list annotation: {annotation!r}")
+        item = _typescript_type(args[0])
+        return f"({item})[]" if " | " in item else f"{item}[]"
+    if origin is dict:
+        args = get_args(annotation)
+        if len(args) != 2 or args[0] is not str:
+            raise ContractGenerationError(f"unsupported mapping annotation: {annotation!r}")
+        return f"Record<string, {_typescript_type(args[1])}>"
     if origin is Literal:
         values = get_args(annotation)
         if not values:
@@ -80,8 +101,8 @@ def _typescript_type(annotation: object) -> str:
     raise ContractGenerationError(f"unsupported annotation: {annotation!r}")
 
 
-def render_model(model: type[BaseModel], export_name: str) -> str:
-    lines = [HEADER, f"export type {export_name} = {{\n"]
+def render_model(model: type[BaseModel], export_name: str, *, header: str = HEADER) -> str:
+    lines = [header, f"export type {export_name} = {{\n"]
     for name, field in model.model_fields.items():
         try:
             rendered = _typescript_type(field.annotation)
@@ -99,10 +120,34 @@ def render_parameter_read() -> str:
 
 
 def render_engineering_reads() -> str:
-    return (HEADER.replace(SOURCE_LABEL, "backend/app/modules/engineering/operator_models.py")
-            + render_model(EvaluatorRead, "EvaluatorRead").split("\n\n", 1)[1]
-            + "\n"
-            + render_model(CapabilityRead, "CapabilityRead").split("\n\n", 1)[1])
+    header = HEADER.replace(SOURCE_LABEL, "backend/app/modules/engineering/operator_models.py")
+    return render_model(EvaluatorRead, "EvaluatorRead", header=header) + "\n" + render_model(
+        CapabilityRead, "CapabilityRead", header=""
+    )
+
+
+def render_editor_contracts() -> str:
+    from app.modules.process_stack.editor_models import (
+        EditorCaseRead,
+        EditorConnectionRead,
+        EditorObjectRead,
+        EditorProjectionRead,
+        EditorQuantity,
+        RevisionRead,
+    )
+
+    models = [
+        EditorQuantity,
+        EditorCaseRead,
+        RevisionRead,
+        EditorObjectRead,
+        EditorConnectionRead,
+        EditorProjectionRead,
+    ]
+    return "\n".join(
+        render_model(model, model.__name__, header=EDITOR_HEADER if index == 0 else "")
+        for index, model in enumerate(models)
+    )
 
 
 def _matches(path: Path, expected: str, *, report: bool = False) -> bool:
@@ -126,6 +171,8 @@ def _matches(path: Path, expected: str, *, report: bool = False) -> bool:
 
 
 def self_test() -> None:
+    from app.modules.modeling.models import ParameterRead
+
     rendered = render_parameter_read()
     assert rendered == render_parameter_read()
     expected_names = [
@@ -169,7 +216,7 @@ def self_test() -> None:
     assert render_model(ChangedParameterRead, "ParameterRead") != rendered
 
     class Unsupported(BaseModel):
-        items: list[str]
+        items: set[str]
 
     try:
         render_model(Unsupported, "Unsupported")
@@ -201,8 +248,13 @@ def main() -> int:
 
     expected = render_parameter_read()
     engineering_expected = render_engineering_reads()
+    editor_expected = render_editor_contracts()
     if args.check:
-        if _matches(TARGET, expected, report=True) and _matches(ENGINEERING_TARGET, engineering_expected, report=True):
+        if (
+            _matches(TARGET, expected, report=True)
+            and _matches(ENGINEERING_TARGET, engineering_expected, report=True)
+            and _matches(EDITOR_TARGET, editor_expected, report=True)
+        ):
             print("frontend generated contracts are current")
             return 0
         print("frontend generated contracts are stale; regenerate before committing", file=sys.stderr)
@@ -211,6 +263,8 @@ def main() -> int:
     TARGET.parent.mkdir(parents=True, exist_ok=True)
     TARGET.write_text(expected, encoding="utf-8", newline="\n")
     ENGINEERING_TARGET.write_text(engineering_expected, encoding="utf-8", newline="\n")
+    EDITOR_TARGET.parent.mkdir(parents=True, exist_ok=True)
+    EDITOR_TARGET.write_text(editor_expected, encoding="utf-8", newline="\n")
     print(f"wrote {TARGET.relative_to(REPO_ROOT)}")
     return 0
 
