@@ -35,6 +35,7 @@ from app.modules.ai.retrieval_contracts import (
     RetrievalHit,
     context_bundle_digest,
 )
+from app.modules.ai.retrieval_owners import canonical_owner_documents, resolve_owner_document
 from app.modules.ai.thread_service import get_thread, list_threads
 from app.modules.bluecad.evidence import EvidenceRecord, get_evidence_record
 from app.modules.bluecad.ledger import get_attempt, get_candidate, list_attempts, list_candidates
@@ -207,11 +208,6 @@ def canonical_documents() -> Iterable[IndexDocument]:
                 yield _record_document(
                     "modeling", "dossier", dossier, wid, object_id=version.model_version_id,
                 )
-        for thread in list_threads(workspace_id=wid, limit=50).threads:
-            yield _record_document("ai_threads", "thread", thread, wid)
-            detail = get_thread(workspace_id=wid, thread_id=thread.id, interaction_limit=100)
-            for interaction in detail.interactions:
-                yield _record_document("ai_threads", "interaction", interaction, wid, title=thread.id)
         for candidate in list_candidates(wid):
             yield _record_document("bluecad", "candidate", candidate, wid)
             for attempt in list_attempts(candidate.id):
@@ -221,17 +217,11 @@ def canonical_documents() -> Iterable[IndexDocument]:
         with open_sqlite_connection() as db:
             evidence_ids = [str(row[0]) for row in db.execute(
                 "SELECT id FROM evidence_records WHERE workspace_id=? ORDER BY id", (wid,))]
-            snapshot_ids = [str(row[0]) for row in db.execute(
-                "SELECT id FROM project_knowledge_reconciled_snapshots WHERE workspace_id=? ORDER BY id", (wid,))]
         for evidence_id in evidence_ids:
             evidence_record = get_evidence_record(evidence_id)
             if evidence_record is not None and evidence_record.workspace_id == wid:
                 yield _evidence_document(evidence_record, wid)
-        for snapshot_id in snapshot_ids:
-            snapshot = get_snapshot(wid, snapshot_id)
-            doc = _snapshot_document(snapshot, wid)
-            if len(doc.text) <= 200_000:
-                yield doc
+    yield from canonical_owner_documents()
 
 
 def _hermes_home() -> Path:
@@ -475,6 +465,16 @@ _OWNER_RESOLVERS: dict[tuple[str, str], Callable[[SourceRef], IndexDocument | No
     ("ai_threads", "thread"): _resolve_thread,
     ("ai_threads", "interaction"): _resolve_thread,
     ("hermes_operational_memory", "memory_entry"): _resolve_hermes_operational_memory,
+    **{(owner, kind): resolve_owner_document for owner, kind in (
+        ("brainstorm", "brainstorm_raw"), ("brainstorm", "brainstorm_discussion"),
+        ("brainstorm", "brainstorm_revision"), ("brainstorm", "brainstorm_promotion"),
+        ("literature", "entry"), ("project_knowledge", "revision"),
+        ("project_knowledge", "snapshot"),
+        ("development", "roadmap_item"), ("development", "calendar_allocation"),
+        ("modeling", "simulation_run"), ("engineering", "study_run"),
+        ("process_stack", "case_revision"),
+        ("ai_threads", "thread"), ("ai_threads", "interaction"),
+    )},
 }
 
 
@@ -1370,3 +1370,14 @@ class SQLiteIndexStore:
                              items=tuple(items), evidence_manifest=tuple(manifest), token_estimate=used,
                              token_budget=token_budget, expansion_level=expansion_level, index_revision=self.revision,
                              bundle_digest=context_bundle_digest(items), created_at=datetime.now(UTC))
+
+    def _delete_keys(self, db: sqlite3.Connection, keys: Sequence[str]) -> None:
+        """Delete document rows and all derived references inside a caller transaction."""
+        if self.use_sqlite_vec:
+            _load_vector_extension(db)
+        for key in keys:
+            db.execute("DELETE FROM docs WHERE key=?", (key,))
+            db.execute("DELETE FROM docs_fts WHERE key=?", (key,))
+            if self.use_sqlite_vec:
+                db.execute("DELETE FROM vec_docs WHERE key=?", (key,))
+            db.execute("DELETE FROM edges WHERE source_key=? OR target_key=?", (key, key))
