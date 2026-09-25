@@ -1,0 +1,256 @@
+{
+  "schema": "jarvisos.149-process-editor-operator-proof.v1",
+  "source_sha": "3efd211f9bf4f7b1fa29a0e9abed1d8802f6afbb",
+  "workspace_id": "bb73733f-a550-4e0e-a3c0-7ecd5dab70ce",
+  "case_id": "bb7b8fa0-d429-4a06-a1b8-cd96fe814409",
+  "imported_case_id": "4401a252-5251-465b-9173-57a2f8504735",
+  "dwsim_version": "10.2.9",
+  "mcp_sha256": "d20f97426c264ac91114240b085b3c4e7877dfda83ecb487c0125f838cf66cfa",
+  "revision_chain": [
+    "5d0583d7ea88415a23fb9ba9617992d6c984aac023b267ab35a1760c5c26ca99:1",
+    "919cf5d15bfda5cd96b373a773f3922af804fb70a65dfb3f71df67d494d96e7b:2",
+    "2abcfc693638660cf8b4e1a4905829d34dd6d4b530ed0b5d5bbc23c3833694c3:3",
+    "003b4da0c88257d008c0a721b8fa190a930eb815fd6e38ef387191427416053a:4",
+    "65b6bdd3cf87edbee789388e220775cf5fe2d3ff77cab5dec5c1d449ff843bc4:5",
+    "9a85f9342e69dfdd202fbd45f25b733002a049f4df79f4f626e4c7a949e3e0f9:6",
+    "236d00d5ce65070b4752c2bb3412ef03e77ac96f8de58b30acdd932124f4216b:7",
+    "fc40f4a8ce870feed002a896097ab63220fa2df54af2e49151758680bdc74d7e:8",
+    "86c4a9aa6612a17351ff2a9aaae73f9a8e823b2b3a8f0649d9843cc54c2f108f:9",
+    "8c270e26c3fa985d76082718e39cd41f53f4c22be143eef7fb31a0ed1ab1269e:10",
+    "58232fcfc1e0a3751002cfccd98b7334c6144f4d777ccf272a51cf236332eddd:11",
+    "3ee73f554f8cb6b662c44c6fabe446087c442f7a84c10bae959d833776748464:12",
+    "dea2e944496101b1fa6bafa85a4e19fff6555788597fd79864e479524a22efc1:13",
+    "128d712136baa3ebaa77e514348f22621aa3ffa47c7eeb2d0bffd8cb4a5900be:14",
+    "aee7bda60fbf05be10a4bd47209b8ba79ec84a7115a3035bca7efcadbb44e75e:15",
+    "6802e657c48e2696f652a13824e4c7c4f9b331f895db31673466b66d448601ef:16",
+    "91cc7f73d3ec4e613d2f839c5e64f8261466f312f7695337eb70bb86855bd961:1",
+    "5d0583d7ea88415a23fb9ba9617992d6c984aac023b267ab35a1760c5c26ca99:17"
+  ],
+  "projection_digests_rendered_by_ui": [
+    {
+      "revision": "5d0583d7ea88415a23fb9ba9617992d6c984aac023b267ab35a1760c5c26ca99:1",
+      "sha256": "50c5e489c5a5803f465b342849b5b3f3c859210f5d33b6540da9b6756831384e"
+    },
+    {
+      "revision": "919cf5d15bfda5cd96b373a773f3922af804fb70a65dfb3f71df67d494d96e7b:2",
+      "sha256": "a0174ce6b025bacafacbf2bee11d479be445ef03cf16c6d26ff72b8f7d392f56"
+    },
+    {
+      "revision": "2abcfc693638660cf8b4e1a4905829d34dd6d4b530ed0b5d5bbc23c3833694c3:3",
+      "sha256": "b88c29f1c904aad9f271a55003857303f17c54ad28efab9d3402765fe7895f55"
+    },
+    {
+      "revision": "003b4da0c88257d008c0a721b8fa190a930eb815fd6e38ef387191427416053a:4",
+      "sha256": "f1cdd53a10db496f21bd91333dfcf710a3d59429dc512103a6115d4c8a8346c0"
+    },
+    {
+      "revision": "65b6bdd3cf87edbee789388e220775cf5fe2d3ff77cab5dec5c1d449ff843bc4:5",
+      "sha256": "eef86c90d1e0b855e44979dd5c405dd2f66f26324ea7d8496c91c5ea22b779cf"
+    },
+    {
+      "revision": "9a85f9342e69dfdd202fbd45f25b733002a049f4df79f4f626e4c7a949e3e0f9:6",
+      "sha256": "31ea78ae04b75dc30f9d0dc2d70512da858124538fbace02e29c25dabe7e7e1c"
+    },
+    {
+      "revision": "236d00d5ce65070b4752c2bb3412ef03e77ac96f8de58b30acdd932124f4216b:7",
+      "sha256": "5c6427a40d09d9f9d418988a2807a516d08f85a58a4110746a16fcd77b24cb1c"
+    },
+    {
+      "revision": "fc40f4a8ce870feed002a896097ab63220fa2df54af2e49151758680bdc74d7e:8",
+      "sha256": "fdf2bbaef2eba8faa72cb562925a2f2d261eb75ae2258d01b0b11c8c79aeeedd"
+    },
+    {
+      "revision": "86c4a9aa6612a17351ff2a9aaae73f9a8e823b2b3a8f0649d9843cc54c2f108f:9",
+      "sha256": "a737fbcd7e799bd987faca07d10e89c663134d2ae7ae94926a79d41a892d1349"
+    },
+    {
+      "revision": "8c270e26c3fa985d76082718e39cd41f53f4c22be143eef7fb31a0ed1ab1269e:10",
+      "sha256": "f2ca5bd50d21c8c0e62be3fb5b30f347db013a211a438a23ebf4bade0dc68d30"
+    },
+    {
+      "revision": "58232fcfc1e0a3751002cfccd98b7334c6144f4d777ccf272a51cf236332eddd:11",
+      "sha256": "644352536dba9933dbafff3f5d1db9fd7fdbb88a98dc1caad2db088cb0ac02fd"
+    },
+    {
+      "revision": "3ee73f554f8cb6b662c44c6fabe446087c442f7a84c10bae959d833776748464:12",
+      "sha256": "93ac6b6c9c2188d4ada2a07fa9b70dff9d64eb3b6e6aaab668a431e8ab2e593e"
+    },
+    {
+      "revision": "dea2e944496101b1fa6bafa85a4e19fff6555788597fd79864e479524a22efc1:13",
+      "sha256": "5a3dffc1100e88767bb2a6ade5ad9a747914a090a339ab7e5bd1937ee7f35983"
+    },
+    {
+      "revision": "128d712136baa3ebaa77e514348f22621aa3ffa47c7eeb2d0bffd8cb4a5900be:14",
+      "sha256": "38a4acdef0f066669389c46d7fb2c63a5b062cb80d0b10ebe0236f8f1cfe60b5"
+    },
+    {
+      "revision": "aee7bda60fbf05be10a4bd47209b8ba79ec84a7115a3035bca7efcadbb44e75e:15",
+      "sha256": "2bce659a808213e66a4ef989b5b4f90cb8af2261017a3aafe519e815e0431138"
+    },
+    {
+      "revision": "6802e657c48e2696f652a13824e4c7c4f9b331f895db31673466b66d448601ef:16",
+      "sha256": "2313e4384efa59ed05430cf27941fcd18e9858bc1e89857791b268e1b9ef17ce"
+    },
+    {
+      "revision": "91cc7f73d3ec4e613d2f839c5e64f8261466f312f7695337eb70bb86855bd961:1",
+      "sha256": "feb6a0fcc9fdb18b6206809c9cafd08962f8c437994d26f1beb26850914a247b"
+    },
+    {
+      "revision": "5d0583d7ea88415a23fb9ba9617992d6c984aac023b267ab35a1760c5c26ca99:17",
+      "sha256": "eca8eb64275223fc3d28204e5d187baa7ca819d72491a2ddda867f90ab6299ee"
+    }
+  ],
+  "actions": [
+    {
+      "action": "create_case",
+      "case_id": "bb7b8fa0-d429-4a06-a1b8-cd96fe814409",
+      "revision": "5d0583d7ea88415a23fb9ba9617992d6c984aac023b267ab35a1760c5c26ca99:1"
+    },
+    {
+      "action": "thermodynamics",
+      "compounds": [
+        "Water"
+      ],
+      "property_package": "Steam Tables (IAPWS-IF97)"
+    },
+    {
+      "action": "drag_move",
+      "from": {
+        "x": 230,
+        "y": 135
+      },
+      "readback": {
+        "x": 358,
+        "y": 236
+      },
+      "canvas_transform": "translate(358,236)"
+    },
+    {
+      "action": "solve",
+      "solve_status": "completed",
+      "feed_mass_flow_kg_s": 2,
+      "product_mass_flow_kg_s": 2,
+      "mass_balance_residual_kg_s": 0,
+      "mass_balance_residual_source": "projected boundary streams (inlet total - outlet total)",
+      "server_mass_balance_status": "unavailable"
+    },
+    {
+      "action": "stale_edit",
+      "status": 409,
+      "message": "Changed elsewhere; stale edit discarded",
+      "refreshed_revision": "6802e657c48e2696f652a13824e4c7c4f9b331f895db31673466b66d448601ef:16"
+    },
+    {
+      "action": "download_reimport",
+      "imported_case_id": "4401a252-5251-465b-9173-57a2f8504735",
+      "imported_revision": "91cc7f73d3ec4e613d2f839c5e64f8261466f312f7695337eb70bb86855bd961:1",
+      "object_count": 5,
+      "connection_count": 3,
+      "layout_and_connections_match": true
+    },
+    {
+      "action": "restore",
+      "revision": "5d0583d7ea88415a23fb9ba9617992d6c984aac023b267ab35a1760c5c26ca99:17",
+      "restored_object_count": 0
+    }
+  ],
+  "final_ui_projection_sha256": "eca8eb64275223fc3d28204e5d187baa7ca819d72491a2ddda867f90ab6299ee",
+  "elapsed_seconds": 103.906,
+  "timings_ms": [
+    {
+      "operation": "add_compounds",
+      "duration_ms": 4292
+    },
+    {
+      "operation": "set_property_package",
+      "duration_ms": 4547
+    },
+    {
+      "operation": "create_material_stream",
+      "duration_ms": 4600
+    },
+    {
+      "operation": "create_material_stream",
+      "duration_ms": 4801
+    },
+    {
+      "operation": "create_material_stream",
+      "duration_ms": 4328
+    },
+    {
+      "operation": "create_unit",
+      "duration_ms": 6210
+    },
+    {
+      "operation": "connect",
+      "duration_ms": 4875
+    },
+    {
+      "operation": "connect",
+      "duration_ms": 4463
+    },
+    {
+      "operation": "connect",
+      "duration_ms": 4903
+    },
+    {
+      "operation": "move",
+      "duration_ms": 4836
+    },
+    {
+      "operation": "rename",
+      "duration_ms": 5003
+    },
+    {
+      "operation": "set_stream_conditions",
+      "duration_ms": 6792
+    },
+    {
+      "operation": "set_stream_conditions",
+      "duration_ms": 5030
+    },
+    {
+      "operation": "solve",
+      "duration_ms": 4288
+    },
+    {
+      "operation": "create_material_stream",
+      "duration_ms": 5003
+    },
+    {
+      "operation": "download_reimport",
+      "duration_ms": 4824
+    },
+    {
+      "operation": "restore",
+      "duration_ms": 6138
+    }
+  ],
+  "screenshots": [
+    {
+      "path": "scripts/qualification/149/process-editor-blank-case.png",
+      "size_bytes": 104436
+    },
+    {
+      "path": "scripts/qualification/149/process-editor-native-graph.png",
+      "size_bytes": 115840
+    },
+    {
+      "path": "scripts/qualification/149/process-editor-solved.png",
+      "size_bytes": 122431
+    },
+    {
+      "path": "scripts/qualification/149/process-editor-revision-conflict.png",
+      "size_bytes": 119303
+    },
+    {
+      "path": "scripts/qualification/149/process-editor-roundtrip.png",
+      "size_bytes": 119891
+    },
+    {
+      "path": "scripts/qualification/149/process-editor-restored.png",
+      "size_bytes": 104463
+    }
+  ],
+  "page_errors": []
+}
