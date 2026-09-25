@@ -167,7 +167,7 @@ const persistedRuntimeMetrics = (prompt) => {
   const query = `import json,sqlite3,sys
 db,prompt=sys.argv[1:]
 c=sqlite3.connect(db); c.row_factory=sqlite3.Row
-row=c.execute("""SELECT f.state,f.terminal_reason,f.usage_totals_json,j.normalized_finish_reason,j.input_tokens,j.output_tokens,j.reasoning_tokens,j.normalized_usage_source
+row=c.execute("""SELECT f.state,f.terminal_reason,f.usage_totals_json,j.model_id,j.normalized_finish_reason,j.input_tokens,j.output_tokens,j.reasoning_tokens,j.normalized_usage_source
 FROM ai_thread_interactions i JOIN ai_flows f ON f.id=i.flow_id
 LEFT JOIN ai_jobs j ON j.id=f.terminal_attempt_id
 WHERE i.user_text=? ORDER BY i.created_at DESC LIMIT 1""",(prompt,)).fetchone()
@@ -204,6 +204,7 @@ const send = async (prompt) => {
     prompt,
     answer,
     state,
+    model_id: metrics.model_id,
     finish_reason: metrics.normalized_finish_reason,
     eval_counts: {
       prompt: metrics.input_tokens,
@@ -214,6 +215,10 @@ const send = async (prompt) => {
     reasoning_tokens: metrics.reasoning_tokens,
     duration_ms: Date.now() - started,
   };
+  if (isLlamaCpp) {
+    assert(flow.model_id === llamaConfig.model_id,
+      `interaction model ${flow.model_id} did not match configured llama.cpp model ${llamaConfig.model_id}`);
+  }
   timings.push({ prompt, duration_ms: flow.duration_ms });
   flows.push(flow);
   return { entry, flow };
@@ -406,13 +411,11 @@ try {
     await page.waitForFunction((selectedRoute) => [...document.querySelectorAll('[aria-label="Jarvis responder"] option')].some((option) => option.value === selectedRoute && !option.disabled), route, { timeout: 60_000 });
   }
   reachableOptions = await optionRecords();
-  if (isLlamaCpp) {
-    const configuredRoute = reachableOptions.find((item) => item.value === route);
-    assert(configuredRoute?.text.includes(llamaConfig.model_id),
-      `Sidecar route did not report configured llama.cpp model ${llamaConfig.model_id}: ${JSON.stringify(reachableOptions)}`);
-  }
   const localRoute = page.getByLabel("Jarvis responder");
   await localRoute.selectOption(route);
+  if (isLlamaCpp) {
+    await page.getByText(`Uses local model ${llamaConfig.model_id}.`, { exact: true }).waitFor();
+  }
   await page.getByLabel("Message", { exact: true }).waitFor();
   const jarvis = await send("funzioni jarvis?");
   assert(jarvis.flow.state === "complete", `funzioni jarvis? interaction was ${JSON.stringify(jarvis.flow)}`);
