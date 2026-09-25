@@ -32,6 +32,17 @@ _RETRIEVAL_TOOL = {
         }, "required": ["grant_id", "query", "source_scope"], "additionalProperties": False,
     },
 }
+_DECISION_TOOL = {
+    "name": "jarvis_decide",
+    "description": "Request bounded, non-authoritative Jarvis decision advice.",
+    "inputSchema": {
+        "type": "object", "properties": {
+            "grant_id": {"type": "string", "minLength": 1, "maxLength": 128},
+            "kind": {"type": "string", "enum": ["route_class", "retry_or_stop", "escalate", "model_select"]},
+            "request": {"type": "object"},
+        }, "required": ["grant_id", "kind", "request"], "additionalProperties": False,
+    },
+}
 
 
 class _DenyRedirects(HTTPRedirectHandler):
@@ -49,14 +60,16 @@ def _reply(message: dict[str, Any]) -> dict[str, Any] | None:
             "protocolVersion": "2024-11-05", "capabilities": {"tools": {}},
             "serverInfo": {"name": "jarvis", "version": "1"}}}
     if method == "tools/list":
-        return {"jsonrpc": "2.0", "id": request_id, "result": {"tools": [_TOOL, _RETRIEVAL_TOOL]}}
+        return {"jsonrpc": "2.0", "id": request_id, "result": {"tools": [_TOOL, _RETRIEVAL_TOOL, _DECISION_TOOL]}}
     if method == "tools/call":
         params = message.get("params") or {}
-        if params.get("name") not in {_TOOL["name"], _RETRIEVAL_TOOL["name"]}:
+        if params.get("name") not in {_TOOL["name"], _RETRIEVAL_TOOL["name"], _DECISION_TOOL["name"]}:
             return {"jsonrpc": "2.0", "id": request_id, "error": {"code": -32601, "message": "unknown tool"}}
         body = params.get("arguments") or {}
         if params.get("name") == _RETRIEVAL_TOOL["name"] and isinstance(body, dict):
             body = {**body, "tool_name": _RETRIEVAL_TOOL["name"]}
+        if params.get("name") == _DECISION_TOOL["name"] and isinstance(body, dict):
+            body = {**body, "tool_name": _DECISION_TOOL["name"]}
         encoded = json.dumps(body).encode()
         broker_url = os.environ["JARVIS_HERMES_BROKER_URL"]
         parsed = urlsplit(broker_url)
