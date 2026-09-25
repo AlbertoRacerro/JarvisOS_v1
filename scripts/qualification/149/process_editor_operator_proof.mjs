@@ -197,6 +197,24 @@ const waitRestore = async (currentPage) => {
   timings.push({ operation: "restore", duration_ms: Date.now() - started });
   return loaded(currentPage);
 };
+const waitImport = async (currentPage, previousCaseId) => {
+  const started = Date.now();
+  await currentPage.waitForFunction(
+    (previous) => {
+      const text = document.querySelector(".dwsim-evidence pre")?.textContent;
+      if (!text) return false;
+      try {
+        return JSON.parse(text).case_id !== previous;
+      } catch {
+        return false;
+      }
+    },
+    previousCaseId,
+    { timeout: 180_000 },
+  );
+  timings.push({ operation: "download_reimport", duration_ms: Date.now() - started });
+  return loaded(currentPage);
+};
 const selectObject = async (currentPage, tag) => {
   const object = currentPage.getByRole("button", {
     name: new RegExp(`^${tag},`),
@@ -487,9 +505,9 @@ try {
   ]);
   const downloadPath = join(tempDir, "roundtrip.dwxmz");
   await download.saveAs(downloadPath);
+  const sourceCaseId = projection.case_id;
   await page.locator('input[type="file"]').setInputFiles(downloadPath);
-  await waitCommand(page);
-  projection = await loaded(page);
+  projection = await waitImport(page, sourceCaseId);
   const importedCaseId = projection.case_id;
   const importedShape = projection.objects
     .map((item) => [item.tag, item.x, item.y])
