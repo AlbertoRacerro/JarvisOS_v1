@@ -1,12 +1,6 @@
 #!/usr/bin/env node
 import { createHash } from "node:crypto";
-import {
-  mkdtemp,
-  readFile,
-  rm,
-  writeFile,
-  stat,
-} from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
@@ -31,11 +25,16 @@ const env = {
 };
 const initialized = spawnSync(
   join(backend, ".venv/bin/python"),
-  ["-c", "from app.core.database import initialize_database; initialize_database()"],
+  [
+    "-c",
+    "from app.core.database import initialize_database; initialize_database()",
+  ],
   { cwd: backend, env, encoding: "utf8" },
 );
 if (initialized.status !== 0)
-  throw new Error(`isolated database initialization failed: ${initialized.stderr}`);
+  throw new Error(
+    `isolated database initialization failed: ${initialized.stderr}`,
+  );
 const backendProc = spawn(
   join(backend, ".venv/bin/python"),
   ["-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8000"],
@@ -161,13 +160,17 @@ const addStream = async (currentPage, tag, x, y) => {
 };
 const connect = async (currentPage, unit, stream, role, port) => {
   await currentPage
-    .getByLabel("Unit", { exact: true })
+    .getByLabel("Connect unit", { exact: true })
     .selectOption({ label: unit });
   await currentPage
-    .getByLabel("Stream", { exact: true })
+    .getByLabel("Connect stream", { exact: true })
     .selectOption({ label: stream });
-  await currentPage.getByLabel("Role", { exact: true }).selectOption(role);
-  await currentPage.getByLabel("Port", { exact: true }).fill(String(port));
+  await currentPage
+    .getByLabel("Connect role", { exact: true })
+    .selectOption(role);
+  await currentPage
+    .getByLabel("Connect port", { exact: true })
+    .fill(String(port));
   await currentPage
     .getByRole("button", { name: "Connect", exact: true })
     .click();

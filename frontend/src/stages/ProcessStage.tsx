@@ -1413,6 +1413,7 @@ function ProcessStage({
           <label>
             Unit
             <select
+              aria-label="Connect unit"
               value={connectUnit}
               onChange={(e) => setConnectUnit(e.target.value)}
               disabled={loading || Boolean(runtimeUnavailable)}
@@ -1434,6 +1435,7 @@ function ProcessStage({
           <label>
             Stream
             <select
+              aria-label="Connect stream"
               value={connectStream}
               onChange={(e) => setConnectStream(e.target.value)}
               disabled={loading || Boolean(runtimeUnavailable)}
@@ -1460,6 +1462,7 @@ function ProcessStage({
           <label>
             Role
             <select
+              aria-label="Connect role"
               value={connectRole}
               onChange={(e) =>
                 setConnectRole(e.target.value as typeof connectRole)
@@ -1475,6 +1478,7 @@ function ProcessStage({
             Port
             <input
               type="number"
+              aria-label="Connect port"
               min="0"
               value={connectPort}
               onChange={(e) => setConnectPort(e.target.value)}
