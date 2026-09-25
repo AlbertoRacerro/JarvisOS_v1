@@ -8,6 +8,7 @@ import ModelStage from "./ModelStage";
 import ProcessStage from "./ProcessStage";
 import ResultsStage from "./ResultsStage";
 import ReviewStage from "./ReviewStage";
+import EngineeringStudiesStage from "./EngineeringStudiesStage";
 
 export type ShellRegion = "navigator" | "sidecar" | "dock";
 
@@ -38,5 +39,6 @@ export const PRIMARY_STAGES: Readonly<Record<StageKind, StageDefinition>> = {
   process: { kind: "process", label: "Process", render: ProcessStage },
   results: { kind: "results", label: "Results", render: ResultsStage },
   lineage: { kind: "lineage", label: "Lineage", render: LineageStage },
-  review: { kind: "review", label: "Review", render: ReviewStage }
+  review: { kind: "review", label: "Review", render: ReviewStage },
+  studies: { kind: "studies", label: "Studies", render: EngineeringStudiesStage }
 };

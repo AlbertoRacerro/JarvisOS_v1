@@ -1,9 +1,10 @@
 export type PrimaryNavId = "design" | "memory" | "development" | "coding" | "settings";
 
-export type StageKind = "model" | "process" | "results" | "lineage" | "review";
+export type StageKind = "model" | "process" | "results" | "lineage" | "review" | "studies";
 
 export type RouteId =
   | "design-process"
+  | "design-studies"
   | "design-bluecad"
   | "memory-project-basis"
   | "memory-models"
@@ -40,6 +41,7 @@ export type PeerNavItem = Readonly<{ label: string; href: string }>;
 
 export const PRODUCTION_ROUTES: readonly AppRouteDefinition[] = [
   { id: "design-process", path: "/design/process", title: "Process", primaryNav: "design", stageKind: "process" },
+  { id: "design-studies", path: "/design/studies", title: "Studies", primaryNav: "design", stageKind: "studies" },
   { id: "design-bluecad", path: "/design/bluecad", title: "BLUECAD", primaryNav: "design", stageKind: "model" },
   { id: "memory-project-basis", path: "/memory/project-basis", title: "Project Basis", primaryNav: "memory" },
   { id: "memory-models", path: "/memory/models", title: "Models", primaryNav: "memory" },

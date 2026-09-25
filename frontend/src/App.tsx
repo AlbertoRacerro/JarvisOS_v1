@@ -155,6 +155,9 @@ function App() {
   } else if (route.stageKind && (route.id === "design-process" || route.id === "design-bluecad" || route.id === "review")) {
     const Stage = PRIMARY_STAGES[route.stageKind].render;
     content = <Stage workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} selection={selection} onSelectionChange={setSelection} onShellRegionsChange={setShellRegions} requestShellRegionOpen={requestShellRegionOpen} navigate={navigate} />;
+  } else if (route.id === "design-studies") {
+    const Stage = PRIMARY_STAGES.studies.render;
+    content = <Stage workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} selection={selection} onSelectionChange={setSelection} onShellRegionsChange={setShellRegions} requestShellRegionOpen={requestShellRegionOpen} navigate={navigate} />;
   } else {
     switch (route.id) {
       case "memory-project-basis":
