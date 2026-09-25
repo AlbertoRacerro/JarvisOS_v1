@@ -48,6 +48,48 @@ const display = (value: unknown) =>
     : value == null
       ? "—"
       : JSON.stringify(value);
+const projectedBoundaryResidual = (projection: EditorProjectionRead) => {
+  const objects = Array.isArray(projection.objects) ? projection.objects : [];
+  const units = new Set(
+    objects
+      .filter((item) => item?.category === "unit")
+      .map((item) => item.native_id)
+      .filter((id): id is string => typeof id === "string"),
+  );
+  const streams = new Map(
+    objects
+      .filter(
+        (item) =>
+          item?.category === "material_stream" &&
+          typeof item.native_id === "string",
+      )
+      .map((item) => [item.native_id as string, item]),
+  );
+  const inlets = new Set<string>();
+  const outlets = new Set<string>();
+  for (const edge of Array.isArray(projection.connections)
+    ? projection.connections
+    : []) {
+    if (edge.kind !== "material") continue;
+    if (streams.has(edge.source_native_id) && units.has(edge.target_native_id))
+      inlets.add(edge.source_native_id);
+    if (units.has(edge.source_native_id) && streams.has(edge.target_native_id))
+      outlets.add(edge.target_native_id);
+  }
+  if (!inlets.size || !outlets.size) return null;
+  const flow = (id: string) => {
+    const value = record(streams.get(id)?.results).mass_flow_kg_s;
+    return typeof value === "number" && Number.isFinite(value) ? value : null;
+  };
+  const inletFlows = [...inlets].map(flow);
+  const outletFlows = [...outlets].map(flow);
+  if (inletFlows.some((value) => value === null) || outletFlows.some((value) => value === null))
+    return null;
+  return (
+    (inletFlows as number[]).reduce((sum, value) => sum + value, 0) -
+    (outletFlows as number[]).reduce((sum, value) => sum + value, 0)
+  );
+};
 function readProjectKnowledgeHandoff() {
   const params = new URLSearchParams(window.location.search);
   const revisionId = params.get("project_knowledge_revision_id")?.trim();
@@ -512,6 +554,10 @@ function ProcessStage({
     ? `${selected.native_id} · case-local`
     : "—";
   const solve = record(projection?.last_solve);
+  const returnedResidual = solve.mass_balance_residual_kg_s;
+  const boundaryResidual = projection
+    ? projectedBoundaryResidual(projection)
+    : null;
   const solveObjects = Array.isArray(solve.object_calculation)
     ? solve.object_calculation
         .filter((item) => item && typeof item === "object")
@@ -669,10 +715,20 @@ function ProcessStage({
           </span>
           <span>DWSIM · {projection?.dwsim_version ?? "—"}</span>
           <span>Last solve · {display(solve.solve_status ?? "not run")}</span>
-          {solve.mass_balance_residual_kg_s !== undefined && (
+          {typeof returnedResidual === "number" &&
+          Number.isFinite(returnedResidual) ? (
             <span>
-              Residual · {display(solve.mass_balance_residual_kg_s)} kg/s ·
-              source: last_solve.mass_balance_residual_kg_s
+              Residual · {display(returnedResidual)} kg/s · source:
+              last_solve.mass_balance_residual_kg_s
+            </span>
+          ) : boundaryResidual !== null ? (
+            <span>
+              Residual · {display(boundaryResidual)} kg/s · source: projected
+              boundary streams (inlet total − outlet total)
+            </span>
+          ) : (
+            <span>
+              Residual · unavailable · source: {display(solve.mass_balance_status ?? "not returned")}
             </span>
           )}
         </div>

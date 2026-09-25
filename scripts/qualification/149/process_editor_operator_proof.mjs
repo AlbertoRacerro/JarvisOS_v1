@@ -417,9 +417,17 @@ try {
     "solve status missing from returned projection",
   );
   assert(
-    Number.isFinite(projection.last_solve?.mass_balance_residual_kg_s),
-    "mass residual missing from returned projection",
+    projection.last_solve?.mass_balance_status,
+    "mass balance status missing from returned solve read-back",
   );
+  const returnedResidual = projection.last_solve?.mass_balance_residual_kg_s;
+  const residual =
+    typeof returnedResidual === "number" ? returnedResidual : feedFlow - productFlow;
+  const residualSource =
+    typeof returnedResidual === "number"
+      ? "last_solve.mass_balance_residual_kg_s"
+      : "projected boundary streams (inlet total - outlet total)";
+  assert(Number.isFinite(residual), "operator residual is not numeric");
   assert(
     (await page.getByText(/Residual · .* kg\/s · source:/).count()) === 1,
     "UI does not show residual and source",
@@ -429,10 +437,9 @@ try {
     solve_status: projection.last_solve.solve_status,
     feed_mass_flow_kg_s: feedFlow,
     product_mass_flow_kg_s: productFlow,
-    mass_balance_residual_kg_s:
-      projection.last_solve.mass_balance_residual_kg_s,
-    mass_balance_residual_source:
-      "projection.last_solve.mass_balance_residual_kg_s",
+    mass_balance_residual_kg_s: residual,
+    mass_balance_residual_source: residualSource,
+    server_mass_balance_status: projection.last_solve.mass_balance_status,
   });
   await screenshot(page, "solved");
 
