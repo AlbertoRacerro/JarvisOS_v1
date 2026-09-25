@@ -182,11 +182,11 @@ const send = async (prompt) => {
   await page.getByRole("button", { name: /Send without project context/ }).click();
   const transcript = page.getByRole("list", { name: "Jarvis thread transcript" });
   const promptMarker = prompt.replace(/\s+/g, " ").trim().slice(0, 120);
-  const entry = transcript.locator("li").filter({ hasText: promptMarker });
+  const entry = transcript.locator("li").filter({ hasText: promptMarker }).last();
   await entry.waitFor({ state: "visible", timeout: responseWaitMs });
   await page.waitForFunction((text) => {
     const item = [...document.querySelectorAll('[aria-label="Jarvis thread transcript"] li')]
-      .find((node) => (node.textContent ?? "").replace(/\s+/g, " ").includes(text));
+      .filter((node) => (node.textContent ?? "").replace(/\s+/g, " ").includes(text)).at(-1);
     return Boolean(item && item.querySelector("details") && /Canonical state/.test(item.textContent ?? "") && !/Submitting/.test(item.textContent ?? ""));
   }, promptMarker, { timeout: responseWaitMs });
   const details = entry.getByText("Interaction details", { exact: true });
