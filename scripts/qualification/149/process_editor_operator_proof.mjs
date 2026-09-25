@@ -183,7 +183,7 @@ const massFlow = (object) => object?.results?.mass_flow_kg_s ?? null;
 
 try {
   await waitForHttp("http://127.0.0.1:8000/health");
-  await waitForHttp("http://127.0.0.1:8000/design/process");
+  await waitForHttp("http://127.0.0.1:8000/");
   const createdWorkspace = await fetch("http://127.0.0.1:8000/workspaces", {
     method: "POST",
     headers: { "content-type": "application/json" },
