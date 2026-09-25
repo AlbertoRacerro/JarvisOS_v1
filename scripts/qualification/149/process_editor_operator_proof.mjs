@@ -368,8 +368,8 @@ try {
     renderedObject(projection, "FeedA_Renamed"),
     "renamed feed missing from projection",
   );
-  await setStreamValues(page, "FeedA_Renamed", 1.25);
-  await setStreamValues(page, "FeedB", 2.75);
+  await setStreamValues(page, "FeedA_Renamed", 1.0);
+  await setStreamValues(page, "FeedB", 1.0);
   await page.getByRole("button", { name: "Solve", exact: true }).click();
   projection = await waitCommand(page);
   const productFlow = massFlow(renderedObject(projection, "Product"));
