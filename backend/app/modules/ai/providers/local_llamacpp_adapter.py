@@ -18,7 +18,7 @@ from app.modules.ai.contracts import (
     AIUsageSource,
     ModelRegistryEntry,
 )
-from app.modules.local_ai.runtime.llama_cpp import llama_cpp_runtime_config
+from app.modules.local_ai.runtime.llama_cpp import get_llama_cpp_runtime_owner, llama_cpp_runtime_config
 
 LOCAL_LLAMACPP_PROVIDER_ID = "local_llamacpp"
 _THINK_RE = re.compile(r"<think>(.*?)</think>", re.DOTALL | re.IGNORECASE)
@@ -61,9 +61,11 @@ class LocalLlamaCppAdapter:
     def complete(self, request: AIRequest) -> AIResponse:
         base_url = self._base_url()
         model_id = request.model_preference or llama_cpp_runtime_config().model_id
-        messages = [message.model_dump() for message in request.messages]
-        if not messages:
-            messages = [{"role": "user", "content": request.prompt or ""}]
+        # Same precedence as the Ollama route: the assembled prompt carries the Jarvis envelope.
+        if request.prompt is not None:
+            messages = [{"role": "user", "content": request.prompt}]
+        else:
+            messages = [message.model_dump() for message in request.messages]
         payload = {
             "model": model_id,
             "messages": messages,
@@ -73,7 +75,9 @@ class LocalLlamaCppAdapter:
         }
         client = self._client_factory()
         try:
-            response = client.post(f"{base_url}/chat/completions", json=payload, timeout=120.0)
+            response = client.post(f"{base_url}/chat/completions", json=payload,
+                                    headers=get_llama_cpp_runtime_owner().auth_headers(),
+                                    timeout=llama_cpp_runtime_config().request_timeout_s)
             response.raise_for_status()
             body_raw = response.json()
             if not isinstance(body_raw, dict):

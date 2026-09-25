@@ -144,6 +144,9 @@ def test_registry_classifies_llamacpp_as_local_compute() -> None:
 
 class _FakeProcess:
     pid = 332211
+    returncode: int | None = None
+    def poll(self) -> int | None:
+        return self.returncode
     def wait(self, timeout: float) -> int:
         return 0
     def kill(self) -> None:
@@ -169,10 +172,12 @@ def test_lifecycle_start_stop_restart_and_existing_instance(tmp_path) -> None:
         return httpx.Response(200, json=[])
 
     transport = httpx.MockTransport(respond)
-    def popen(args: list[str], **_: object) -> _FakeProcess:
+    spawn_env: list[dict[str, str]] = []
+    def popen(args: list[str], **kwargs: object) -> _FakeProcess:
         nonlocal online
         online = True
         spawn_calls.append(args)
+        spawn_env.append(kwargs["env"])  # type: ignore[arg-type]
         return _FakeProcess()
     owner = LlamaCppRuntimeOwner(
         _config(binary_path=str(binary), model_path=str(model)), popen=popen,
@@ -181,6 +186,10 @@ def test_lifecycle_start_stop_restart_and_existing_instance(tmp_path) -> None:
     )
     assert owner.start()["model_loaded"] is True
     assert len(spawn_calls) == 1
+    key = spawn_env[0]["LLAMA_API_KEY"]
+    assert key and key not in spawn_calls[0]
+    assert "--no-webui" in spawn_calls[0] and "--n-gpu-layers" in spawn_calls[0]
+    assert owner.auth_headers() == {"Authorization": f"Bearer {key}"}
     assert owner.start()["runtime_reachable"] is True
     assert len(spawn_calls) == 1
     owner.stop()
@@ -195,3 +204,77 @@ def test_lifecycle_start_stop_restart_and_existing_instance(tmp_path) -> None:
     )
     online = True
     assert existing.start()["runtime_reachable"] is True
+
+
+def test_spawn_defaults_fit_offload_and_reports_loading_auth_and_exit(tmp_path) -> None:
+    binary = tmp_path / "llama-server"
+    model = tmp_path / "model.gguf"
+    binary.write_text("fake executable")
+    model.write_bytes(b"fake model")
+    health = 503
+    seen_auth: list[str | None] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        seen_auth.append(request.headers.get("authorization"))
+        if request.url.path.endswith("/health"):
+            return httpx.Response(health)
+        if request.url.path.endswith("/props"):
+            return httpx.Response(200, json={"build_id": "b11178"})
+        if request.url.path.endswith("/v1/models"):
+            return httpx.Response(200, json={"data": [{"id": "qwen3.8-27b-q4kxl"}]})
+        return httpx.Response(200, json=[])
+
+    transport = httpx.MockTransport(respond)
+    process = _FakeProcess()
+    spawned: list[tuple[list[str], dict[str, object]]] = []
+
+    def popen(args: list[str], **kwargs: object) -> _FakeProcess:
+        spawned.append((args, kwargs))
+        return process
+
+    log = tmp_path / "logs" / "llama-server.log"
+    owner = LlamaCppRuntimeOwner(
+        _config(binary_path=str(binary), model_path=str(model), n_gpu_layers=None,
+                library_dirs=("/opt/cudart",), log_path=str(log), startup_wait_s=0.0),
+        popen=popen, client_factory=lambda **kwargs: httpx.Client(transport=transport, **kwargs),
+        sleep=lambda _: None,
+    )
+    loading = owner.start()
+    args, kwargs = spawned[0]
+    assert "--n-gpu-layers" not in args
+    assert str(kwargs["env"]["LD_LIBRARY_PATH"]).startswith("/opt/cudart")  # type: ignore[index]
+    assert log.exists()
+    assert loading["reason_code"] == "LLAMACPP_LOADING"
+    assert loading["digest_state"] == "not_verified"
+    health = 200
+    ready = owner.status()
+    assert ready["model_loaded"] is True
+    assert seen_auth[-1] == f"Bearer {kwargs['env']['LLAMA_API_KEY']}"  # type: ignore[index]
+    process.returncode = 1
+    exited = owner.status()
+    assert exited["spawned_by_jarvis"] is False and exited["last_exit_code"] == 1
+    assert owner.auth_headers() == {}
+
+
+def test_adapter_sends_assembled_prompt_with_auth_and_route_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(adapter_module, "llama_cpp_runtime_config", lambda: _config(request_timeout_s=900.0))
+
+    class Owner:
+        def auth_headers(self) -> dict[str, str]:
+            return {"Authorization": "Bearer local-token"}
+
+    monkeypatch.setattr(adapter_module, "get_llama_cpp_runtime_owner", lambda: Owner())
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        import json
+        captured["auth"] = request.headers.get("authorization")
+        captured["timeout"] = request.extensions["timeout"]["read"]
+        captured["messages"] = json.loads(request.content)["messages"]
+        return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}, "finish_reason": "stop"}]})
+
+    adapter = LocalLlamaCppAdapter(client_factory=lambda: httpx.Client(transport=httpx.MockTransport(respond)))
+    adapter.complete(AIRequest(task_type=AITaskType.synthesis, prompt="SYSTEM: envelope\nUSER: ciao"))
+    assert captured["auth"] == "Bearer local-token"
+    assert captured["timeout"] == 900.0
+    assert captured["messages"] == [{"role": "user", "content": "SYSTEM: envelope\nUSER: ciao"}]

@@ -19,4 +19,6 @@ def control_llama_cpp(action: str) -> dict[str, object]:
         return owner.stop()
     if action == "restart":
         return owner.restart()
+    if action == "verify-digest":
+        return owner.verify_digest()
     raise HTTPException(status_code=404, detail="Unknown llama.cpp runtime action.")
