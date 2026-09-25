@@ -1353,7 +1353,9 @@ class SQLiteIndexStore:
         return resolver(ref) if resolver else None
 
     def build_bundle(self, query: str, *, workspace_id: str | None, token_budget: int,
-                     expansion_level: int = 0, limit: int = 12) -> ContextBundle:
+                     expansion_level: int = 0, limit: int = 12,
+                     source_owners: frozenset[str] | None = None,
+                     source_refs: frozenset[tuple[str, str, str]] | None = None) -> ContextBundle:
         freshness = self.freshness()
         owner_stale_refs = list(getattr(self, "_last_owner_changes", []))
         if token_budget < 0 or not 0 <= expansion_level <= 8 or limit < 0:
@@ -1379,6 +1381,9 @@ class SQLiteIndexStore:
             hit for hit in self.search_hybrid(query, limit=limit * 4, workspace_id=workspace_id)
             if not (hit.source_ref.authority_owner == "retrieval"
                     and hit.source_ref.object_type == "group_summary")
+            and (source_owners is None or hit.source_ref.authority_owner in source_owners)
+            and (source_refs is None or (hit.source_ref.authority_owner, hit.source_ref.object_type,
+                                         hit.source_ref.object_id) in source_refs)
         ][:limit]
         candidates: list[tuple[RetrievalHit, int]] = []
         seen: set[str] = set()
@@ -1407,14 +1412,18 @@ class SQLiteIndexStore:
                 rows = db.execute("SELECT * FROM docs WHERE object_id=?", (_key(ref),)).fetchall()
                 row = next((item for item in rows if SourceRef.model_validate_json(item["ref"]).object_type
                             == "document_summary"), None)
-                if row is not None:
+                if row is not None and source_owners is None:
                     include(self._hit(row, revision, graph=1.0), 0)
-                if expansion_level >= 1:
-                    include(hit, 1)
+                if expansion_level >= 1 or source_owners is not None:
+                    include(hit, expansion_level)
         if expansion_level >= 2 and direct and workspace_id is not None:
             refs = [hit.source_ref for hit in direct if hit.source_ref.workspace_id == workspace_id]
             for hit in self.expand_graph(refs, depth=expansion_level - 1, limit=limit):
-                include(hit, min(expansion_level, 1 + round(1.0 / (hit.graph_score or 1.0))))
+                if ((source_owners is None or hit.source_ref.authority_owner in source_owners)
+                        and (source_refs is None or (hit.source_ref.authority_owner,
+                                                     hit.source_ref.object_type, hit.source_ref.object_id)
+                             in source_refs)):
+                    include(hit, min(expansion_level, 1 + round(1.0 / (hit.graph_score or 1.0))))
         items: list[ContextBundleItem] = []
         manifest: list[ContextManifestEntry] = [
             ContextManifestEntry(source_ref=hit.source_ref, outcome="stale",

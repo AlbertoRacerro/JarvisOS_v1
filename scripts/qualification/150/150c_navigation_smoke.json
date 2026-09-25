@@ -1,0 +1,198 @@
+{
+  "changed_paths": 1,
+  "deleted_documents": 0,
+  "delta_sha": "69bc78f8ebf3e70c1e960d7b36c0928aa4f9ede0",
+  "document_count_delta": 2,
+  "embedded_documents": 3,
+  "embedder": "hashing-v1:128",
+  "generation_after_delta": 2,
+  "hermes_runtime_exercised": false,
+  "indexed_master_sha": "e1b944ca60b31066ccf691ae1c8b7cb5794bcfa1",
+  "known_gaps": [
+    "Hermes route deterministically tested; real Hermes runtime not launched by smoke.",
+    "HashingEmbedder used; E5 was not exercised."
+  ],
+  "queries": [
+    {
+      "evidence_role": "reference_data_not_instructions",
+      "freshness": {
+        "generation": 2,
+        "indexed_sha": "69bc78f8ebf3e70c1e960d7b36c0928aa4f9ede0",
+        "master_sha": "69bc78f8ebf3e70c1e960d7b36c0928aa4f9ede0",
+        "reason": null,
+        "state": "caught_up"
+      },
+      "hits": [
+        {
+          "excerpt": "def no_cost_fixture(**overrides):\n    defaults = {\n        \"estimated_cost\": None,\n        \"cost_currency\": None,\n        \"cost_source\": None,\n        \"cost_status\": \"unavailable\",\n        \"source_note\": None,\n        \"source_checked_at_note\": None,\n    }\n    defaults.update(overrides)\n    return fi",
+          "id": "tests/test_router_policy_benchmark_replay_harness.py::no_cost_fixture",
+          "owner": "repository",
+          "type": "symbol"
+        },
+        {
+          "excerpt": "class ContextManifestEntry(FrozenContract):\n    source_ref: SourceRef\n    outcome: ManifestOutcome\n    reason: str | None = Field(default=None, max_length=256)",
+          "id": "backend/app/modules/ai/retrieval_contracts.py::ContextManifestEntry",
+          "owner": "repository",
+          "type": "symbol"
+        },
+        {
+          "excerpt": "Thinking...\nOkay, let's tackle this query. The user is asking about material selection \u001b[K\nfor BlueRev tubing, specifically between silicone, PVC, ETFE, and acrylic. \u001b[K\nThey mention that none have been selected yet and that if asked, the answer\u001b[6D\u001b[K\nanswer should state the material isn't decided.",
+          "id": "reports/local_model_smoke/1G-B2-E/qwen_hybrid_parse_safe_v0_4__qwen3_8b__HG-032__raw.txt",
+          "owner": "repository",
+          "type": "file"
+        },
+        {
+          "excerpt": "def github_actions_runner(token: str) -> GitRunner:\n    \"\"\"Existing workflow credential adapter for 022/079 compatibility only.\"\"\"\n\n    if not token:\n        raise DeliveryRefusal(\n            DeliveryCode.LOCAL_CREDENTIAL_UNAVAILABLE,\n            \"workflow credential is unavailable\",\n        )\n    ",
+          "id": "scripts/repository_delivery.py::github_actions_runner",
+          "owner": "repository",
+          "type": "symbol"
+        }
+      ],
+      "latency_ms": 1528.84,
+      "query": "where is the local Ollama adapter finish reason handled",
+      "source_scope": [
+        "repository"
+      ],
+      "token_estimate": 965,
+      "workspace_id": null
+    },
+    {
+      "evidence_role": "reference_data_not_instructions",
+      "freshness": {
+        "generation": 2,
+        "indexed_sha": "69bc78f8ebf3e70c1e960d7b36c0928aa4f9ede0",
+        "master_sha": "69bc78f8ebf3e70c1e960d7b36c0928aa4f9ede0",
+        "reason": null,
+        "state": "current"
+      },
+      "hits": [
+        {
+          "excerpt": "{\"basis_lifecycle_state\": \"active\", \"created_at\": \"2026-09-25T14:08:12.829819+00:00\", \"decision_text\": \"Use a variable-speed pump with the documented pressure boundary; verify against the selected reactor case.\", \"id\": \"0d39c309-a4b9-4ecd-842e-13aeeb5d18c8\", \"linked_run_id\": null, \"notes\": null, \"ra",
+          "id": "0d39c309-a4b9-4ecd-842e-13aeeb5d18c8",
+          "owner": "modeling",
+          "type": "decision"
+        },
+        {
+          "excerpt": "{\"basis_kind\": \"requirement\", \"created_at\": \"2026-09-25T14:08:12.851163+00:00\", \"criterion_expected_unit\": null, \"criterion_expected_value\": null, \"criterion_operator\": null, \"criterion_output_name\": null, \"criterion_rule_version\": null, \"id\": \"fa571e20-b186-4449-983c-d66115154adb\", \"notes\": null, \"",
+          "id": "fa571e20-b186-4449-983c-d66115154adb",
+          "owner": "modeling",
+          "type": "requirement"
+        }
+      ],
+      "latency_ms": 681.84,
+      "query": "PBR pump decision smoke 1f7ac7cf",
+      "source_scope": [
+        "modeling"
+      ],
+      "token_estimate": 267,
+      "workspace_id": "bluerev"
+    },
+    {
+      "evidence_role": "reference_data_not_instructions",
+      "freshness": {
+        "generation": 2,
+        "indexed_sha": "69bc78f8ebf3e70c1e960d7b36c0928aa4f9ede0",
+        "master_sha": "69bc78f8ebf3e70c1e960d7b36c0928aa4f9ede0",
+        "reason": null,
+        "state": "current"
+      },
+      "hits": [
+        {
+          "excerpt": "{\"basis_lifecycle_state\": \"active\", \"created_at\": \"2026-09-25T14:08:12.829819+00:00\", \"decision_text\": \"Use a variable-speed pump with the documented pressure boundary; verify against the selected reactor case.\", \"id\": \"0d39c309-a4b9-4ecd-842e-13aeeb5d18c8\", \"linked_run_id\": null, \"notes\": null, \"ra",
+          "id": "0d39c309-a4b9-4ecd-842e-13aeeb5d18c8",
+          "owner": "modeling",
+          "type": "decision"
+        },
+        {
+          "excerpt": "{\"basis_kind\": \"requirement\", \"created_at\": \"2026-09-25T14:08:12.851163+00:00\", \"criterion_expected_unit\": null, \"criterion_expected_value\": null, \"criterion_operator\": null, \"criterion_output_name\": null, \"criterion_rule_version\": null, \"id\": \"fa571e20-b186-4449-983c-d66115154adb\", \"notes\": null, \"",
+          "id": "fa571e20-b186-4449-983c-d66115154adb",
+          "owner": "modeling",
+          "type": "requirement"
+        }
+      ],
+      "latency_ms": 510.08,
+      "query": "PBR pump pressure requirement smoke 1f7ac7cf",
+      "source_scope": [
+        "modeling"
+      ],
+      "token_estimate": 267,
+      "workspace_id": "bluerev"
+    },
+    {
+      "evidence_role": "reference_data_not_instructions",
+      "freshness": {
+        "generation": 2,
+        "indexed_sha": "69bc78f8ebf3e70c1e960d7b36c0928aa4f9ede0",
+        "master_sha": "69bc78f8ebf3e70c1e960d7b36c0928aa4f9ede0",
+        "reason": null,
+        "state": "current"
+      },
+      "hits": [
+        {
+          "excerpt": "Lifecycle: raw exploratory capture — NOT an accepted engineering decision\n{\"attachment_refs\": [], \"content\": \"Exploratory thought: compare a low-shear PBR pump (1f7ac7cf).\", \"created_at\": \"2026-09-25T14:08:12.865350+00:00\", \"created_by\": \"150c-smoke\", \"id\": \"19c794a5-de60-4f14-b7d1-6fe3d4dd872b\", \"l",
+          "id": "19c794a5-de60-4f14-b7d1-6fe3d4dd872b",
+          "owner": "brainstorm",
+          "type": "brainstorm_raw"
+        },
+        {
+          "excerpt": "Lifecycle: reconciled idea revision 1 (lineage_state=RECONCILED); proposal only\n{\"created_at\": \"2026-09-25T14:08:12.888066+00:00\", \"created_by\": \"150c-smoke\", \"idea_id\": \"292478a7-e78b-4284-91d2-807295bac3aa\", \"revision\": 1, \"source_refs\": [{\"ref_id\": \"19c794a5-de60-4f14-b7d1-6fe3d4dd872b\", \"ref_typ",
+          "id": "292478a7-e78b-4284-91d2-807295bac3aa:1",
+          "owner": "brainstorm",
+          "type": "brainstorm_revision"
+        },
+        {
+          "excerpt": "Lifecycle: promotion proposal state=pending target=roadmap; proposal only, never accepted engineering state\n{\"created_at\": \"2026-09-25T14:08:12.905471+00:00\", \"created_by\": \"150c-smoke\", \"downstream_handoff_id\": null, \"id\": \"8c74b584-e11b-4471-8736-fe2b3c6155d3\", \"idea_id\": \"292478a7-e78b-4284-91d2-",
+          "id": "8c74b584-e11b-4471-8736-fe2b3c6155d3",
+          "owner": "brainstorm",
+          "type": "brainstorm_promotion"
+        }
+      ],
+      "latency_ms": 804.36,
+      "query": "pump exploration promotion smoke 1f7ac7cf",
+      "source_scope": [
+        "brainstorm"
+      ],
+      "token_estimate": 356,
+      "workspace_id": "bluerev"
+    },
+    {
+      "evidence_role": "reference_data_not_instructions",
+      "freshness": {
+        "generation": 2,
+        "indexed_sha": "69bc78f8ebf3e70c1e960d7b36c0928aa4f9ede0",
+        "master_sha": "69bc78f8ebf3e70c1e960d7b36c0928aa4f9ede0",
+        "reason": null,
+        "state": "current"
+      },
+      "hits": [
+        {
+          "excerpt": "{\"backing\": null, \"citation\": \"Qualification-only local citation; not a validated engineering source.\", \"created_at\": \"2026-09-25T14:08:12.918563+00:00\", \"entries\": [{\"context_text\": \"Qualification smoke record.\", \"created_at\": \"2026-09-25T14:08:12.938405+00:00\", \"entry_kind\": \"claim\", \"id\": \"b8274d",
+          "id": "3a59d4ac-8f83-4ac1-9ef1-118801f0bfe4",
+          "owner": "literature",
+          "type": "source"
+        },
+        {
+          "excerpt": "{\"context_text\": \"Qualification smoke record.\", \"created_at\": \"2026-09-25T14:08:12.938405+00:00\", \"entry_kind\": \"claim\", \"id\": \"b8274d54-c8e6-4a9a-9aa3-8e9cbb3d0085\", \"locator_end\": null, \"locator_kind\": null, \"locator_start\": null, \"provenance_ref\": \"literature_entry:b8274d54-c8e6-4a9a-9aa3-8e9cbb3",
+          "id": "b8274d54-c8e6-4a9a-9aa3-8e9cbb3d0085",
+          "owner": "literature",
+          "type": "entry"
+        }
+      ],
+      "latency_ms": 563.94,
+      "query": "PBR circulation review smoke 1f7ac7cf",
+      "source_scope": [
+        "literature"
+      ],
+      "token_estimate": 424,
+      "workspace_id": "bluerev"
+    }
+  ],
+  "recall_observations": [
+    "The seeded decision, requirement, Brainstorm raw/revision/promotion, and literature source/entry were retrieved in their scoped queries.",
+    "The broad local Ollama finish-reason query returned repository excerpts but missed the expected adapter location in its top four; query phrasing or ranking needs improvement."
+  ],
+  "repository": "/tmp/k150a-repo",
+  "schema_version": "150c-navigation-smoke.v1",
+  "source_repository": "/home/thera/src/JarvisOS_v1",
+  "sqlite_vec_enabled": true
+}

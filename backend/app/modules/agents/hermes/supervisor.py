@@ -41,15 +41,22 @@ _SEED_INTERACTIONS = 20
 _SEED_CHARS = 60_000
 # Tool schemas Jarvis admits in a relayed model request. Only the broker tool reaches Jarvis
 # capabilities; memory and session search remain read-only worker-local tools.
-HERMES_TOOL_ALLOWLIST = frozenset({"mcp__jarvis__jarvis_context_preview", "memory", "session_search"})
+HERMES_TOOL_ALLOWLIST = frozenset({"mcp__jarvis__jarvis_context_preview",
+                                  "mcp__jarvis__jarvis_retrieval_query", "memory", "session_search"})
 _BWRAP_PREFIX = ("bwrap", "--dev-bind", "/", "/", "--unshare-net", "--die-with-parent", "--")
 
 _HERMES_CONTEXT_CAPABILITY = JarvisCapabilityDescriptor(
     capability_id="jarvis.context_preview", route_id="ai-threads", action_class="CONTEXT",
     label="Preview exact Jarvis context",
 )
+_HERMES_RETRIEVAL_CAPABILITY = JarvisCapabilityDescriptor(
+    capability_id="jarvis.retrieval_query", route_id="ai-threads", action_class="READ",
+    label="Query bounded Second Brain evidence",
+)
 if _HERMES_CONTEXT_CAPABILITY not in PRODUCTION_CAPABILITY_REGISTRY.for_route("ai-threads"):
     PRODUCTION_CAPABILITY_REGISTRY.register(_HERMES_CONTEXT_CAPABILITY)
+if _HERMES_RETRIEVAL_CAPABILITY not in PRODUCTION_CAPABILITY_REGISTRY.for_route("ai-threads"):
+    PRODUCTION_CAPABILITY_REGISTRY.register(_HERMES_RETRIEVAL_CAPABILITY)
 
 
 def current_mapping(connection: sqlite3.Connection, thread_id: str) -> AgentSessionRef | None:
@@ -232,6 +239,34 @@ def dispatch_tool(
                             result = build_jarvis_context_preview(request).model_dump(mode="json")
                     except ValueError:
                         error = "invalid_arguments"
+                elif call.capability_id == "jarvis.retrieval_query":
+                    try:
+                        requested = dict(call.arguments)
+                        requested_owners = requested.pop("source_scope", None)
+                        allowed_owners = {ref.authority_owner for ref in scope.object_refs}
+                        granted_refs = frozenset((ref.authority_owner, ref.object_type, ref.object_id)
+                                                 for ref in scope.object_refs)
+                        raw_query = requested.pop("query", None)
+                        raw_limit = requested.pop("limit", 8)
+                        raw_token_budget = requested.pop("token_budget", 1_024)
+                        if (isinstance(requested_owners, list) and requested_owners
+                                and all(isinstance(owner, str) for owner in requested_owners)
+                                and set(requested_owners) <= allowed_owners):
+                            from app.modules.ai.retrieval_query import query_context
+                            if (not requested and isinstance(raw_query, str)
+                                    and isinstance(raw_limit, int) and not isinstance(raw_limit, bool)
+                                    and 1 <= raw_limit <= 8
+                                    and isinstance(raw_token_budget, int) and not isinstance(raw_token_budget, bool)
+                                    and 1 <= raw_token_budget <= 1_024):
+                                result = query_context(raw_query, workspace_id=scope.workspace_id,
+                                                       source_scope=tuple(str(owner) for owner in requested_owners),
+                                                       allowed_refs=granted_refs,
+                                                       limit=raw_limit,
+                                                       token_budget=raw_token_budget)
+                        else:
+                            error = "scope_denied"
+                    except (TypeError, ValueError):
+                        error = "invalid_arguments"
     return StructuredToolResult(
         call_id=call.call_id, capability_id=call.capability_id,
         status="succeeded" if result is not None else "refused",
@@ -405,10 +440,14 @@ class HermesSupervisor:
             arguments = frame["arguments"]
             if ref != self.session or not isinstance(arguments, dict):
                 raise ValueError("stale or malformed tool call")
+            tool_name = arguments.pop("tool_name", "")
+            capability_id = ("jarvis.retrieval_query" if tool_name == "jarvis_retrieval_query"
+                             else "jarvis.context_preview")
             call = StructuredToolCall(
-                call_id=str(frame["id"]), capability_id="jarvis.context_preview",
+                call_id=str(frame["id"]), capability_id=capability_id,
                 grant_id=arguments["grant_id"], correlation_id=str(frame["id"]),
-                session_ref=ref, arguments=arguments["request"],
+                session_ref=ref, arguments=(arguments if capability_id == "jarvis.retrieval_query"
+                                            else arguments["request"]),
                 requested_at=now, deadline_at=now + timedelta(seconds=120),
             )
             result = dispatch_tool(call, live_grants=self.live_grants)
