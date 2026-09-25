@@ -24,11 +24,11 @@ BACKEND_ROOT = REPO_ROOT / "backend"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
-from app.modules.engineering.operator_models import (
+from app.modules.engineering.operator_models import (  # noqa: E402
     CapabilityRead,
     EvaluatorRead,
 )
-from app.modules.modeling.models import ParameterRead
+from app.modules.modeling.models import ParameterRead  # noqa: E402
 
 SOURCE_LABEL = "backend/app/modules/modeling/models.py::ParameterRead"
 TARGET = REPO_ROOT / "frontend" / "src" / "api" / "generated" / "modeling.ts"
