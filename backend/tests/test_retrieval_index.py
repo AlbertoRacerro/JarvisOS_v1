@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -315,6 +316,32 @@ def test_non_ancestor_rebuild_and_concurrent_sync_increment_once(tmp_path: Path,
                                                 "json_extract(ref,'$.authority_owner')='repository'")}
     assert "fresh.txt" in ids and "unit.py" not in ids and "replacement.txt" not in ids
     get_settings.cache_clear()
+
+
+def test_concurrent_rebuilds_are_generation_guarded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("JARVISOS_DATA_ROOT", str(tmp_path / "data"))
+    get_settings.cache_clear()
+    barrier = threading.Barrier(2)
+    document = _doc("rebuild-race", "w1", "one deterministic record")
+
+    def documents():
+        barrier.wait(timeout=5)
+        return [document]
+
+    index = SQLiteIndexStore(documents=documents)
+
+    def rebuild():
+        try:
+            return True, index.rebuild()
+        except RuntimeError as exc:
+            return False, str(exc)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        outcomes = list(pool.map(lambda _: rebuild(), range(2)))
+    assert sum(succeeded for succeeded, _ in outcomes) == 1
+    assert sum(not succeeded and "changed during rebuild" in value for succeeded, value in outcomes) == 1
+    with open_retrieval_index_connection() as db:
+        assert db.execute("SELECT value FROM meta WHERE name='generation'").fetchone()[0] == "1"
 
 
 def test_process_exit_rolls_back_and_sync_recovers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

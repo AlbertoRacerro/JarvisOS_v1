@@ -38,11 +38,22 @@ def _records(value: object) -> list[dict[str, object]]:
 
 def canonical_owner_documents(owners: set[str] | None = None) -> Iterable[IndexDocument]:
     """Project the accepted owner records named by Second Brain capabilities 3 and 4."""
+    from app.modules.ai.retrieval_index import _evidence_document, _model_document, _record_document
     from app.modules.ai.thread_service import get_thread, list_threads
+    from app.modules.bluecad.evidence import get_evidence_record
+    from app.modules.bluecad.ledger import list_attempts, list_candidates
     from app.modules.development import brainstorm_service as brainstorm
     from app.modules.development.service import list_calendar_allocations, list_roadmap_items
     from app.modules.memory.literature_service import list_literature_sources
-    from app.modules.modeling.service import list_simulation_runs
+    from app.modules.modeling.model_dossier import get_model_dossier, list_model_dossier_index
+    from app.modules.modeling.service import (
+        list_assumptions,
+        list_decisions,
+        list_model_specs,
+        list_parameters,
+        list_requirements,
+        list_simulation_runs,
+    )
     from app.modules.project_knowledge.service import get_snapshot, list_revisions
 
     def selected(owner: str) -> bool:
@@ -50,6 +61,32 @@ def canonical_owner_documents(owners: set[str] | None = None) -> Iterable[IndexD
 
     for workspace in sorted(list_workspaces(), key=lambda item: item.id):
         wid = workspace.id
+        if selected("modeling"):
+            for kind, records in (
+                ("model_spec", list_model_specs(wid)), ("decision", list_decisions(wid)),
+                ("assumption", list_assumptions(wid)), ("parameter", list_parameters(wid)),
+                ("requirement", list_requirements(wid)),
+            ):
+                for record in records:
+                    yield _model_document(kind, record, wid)
+            for dossier_entry in list_model_dossier_index(wid):
+                for version in dossier_entry.versions:
+                    dossier = get_model_dossier(wid, version.model_version_id)
+                    if dossier is not None:
+                        yield _record_document("modeling", "dossier", dossier, wid,
+                                               object_id=version.model_version_id)
+        if selected("bluecad"):
+            for candidate in list_candidates(wid):
+                yield _record_document("bluecad", "candidate", candidate, wid)
+                for attempt in list_attempts(candidate.id):
+                    yield _record_document("bluecad", "attempt", attempt, wid)
+            with open_sqlite_connection() as connection:
+                evidence_ids = [str(row[0]) for row in connection.execute(
+                    "SELECT id FROM evidence_records WHERE workspace_id=? ORDER BY id", (wid,))]
+            for evidence_id in evidence_ids:
+                evidence_record = get_evidence_record(evidence_id)
+                if evidence_record is not None and evidence_record.workspace_id == wid:
+                    yield _evidence_document(evidence_record, wid)
         seen_discussions: set[str] = set()
         thread_offset = 0
         while selected("ai_threads"):
@@ -108,6 +145,7 @@ def canonical_owner_documents(owners: set[str] | None = None) -> Iterable[IndexD
         for page_offset in (range(0, 1_000_000, 50) if selected("literature") else []):
             page = list_literature_sources(wid, offset=page_offset, limit=50)
             for source in page.items:
+                yield _record_document("literature", "source", source, wid)
                 for entry in source.entries:
                     yield _doc("literature", "entry", entry.id, wid, entry,
                                revision=entry.updated_at, title=source.title)
@@ -131,12 +169,12 @@ def canonical_owner_documents(owners: set[str] | None = None) -> Iterable[IndexD
             text = (full_text if len(full_text) <= 200_000 else
                     full_text[:_MAX_DOCUMENT_CHARS] + f"\n[TRUNCATED: full owner record digest sha256:{digest}]")
             yield IndexDocument(source_ref=ref, text=text)
-        for item in (list_roadmap_items(wid) if selected("development") else []):
-            yield _doc("development", "roadmap_item", str(item["id"]), wid, item,
-                       revision=str(item.get("revision", item.get("updated_at", ""))))
-        for item in (list_calendar_allocations(wid) if selected("development") else []):
-            yield _doc("development", "calendar_allocation", str(item["id"]), wid, item,
-                       revision=str(item.get("revision", item.get("updated_at", ""))))
+        for roadmap_item in (list_roadmap_items(wid) if selected("development") else []):
+            yield _doc("development", "roadmap_item", str(roadmap_item["id"]), wid, roadmap_item,
+                       revision=str(roadmap_item.get("revision", roadmap_item.get("updated_at", ""))))
+        for allocation in (list_calendar_allocations(wid) if selected("development") else []):
+            yield _doc("development", "calendar_allocation", str(allocation["id"]), wid, allocation,
+                       revision=str(allocation.get("revision", allocation.get("updated_at", ""))))
         for run in (list_simulation_runs(wid) if selected("modeling") else []):
             yield _doc("modeling", "simulation_run", run.id, wid, run,
                        revision=run.created_at)
@@ -315,16 +353,18 @@ def _owner_fingerprints() -> dict[str, str]:
     tables = {
         "brainstorm": ("brainstorm_raw_records", "brainstorm_discussions", "brainstorm_ideas",
                        "brainstorm_revisions", "brainstorm_promotions"),
-        "literature": ("literature_entries",),
+        "literature": ("literature_sources", "literature_entries"),
         "project_knowledge": ("project_knowledge_revisions", "project_knowledge_reconciled_snapshots"),
         "development": ("roadmap_items", "calendar_allocations"),
-        "modeling": ("simulation_runs",),
         "ai_threads": ("ai_threads", "ai_thread_interactions"),
+        "modeling": ("model_specs", "decisions", "assumptions", "parameters", "requirements",
+                     "model_versions", "simulation_runs"),
+        "bluecad": ("bluecad_candidates", "bluecad_attempts", "evidence_records"),
     }
     result: dict[str, str] = {}
     with open_sqlite_connection() as connection:
         for owner, names in tables.items():
-            values = []
+            values: list[object] = []
             for table in names:
                 exists = connection.execute(
                     "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)
@@ -332,18 +372,9 @@ def _owner_fingerprints() -> dict[str, str]:
                 if exists is None:
                     values.append((table, 0, None, None))
                     continue
-                columns = {str(row[1]) for row in connection.execute(f"PRAGMA table_info({table})")}
-                timestamp = next((name for name in ("updated_at", "created_at", "accepted_at") if name in columns), None)
-                maximum = f", MAX({timestamp})" if timestamp else ""
-                revision = ", MAX(revision)" if "revision" in columns else ""
-                row = connection.execute(f"SELECT COUNT(*), MAX(rowid){maximum}{revision} FROM {table}").fetchone()
-                state_columns = [name for name in ("state", "status", "lineage_state") if name in columns]
-                states = []
-                for column in state_columns:
-                    states.append((column, [tuple(item) for item in connection.execute(
-                        f"SELECT {column}, COUNT(*) FROM {table} GROUP BY {column} ORDER BY {column}"
-                    )]))
-                values.append((table, *tuple(row), states))
+                rows = connection.execute(f"SELECT * FROM {table} ORDER BY rowid").fetchall()
+                values.append((table, [tuple(bytes(value).hex() if isinstance(value, bytes) else value
+                                               for value in row) for row in rows]))
             result[owner] = canonical_digest(values)
 
     from app.core.paths import build_paths
@@ -364,7 +395,13 @@ def _owner_fingerprints() -> dict[str, str]:
 
 def owner_catch_up(store: SQLiteIndexStore) -> dict[str, dict[str, int]]:
     """Synchronize canonical-owner projections atomically; unchanged records are not embedded."""
+    store._last_owner_changes = []
     fingerprints = _owner_fingerprints()
+    with open_sqlite_connection() as canonical_db:
+        workspaces_ready = canonical_db.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='workspaces'").fetchone() is not None
+    if not workspaces_ready:
+        return {owner: {"changed": 0, "deleted": 0, "embedded": 0} for owner in fingerprints}
     with open_retrieval_index_connection() as db:
         db.execute("CREATE TABLE IF NOT EXISTS owner_manifest (key TEXT PRIMARY KEY, owner TEXT NOT NULL, object_type TEXT NOT NULL, workspace_id TEXT NOT NULL, content_digest TEXT NOT NULL)")
         previous = {str(row[0]).removeprefix("owner_fingerprint:"): str(row[1]) for row in db.execute(
@@ -386,9 +423,11 @@ def owner_catch_up(store: SQLiteIndexStore) -> dict[str, dict[str, int]]:
         db.execute("CREATE TABLE IF NOT EXISTS owner_manifest (key TEXT PRIMARY KEY, owner TEXT NOT NULL, object_type TEXT NOT NULL, workspace_id TEXT NOT NULL, content_digest TEXT NOT NULL)")
         db.execute("BEGIN IMMEDIATE")
         old_rows = db.execute("SELECT key, owner, object_type, workspace_id, content_digest FROM owner_manifest").fetchall()
+        previous_digests = {str(row[0]): str(row[4]) for row in old_rows}
         owners = changed_owners
         changed_docs: list[IndexDocument] = []
         deleted_keys: set[str] = set()
+        embedded_count: dict[str, int] = defaultdict(int)
         for owner in owners:
             current = {key: doc for key, doc in grouped.get(owner, [])}
             previous = {str(row[0]): str(row[4]) for row in old_rows if str(row[1]) == owner}
@@ -397,9 +436,26 @@ def owner_catch_up(store: SQLiteIndexStore) -> dict[str, dict[str, int]]:
             changed_docs.extend(changed)
             deleted_keys.update(deleted)
             result[owner] = {"changed": len(changed), "deleted": len(deleted), "embedded": 0}
+        stale_refs: list[SourceRef] = []
+        changed_manifest_keys = {
+            key for owner in changed_owners for key, doc in grouped.get(owner, [])
+            if previous_digests.get(key) != doc.source_ref.content_digest
+        }
+        changed_manifest_keys.update(key for key in deleted_keys)
+        desired_digests = {key: doc.source_ref.content_digest for key, doc in desired.items()}
+        for key in changed_manifest_keys:
+            row = db.execute("SELECT ref FROM docs WHERE key=?", (key,)).fetchone()
+            if row is not None:
+                old_ref = SourceRef.model_validate_json(row[0])
+                if key in deleted_keys or desired_digests.get(key) != old_ref.content_digest:
+                    stale_refs.append(old_ref)
+        store._last_owner_changes = stale_refs
         # Owner docs and their summaries are maintained in the same SQLite transaction.
         if changed_docs:
-            store._upsert(db, changed_docs)
+            for owner in changed_owners:
+                owner_docs = [doc for doc in changed_docs if doc.source_ref.authority_owner == owner]
+                if owner_docs:
+                    embedded_count[owner] += store._upsert(db, owner_docs)
         for key in deleted_keys:
             store._delete_keys(db, [key])
             summary_rows = db.execute("SELECT key FROM docs WHERE object_id=?", (key,)).fetchall()
@@ -411,7 +467,7 @@ def owner_catch_up(store: SQLiteIndexStore) -> dict[str, dict[str, int]]:
             changed_owner_docs = [doc for doc in changed_docs if doc.source_ref.authority_owner == owner]
             summaries = [_document_summary(doc) for doc in changed_owner_docs]
             if summaries:
-                store._upsert(db, summaries)
+                embedded_count[owner] += store._upsert(db, summaries)
             groups: dict[str, list[IndexDocument]] = defaultdict(list)
             for doc in current_docs:
                 groups[doc.source_ref.workspace_id or ""].append(doc)
@@ -430,7 +486,7 @@ def owner_catch_up(store: SQLiteIndexStore) -> dict[str, dict[str, int]]:
             live_group_keys = {_key(doc.source_ref) for doc in group_summaries}
             store._delete_keys(db, [key for key in existing_groups if key not in live_group_keys])
             if group_summaries:
-                store._upsert(db, group_summaries)
+                embedded_count[owner] += store._upsert(db, group_summaries)
             summary_by_key = {doc.source_ref.object_id: doc for doc in summaries}
             for doc in current_docs:
                 summary = summary_by_key.get(_key(doc.source_ref))
@@ -443,8 +499,7 @@ def owner_catch_up(store: SQLiteIndexStore) -> dict[str, dict[str, int]]:
                     if summary is not None:
                         db.execute("INSERT OR IGNORE INTO edges VALUES (?,?,?,?)",
                                    (_key(group.source_ref), _key(summary.source_ref), "group_summary", None))
-            embedded = len(changed_docs) + len(summaries) + len(group_summaries)
-            result.setdefault(owner, {"changed": 0, "deleted": 0, "embedded": 0})["embedded"] = embedded
+            result.setdefault(owner, {"changed": 0, "deleted": 0, "embedded": 0})["embedded"] = embedded_count[owner]
             db.execute("DELETE FROM owner_manifest WHERE owner=?", (owner,))
             db.executemany("INSERT INTO owner_manifest VALUES (?,?,?,?,?)", [
                 (_manifest_key(doc.source_ref), owner, doc.source_ref.object_type,

@@ -50,8 +50,13 @@ from app.modules.engineering.evaluator_contracts import (
 from app.modules.engineering.refs import EvaluationResultRef, Quantity
 from app.modules.memory.literature_models import LiteratureEntryCreate, LiteratureSourceCreate
 from app.modules.memory.literature_service import create_literature_entry, create_literature_source
-from app.modules.modeling.models import SimulationRunCreate
-from app.modules.modeling.service import create_simulation_run
+from app.modules.modeling.models import DecisionCreate, RequirementCreate, RequirementUpdate, SimulationRunCreate
+from app.modules.modeling.service import (
+    create_decision,
+    create_requirement,
+    create_simulation_run,
+    update_requirement,
+)
 from app.modules.process_stack import editor as process_editor
 from app.modules.process_stack.correlations import PIPE_EVALUATOR_ID
 from app.modules.project_knowledge.models import ApprovalRequest, DraftCreate, ProjectKnowledgeOperation
@@ -276,6 +281,36 @@ def test_roadmap_mutation_and_delete_are_caught_up(store: SQLiteIndexStore) -> N
     delete_roadmap_item(workspace.id, str(item["id"]), 2, "test")
     retrieval_owners.owner_catch_up(store)
     assert store.resolve_authoritative(old_ref).state == "unavailable"
+
+
+def test_legacy_modeling_owners_catch_up_without_events(store: SQLiteIndexStore) -> None:
+    workspace = seed_default_workspace()
+    decision = create_decision(workspace.id, DecisionCreate(
+        title="Pump selection", decision_text="Use the small pump",
+    ))
+    requirement = create_requirement(workspace.id, RequirementCreate(
+        statement="Pressure stays below 10 kPa", status="active",
+    ))
+    retrieval_owners.owner_catch_up(store)
+    with open_retrieval_index_connection() as db:
+        old_decision = SourceRef.model_validate_json(db.execute(
+            "SELECT ref FROM docs WHERE object_id=? AND json_extract(ref,'$.object_type')='decision'",
+            (decision.id,),
+        ).fetchone()[0])
+    with open_sqlite_connection() as db:
+        db.execute("UPDATE decisions SET decision_text=? WHERE id=?", ("Use the variable speed pump", decision.id))
+        db.commit()
+    update_requirement(requirement.id, RequirementUpdate(statement="Pressure stays below 8 kPa"))
+
+    changed = retrieval_owners.owner_catch_up(store)
+    assert changed["modeling"]["changed"] >= 2
+    assert store.resolve_authoritative(old_decision).state == "stale"
+    with open_retrieval_index_connection() as db:
+        texts = {str(row["object_id"]): str(row["text"]) for row in db.execute(
+            "SELECT object_id,text FROM docs WHERE json_extract(ref,'$.authority_owner')='modeling' "
+            "AND json_extract(ref,'$.object_type') IN ('decision','requirement')")}
+    assert "variable speed pump" in texts[decision.id]
+    assert "below 8 kPa" in texts[requirement.id]
 
 
 def test_literature_entry_mutation_and_delete_are_caught_up(store: SQLiteIndexStore) -> None:
