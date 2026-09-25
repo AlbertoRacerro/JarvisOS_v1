@@ -26,6 +26,9 @@ const routeClass = arg("--route", "local:general");
 const runtime = arg("--runtime", "ollama");
 if (!["ollama", "llamacpp"].includes(runtime)) throw new Error(`unsupported runtime: ${runtime}`);
 const isLlamaCpp = runtime === "llamacpp";
+if (isLlamaCpp && process.env.JARVISOS_151_FULL_PROOF !== "1") {
+  throw new Error("full local-model browser proof requires JARVISOS_151_FULL_PROOF=1 after the short model gate passes");
+}
 const route = isLlamaCpp ? "local:llamacpp" : routeClass;
 const proofFile = join(output, isLlamaCpp ? "sidecar_operator_proof.llamacpp.json" : "sidecar_operator_proof.json");
 const runtimeKind = arg("--runtime-kind", isLlamaCpp ? "Jarvis-owned llama.cpp runtime" : "Windows Ollama via temporary dev bridge");
@@ -33,8 +36,8 @@ const llamaBinaryDir = "/home/thera/jarvis-control/work/tools/llama.cpp/b11178/d
 const llamaConfig = {
   binary_path: `${llamaBinaryDir}/llama-server`,
   library_dirs: [llamaBinaryDir, "/home/thera/jarvis-control/work/tools/llama.cpp/b11178/dist/cudart-llama-b11178-bin-ubuntu-cuda-12.8-x64"],
-  model_path: "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-UD-Q4_K_XL.gguf",
-  model_sha256: "bee238bbeb3dc0a34bde4d0dedbaee1f98c009e8bb4226f03070054c12fb1372",
+  model_path: process.env.JARVISOS_LLAMACPP_MODEL_PATH ?? "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-UD-Q4_K_XL.gguf",
+  model_sha256: process.env.JARVISOS_LLAMACPP_MODEL_SHA256 ?? "bee238bbeb3dc0a34bde4d0dedbaee1f98c009e8bb4226f03070054c12fb1372",
   pinned_build_id: "b11178-f9af9be21",
   port: 18081,
   ctx_size: 8192,
@@ -259,12 +262,24 @@ const processIds = () => {
 };
 
 const waitForGpuGate = async () => {
-  const qualificationPath = "/home/thera/jarvis-control/work/out/w3/llamacpp-qualification.json";
+  const qualificationPath = process.env.JARVISOS_LLAMACPP_QUALIFICATION ?? join(output, "llamacpp_iq2m_qualification.json");
   while (true) {
-    const qualificationExists = await stat(qualificationPath).then(() => true, () => false);
+    const qualification = await import("node:fs/promises").then(({ readFile }) => readFile(qualificationPath, "utf8").then(JSON.parse, () => null));
     const busyPids = processIds();
-    if (qualificationExists && busyPids.length === 0) return { qualification_path: qualificationPath, qualification_exists: true, llama_server_pids: [] };
-    console.log(JSON.stringify({ waiting_for_gpu_gate: true, qualification_exists: qualificationExists, llama_server_pids: busyPids }));
+    if (qualification && busyPids.length === 0) {
+      const byName = Object.fromEntries((qualification.probes ?? []).map((probe) => [probe.probe, probe.pass]));
+      const required = ["tool_selection_args", "multi_step_loop", "structured_output", "abstention", "no_fabricated_success", "eng_reasoning"];
+      const speed = qualification.speed?.[0]?.gen_tok_s ?? 0;
+      assert(required.every((name) => byName[name] === true), `short IQ2_M gate failed required probes: ${JSON.stringify(byName)}`);
+      assert(qualification.identity_followup?.pass === true, "short IQ2_M gate has no passing bounded identity follow-up");
+      assert(speed >= 7, `IQ2_M generation speed ${speed} tok/s did not clear the 7 tok/s browser-proof threshold`);
+      assert(qualification.ngl === "99" && qualification.launch_args.includes("--fit") &&
+        qualification.launch_args[qualification.launch_args.indexOf("--fit") + 1] === "off",
+      "IQ2_M short gate did not use forced full-GPU placement (-ngl 99 --fit off)");
+      return { qualification_path: qualificationPath, qualification_exists: true, gen_tok_s: speed,
+        identity_completion_tokens: qualification.identity_followup.completion_tokens, llama_server_pids: [] };
+    }
+    console.log(JSON.stringify({ waiting_for_gpu_gate: true, qualification_exists: Boolean(qualification), llama_server_pids: busyPids }));
     await delay(5_000);
   }
 };
@@ -457,7 +472,7 @@ try {
     runtime_endpoint_kind: runtimeKind,
     runtime_endpoint: isLlamaCpp ? "Jarvis-owned loopback llama.cpp runtime on port 18081" : endpoint,
     route_class: route,
-    model_id: isLlamaCpp ? "qwen3.8-27b-q4kxl" : model,
+    model_id: isLlamaCpp ? (process.env.JARVISOS_LLAMACPP_MODEL_ID ?? "qwen3.8-27b-q4kxl") : model,
     runtime_configuration: isLlamaCpp ? llamaConfig : undefined,
     runtime_actions: runtimeActions,
     first_pass_runtime_status: firstPassStatus,
@@ -506,7 +521,7 @@ try {
       runtime_endpoint_kind: runtimeKind,
       runtime_endpoint: "Jarvis-owned loopback llama.cpp runtime on port 18081",
       route_class: route,
-      model_id: "qwen3.8-27b-q4kxl",
+      model_id: process.env.JARVISOS_LLAMACPP_MODEL_ID ?? "qwen3.8-27b-q4kxl",
       runtime_configuration: llamaConfig,
       runtime_actions: runtimeActions,
       first_pass_runtime_status: firstPassStatus,

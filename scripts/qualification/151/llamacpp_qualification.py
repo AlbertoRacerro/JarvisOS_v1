@@ -24,7 +24,7 @@ ROOT = Path(os.environ.get("LLAMACPP_DIST", "/home/thera/jarvis-control/work/too
 BIN = ROOT / "llama-b11178" / "llama-server"
 LIBS = f"{ROOT / 'llama-b11178'}:{ROOT / 'cudart-llama-b11178-bin-ubuntu-cuda-12.8-x64'}"
 GGUF = os.environ.get("GGUF", "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-UD-Q4_K_XL.gguf")
-GGUF_SHA256 = "bee238bbeb3dc0a34bde4d0dedbaee1f98c009e8bb4226f03070054c12fb1372"
+GGUF_SHA256 = os.environ.get("GGUF_SHA256", "bee238bbeb3dc0a34bde4d0dedbaee1f98c009e8bb4226f03070054c12fb1372")
 PORT = int(os.environ.get("PORT", "18080"))
 CTX = int(os.environ.get("CTX", "8192"))
 NGL = os.environ.get("NGL", "auto")
@@ -106,7 +106,8 @@ def stop(proc: subprocess.Popen) -> float:
 
 def chat(messages: list[dict], **kw) -> tuple[dict, float]:
     t0 = time.monotonic()
-    out = http("/v1/chat/completions", {"messages": messages, "temperature": 0, **kw})
+    out = http("/v1/chat/completions", {"messages": messages, "temperature": 0,
+                                         "max_tokens": int(os.environ.get("MAX_TOKENS", "256")), **kw})
     return out, time.monotonic() - t0
 
 
@@ -223,6 +224,7 @@ def speed() -> dict:
 
 def main() -> None:
     log_dir = Path(os.environ.get("LOG_DIR", "/tmp"))
+    log_dir.mkdir(parents=True, exist_ok=True)
     ev: dict = {"schema": "jarvisos.151-llamacpp-qualification.v1", "gguf": GGUF, "gguf_sha256": GGUF_SHA256,
                 "gguf_bytes": Path(GGUF).stat().st_size, "launch_args": launch_args()[1:], "ctx": CTX, "ngl": NGL,
                 "gpu_before": gpu()}
@@ -234,14 +236,16 @@ def main() -> None:
     ev["props"] = {k: props.get(k) for k in ("build_info", "model_path", "total_slots")} | {
         "n_ctx": props.get("default_generation_settings", {}).get("n_ctx")}
     ev["gpu_loaded"], ev["rss_mib"] = gpu(), rss_mib(proc.pid)
-    ev["speed"] = [speed(), speed()]
+    ev["speed"] = [speed() for _ in range(max(1, int(os.environ.get("SPEED_RUNS", "2"))))]
     ev["probes"] = probe() if os.environ.get("PROBES", "1") == "1" else []
     ev["stop_s"] = stop(proc)
-    proc, ev["load_s_restart"] = start(log_dir / "llamacpp-run2.log")
-    ev["restart_health"] = http("/health")
-    ev["stop_s_2"] = stop(proc)
+    if os.environ.get("RESTART", "1") == "1":
+        proc, ev["load_s_restart"] = start(log_dir / "llamacpp-run2.log")
+        ev["restart_health"] = http("/health")
+        ev["stop_s_2"] = stop(proc)
     offload = [ln.strip() for ln in (log_dir / "llamacpp-run1.log").read_text(errors="replace").splitlines()
-               if "offload" in ln.lower() or "CUDA0 model buffer" in ln or "CPU_Mapped model buffer" in ln]
+               if any(term in ln.lower() for term in ("offload", "cuda0 model buffer", "cpu_mapped model buffer",
+                                                        "kv cache", "kv buffer", "context size"))]
     ev["offload_log"] = offload[:12]
     OUT.write_text(json.dumps(ev, indent=2) + "\n")
     print(json.dumps({k: v for k, v in ev.items() if k != "probes"}, indent=2))
