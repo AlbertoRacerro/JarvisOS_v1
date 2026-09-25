@@ -189,9 +189,9 @@ const send = async (prompt) => {
       .filter((node) => (node.textContent ?? "").replace(/\s+/g, " ").includes(text)).at(-1);
     return Boolean(item && item.querySelector("details") && /Canonical state/.test(item.textContent ?? "") && !/Submitting/.test(item.textContent ?? ""));
   }, promptMarker, { timeout: responseWaitMs });
-  const details = entry.getByText("Interaction details", { exact: true });
-  await details.click();
-  await entry.getByText("Canonical state", { exact: true }).waitFor();
+  const details = entry.locator("details").last();
+  if (!(await details.evaluate((node) => node.open))) await details.locator("summary").click();
+  await details.getByText("Canonical state", { exact: true }).waitFor({ state: "visible" });
   const text = (await entry.innerText()) ?? "";
   const state = (text.match(/Canonical state\s+(\S+)/) ?? [])[1] ?? "unknown";
   const answer = await entry.locator("p").evaluateAll((paragraphs) => {
