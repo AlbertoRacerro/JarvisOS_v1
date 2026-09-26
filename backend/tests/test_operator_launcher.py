@@ -61,6 +61,14 @@ def test_wsl_distro_without_inherited_environment(monkeypatch):
     assert launcher.wsl_distro({}) == "Ubuntu-24.04"
 
 
+def test_windows_tools_resolve_without_windows_path(monkeypatch):
+    monkeypatch.setattr(launcher.shutil, "which", lambda name: None)
+    if not (Path("/mnt/c/Windows/System32/cmd.exe")).is_file():
+        pytest.skip("Windows interop tools unavailable outside WSL")
+    assert launcher.running_under_wsl()
+    assert launcher.windows_tool("cmd.exe") == "/mnt/c/Windows/System32/cmd.exe"
+
+
 def test_readiness_requires_loaded_local_model(monkeypatch):
     monkeypatch.setattr(launcher, "http_text", lambda *args, **kwargs: (200, '<div id="root"></div>'))
     def response(url, **kwargs):
