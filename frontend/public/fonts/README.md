@@ -2,6 +2,13 @@
 
 Spec 100 uses only locally bundled open fonts. Normal rendering must not fetch remote font stylesheets or assets.
 
+## Inter
+
+- Authors: The Inter Project Authors (`https://github.com/rsms/inter`)
+- License: SIL Open Font License 1.1 (`OFL-Inter.txt`)
+- Asset: `InterVariable.woff2`; SHA-256 `693b77d4f32ee9b8bfc995589b5fad5e99adf2832738661f5402f9978429a8e3`
+- Used by the final operator shell to match the approved Inter typography.
+
 ## Instrument Sans
 
 - Upstream: `Instrument/instrument-sans`

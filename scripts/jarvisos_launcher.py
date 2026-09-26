@@ -39,6 +39,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
+CANONICAL_REPO = Path.home() / "src" / "JarvisOS_v1"
 CONFIG_FILE = Path(os.getenv("JARVISOS_LAUNCHER_CONFIG", Path.home() / ".config" / "jarvisos" / "operator.env"))
 STATE_DIR = Path(os.getenv("JARVISOS_LAUNCHER_STATE", Path.home() / ".local" / "state" / "jarvisos"))
 DEFAULT_PORT = 8000
@@ -149,7 +150,7 @@ class UpdatePlan:
 
 
 def git(*args: str, timeout: float = 30, check: bool = True) -> str:
-    result = subprocess.run(["git", "-C", str(REPO), *args], capture_output=True, text=True, timeout=timeout,
+    result = subprocess.run(["git", "-C", str(REPO), *args], check=False, capture_output=True, text=True, timeout=timeout,
                             env={**os.environ, "GIT_TERMINAL_PROMPT": "0", "GIT_ASKPASS": "true"})
     if check and result.returncode:
         raise LaunchError(f"git {' '.join(args)} failed: {result.stderr.strip() or result.stdout.strip()}")
@@ -159,7 +160,7 @@ def git(*args: str, timeout: float = 30, check: bool = True) -> str:
 def read_git_state(fetch: bool, remote_branch: str = "master") -> GitState:
     branch = git("rev-parse", "--abbrev-ref", "HEAD")
     head = git("rev-parse", "HEAD")
-    dirty = [line for line in git("status", "--porcelain", "--untracked-files=no").splitlines() if line]
+    dirty = [line for line in git("status", "--porcelain", "--untracked-files=normal").splitlines() if line]
     state = GitState(branch=branch, head=head, dirty=dirty, fetched=False)
     if fetch:
         try:
@@ -242,7 +243,7 @@ def ensure_backend_env() -> None:
     elif read_stamp("backend-requirements") == fingerprint:
         return
     say("Installing backend Python dependencies (requirements changed)…")
-    result = subprocess.run([str(python), "-m", "pip", "install", "--quiet", "--disable-pip-version-check", "-r", str(requirements)],
+    result = subprocess.run([str(python), "-m", "pip", "install", "--quiet", "--disable-pip-version-check", "-r", str(requirements)], check=False,
                             capture_output=True, text=True)
     if result.returncode:
         raise LaunchError("Backend dependency installation failed:\n" + result.stderr[-2000:])
@@ -284,7 +285,7 @@ def ensure_frontend_deps(config: dict[str, str]) -> None:
         return
     say("Installing frontend dependencies (package-lock changed)…")
     env = {**os.environ, "PATH": os.pathsep.join([str(Path(node_command(config, "node")).parent), os.environ.get("PATH", "")])}
-    result = subprocess.run([node_command(config, "npm"), "ci", "--no-audit", "--no-fund"], cwd=frontend, env=env,
+    result = subprocess.run([node_command(config, "npm"), "ci", "--no-audit", "--no-fund"], check=False, cwd=frontend, env=env,
                             capture_output=True, text=True)
     if result.returncode:
         raise LaunchError("Frontend dependency installation failed:\n" + result.stderr[-2000:])
@@ -316,7 +317,7 @@ def ensure_frontend_build(config: dict[str, str]) -> bool:
     # Empty API base = same-origin relative requests: no port or CORS coupling.
     env = {**os.environ, "VITE_API_BASE_URL": "", "PATH": os.pathsep.join([str(Path(node).parent), os.environ.get("PATH", "")])}
     started = time.monotonic()
-    result = subprocess.run([node, "node_modules/vite/bin/vite.js", "build", "--outDir", "dist.next", "--emptyOutDir", "--logLevel", "error"],
+    result = subprocess.run([node, "node_modules/vite/bin/vite.js", "build", "--outDir", "dist.next", "--emptyOutDir", "--logLevel", "error"], check=False,
                             cwd=frontend, env=env, capture_output=True, text=True)
     if result.returncode or not (staging / "index.html").is_file():
         raise LaunchError("The interface build failed:\n" + (result.stderr or result.stdout)[-3000:])
@@ -333,7 +334,7 @@ def ensure_frontend_build(config: dict[str, str]) -> bool:
 
 def ensure_database(env: dict[str, str]) -> None:
     python = REPO / "backend" / ".venv" / "bin" / "python"
-    result = subprocess.run([str(python), "-c", "from app.core.database import initialize_database; initialize_database()"],
+    result = subprocess.run([str(python), "-c", "from app.core.database import initialize_database; initialize_database()"], check=False,
                             cwd=REPO / "backend", env=env, capture_output=True, text=True, timeout=300)
     if result.returncode:
         raise LaunchError("The JarvisOS database could not be initialized:\n" + result.stderr[-2000:])
@@ -463,10 +464,11 @@ def _is_zombie(pid: int) -> bool:
 
 
 def orphan_llama_servers(config: dict[str, str]) -> list[ProcInfo]:
-    """llama-servers running the configured binary on its port whose JarvisOS owner is gone."""
+    """JarvisOS llama-servers with the configured binary, model, port and cwd."""
     binary = config.get("JARVISOS_LLAMACPP_BINARY")
+    model = config.get("JARVISOS_LLAMACPP_MODEL")
     port = config.get("JARVISOS_LLAMACPP_PORT", "8080")
-    if not binary:
+    if not binary or not model:
         return []
     found = []
     for entry in Path("/proc").iterdir():
@@ -475,7 +477,11 @@ def orphan_llama_servers(config: dict[str, str]) -> list[ProcInfo]:
         info = proc_info(int(entry.name))
         if info is None or info.exe is None or Path(info.exe).resolve() != Path(binary).resolve():
             continue
+        if info.cwd is None or Path(info.cwd).resolve() != (REPO / "backend").resolve():
+            continue
         if "--port" not in info.cmdline or info.cmdline[info.cmdline.index("--port") + 1] != port:
+            continue
+        if "--model" not in info.cmdline or info.cmdline[info.cmdline.index("--model") + 1] != model:
             continue
         parent = proc_info(info.ppid)
         if parent is not None and is_repo_backend(parent):
@@ -488,6 +494,8 @@ def orphan_llama_servers(config: dict[str, str]) -> list[ProcInfo]:
 
 def serve() -> None:
     """Foreground backend process (the WSL holder runs this hidden)."""
+    if REPO.resolve() != CANONICAL_REPO.resolve():
+        raise LaunchError(f"The backend must run from {CANONICAL_REPO}.")
     config = load_config()
     port = port_of(config)
     env = backend_env(config, port)
@@ -535,7 +543,7 @@ def spawn_backend() -> None:
 
 def readiness(port: int) -> tuple[str, str]:
     """(state, human message) where state is starting|ready|degraded."""
-    status, health = http_json(f"http://127.0.0.1:{port}/health")
+    status, _ = http_json(f"http://127.0.0.1:{port}/health")
     if status != 200:
         return "starting", "Waiting for the JarvisOS server…"
     status, page = http_text(f"http://127.0.0.1:{port}/design/process")
@@ -579,7 +587,7 @@ def wait_ready(port: int, timeout: float) -> tuple[str, str]:
 
 def open_browser(url: str) -> None:
     if running_under_wsl():
-        subprocess.run(["cmd.exe", "/c", "start", "", url], cwd="/mnt/c/Windows", capture_output=True, timeout=30)
+        subprocess.run(["cmd.exe", "/c", "start", "", url], check=True, cwd="/mnt/c/Windows", capture_output=True, timeout=30)
     elif shutil.which("xdg-open"):
         subprocess.Popen(["xdg-open", url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     else:
@@ -597,11 +605,11 @@ def stop_owned(reason: str) -> bool:
 
 
 def resolve_port_conflict(port: int) -> None:
-    """Free the port only from this checkout's own JarvisOS backend; never from anything else."""
+    """Report a conflicting listener without taking ownership of a manual session."""
     for pid in listening_pids(port):
         info = proc_info(pid)
         if info is not None and is_repo_backend(info):
-            terminate(pid, "a JarvisOS server started outside the launcher")
+            raise LaunchError(f"Port {port} has a manually started JarvisOS server (pid {pid}). Stop that session once before using the desktop shortcut; its work and processes were left untouched.")
         else:
             name = " ".join(info.cmdline[:3]) if info else f"pid {pid}"
             raise LaunchError(f"Port {port} is used by another program ({name}). Close it, or set JARVISOS_PORT in {CONFIG_FILE}.")
@@ -613,6 +621,8 @@ def resolve_port_conflict(port: int) -> None:
 
 
 def start(args: argparse.Namespace) -> int:
+    if REPO.resolve() != CANONICAL_REPO.resolve():
+        raise LaunchError(f"This launcher starts only the canonical checkout at {CANONICAL_REPO}; this copy is at {REPO}.")
     started = time.monotonic()
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     lock = (STATE_DIR / "launcher.lock").open("w")
@@ -627,6 +637,8 @@ def start(args: argparse.Namespace) -> int:
     port = port_of(config)
     url = f"http://127.0.0.1:{port}/"
     state = update_checkout(args.no_update)
+    if state.branch != "master":
+        raise LaunchError(f"The canonical checkout is on {state.branch}. Switch it to master without discarding local work before starting JarvisOS.")
     ensure_backend_env()
     ensure_frontend_deps(config)
     rebuilt = ensure_frontend_build(config)
@@ -651,7 +663,7 @@ def start(args: argparse.Namespace) -> int:
     if ready_state == "ready":
         say(f"JarvisOS is ready in {elapsed:.0f}s — {message}")
     else:
-        say(f"JarvisOS started with limitations in {elapsed:.0f}s — {message}")
+        raise LaunchError(f"JarvisOS is not ready after {elapsed:.0f}s: {message}. See {STATE_DIR / 'logs' / 'backend.log'}")
     if not args.no_browser:
         open_browser(url)
     say(f"Logs: {STATE_DIR / 'logs'}")
@@ -669,6 +681,8 @@ def status(_: argparse.Namespace) -> int:
 
 
 def stop(_: argparse.Namespace) -> int:
+    if REPO.resolve() != CANONICAL_REPO.resolve():
+        raise LaunchError(f"Stop JarvisOS from its canonical checkout at {CANONICAL_REPO}.")
     if stop_owned("stop requested"):
         say("JarvisOS stopped.")
     else:
@@ -711,18 +725,20 @@ def windows_desktop_shortcut_script(repo: Path, distro: str, icon: str | None) -
 
 
 def install_shortcut(_: argparse.Namespace) -> int:
+    if REPO.resolve() != CANONICAL_REPO.resolve():
+        raise LaunchError(f"Install the shortcut from its canonical checkout at {CANONICAL_REPO}.")
     if not running_under_wsl():
         raise LaunchError("install-shortcut must run inside WSL on the Windows machine.")
     icon = None
     source = REPO / "scripts" / "windows" / "jarvisos.ico"
     if source.is_file():
-        local = subprocess.run(["cmd.exe", "/c", "echo %LOCALAPPDATA%"], cwd="/mnt/c/Windows", capture_output=True, text=True).stdout.strip()
-        target_dir = Path(subprocess.run(["wslpath", "-u", local], capture_output=True, text=True).stdout.strip()) / "JarvisOS"
+        local = subprocess.run(["cmd.exe", "/c", "echo %LOCALAPPDATA%"], check=True, cwd="/mnt/c/Windows", capture_output=True, text=True).stdout.strip()
+        target_dir = Path(subprocess.run(["wslpath", "-u", local], check=True, capture_output=True, text=True).stdout.strip()) / "JarvisOS"
         target_dir.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, target_dir / "jarvisos.ico")
         icon = f"{local}\\JarvisOS\\jarvisos.ico"
     script = windows_desktop_shortcut_script(REPO, os.environ["WSL_DISTRO_NAME"], icon)
-    result = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script], cwd="/mnt/c/Windows",
+    result = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script], check=False, cwd="/mnt/c/Windows",
                             capture_output=True, text=True, timeout=60)
     if result.returncode:
         raise LaunchError("Shortcut creation failed: " + result.stderr.strip())

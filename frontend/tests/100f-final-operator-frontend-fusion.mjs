@@ -59,15 +59,15 @@ check(!routes.includes('label: "Board"'), "Board reintroduced as Roadmap peer");
 check(contextNav.includes("ROADMAP_STAGE_ITEMS"), "Roadmap Timeline/Calendar secondary navigation missing");
 
 check(app.includes('route.id === "design-process" || route.id === "design-bluecad"'), "Process/BLUECAD do not reuse the existing stage shell");
-check(app.includes('sidecar: route.primaryNav === "settings" || workspaceLoadState !== "ready" || !workspaceId ? undefined : jarvisSidecar'), "Settings must not expose Jarvis sidecar");
+check(app.includes('sidecar: route.primaryNav === "settings" || route.primaryNav === "coding" || workspaceLoadState !== "ready" || !workspaceId ? undefined : jarvisSidecar'), "Settings must not expose Jarvis sidecar; Coding embeds it in its own right panel");
 includesAll(app, [
   'FinalOperatorReadSurface kind="project-basis"', 'ModelDossier workspaceId=',
   'kind="literature"',
   '<DevelopmentRoadmap mode="timeline" workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} jarvis={jarvisSidecar} />',
   '<DevelopmentRoadmap mode="calendar" workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} jarvis={jarvisSidecar} />',
   '<DevelopmentBrainstorm jarvis={jarvisSidecar} workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId}',
-  '<CodingWorkbench mode="repository" workspaceId={workspaceId} />',
-  '<CodingWorkbench mode="runtime" workspaceId={workspaceId} />'
+  '<CodingWorkbench mode="repository" workspaceId={workspaceId} jarvis={jarvisSidecar} />',
+  '<CodingWorkbench mode="runtime" workspaceId={workspaceId} jarvis={jarvisSidecar} />'
 ], "missing final production surface composition");
 check(!app.includes("No server-owned roadmap item store") && !app.includes("No server-owned time-allocation calendar"), "Development still presents obsolete missing-authority states after 116 owner landed");
 check(codingWorkbench.includes("readSafeGithubUrl(repository, requestSha, path)") && codingWorkbench.includes("href={safeUrl}"), "Repository frontend/GitHub truth boundary is not explicit");

@@ -15,8 +15,8 @@ const includesAll = (text, fragments, message) => {
 
 includesAll(app, [
   'import CodingWorkbench from "./pages/CodingWorkbench"',
-  '<CodingWorkbench mode="repository" workspaceId={workspaceId} />',
-  '<CodingWorkbench mode="runtime" workspaceId={workspaceId} />'
+  '<CodingWorkbench mode="repository" workspaceId={workspaceId} jarvis={jarvisSidecar} />',
+  '<CodingWorkbench mode="runtime" workspaceId={workspaceId} jarvis={jarvisSidecar} />'
 ], "Coding routes are not wired to the accepted 140 surface");
 
 includesAll(api, [
@@ -109,11 +109,11 @@ includesAll(workbench, [
   "No synthetic stages are shown.",
   "inspectCodingTarget",
   "previewCodingContext",
-  "Add to Jarvis context",
+  "Add to proposal context",
   "context_digest",
   "added_context_refs",
   "suggestCodingModification",
-  "Browsing has not entered Jarvis context",
+  "Browsing has not entered proposal context",
   "Proposals for review",
   "Suggestions remain proposals for review."
 ], "140 operator contract is incomplete");

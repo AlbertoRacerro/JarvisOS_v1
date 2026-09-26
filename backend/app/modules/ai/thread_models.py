@@ -82,6 +82,7 @@ class AIThreadInteractionRead(BaseModel):
     terminal_reason: str | None = None
     attempt_count: int
     terminal_attempt_id: str | None = None
+    route_class: str | None = None
     execution_class: str | None = None
     model_id: str | None = None
     proposal_ids: list[str] = Field(default_factory=list)

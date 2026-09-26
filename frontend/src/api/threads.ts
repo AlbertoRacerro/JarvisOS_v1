@@ -39,6 +39,7 @@ export type ThreadInteraction = {
   terminal_reason: string | null;
   attempt_count: number;
   terminal_attempt_id: string | null;
+  route_class?: string | null;
   execution_class?: string | null;
   model_id?: string | null;
   proposal_ids: string[];

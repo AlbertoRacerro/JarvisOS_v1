@@ -31,6 +31,7 @@ import "./CodingWorkbench.css";
 type Props = Readonly<{
   mode: "repository" | "runtime";
   workspaceId: string | null;
+  jarvis?: ReactNode;
 }>;
 
 type TreeEntry = Readonly<{ path?: string; type?: string; sha?: string | null; size?: number | null }>;
@@ -196,7 +197,7 @@ function PipelineSummary({ value }: Readonly<{ value: Record<string, unknown> }>
   return <div><div className="final-fusion__source-empty"><strong>Pipeline {projectionLabel}</strong><span>{evidenceLabel}</span></div>{stages.map((stage, index) => <div className="final-fusion__source-empty" key={String(stage.id ?? stage.name ?? index)}><strong>{humanize(stage.title ?? stage.name, `Stage ${index + 1}`)}</strong><span>{humanize(stage.state ?? stage.status)}{stage.reason ? ` · ${humanize(stage.reason)}` : ""}</span></div>)}{warnings.length ? <div className="coding-action-result"><strong>Evidence gaps</strong><ul>{warnings.map((warning, index) => <li key={index}>{humanize(warning)}</li>)}</ul></div> : null}<RawJson value={value} /></div>;
 }
 
-function RepositorySurface({ workspaceId }: Readonly<{ workspaceId: string | null }>) {
+function RepositorySurface({ workspaceId, jarvis }: Readonly<{ workspaceId: string | null; jarvis?: ReactNode }>) {
   const [repository] = useState(CODING_REPOSITORY);
   const [ref] = useState(CODING_TARGET_REF);
   const [truth, setTruth] = useState<RepositoryTruthResult | null>(null);
@@ -507,12 +508,14 @@ function RepositorySurface({ workspaceId }: Readonly<{ workspaceId: string | nul
       {prEvidence ? <EvidenceSummary value={prEvidence} label={`Pull request ${prInput}`} /> : null}</details>
     </Panel>
     <Panel title="Jarvis Coding" status={jarvisError || inspectResult?.state === "refused" || proposal?.state === "refused" ? "Action unavailable" : "Proposals for review"}>
+      {jarvis ? <div className="coding-jarvis-chat">{jarvis}</div> : null}
+      <details className="coding-proposal-tools"><summary>Inspect or propose a repository change</summary>
       <div className="final-fusion__context-note">Select a file and describe the change you want. Suggestions remain proposals for review. The selected file is always supplied as target evidence; adding context binds it explicitly to this proposal.</div>
       {!workspaceId ? <p role="status">Select a workspace to inspect files or request proposals.</p> : !resolvedSha ? <p role="status">Repository evidence is unavailable. Refresh the repository before using Coding actions.</p> : null}
       <div className="final-fusion__toolbar-line"><button type="button" onClick={() => void inspect()} disabled={!workspaceId || !resolvedSha || !fileLoaded || partial.file || pendingAction !== null}>Inspect file</button><span>{pendingAction === "inspect" ? "Verifying file evidence…" : "Verify exact file evidence"}</span></div>
       {repositoryErrors.inspect ? <div className="final-fusion__source-empty" role="status"><strong>Inspect refused / unavailable</strong><span>{readableReason(repositoryErrors.inspect)}</span></div> : null}
       {inspectResult ? <ActionResult value={inspectResult} kind="inspect" /> : null}
-      <div className="final-fusion__toolbar-line"><button type="button" onClick={() => void addContext()} disabled={!workspaceId || !resolvedSha || !fileLoaded || partial.file || pendingAction !== null || !!contextBinding}>Add to Jarvis context</button><span>{pendingAction === "context" ? "Verifying context…" : contextBinding?.context_digest ? `In context: ${selectedPath}` : "Browsing has not entered Jarvis context"}</span></div>
+      <div className="final-fusion__toolbar-line"><button type="button" onClick={() => void addContext()} disabled={!workspaceId || !resolvedSha || !fileLoaded || partial.file || pendingAction !== null || !!contextBinding}>Add to proposal context</button><span>{pendingAction === "context" ? "Verifying context…" : contextBinding?.context_digest ? `In context: ${selectedPath}` : "Browsing has not entered proposal context"}</span></div>
       {contextBinding ? <div className="coding-context-binding"><span>{contextBinding.target_paths?.join(", ") ?? selectedPath}<small>Commit {contextBinding.base_sha?.slice(0, 8)} · for this proposal</small></span><button type="button" onClick={removeContext} disabled={pendingAction === "inspect"}>Remove context</button></div> : null}
       {repositoryErrors.context ? <div className="final-fusion__source-empty" role="status"><strong>Context insertion refused / unavailable</strong><span>{readableReason(repositoryErrors.context)}</span></div> : null}
       <textarea aria-label="Suggest modification intent" rows={4} maxLength={4000} disabled={pendingAction !== null} value={intent} onChange={(event) => { proposalGeneration.current += 1; setProposal(null); setRepositoryError("proposal", null); setIntent(event.target.value); }} placeholder="Describe a bounded proposal for the selected path" />
@@ -520,11 +523,12 @@ function RepositorySurface({ workspaceId }: Readonly<{ workspaceId: string | nul
       {pendingAction === "proposal" ? <p role="status">Preparing a proposal for review…</p> : null}
       {repositoryErrors.proposal ? <div className="final-fusion__source-empty" role="status"><strong>Proposal refused / unavailable</strong><span>{readableReason(repositoryErrors.proposal)}</span></div> : null}
       {proposal ? <ActionResult value={proposal} kind="proposal" /> : null}
+      </details>
     </Panel>
   </div>;
 }
 
-function RuntimeSurface() {
+function RuntimeSurface({ jarvis }: Readonly<{ jarvis?: ReactNode }>) {
   const [runtime, setRuntime] = useState<RuntimeTruth | null>(null);
   const [prInput, setPrInput] = useState("");
   const [specId, setSpecId] = useState("");
@@ -582,13 +586,16 @@ function RuntimeSurface() {
       <button type="button" onClick={() => void refresh()} disabled={loading}>Refresh runtime truth</button>
     </Panel>
     <Panel title="Development pipeline" status={pipelineError ? "Projection error" : pipeline ? "Reported evidence" : "Unselected"}>
+      {jarvis ? <div className="coding-jarvis-chat">{jarvis}</div> : null}
+      <details className="coding-proposal-tools"><summary>Inspect development pipeline</summary>
       <div className="final-fusion__toolbar-line"><input aria-label="Pipeline PR number" inputMode="numeric" value={prInput} onChange={(event) => { setPrInput(event.target.value); invalidatePipelineSelection(); }} placeholder="PR number"/><input aria-label="Pipeline spec id" value={specId} onChange={(event) => { setSpecId(event.target.value); invalidatePipelineSelection(); }} placeholder="Spec id"/><button type="button" onClick={() => void loadPipeline()} disabled={!prInput || !specId}>Load pipeline state</button></div>
       {pipelineError ? <div className="final-fusion__source-empty" role="status"><strong>Pipeline projection refused / unavailable</strong><span>{readableReason(pipelineError)}</span></div> : null}
       {pipeline ? <PipelineSummary value={pipeline} /> : <div className="final-fusion__source-empty"><strong>No pipeline selection</strong><span>No synthetic stages are shown.</span></div>}
+      </details>
     </Panel>
   </div>;
 }
 
-export default function CodingWorkbench({ mode, workspaceId }: Props) {
-  return mode === "repository" ? <RepositorySurface workspaceId={workspaceId} /> : <RuntimeSurface />;
+export default function CodingWorkbench({ mode, workspaceId, jarvis }: Props) {
+  return mode === "repository" ? <RepositorySurface workspaceId={workspaceId} jarvis={jarvis} /> : <RuntimeSurface jarvis={jarvis} />;
 }
