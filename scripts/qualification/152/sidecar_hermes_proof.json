@@ -1,9 +1,9 @@
 {
   "schema": "jarvisos.152-sidecar-hermes-proof.v1",
-  "source_sha": "9b004849e4c9086c8c4d7ce2e392ba04bbac4d63",
-  "hermes_venv": null,
-  "hermes_venv_python": null,
-  "workspace_id": "5837fda6-a81f-4401-b285-ae9928cbcce4",
+  "source_sha": "146f2119fdf60dc38aaad43c2cffc8693df759e2",
+  "hermes_venv": "/home/thera/jarvis-control/work/venvs/h146",
+  "hermes_venv_python": "/home/thera/jarvis-control/work/venvs/h146/bin/python",
+  "workspace_id": "97ebd2c9-ab73-4f46-83b0-ec9555c8cc39",
   "thread_id": null,
   "seeded_decision": null,
   "runtime_configuration": {
@@ -48,18 +48,13 @@
         "disabled": false
       },
       {
-        "text": "Jarvis agent (Hermes) — Hermes agent runtime is not configured.",
+        "text": "Jarvis agent (Hermes) — The configured local Jarvis inference runtime is unavailable.",
         "value": "hermes:agent",
         "disabled": true
       }
     ]
   },
-  "screenshots": [
-    {
-      "path": "scripts/qualification/152/sidecar-hermes-runtime-down.jpg",
-      "size_bytes": 95927
-    }
-  ],
+  "screenshots": [],
   "turns": [],
   "console_errors": [],
   "page_errors": [],
@@ -93,10 +88,10 @@
   ],
   "rss_vram_samples": [],
   "proof_failures": [
-    "intentional --until=unavailable dry run; runtime turns were not executed"
+    "TimeoutError: locator.waitFor: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('.jarvis-sidecar__status').filter({ hasText: /Hermes agent runtime|Hermes requires|configured local inference runtime is unavailable|Hermes agent is unavailable/i }).first() to be visible\u001b[22m\n"
   ],
   "proof_status": "incomplete",
-  "started_at": "2026-09-26T07:10:27.652Z",
-  "finished_at": "2026-09-26T07:10:30.103Z",
-  "elapsed_seconds": 2.451
+  "started_at": "2026-09-26T07:12:31.053Z",
+  "finished_at": "2026-09-26T07:12:38.462Z",
+  "elapsed_seconds": 7.409
 }

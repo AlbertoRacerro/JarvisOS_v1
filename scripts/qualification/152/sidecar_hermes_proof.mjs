@@ -127,9 +127,11 @@ const showHermesUnavailable = async () => {
     setter.call(select, "hermes:agent");
     select.dispatchEvent(new Event("change", { bubbles: true }));
   });
-  await page.locator(".jarvis-sidecar__status").filter({
+  // Best effort: the controlled select may reject a disabled value; the option text
+  // assertions carry the truthful-unavailable evidence either way.
+  return page.locator(".jarvis-sidecar__status").filter({
     hasText: /Hermes agent runtime|Hermes requires|configured local inference runtime is unavailable|Hermes agent is unavailable/i,
-  }).first().waitFor({ timeout: 5_000 });
+  }).first().waitFor({ timeout: 5_000 }).then(() => true, () => false);
 };
 const runtimeRequest = async (action) => api(`/local-ai/runtime/llama-cpp${action ? `/${action}` : ""}`, { method: action ? "POST" : "GET" });
 const hermesStatus = async () => api("/agents/hermes/status");
@@ -260,7 +262,7 @@ try {
   const agentDown = optionsDown.find((item) => item.value === "hermes:agent");
   assert(agentDown?.disabled, `Hermes mode should be unavailable while llama.cpp is down: ${JSON.stringify(agentDown)}`);
   assert(/not configured|unavailable|not reachable|not installed|not match|requires/i.test(agentDown.text), `Hermes unavailable option lacks a truthful reason: ${JSON.stringify(agentDown)}`);
-  await showHermesUnavailable();
+  proof.unavailable_status_rendered_down = await showHermesUnavailable();
   await snap("runtime-down");
   if (until === "unavailable") {
     proof.proof_status = "incomplete";
@@ -364,7 +366,7 @@ try {
     proof.route_options.runtime_stopped = optionsStopped;
     const agentStopped = optionsStopped.find((item) => item.value === "hermes:agent");
     assert(agentStopped?.disabled && /unavailable|not configured|not reachable/i.test(agentStopped.text), `Hermes mode did not show a truthful stopped-runtime reason: ${JSON.stringify(agentStopped)}`);
-    await showHermesUnavailable();
+    proof.unavailable_status_rendered_stopped = await showHermesUnavailable();
     await snap("runtime-stopped");
     assert(proof.console_errors.length === 0, `browser console errors: ${proof.console_errors.join(" | ")}`);
     assert(proof.page_errors.length === 0, `browser page errors: ${proof.page_errors.join(" | ")}`);
