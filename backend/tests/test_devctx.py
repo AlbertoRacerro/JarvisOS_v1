@@ -163,7 +163,10 @@ def test_pr_bound_entries_report_current_pr_state(world) -> None:
     assert "now MERGED" in fresh[entry["id"]]["why"]
     assert fresh[proof["id"]]["verdict"] == "current" and "merged" in fresh[proof["id"]]["why"]
     assert any("spec 003 is in_review but none of its PRs is open" in c for c in packet["candidates"])
-    assert any("spec 002 TWO is ready" in c for c in packet["candidates"])
+    assert any(c.endswith("TWO is ready with dependencies merged") for c in packet["candidates"])
+    gh.open = [{"number": 8, "title": "impl two", "headRefName": "impl/002-two", "headRefOid": base, "isDraft": True}]
+    packet = devctx.build_packet(env, fetch=False)
+    assert any("spec 002 TWO is ready" in c and "[8]" in c for c in packet["candidates"])
 
 
 def test_lane_states_including_reparented_worker(world) -> None:
@@ -175,11 +178,14 @@ def test_lane_states_including_reparented_worker(world) -> None:
     (out / "dead1.a1.log").write_text("partial")
     (out / "live1.a1.log").write_text("working")
     (out / "live2.a1.log").write_text("working")
+    (out / "suite.a1.log").write_text("....")
     procs += [
-        {"pid": 11, "name": "codex", "cwd": str(out), "stdout": None, "cmdline": "codex exec -C /wt/k1 -o live1.report.md prompt",
+        {"pid": 11, "name": "codex", "cwd": str(out), "logs": [], "cmdline": "codex exec -C /wt/k1 -o live1.report.md prompt",
          "started_at": "2026-09-26T00:00:00Z"},
-        {"pid": 12, "name": "agy", "cwd": "/scratch", "stdout": str(out / "live2.a1.log"), "cmdline": "agy -p text",
+        {"pid": 12, "name": "agy", "cwd": "/scratch", "logs": [str(out / "live2.a1.log")], "cmdline": "agy -p text",
          "started_at": "2026-09-26T00:00:00Z"},
+        {"pid": 13, "name": "python", "cwd": "/wt/k1/backend", "logs": [str(out / "suite.a1.log")],
+         "cmdline": "python -m pytest -q", "started_at": "2026-09-26T00:00:00Z"},
     ]
     states = {lane["lane"]: lane for lane in devctx.lane_state(env, procs)}
     assert states["done1"]["state"] == "done"
@@ -187,13 +193,14 @@ def test_lane_states_including_reparented_worker(world) -> None:
     assert states["dead1"]["state"] == "incomplete-no-process"
     assert states["live1"]["state"] == "running" and states["live1"]["worktree"] == "/wt/k1"
     assert states["live2"]["state"] == "running"
+    assert states["suite"]["state"] == "running" and states["suite"]["pids"] == [13]
 
 
 def test_directives_relay_provenance_and_unrecorded_prompts(world) -> None:
     env, relay = world["env"], world["relay"]
     prompt = relay / "s1" / "turns" / "turn-001" / "prompt.md"
     prompt.parent.mkdir(parents=True)
-    text = "MAINTAINER MISSION\n" + "Build the thing carefully.\n" * 60
+    text = "MAINTAINER MISSION\nSPEC 999 — THE THING\n" + "Build the thing carefully.\n" * 60
     prompt.write_text(text)
     packet = devctx.build_packet(env, fetch=False)
     assert any("not recorded as a directive" in w for w in packet["warnings"])
@@ -203,6 +210,7 @@ def test_directives_relay_provenance_and_unrecorded_prompts(world) -> None:
     packet = devctx.build_packet(env, fetch=False)
     prov = {e["id"]: e["provenance"] for e in packet["ledger"] if e["kind"] == "directive"}
     assert prov[recorded["id"]].startswith("relay-verified")
+    assert recorded["text"] == "MAINTAINER MISSION / SPEC 999 — THE THING"
     assert prov[forged["id"]].startswith("unverified source")
     assert not any("not recorded as a directive" in w for w in packet["warnings"])
     rendered = devctx.render(packet)

@@ -115,8 +115,10 @@ def real_gh(args: list[str]) -> Any:
     return json.loads(out) if out.strip() else None
 
 
-def real_processes() -> list[dict[str, Any]]:
-    """Agent and model-server processes with cwd, excluding this process and its ancestors."""
+def real_processes(log_root: Path | None = None) -> list[dict[str, Any]]:
+    """Agent/model-server processes, plus any process holding a lane log under `log_root` open.
+
+    Excludes this process and its ancestors."""
     skip, pid = set(), os.getpid()
     while pid > 1:
         skip.add(pid)
@@ -133,14 +135,21 @@ def real_processes() -> list[dict[str, Any]]:
         try:
             argv = (entry / "cmdline").read_bytes().split(b"\0")
             name = Path(argv[0].decode(errors="replace")).name if argv and argv[0] else ""
-            if name not in AGENT_NAMES + MODEL_SERVERS:
+            logs = []
+            if log_root is not None:
+                # Any fd, not just stdout: pytest and similar tools re-point fd 1 at a capture file.
+                for fd in (entry / "fd").iterdir():
+                    target = os.readlink(fd)
+                    if target.startswith(f"{log_root}/") and target.endswith(".log"):
+                        logs.append(target)
+            if name not in AGENT_NAMES + MODEL_SERVERS and not logs:
                 continue
             stat = (entry / "stat").read_text().rsplit(")", 1)[1].split()
             rows.append({
                 "pid": int(entry.name), "ppid": int(stat[1]), "name": name,
                 "start": int(stat[19]), "started_at": iso(datetime.fromtimestamp(boot + int(stat[19]) / hertz, timezone.utc)),
                 "cwd": os.readlink(entry / "cwd"),
-                "stdout": os.readlink(entry / "fd/1") if (entry / "fd/1").exists() else None,
+                "logs": sorted(set(logs)),
                 "cmdline": " ".join(a.decode(errors="replace") for a in argv if a)[:4_000],
             })
         except (OSError, ValueError, IndexError):
@@ -171,7 +180,7 @@ def default_env(repo: Path | None = None) -> Env:
     control = Path(os.environ.get("JARVIS_CONTROL_DIR", Path.home() / "jarvis-control/work")).expanduser()
     relay = main_root / ".agent-relay" / "sessions"
     return Env(repo=root, control=control, relay_sessions=relay if relay.is_dir() else None,
-               gh=real_gh, processes=real_processes, gpu=real_gpu)
+               gh=real_gh, processes=lambda: real_processes(control / "out"), gpu=real_gpu)
 
 
 # ---------------------------------------------------------------------------
@@ -282,7 +291,7 @@ def record_directive(env: Env, content: str, *, source: str | None, supersedes: 
     if hit := find_secret(content):
         raise ValueError(f"directive matches a credential/secret pattern ({hit}); refusing to record it")
     digest = hashlib.sha256(raw).hexdigest()
-    title = next((line.strip() for line in content.splitlines() if line.strip()), "")[:160]
+    title = " / ".join([line.strip() for line in content.splitlines() if line.strip()][:2])[:200]
     env.directives.mkdir(parents=True, exist_ok=True)
     path = env.directives / f"{env.now.strftime('%Y%m%dT%H%M%S')}-{digest[:12]}.md"
     if not any(p.name.endswith(f"-{digest[:12]}.md") for p in env.directives.iterdir()):
@@ -437,8 +446,8 @@ def lane_state(env: Env, procs: list[dict[str, Any]]) -> list[dict[str, Any]]:
     for lane in lanes.values():
         token = re.compile(rf"(?<![\w.-]){re.escape(lane['lane'])}\.report\.md")
         log = re.compile(rf"/{re.escape(lane['lane'])}\.a\d+\.log$")
-        live = [p for p in procs if p["name"] in AGENT_NAMES
-                and (token.search(p["cmdline"]) or log.search(p.get("stdout") or ""))]
+        live = [p for p in procs if (p["name"] in AGENT_NAMES and token.search(p["cmdline"]))
+                or any(log.search(item) for item in p.get("logs", []))]
         lane["pids"] = [p["pid"] for p in live]
         worktree = next((m.group(1) for p in live if (m := re.search(r"\s-C\s+(\S+)", p["cmdline"]))), None)
         lane["worktree"] = worktree or (live[0]["cwd"] if live else None)
@@ -603,7 +612,9 @@ def build_packet(env: Env, *, fetch: bool = True) -> dict[str, Any]:
             candidates.append(f"spec {row['spec']} is in_review but none of its PRs is open: reconcile STATUS")
     for row in ready:
         if row["deps_merged"] and not set(row["prs"]) & open_numbers:
-            candidates.append(f"spec {row['spec']} {row['name']} is ready with dependencies merged")
+            linked = [pr["number"] for pr in open_prs if re.search(rf"/{re.escape(row['spec'])}-", pr["headRefName"])]
+            candidates.append(f"spec {row['spec']} {row['name']} is ready with dependencies merged"
+                              + (f"; open PR(s) {linked} on its branch likely implement it" if linked else ""))
     for lane in lanes:
         if lane["state"] == "running":
             candidates.append(f"lane {lane['lane']} is running (pids {lane['pids']}): consume its report when done")
@@ -675,7 +686,7 @@ def render(packet: dict[str, Any], budget: int = DEFAULT_BUDGET_CHARS) -> str:
     for entry in reversed(directives[-4:]):
         meta = entry["directive"]
         out.append(f"- [{entry.get('provenance', 'unchecked')}] {entry['id']} {entry['ts']} "
-                   f"({age(parse_ts(entry['ts']), now)} ago) \"{entry['text'][:110]}\" -> {meta['path']} ({meta['bytes']} B)")
+                   f"({age(parse_ts(entry['ts']), now)} ago) \"{entry['text'][:160]}\" -> {meta['path']} ({meta['bytes']} B)")
     if not directives:
         out.append("- none recorded")
     if len(directives) > 4:
