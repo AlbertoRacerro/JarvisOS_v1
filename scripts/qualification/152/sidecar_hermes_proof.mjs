@@ -317,7 +317,7 @@ try {
     assert(first.interaction.flow_state === "complete" && first.interaction.persistence_state === "captured", `first canonical interaction did not complete and capture: ${JSON.stringify(first.interaction)}`);
     assert(answer.includes(fact) && answer.includes(decision.id), `grounded answer did not render the seeded fact and evidence ref ${decision.id}: ${answer}`);
     assert(first.evidence.ai_jobs.length > 0 && first.evidence.ai_jobs.every((job) => job.selected_route_class === "local:llamacpp" && job.model_id === llamaConfig.model_id), `relay ai_jobs did not prove local:llamacpp and model ${llamaConfig.model_id}: ${JSON.stringify(first.evidence.ai_jobs)}`);
-    assert(first.evidence.ai_jobs.every((job) => job.status === "succeeded"), `relay job did not succeed: ${JSON.stringify(first.evidence.ai_jobs)}`);
+    assert(first.evidence.ai_jobs.every((job) => job.status === "success"), `relay job did not succeed: ${JSON.stringify(first.evidence.ai_jobs)}`);
     assert(!first.evidence.ai_jobs.some((job) => job.model_id === "local:fake"), "a relay ai_job used local:fake");
     const toolEvents = first.evidence.events.map((item) => item.payload).filter((item) => item?.tool_name === "jarvis_retrieval_query");
     assert(toolEvents.some((item) => item.status === "succeeded" && item.evidence_refs?.some((ref) => String(ref).includes(decision.id))), `no successful retrieval tool event with decision evidence ref: ${JSON.stringify(first.evidence.events)}`);
@@ -344,7 +344,7 @@ try {
     const workerExited1 = workerPid1 ? await waitForProcessExit(workerPid1) : false;
     assert(workerExited1, `Hermes supervisor reported stopped but worker PID ${workerPid1} still exists`);
     proof.worker_stop = { mechanism: "HermesSessionPool scheduled idle stop (300 seconds)", worker_pid: workerPid1, process_exited: workerExited1, status: stopped };
-    const third = await send("Retrieve the 152 proof beacon again and state it exactly.", "worker-restart");
+    const third = await send("Use jarvis_retrieval_query again to retrieve the 152 proof beacon, then state the exact beacon fact and its decision id.", "worker-restart");
     const status3 = await hermesStatus();
     const generation3 = status3.threads?.[proof.thread_id]?.generation;
     assert(third.interaction.flow_state === "complete", `post-stop turn did not complete: ${JSON.stringify(third.interaction)}`);
