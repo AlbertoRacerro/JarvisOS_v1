@@ -273,7 +273,10 @@ try {
     proof.proof_failures.push("intentional --until=unavailable dry run; runtime turns were not executed");
   } else {
     // Seed canonical Second Brain data through the product API (no direct DB writes).
-    const fact = `The 152 proof beacon is ${`ORCHID-${Date.now()}`}.`;
+    // The unique beacon token is only obtainable through retrieval (the prompt names the
+    // decision id but never the token), so it is the grounding check; wording may vary.
+    const beacon = `ORCHID-${Date.now()}`;
+    const fact = `The 152 proof beacon is ${beacon}.`;
     const decision = await api(`/workspaces/${proof.workspace_id}/decisions`, {
       method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ title: "152 Hermes retrieval beacon", decision_text: fact,
@@ -319,7 +322,7 @@ try {
     const first = await send(prompt, "retrieval-grounding");
     const answer = first.record.answer;
     assert(first.interaction.flow_state === "complete" && first.interaction.persistence_state === "captured", `first canonical interaction did not complete and capture: ${JSON.stringify(first.interaction)}`);
-    assert(answer.includes(fact) && answer.includes(decision.id), `grounded answer did not render the seeded fact and evidence ref ${decision.id}: ${answer}`);
+    assert(answer.includes(beacon) && answer.includes(decision.id), `grounded answer did not render the seeded fact and evidence ref ${decision.id}: ${answer}`);
     assert(first.evidence.ai_jobs.length > 0 && first.evidence.ai_jobs.every((job) => job.selected_route_class === "local:llamacpp" && job.model_id === llamaConfig.model_id), `relay ai_jobs did not prove local:llamacpp and model ${llamaConfig.model_id}: ${JSON.stringify(first.evidence.ai_jobs)}`);
     assert(first.evidence.ai_jobs.every((job) => job.status === "success"), `relay job did not succeed: ${JSON.stringify(first.evidence.ai_jobs)}`);
     assert(!first.evidence.ai_jobs.some((job) => job.model_id === "local:fake"), "a relay ai_job used local:fake");
@@ -356,7 +359,10 @@ try {
     const persisted = await threadDetail();
     assert(persisted.interactions.length === 3 && persisted.interactions.every((item) => item.persistence_state === "captured"), "canonical transcript was not intact after worker restart");
     proof.worker_restart = { generation_before_stop: generation2, generation_after_restart: generation3, status: status3, transcript_interactions: persisted.interactions.length };
-    assert(third.record.answer.includes(fact) && third.record.answer.includes(decision.id), "post-restart answer lost its grounded evidence");
+    assert(third.record.answer.includes(beacon) && third.record.answer.includes(decision.id), `post-restart answer lost its grounded evidence: ${third.record.answer}`);
+    assert(second.record.answer.includes(beacon), `worker-reuse answer lost the beacon: ${second.record.answer}`);
+    proof.worker_restart.retrieval_tool_events = third.evidence.events.map((item) => item.payload)
+      .filter((item) => item?.tool_name === "jarvis_retrieval_query" && item.status === "succeeded").length;
 
     const workerPid3 = status3.threads?.[proof.thread_id]?.worker_pid;
     const finalWorkerStop = await waitForWorkerStopped();
