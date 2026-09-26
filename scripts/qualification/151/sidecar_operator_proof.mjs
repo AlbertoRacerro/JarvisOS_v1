@@ -1,0 +1,596 @@
+#!/usr/bin/env node
+// Real Chromium proof for the existing Jarvis Sidecar, following the isolated
+// backend/frontend lifecycle used by qualification 149.
+import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
+import { openSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { spawn, spawnSync, execFileSync } from "node:child_process";
+import { setTimeout as delay } from "node:timers/promises";
+import { chromium } from "/home/thera/jarvis-control/work/tools/pw/node_modules/playwright/index.mjs";
+
+const root = resolve(new URL("../../../", import.meta.url).pathname);
+const backend = join(root, "backend");
+const output = new URL(".", import.meta.url).pathname;
+const backendPort = Number(process.env.JARVISOS_PROOF_BACKEND_PORT ?? 8041);
+const backendUrl = `http://127.0.0.1:${backendPort}`;
+// The backend serves frontend/dist: build it from this exact head against this proof's backend.
+execFileSync("node", ["node_modules/vite/bin/vite.js", "build"], {
+  cwd: join(root, "frontend"), env: { ...process.env, VITE_API_BASE_URL: backendUrl }, stdio: ["ignore", "ignore", "inherit"],
+});
+const responseWaitMs = Number(process.env.JARVISOS_PROOF_RESPONSE_TIMEOUT_MS ?? 1_800_000);
+const args = process.argv.slice(2);
+const arg = (name, fallback) => {
+  const index = args.indexOf(name);
+  return index >= 0 ? args[index + 1] : process.env[name.slice(2).replaceAll("-", "_").toUpperCase()] ?? fallback;
+};
+const endpoint = arg("--endpoint", "http://127.0.0.1:11435/api/generate");
+const model = arg("--model", process.env.JARVISOS_DEV_MESSAGE_ROUTE_MODEL ?? "gemma4:12b-it-qat");
+const timeoutSeconds = arg("--timeout", "180");
+const routeClass = arg("--route", "local:general");
+const runtime = arg("--runtime", "ollama");
+if (!["ollama", "llamacpp"].includes(runtime)) throw new Error(`unsupported runtime: ${runtime}`);
+const isLlamaCpp = runtime === "llamacpp";
+if (isLlamaCpp && process.env.JARVISOS_151_FULL_PROOF !== "1") {
+  throw new Error("full local-model browser proof requires JARVISOS_151_FULL_PROOF=1 after the short model gate passes");
+}
+const route = isLlamaCpp ? "local:llamacpp" : routeClass;
+const proofFile = join(output, isLlamaCpp ? "sidecar_operator_proof.llamacpp.json" : "sidecar_operator_proof.json");
+const runtimeKind = arg("--runtime-kind", isLlamaCpp ? "Jarvis-owned llama.cpp runtime" : "Windows Ollama via temporary dev bridge");
+const llamaBinaryDir = "/home/thera/jarvis-control/work/tools/llama.cpp/b11178/dist/llama-b11178";
+const llamaConfig = {
+  binary_path: `${llamaBinaryDir}/llama-server`,
+  library_dirs: [llamaBinaryDir, "/home/thera/jarvis-control/work/tools/llama.cpp/b11178/dist/cudart-llama-b11178-bin-ubuntu-cuda-12.8-x64"],
+  model_path: process.env.JARVISOS_LLAMACPP_MODEL_PATH ?? "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-UD-Q4_K_XL.gguf",
+  model_sha256: process.env.JARVISOS_LLAMACPP_MODEL_SHA256 ?? "bee238bbeb3dc0a34bde4d0dedbaee1f98c009e8bb4226f03070054c12fb1372",
+  model_id: process.env.JARVISOS_LLAMACPP_MODEL_ID ?? "qwen3.8-27b-q4kxl",
+  pinned_build_id: "b11178-f9af9be21",
+  port: 18081,
+  ctx_size: 8192,
+  n_gpu_layers: Number(process.env.JARVISOS_LLAMACPP_N_GPU_LAYERS ?? 99),
+};
+const dataRoot = await mkdtemp(join(tmpdir(), "jarvisos-151p-data-"));
+const tempDir = await mkdtemp(join(tmpdir(), "jarvisos-151p-proof-"));
+const baseEnv = {
+  ...process.env,
+  JARVISOS_DATA_ROOT: dataRoot,
+};
+const screenshots = [];
+const consoleErrors = [];
+const pageErrors = [];
+const flows = [];
+const timings = [];
+const runtimeSnapshots = [];
+const loadingSnapshots = [];
+const runtimeActions = [];
+let server;
+let browser;
+let context;
+let page;
+let workspaceId;
+let succeeded = false;
+let runtimeStarted = false;
+let llamaLogPath;
+let proofFailure;
+let evidenceWritten = false;
+const proofFailures = [];
+let firstPassStatus;
+let unreachableOptions = [];
+let reachableOptions = [];
+let loadedEvidence;
+let restartEvidence;
+let gpuGate;
+let ollamaUnload = null;
+let launchArguments = null;
+let length;
+let proofAiSettings;
+const proofStartedAt = Date.now();
+
+const assert = (condition, message) => { if (!condition) throw new Error(message); };
+const waitForHttp = async (url, timeout = 60_000) => {
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    try { if ((await fetch(url)).ok) return; } catch { /* starting */ }
+    await delay(250);
+  }
+  throw new Error(`service did not become ready: ${url}`);
+};
+const stopBackend = async () => {
+  if (!server) return;
+  server.kill("SIGTERM");
+  if (server.exitCode === null) await new Promise((done) => server.once("exit", done));
+  server = undefined;
+};
+const startBackend = async (devEndpoint) => {
+  await stopBackend();
+  const env = {
+    ...baseEnv,
+  };
+  if (!isLlamaCpp) {
+    env.JARVISOS_DEV_MESSAGE_ROUTE_ENDPOINT = devEndpoint;
+    env.JARVISOS_DEV_MESSAGE_ROUTE_MODEL = model;
+    env.JARVISOS_DEV_MESSAGE_ROUTE_TIMEOUT_S = timeoutSeconds;
+  } else {
+    delete env.JARVISOS_DEV_MESSAGE_ROUTE_ENDPOINT;
+    delete env.JARVISOS_DEV_MESSAGE_ROUTE_MODEL;
+    delete env.JARVISOS_DEV_MESSAGE_ROUTE_TIMEOUT_S;
+    for (const name of Object.keys(env)) {
+      if (name.startsWith("JARVISOS_LLAMACPP_") && name !== "JARVISOS_LLAMACPP_CONFIG") delete env[name];
+    }
+    delete env.JARVISOS_MANAGE_LLAMACPP;
+    env.JARVISOS_LLAMACPP_CONFIG = join(dataRoot, "settings", "llama_cpp.json");
+  }
+  const log = join(tempDir, `backend-${devEndpoint.includes("11436") ? "unreachable" : "reachable"}.log`);
+  server = spawn(join(backend, ".venv/bin/python"), ["-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", String(backendPort)], {
+    cwd: backend, env, stdio: ["ignore", openSync(log, "w"), openSync(log, "a")],
+  });
+  await waitForHttp(`${backendUrl}/health`);
+};
+const snap = async (name) => {
+  const path = join(output, `sidecar-${isLlamaCpp ? "llamacpp-" : ""}${name}.jpg`);
+  await page.screenshot({ path, type: "jpeg", quality: 65, fullPage: false, animations: "disabled" });
+  const sizeBytes = (await stat(path)).size;
+  assert(sizeBytes <= 150 * 1024, `${name} screenshot is ${sizeBytes} bytes, over 150 KiB`);
+  screenshots.push({ path: path.slice(root.length + 1), size_bytes: sizeBytes });
+};
+const openSidecar = async () => {
+  const toggle = page.getByRole("button", { name: "Show context" });
+  if (await toggle.count()) {
+    await toggle.waitFor({ state: "visible", timeout: 20_000 });
+    await toggle.click();
+  }
+  try {
+    await page.getByTestId("jarvis-sidecar").waitFor({ state: "visible", timeout: 20_000 });
+  } catch {
+    const detail = await page.evaluate(() => ({
+      title: document.title,
+      body: document.body.innerText.slice(0, 2000),
+      appErrors: [...document.querySelectorAll('[role="status"]')].map((item) => item.textContent),
+      sidecar: document.querySelector("#shell-sidecar")?.outerHTML.slice(0, 1000),
+    }));
+    throw new Error(`Sidecar did not render: ${JSON.stringify(detail)}`);
+  }
+  const settings = page.locator(".jarvis-conversation-settings");
+  if (!(await settings.evaluate((node) => node.open))) await settings.locator("summary").click();
+  try {
+    await page.getByLabel("Jarvis responder").waitFor({ timeout: 20_000 });
+  } catch {
+    const detail = await page.evaluate(() => ({
+      viewport: [innerWidth, innerHeight],
+      sidecar: document.querySelector(".jarvis-sidecar")?.parentElement?.outerHTML.slice(0, 2000),
+      workspace: document.querySelector(".workspace-bootstrap")?.textContent,
+      errors: [...document.querySelectorAll('[role="status"]')].map((item) => item.textContent),
+    }));
+    throw new Error(`Sidecar responder selector remained hidden: ${JSON.stringify(detail)}`);
+  }
+};
+const optionRecords = async () => page.getByLabel("Jarvis responder").locator("option").evaluateAll((options) => options.map((option) => ({
+  text: option.textContent?.trim() ?? "", value: option.value, disabled: option.disabled,
+})).filter((item) => item.value));
+const persistedRuntimeMetrics = (prompt) => {
+  const query = `import json,sqlite3,sys
+db,prompt=sys.argv[1:]
+c=sqlite3.connect(db); c.row_factory=sqlite3.Row
+row=c.execute("""SELECT f.state,f.terminal_reason,f.usage_totals_json,j.model_id,j.normalized_finish_reason,j.input_tokens,j.output_tokens,j.reasoning_tokens,j.normalized_usage_source
+FROM ai_thread_interactions i JOIN ai_flows f ON f.id=i.flow_id
+LEFT JOIN ai_jobs j ON j.id=f.terminal_attempt_id
+WHERE i.user_text=? ORDER BY i.created_at DESC LIMIT 1""",(prompt,)).fetchone()
+print(json.dumps(dict(row) if row else {}))`;
+  const result = spawnSync(join(backend, ".venv/bin/python"), ["-c", query, join(dataRoot, "jarvisos.db"), prompt], { encoding: "utf8" });
+  assert(result.status === 0, `runtime metric read failed: ${result.stderr}`);
+  return JSON.parse(result.stdout);
+};
+const send = async (prompt) => {
+  const started = Date.now();
+  await page.getByLabel("Message", { exact: true }).fill(prompt);
+  await page.getByRole("button", { name: /Send without project context/ }).click();
+  const transcript = page.getByRole("list", { name: "Jarvis thread transcript" });
+  const promptMarker = prompt.replace(/\s+/g, " ").trim().slice(0, 120);
+  const entry = transcript.locator("li").filter({ hasText: promptMarker }).last();
+  await entry.waitFor({ state: "visible", timeout: responseWaitMs });
+  await page.waitForFunction((text) => {
+    const item = [...document.querySelectorAll('[aria-label="Jarvis thread transcript"] li')]
+      .filter((node) => (node.textContent ?? "").replace(/\s+/g, " ").includes(text)).at(-1);
+    return Boolean(item && item.querySelector("details") && /Canonical state/.test(item.textContent ?? "") && !/Submitting/.test(item.textContent ?? ""));
+  }, promptMarker, { timeout: responseWaitMs });
+  const details = entry.locator("details").last();
+  if (!(await details.evaluate((node) => node.open))) await details.locator("summary").click();
+  await details.getByText("Canonical state", { exact: true }).waitFor({ state: "visible" });
+  const text = (await entry.innerText()) ?? "";
+  const state = (text.match(/Canonical state\s+(\S+)/) ?? [])[1] ?? "unknown";
+  const answer = await entry.locator("p").evaluateAll((paragraphs) => {
+    const answerParagraph = paragraphs.find((item) => item.querySelector("strong")?.textContent?.trim() === "Jarvis");
+    return answerParagraph?.textContent?.replace(/^Jarvis\s*/, "").trim() ?? "";
+  });
+  const metrics = persistedRuntimeMetrics(prompt);
+  const usage = JSON.parse(metrics.usage_totals_json ?? "{}");
+  const flow = {
+    prompt,
+    answer,
+    state,
+    model_id: metrics.model_id,
+    finish_reason: metrics.normalized_finish_reason,
+    eval_counts: {
+      prompt: metrics.input_tokens,
+      output: metrics.output_tokens,
+      source: metrics.normalized_usage_source,
+    },
+    usage_totals: usage,
+    reasoning_tokens: metrics.reasoning_tokens,
+    duration_ms: Date.now() - started,
+  };
+  if (isLlamaCpp) {
+    assert(flow.model_id === llamaConfig.model_id,
+      `interaction model ${flow.model_id} did not match configured llama.cpp model ${llamaConfig.model_id}`);
+  }
+  timings.push({ prompt, duration_ms: flow.duration_ms });
+  flows.push(flow);
+  return { entry, flow };
+};
+
+const runtimeRequest = async (action) => {
+  const response = await fetch(`${backendUrl}/local-ai/runtime/llama-cpp${action ? `/${action}` : ""}`, {
+    method: action ? "POST" : "GET",
+  });
+  assert(response.ok, `llama.cpp ${action || "status"} returned ${response.status}`);
+  const body = await response.json();
+  runtimeSnapshots.push({ at: new Date().toISOString(), action: action || "status", status: body });
+  if (body.reason_code === "LLAMACPP_LOADING") loadingSnapshots.push({ at: new Date().toISOString(), status: body });
+  if (action) runtimeActions.push({ action, status: body });
+  return body;
+};
+
+const waitForLlamaLoaded = async (phase, maxWait = 15 * 60_000) => {
+  const started = Date.now();
+  const deadline = started + maxWait;
+  let latest;
+  while (Date.now() < deadline) {
+    latest = await runtimeRequest("");
+    if (latest.runtime_reachable && latest.model_loaded) {
+      return { phase, duration_ms: Date.now() - started, status: latest };
+    }
+    await delay(2_000);
+  }
+  throw new Error(`${phase} llama.cpp runtime did not load within ${maxWait}ms: ${JSON.stringify(latest)}`);
+};
+
+const readLlamaLogEvidence = async () => {
+  const { readFile } = await import("node:fs/promises");
+  let log = "";
+  try { log = await readFile(llamaLogPath, "utf8"); } catch { /* failure path may precede log creation */ }
+  const lines = log.split(/\r?\n/).filter((line) => /build|cuda|offload|buffer|n_ctx|ctx|slot|model loader|server is listening/i.test(line));
+  return { path: llamaLogPath, relevant_lines: lines.slice(-100) };
+};
+
+const processIds = () => {
+  const result = spawnSync("pgrep", ["-f", "llama-server"], { encoding: "utf8" });
+  if (result.status !== 0) return [];
+  return result.stdout.trim().split(/\s+/).filter(Boolean).map(Number).filter((pid) => {
+    try {
+      return execFileSync("readlink", ["-f", `/proc/${pid}/exe`], { encoding: "utf8" }).trim().endsWith("/llama-server");
+    } catch {
+      return false;
+    }
+  });
+};
+
+const waitForGpuGate = async () => {
+  const qualificationPath = process.env.JARVISOS_LLAMACPP_QUALIFICATION ?? join(output, "llamacpp_iq2m_qualification.json");
+  while (true) {
+    const qualification = await import("node:fs/promises").then(({ readFile }) => readFile(qualificationPath, "utf8").then(JSON.parse, () => null));
+    const busyPids = processIds();
+    if (qualification && busyPids.length === 0) {
+      const byName = Object.fromEntries((qualification.probes ?? []).map((probe) => [probe.probe, probe.pass]));
+      const required = ["tool_selection_args", "multi_step_loop", "structured_output", "abstention", "no_fabricated_success", "eng_reasoning"];
+      const speed = qualification.speed?.[0]?.gen_tok_s ?? 0;
+      assert(required.every((name) => byName[name] === true), `short IQ2_M gate failed required probes: ${JSON.stringify(byName)}`);
+      assert(qualification.identity_followup?.pass === true, "short IQ2_M gate has no passing bounded identity follow-up");
+      assert(speed >= 7, `IQ2_M generation speed ${speed} tok/s did not clear the 7 tok/s browser-proof threshold`);
+      assert(qualification.ngl === "99" && qualification.launch_args.includes("--fit") &&
+        qualification.launch_args[qualification.launch_args.indexOf("--fit") + 1] === "off",
+      "IQ2_M short gate did not use forced full-GPU placement (-ngl 99 --fit off)");
+      return { qualification_path: qualificationPath, qualification_exists: true, gen_tok_s: speed,
+        identity_completion_tokens: qualification.identity_followup.completion_tokens, llama_server_pids: [] };
+    }
+    console.log(JSON.stringify({ waiting_for_gpu_gate: true, qualification_exists: Boolean(qualification), llama_server_pids: busyPids }));
+    await delay(5_000);
+  }
+};
+
+const unloadOllamaModels = async () => {
+  let response;
+  try { response = await fetch("http://127.0.0.1:11435/api/ps", { signal: AbortSignal.timeout(3_000) }); }
+  catch (error) { return { checked: false, reason: `Ollama API unavailable: ${error}` }; }
+  if (!response.ok) return { checked: false, reason: `Ollama /api/ps returned ${response.status}` };
+  const data = await response.json();
+  const models = Array.isArray(data.models) ? data.models : [];
+  const unloaded = [];
+  for (const item of models) {
+    const name = item.name ?? item.model;
+    if (!name) continue;
+    const result = await fetch("http://127.0.0.1:11435/api/generate", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model: name, keep_alive: 0, stream: false }),
+      signal: AbortSignal.timeout(30_000),
+    });
+    assert(result.ok, `Ollama unload for ${name} returned ${result.status}`);
+    unloaded.push(name);
+  }
+  let remaining = models;
+  const deadline = Date.now() + 30_000;
+  while (remaining.length && Date.now() < deadline) {
+    await delay(1_000);
+    const check = await fetch("http://127.0.0.1:11435/api/ps", { signal: AbortSignal.timeout(3_000) });
+    assert(check.ok, `Ollama post-unload /api/ps returned ${check.status}`);
+    const current = await check.json();
+    remaining = Array.isArray(current.models) ? current.models : [];
+  }
+  assert(remaining.length === 0, `Ollama still has loaded models: ${JSON.stringify(remaining)}`);
+  return { checked: true, models_before: models.map((item) => item.name ?? item.model), unloaded, models_after: [] };
+};
+
+const readLaunchArguments = async (pid) => {
+  if (!pid) return null;
+  const { readFile } = await import("node:fs/promises");
+  const bytes = await readFile(`/proc/${pid}/cmdline`);
+  return { pid, source: `/proc/${pid}/cmdline`, argv: bytes.toString("utf8").split("\0").filter(Boolean) };
+};
+
+try {
+  if (isLlamaCpp) {
+    await mkdir(join(dataRoot, "settings"), { recursive: true });
+    llamaLogPath = join(dataRoot, "logs", "llama-server.log");
+    await writeFile(join(dataRoot, "settings", "llama_cpp.json"), `${JSON.stringify({
+      ...llamaConfig,
+      manage: false,
+      startup_wait_s: 0.1,
+      request_timeout_s: 900,
+      log_path: llamaLogPath,
+    }, null, 2)}\n`, "utf8");
+  }
+  const initialized = spawnSync(join(backend, ".venv/bin/python"), ["-c", "from app.core.database import initialize_database; initialize_database()"], { cwd: backend, env: baseEnv, encoding: "utf8" });
+  assert(initialized.status === 0, `database initialization failed: ${initialized.stderr}`);
+  browser = await chromium.launch({ headless: true });
+  context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+  page = await context.newPage();
+  page.on("console", (message) => { if (message.type() === "error") consoleErrors.push(message.text()); });
+  page.on("pageerror", (error) => pageErrors.push(String(error)));
+  await startBackend(isLlamaCpp ? "" : "http://127.0.0.1:11436/api/generate");
+  if (isLlamaCpp) {
+    const settingsResponse = await fetch(`${backendUrl}/ai/settings`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ max_direct_continuations: 1 }),
+    });
+    assert(settingsResponse.ok, `bounded proof continuation setting returned ${settingsResponse.status}`);
+    proofAiSettings = await settingsResponse.json();
+  }
+  firstPassStatus = isLlamaCpp ? await runtimeRequest("") : null;
+  if (isLlamaCpp) {
+    assert(!firstPassStatus.runtime_reachable && !firstPassStatus.pid && !firstPassStatus.spawned_by_jarvis,
+      `llama.cpp runtime was expected to be stopped in pass 1: ${JSON.stringify(firstPassStatus)}`);
+  }
+  const workspaceResponse = await fetch(`${backendUrl}/workspaces`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: "151 Sidecar Operator Proof", slug: `sidecar-${Date.now()}` }) });
+  assert(workspaceResponse.ok, `workspace creation failed: ${workspaceResponse.status}`);
+  workspaceId = (await workspaceResponse.json()).id;
+  await page.goto(`${backendUrl}/design/process`, { waitUntil: "networkidle" });
+  await openSidecar();
+  unreachableOptions = await optionRecords();
+  const unreachable = unreachableOptions.find((item) => item.value === route);
+  assert(unreachable?.disabled && /not reachable/i.test(unreachable.text), `unreachable route not disabled with an actionable reason: ${JSON.stringify(unreachableOptions)}`);
+  if (isLlamaCpp) {
+    assert(firstPassStatus.reason_code === "LLAMACPP_RUNTIME_UNREACHABLE",
+      `stopped llama.cpp runtime did not report unreachable: ${JSON.stringify(firstPassStatus)}`);
+    assert(/not reachable/i.test(firstPassStatus.message), `stopped llama.cpp status has no actionable reason: ${JSON.stringify(firstPassStatus)}`);
+  }
+  const testResponder = unreachableOptions.find((item) => item.value === "local:fake");
+  assert(testResponder && /test responder/i.test(testResponder.text), `test responder is not labelled test-only: ${JSON.stringify(testResponder)}`);
+  await page.getByLabel("Jarvis responder").selectOption("local:fake");
+  await page.getByText("Test responder only — synthetic output, not an AI answer.", { exact: true }).waitFor();
+  await snap("unreachable-routes");
+
+  if (isLlamaCpp) {
+    gpuGate = await waitForGpuGate();
+    ollamaUnload = await unloadOllamaModels();
+    const startAt = Date.now();
+    const initialStart = await runtimeRequest("start");
+    runtimeStarted = true;
+    if (initialStart.runtime_reachable && initialStart.model_loaded) {
+      loadedEvidence = { phase: "cold_start", duration_ms: Date.now() - startAt, status: initialStart };
+    } else {
+      assert(initialStart.reason_code === "LLAMACPP_LOADING" || !initialStart.runtime_reachable,
+        `unexpected start response: ${JSON.stringify(initialStart)}`);
+      loadedEvidence = await waitForLlamaLoaded("cold_start");
+      loadedEvidence.duration_ms += Date.now() - startAt;
+    }
+    launchArguments = await readLaunchArguments(loadedEvidence.status.pid);
+    await page.reload({ waitUntil: "networkidle" });
+    await openSidecar();
+    await page.waitForFunction((selectedRoute) => [...document.querySelectorAll('[aria-label="Jarvis responder"] option')].some((option) => option.value === selectedRoute && !option.disabled), route, { timeout: 60_000 });
+  } else {
+    await startBackend(endpoint);
+    await page.reload({ waitUntil: "networkidle" });
+    await openSidecar();
+    await page.waitForFunction((selectedRoute) => [...document.querySelectorAll('[aria-label="Jarvis responder"] option')].some((option) => option.value === selectedRoute && !option.disabled), route, { timeout: 60_000 });
+  }
+  reachableOptions = await optionRecords();
+  const localRoute = page.getByLabel("Jarvis responder");
+  await localRoute.selectOption(route);
+  if (isLlamaCpp) {
+    await page.getByText(`Uses local model ${llamaConfig.model_id}.`, { exact: true }).waitFor();
+  }
+  await page.getByLabel("Message", { exact: true }).waitFor();
+  const jarvis = await send("funzioni jarvis?");
+  assert(jarvis.flow.state === "complete", `funzioni jarvis? interaction was ${JSON.stringify(jarvis.flow)}`);
+  assert(jarvis.flow.finish_reason === "stop", `funzioni jarvis? finish was ${jarvis.flow.finish_reason}`);
+  assert(/jarvisos/i.test(jarvis.flow.answer) && !/marvel/i.test(jarvis.flow.answer), `identity answer did not identify JarvisOS: ${jarvis.flow.answer}`);
+  assert(!/incomplete/i.test(await jarvis.entry.innerText()), "complete identity response shows an incomplete warning");
+  const ciao = await send("ciao");
+  assert(ciao.flow.state === "complete", `ciao interaction was ${JSON.stringify(ciao.flow)}`);
+  assert(ciao.flow.finish_reason === "stop", `ciao finish was ${ciao.flow.finish_reason}`);
+  assert(/[àèéìòù]|\b(ciao|buongiorno|salve|sono|posso|come|aiutarti|aiuto)\b/i.test(ciao.flow.answer), `Italian response not observed: ${ciao.flow.answer}`);
+  await snap("complete-answers");
+
+  if (isLlamaCpp) {
+    // A reasoning model may spend the whole bound on hidden reasoning. Record that
+    // outcome honestly (it must say so, not blame the runtime), then ask more directly.
+    const budgetExhausted = [];
+    let truncated;
+    for (const prompt of [
+      "Scrivi i numeri da 1 a 3000, uno per riga, senza commenti.",
+      "Senza ragionare, inizia subito: scrivi i numeri da 1 a 3000, uno per riga.",
+      "Rispondi subito senza pensare. Elenca i numeri da 1 a 3000, uno per riga.",
+    ]) {
+      truncated = await send(prompt);
+      if ((truncated.flow.answer && !/^No answer was produced/.test(truncated.flow.answer)) || truncated.flow.finish_reason !== "length") break;
+      const text = await truncated.entry.innerText();
+      const truthful = /whole output budget/i.test(text) && !/Check that the configured local model is running/i.test(text);
+      if (!truthful) proofFailures.push("budget-exhausted answer did not render the truthful budget message");
+      budgetExhausted.push({ flow: truncated.flow, truthful_message_rendered: truthful });
+    }
+    const truncatedText = await truncated.entry.innerText();
+    const continueButton = truncated.entry.getByRole("button", { name: "Continue as a new message" });
+    const continueButtonRendered = await continueButton.isVisible().catch(() => false);
+    if (truncated.flow.state === "complete") proofFailures.push("long answer unexpectedly completed");
+    if (truncated.flow.finish_reason !== "length") proofFailures.push(`long answer finish was ${truncated.flow.finish_reason}`);
+    const incompleteWarningRendered = /This answer is incomplete/i.test(truncatedText);
+    if (!incompleteWarningRendered) proofFailures.push("length-finished answer did not render the incomplete warning");
+    if (!continueButtonRendered) proofFailures.push("continue button was not rendered for the long answer");
+    await snap("incomplete-answer");
+    let continuationPrompt = "";
+    let continuation;
+    if (continueButtonRendered) {
+      await continueButton.click();
+      continuationPrompt = await page.getByLabel("Message", { exact: true }).inputValue();
+      if (!continuationPrompt) proofFailures.push("continue button did not populate the next-message prompt");
+      else continuation = await send(continuationPrompt);
+    }
+    length = {
+      status: truncated.flow.state !== "complete" && truncated.flow.finish_reason === "length" ? "observed" : "not_observed",
+      interaction: truncated.flow,
+      hidden_reasoning_empty_visible_answer: !truncated.flow.answer,
+      budget_exhausted_attempts: budgetExhausted,
+      incomplete_warning_rendered: incompleteWarningRendered,
+      continue_button_rendered: continueButtonRendered,
+      continuation_clicked: continueButtonRendered,
+      continuation_prompt: continuationPrompt,
+      continuation_result: continuation?.flow ?? null,
+    };
+  } else {
+    // Preserve the existing Ollama proof behavior while marking this lane-specific observation N/A.
+    length = { status: "not_run", reason: "Length-finish proof is specific to the llamacpp lane." };
+  }
+
+  if (isLlamaCpp) {
+    const restartAt = Date.now();
+    const restarted = await runtimeRequest("restart");
+    if (restarted.runtime_reachable && restarted.model_loaded) {
+      restartEvidence = { duration_ms: Date.now() - restartAt, status: restarted };
+    } else {
+      restartEvidence = await waitForLlamaLoaded("warm_restart");
+      restartEvidence.duration_ms += Date.now() - restartAt;
+    }
+    const restartCiao = await send("ciao dopo il riavvio");
+    assert(restartCiao.flow.state === "complete" && restartCiao.flow.finish_reason === "stop",
+      `post-restart ciao did not complete: ${JSON.stringify(restartCiao.flow)}`);
+  }
+  if (consoleErrors.length) proofFailures.push(`browser console errors: ${consoleErrors.join(" | ")}`);
+  if (pageErrors.length) proofFailures.push(`browser page errors: ${pageErrors.join(" | ")}`);
+  let llamaLogEvidence = null;
+  let remainingLlamaPids = [];
+  if (isLlamaCpp) {
+    await runtimeRequest("stop");
+    runtimeStarted = false;
+    remainingLlamaPids = processIds();
+    assert(remainingLlamaPids.length === 0, `llama-server processes remain after stop: ${remainingLlamaPids.join(", ")}`);
+    llamaLogEvidence = await readLlamaLogEvidence();
+  }
+  const evidence = {
+    schema: "jarvisos.151-sidecar-operator-proof.v1",
+    source_sha: execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim(),
+    workspace_id: workspaceId,
+    runtime_endpoint_kind: runtimeKind,
+    runtime_endpoint: isLlamaCpp ? "Jarvis-owned loopback llama.cpp runtime on port 18081" : endpoint,
+    route_class: route,
+    proof_ai_settings: proofAiSettings,
+    model_id: isLlamaCpp ? (process.env.JARVISOS_LLAMACPP_MODEL_ID ?? "qwen3.8-27b-q4kxl") : model,
+    runtime_configuration: isLlamaCpp ? llamaConfig : undefined,
+    runtime_actions: runtimeActions,
+    first_pass_runtime_status: firstPassStatus,
+    runtime_status_snapshots: runtimeSnapshots,
+    loading_snapshots: loadingSnapshots,
+    cold_load: loadedEvidence,
+    warm_restart: restartEvidence,
+    server_log: llamaLogEvidence,
+    ollama_unload: ollamaUnload,
+    gpu_gate: gpuGate,
+    launch_arguments: launchArguments,
+    remaining_llama_server_pids: remainingLlamaPids,
+    browser: "Chromium via Playwright",
+    route_options: { unreachable: unreachableOptions, reachable: reachableOptions },
+    flows,
+    length_finish: length,
+    screenshots,
+    console_errors: consoleErrors,
+    page_errors: pageErrors,
+    timings_ms: timings,
+    elapsed_seconds: (Date.now() - proofStartedAt) / 1000,
+    proof_status: proofFailures.length ? "incomplete" : "passed",
+    proof_failures: proofFailures,
+  };
+  await writeFile(proofFile, `${JSON.stringify(evidence, null, 2)}\n`, "utf8");
+  evidenceWritten = true;
+  console.log(JSON.stringify(evidence, null, 2));
+  if (proofFailures.length) throw new Error(`proof did not pass: ${proofFailures.join(" | ")}`);
+  succeeded = true;
+  await stopBackend();
+} catch (error) {
+  proofFailure = String(error);
+  throw error;
+} finally {
+  if (runtimeStarted && isLlamaCpp) {
+    await runtimeRequest("stop").catch(() => {});
+  }
+  await context?.close().catch(() => {});
+  await browser?.close().catch(() => {});
+  await stopBackend();
+  if (isLlamaCpp && !evidenceWritten) {
+    const evidence = {
+      schema: "jarvisos.151-sidecar-operator-proof.v1",
+      source_sha: execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim(),
+      workspace_id: workspaceId ?? null,
+      runtime_endpoint_kind: runtimeKind,
+      runtime_endpoint: "Jarvis-owned loopback llama.cpp runtime on port 18081",
+      route_class: route,
+      proof_ai_settings: proofAiSettings,
+      model_id: process.env.JARVISOS_LLAMACPP_MODEL_ID ?? "qwen3.8-27b-q4kxl",
+      runtime_configuration: llamaConfig,
+      runtime_actions: runtimeActions,
+      first_pass_runtime_status: firstPassStatus,
+      runtime_status_snapshots: runtimeSnapshots,
+      loading_snapshots: loadingSnapshots,
+      cold_load: loadedEvidence ?? null,
+      warm_restart: restartEvidence ?? null,
+      server_log: await readLlamaLogEvidence(),
+      launch_arguments: launchArguments,
+      remaining_llama_server_pids: processIds(),
+      browser: "Chromium via Playwright",
+      route_options: { unreachable: unreachableOptions, reachable: reachableOptions },
+      flows,
+      length_finish: length ?? null,
+      screenshots,
+      console_errors: consoleErrors,
+      page_errors: pageErrors,
+      timings_ms: timings,
+      elapsed_seconds: (Date.now() - proofStartedAt) / 1000,
+      proof_status: "incomplete",
+      proof_failures: [proofFailure ?? "proof exited before evidence assembly"],
+    };
+    await writeFile(proofFile, `${JSON.stringify(evidence, null, 2)}\n`, "utf8");
+  }
+  if (succeeded) {
+    await rm(dataRoot, { recursive: true, force: true });
+    await rm(tempDir, { recursive: true, force: true });
+  }
+}

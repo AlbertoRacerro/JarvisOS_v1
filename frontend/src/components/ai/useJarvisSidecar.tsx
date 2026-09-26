@@ -70,16 +70,21 @@ export function useJarvisSidecar(
   const activeKnowledge = knowledgeContext?.workspace_id === workspaceId && knowledgeContext.route_id === routeId ? knowledgeContext : null;
   const contextEnabled = projectPackEnabled && !activeKnowledge;
   const activeRoute = routes.find(route => route.route_class === routeClass);
+  const activeRouteAvailable = activeRoute?.execution_class === "synthetic"
+    || Boolean(activeRoute?.availability.runtime_reachable && activeRoute.availability.model_installed);
 
   useEffect(() => {
     let alive = true;
-    void getConversationOptions().then(result => {
+    const refresh = () => void getConversationOptions().then(result => {
       if (!alive) return;
       setRoutes(result.routes);
-      setRouteClass(current => result.routes.some(route => route.route_class === current) ? current : result.routes[0]?.route_class ?? "");
-      setRouteError(result.routes.length ? null : "No conversation model is configured.");
-    }).catch(() => { if (alive) setRouteError("Conversation options could not be loaded. Reload to retry."); });
-    return () => { alive = false; };
+      setRouteClass(current => result.routes.some(route => route.route_class === current)
+        ? current : result.routes.find(route => route.availability.runtime_reachable && route.availability.model_installed)?.route_class ?? result.routes[0]?.route_class ?? "");
+      setRouteError(result.routes.length ? null : "No local conversation route is configured.");
+    }).catch(() => { if (alive) setRouteError("Conversation availability could not be loaded."); });
+    refresh();
+    const timer = window.setInterval(refresh, 5000);
+    return () => { alive = false; window.clearInterval(timer); };
   }, []);
   const [previewNonce, setPreviewNonce] = useState(0);
   const [prompt, setPrompt] = useState("");
@@ -228,7 +233,7 @@ export function useJarvisSidecar(
     // Wait for thread ownership to settle before auto-creating or dispatching.
     // Otherwise a delayed initial list (or explicit creation) can select a
     // different thread while this submit publishes its transcript.
-    if (!workspaceId || !text || loadingThreads || submitting || !activeRoute || activeKnowledge?.route_id === "memory-project-basis") return;
+    if (!workspaceId || !text || loadingThreads || submitting || !activeRoute || !activeRouteAvailable || activeKnowledge?.route_id === "memory-project-basis") return;
     const workspaceTokenForCreate = workspaceOwner.current;
     const creationToken = ++submitOwner.current;
     let threadId = selectedThreadId;
@@ -351,11 +356,15 @@ export function useJarvisSidecar(
     {workspaceId ? <label className="jarvis-sidecar__field">Conversation<select value={selectedThreadId ?? ""} onChange={(event) => selectThread(event.target.value || null)} disabled={loadingThreads}><option value="">Select thread</option>{threads.map((thread) => <option key={thread.id} value={thread.id}>{thread.title || "Untitled thread"}</option>)}</select></label> : null}
     <label className="jarvis-sidecar__field">Responder<select aria-label="Jarvis responder" value={routeClass} disabled={submitting || !routes.length} onChange={event => { setRouteClass(event.target.value); setPending(null); setError(null); }}>
       {!routes.length && <option value="">Unavailable</option>}
-      {routes.map(route => <option value={route.route_class} key={route.route_class}>{route.label}</option>)}
+      {routes.map(route => {
+        const unavailable = route.execution_class !== "synthetic" && (!route.availability.runtime_reachable || !route.availability.model_installed);
+        return <option value={route.route_class} key={route.route_class} disabled={unavailable}>{route.label}{unavailable ? ` — ${route.availability.message}` : ""}</option>;
+      })}
     </select></label>
+    {activeRoute && <p className="jarvis-sidecar__status" role="status">{activeRoute.availability.message}{activeRoute.availability.qualified === "unknown" && activeRoute.execution_class !== "synthetic" ? " Qualification has not been recorded." : ""}</p>}
     </details>
     {routeError && <p role="status">{routeError}</p>}
-    {activeRoute && <small>{activeRoute.execution_class === "synthetic" ? "Test responder only — synthetic output, not an AI answer." : `Uses the configured local model (${activeRoute.model_id}). Availability is checked when you send.`}</small>}
+    {activeRoute && <small>{activeRoute.execution_class === "synthetic" ? "Test responder only — synthetic output, not an AI answer." : `Uses local model ${activeRoute.model_id}.`}</small>}
     {loadingDetail ? <p className="jarvis-sidecar__status">Loading thread…</p> : null}
 
     <details className="jarvis-sidecar__context" aria-label="Project context controls"><summary>{activeKnowledge ? `${activeKnowledge.included_count} selected records` : contextEnabled ? "Project context included" : "Optional project context"}</summary>
@@ -366,14 +375,14 @@ export function useJarvisSidecar(
       {pendingRetryReady && contextEnabled ? <p className="jarvis-sidecar__status">An uncertain prior submit retains its inspected digest for a safe idempotent retry.</p> : null}
     </details>
 
-    {detail ? <ol className="jarvis-sidecar__transcript" aria-label="Jarvis thread transcript">{detail.interactions.map((interaction) => <li key={interaction.id}><p><strong>You</strong> {interaction.user_text}</p><p><strong>{interaction.execution_class === "synthetic" ? "Test responder" : "Jarvis"}</strong> {interaction.assistant_text ?? "No answer was produced. See the saved outcome below."}</p><details><summary>Interaction details</summary><dl><div><dt>Model</dt><dd>{interaction.model_id ?? "Unknown"}</dd></div><div><dt>Flow</dt><dd>{interaction.flow_id}</dd></div><div><dt>Canonical state</dt><dd>{interaction.flow_state}</dd></div><div><dt>Persistence</dt><dd>{interaction.persistence_state}</dd></div><div><dt>Attempts</dt><dd>{interaction.attempt_count}</dd></div><div><dt>Proposals</dt><dd>{interaction.proposal_count}{interaction.proposals_truncated ? "+" : ""}</dd></div></dl></details>{interaction.flow_state === "failed_terminal" ? <p role="status">The responder could not answer. {interaction.terminal_reason?.replace(/_/g, " ")}. Check that the configured local model is running.</p> : null}{interaction.assistant_text_truncated ? <small>This saved response was truncated.</small> : null}{interaction.flow_state === "failed_terminal" ? <button type="button" disabled={submitting} onClick={() => setPrompt(interaction.user_text)}>Try this message again</button> : null}{interaction.persistence_error ? <small>Persistence diagnostic: {interaction.persistence_error}</small> : null}{interaction.proposal_ids.length ? <small>Proposal refs: {interaction.proposal_ids.join(", ")}</small> : null}</li>)}</ol> : null}
+    {detail ? <ol className="jarvis-sidecar__transcript" aria-label="Jarvis thread transcript">{detail.interactions.map((interaction) => <li key={interaction.id}><p><strong>You</strong> {interaction.user_text}</p><p><strong>{interaction.execution_class === "synthetic" ? "Test responder" : "Jarvis"}</strong> {interaction.assistant_text ?? "No answer was produced. See the saved outcome below."}</p><details><summary>Interaction details</summary><dl><div><dt>Model</dt><dd>{interaction.model_id ?? "Unknown"}</dd></div><div><dt>Flow</dt><dd>{interaction.flow_id}</dd></div><div><dt>Canonical state</dt><dd>{interaction.flow_state}</dd></div><div><dt>Persistence</dt><dd>{interaction.persistence_state}</dd></div><div><dt>Attempts</dt><dd>{interaction.attempt_count}</dd></div><div><dt>Proposals</dt><dd>{interaction.proposal_count}{interaction.proposals_truncated ? "+" : ""}</dd></div></dl></details>{interaction.flow_state === "partial_terminal" ? <p role="status">This answer is incomplete: {interaction.terminal_reason === "output_length_limit" ? "it stopped at the output limit" : (interaction.terminal_reason?.replace(/_/g, " ") ?? "the answer ended early")}. You can request a continuation as a new message.</p> : null}{interaction.flow_state === "failed_terminal" ? <p role="status">{interaction.terminal_reason?.endsWith("output_budget_exhausted") ? "The model used its whole output budget before producing a visible answer (for example on hidden reasoning). Try a shorter or more direct request." : `The responder could not answer. ${interaction.terminal_reason?.replace(/_/g, " ") ?? ""}. Check that the configured local model is running.`}</p> : null}{interaction.assistant_text_truncated ? <small>This saved response was truncated.</small> : null}{interaction.flow_state === "partial_terminal" ? <button type="button" disabled={submitting} onClick={() => setPrompt(`Continue the previous answer from where it stopped. Do not repeat the completed part. Original request: ${interaction.user_text.slice(0, 1500)}\n\nPrevious partial answer:\n${(interaction.assistant_text ?? "").slice(-8500)}`)}>Continue as a new message</button> : null}{interaction.flow_state === "failed_terminal" ? <button type="button" disabled={submitting} onClick={() => setPrompt(interaction.user_text)}>Try this message again</button> : null}{interaction.persistence_error ? <small>Persistence diagnostic: {interaction.persistence_error}</small> : null}{interaction.proposal_ids.length ? <small>Proposal refs: {interaction.proposal_ids.join(", ")}</small> : null}</li>)}</ol> : null}
     {error ? <p className="jarvis-sidecar__status" role="status">{error}</p> : null}
 
     {basisDiscussionBlocked && <p role="status">Project Basis discussion is unavailable under the current sensitivity controls. Prepare a written proposal above, or clear selected context to ask a general question.</p>}
     <form onSubmit={(event) => void submit(event)} className="jarvis-sidecar__composer">
       <label htmlFor="jarvis-prompt">Message</label>
       <textarea id="jarvis-prompt" value={prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} maxLength={12000} rows={5} disabled={!workspaceId || submitting} placeholder="Ask Jarvis…" />
-      <button type="submit" disabled={!workspaceId || !activeRoute || !prompt.trim() || loadingThreads || submitting || !contextReady}>{submitting ? "Submitting…" : loadingThreads ? "Loading conversations…" : contextEnabled ? pendingRetryReady ? "Retry with original context" : "Send with inspected context" : activeKnowledge ? "Send with selected context" : "Send without project context"}</button>
+      <button type="submit" disabled={!workspaceId || !activeRoute || !activeRouteAvailable || !prompt.trim() || loadingThreads || submitting || !contextReady}>{submitting ? "Submitting…" : loadingThreads ? "Loading conversations…" : contextEnabled ? pendingRetryReady ? "Retry with original context" : "Send with inspected context" : activeKnowledge ? "Send with selected context" : "Send without project context"}</button>
       <small>Enter submits. Shift+Enter adds a line. Closing the sidecar does not cancel canonical execution.</small>
     </form>
   </div>;

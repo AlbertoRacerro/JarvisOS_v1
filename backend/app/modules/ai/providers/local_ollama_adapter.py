@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import os
-from typing import Any
+from typing import Any, TypeGuard
 
 from app.modules.ai.contracts import (
     AIModelCapability,
     AIPrivacyClass,
+    AIProviderError,
+    AIProviderErrorCode,
     AIProviderHealth,
     AIRequest,
     AIResponse,
@@ -22,9 +24,8 @@ _DEFAULT_KEEP_ALIVE = "30m"
 _MODEL_ENV = "JARVISOS_DEV_MESSAGE_ROUTE_MODEL"
 _TIMEOUT_ENV = "JARVISOS_DEV_MESSAGE_ROUTE_TIMEOUT_S"
 _KEEP_ALIVE_ENV = "JARVISOS_DEV_MESSAGE_ROUTE_KEEP_ALIVE"
-_NUM_PREDICT_ENV = "JARVISOS_DEV_MESSAGE_ROUTE_NUM_PREDICT"
 _LOCAL_CHAT_MAX_PROMPT_CHARS = 32000
-_LOCAL_CHAT_MAX_OUTPUT_CHARS = 16000
+_LOCAL_CHAT_MAX_OUTPUT_CHARS = 64000
 _CHARS_PER_TOKEN_ESTIMATE = 4
 
 
@@ -64,24 +65,22 @@ def _resolved_keep_alive() -> str:
     return raw
 
 
-def _resolved_num_predict() -> int | None:
-    raw = os.getenv(_NUM_PREDICT_ENV)
-    if raw is None or not raw.strip():
-        return None
-    try:
-        parsed = int(raw)
-    except ValueError:
-        return None
-    return parsed if parsed > 0 else None
+def _resolved_num_predict(request: AIRequest) -> int:
+    return request.max_output_tokens if request.max_output_tokens and request.max_output_tokens > 0 else 2048
 
 
 def _max_output_chars(request: AIRequest) -> int:
-    max_tokens = request.max_output_tokens if request.max_output_tokens is not None else 512
-    return min(_LOCAL_CHAT_MAX_OUTPUT_CHARS, max(256, max_tokens * _CHARS_PER_TOKEN_ESTIMATE))
+    del request
+    # Ollama enforces the real token budget; this is only a distant corruption guard.
+    return _LOCAL_CHAT_MAX_OUTPUT_CHARS
 
 
 def _estimated_tokens(text: str) -> int:
     return max(1, len(text) // 4) if text else 1
+
+
+def _is_nonnegative_count(value: object) -> TypeGuard[int]:
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
 
 
 def _usage_from_metadata(model_id: str, prompt: str, text: str, metadata: dict[str, Any]) -> AIUsage:
@@ -90,26 +89,26 @@ def _usage_from_metadata(model_id: str, prompt: str, text: str, metadata: dict[s
         input_tokens = usage.get("input_tokens")
         output_tokens = usage.get("output_tokens")
         total_tokens = usage.get("total_tokens")
-        if all(isinstance(value, int) and value >= 0 for value in (input_tokens, output_tokens)):
+        if _is_nonnegative_count(input_tokens) and _is_nonnegative_count(output_tokens):
             return AIUsage(
                 provider_id=LOCAL_OLLAMA_PROVIDER_ID,
                 model_id=model_id,
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
-                total_tokens=total_tokens if isinstance(total_tokens, int) and total_tokens >= 0 else None,
+                total_tokens=total_tokens if _is_nonnegative_count(total_tokens) and total_tokens == input_tokens + output_tokens else None,
                 usage_source=AIUsageSource.actual,
             )
 
     input_tokens = metadata.get("input_tokens")
     output_tokens = metadata.get("output_tokens")
     total_tokens = metadata.get("total_tokens")
-    if all(isinstance(value, int) and value >= 0 for value in (input_tokens, output_tokens)):
+    if _is_nonnegative_count(input_tokens) and _is_nonnegative_count(output_tokens):
         return AIUsage(
             provider_id=LOCAL_OLLAMA_PROVIDER_ID,
             model_id=model_id,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
-            total_tokens=total_tokens if isinstance(total_tokens, int) and total_tokens >= 0 else None,
+            total_tokens=total_tokens if _is_nonnegative_count(total_tokens) and total_tokens == input_tokens + output_tokens else None,
             usage_source=AIUsageSource.actual,
         )
 
@@ -131,6 +130,10 @@ def _safe_raw_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
         "response_limit_source",
         "local_responder_timing",
         "finish_reason",
+        "done_reason",
+        "thinking_char_count",
+        "thinking_token_count",
+        "usage_source",
     ):
         if key in metadata:
             safe[key] = metadata[key]
@@ -149,7 +152,17 @@ class LocalOllamaAdapter:
         return self._load_smoke_adapter().call_local_ollama_generate_with_metadata
 
     def health(self) -> AIProviderHealth:
-        return AIProviderHealth.healthy if _configured_model_name() else AIProviderHealth.degraded
+        try:
+            from app.modules.local_ai.runtime.status import get_local_ai_runtime_status
+
+            status = get_local_ai_runtime_status()
+            model = _configured_model_name()
+            installed = set(status.get("installed_models", []))
+            if status.get("ollama_reachable") and model in installed:
+                return AIProviderHealth.healthy
+            return AIProviderHealth.unavailable if not status.get("ollama_reachable") else AIProviderHealth.degraded
+        except Exception:
+            return AIProviderHealth.unavailable
 
     def list_models(self) -> list[ModelRegistryEntry]:
         model_id = _configured_model_name()
@@ -179,9 +192,31 @@ class LocalOllamaAdapter:
             max_prompt_chars=_LOCAL_CHAT_MAX_PROMPT_CHARS,
             max_output_chars=_max_output_chars(request),
             keep_alive=_resolved_keep_alive(),
-            num_predict=_resolved_num_predict(),
+            num_predict=_resolved_num_predict(request),
         )
         text = metadata["response"]
+        finish_reason = metadata.get("finish_reason")
+        if metadata.get("response_truncated") is True:
+            finish_reason = "length"
+        elif finish_reason not in {"stop", "length", "error"}:
+            finish_reason = None
+        usage = _usage_from_metadata(model_id, prompt, text, metadata)
+        if finish_reason == "error":
+            return AIResponse(
+                provider_id=LOCAL_OLLAMA_PROVIDER_ID,
+                model_id=model_id,
+                request_id=request.request_id,
+                correlation_id=request.correlation_id,
+                usage=usage,
+                finish_reason="error",
+                safety_status="allowed",
+                raw_provider_metadata=_safe_raw_metadata(metadata),
+                error=AIProviderError(
+                    code=AIProviderErrorCode.provider_response_invalid,
+                    message="Local Ollama reported an inference error.",
+                    retryable=False,
+                ),
+            )
         return AIResponse(
             provider_id=LOCAL_OLLAMA_PROVIDER_ID,
             model_id=model_id,
@@ -189,8 +224,8 @@ class LocalOllamaAdapter:
             correlation_id=request.correlation_id,
             text=text,
             content=text,
-            usage=_usage_from_metadata(model_id, prompt, text, metadata),
-            finish_reason=metadata.get("finish_reason"),
+            usage=usage,
+            finish_reason=finish_reason,
             safety_status="allowed",
             raw_provider_metadata=_safe_raw_metadata(metadata),
         )

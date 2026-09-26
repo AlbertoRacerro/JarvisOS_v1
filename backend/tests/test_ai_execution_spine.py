@@ -320,6 +320,10 @@ def test_local_ollama_adapter_default_model_is_qwen3(monkeypatch) -> None:
 
     adapter = LocalOllamaAdapter()
     monkeypatch.setattr(adapter, "_load_responder", lambda: _fake_responder)
+    monkeypatch.setattr(
+        "app.modules.local_ai.runtime.status.get_local_ai_runtime_status",
+        lambda: {"ollama_reachable": True, "installed_models": ["qwen3:8b"]},
+    )
 
     listed = adapter.list_models()
     response = adapter.complete(AIRequest(task_type=AITaskType.synthesis, prompt="hello"))
@@ -331,6 +335,41 @@ def test_local_ollama_adapter_default_model_is_qwen3(monkeypatch) -> None:
     assert listed[0].display_name == "Local Ollama qwen3:8b"
     assert captured["model"] == "qwen3:8b"
     assert response.model_id == "qwen3:8b"
+
+
+@pytest.mark.parametrize(("finish_reason", "expected_state"), [("stop", "stop"), ("length", "length"), ("error", "error")])
+def test_local_ollama_adapter_preserves_finish_reason_and_generation_budget(
+    monkeypatch, finish_reason: str, expected_state: str
+) -> None:
+    from app.modules.ai.contracts import AITaskType
+    from app.modules.ai.providers.local_ollama_adapter import LocalOllamaAdapter
+
+    captured: dict[str, object] = {}
+
+    def responder(_prompt: str, **kwargs):
+        captured.update(kwargs)
+        return {
+            "response": "visible answer",
+            "response_truncated": False,
+            "finish_reason": finish_reason,
+            "usage": {"input_tokens": 11, "output_tokens": 23, "total_tokens": 34},
+            "thinking_char_count": 80,
+        }
+
+    adapter = LocalOllamaAdapter()
+    monkeypatch.setattr(adapter, "_load_responder", lambda: responder)
+    response = adapter.complete(AIRequest(
+        task_type=AITaskType.synthesis, prompt="hello", max_output_tokens=777,
+    ))
+
+    assert captured["num_predict"] == 777
+    assert captured["max_output_chars"] == 64000
+    assert response.finish_reason == expected_state
+    assert response.raw_provider_metadata["thinking_char_count"] == 80
+    assert response.usage.input_tokens == 11
+    assert response.usage.output_tokens == 23
+    assert response.usage.usage_source == AIUsageSource.actual
+    assert response.error is not None if finish_reason == "error" else response.error is None
 
 
 def test_local_ollama_route_bindings_have_expected_defaults(monkeypatch) -> None:
@@ -351,7 +390,7 @@ def test_local_ollama_route_bindings_have_expected_defaults(monkeypatch) -> None
         assert binding.provider_id == "local_ollama"
         assert binding.model_id == model_id
         assert binding.requires_network is False
-        assert binding.max_output_tokens == 512
+        assert binding.max_output_tokens == (2048 if route_class in {"local:fast", "local:general", "local:gemma", "local:coder"} else 512)
     assert bindings["local:general"].model_id == bindings["local:gemma"].model_id
 
 
@@ -409,7 +448,7 @@ def test_local_ollama_route_env_override_precedence(monkeypatch) -> None:
         assert binding.model_id == model_id
         assert binding.execution_class == "local_compute"
         assert binding.context_window_tokens == 8192
-        assert binding.max_output_tokens == 512
+        assert binding.max_output_tokens == (2048 if route_class in {"local:fast", "local:general", "local:gemma", "local:coder"} else 512)
 
     monkeypatch.delenv("AI_ROUTE_LOCAL_GENERAL_MODEL")
     with pytest.raises(ValueError, match="must resolve uniquely to a registered model"):
@@ -501,7 +540,7 @@ def test_local_gemma_route_executes_and_writes_ai_job(monkeypatch, tmp_path) -> 
     assert outcome.response.text == "[gemma] explain a pump"
     assert outcome.response.usage.usage_source == AIUsageSource.estimated
     assert "response" not in outcome.response.raw_provider_metadata
-    assert captured["max_output_chars"] == 2048
+    assert captured["max_output_chars"] == 64000
     rows = _all_ai_jobs()
     assert len(rows) == 1
     assert rows[0]["status"] == "success"
@@ -552,7 +591,7 @@ def test_configured_local_ollama_provider_error_records_one_row(monkeypatch, tmp
     assert rows[0]["error_type"] == "RuntimeError"
 
 
-def test_local_gemma_caps_max_output_chars(monkeypatch, tmp_path) -> None:
+def test_local_gemma_uses_distant_safety_char_cap(monkeypatch, tmp_path) -> None:
     _isolate_and_init(monkeypatch, tmp_path)
     from app.modules.ai.execution import run_ai_task
     from app.modules.ai.providers.local_ollama_adapter import LocalOllamaAdapter
@@ -574,7 +613,7 @@ def test_local_gemma_caps_max_output_chars(monkeypatch, tmp_path) -> None:
     outcome = run_ai_task(user_prompt="cap test", route_class="local:gemma", max_output_tokens=99999)
 
     assert outcome.status == "success"
-    assert captured["max_output_chars"] == 16000
+    assert captured["max_output_chars"] == 64000
 
 
 def test_provider_registry_default_bindings_for_representative_routes(monkeypatch, tmp_path) -> None:

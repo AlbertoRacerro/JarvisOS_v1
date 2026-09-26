@@ -29,6 +29,8 @@ from app.modules.development.routes import router as development_router
 from app.modules.engineering.operator_routes import router as engineering_operator_router
 from app.modules.flowsheet.routes import router as flowsheet_router
 from app.modules.local_ai.runtime.lifecycle import create_local_ai_runtime_lifecycle_from_env
+from app.modules.local_ai.runtime.llama_cpp import get_llama_cpp_runtime_owner, llama_cpp_runtime_config
+from app.modules.local_ai.runtime.routes import router as local_ai_runtime_router
 from app.modules.memory.literature_routes import router as literature_router
 from app.modules.memory.routes import router as memory_router
 from app.modules.modeling.routes import router as modeling_router
@@ -103,6 +105,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             # Runtime-truth observation must never make JarvisOS fail to start.
             app.state.runtime_startup_snapshot = startup_snapshot_unavailable()
         await lifecycle.startup()
+        llama_owner = get_llama_cpp_runtime_owner()
+        if llama_cpp_runtime_config().manage:
+            await asyncio.to_thread(llama_owner.start)
         live_working_dirs = live_stranded_runner_working_dirs()
         reconcile_stranded_runner_jobs()
         if live_working_dirs:
@@ -116,6 +121,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             with suppress(asyncio.CancelledError):
                 await recovery_task
         await lifecycle.shutdown()
+        await asyncio.to_thread(get_llama_cpp_runtime_owner().stop)
 
 
 def _frontend_dist_path() -> Path:
@@ -161,6 +167,7 @@ def create_app() -> FastAPI:
     app.include_router(dwsim_editor_router)
     app.include_router(project_knowledge_router)
     app.include_router(coding_runtime_router)
+    app.include_router(local_ai_runtime_router)
     app.include_router(development_router)
     app.include_router(brainstorm_router)
 

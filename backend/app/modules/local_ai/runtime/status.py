@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import copy
+import threading
+import time
 from typing import Any
 
 import httpx
@@ -13,9 +16,26 @@ from app.modules.local_ai.runtime.ollama import (
 )
 
 LOCAL_RUNTIME_STATUS_TIMEOUT_S = 1.5
+_STATUS_CACHE_TTL_S = 3.0
+_STATUS_CACHE_LOCK = threading.Lock()
+_STATUS_CACHE: tuple[float, dict[str, Any]] | None = None
 
 
 def get_local_ai_runtime_status(*, client: Any | None = None) -> dict[str, Any]:
+    """Return a short-lived status projection; injected clients always probe fresh."""
+    global _STATUS_CACHE
+    if client is None:
+        now = time.monotonic()
+        with _STATUS_CACHE_LOCK:
+            if _STATUS_CACHE is not None and now - _STATUS_CACHE[0] < _STATUS_CACHE_TTL_S:
+                return copy.deepcopy(_STATUS_CACHE[1])
+            status = _probe_local_ai_runtime_status()
+            _STATUS_CACHE = (time.monotonic(), status)
+            return copy.deepcopy(status)
+    return _probe_local_ai_runtime_status(client=client)
+
+
+def _probe_local_ai_runtime_status(*, client: Any | None = None) -> dict[str, Any]:
     configured_route_models = _configured_local_route_models()
     configured_endpoint = configured_ollama_endpoint_raw()
     status: dict[str, Any] = {
@@ -86,6 +106,13 @@ def get_local_ai_runtime_status(*, client: Any | None = None) -> dict[str, Any]:
     finally:
         if should_close:
             client_obj.close()
+
+
+def clear_local_ai_runtime_status_cache() -> None:
+    """Clear cached status for deterministic tests and operator reconfiguration."""
+    global _STATUS_CACHE
+    with _STATUS_CACHE_LOCK:
+        _STATUS_CACHE = None
 
 
 def _configured_local_route_models() -> dict[str, str]:

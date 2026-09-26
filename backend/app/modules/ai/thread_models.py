@@ -13,11 +13,22 @@ class AIThreadCreate(BaseModel):
     title: str | None = Field(default=None, max_length=120)
 
 
+class AIConversationRouteAvailability(BaseModel):
+    configured: bool
+    runtime_reachable: bool | None
+    model_installed: bool | None
+    model_loaded: bool | None
+    qualified: Literal[True, False, "unknown"]
+    reason_code: str | None = None
+    message: str
+
+
 class AIConversationRoute(BaseModel):
     route_class: str
     label: str
     model_id: str
     execution_class: Literal["local_compute", "synthetic"]
+    availability: AIConversationRouteAvailability
 
 
 class AIConversationOptions(BaseModel):

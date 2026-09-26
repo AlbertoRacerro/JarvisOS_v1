@@ -1,0 +1,169 @@
+{
+  "schema": "jarvisos.151-llamacpp-qualification.v1",
+  "gguf": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+  "gguf_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+  "gguf_bytes": 10522248928,
+  "launch_args": [
+    "-m",
+    "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+    "--host",
+    "127.0.0.1",
+    "--port",
+    "18082",
+    "-c",
+    "8192",
+    "--jinja",
+    "--metrics",
+    "-np",
+    "1",
+    "-ngl",
+    "99",
+    "--fit",
+    "off"
+  ],
+  "ctx": 8192,
+  "ngl": "99",
+  "gpu_before": "16 MiB, 11841 MiB",
+  "version": [
+    "version: 0.5.0-dev (build 11178, commit f9af9be21)",
+    "built with GNU 13.3.0 for Linux x86_64"
+  ],
+  "load_s_first": 100.07550333297695,
+  "pid": 629506,
+  "props": {
+    "build_info": "b11178-f9af9be21",
+    "model_path": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+    "total_slots": 1,
+    "n_ctx": 8192
+  },
+  "gpu_loaded": "10279 MiB, 1578 MiB",
+  "rss_mib": 1045.421875,
+  "speed": [
+    {
+      "prompt_tokens": 602,
+      "prompt_tok_s": 444.688703134095,
+      "gen_tokens": 256,
+      "gen_tok_s": 23.806689679800026,
+      "stop_type": "limit"
+    }
+  ],
+  "probes": [
+    {
+      "probe": "tool_selection_args",
+      "pass": true,
+      "seconds": 4.04,
+      "usage": {
+        "completion_tokens": 58,
+        "prompt_tokens": 513,
+        "total_tokens": 571,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "detail": [
+        {
+          "type": "function",
+          "function": {
+            "name": "search_second_brain",
+            "arguments": "{\"query\":\"PBR pump sizing decision\"}"
+          },
+          "id": "1hRTBN20YP20SZ55MxajNecCFO51dRTx"
+        }
+      ]
+    },
+    {
+      "probe": "multi_step_loop",
+      "pass": true,
+      "seconds": 14.83,
+      "usage": null,
+      "detail": {
+        "trace": [
+          "search_second_brain",
+          "get_decision"
+        ],
+        "final": "Found it. The decision on PBR pump sizing (dec-7f3) reads:\n\n> **Use a 0.75 kW variable-speed pump; revisit after the diel run.**\n\nSo the plan is a 0.75 kW variable-speed pump, with a follow-up review scheduled after the diel run."
+      }
+    },
+    {
+      "probe": "structured_output",
+      "pass": true,
+      "seconds": 12.53,
+      "usage": {
+        "completion_tokens": 256,
+        "prompt_tokens": 135,
+        "total_tokens": 391,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "detail": "{\n  \"category\": \"equipment fault\",\n  \"urgency\": 4\n}"
+    },
+    {
+      "probe": "abstention",
+      "pass": true,
+      "seconds": 12.07,
+      "usage": null,
+      "detail": {
+        "calls": [],
+        "content": ""
+      }
+    },
+    {
+      "probe": "no_fabricated_success",
+      "pass": true,
+      "seconds": 6.37,
+      "usage": null,
+      "detail": "the simulation for project p-12 couldn't be run — the dwsim runtime is currently unavailable. you may want to check that dwsim is installed and properly configured on this workstation, then i can try again."
+    },
+    {
+      "probe": "identity_italian",
+      "pass": false,
+      "seconds": 11.92,
+      "usage": {
+        "completion_tokens": 256,
+        "prompt_tokens": 119,
+        "total_tokens": 375,
+        "prompt_tokens_details": {
+          "cached_tokens": 104
+        }
+      },
+      "detail": ""
+    },
+    {
+      "probe": "eng_reasoning",
+      "pass": true,
+      "seconds": 8.59,
+      "usage": {
+        "completion_tokens": 176,
+        "prompt_tokens": 155,
+        "total_tokens": 331,
+        "prompt_tokens_details": {
+          "cached_tokens": 104
+        }
+      },
+      "detail": "Gauge pressure at the bottom:\nP = ρgh = 1000 × 9.81 × 12 = 117720 Pa = 117.72 kPa\n\nANSWER=117.72"
+    }
+  ],
+  "stop_s": 0.7156167729990557,
+  "offload_log": [],
+  "identity_followup": {
+    "pass": true,
+    "reason": "Initial 256-token identity probe exhausted its entire completion budget in hidden reasoning; this bounded follow-up allowed a complete visible answer.",
+    "max_tokens": 768,
+    "elapsed_s": 30.49,
+    "finish_reason": "stop",
+    "completion_tokens": 695,
+    "prompt_tokens": 119,
+    "gpu_loaded": "10327 MiB, 1530 MiB",
+    "rss_mib": 1551.66015625,
+    "load_s": 90.06,
+    "content": "Ciao! Sono l’assistente di JarvisOS, una workstation di ingegneria local-first (niente a che fare con il JARVIS di Marvel). Posso aiutare con codice, analisi tecnica, documentazione, problem solving e automazione; non posso agire su file, terminale o rete senza strumenti espliciti."
+  },
+  "kv_cache_measurement": {
+    "context_tokens": 8192,
+    "parallel_slots": 1,
+    "kv_unified": false,
+    "allocated_bytes": "not reported by pinned llama.cpp build log; not inferred"
+  },
+  "gate_decision": "qualified_for_exact_head_browser_proof"
+}

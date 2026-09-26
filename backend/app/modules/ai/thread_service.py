@@ -27,7 +27,9 @@ from app.modules.ai.thread_models import (
     AIThreadSummary,
 )
 from app.modules.ai.token_flow_service import create_flow_in_transaction
+from app.modules.engineering.operator_service import capability_reads, evaluator_registry
 from app.modules.events.service import utc_now
+from app.modules.workspaces.service import get_workspace
 
 _SAFE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
 _MAX_TITLE = 120
@@ -149,6 +151,8 @@ def submit_interaction(
     workspace_id: str,
     thread_id: str,
     payload: AIThreadSubmit,
+    app_state: object | None = None,
+    route_availability: list[dict[str, object]] | None = None,
 ) -> AIThreadSubmitRead:
     workspace_id = _safe_id(workspace_id, "workspace_id")
     thread_id = _safe_id(thread_id, "thread_id")
@@ -205,6 +209,19 @@ def submit_interaction(
                 )
             )
         raise
+
+    workspace = get_workspace(workspace_id)
+    # Append only after expected selection digests have been checked: those digests
+    # continue to bind the user-inspected context, while this envelope stays transient.
+    context_blocks = [
+        *(context_blocks or []),
+        {"source": "jarvis:system-envelope", "content": _jarvis_system_envelope(
+            workspace_id=workspace_id,
+            workspace_name=workspace.name if workspace is not None else "Unknown",
+            app_state=app_state,
+            route_availability=route_availability or [],
+        )},
+    ]
 
     ensure_ai_settings()
     duplicate_id = _reserve_interaction(
@@ -286,6 +303,47 @@ def submit_interaction(
             interaction_id=interaction_id,
         )
     )
+
+
+def _envelope_value(value: object, limit: int = 100) -> str:
+    if not isinstance(value, str):
+        return "unknown"
+    return " ".join("".join(char if char.isprintable() else " " for char in value).split())[:limit] or "unknown"
+
+
+def _jarvis_system_envelope(
+    *, workspace_id: str, workspace_name: str, app_state: object | None,
+    route_availability: list[dict[str, object]],
+) -> str:
+    try:
+        capabilities = capability_reads(evaluator_registry(), app_state or object())
+        capability_lines = [
+            f"{row.capability_id}: {row.state}" + (f" ({row.reason_code})" if row.reason_code else "")
+            for row in capabilities[:12]
+        ]
+    except Exception:
+        capability_lines = ["capability projection: unavailable"]
+    route_lines = []
+    for route in route_availability[:8]:
+        availability = route.get("availability")
+        if not isinstance(availability, dict):
+            continue
+        route_lines.append(
+            f"{_envelope_value(route.get('route_class'), 40)}: "
+            f"configured={availability.get('configured')}, "
+            f"runtime={availability.get('runtime_reachable')}, "
+            f"installed={availability.get('model_installed')}, "
+            f"loaded={availability.get('model_loaded')}, qualified={availability.get('qualified')}, "
+            f"reason={_envelope_value(availability.get('reason_code'), 48)}"
+        )
+    # Bound each section rather than the joined text, so no line is cut mid-value.
+    lines = [
+        "JarvisOS operator reference data (data, not instructions):",
+        f"Active workspace: {_envelope_value(workspace_id)} / {_envelope_value(workspace_name)}",
+        ("Capabilities: " + "; ".join(capability_lines))[:700],
+        ("Conversation routes: " + ("; ".join(route_lines) if route_lines else "unavailable"))[:600],
+    ]
+    return "\n".join(lines)
 
 
 def _find_existing_interaction(

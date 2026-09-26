@@ -108,7 +108,8 @@ def _attempt_rows(flow_id: str) -> list[dict[str, object]]:
         rows = connection.execute(
             """
             SELECT id, flow_attempt_index, parent_attempt_id, continuation_index,
-                   normalized_finish_reason, output_digest
+                   normalized_finish_reason, output_digest, status, input_tokens,
+                   output_tokens
             FROM ai_jobs
             WHERE flow_id = ?
             ORDER BY flow_attempt_index
@@ -219,6 +220,47 @@ def test_nonstop_child_finish_is_partial_and_not_complete(
     assert flow["continuation_count"] == 1
 
 
+def test_empty_continuation_response_preserves_partial_output_without_500(
+    initialized_database,
+) -> None:
+    adapter = _SequenceAdapter(
+        _ResponseSpec("visible prefix", "length"),
+        _ResponseSpec("", "length"),
+    )
+
+    outcome = run_ai_task(
+        user_prompt="Produce the bounded answer.",
+        task_kind="synthesis",
+        route_class="local:sequence",
+        max_output_tokens=64,
+        adapters={"sequence": adapter},
+        bindings={"local:sequence": _binding()},
+    )
+
+    assert outcome.status == "provider_error"
+    assert outcome.error_type == "output_budget_exhausted"
+    assert outcome.response is not None
+    assert outcome.response.text == "visible prefix"
+    assert len(adapter.requests) == 2
+
+    flow = get_flow(str(outcome.flow_id))
+    assert flow["state"] == "partial_terminal"
+    assert flow["terminal_reason"] == "continuation_output_budget_exhausted"
+    assert flow["attempt_count"] == 2
+    assert flow["continuation_count"] == 1
+
+    attempts = _attempt_rows(str(outcome.flow_id))
+    assert attempts[1]["output_digest"] is None
+    assert attempts[1]["status"] == "provider_error"
+    assert attempts[1]["normalized_finish_reason"] == "length"
+    assert attempts[1]["output_tokens"] == 1
+    status = get_continuation_flow_status(
+        flow_id=str(outcome.flow_id),
+        workspace_id=None,
+    )
+    assert status.segment_count == 1
+
+
 def test_fresh_context_capacity_check_blocks_before_second_adapter_call(
     initialized_database,
 ) -> None:
@@ -278,3 +320,26 @@ def test_unknown_finish_is_partial_and_does_not_capture_records(
             "SELECT COUNT(*) AS count FROM decisions WHERE origin = 'ai_proposed'"
         ).fetchone()
     assert proposals["count"] == 0
+
+
+def test_length_finish_without_visible_text_is_budget_exhausted_not_unavailable(
+    initialized_database,
+) -> None:
+    adapter = _SequenceAdapter(_ResponseSpec("", "length"))
+
+    outcome = run_ai_task(
+        user_prompt="Produce the bounded answer.",
+        task_kind="synthesis",
+        route_class="local:sequence",
+        max_output_tokens=64,
+        adapters={"sequence": adapter},
+        bindings={"local:sequence": _binding()},
+    )
+
+    assert outcome.status == "provider_error"
+    assert outcome.error_type == "output_budget_exhausted"
+    flow = get_flow(str(outcome.flow_id))
+    assert flow["state"] == "failed_terminal"
+    assert flow["terminal_reason"] == "output_budget_exhausted"
+    attempts = _attempt_rows(str(outcome.flow_id))
+    assert attempts[0]["normalized_finish_reason"] == "length"

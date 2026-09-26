@@ -11,6 +11,7 @@ from app.modules.ai.providers.local_ollama_adapter import LocalOllamaAdapter
 from app.modules.local_ai.runtime.ollama import OllamaRuntimeEndpointError, resolve_ollama_runtime_urls
 from app.modules.local_ai.runtime.status import (
     LOCAL_RUNTIME_STATUS_TIMEOUT_S,
+    clear_local_ai_runtime_status_cache,
     get_local_ai_runtime_status,
 )
 
@@ -53,6 +54,52 @@ def _load_script_local_responder():
     import router_policy_local_responder as responder
 
     return responder
+
+
+def test_runtime_status_short_ttl_cache_avoids_repeat_probe(monkeypatch) -> None:
+    import app.modules.local_ai.runtime.status as runtime_status
+
+    clear_local_ai_runtime_status_cache()
+    calls = 0
+
+    def probe():
+        nonlocal calls
+        calls += 1
+        return {"ollama_reachable": True}
+
+    monkeypatch.setattr(runtime_status, "_probe_local_ai_runtime_status", probe)
+    assert get_local_ai_runtime_status() == {"ollama_reachable": True}
+    assert get_local_ai_runtime_status() == {"ollama_reachable": True}
+    assert calls == 1
+    clear_local_ai_runtime_status_cache()
+
+
+def test_ollama_responder_keeps_thinking_private_and_reports_runtime_truth() -> None:
+    responder = _load_script_local_responder()
+    seen_payload: dict[str, object] = {}
+
+    def client(_endpoint: str, payload: dict, _timeout: float) -> dict:
+        seen_payload.update(payload)
+        return {
+            "response": "<think>private inline</think>visible",
+            "thinking": "private field",
+            "done_reason": "stop",
+            "prompt_eval_count": 7,
+            "eval_count": 13,
+        }
+
+    result = responder.call_local_ollama_generate_with_metadata(
+        "prompt", model="gemma4:12b-it-qat", endpoint="http://127.0.0.1:11434/api/generate",
+        timeout_s=1, temperature=0, max_prompt_chars=100, max_output_chars=64000,
+        num_predict=777, client=client,
+    )
+
+    assert seen_payload["options"]["num_predict"] == 777
+    assert result["response"] == "visible"
+    assert result["finish_reason"] == "stop"
+    assert result["thinking_char_count"] == len("private fieldprivate inline")
+    assert result["usage"] == {"input_tokens": 7, "output_tokens": 13, "total_tokens": 20}
+    assert result["usage_source"] == "actual"
 
 
 def test_runtime_status_reachable_with_all_models_present(monkeypatch) -> None:

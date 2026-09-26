@@ -38,6 +38,10 @@ from app.modules.ai.contracts import (
 from app.modules.ai.execution_types import ProviderBinding
 from app.modules.ai.flow_record_capture import capture_final_flow_records
 from app.modules.ai.providers.fake_adapter import FAKE_PROVIDER_ID, FakeProviderAdapter
+from app.modules.ai.providers.local_llamacpp_adapter import (
+    LOCAL_LLAMACPP_PROVIDER_ID,
+    LocalLlamaCppAdapter,
+)
 from app.modules.ai.providers.local_ollama_adapter import (
     LOCAL_OLLAMA_PROVIDER_ID,
     LocalOllamaAdapter,
@@ -144,6 +148,7 @@ def _default_adapters() -> dict[str, AIProviderAdapter]:
     adapters: dict[str, AIProviderAdapter] = {
         FAKE_PROVIDER_ID: FakeProviderAdapter(),
         LOCAL_OLLAMA_PROVIDER_ID: LocalOllamaAdapter(),
+        LOCAL_LLAMACPP_PROVIDER_ID: LocalLlamaCppAdapter(),
         SCALEWAY_PROVIDER_ID: ScalewayProviderAdapter(),
     }
     from app.modules.ai.provider_registry import load_default_provider_registry
@@ -369,8 +374,11 @@ def _chain_metadata(
 
 
 def _response_status(response: AIResponse) -> tuple[str, str | None]:
-    if response.error is None and response.text is not None:
+    if response.error is None and response.text:
         return "success", None
+    if response.error is None and response.finish_reason == "length":
+        # The output bound was reached with no visible text (e.g. spent on hidden reasoning).
+        return "provider_error", "output_budget_exhausted"
     return "provider_error", response.error.code.value if response.error is not None else "empty_response"
 
 
@@ -802,6 +810,15 @@ def _run_local_continuations(
             ),
             continuation,
         )
+        ledger_response: AIResponse | None = response
+        input_tokens_override = None
+        output_tokens_override = None
+        if error_type in {"empty_response", "output_budget_exhausted"}:
+            # Preserve usage and finish metadata while preventing an empty visible
+            # body from becoming an output digest that cannot own a protected segment.
+            ledger_response = None
+            input_tokens_override = response.usage.input_tokens
+            output_tokens_override = response.usage.output_tokens
         ledger_id = _write_ai_job(
             status=status,
             task_kind=task_kind,
@@ -811,7 +828,7 @@ def _run_local_continuations(
             prompt_digest=canonical_digest({"prompt": request.prompt or ""}),
             context_digest=context_digest,
             context_sources=context_sources,
-            response=response,
+            response=ledger_response,
             latency_ms=_elapsed_ms(attempt_started),
             error_type=error_type,
             route_metadata=route_metadata,
@@ -819,6 +836,8 @@ def _run_local_continuations(
             flow_id=flow_id,
             evidence=evidence,
             continuation_decision=continuation,
+            input_tokens_override=input_tokens_override,
+            output_tokens_override=output_tokens_override,
         )
         if status != "success" or response.text is None:
             _, assembled = terminalize_assembled_output(

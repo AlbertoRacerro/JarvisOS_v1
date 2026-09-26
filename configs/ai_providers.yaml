@@ -33,22 +33,38 @@ providers:
         route_classes: [local:fast]
         # Conservative JarvisOS operating bound, not a vendor maximum claim.
         context_window_tokens: 8192
-        max_output_tokens: 512
+        max_output_tokens: 2048
       gemma4:12b-it-qat:
         provider_model_name: gemma4:12b-it-qat
         route_classes: [local:general, local:gemma]
         context_window_tokens: 8192
-        max_output_tokens: 512
+        max_output_tokens: 2048
       deepseek-coder-v2:16b:
         provider_model_name: deepseek-coder-v2:16b
         route_classes: [local:coder]
         context_window_tokens: 8192
-        max_output_tokens: 512
+        max_output_tokens: 2048
       qwen3-coder:30b:
         provider_model_name: qwen3-coder:30b
         route_classes: [local:coder_heavy]
         context_window_tokens: 8192
         max_output_tokens: 512
+  local_llamacpp:
+    kind: local
+    execution_class: local_compute
+    enabled: true
+    requires_network: false
+    base_url: null  # endpoint is owned by the llama.cpp runtime owner config
+    api_key_ref: null
+    timeout_seconds: 0
+    monthly_token_cap: 0
+    monthly_cost_cap_usd: 0
+    models:
+      qwen3.8-27b-q4kxl:
+        provider_model_name: qwen3.8-27b-q4kxl
+        route_classes: [local:llamacpp]
+        context_window_tokens: 8192
+        max_output_tokens: 2048
   scaleway:
     kind: scaleway
     execution_class: external_provider

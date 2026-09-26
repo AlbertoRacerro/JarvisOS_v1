@@ -6,6 +6,15 @@ export type ConversationRoute = {
   label: string;
   model_id: string;
   execution_class: "local_compute" | "synthetic";
+  availability: {
+    configured: boolean;
+    runtime_reachable: boolean | null;
+    model_installed: boolean | null;
+    model_loaded: boolean | null;
+    qualified: true | false | "unknown";
+    reason_code: string | null;
+    message: string;
+  };
 };
 
 export type ThreadSummary = {
@@ -87,7 +96,7 @@ export async function listThreads(workspaceId: string): Promise<ThreadSummary[]>
   return result.threads;
 }
 
-export function getConversationOptions(): Promise<{routes: ConversationRoute[]; availability: string}> {
+export function getConversationOptions(): Promise<{routes: ConversationRoute[]; availability: "configured" | "unavailable"}> {
   return requestJson("/ai/threads/conversation-options");
 }
 

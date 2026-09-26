@@ -1,0 +1,166 @@
+{
+  "schema": "jarvisos.151-llamacpp-qualification.v1",
+  "gguf": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-UD-Q4_K_XL.gguf",
+  "gguf_sha256": "bee238bbeb3dc0a34bde4d0dedbaee1f98c009e8bb4226f03070054c12fb1372",
+  "gguf_bytes": 17923394624,
+  "launch_args": [
+    "-m",
+    "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-UD-Q4_K_XL.gguf",
+    "--host",
+    "127.0.0.1",
+    "--port",
+    "18080",
+    "-c",
+    "8192",
+    "--jinja",
+    "--metrics",
+    "-np",
+    "1"
+  ],
+  "ctx": 8192,
+  "ngl": "auto",
+  "gpu_before": "16 MiB, 11841 MiB",
+  "version": [
+    "version: 0.5.0-dev (build 11178, commit f9af9be21)",
+    "built with GNU 13.3.0 for Linux x86_64"
+  ],
+  "load_s_first": 238.24389023301774,
+  "pid": 551202,
+  "props": {
+    "build_info": "b11178-f9af9be21",
+    "model_path": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-UD-Q4_K_XL.gguf",
+    "total_slots": 1,
+    "n_ctx": 8192
+  },
+  "gpu_loaded": "9819 MiB, 2038 MiB",
+  "rss_mib": 7839.62109375,
+  "speed": [
+    {
+      "prompt_tokens": 602,
+      "prompt_tok_s": 65.67073327046252,
+      "gen_tokens": 256,
+      "gen_tok_s": 1.2670301145034493,
+      "stop_type": "limit"
+    },
+    {
+      "prompt_tokens": 602,
+      "prompt_tok_s": 148.66730381225443,
+      "gen_tokens": 256,
+      "gen_tok_s": 3.4707369037289313,
+      "stop_type": "limit"
+    }
+  ],
+  "probes": [
+    {
+      "probe": "tool_selection_args",
+      "pass": true,
+      "seconds": 18.47,
+      "usage": {
+        "completion_tokens": 58,
+        "prompt_tokens": 513,
+        "total_tokens": 571,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "detail": [
+        {
+          "type": "function",
+          "function": {
+            "name": "search_second_brain",
+            "arguments": "{\"query\":\"PBR pump sizing decision\"}"
+          },
+          "id": "ZxymBaT4qRS5MPNDF3HY02Adfc3c17y4"
+        }
+      ]
+    },
+    {
+      "probe": "multi_step_loop",
+      "pass": true,
+      "seconds": 128.4,
+      "usage": null,
+      "detail": {
+        "trace": [
+          "search_second_brain",
+          "get_decision"
+        ],
+        "final": "Found it \u2014 decision **dec-7f3** \"PBR circulation pump sizing\":\n\n> Use a 0.75 kW variable-speed pump; revisit after the diel run.\n\nSo the plan is a 0.75 kW variable-speed pump, with a revisit scheduled after the diel run. Want me to check the flowsheet or any related notes?"
+      }
+    },
+    {
+      "probe": "structured_output",
+      "pass": true,
+      "seconds": 70.31,
+      "usage": {
+        "completion_tokens": 161,
+        "prompt_tokens": 135,
+        "total_tokens": 296,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "detail": "{\n  \"category\": \"equipment_fault\",\n  \"urgency\": 3\n}"
+    },
+    {
+      "probe": "abstention",
+      "pass": false,
+      "seconds": 217.54,
+      "usage": null,
+      "detail": {
+        "calls": [
+          {
+            "type": "function",
+            "function": {
+              "name": "search_second_brain",
+              "arguments": "{\"query\":\"supplier pump contact email\"}"
+            },
+            "id": "KYlDcp2qkxQ8vCtnluzukSl2ggDrFi3S"
+          }
+        ],
+        "content": ""
+      }
+    },
+    {
+      "probe": "no_fabricated_success",
+      "pass": true,
+      "seconds": 65.6,
+      "usage": null,
+      "detail": "i tried to run the process simulation for project p-12, but it failed: the dwsim runtime is currently unavailable.\n\nthis means the simulation engine itself isn't running or reachable on this workstation \u2014 it's not a problem with the project's flowsheet. you may need to start or repair the dwsim runt"
+    },
+    {
+      "probe": "identity_italian",
+      "pass": true,
+      "seconds": 146.28,
+      "usage": {
+        "completion_tokens": 383,
+        "prompt_tokens": 119,
+        "total_tokens": 502,
+        "prompt_tokens_details": {
+          "cached_tokens": 104
+        }
+      },
+      "detail": "JarvisOS \u00e8 un ambiente di lavoro locale-first per ingegneria e sviluppo. In pratica, posso aiutarti con funzioni come:\n\n- **Sviluppo software**: scrivere, correggere e rifattorizzare codice.\n- **Debugging**: analizzare errori, log, stack trace e comportamenti anomali.\n- **Architettura**: progettare sistemi, API, database, microservizi, pipeline.\n- **CLI / shell**: aiutarti con comandi, script, aut"
+    },
+    {
+      "probe": "eng_reasoning",
+      "pass": true,
+      "seconds": 69.18,
+      "usage": {
+        "completion_tokens": 153,
+        "prompt_tokens": 155,
+        "total_tokens": 308,
+        "prompt_tokens_details": {
+          "cached_tokens": 104
+        }
+      },
+      "detail": "Gauge pressure = \u03c1gh = 1000 \u00d7 9.81 \u00d7 12 = 117,720 Pa = 117.72 kPa\n\nANSWER=117.72"
+    }
+  ],
+  "stop_s": 1.321665486000711,
+  "load_s_restart": 274.25196041801246,
+  "restart_health": {
+    "status": "ok"
+  },
+  "stop_s_2": 2.0700599510164466,
+  "offload_log": []
+}
