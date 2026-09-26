@@ -159,7 +159,7 @@ def test_mcp_protocol_discloses_only_broker_tool() -> None:
     listed = _reply({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
     assert initialized is not None and initialized["result"]["serverInfo"]["name"] == "jarvis"
     assert listed is not None and [tool["name"] for tool in listed["result"]["tools"]] == [
-        "jarvis_context_preview", "jarvis_retrieval_query"]
+        "jarvis_context_preview", "jarvis_retrieval_query", "jarvis_decide"]
 
 
 def test_text_tool_proposal_requires_the_registered_broker() -> None:
@@ -598,6 +598,136 @@ def test_workspace_retrieval_event_records_evidence_refs(monkeypatch: pytest.Mon
     assert '"object_id":"decision-1"' in payload["evidence_refs"][0]
 
 
+def test_decision_grant_is_thread_scoped_and_records_redacted_evidence(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.modules.local_ai import decision_gateway
+
+    connection = _connection()
+    connection.commit()
+    monkeypatch.setattr("app.modules.agents.hermes.supervisor.open_sqlite_connection",
+                        lambda: _existing_connection(connection))
+    monkeypatch.setattr(decision_gateway.DecisionGateway, "from_config", classmethod(
+        lambda cls: cls(available_routes=lambda: set())))
+    now = datetime.now(UTC)
+    grant = CapabilityGrantRef(grant_id="decide-grant", capability_id="jarvis.decide",
+                               issuer="jarvis_policy",
+                               scope=CapabilityScope(workspace_id=SESSION.workspace_id,
+                                                     jarvis_thread_id=SESSION.jarvis_thread_id),
+                               issued_at=now, expires_at=now + timedelta(minutes=10))
+    supervisor = HermesSupervisor("unused")
+    supervisor.session = SESSION
+    supervisor.active_interaction_id = "interaction-decide"
+    supervisor.last_flow[SESSION.hermes_session_id] = "relay-flow-1"
+    supervisor.live_grants[grant.grant_id] = grant
+    monkeypatch.setattr(supervisor, "_send", lambda _frame: None)
+    raw_text = "private summary must not persist"
+    supervisor._handle_tool({"id": "decision-call", "session_ref": SESSION.model_dump(mode="json"),
+                             "arguments": {"tool_name": "jarvis_decide", "grant_id": grant.grant_id,
+                                           "kind": "route_class",
+                                           "request": {"summary": raw_text, "read_tool_ids": [],
+                                                       "required_capability_available": True}}})
+    row = connection.execute("SELECT payload FROM events WHERE event_type = 'hermes.tool_result'").fetchone()
+    assert row is not None
+    payload = json.loads(row["payload"])
+    assert payload["status"] == "succeeded"
+    assert payload["kind"] == "route_class"
+    assert payload["request_digest"].startswith("sha256:")
+    assert payload["backend_model_ref"] == "jarvis.laya-rules.v1"
+    assert payload["backend_revision"] == "v1"
+    assert payload["outcome"] == "decided" and payload["latency_ms"] >= 0
+    assert payload["recommendation"] == "answer_directly"
+    assert payload["interaction_id"] == "interaction-decide"
+    assert payload["current_relay_flow_id"] == "relay-flow-1"
+    assert raw_text not in row["payload"]
+
+
+@pytest.mark.parametrize("arguments", [
+    {"kind": "route_class"},
+    {"kind": "route_class", "request": {}, "extra": True},
+])
+def test_malformed_decision_call_is_refused_as_decide(monkeypatch: pytest.MonkeyPatch,
+                                                      arguments: dict[str, object]) -> None:
+    connection = _connection()
+    connection.commit()
+    monkeypatch.setattr("app.modules.agents.hermes.supervisor.open_sqlite_connection",
+                        lambda: _existing_connection(connection))
+    now = datetime.now(UTC)
+    grant = CapabilityGrantRef(grant_id="decide-grant", capability_id="jarvis.decide",
+                               issuer="jarvis_policy",
+                               scope=CapabilityScope(workspace_id=SESSION.workspace_id,
+                                                     jarvis_thread_id=SESSION.jarvis_thread_id),
+                               issued_at=now, expires_at=now + timedelta(minutes=10))
+    supervisor = HermesSupervisor("unused")
+    supervisor.session = SESSION
+    supervisor.live_grants[grant.grant_id] = grant
+    monkeypatch.setattr(supervisor, "_send", lambda _frame: None)
+    supervisor._handle_tool({"id": "decision-call", "session_ref": SESSION.model_dump(mode="json"),
+                             "arguments": {"tool_name": "jarvis_decide", "grant_id": grant.grant_id,
+                                           **arguments}})
+    row = connection.execute("SELECT payload FROM events WHERE event_type = 'hermes.tool_result'").fetchone()
+    payload = json.loads(row["payload"])
+    assert payload["capability_id"] == "jarvis.decide"
+    assert payload["status"] == "refused"
+    assert payload["error_code"] == "invalid_arguments"
+
+
+def test_decide_call_without_grant_never_persists_request_text(monkeypatch: pytest.MonkeyPatch) -> None:
+    connection = _connection()
+    connection.commit()
+    monkeypatch.setattr("app.modules.agents.hermes.supervisor.open_sqlite_connection",
+                        lambda: _existing_connection(connection))
+    supervisor = HermesSupervisor("unused")
+    supervisor.session = SESSION
+    sent: list[dict[str, Any]] = []
+    monkeypatch.setattr(supervisor, "_send", sent.append)
+    supervisor._handle_tool({"id": "decision-call", "session_ref": SESSION.model_dump(mode="json"),
+                             "arguments": {"tool_name": "jarvis_decide", "kind": "route_class",
+                                           "request": {"summary": "private-request-text"}}})
+    row = connection.execute("SELECT payload FROM events WHERE event_type = 'hermes.tool_result'").fetchone()
+    assert "private-request-text" not in row["payload"]
+    payload = json.loads(row["payload"])
+    assert payload["capability_id"] == "jarvis.decide"
+    assert payload["status"] == "refused"
+    assert sent and sent[0]["tool_result"]["status"] == "refused"
+
+
+def test_non_object_tool_arguments_are_refused_with_a_response(monkeypatch: pytest.MonkeyPatch) -> None:
+    connection = _connection()
+    connection.commit()
+    monkeypatch.setattr("app.modules.agents.hermes.supervisor.open_sqlite_connection",
+                        lambda: _existing_connection(connection))
+    supervisor = HermesSupervisor("unused")
+    supervisor.session = SESSION
+    sent: list[dict[str, Any]] = []
+    monkeypatch.setattr(supervisor, "_send", sent.append)
+    supervisor._handle_tool({"id": "list-call", "session_ref": SESSION.model_dump(mode="json"),
+                             "arguments": ["jarvis_decide", "private-request-text"]})
+    assert sent and sent[0]["tool_result"]["status"] == "refused"
+    row = connection.execute("SELECT payload FROM events WHERE event_type = 'hermes.tool_result'").fetchone()
+    assert "private-request-text" not in row["payload"]
+
+
+def test_decision_grant_requires_exact_thread_scope_and_active_grant() -> None:
+    now = datetime.now(UTC)
+    call = StructuredToolCall(call_id="decide-call", capability_id="jarvis.decide", grant_id="decide-grant",
+                              correlation_id="decide-call", session_ref=SESSION,
+                              arguments={"kind": "retry_or_stop", "request": {
+                                  "previous_outcome": "failed", "attempt_count": 0, "retryable": True}},
+                              requested_at=now, deadline_at=now + timedelta(minutes=1))
+    grant = CapabilityGrantRef(grant_id="decide-grant", capability_id="jarvis.decide", issuer="jarvis_policy",
+                               scope=CapabilityScope(workspace_id=SESSION.workspace_id,
+                                                     jarvis_thread_id=SESSION.jarvis_thread_id),
+                               issued_at=now, expires_at=now + timedelta(minutes=10))
+    assert dispatch_tool(call, live_grants={grant.grant_id: grant}).status == "succeeded"
+    for denied in (
+        grant.model_copy(update={"capability_id": "jarvis.retrieval_query"}),
+        grant.model_copy(update={"scope": CapabilityScope(workspace_id="other", jarvis_thread_id=SESSION.jarvis_thread_id)}),
+        grant.model_copy(update={"scope": CapabilityScope(workspace_id=SESSION.workspace_id, jarvis_thread_id="other-thread")}),
+        grant.model_copy(update={"expires_at": now - timedelta(seconds=1)}),
+        grant.model_copy(update={"revoked_at": now, "revocation_reason": "revoked"}),
+    ):
+        assert dispatch_tool(call, live_grants={grant.grant_id: denied}).status == "refused"
+
+
 @pytest.mark.skipif(not os.environ.get("JARVIS_HERMES_VENV"), reason="requires installed Hermes venv")
 def test_real_worker_turn_interrupt_relay(tmp_path: Path) -> None:
     """Opt-in integration: real Hermes, fake Jarvis inference, no provider/network dependency."""
@@ -629,7 +759,7 @@ def test_real_worker_turn_interrupt_relay(tmp_path: Path) -> None:
         assert not {"delegate_task", "skills_list", "skill_view"} & set(bound["tools"])
         assert set(bound["tools"]) <= {
             "mcp__jarvis__jarvis_context_preview", "mcp__jarvis__jarvis_retrieval_query",
-            "memory", "session_search",
+            "mcp__jarvis__jarvis_decide", "memory", "session_search",
         }
         process.stdin.write(json.dumps({"type": "turn", "id": "turn-1", "prompt": "Say hello"}) + "\n")
         process.stdin.flush()
@@ -652,3 +782,30 @@ def test_real_worker_turn_interrupt_relay(tmp_path: Path) -> None:
     finally:
         process.terminate()
         process.wait(timeout=10)
+
+
+def test_laya_advice_never_switches_or_admits_a_route(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.modules.local_ai.decision_gateway import DecisionGateway
+
+    advice = DecisionGateway(available_routes=lambda: set()).decide("escalate", {
+        "summary": "The local answer was weak.", "stronger_route_ids": ["openai:external"],
+        "local_route_available": True})
+    assert advice["recommendation"] == "suggest_stronger_route"  # advice only
+    observed: list[tuple[str | None, str | None]] = []
+
+    def governed(envelope: InferenceEnvelope, **_kwargs: Any) -> dict[str, str]:
+        observed.append((envelope.route_class, envelope.model_candidate))
+        return {"status": "refused"}
+
+    monkeypatch.setattr(hermes_supervisor_module, "run_governed_inference", governed)
+    supervisor = HermesSupervisor("unused")
+    supervisor.session = SESSION
+    sent: list[dict[str, Any]] = []
+    monkeypatch.setattr(supervisor, "_send", sent.append)
+    # Hermes acting on the advice can only name a model; Jarvis keeps the configured local route.
+    supervisor._handle_relay(_frame() | {"model_candidate": "openai:external"})
+    assert observed == [("local:llamacpp", "openai:external")]
+    # A route switch to the advised external route is refused by the existing relay admission.
+    supervisor.route_for_task = lambda _task: "openai:external"
+    supervisor._handle_relay(_frame())
+    assert len(observed) == 1 and sent[-1]["status"] == "refused"

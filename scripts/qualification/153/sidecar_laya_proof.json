@@ -1,0 +1,1777 @@
+{
+  "schema": "jarvisos.153-sidecar-laya-proof.v1",
+  "source_sha": "f4499425e6caf409b46ba6751bc424ea34f21a2c",
+  "hermes_venv": "/home/thera/jarvis-control/work/venvs/h146",
+  "hermes_venv_python": "/home/thera/jarvis-control/work/venvs/h146/bin/python",
+  "workspace_id": "d93b0d42-dd4e-4e2b-89bf-fb1798f33d38",
+  "thread_id": "ff76b9a1-f483-42b5-81ed-560df5b7f065",
+  "seeded_decision": null,
+  "runtime_configuration": {
+    "binary_path": "/home/thera/jarvis-control/work/tools/llama.cpp/b11178/dist/llama-b11178/llama-server",
+    "library_dirs": [
+      "/home/thera/jarvis-control/work/tools/llama.cpp/b11178/dist/llama-b11178",
+      "/home/thera/jarvis-control/work/tools/llama.cpp/b11178/dist/cudart-llama-b11178-bin-ubuntu-cuda-12.8-x64"
+    ],
+    "model_path": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+    "model_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+    "model_id": "qwen3.8-27b-iq2m",
+    "pinned_build_id": "b11178-f9af9be21",
+    "port": 18081,
+    "ctx_size": 16384,
+    "n_gpu_layers": 99,
+    "extra_args": [
+      "-fa",
+      "on",
+      "-ctk",
+      "q8_0",
+      "-ctv",
+      "q8_0"
+    ]
+  },
+  "route_options": {
+    "runtime_down": [
+      {
+        "text": "Local assistant — Ollama is not reachable; start the configured local runtime.",
+        "value": "local:general",
+        "disabled": true
+      },
+      {
+        "text": "Local fast assistant — Ollama is not reachable; start the configured local runtime.",
+        "value": "local:fast",
+        "disabled": true
+      },
+      {
+        "text": "Local coding assistant — Ollama is not reachable; start the configured local runtime.",
+        "value": "local:coder",
+        "disabled": true
+      },
+      {
+        "text": "Local llama.cpp assistant — llama-server is not reachable at the configured loopback address.",
+        "value": "local:llamacpp",
+        "disabled": true
+      },
+      {
+        "text": "Test responder (synthetic)",
+        "value": "local:fake",
+        "disabled": false
+      },
+      {
+        "text": "Jarvis agent (Hermes) — The configured local Jarvis inference runtime is unavailable.",
+        "value": "hermes:agent",
+        "disabled": true
+      }
+    ],
+    "runtime_ready": [
+      {
+        "text": "Local assistant — Ollama is not reachable; start the configured local runtime.",
+        "value": "local:general",
+        "disabled": true
+      },
+      {
+        "text": "Local fast assistant — Ollama is not reachable; start the configured local runtime.",
+        "value": "local:fast",
+        "disabled": true
+      },
+      {
+        "text": "Local coding assistant — Ollama is not reachable; start the configured local runtime.",
+        "value": "local:coder",
+        "disabled": true
+      },
+      {
+        "text": "Local llama.cpp assistant",
+        "value": "local:llamacpp",
+        "disabled": false
+      },
+      {
+        "text": "Test responder (synthetic)",
+        "value": "local:fake",
+        "disabled": false
+      },
+      {
+        "text": "Jarvis agent (Hermes)",
+        "value": "hermes:agent",
+        "disabled": false
+      }
+    ]
+  },
+  "screenshots": [
+    {
+      "path": "scripts/qualification/153/sidecar-laya-runtime-down.jpg",
+      "size_bytes": 96257
+    },
+    {
+      "path": "scripts/qualification/153/sidecar-laya-laya-advice.jpg",
+      "size_bytes": 98551
+    }
+  ],
+  "turns": [
+    {
+      "label": "retry-advice",
+      "prompt": "A tool step failed with a retryable error on its first attempt. Consult Jarvis using the jarvis_decide tool with kind retry_or_stop, previous_outcome failed, attempt_count 0, and retryable true. Report Jarvis's recommendation and whether it abstained.",
+      "interaction_id": "1c005b45-fe73-4125-857e-2c48d23fffad",
+      "interaction_index": 0,
+      "answer": "Jarvis recommended **retry** (confidence 1.0). It did not abstain — the outcome was `decided`.",
+      "interaction_state": "complete",
+      "persistence_state": "captured",
+      "flow_id": "544bd677-d9e3-434b-ab94-4602b2e9a069",
+      "terminal_reason": "completed",
+      "duration_ms": 38811,
+      "durable_evidence": {
+        "interaction": {
+          "id": "1c005b45-fe73-4125-857e-2c48d23fffad",
+          "user_text": "A tool step failed with a retryable error on its first attempt. Consult Jarvis using the jarvis_decide tool with kind retry_or_stop, previous_outcome failed, attempt_count 0, and retryable true. Report Jarvis's recommendation and whether it abstained.",
+          "assistant_text": "Jarvis recommended **retry** (confidence 1.0). It did not abstain — the outcome was `decided`.",
+          "flow_id": "544bd677-d9e3-434b-ab94-4602b2e9a069",
+          "persistence_state": "captured"
+        },
+        "flows": [
+          {
+            "id": "3ada6f5a-7900-4098-8bd2-16238617e1dd",
+            "state": "complete",
+            "terminal_reason": "completed",
+            "terminal_attempt_id": "6414dfc1-4290-4456-893f-7236bdb6c499",
+            "usage_totals_json": "{\"cache_read_tokens\":0,\"input_tokens\":4134,\"latency_ms\":17374,\"output_tokens\":208,\"reasoning_tokens\":0,\"total_tokens\":4342,\"usage_source_counts\":{\"actual\":1}}"
+          },
+          {
+            "id": "4a2e0fc9-e908-4f7e-a219-8d7b681bfd62",
+            "state": "cancelled_terminal",
+            "terminal_reason": "agent_relayed",
+            "terminal_attempt_id": null,
+            "usage_totals_json": "{\"cache_read_tokens\":0,\"input_tokens\":0,\"latency_ms\":0,\"output_tokens\":0,\"reasoning_tokens\":0,\"total_tokens\":0,\"usage_source_counts\":{}}"
+          },
+          {
+            "id": "544bd677-d9e3-434b-ab94-4602b2e9a069",
+            "state": "complete",
+            "terminal_reason": "completed",
+            "terminal_attempt_id": "63bba798-2c3d-4db8-904d-65ffab3958fd",
+            "usage_totals_json": "{\"cache_read_tokens\":0,\"input_tokens\":4695,\"latency_ms\":18254,\"output_tokens\":199,\"reasoning_tokens\":0,\"total_tokens\":4894,\"usage_source_counts\":{\"actual\":1}}"
+          }
+        ],
+        "ai_jobs": [
+          {
+            "id": "6414dfc1-4290-4456-893f-7236bdb6c499",
+            "flow_id": "3ada6f5a-7900-4098-8bd2-16238617e1dd",
+            "status": "success",
+            "selected_route_class": "local:llamacpp",
+            "model_id": "qwen3.8-27b-iq2m",
+            "input_tokens": 4134,
+            "output_tokens": 208,
+            "latency_ms": 17374,
+            "usage_source": null
+          },
+          {
+            "id": "63bba798-2c3d-4db8-904d-65ffab3958fd",
+            "flow_id": "544bd677-d9e3-434b-ab94-4602b2e9a069",
+            "status": "success",
+            "selected_route_class": "local:llamacpp",
+            "model_id": "qwen3.8-27b-iq2m",
+            "input_tokens": 4695,
+            "output_tokens": 199,
+            "latency_ms": 18254,
+            "usage_source": null
+          }
+        ],
+        "events": [
+          {
+            "event_type": "hermes.tool_result",
+            "target_id": "e83fcf39691b403b85a3c39b9447a3d6",
+            "payload": {
+              "call_id": "e83fcf39691b403b85a3c39b9447a3d6",
+              "capability_id": "jarvis.decide",
+              "status": "succeeded",
+              "error_code": null,
+              "session_ref": {
+                "jarvis_thread_id": "ff76b9a1-f483-42b5-81ed-560df5b7f065",
+                "hermes_session_id": "4acbad95-e323-4fbb-806b-ec5d604f644c",
+                "profile_id": "default",
+                "workspace_id": "d93b0d42-dd4e-4e2b-89bf-fb1798f33d38",
+                "generation": 1,
+                "upstream_revision": "d337b736aa1e8ebecfab043842d13e4a2d2f48a3"
+              },
+              "interaction_id": "1c005b45-fe73-4125-857e-2c48d23fffad",
+              "correlation_id": "1c005b45-fe73-4125-857e-2c48d23fffad",
+              "generation": 1,
+              "tool_name": "jarvis_decide",
+              "arguments": {
+                "kind": "retry_or_stop",
+                "request_digest": "sha256:26a3f7c236d7367e67111cc206cf1935379dafafa1e1458444ec8b182aaf0f08"
+              },
+              "result_digest": "sha256:4421ad5bd7231526e94365bf9dfe52b8da76ba32c559cc03f0cf6f6f303c2b3c",
+              "evidence_refs": [],
+              "kind": "retry_or_stop",
+              "request_digest": "sha256:26a3f7c236d7367e67111cc206cf1935379dafafa1e1458444ec8b182aaf0f08",
+              "backend_model_ref": "jarvis.laya-rules.v1",
+              "backend_revision": "v1",
+              "outcome": "decided",
+              "latency_ms": 0,
+              "recommendation": "retry",
+              "current_relay_flow_id": "3ada6f5a-7900-4098-8bd2-16238617e1dd"
+            }
+          },
+          {
+            "event_type": "hermes.interaction_flows",
+            "target_id": "1c005b45-fe73-4125-857e-2c48d23fffad",
+            "payload": {
+              "interaction_id": "1c005b45-fe73-4125-857e-2c48d23fffad",
+              "reservation_flow_id": "4a2e0fc9-e908-4f7e-a219-8d7b681bfd62",
+              "final_flow_id": "544bd677-d9e3-434b-ab94-4602b2e9a069",
+              "relay_flow_ids": [
+                "3ada6f5a-7900-4098-8bd2-16238617e1dd",
+                "544bd677-d9e3-434b-ab94-4602b2e9a069"
+              ],
+              "route_class": "local:llamacpp"
+            }
+          }
+        ]
+      },
+      "tool_events": [
+        {
+          "call_id": "e83fcf39691b403b85a3c39b9447a3d6",
+          "capability_id": "jarvis.decide",
+          "status": "succeeded",
+          "error_code": null,
+          "session_ref": {
+            "jarvis_thread_id": "ff76b9a1-f483-42b5-81ed-560df5b7f065",
+            "hermes_session_id": "4acbad95-e323-4fbb-806b-ec5d604f644c",
+            "profile_id": "default",
+            "workspace_id": "d93b0d42-dd4e-4e2b-89bf-fb1798f33d38",
+            "generation": 1,
+            "upstream_revision": "d337b736aa1e8ebecfab043842d13e4a2d2f48a3"
+          },
+          "interaction_id": "1c005b45-fe73-4125-857e-2c48d23fffad",
+          "correlation_id": "1c005b45-fe73-4125-857e-2c48d23fffad",
+          "generation": 1,
+          "tool_name": "jarvis_decide",
+          "arguments": {
+            "kind": "retry_or_stop",
+            "request_digest": "sha256:26a3f7c236d7367e67111cc206cf1935379dafafa1e1458444ec8b182aaf0f08"
+          },
+          "result_digest": "sha256:4421ad5bd7231526e94365bf9dfe52b8da76ba32c559cc03f0cf6f6f303c2b3c",
+          "evidence_refs": [],
+          "kind": "retry_or_stop",
+          "request_digest": "sha256:26a3f7c236d7367e67111cc206cf1935379dafafa1e1458444ec8b182aaf0f08",
+          "backend_model_ref": "jarvis.laya-rules.v1",
+          "backend_revision": "v1",
+          "outcome": "decided",
+          "latency_ms": 0,
+          "recommendation": "retry",
+          "current_relay_flow_id": "3ada6f5a-7900-4098-8bd2-16238617e1dd"
+        }
+      ],
+      "relay_flow_ids": [
+        "3ada6f5a-7900-4098-8bd2-16238617e1dd",
+        "544bd677-d9e3-434b-ab94-4602b2e9a069"
+      ]
+    }
+  ],
+  "console_errors": [],
+  "page_errors": [],
+  "worker_status": [
+    {
+      "label": "retry-advice",
+      "status": {
+        "threads": {
+          "ff76b9a1-f483-42b5-81ed-560df5b7f065": {
+            "worker_pid": 735197,
+            "state": "running",
+            "upstream_revision": "d337b736aa1e8ebecfab043842d13e4a2d2f48a3",
+            "generation": 1,
+            "last_error": null
+          }
+        },
+        "state": "running"
+      }
+    }
+  ],
+  "runtime_status": [
+    {
+      "phase": "runtime_down",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_RUNTIME_UNREACHABLE",
+        "message": "llama-server is not reachable at the configured loopback address.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": null,
+        "ctx_size": 16384,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": false,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "phase": "start",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_RUNTIME_UNREACHABLE",
+        "message": "llama-server is not reachable at the configured loopback address.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 734760,
+        "ctx_size": 16384,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T08:39:19.230Z",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_RUNTIME_UNREACHABLE",
+        "message": "llama-server is not reachable at the configured loopback address.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 734760,
+        "ctx_size": 16384,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T08:39:21.240Z",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 734760,
+        "ctx_size": 16384,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T08:39:23.254Z",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 734760,
+        "ctx_size": 16384,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T08:39:25.266Z",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 734760,
+        "ctx_size": 16384,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T08:39:27.279Z",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 734760,
+        "ctx_size": 16384,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T08:39:29.291Z",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 734760,
+        "ctx_size": 16384,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T08:39:31.304Z",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 734760,
+        "ctx_size": 16384,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T08:39:33.311Z",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 734760,
+        "ctx_size": 16384,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T08:39:35.321Z",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 734760,
+        "ctx_size": 16384,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T08:39:37.334Z",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 734760,
+        "ctx_size": 16384,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T08:39:39.346Z",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 734760,
+        "ctx_size": 16384,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T08:39:41.354Z",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 734760,
+        "ctx_size": 16384,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T08:39:43.366Z",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 734760,
+        "ctx_size": 16384,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T08:39:45.395Z",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 734760,
+        "ctx_size": 16384,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T08:39:47.406Z",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 734760,
+        "ctx_size": 16384,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T08:39:49.419Z",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 734760,
+        "ctx_size": 16384,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T08:39:51.431Z",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 734760,
+        "ctx_size": 16384,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T08:39:53.442Z",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 734760,
+        "ctx_size": 16384,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T08:39:55.452Z",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 734760,
+        "ctx_size": 16384,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T08:39:57.466Z",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 734760,
+        "ctx_size": 16384,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T08:39:59.479Z",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 734760,
+        "ctx_size": 16384,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T08:40:01.489Z",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 734760,
+        "ctx_size": 16384,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T08:40:03.503Z",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 734760,
+        "ctx_size": 16384,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T08:40:05.516Z",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 734760,
+        "ctx_size": 16384,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T08:40:07.525Z",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 734760,
+        "ctx_size": 16384,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T08:40:09.533Z",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 734760,
+        "ctx_size": 16384,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T08:40:11.541Z",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 734760,
+        "ctx_size": 16384,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T08:40:13.548Z",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 734760,
+        "ctx_size": 16384,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T08:40:15.557Z",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 734760,
+        "ctx_size": 16384,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T08:40:17.567Z",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 734760,
+        "ctx_size": 16384,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T08:40:19.576Z",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 734760,
+        "ctx_size": 16384,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T08:40:21.584Z",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 734760,
+        "ctx_size": 16384,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T08:40:23.592Z",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 734760,
+        "ctx_size": 16384,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T08:40:25.608Z",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 734760,
+        "ctx_size": 16384,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T08:40:27.620Z",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 734760,
+        "ctx_size": 16384,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T08:40:29.629Z",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 734760,
+        "ctx_size": 16384,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T08:40:31.637Z",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 734760,
+        "ctx_size": 16384,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T08:40:33.646Z",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 734760,
+        "ctx_size": 16384,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T08:40:35.657Z",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 734760,
+        "ctx_size": 16384,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T08:40:37.667Z",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 734760,
+        "ctx_size": 16384,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T08:40:39.677Z",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 734760,
+        "ctx_size": 16384,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T08:40:41.691Z",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 734760,
+        "ctx_size": 16384,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T08:40:43.702Z",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": true,
+        "model_installed": true,
+        "model_loaded": true,
+        "reason_code": null,
+        "message": "llama-server is reachable and serving its configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 734760,
+        "ctx_size": 16384,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": 4,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "phase": "loaded",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": true,
+        "model_installed": true,
+        "model_loaded": true,
+        "reason_code": null,
+        "message": "llama-server is reachable and serving its configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 734760,
+        "ctx_size": 16384,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": 4,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "phase": "stop",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_RUNTIME_UNREACHABLE",
+        "message": "llama-server is not reachable at the configured loopback address.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": null,
+        "ctx_size": 16384,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": false,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    }
+  ],
+  "rss_vram_samples": [
+    {
+      "turn": "retry-advice",
+      "at": "2026-09-26T08:40:45.745Z",
+      "llama_pid": 734760,
+      "rss_kb": 1078516,
+      "vram_mb": null,
+      "nvidia_smi_available": true
+    },
+    {
+      "turn": "retry-advice",
+      "at": "2026-09-26T08:40:46.759Z",
+      "llama_pid": 734760,
+      "rss_kb": 1078592,
+      "vram_mb": null,
+      "nvidia_smi_available": true
+    },
+    {
+      "turn": "retry-advice",
+      "at": "2026-09-26T08:40:47.780Z",
+      "llama_pid": 734760,
+      "rss_kb": 1269784,
+      "vram_mb": null,
+      "nvidia_smi_available": true
+    },
+    {
+      "turn": "retry-advice",
+      "at": "2026-09-26T08:40:48.740Z",
+      "llama_pid": 734760,
+      "rss_kb": 1432516,
+      "vram_mb": null,
+      "nvidia_smi_available": true
+    },
+    {
+      "turn": "retry-advice",
+      "at": "2026-09-26T08:40:49.721Z",
+      "llama_pid": 734760,
+      "rss_kb": 1432748,
+      "vram_mb": null,
+      "nvidia_smi_available": true
+    },
+    {
+      "turn": "retry-advice",
+      "at": "2026-09-26T08:40:50.725Z",
+      "llama_pid": 734760,
+      "rss_kb": 1432828,
+      "vram_mb": null,
+      "nvidia_smi_available": true
+    },
+    {
+      "turn": "retry-advice",
+      "at": "2026-09-26T08:40:51.714Z",
+      "llama_pid": 734760,
+      "rss_kb": 1433008,
+      "vram_mb": null,
+      "nvidia_smi_available": true
+    },
+    {
+      "turn": "retry-advice",
+      "at": "2026-09-26T08:40:52.712Z",
+      "llama_pid": 734760,
+      "rss_kb": 1433088,
+      "vram_mb": null,
+      "nvidia_smi_available": true
+    },
+    {
+      "turn": "retry-advice",
+      "at": "2026-09-26T08:40:53.721Z",
+      "llama_pid": 734760,
+      "rss_kb": 1433164,
+      "vram_mb": null,
+      "nvidia_smi_available": true
+    },
+    {
+      "turn": "retry-advice",
+      "at": "2026-09-26T08:40:55.243Z",
+      "llama_pid": 734760,
+      "rss_kb": 1739840,
+      "vram_mb": null,
+      "nvidia_smi_available": true
+    },
+    {
+      "turn": "retry-advice",
+      "at": "2026-09-26T08:40:55.717Z",
+      "llama_pid": 734760,
+      "rss_kb": 1759900,
+      "vram_mb": null,
+      "nvidia_smi_available": true
+    },
+    {
+      "turn": "retry-advice",
+      "at": "2026-09-26T08:40:56.717Z",
+      "llama_pid": 734760,
+      "rss_kb": 1759988,
+      "vram_mb": null,
+      "nvidia_smi_available": true
+    },
+    {
+      "turn": "retry-advice",
+      "at": "2026-09-26T08:40:57.726Z",
+      "llama_pid": 734760,
+      "rss_kb": 1760064,
+      "vram_mb": null,
+      "nvidia_smi_available": true
+    },
+    {
+      "turn": "retry-advice",
+      "at": "2026-09-26T08:40:58.729Z",
+      "llama_pid": 734760,
+      "rss_kb": 1760084,
+      "vram_mb": null,
+      "nvidia_smi_available": true
+    },
+    {
+      "turn": "retry-advice",
+      "at": "2026-09-26T08:40:59.718Z",
+      "llama_pid": 734760,
+      "rss_kb": 1760112,
+      "vram_mb": null,
+      "nvidia_smi_available": true
+    },
+    {
+      "turn": "retry-advice",
+      "at": "2026-09-26T08:41:00.725Z",
+      "llama_pid": 734760,
+      "rss_kb": 1760124,
+      "vram_mb": null,
+      "nvidia_smi_available": true
+    },
+    {
+      "turn": "retry-advice",
+      "at": "2026-09-26T08:41:01.718Z",
+      "llama_pid": 734760,
+      "rss_kb": 1760148,
+      "vram_mb": null,
+      "nvidia_smi_available": true
+    },
+    {
+      "turn": "retry-advice",
+      "at": "2026-09-26T08:41:02.740Z",
+      "llama_pid": 734760,
+      "rss_kb": 1760156,
+      "vram_mb": null,
+      "nvidia_smi_available": true
+    },
+    {
+      "turn": "retry-advice",
+      "at": "2026-09-26T08:41:03.764Z",
+      "llama_pid": 734760,
+      "rss_kb": 1760168,
+      "vram_mb": null,
+      "nvidia_smi_available": true
+    },
+    {
+      "turn": "retry-advice",
+      "at": "2026-09-26T08:41:04.725Z",
+      "llama_pid": 734760,
+      "rss_kb": 1760196,
+      "vram_mb": null,
+      "nvidia_smi_available": true
+    },
+    {
+      "turn": "retry-advice",
+      "at": "2026-09-26T08:41:05.730Z",
+      "llama_pid": 734760,
+      "rss_kb": 2215424,
+      "vram_mb": null,
+      "nvidia_smi_available": true
+    },
+    {
+      "turn": "retry-advice",
+      "at": "2026-09-26T08:41:06.724Z",
+      "llama_pid": 734760,
+      "rss_kb": 2215432,
+      "vram_mb": null,
+      "nvidia_smi_available": true
+    },
+    {
+      "turn": "retry-advice",
+      "at": "2026-09-26T08:41:07.715Z",
+      "llama_pid": 734760,
+      "rss_kb": 2215440,
+      "vram_mb": null,
+      "nvidia_smi_available": true
+    },
+    {
+      "turn": "retry-advice",
+      "at": "2026-09-26T08:41:08.753Z",
+      "llama_pid": 734760,
+      "rss_kb": 2215452,
+      "vram_mb": null,
+      "nvidia_smi_available": true
+    },
+    {
+      "turn": "retry-advice",
+      "at": "2026-09-26T08:41:09.741Z",
+      "llama_pid": 734760,
+      "rss_kb": 2215476,
+      "vram_mb": null,
+      "nvidia_smi_available": true
+    },
+    {
+      "turn": "retry-advice",
+      "at": "2026-09-26T08:41:10.728Z",
+      "llama_pid": 734760,
+      "rss_kb": 2215488,
+      "vram_mb": null,
+      "nvidia_smi_available": true
+    },
+    {
+      "turn": "retry-advice",
+      "at": "2026-09-26T08:41:11.745Z",
+      "llama_pid": 734760,
+      "rss_kb": 2215496,
+      "vram_mb": null,
+      "nvidia_smi_available": true
+    },
+    {
+      "turn": "retry-advice",
+      "at": "2026-09-26T08:41:12.966Z",
+      "llama_pid": 734760,
+      "rss_kb": 2368728,
+      "vram_mb": null,
+      "nvidia_smi_available": true
+    },
+    {
+      "turn": "retry-advice",
+      "at": "2026-09-26T08:41:13.797Z",
+      "llama_pid": 734760,
+      "rss_kb": 2521948,
+      "vram_mb": null,
+      "nvidia_smi_available": true
+    },
+    {
+      "turn": "retry-advice",
+      "at": "2026-09-26T08:41:14.733Z",
+      "llama_pid": 734760,
+      "rss_kb": 2524848,
+      "vram_mb": null,
+      "nvidia_smi_available": true
+    },
+    {
+      "turn": "retry-advice",
+      "at": "2026-09-26T08:41:15.716Z",
+      "llama_pid": 734760,
+      "rss_kb": 2524852,
+      "vram_mb": null,
+      "nvidia_smi_available": true
+    },
+    {
+      "turn": "retry-advice",
+      "at": "2026-09-26T08:41:16.720Z",
+      "llama_pid": 734760,
+      "rss_kb": 2524852,
+      "vram_mb": null,
+      "nvidia_smi_available": true
+    },
+    {
+      "turn": "retry-advice",
+      "at": "2026-09-26T08:41:17.724Z",
+      "llama_pid": 734760,
+      "rss_kb": 2524852,
+      "vram_mb": null,
+      "nvidia_smi_available": true
+    },
+    {
+      "turn": "retry-advice",
+      "at": "2026-09-26T08:41:18.731Z",
+      "llama_pid": 734760,
+      "rss_kb": 2524852,
+      "vram_mb": null,
+      "nvidia_smi_available": true
+    },
+    {
+      "turn": "retry-advice",
+      "at": "2026-09-26T08:41:19.714Z",
+      "llama_pid": 734760,
+      "rss_kb": 2524856,
+      "vram_mb": null,
+      "nvidia_smi_available": true
+    },
+    {
+      "turn": "retry-advice",
+      "at": "2026-09-26T08:41:20.717Z",
+      "llama_pid": 734760,
+      "rss_kb": 2524860,
+      "vram_mb": null,
+      "nvidia_smi_available": true
+    },
+    {
+      "turn": "retry-advice",
+      "at": "2026-09-26T08:41:21.730Z",
+      "llama_pid": 734760,
+      "rss_kb": 2524860,
+      "vram_mb": null,
+      "nvidia_smi_available": true
+    },
+    {
+      "turn": "retry-advice",
+      "at": "2026-09-26T08:41:22.726Z",
+      "llama_pid": 734760,
+      "rss_kb": 2524860,
+      "vram_mb": null,
+      "nvidia_smi_available": true
+    }
+  ],
+  "proof_failures": [],
+  "proof_status": "passed",
+  "laya_latency_ms": 0,
+  "started_at": "2026-09-26T08:39:07.911Z",
+  "unavailable_status_rendered_down": false,
+  "cold_load_ms": 84674,
+  "finished_at": "2026-09-26T08:41:24.528Z",
+  "elapsed_seconds": 136.617
+}

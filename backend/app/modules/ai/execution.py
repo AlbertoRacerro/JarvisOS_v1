@@ -247,7 +247,9 @@ def _write_ai_job(
         else response.usage.output_tokens if response is not None else None
     )
     cost_estimate = response.usage.provider_cost_estimate if response is not None else None
-    route_reason = {"decision_reason": decision.decision_reason, "blocked_reason": decision.blocked_reason}
+    route_reason: dict[str, object] = {
+        "decision_reason": decision.decision_reason, "blocked_reason": decision.blocked_reason,
+    }
     if route_metadata:
         route_reason.update(route_metadata)
     route_reason_json = json.dumps(route_reason, sort_keys=True)

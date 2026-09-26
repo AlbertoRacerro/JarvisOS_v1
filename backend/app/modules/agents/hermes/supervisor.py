@@ -42,7 +42,8 @@ _SEED_CHARS = 60_000
 # Tool schemas Jarvis admits in a relayed model request. Only the broker tool reaches Jarvis
 # capabilities; memory and session search remain read-only worker-local tools.
 HERMES_TOOL_ALLOWLIST = frozenset({"mcp__jarvis__jarvis_context_preview",
-                                  "mcp__jarvis__jarvis_retrieval_query", "memory", "session_search"})
+                                  "mcp__jarvis__jarvis_retrieval_query", "mcp__jarvis__jarvis_decide",
+                                  "memory", "session_search"})
 _BWRAP_PREFIX = ("bwrap", "--dev-bind", "/", "/", "--unshare-net", "--die-with-parent", "--")
 
 _HERMES_CONTEXT_CAPABILITY = JarvisCapabilityDescriptor(
@@ -53,10 +54,16 @@ _HERMES_RETRIEVAL_CAPABILITY = JarvisCapabilityDescriptor(
     capability_id="jarvis.retrieval_query", route_id="ai-threads", action_class="READ",
     label="Query bounded Second Brain evidence",
 )
+_HERMES_DECISION_CAPABILITY = JarvisCapabilityDescriptor(
+    capability_id="jarvis.decide", route_id="ai-threads", action_class="PROPOSE",
+    label="Request bounded decision advice",
+)
 if _HERMES_CONTEXT_CAPABILITY not in PRODUCTION_CAPABILITY_REGISTRY.for_route("ai-threads"):
     PRODUCTION_CAPABILITY_REGISTRY.register(_HERMES_CONTEXT_CAPABILITY)
 if _HERMES_RETRIEVAL_CAPABILITY not in PRODUCTION_CAPABILITY_REGISTRY.for_route("ai-threads"):
     PRODUCTION_CAPABILITY_REGISTRY.register(_HERMES_RETRIEVAL_CAPABILITY)
+if _HERMES_DECISION_CAPABILITY not in PRODUCTION_CAPABILITY_REGISTRY.for_route("ai-threads"):
+    PRODUCTION_CAPABILITY_REGISTRY.register(_HERMES_DECISION_CAPABILITY)
 
 
 def current_mapping(connection: sqlite3.Connection, thread_id: str) -> AgentSessionRef | None:
@@ -289,12 +296,44 @@ def dispatch_tool(
                             error = "scope_denied"
                     except (TypeError, ValueError):
                         error = "invalid_arguments"
+                elif call.capability_id == "jarvis.decide":
+                    try:
+                        from app.modules.local_ai.decision_gateway import DecisionGateway
+
+                        kind = call.arguments.get("kind")
+                        decision_request = call.arguments.get("request")
+                        if (isinstance(kind, str) and isinstance(decision_request, dict)
+                                and set(call.arguments) == {"kind", "request"}):
+                            result = DecisionGateway.from_config().decide(kind, decision_request)
+                        else:
+                            error = "invalid_arguments"
+                    except (TypeError, ValueError):
+                        error = "invalid_arguments"
     return StructuredToolResult(
         call_id=call.call_id, capability_id=call.capability_id,
         status="succeeded" if result is not None else "refused",
         result=result, error_code=None if result is not None else error,
         completed_at=now,
     )
+
+
+def _decision_evidence(result: dict[str, Any] | None, supervisor: HermesSupervisor,
+                       ref: AgentSessionRef | None) -> dict[str, Any]:
+    data = result if isinstance(result, dict) else {}
+    model_ref = str(data.get("model_ref")) if isinstance(data.get("model_ref"), str) else "unknown"
+    backend_ref, separator, revision = model_ref.partition("@")
+    flow_id = supervisor.last_flow.get(ref.hermes_session_id) if ref is not None else None
+    return {
+        "kind": data.get("kind"),
+        "request_digest": data.get("request_digest"),
+        "backend_model_ref": backend_ref,
+        "backend_revision": revision if separator else model_ref.rpartition(".")[2],
+        "outcome": data.get("outcome"),
+        "latency_ms": data.get("latency_ms"),
+        "recommendation": data.get("recommendation"),
+        "interaction_id": supervisor.active_interaction_id,
+        "current_relay_flow_id": flow_id,
+    }
 
 
 class HermesSupervisor:
@@ -467,27 +506,30 @@ class HermesSupervisor:
         ref: AgentSessionRef | None = None
         arguments: dict[str, Any] = {}
         tool_name = "unknown"
+        capability_id = "jarvis.context_preview"
         call_id = str(frame.get("id", "unknown"))
         try:
             ref = AgentSessionRef.model_validate(frame["session_ref"])
-            arguments = frame["arguments"]
-            if ref != self.session or not isinstance(arguments, dict):
+            raw_arguments = frame["arguments"]
+            if ref != self.session or not isinstance(raw_arguments, dict):
                 raise ValueError("stale or malformed tool call")
+            arguments = raw_arguments
             tool_name = arguments.pop("tool_name", "")
-            grant_id = arguments.pop("grant_id")
             capability_id = ("jarvis.retrieval_query" if tool_name == "jarvis_retrieval_query"
+                             else "jarvis.decide" if tool_name == "jarvis_decide"
                              else "jarvis.context_preview")
+            grant_id = arguments.pop("grant_id")
             call = StructuredToolCall(
                 call_id=str(frame["id"]), capability_id=capability_id,
                 grant_id=grant_id, correlation_id=str(frame["id"]),
-                session_ref=ref, arguments=(arguments if capability_id == "jarvis.retrieval_query"
+                session_ref=ref, arguments=(arguments if capability_id in {"jarvis.retrieval_query", "jarvis.decide"}
                                             else arguments["request"]),
                 requested_at=now, deadline_at=now + timedelta(seconds=120),
             )
             result = dispatch_tool(call, live_grants=self.live_grants)
         except (ValueError, KeyError, sqlite3.Error):
             result = StructuredToolResult(
-                call_id=call_id, capability_id="jarvis.context_preview",
+                call_id=call_id, capability_id=capability_id,
                 status="refused", error_code="capability_denied", completed_at=now,
             )
         try:
@@ -502,9 +544,16 @@ class HermesSupervisor:
                                    "correlation_id": self.active_interaction_id or call_id,
                                    "generation": ref.generation if ref is not None else None,
                                    "tool_name": str(tool_name)[:80],
-                                   "arguments": _safe_tool_arguments(arguments),
+                                   "arguments": ({"kind": arguments.get("kind"),
+                                                  "request_digest": (result.result or {}).get("request_digest")}
+                                                 if result.capability_id == "jarvis.decide" and result.result
+                                                 else {} if result.capability_id == "jarvis.decide"
+                                                 else _safe_tool_arguments(arguments)),
                                    "result_digest": canonical_digest(result.model_dump(mode="json")),
-                                   "evidence_refs": _tool_evidence_refs(result.model_dump(mode="json"))})
+                                   "evidence_refs": _tool_evidence_refs(result.model_dump(mode="json")),
+                                   **(_decision_evidence(result.result if isinstance(result.result, dict) else None,
+                                                         self, ref)
+                                      if result.capability_id == "jarvis.decide" else {})})
                 connection.commit()
         except sqlite3.Error:
             self.last_error = "tool_evidence_unavailable"
