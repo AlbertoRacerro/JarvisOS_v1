@@ -746,3 +746,30 @@ def test_real_worker_turn_interrupt_relay(tmp_path: Path) -> None:
     finally:
         process.terminate()
         process.wait(timeout=10)
+
+
+def test_laya_advice_never_switches_or_admits_a_route(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.modules.local_ai.decision_gateway import DecisionGateway
+
+    advice = DecisionGateway(available_routes=lambda: set()).decide("escalate", {
+        "summary": "The local answer was weak.", "stronger_route_ids": ["openai:external"],
+        "local_route_available": True})
+    assert advice["recommendation"] == "suggest_stronger_route"  # advice only
+    observed: list[tuple[str | None, str | None]] = []
+
+    def governed(envelope: InferenceEnvelope, **_kwargs: Any) -> dict[str, str]:
+        observed.append((envelope.route_class, envelope.model_candidate))
+        return {"status": "refused"}
+
+    monkeypatch.setattr(hermes_supervisor_module, "run_governed_inference", governed)
+    supervisor = HermesSupervisor("unused")
+    supervisor.session = SESSION
+    sent: list[dict[str, Any]] = []
+    monkeypatch.setattr(supervisor, "_send", sent.append)
+    # Hermes acting on the advice can only name a model; Jarvis keeps the configured local route.
+    supervisor._handle_relay(_frame() | {"model_candidate": "openai:external"})
+    assert observed == [("local:llamacpp", "openai:external")]
+    # A route switch to the advised external route is refused by the existing relay admission.
+    supervisor.route_for_task = lambda _task: "openai:external"
+    supervisor._handle_relay(_frame())
+    assert len(observed) == 1 and sent[-1]["status"] == "refused"
