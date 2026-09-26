@@ -109,7 +109,7 @@ class Env:
 
 
 def real_gh(args: list[str]) -> Any:
-    code, out = run(["gh", *args], timeout=30.0)
+    code, out = run(["gh", *args], timeout=12.0)
     if code != 0:
         raise RuntimeError(out.strip()[:300] or "gh failed")
     return json.loads(out) if out.strip() else None
@@ -191,7 +191,7 @@ def read_ledger(env: Env) -> list[dict[str, Any]]:
     if not env.ledger.exists():
         return []
     entries = []
-    for line in env.ledger.read_text(encoding="utf-8").splitlines():
+    for line in env.ledger.read_text(encoding="utf-8", errors="replace").splitlines():
         try:
             item = json.loads(line)
         except json.JSONDecodeError:
@@ -312,7 +312,7 @@ def record_directive(env: Env, content: str, *, source: str | None, supersedes: 
 def fetch_origin(env: Env, enabled: bool) -> dict[str, Any]:
     if not enabled:
         return {"attempted": False}
-    code, out = run(["git", "fetch", "--quiet", "--prune", "origin"], cwd=env.repo, timeout=45.0)
+    code, out = run(["git", "fetch", "--quiet", "--prune", "origin"], cwd=env.repo, timeout=20.0)
     return {"attempted": True, "ok": code == 0, "error": None if code == 0 else out.strip()[:300]}
 
 
@@ -503,13 +503,24 @@ def resolve_target(env: Env, refs: dict[str, Any], gh_state: dict[str, Any], cac
 
 
 def freshness(env: Env, entry: dict[str, Any], gh_state: dict[str, Any], cache: dict[int, Any],
-              procs: list[dict[str, Any]]) -> dict[str, Any]:
+              procs: list[dict[str, Any]], refs_fresh: bool = True) -> dict[str, Any]:
+    result = _freshness(env, entry, gh_state, cache, procs)
+    if not refs_fresh and result["verdict"] in ("current", "stale") and "origin/" in result["why"]:
+        # A comparison against last-fetched remote refs is not evidence about the current remote.
+        return {**result, "verdict": "unverified",
+                "why": f"origin refs not refreshed (fetch skipped/failed); last-fetched comparison said "
+                       f"{result['verdict']}: {result['why']}"}
+    return result
+
+
+def _freshness(env: Env, entry: dict[str, Any], gh_state: dict[str, Any], cache: dict[int, Any],
+               procs: list[dict[str, Any]]) -> dict[str, Any]:
     refs = entry.get("refs", {})
     if entry["kind"] == "claim":
         claim = entry.get("claim", {})
         expired = env.now > parse_ts(claim.get("expires", entry["ts"]))
         pid = claim.get("pid")
-        alive = pid is None or pid_start(pid) == claim.get("pid_start")
+        alive = pid is None or (claim.get("pid_start") is not None and pid_start(pid) == claim.get("pid_start"))
         if expired or not alive:
             return {"verdict": "expired", "why": "TTL passed" if expired else f"holder pid {pid} is gone"}
         return {"verdict": "current", "why": f"held until {claim.get('expires')}"}
@@ -571,8 +582,9 @@ def build_packet(env: Env, *, fetch: bool = True) -> dict[str, Any]:
     cache: dict[int, Any] = {}
     active = [item for item in ledger if item["id"] not in superseded]
     relay_texts = None
+    refs_fresh = bool(fetched.get("ok"))
     for item in active:
-        item["freshness"] = freshness(env, item, gh_state, cache, procs)
+        item["freshness"] = freshness(env, item, gh_state, cache, procs, refs_fresh)
         if item.get("directive"):
             if relay_texts is None:
                 relay_texts = [(str(p), p.read_text(encoding="utf-8", errors="replace"))
@@ -767,6 +779,8 @@ def command_note(env: Env, args: argparse.Namespace) -> None:
     claim = None
     if args.kind == "claim":
         pid = args.pid
+        if pid and pid_start(pid) is None:
+            raise ValueError(f"claim holder pid {pid} is not running")
         claim = {"expires": iso(env.now + timedelta(hours=args.ttl_hours)), "pid": pid,
                  "pid_start": pid_start(pid) if pid else None}
     entry = make_entry(env, args.kind, args.text, status=args.status, refs=refs, supersedes=args.supersedes,
@@ -781,7 +795,7 @@ def command_show(env: Env, args: argparse.Namespace) -> None:
         raise SystemExit(f"no ledger entry {args.id}")
     packet_gh = github_state(env)
     procs = env.processes() if env.processes else []
-    entry["freshness"] = freshness(env, entry, packet_gh, {}, procs)
+    entry["freshness"] = freshness(env, entry, packet_gh, {}, procs, fetch_origin(env, True).get("ok", False))
     print(json.dumps(entry, indent=2, ensure_ascii=False))
     if entry.get("directive"):
         path = Path(entry["directive"]["path"])
