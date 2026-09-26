@@ -30,6 +30,8 @@ A Frontier Coordinator normally reads, in this order:
 6. the active PR exact head, relevant diff/checks/reviews/proofs;
 7. `docs/POST_112_PARALLEL_DELIVERY_PROFILE.md` only when post-112 concurrency mechanics are relevant.
 
+On recovery or takeover, `python3 scripts/devctx.py recover` (spec 154) gives a derived orientation packet over fresh repository/control-room state and the local control ledger, with a freshness verdict on every recorded item. It narrows what to read and never replaces the reads above. Record non-derivable decisions, findings, proof results, claims and maintainer directives with `devctx.py` rather than in chat handoffs.
+
 Do not preload the whole repository or every historical governance document by default. Read more only when the current decision requires it.
 
 A chat handoff should normally contain only facts not reconstructible from GitHub, plus pointers to the active repo/PR. Do not duplicate canonical process text in handoffs.

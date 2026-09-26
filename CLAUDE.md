@@ -12,6 +12,8 @@ Read, from fresh exact Git state:
 4. `docs/specs/README.md` plus the active accepted spec/readiness;
 5. the active PR exact head, diff, required checks/reviews/proofs.
 
+On resume or takeover, run `python3 scripts/devctx.py recover` first: a derived, freshness-checked orientation packet (spec 154) over fresh Git/GitHub/STATUS/worktree/lane state and the local control ledger. It narrows what to read; it never outranks the sources above. Record non-derivable outcomes with `devctx.py note` / `devctx.py directive`.
+
 If the current session is granted Frontier Coordinator authority, operate as the Generic Frontier Builder Contract specifies. If it is granted Frontier Peer or Constrained Worker authority, stay within those deterministic capabilities.
 
 Do not infer implementation, merge, credential, filesystem, provider, queue-selection, or review authority from this filename or from being Claude. Model identity is not authority.

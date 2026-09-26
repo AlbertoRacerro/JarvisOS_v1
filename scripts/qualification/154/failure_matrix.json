@@ -1,0 +1,133 @@
+{
+ "source_sha": "04bff8978e9a9aa911ceeac0a2d95bccfb9d4b5b",
+ "generated_at": "2026-09-26T13:07:50Z",
+ "provider_switch": "exercised separately by the Codex acceptance probe (see acceptance.json)",
+ "passed": 11,
+ "total": 11,
+ "scenarios": {
+  "coordinator_process_dies": {
+   "expect": "dead coordinator's claim is expired; open PR and plan remain visible",
+   "observed": {
+    "claim": "expired",
+    "open_prs": [
+     718
+    ],
+    "candidates": [
+     "complete evidence / undraft PR #718 (feat(154): devctx recovery packet and typed control ledger)",
+     "spec 154 PERSISTENT-DEVELOPMENT-CONTEXT-1 is ready with dependencies merged; open PR(s) [718] on its branch likely implement it"
+    ]
+   },
+   "pass": true
+  },
+  "new_relay_session": {
+   "expect": "a fresh session sees the recorded directive and Relay's verbatim maintainer prompts by path",
+   "observed": {
+    "directives": [
+     [
+      "JARVISOS — NEXT MAINTAINER MISSION / SPEC 154 — PERSISTENT DEVELOPMENT CONTEXT /",
+      "unverified source (recorded by claude pi"
+     ]
+    ],
+    "relay_prompts_visible_48h": 20
+   },
+   "pass": true
+  },
+  "network_loss": {
+   "expect": "authority marked NOT VERIFIED; origin-bound verdicts downgraded to unverified",
+   "observed": {
+    "header": true,
+    "proof": "unverified",
+    "why": "origin refs not refreshed (fetch skipped/failed); last-fetched comparison said current: bound paths unchanged since 20a7",
+    "warnings": [
+     "git fetch skipped; origin/master is last-fetched state, NOT verified current",
+     "GitHub UNVERIFIED (error connecting to api.github.com); PR state and PR-bound freshness un"
+    ]
+   },
+   "pass": true
+  },
+  "authentication_expired": {
+   "expect": "GitHub state reported UNKNOWN, not 'no open PRs'",
+   "observed": {
+    "open_prs_line": true,
+    "warning": "GitHub UNVERIFIED (HTTP 401: Bad credentials (gh auth login required)); PR state and PR-bound freshn"
+   },
+   "pass": true
+  },
+  "machine_suspend_restart": {
+   "expect": "after restart no lane is reported running; unfinished lanes are flagged incomplete",
+   "observed": {
+    "running": [],
+    "incomplete_count": 3,
+    "incomplete_sample": [
+     "151q",
+     "110",
+     "lane148c"
+    ]
+   },
+   "pass": true
+  },
+  "old_session_stale_git_state": {
+   "expect": "an old note about an open PR is annotated with the PR's current MERGED state",
+   "observed": {
+    "why": "no SHA binding; PR #715 is now MERGED"
+   },
+   "pass": true
+  },
+  "worker_report_conflicts_with_master": {
+   "expect": "a finding bound to content that master has since changed is stale",
+   "observed": {
+    "verdict": "stale",
+    "why": "1 changed in bound paths since 248291cc; compared with origin/master",
+    "changed": [
+     "docs/specs/STATUS.md"
+    ]
+   },
+   "pass": true
+  },
+  "proof_then_code_changed": {
+   "expect": "a proof whose bound code changed on the branch afterwards is stale and names the file",
+   "observed": {
+    "verdict": "stale",
+    "why": "1 changed in bound paths since c44c8c39; origin/impl/154-persistent-development-context d339026c",
+    "changed": [
+     "scripts/devctx.py"
+    ]
+   },
+   "pass": true
+  },
+  "incomplete_worker_lane": {
+   "expect": "lanes with logs but no done marker and no live process are reported incomplete, not done",
+   "observed": {
+    "incomplete": [
+     "110",
+     "151q",
+     "lane148c"
+    ],
+    "done_count": 42
+   },
+   "pass": true
+  },
+  "two_contradictory_findings": {
+   "expect": "contradictory findings surface as an unresolved conflict until a decision supersedes one",
+   "observed": {
+    "warning": "UNRESOLVED CONFLICT between L20260926130744-302f and L20260926130744-c008: record a decision that supersedes one"
+   },
+   "pass": true
+  },
+  "missing_local_history_github_intact": {
+   "expect": "with no ledger/lanes the packet still recovers authority, open PRs and candidates from GitHub/Git",
+   "observed": {
+    "open_prs": [
+     718
+    ],
+    "master": "20a7efc50ee3b270ff86231ade807aad7904dabb",
+    "warning": "no control ledger at /tmp/devctx-matrix-gfyc17tm/ledger.jsonl; packet is derived state onl",
+    "candidates": [
+     "complete evidence / undraft PR #718 (feat(154): devctx recovery packet and typed control ledger)",
+     "spec 154 PERSISTENT-DEVELOPMENT-CONTEXT-1 is ready with dependencies merged; open PR(s) [718] on its branch likely implement it"
+    ]
+   },
+   "pass": true
+  }
+ }
+}

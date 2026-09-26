@@ -1,0 +1,124 @@
+{
+ "spec": "154",
+ "generated_at": "2026-09-26T13:07Z",
+ "instruction": "Recover current JarvisOS maintainer context and continue.\n\n(Acceptance-probe constraint: this session is a read-only measurement. Do not modify files, Git refs other than fetch, GitHub, processes, or the control ledger. When you have recovered, stop and report: current mission; authoritative state; active and finished work; evidence that must not be repeated; stale or historical items; and the exact next task you would execute.)\n",
+ "instruction_note": "The recovery instruction itself is 57 bytes ('Recover current JarvisOS maintainer context and continue.'); the parenthetical read-only clause is test-harness only, so probes could not become a second concurrent writer. No other maintainer context was supplied.",
+ "ground_truth_rubric_written_before_probes": "# 154 acceptance ground truth (written 2026-09-26 ~13:00Z BEFORE probes ran)\nT1 mission: current maintainer mission = spec 154 persistent development context/control-room continuity (directive 12:36Z); 155 PROCESS-FLOWSHEET is next but planned/not authorized.\nT2 authority: origin/master 20a7efc5 (#717 merged = 154 planning); open PR #718 draft impl/154 (head d339026c at probe start), CI in progress/green; STATUS on master: 154 ready (branch has in_review #718), 155 planned.\nT3 active work: k154ctx worktree impl/154 branch (claimed by the live Claude coordinator); lane 154full (local full backend suite) running; 154rev/154adv/154relay/154hand lanes done and consumed; pf3 (155 DWSIM probe) done in k154-probe - belongs to 155.\nT4 do-not-repeat: devctx focused tests passed at d339026c (current); 154rev + 154adv reviews already consumed; 154full suite already running - do not start another; CI covers head.\nT5 stale/historical: superseded proof entry (2feeb31f) hidden/superseded; Gemini 154relay/154hand claims rejected; PROGRESS.md is legacy; 153 done; old handoff facts (e.g. 151/152 work) historical.\nT6 runtime caution: foreign llama-server (not coordinator's) + Codex desktop app-server present; do not touch.\nT7 next task: finish 154 acceptance evidence (probes + failure matrix) -> commit evidence -> undraft #718 -> CI -> merge -> reconcile; NOT implement 155; NOT create duplicate PR/branch.\nT8 authority hygiene: must verify fresh GitHub/master itself (fetch/gh or devctx fetch), treat ledger as historical claims, notice live claim by another coordinator (should not seize k154ctx).\n",
+ "probes": {
+  "A1": {
+   "agent": "Claude Code (claude --model opus, fresh -p session, no Relay, no handoff)",
+   "tool_calls": 6,
+   "turns": 7,
+   "wall_s": 42.7,
+   "cumulative_input_tokens": 322345,
+   "output_tokens": 3241,
+   "cost_usd": 0.31,
+   "scenario": "fresh Claude coordinator while the original coordinator is alive and holds a claim",
+   "correct": [
+    "T1",
+    "T2",
+    "T3",
+    "T4",
+    "T6",
+    "T7",
+    "T8"
+   ],
+   "partial": [
+    "T5 (did not mention PROGRESS.md is legacy)"
+   ],
+   "missed": [],
+   "stale_or_incorrect_claims": 0,
+   "artifacts": [
+    "reported its own lane 154accA1 as incomplete: devctx excludes its own process ancestry (true observation, not a stale claim)"
+   ],
+   "continuation": "deferred to the live claim holder and named the holder's exact next steps (collect probes, matrix, commit evidence, undraft, merge, reconcile)"
+  },
+  "A2": {
+   "agent": "Codex CLI (codex exec -m gpt-6-luna, fresh session)",
+   "tool_calls": 12,
+   "wall_s": 132,
+   "input_tokens": 483614,
+   "cached_input_tokens": 427776,
+   "output_tokens": 5158,
+   "read_grading_rubric": true,
+   "scenario": "fresh Codex coordinator (portability)",
+   "graded": false,
+   "reason": "contaminated: its final command read the grading rubric out/w3/154acc-truth.md; rerun as A3 with the rubric moved to a private path"
+  },
+  "A3": {
+   "agent": "Codex CLI (codex exec -m gpt-6-luna, fresh session)",
+   "tool_calls": 6,
+   "wall_s": 113,
+   "input_tokens": 217325,
+   "cached_input_tokens": 181504,
+   "output_tokens": 3875,
+   "read_grading_rubric": false,
+   "scenario": "fresh Codex coordinator (portability), clean rerun",
+   "correct": [
+    "T1",
+    "T3",
+    "T4",
+    "T5",
+    "T7",
+    "T8"
+   ],
+   "partial": [
+    "T2 (reported 154 in_review from the branch copy of STATUS without noting master still says ready)"
+   ],
+   "missed": [
+    "T6 (did not mention the foreign llama-server / Codex desktop processes)"
+   ],
+   "stale_or_incorrect_claims": 0,
+   "artifacts": [
+    "called A1 'failed with an empty report': probe-harness naming (A1 wrote its report to its log), classified truthfully by devctx at the time"
+   ],
+   "continuation": "deferred to the live claim; next = consume 154full + CI, then acceptance rerun and matrix (consistent with the ledger plan at that moment)"
+  },
+  "A4": {
+   "agent": "Claude Code (claude --model opus, fresh -p session, no Relay, no handoff)",
+   "tool_calls": 5,
+   "turns": 6,
+   "wall_s": 47.8,
+   "cumulative_input_tokens": 310678,
+   "output_tokens": 3284,
+   "cost_usd": 0.282,
+   "scenario": "terminate-coordinator emulation: coordinator claim released (superseded) before a fresh Claude session",
+   "correct": [
+    "T1",
+    "T2",
+    "T3",
+    "T4",
+    "T5",
+    "T6",
+    "T7",
+    "T8"
+   ],
+   "partial": [],
+   "missed": [],
+   "stale_or_incorrect_claims": 0,
+   "artifacts": [
+    "attributed the matrix proof's STALE verdict to the untracked JSON; actual cause was the unpushed commit vs the PR head (verdict itself correct, resolves on push)"
+   ],
+   "found_defect": "log-only lane with EXIT 0 labelled failed-empty-report -> fixed (done-log-only / failed-exit-N) with a causal test",
+   "continuation": "took ownership: commit failure_matrix.json + acceptance evidence, push, exact-head CI, undraft #718, merge, reconcile STATUS 154->merged, leave 155 planned; no duplicate PR/branch, no GPU/proof rerun"
+  }
+ },
+ "baseline_pre_154": {
+  "source": "docs/implementation/154-continuity-archaeology-2026-09-26.md section 2 (measured from Claude transcripts and Relay prompts)",
+  "maintainer_recovery_prompt_bytes": "1,200-8,300 for resume-type handoffs (plus 20-44 KB when new direction was also given); 12+ recoveries in 48 h",
+  "coordinator_tool_calls_before_first_action": "9-22",
+  "coordinator_turns": "16-44",
+  "cumulative_input_tokens": "550,000-2,420,000"
+ },
+ "summary": {
+  "maintainer_context_required": "57-byte instruction; no handoff",
+  "claude_tool_calls": "5-6 (vs 9-22)",
+  "claude_cumulative_input_tokens": "310,678-322,345 (vs 0.55-2.42 M)",
+  "claude_wall_s": "43-48",
+  "codex_tool_calls": 6,
+  "codex_input_tokens": 217325,
+  "codex_wall_s": 113,
+  "stale_or_incorrect_recovered_claims": 0,
+  "packet": "~8-9 KB (~2.2k tokens) rendered in ~2.5 s including git fetch and gh"
+ }
+}
