@@ -54,6 +54,13 @@ def test_launcher_rejects_noncanonical_worktree(monkeypatch, tmp_path):
         launcher.start(SimpleNamespace(no_update=True, no_browser=True))
 
 
+def test_wsl_distro_without_inherited_environment(monkeypatch):
+    monkeypatch.delenv("WSL_DISTRO_NAME", raising=False)
+    monkeypatch.setattr(launcher.subprocess, "run", lambda *args, **kwargs: SimpleNamespace(
+        stdout="Ubuntu-24.04\r\n".encode("utf-16-le")))
+    assert launcher.wsl_distro({}) == "Ubuntu-24.04"
+
+
 def test_readiness_requires_loaded_local_model(monkeypatch):
     monkeypatch.setattr(launcher, "http_text", lambda *args, **kwargs: (200, '<div id="root"></div>'))
     def response(url, **kwargs):

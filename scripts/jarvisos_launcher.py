@@ -47,7 +47,7 @@ DEFAULT_PORT = 8000
 DEV_ORIGINS = "http://127.0.0.1:5173,http://localhost:5173"
 # Keys copied from a running backend by `setup --from-pid`. Secrets never are.
 CAPTURE_PREFIXES = ("JARVISOS_", "JARVIS_HERMES_")
-LAUNCHER_ONLY_KEYS = {"JARVISOS_PORT", "JARVISOS_NODE_BIN", "JARVISOS_GIT_REMOTE", "JARVISOS_READY_TIMEOUT_S"}
+LAUNCHER_ONLY_KEYS = {"JARVISOS_PORT", "JARVISOS_NODE_BIN", "JARVISOS_GIT_REMOTE", "JARVISOS_READY_TIMEOUT_S", "JARVISOS_WSL_DISTRO"}
 SECRET_WORDS = ("KEY", "TOKEN", "SECRET", "PASSWORD", "CREDENTIAL")
 FRONTEND_INPUTS = ("src", "public", "index.html", "package.json", "package-lock.json", "vite.config.ts", "tsconfig.json")
 
@@ -544,7 +544,22 @@ def serve() -> None:
 
 
 def running_under_wsl() -> bool:
-    return bool(os.getenv("WSL_DISTRO_NAME")) and shutil.which("powershell.exe") is not None
+    with contextlib.suppress(OSError):
+        return "microsoft" in Path("/proc/version").read_text().lower() and shutil.which("powershell.exe") is not None
+    return False
+
+
+def wsl_distro(config: dict[str, str]) -> str:
+    name = config.get("JARVISOS_WSL_DISTRO") or os.getenv("WSL_DISTRO_NAME")
+    if not name:
+        result = subprocess.run(["wsl.exe", "--list", "--quiet"], check=True, capture_output=True, timeout=15)
+        names = [line.strip() for line in result.stdout.decode("utf-16-le").splitlines() if line.strip()]
+        if len(names) != 1:
+            raise LaunchError(f"Set JARVISOS_WSL_DISTRO in {CONFIG_FILE} to this Ubuntu distro (Windows lists {len(names)} distros).")
+        name = names[0]
+    if not re.fullmatch(r"[A-Za-z0-9._-]+", name):
+        raise LaunchError(f"Invalid WSL distro name in {CONFIG_FILE}.")
+    return name
 
 
 def spawn_backend() -> None:
@@ -553,7 +568,7 @@ def spawn_backend() -> None:
         # WSL stops a distro's background processes once no wsl.exe session is
         # attached; a hidden wsl.exe holder keeps the backend alive after this
         # launcher window closes.
-        distro = os.environ["WSL_DISTRO_NAME"]
+        distro = wsl_distro(load_config())
         overrides = [f"{key}={os.environ[key]}" for key in ("JARVISOS_LAUNCHER_CONFIG", "JARVISOS_LAUNCHER_STATE") if key in os.environ]
         words = [*overrides, "/usr/bin/python3", script, "serve"]
         if any(re.search(r"[\s'\"]", word) for word in [*words, str(REPO)]):
@@ -763,7 +778,7 @@ def install_shortcut(_: argparse.Namespace) -> int:
         target_dir.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, target_dir / "jarvisos.ico")
         icon = f"{local}\\JarvisOS\\jarvisos.ico"
-    script = windows_desktop_shortcut_script(REPO, os.environ["WSL_DISTRO_NAME"], icon)
+    script = windows_desktop_shortcut_script(REPO, wsl_distro(load_config()), icon)
     result = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script], check=False, cwd="/mnt/c/Windows",
                             capture_output=True, text=True, timeout=60)
     if result.returncode:
