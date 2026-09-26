@@ -30,8 +30,10 @@ const llamaConfig = {
   model_id: "qwen3.8-27b-iq2m",
   pinned_build_id: "b11178-f9af9be21",
   port: 18081,
-  ctx_size: 8192,
+  // Same agent-mode sizing as the 152 proof: 8192 overflows Hermes relay prompts.
+  ctx_size: 16384,
   n_gpu_layers: 99,
+  extra_args: ["-fa", "on", "-ctk", "q8_0", "-ctv", "q8_0"],
 };
 const dataRoot = await mkdtemp(join(tmpdir(), "jarvisos-153p-data-"));
 const tempDir = await mkdtemp(join(tmpdir(), "jarvisos-153p-proof-"));
@@ -268,7 +270,7 @@ try {
     assert(decideEvent, `no successful jarvis.decide tool_result event: ${JSON.stringify(first.evidence.events)}`);
     assert(decideEvent.interaction_id === first.interaction.id, `decision evidence is not linked to canonical interaction ${first.interaction.id}`);
     assert(decideEvent.kind === "retry_or_stop" && decideEvent.outcome === "decided" && decideEvent.recommendation === "retry", `unexpected Laya result: ${JSON.stringify(decideEvent)}`);
-    assert(typeof decideEvent.request_digest === "string" && /^[0-9a-f]{64}$/.test(decideEvent.request_digest), `decision request digest missing or malformed: ${JSON.stringify(decideEvent)}`);
+    assert(typeof decideEvent.request_digest === "string" && /^sha256:[0-9a-f]{64}$/.test(decideEvent.request_digest), `decision request digest missing or malformed: ${JSON.stringify(decideEvent)}`);
     assert(typeof decideEvent.backend_model_ref === "string" && decideEvent.backend_model_ref.length > 0, "decision backend model ref missing");
     assert(Number.isFinite(decideEvent.latency_ms) && decideEvent.latency_ms >= 0, "decision latency missing");
     assert(typeof decideEvent.current_relay_flow_id === "string" && first.evidence.flows.some((flow) => flow.id === decideEvent.current_relay_flow_id), `decision relay flow is not present for interaction: ${JSON.stringify(decideEvent)}`);
@@ -302,8 +304,11 @@ try {
   if (proof.proof_status !== "passed") proof.proof_status = "incomplete";
   await writeFile(proofFile, `${JSON.stringify(proof, null, 2)}\n`);
   evidenceWritten = true;
-  await rm(dataRoot, { recursive: true, force: true });
-  await rm(tempDir, { recursive: true, force: true });
+  // Failed runs keep their data root (backend log, Hermes worker stderr, database) for diagnosis.
+  if (proof.proof_status === "passed" || env.JARVISOS_PROOF_DISCARD_FAILED === "1") {
+    await rm(dataRoot, { recursive: true, force: true });
+    await rm(tempDir, { recursive: true, force: true });
+  }
 }
 console.log(JSON.stringify(proof, null, 2));
 if (fatalError || proof.proof_status !== "passed") process.exitCode = 1;
