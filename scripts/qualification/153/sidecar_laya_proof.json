@@ -1,6 +1,6 @@
 {
   "schema": "jarvisos.153-sidecar-laya-proof.v1",
-  "source_sha": "c32b68fa114575a83d94d6e740858addf872a8b6",
+  "source_sha": "595c15ce3c113e66f147fadfe439ed5c2eb252e7",
   "hermes_venv": null,
   "hermes_venv_python": null,
   "workspace_id": null,
@@ -33,7 +33,7 @@
   ],
   "proof_status": "incomplete",
   "laya_latency_ms": null,
-  "started_at": "2026-09-26T07:24:57.306Z",
-  "finished_at": "2026-09-26T07:24:57.338Z",
-  "elapsed_seconds": 0.032
+  "started_at": "2026-09-26T07:41:45.026Z",
+  "finished_at": "2026-09-26T07:41:45.054Z",
+  "elapsed_seconds": 0.028
 }
