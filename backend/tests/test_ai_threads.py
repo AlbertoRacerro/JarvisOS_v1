@@ -132,6 +132,50 @@ def test_hermes_unavailable_turn_keeps_one_failed_idempotent_reservation() -> No
                                   (first.flow_id,)).fetchone()[0] == 0
 
 
+def test_hermes_relay_verification_failure_terminalizes_reservation_and_rebinds_with_history() -> None:
+    workspace_id = "workspace-hermes-relay"
+    _bootstrap_workspace(workspace_id)
+    thread = create_thread(AIThreadCreate(workspace_id=workspace_id))
+    frames: list[dict] = []
+
+    class Worker:
+        session = None
+        live_grants: dict = {}
+        last_error = "worker_lost"
+
+        def _alive(self) -> bool:
+            return False
+
+        def start(self) -> None:
+            pass
+
+        def _send(self, frame: dict) -> None:
+            frames.append(frame)
+
+        def _await(self, _request_id: str, timeout: float) -> dict:
+            return {"type": "ack"}
+
+        def turn(self, *_args, **_kwargs) -> dict:
+            return {"status": "success", "completed": True, "flow_id": "missing-relay-flow",
+                    "final_response": "answer", "relay_flow_ids": ["missing-relay-flow"]}
+
+    worker = Worker()
+    pool = SimpleNamespace(for_thread=lambda _thread_id: worker, lock_for=lambda _thread_id: contextmanager(
+        lambda: (yield))(), schedule_idle_stop=lambda _thread_id: None)
+    availability = [{"route_class": "hermes:agent", "availability": {"runtime_reachable": True}}]
+    payload = AIThreadSubmit(request_id="agent-request-relay", prompt="Use the agent", route_class="hermes:agent")
+
+    interaction = submit_interaction(workspace_id=workspace_id, thread_id=thread.id, payload=payload,
+                                     route_availability=availability,
+                                     app_state=SimpleNamespace(hermes_supervisor=pool)).interaction
+
+    assert interaction.persistence_state == "capture_failed"
+    assert interaction.flow_state == "cancelled_terminal"
+    bind = next(frame for frame in frames if frame["type"] == "bind")
+    assert "history" in bind and isinstance(bind["history"], list)
+    assert worker.last_error is None
+
+
 def test_hermes_retrieval_grant_is_limited_to_submitted_exact_refs() -> None:
     payload = AIThreadSubmit(
         request_id="agent-grant-1", prompt="Search this selected record", route_class="hermes:agent",

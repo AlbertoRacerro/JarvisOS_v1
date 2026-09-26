@@ -6,6 +6,7 @@ import os
 import socket
 import sqlite3
 import subprocess
+import time
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -307,6 +308,29 @@ def test_session_pool_keeps_bounded_per_thread_workers_and_idle_stop() -> None:
     pool.for_thread("thread-c")
     assert len(created) == 3 and first.session is None
     assert pool.status()["state"] == "stopped"
+
+
+def test_session_pool_idle_stop_yields_to_a_newer_claim() -> None:
+    class Worker:
+        process = None
+        session = object()
+
+        def status(self) -> dict[str, Any]:
+            return {"state": "running"}
+
+    pool = HermesSessionPool(Worker, maximum=2, idle_seconds=60)
+    worker = pool.for_thread("thread-a")
+    pool.schedule_idle_stop("thread-a")
+    assert pool.for_thread("thread-a") is worker  # a new turn claims the worker
+    pool._idle_stop("thread-a")  # the superseded timer fires late
+    assert pool.for_thread("thread-a") is worker and worker.session is not None
+
+    pool.idle_seconds = 0.01
+    pool.schedule_idle_stop("thread-a")
+    deadline = time.monotonic() + 5
+    while worker.session is not None and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert worker.session is None and pool.status()["state"] == "stopped"
 
 
 def test_tool_refusal_emits_bounded_correlated_event_without_secrets(monkeypatch: pytest.MonkeyPatch) -> None:

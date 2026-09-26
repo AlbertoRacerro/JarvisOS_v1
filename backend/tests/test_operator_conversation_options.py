@@ -1,4 +1,5 @@
 from dataclasses import replace
+from types import SimpleNamespace
 
 import pytest
 from fastapi import FastAPI
@@ -89,3 +90,10 @@ def test_hermes_availability_reports_prerequisite_reason_without_starting_worker
     ready = _hermes_agent_availability(None)
     assert ready.reason_code is None and ready.runtime_reachable is True
     assert ready.model_loaded is False
+
+    lost_pool = SimpleNamespace(status=lambda: {"state": "stopped", "threads": {
+        "thread-a": {"state": "stopped", "last_error": "worker_lost"}}})
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(_state={"hermes_supervisor": lost_pool})))
+    lost = _hermes_agent_availability(request)
+    assert lost.reason_code == "HERMES_WORKER_LOST"
+    assert lost.runtime_reachable is True  # the next turn recovers the session

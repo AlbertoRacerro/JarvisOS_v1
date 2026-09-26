@@ -62,18 +62,22 @@ class HermesSessionPool:
             timer.start()
 
     def _idle_stop(self, thread_id: str) -> None:
+        # Hold the guard for the whole stop so for_thread cannot hand out a worker
+        # that is being stopped; a for_thread since scheduling replaced this timer.
         with self._guard:
+            if self._timers.get(thread_id) is not threading.current_thread():
+                return
             lock = self._locks.get(thread_id)
             worker = self._items.get(thread_id)
-        if worker is None or lock is None:
-            return
-        if not lock.acquire(blocking=False):
-            self.schedule_idle_stop(thread_id)
-            return
-        try:
-            self._stop(thread_id, worker)
-        finally:
-            lock.release()
+            if worker is None or lock is None:
+                return
+            if not lock.acquire(blocking=False):
+                self.schedule_idle_stop(thread_id)
+                return
+            try:
+                self._stop(thread_id, worker)
+            finally:
+                lock.release()
 
     def _stop(self, thread_id: str, worker: HermesSupervisor) -> None:
         process = worker.process

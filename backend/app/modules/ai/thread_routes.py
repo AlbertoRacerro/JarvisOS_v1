@@ -129,7 +129,8 @@ def _hermes_agent_availability(request: Request | None) -> AIConversationRouteAv
     if worker_lost:
         reason, message = "HERMES_WORKER_LOST", "Hermes worker was lost; the next turn will recover the session."
     return AIConversationRouteAvailability(
-        configured=bool(python and python.is_file()), runtime_reachable=reason is None,
+        # A lost worker is recovered by the next turn, so it must stay submittable.
+        configured=bool(python and python.is_file()), runtime_reachable=reason in {None, "HERMES_WORKER_LOST"},
         model_installed=bool(python and python.is_file()), model_loaded=state == "running",
         qualified="unknown", reason_code=reason, message=message,
     )

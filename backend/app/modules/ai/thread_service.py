@@ -382,7 +382,7 @@ def _submit_hermes_interaction(
                 connection.rollback()
                 raise
     except Exception as exc:
-        _best_effort_mark_capture_failed(interaction_id, reservation_flow_id, exc)
+        _mark_hermes_failed(interaction_id, reservation_flow_id, exc)
     pool.schedule_idle_stop(thread_id)
     return AIThreadSubmitRead(interaction=_read_interaction(
         workspace_id=workspace_id, thread_id=thread_id, interaction_id=interaction_id))
@@ -402,7 +402,12 @@ def _mark_hermes_failed(interaction_id: str, reservation_flow_id: str, error: ob
 
 
 def _ensure_hermes_thread_session(worker: HermesSupervisor, *, thread_id: str, workspace_id: str) -> None:
-    from app.modules.agents.hermes.supervisor import UPSTREAM_REVISION, bind_session, current_mapping
+    from app.modules.agents.hermes.supervisor import (
+        UPSTREAM_REVISION,
+        bind_session,
+        current_mapping,
+        durable_history,
+    )
     if worker.session is not None and worker.session.jarvis_thread_id == thread_id \
             and worker.session.workspace_id == workspace_id and worker._alive():
         return
@@ -415,11 +420,14 @@ def _ensure_hermes_thread_session(worker: HermesSupervisor, *, thread_id: str, w
         if ref.generation != generation + 1 or ref.upstream_revision != UPSTREAM_REVISION:
             raise AIThreadConflictError("Hermes session generation or revision changed")
         connection.commit()
+        history = durable_history(connection, thread_id)
     worker.session = ref
     bind_id = str(uuid4())
-    worker._send({"type": "bind", "id": bind_id, "session_ref": ref.model_dump(mode="json")})
+    worker._send({"type": "bind", "id": bind_id, "session_ref": ref.model_dump(mode="json"),
+                  "history": history})
     if worker._await(bind_id, timeout=30).get("type") != "ack":
         raise RuntimeError("Hermes session bind failed")
+    worker.last_error = None
 
 
 def _install_hermes_retrieval_grant(
@@ -545,7 +553,7 @@ def _context_blocks_for_new_submit(workspace_id: str, payload: AIThreadSubmit) -
                 task_kind=payload.task_kind,
                 route_class=payload.route_class,
             )
-            if not effective_route_class.startswith("local:"):
+            if not (effective_route_class.startswith("local:") or effective_route_class == "hermes:agent"):
                 raise AIThreadConflictError(
                     "exact-ref Jarvis context is unavailable for external routes in spec 111"
                 )
