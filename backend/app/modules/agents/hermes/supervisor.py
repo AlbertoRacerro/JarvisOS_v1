@@ -517,8 +517,6 @@ class HermesSupervisor:
             capability_id = ("jarvis.retrieval_query" if tool_name == "jarvis_retrieval_query"
                              else "jarvis.decide" if tool_name == "jarvis_decide"
                              else "jarvis.context_preview")
-            if capability_id == "jarvis.decide":
-                arguments = {"kind": arguments.pop("kind"), "request": arguments.pop("request")}
             call = StructuredToolCall(
                 call_id=str(frame["id"]), capability_id=capability_id,
                 grant_id=grant_id, correlation_id=str(frame["id"]),

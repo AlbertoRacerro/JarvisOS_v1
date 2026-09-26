@@ -640,6 +640,36 @@ def test_decision_grant_is_thread_scoped_and_records_redacted_evidence(monkeypat
     assert raw_text not in row["payload"]
 
 
+@pytest.mark.parametrize("arguments", [
+    {"kind": "route_class"},
+    {"kind": "route_class", "request": {}, "extra": True},
+])
+def test_malformed_decision_call_is_refused_as_decide(monkeypatch: pytest.MonkeyPatch,
+                                                      arguments: dict[str, object]) -> None:
+    connection = _connection()
+    connection.commit()
+    monkeypatch.setattr("app.modules.agents.hermes.supervisor.open_sqlite_connection",
+                        lambda: _existing_connection(connection))
+    now = datetime.now(UTC)
+    grant = CapabilityGrantRef(grant_id="decide-grant", capability_id="jarvis.decide",
+                               issuer="jarvis_policy",
+                               scope=CapabilityScope(workspace_id=SESSION.workspace_id,
+                                                     jarvis_thread_id=SESSION.jarvis_thread_id),
+                               issued_at=now, expires_at=now + timedelta(minutes=10))
+    supervisor = HermesSupervisor("unused")
+    supervisor.session = SESSION
+    supervisor.live_grants[grant.grant_id] = grant
+    monkeypatch.setattr(supervisor, "_send", lambda _frame: None)
+    supervisor._handle_tool({"id": "decision-call", "session_ref": SESSION.model_dump(mode="json"),
+                             "arguments": {"tool_name": "jarvis_decide", "grant_id": grant.grant_id,
+                                           **arguments}})
+    row = connection.execute("SELECT payload FROM events WHERE event_type = 'hermes.tool_result'").fetchone()
+    payload = json.loads(row["payload"])
+    assert payload["capability_id"] == "jarvis.decide"
+    assert payload["status"] == "refused"
+    assert payload["error_code"] == "invalid_arguments"
+
+
 def test_decision_grant_requires_exact_thread_scope_and_active_grant() -> None:
     now = datetime.now(UTC)
     call = StructuredToolCall(call_id="decide-call", capability_id="jarvis.decide", grant_id="decide-grant",
