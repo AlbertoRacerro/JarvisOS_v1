@@ -11,15 +11,13 @@ import { chromium } from "/home/thera/jarvis-control/work/tools/pw/node_modules/
 
 const root = resolve(new URL("../../../", import.meta.url).pathname);
 const backend = join(root, "backend");
-// The backend serves frontend/dist; an exact-head browser proof needs a bundle built after the head's frontend changes.
-{
-  const frontendCommitMs = Number(execFileSync("git", ["-C", root, "log", "-1", "--format=%ct", "--", "frontend"], { encoding: "utf8" }).trim()) * 1000;
-  const distMs = (await stat(join(root, "frontend/dist/index.html"))).mtimeMs;
-  if (!(distMs > frontendCommitMs)) throw new Error("frontend/dist is older than the head's frontend changes; run `npm run build` in frontend first");
-}
 const output = new URL(".", import.meta.url).pathname;
 const backendPort = Number(process.env.JARVISOS_PROOF_BACKEND_PORT ?? 8041);
 const backendUrl = `http://127.0.0.1:${backendPort}`;
+// The backend serves frontend/dist: build it from this exact head against this proof's backend.
+execFileSync("node", ["node_modules/vite/bin/vite.js", "build"], {
+  cwd: join(root, "frontend"), env: { ...process.env, VITE_API_BASE_URL: backendUrl }, stdio: ["ignore", "ignore", "inherit"],
+});
 const responseWaitMs = Number(process.env.JARVISOS_PROOF_RESPONSE_TIMEOUT_MS ?? 1_800_000);
 const args = process.argv.slice(2);
 const arg = (name, fallback) => {
