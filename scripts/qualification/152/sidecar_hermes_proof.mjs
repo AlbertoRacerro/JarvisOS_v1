@@ -306,7 +306,9 @@ try {
     await page.getByLabel("Jarvis responder").selectOption("hermes:agent");
     await page.getByRole("button", { name: "New thread" }).click();
     const threadSelect = page.getByLabel("Conversation");
-    await page.waitForFunction(() => Boolean(document.querySelector('[aria-label="Jarvis responder"]') && document.querySelector('select[aria-label="Conversation"]')?.value));
+    // The Conversation select is labelled by its wrapping <label>, not an aria-label attribute.
+    const threadDeadline = Date.now() + 30_000;
+    while (!(await threadSelect.inputValue()) && Date.now() < threadDeadline) await delay(250);
     proof.thread_id = await threadSelect.inputValue();
     assert(proof.thread_id, "Sidecar did not create and select a canonical thread");
     const prompt = `Use jarvis_retrieval_query in the Second Brain to find the accepted decision with the 152 proof beacon. Answer with the exact beacon fact and cite the decision id ${decision.id}. Do not guess; only report what the retrieval result supports.`;
