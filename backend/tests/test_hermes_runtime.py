@@ -6,6 +6,7 @@ import os
 import socket
 import sqlite3
 import subprocess
+import threading
 import time
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
@@ -20,6 +21,7 @@ import app.modules.agents.hermes.supervisor as hermes_supervisor_module
 from app.modules.agents.hermes.broker_mcp import _reply
 from app.modules.agents.hermes.session_pool import HermesSessionPool
 from app.modules.agents.hermes.supervisor import (
+    RELAY_TOOL_PROTOCOL,
     HermesSupervisor,
     bind_session,
     current_mapping,
@@ -172,8 +174,30 @@ def test_text_tool_proposal_requires_the_registered_broker() -> None:
                               tools)["content"] is not None
     envelope = infer_envelope(_frame() | {"tools": tools})
     assert "mcp__jarvis__jarvis_context_preview" in envelope.prompt
+    assert envelope.prompt.endswith(RELAY_TOOL_PROTOCOL)
+    assert RELAY_TOOL_PROTOCOL not in infer_envelope(_frame()).prompt
     with pytest.raises(ValueError):
         infer_envelope(_frame() | {"tools": [{"function": {"name": "terminal"}}]})
+
+
+def test_turn_without_a_model_answer_is_reported_failed() -> None:
+    from app.modules.agents.hermes.worker_shim import Worker as ShimWorker
+
+    shim = ShimWorker.__new__(ShimWorker)  # no loopback relay server needed
+    shim.turn_lock, shim.session, shim.history = threading.Lock(), None, []
+    frames: list[dict[str, Any]] = []
+    shim.send = frames.append
+    shim.event = lambda *_args: None
+    shim.session_id = lambda: "hermes-session"
+    for exit_reason, final, status in (
+        ("empty_response_exhausted", "No reply: jarvis-relay didn't produce a reply", "failed"),
+        ("text_response(finish_reason=stop)", "The beacon is ORCHID-1.", "success"),
+    ):
+        result = {"final_response": final, "completed": True, "turn_exit_reason": exit_reason, "messages": []}
+        shim.agent = SimpleNamespace(run_conversation=lambda _result=result, **_kwargs: _result)
+        shim.run_turn("turn-1", "hello")
+        assert frames[-1]["status"] == status
+    assert "empty_response_exhausted" in frames[0]["error"]
 
 
 def test_governed_inference_maps_result_and_cancellation() -> None:

@@ -150,6 +150,16 @@ def worker_environment(home: Path, backend_root: Path) -> dict[str, str]:
     }
 
 
+# The relay flattens Hermes messages and tool schemas into one Jarvis prompt, so the
+# model must be told the exact text shape the worker shim promotes to a tool call;
+# without it Qwen-class models end the turn after reasoning with no visible output.
+RELAY_TOOL_PROTOCOL = (
+    "\n\nYou are answering the conversation above as the assistant. To call one of the listed "
+    'tools, reply with ONLY a JSON object of the form {"tool_calls": [{"name": "<tool name>", '
+    '"arguments": {...}}]} and nothing else. Otherwise reply with the final answer text.'
+)
+
+
 def infer_envelope(frame: dict[str, Any], *, deadline_seconds: int = 120,
                    route_class: str | None = None) -> InferenceEnvelope:
     """Untrusted OpenAI request becomes a bounded frozen Jarvis envelope."""
@@ -184,8 +194,8 @@ def infer_envelope(frame: dict[str, Any], *, deadline_seconds: int = 120,
         envelope_id=str(uuid4()), correlation_id=str(frame["id"]),
         task_kind=str(frame.get("task_kind", "general")),
         workspace_id=ref.workspace_id,
-        prompt=json.dumps({"messages": messages, "tools": tools}, ensure_ascii=False) if tools else
-               json.dumps(messages, ensure_ascii=False),
+        prompt=json.dumps({"messages": messages, "tools": tools}, ensure_ascii=False) + RELAY_TOOL_PROTOCOL
+               if tools else json.dumps(messages, ensure_ascii=False),
         route_class=route_class,
         model_candidate=str(frame["model_candidate"])[:256] if frame.get("model_candidate") else None,
         max_output_tokens=frame.get("max_output_tokens"), agent_session=ref,

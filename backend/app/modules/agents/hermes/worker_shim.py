@@ -314,6 +314,14 @@ class Worker:
                 self.send({"type": "turn_result", "id": request_id, "status": "interrupted",
                            "final_response": result.get("final_response") or "", "completed": False})
                 return
+            # Hermes substitutes an explanatory "No reply" text when a turn ends without a
+            # model answer; only a text_response exit is a real final answer.
+            exit_reason = str(result.get("turn_exit_reason") or "")
+            if result.get("failed") or (exit_reason and not exit_reason.startswith("text_response")):
+                self.event("turn.failed", request_id)
+                self.send({"type": "turn_result", "id": request_id, "status": "failed",
+                           "error": f"no_final_answer({exit_reason[:80]})", "completed": False})
+                return
             self.event("turn.completed", request_id)
             self.send({"type": "turn_result", "id": request_id, "status": "success",
                        "final_response": result.get("final_response", ""),
