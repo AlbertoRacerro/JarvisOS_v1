@@ -1,0 +1,102 @@
+{
+  "schema": "jarvisos.152-sidecar-hermes-proof.v1",
+  "source_sha": "9b004849e4c9086c8c4d7ce2e392ba04bbac4d63",
+  "hermes_venv": null,
+  "hermes_venv_python": null,
+  "workspace_id": "5837fda6-a81f-4401-b285-ae9928cbcce4",
+  "thread_id": null,
+  "seeded_decision": null,
+  "runtime_configuration": {
+    "binary_path": "/home/thera/jarvis-control/work/tools/llama.cpp/b11178/dist/llama-b11178/llama-server",
+    "library_dirs": [
+      "/home/thera/jarvis-control/work/tools/llama.cpp/b11178/dist/llama-b11178",
+      "/home/thera/jarvis-control/work/tools/llama.cpp/b11178/dist/cudart-llama-b11178-bin-ubuntu-cuda-12.8-x64"
+    ],
+    "model_path": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+    "model_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+    "model_id": "qwen3.8-27b-iq2m",
+    "pinned_build_id": "b11178-f9af9be21",
+    "port": 18081,
+    "ctx_size": 8192,
+    "n_gpu_layers": 99
+  },
+  "route_options": {
+    "runtime_down": [
+      {
+        "text": "Local assistant — Ollama is not reachable; start the configured local runtime.",
+        "value": "local:general",
+        "disabled": true
+      },
+      {
+        "text": "Local fast assistant — Ollama is not reachable; start the configured local runtime.",
+        "value": "local:fast",
+        "disabled": true
+      },
+      {
+        "text": "Local coding assistant — Ollama is not reachable; start the configured local runtime.",
+        "value": "local:coder",
+        "disabled": true
+      },
+      {
+        "text": "Local llama.cpp assistant — llama-server is not reachable at the configured loopback address.",
+        "value": "local:llamacpp",
+        "disabled": true
+      },
+      {
+        "text": "Test responder (synthetic)",
+        "value": "local:fake",
+        "disabled": false
+      },
+      {
+        "text": "Jarvis agent (Hermes) — Hermes agent runtime is not configured.",
+        "value": "hermes:agent",
+        "disabled": true
+      }
+    ]
+  },
+  "screenshots": [
+    {
+      "path": "scripts/qualification/152/sidecar-hermes-runtime-down.jpg",
+      "size_bytes": 95927
+    }
+  ],
+  "turns": [],
+  "console_errors": [],
+  "page_errors": [],
+  "worker_status": [],
+  "runtime_status": [
+    {
+      "phase": "runtime_down",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_RUNTIME_UNREACHABLE",
+        "message": "llama-server is not reachable at the configured loopback address.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": null,
+        "ctx_size": 8192,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": false,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    }
+  ],
+  "rss_vram_samples": [],
+  "proof_failures": [
+    "intentional --until=unavailable dry run; runtime turns were not executed"
+  ],
+  "proof_status": "incomplete",
+  "started_at": "2026-09-26T07:10:27.652Z",
+  "finished_at": "2026-09-26T07:10:30.103Z",
+  "elapsed_seconds": 2.451
+}
