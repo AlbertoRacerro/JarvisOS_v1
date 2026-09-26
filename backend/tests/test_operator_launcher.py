@@ -69,6 +69,13 @@ def test_readiness_requires_loaded_local_model(monkeypatch):
     assert launcher.readiness(8000)[0] == "degraded"
 
 
+@pytest.mark.parametrize("url", ["https://127.0.0.1:8000/health", "http://example.com/health",
+                                   "http://127.0.0.1.evil.test:8000/health", "file:///etc/passwd"])
+def test_health_transport_rejects_non_loopback_endpoints(url):
+    with pytest.raises(launcher.LaunchError, match="127.0.0.1"):
+        launcher.http_json(url)
+
+
 def test_real_git_fast_forward_then_dirty_and_offline_safe_mode(monkeypatch, tmp_path):
     def git(*args, cwd=None):
         return subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True, text=True).stdout.strip()

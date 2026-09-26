@@ -34,6 +34,7 @@ import subprocess
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -114,7 +115,13 @@ def capture_process_env(pid: int) -> dict[str, str]:
 
 
 def port_of(config: dict[str, str]) -> int:
-    return int(config.get("JARVISOS_PORT", DEFAULT_PORT))
+    try:
+        port = int(config.get("JARVISOS_PORT", DEFAULT_PORT))
+    except ValueError as exc:
+        raise LaunchError(f"JARVISOS_PORT in {CONFIG_FILE} must be a TCP port number.") from exc
+    if not 1 <= port <= 65535:
+        raise LaunchError(f"JARVISOS_PORT in {CONFIG_FILE} must be between 1 and 65535.")
+    return port
 
 
 def backend_env(config: dict[str, str], port: int) -> dict[str, str]:
@@ -420,10 +427,29 @@ def read_owned() -> dict | None:
     return record
 
 
-def http_json(url: str, timeout: float = 3) -> tuple[int, object]:
-    request = urllib.request.Request(url, headers={"Accept": "application/json"})
+class _RejectRedirects(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, request, fp, code, msg, headers, newurl):
+        raise urllib.error.HTTPError(request.full_url, code, "Launcher loopback probe refused a redirect", headers, fp)
+
+
+_LOCAL_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}), _RejectRedirects())
+
+
+def _local_url(url: str) -> str:
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
+        parsed = urllib.parse.urlsplit(url)
+        valid = parsed.scheme == "http" and parsed.hostname == "127.0.0.1" and parsed.port is not None
+    except ValueError:
+        valid = False
+    if not valid or parsed.username or parsed.password:
+        raise LaunchError("Launcher health probes must use an HTTP 127.0.0.1 endpoint.")
+    return url
+
+
+def http_json(url: str, timeout: float = 3) -> tuple[int, object]:
+    request = urllib.request.Request(_local_url(url), headers={"Accept": "application/json"})
+    try:
+        with _LOCAL_OPENER.open(request, timeout=timeout) as response:
             return response.status, json.loads(response.read() or b"null")
     except urllib.error.HTTPError as exc:
         return exc.code, None
@@ -432,9 +458,9 @@ def http_json(url: str, timeout: float = 3) -> tuple[int, object]:
 
 
 def http_text(url: str, timeout: float = 3) -> tuple[int, str]:
-    request = urllib.request.Request(url, headers={"Accept": "text/html"})
+    request = urllib.request.Request(_local_url(url), headers={"Accept": "text/html"})
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
+        with _LOCAL_OPENER.open(request, timeout=timeout) as response:
             return response.status, response.read(200_000).decode(errors="replace")
     except urllib.error.HTTPError as exc:
         return exc.code, ""
