@@ -1,0 +1,39 @@
+{
+  "schema": "jarvisos.153-sidecar-laya-proof.v1",
+  "source_sha": "c32b68fa114575a83d94d6e740858addf872a8b6",
+  "hermes_venv": null,
+  "hermes_venv_python": null,
+  "workspace_id": null,
+  "thread_id": null,
+  "seeded_decision": null,
+  "runtime_configuration": {
+    "binary_path": "/home/thera/jarvis-control/work/tools/llama.cpp/b11178/dist/llama-b11178/llama-server",
+    "library_dirs": [
+      "/home/thera/jarvis-control/work/tools/llama.cpp/b11178/dist/llama-b11178",
+      "/home/thera/jarvis-control/work/tools/llama.cpp/b11178/dist/cudart-llama-b11178-bin-ubuntu-cuda-12.8-x64"
+    ],
+    "model_path": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+    "model_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+    "model_id": "qwen3.8-27b-iq2m",
+    "pinned_build_id": "b11178-f9af9be21",
+    "port": 18081,
+    "ctx_size": 8192,
+    "n_gpu_layers": 99
+  },
+  "route_options": {},
+  "screenshots": [],
+  "turns": [],
+  "console_errors": [],
+  "page_errors": [],
+  "worker_status": [],
+  "runtime_status": [],
+  "rss_vram_samples": [],
+  "proof_failures": [
+    "Error: Command failed: node node_modules/vite/bin/vite.js build"
+  ],
+  "proof_status": "incomplete",
+  "laya_latency_ms": null,
+  "started_at": "2026-09-26T07:24:57.306Z",
+  "finished_at": "2026-09-26T07:24:57.338Z",
+  "elapsed_seconds": 0.032
+}

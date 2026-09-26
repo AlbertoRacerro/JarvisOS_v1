@@ -1,0 +1,444 @@
+{
+  "schema": "jarvisos.153-laya-qualification.v1",
+  "source_sha": "c32b68fa114575a83d94d6e740858addf872a8b6",
+  "created_at": "2026-09-26T07:39:10.867811+00:00",
+  "configured_backend": "RulesDecisionBackend",
+  "backend_model_refs": [
+    "jarvis.laya-rules.v1"
+  ],
+  "fixture_source": "fixed contract-level fixtures in laya_qualification.py; no outputs are adapted to observed backend behavior",
+  "kinds": {
+    "route_class": {
+      "status": "unqualified",
+      "pass_count": 5,
+      "case_count": 6,
+      "abstentions": 2,
+      "latency_ms": {
+        "p50": 0.0,
+        "max": 0
+      },
+      "backend_model_refs": [
+        "jarvis.laya-rules.v1"
+      ],
+      "backend_revisions": [
+        "v1"
+      ],
+      "cases": [
+        {
+          "id": "direct-answer",
+          "expected": "answer_directly",
+          "actual": {
+            "kind": "route_class",
+            "outcome": "decided",
+            "recommendation": "answer_directly",
+            "confidence": 1.0,
+            "reason_code": null,
+            "model_ref": "jarvis.laya-rules.v1",
+            "latency_ms": 0,
+            "request_digest": "sha256:b1eabb22dea42ba6bbcee7dc717fdc4003a7c37270032ccc1cab3d4d043131a1"
+          },
+          "pass": true
+        },
+        {
+          "id": "available-read-tool",
+          "expected": "use_read_tool",
+          "actual": {
+            "kind": "route_class",
+            "outcome": "decided",
+            "recommendation": "use_read_tool",
+            "confidence": 1.0,
+            "reason_code": null,
+            "model_ref": "jarvis.laya-rules.v1",
+            "latency_ms": 0,
+            "request_digest": "sha256:de8276b6bd52baa54bcec1969074e78e41bbd398ea0acc08b02411f92895e95f"
+          },
+          "pass": true
+        },
+        {
+          "id": "ungranted-capability",
+          "expected": "needs_ungranted_capability",
+          "actual": {
+            "kind": "route_class",
+            "outcome": "decided",
+            "recommendation": "needs_ungranted_capability",
+            "confidence": 1.0,
+            "reason_code": null,
+            "model_ref": "jarvis.laya-rules.v1",
+            "latency_ms": 0,
+            "request_digest": "sha256:c832b1111acb4dc090456d18703392d3ae6c67c6447aa9adc8d0711914a273a8"
+          },
+          "pass": true
+        },
+        {
+          "id": "ambiguous-low-confidence",
+          "expected": "abstained",
+          "actual": {
+            "kind": "route_class",
+            "outcome": "decided",
+            "recommendation": "answer_directly",
+            "confidence": 1.0,
+            "reason_code": null,
+            "model_ref": "jarvis.laya-rules.v1",
+            "latency_ms": 0,
+            "request_digest": "sha256:b0bdd39d64d83804f7b12b9aedf32f08a0bffe45a54ed117ee4100d32c664cb6"
+          },
+          "pass": false
+        },
+        {
+          "id": "malformed",
+          "expected": "abstained",
+          "actual": {
+            "kind": "route_class",
+            "outcome": "abstained",
+            "recommendation": null,
+            "confidence": null,
+            "reason_code": "invalid_or_backend_error",
+            "model_ref": "jarvis.laya-rules.v1",
+            "latency_ms": 0,
+            "request_digest": "sha256:c8c9ab82d4ec6e46441f89751c11cb1e03d4d1080bb3d6941bc6e2177fcbbb0a"
+          },
+          "pass": true
+        },
+        {
+          "id": "out-of-catalogue",
+          "expected": "abstained",
+          "actual": {
+            "kind": "unknown",
+            "outcome": "abstained",
+            "recommendation": null,
+            "confidence": null,
+            "reason_code": "invalid_or_backend_error",
+            "model_ref": "jarvis.laya-rules.v1",
+            "latency_ms": 0,
+            "request_digest": "sha256:07a3c5e666a69f71624029a111188fb7cbb7b4a047ec9e98591c2dd56bfad841"
+          },
+          "pass": true
+        }
+      ]
+    },
+    "retry_or_stop": {
+      "status": "qualified",
+      "pass_count": 6,
+      "case_count": 6,
+      "abstentions": 2,
+      "latency_ms": {
+        "p50": 0.0,
+        "max": 0
+      },
+      "backend_model_refs": [
+        "jarvis.laya-rules.v1"
+      ],
+      "backend_revisions": [
+        "v1"
+      ],
+      "cases": [
+        {
+          "id": "retry-first-retryable-failure",
+          "expected": "retry",
+          "actual": {
+            "kind": "retry_or_stop",
+            "outcome": "decided",
+            "recommendation": "retry",
+            "confidence": 1.0,
+            "reason_code": null,
+            "model_ref": "jarvis.laya-rules.v1",
+            "latency_ms": 0,
+            "request_digest": "sha256:26a3f7c236d7367e67111cc206cf1935379dafafa1e1458444ec8b182aaf0f08"
+          },
+          "pass": true
+        },
+        {
+          "id": "retry-empty-result",
+          "expected": "retry",
+          "actual": {
+            "kind": "retry_or_stop",
+            "outcome": "decided",
+            "recommendation": "retry",
+            "confidence": 1.0,
+            "reason_code": null,
+            "model_ref": "jarvis.laya-rules.v1",
+            "latency_ms": 0,
+            "request_digest": "sha256:d695e6f4acab04f75a161e6a2ef5d68e5ea984c67f6c64b75ea4b05e4e4b3264"
+          },
+          "pass": true
+        },
+        {
+          "id": "stop-nonretryable",
+          "expected": "stop",
+          "actual": {
+            "kind": "retry_or_stop",
+            "outcome": "decided",
+            "recommendation": "stop",
+            "confidence": 1.0,
+            "reason_code": null,
+            "model_ref": "jarvis.laya-rules.v1",
+            "latency_ms": 0,
+            "request_digest": "sha256:93ea63de3e7600ef32b721e69bd9d1fd6c3ed0b65f0f1fd6e6692eea240840b8"
+          },
+          "pass": true
+        },
+        {
+          "id": "stop-after-attempt",
+          "expected": "stop",
+          "actual": {
+            "kind": "retry_or_stop",
+            "outcome": "decided",
+            "recommendation": "stop",
+            "confidence": 1.0,
+            "reason_code": null,
+            "model_ref": "jarvis.laya-rules.v1",
+            "latency_ms": 0,
+            "request_digest": "sha256:3281ba50af4125323f50e80bc4cf647a9b5ab1c40a325fdc7629b67075a500e3"
+          },
+          "pass": true
+        },
+        {
+          "id": "malformed",
+          "expected": "abstained",
+          "actual": {
+            "kind": "retry_or_stop",
+            "outcome": "abstained",
+            "recommendation": null,
+            "confidence": null,
+            "reason_code": "invalid_or_backend_error",
+            "model_ref": "jarvis.laya-rules.v1",
+            "latency_ms": 0,
+            "request_digest": "sha256:c1756e2d643ae7f0444b10695684033d90918cab9376f1417ef9eae9b2522c12"
+          },
+          "pass": true
+        },
+        {
+          "id": "out-of-catalogue",
+          "expected": "abstained",
+          "actual": {
+            "kind": "unknown",
+            "outcome": "abstained",
+            "recommendation": null,
+            "confidence": null,
+            "reason_code": "invalid_or_backend_error",
+            "model_ref": "jarvis.laya-rules.v1",
+            "latency_ms": 0,
+            "request_digest": "sha256:7d9fd89b201ebf597f860d3d2fd6714c074faf37993d6d90df45d4d53245b1bd"
+          },
+          "pass": true
+        }
+      ]
+    },
+    "escalate": {
+      "status": "qualified",
+      "pass_count": 6,
+      "case_count": 6,
+      "abstentions": 2,
+      "latency_ms": {
+        "p50": 0.0,
+        "max": 0
+      },
+      "backend_model_refs": [
+        "jarvis.laya-rules.v1"
+      ],
+      "backend_revisions": [
+        "v1"
+      ],
+      "cases": [
+        {
+          "id": "stay-local",
+          "expected": "stay_local",
+          "actual": {
+            "kind": "escalate",
+            "outcome": "decided",
+            "recommendation": "stay_local",
+            "confidence": 1.0,
+            "reason_code": null,
+            "model_ref": "jarvis.laya-rules.v1",
+            "latency_ms": 0,
+            "request_digest": "sha256:e1f6943f3958a3d67db96fd646ec9a988d8efd4747e0dc3c5fa4342bd93fc3bf"
+          },
+          "pass": true
+        },
+        {
+          "id": "ask-human",
+          "expected": "ask_human",
+          "actual": {
+            "kind": "escalate",
+            "outcome": "decided",
+            "recommendation": "ask_human",
+            "confidence": 1.0,
+            "reason_code": null,
+            "model_ref": "jarvis.laya-rules.v1",
+            "latency_ms": 0,
+            "request_digest": "sha256:22b7dd14b94e13ae32dd41239f508b7abc8870fdde1ee9e4259deb044472644a"
+          },
+          "pass": true
+        },
+        {
+          "id": "suggest-admitted-stronger-route",
+          "expected": "suggest_stronger_route",
+          "actual": {
+            "kind": "escalate",
+            "outcome": "decided",
+            "recommendation": "suggest_stronger_route",
+            "confidence": 1.0,
+            "reason_code": null,
+            "model_ref": "jarvis.laya-rules.v1",
+            "latency_ms": 0,
+            "request_digest": "sha256:a6fac12a38e8c2043bc2b71e05e8ba8249153c8e47d75dcddf90a6e226a4a11d"
+          },
+          "pass": true
+        },
+        {
+          "id": "suggest-route-without-local-route",
+          "expected": "suggest_stronger_route",
+          "actual": {
+            "kind": "escalate",
+            "outcome": "decided",
+            "recommendation": "suggest_stronger_route",
+            "confidence": 1.0,
+            "reason_code": null,
+            "model_ref": "jarvis.laya-rules.v1",
+            "latency_ms": 0,
+            "request_digest": "sha256:b8aa406ea99fa885e22e6588a84a81bd4fc8c9288810a2282925b93a4992df94"
+          },
+          "pass": true
+        },
+        {
+          "id": "malformed",
+          "expected": "abstained",
+          "actual": {
+            "kind": "escalate",
+            "outcome": "abstained",
+            "recommendation": null,
+            "confidence": null,
+            "reason_code": "invalid_or_backend_error",
+            "model_ref": "jarvis.laya-rules.v1",
+            "latency_ms": 0,
+            "request_digest": "sha256:77e07cd8e3d1ea4cbe7afa5cc7c8c4ab3f72f927972a08b2febd0fbc46922de3"
+          },
+          "pass": true
+        },
+        {
+          "id": "out-of-catalogue",
+          "expected": "abstained",
+          "actual": {
+            "kind": "unknown",
+            "outcome": "abstained",
+            "recommendation": null,
+            "confidence": null,
+            "reason_code": "invalid_or_backend_error",
+            "model_ref": "jarvis.laya-rules.v1",
+            "latency_ms": 0,
+            "request_digest": "sha256:9043b0330d449140b322740e3d77dc8f2fbc78a1c050deb00e46a76e92ea2b8a"
+          },
+          "pass": true
+        }
+      ]
+    },
+    "model_select": {
+      "status": "unqualified",
+      "pass_count": 4,
+      "case_count": 6,
+      "abstentions": 6,
+      "latency_ms": {
+        "p50": 0.0,
+        "max": 377
+      },
+      "backend_model_refs": [
+        "jarvis.laya-rules.v1"
+      ],
+      "backend_revisions": [
+        "v1"
+      ],
+      "cases": [
+        {
+          "id": "select-among-admitted-local-candidates",
+          "expected": "one_of_candidates",
+          "actual": {
+            "kind": "model_select",
+            "outcome": "abstained",
+            "recommendation": null,
+            "confidence": null,
+            "reason_code": "invalid_or_backend_error",
+            "model_ref": "jarvis.laya-rules.v1",
+            "latency_ms": 377,
+            "request_digest": "sha256:f9f2591bb9442c537d5aaec47a6ccbb15fa7d046ad5f359158c8ed4ae7e9dfe8"
+          },
+          "pass": false
+        },
+        {
+          "id": "select-coding-candidate",
+          "expected": "one_of_candidates",
+          "actual": {
+            "kind": "model_select",
+            "outcome": "abstained",
+            "recommendation": null,
+            "confidence": null,
+            "reason_code": "invalid_or_backend_error",
+            "model_ref": "jarvis.laya-rules.v1",
+            "latency_ms": 0,
+            "request_digest": "sha256:a8aca90a5f6abddf2da8ced9790d29be001cb6b616d058fcaf99b6f45692f09f"
+          },
+          "pass": false
+        },
+        {
+          "id": "abstain-no-currently-available-candidate",
+          "expected": "abstained",
+          "actual": {
+            "kind": "model_select",
+            "outcome": "abstained",
+            "recommendation": null,
+            "confidence": null,
+            "reason_code": "invalid_or_backend_error",
+            "model_ref": "jarvis.laya-rules.v1",
+            "latency_ms": 0,
+            "request_digest": "sha256:d80ec17e597e3fa22d949f562fe9f37c0019aa29728be65a8d11025cfd040758"
+          },
+          "pass": true
+        },
+        {
+          "id": "abstain-candidates-do-not-fit-context",
+          "expected": "abstained",
+          "actual": {
+            "kind": "model_select",
+            "outcome": "abstained",
+            "recommendation": null,
+            "confidence": null,
+            "reason_code": "invalid_or_backend_error",
+            "model_ref": "jarvis.laya-rules.v1",
+            "latency_ms": 0,
+            "request_digest": "sha256:1eabb1f8ce9fb9855be8a4c39e6e39a422b9c61912a5bfa6608679e9958133b9"
+          },
+          "pass": true
+        },
+        {
+          "id": "malformed",
+          "expected": "abstained",
+          "actual": {
+            "kind": "model_select",
+            "outcome": "abstained",
+            "recommendation": null,
+            "confidence": null,
+            "reason_code": "invalid_or_backend_error",
+            "model_ref": "jarvis.laya-rules.v1",
+            "latency_ms": 0,
+            "request_digest": "sha256:a84eee59e5750b48234789f44f634feeeab19cfd50e9e28189909991ae4ad400"
+          },
+          "pass": true
+        },
+        {
+          "id": "out-of-catalogue",
+          "expected": "abstained",
+          "actual": {
+            "kind": "unknown",
+            "outcome": "abstained",
+            "recommendation": null,
+            "confidence": null,
+            "reason_code": "invalid_or_backend_error",
+            "model_ref": "jarvis.laya-rules.v1",
+            "latency_ms": 0,
+            "request_digest": "sha256:f144f5063399dd1f2ca3e1d6855d050b0f044e17f3d91316a41dacd0462c6488"
+          },
+          "pass": true
+        }
+      ]
+    }
+  }
+}
