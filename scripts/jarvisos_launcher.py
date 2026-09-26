@@ -545,14 +545,27 @@ def serve() -> None:
 
 def running_under_wsl() -> bool:
     with contextlib.suppress(OSError):
-        return "microsoft" in Path("/proc/version").read_text().lower() and shutil.which("powershell.exe") is not None
+        return "microsoft" in Path("/proc/version").read_text().lower()
     return False
+
+
+def windows_tool(name: str) -> str:
+    """Find Windows interop tools even when wsl.exe omits Windows PATH entries."""
+    paths = {"powershell.exe": "System32/WindowsPowerShell/v1.0/powershell.exe",
+             "cmd.exe": "System32/cmd.exe", "wsl.exe": "System32/wsl.exe"}
+    standard = Path("/mnt/c/Windows") / paths[name]
+    if standard.is_file():
+        return str(standard)
+    found = shutil.which(name)
+    if found:
+        return found
+    raise LaunchError(f"Windows interop tool {name} is unavailable; check WSL interop or the Windows installation.")
 
 
 def wsl_distro(config: dict[str, str]) -> str:
     name = config.get("JARVISOS_WSL_DISTRO") or os.getenv("WSL_DISTRO_NAME")
     if not name:
-        result = subprocess.run(["wsl.exe", "--list", "--quiet"], check=True, capture_output=True, timeout=15)
+        result = subprocess.run([windows_tool("wsl.exe"), "--list", "--quiet"], check=True, capture_output=True, timeout=15)
         names = [line.strip() for line in result.stdout.decode("utf-16-le").splitlines() if line.strip()]
         if len(names) != 1:
             raise LaunchError(f"Set JARVISOS_WSL_DISTRO in {CONFIG_FILE} to this Ubuntu distro (Windows lists {len(names)} distros).")
@@ -574,8 +587,8 @@ def spawn_backend() -> None:
         if any(re.search(r"[\s'\"]", word) for word in [*words, str(REPO)]):
             raise LaunchError("Paths containing spaces or quotes are not supported by the WSL launcher.")
         args = f"-d {distro} --cd {REPO} -- /usr/bin/env {' '.join(words)}"
-        command = f"Start-Process -WindowStyle Hidden -FilePath wsl.exe -ArgumentList '{args}'"
-        subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", command], check=True,
+        command = f"Start-Process -WindowStyle Hidden -FilePath \"$env:WINDIR\\System32\\wsl.exe\" -ArgumentList '{args}'"
+        subprocess.run([windows_tool("powershell.exe"), "-NoProfile", "-NonInteractive", "-Command", command], check=True,
                        cwd="/mnt/c/Windows", capture_output=True, timeout=60)
     else:
         subprocess.Popen([sys.executable, script, "serve"], start_new_session=True, stdin=subprocess.DEVNULL,
@@ -628,7 +641,7 @@ def wait_ready(port: int, timeout: float) -> tuple[str, str]:
 
 def open_browser(url: str) -> None:
     if running_under_wsl():
-        subprocess.run(["cmd.exe", "/c", "start", "", url], check=True, cwd="/mnt/c/Windows", capture_output=True, timeout=30)
+        subprocess.run([windows_tool("cmd.exe"), "/c", "start", "", url], check=True, cwd="/mnt/c/Windows", capture_output=True, timeout=30)
     elif shutil.which("xdg-open"):
         subprocess.Popen(["xdg-open", url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     else:
@@ -773,13 +786,13 @@ def install_shortcut(_: argparse.Namespace) -> int:
     icon = None
     source = REPO / "scripts" / "windows" / "jarvisos.ico"
     if source.is_file():
-        local = subprocess.run(["cmd.exe", "/c", "echo %LOCALAPPDATA%"], check=True, cwd="/mnt/c/Windows", capture_output=True, text=True).stdout.strip()
+        local = subprocess.run([windows_tool("cmd.exe"), "/c", "echo %LOCALAPPDATA%"], check=True, cwd="/mnt/c/Windows", capture_output=True, text=True).stdout.strip()
         target_dir = Path(subprocess.run(["wslpath", "-u", local], check=True, capture_output=True, text=True).stdout.strip()) / "JarvisOS"
         target_dir.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, target_dir / "jarvisos.ico")
         icon = f"{local}\\JarvisOS\\jarvisos.ico"
     script = windows_desktop_shortcut_script(REPO, wsl_distro(load_config()), icon)
-    result = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script], check=False, cwd="/mnt/c/Windows",
+    result = subprocess.run([windows_tool("powershell.exe"), "-NoProfile", "-NonInteractive", "-Command", script], check=False, cwd="/mnt/c/Windows",
                             capture_output=True, text=True, timeout=60)
     if result.returncode:
         raise LaunchError("Shortcut creation failed: " + result.stderr.strip())
