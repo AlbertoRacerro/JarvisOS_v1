@@ -12,6 +12,16 @@
 }
 .application-shell--final .shell-main > .final-fusion__workspace-head { flex: 0 0 auto; }
 .application-shell--final .shell-main:focus { outline: none; }
+.application-shell--final .shell-sidecar__tabs { display: flex; }
+.application-shell--final .shell-sidecar__workbench { display: flex; flex-direction: column; gap: 0; }
+.application-shell--final .shell-sidecar__pane { flex: 1 1 auto; padding: 8px 4px; font-size: 12px; }
+.application-shell--final .shell-sidecar__pane[data-compact-hidden="true"] { display: none; }
+.application-shell--final .shell-sidecar__pane--jarvis { border: 0; }
+.application-shell--final .shell-sidecar .ui-inline-notice,
+.application-shell--final .shell-sidecar :is(p, summary, dt, dd) { font-size: 11px; line-height: 1.45; }
+.application-shell--final .shell-panel__header h2 { font-size: 13px; }
+.application-shell--final .shell-panel__header h2:focus { outline: none; }
+.application-shell--final .shell-panel__header .ui-button { font-size: 11px; }
 .final-fusion__workbench { min-height: 420px; }
 .final-fusion__panel { overflow: auto; overscroll-behavior: contain; }
 .final-fusion__panel-head { flex: 0 0 auto; }
@@ -69,6 +79,17 @@
 [data-testid=coding-repository-surface] > section:first-child .final-fusion__disclosure-row { text-align: left; grid-template-columns: minmax(0, 1fr); }
 [data-testid=coding-repository-surface] > section:nth-child(2) { overflow: hidden; }
 [data-testid=coding-repository-surface] > section:nth-child(3) { padding: 10px; }
+[data-testid=coding-repository-surface] .final-fusion__source-list > div.final-fusion__disclosure-row button {
+  width: 100%; min-height: 28px; padding: 6px 9px; text-align: left;
+  border: 0; border-radius: 0; background: transparent; color: #344334; box-shadow: none;
+}
+[data-testid=coding-repository-surface] .final-fusion__source-list > div.final-fusion__disclosure-row button:hover {
+  background: var(--fusion-green-soft);
+}
+.coding-jarvis-chat { height: min(680px, calc(100vh - 190px)); min-height: 390px; padding: 4px 0 12px; }
+.coding-proposal-tools { border-top: 1px solid var(--fusion-line); padding: 10px 0; }
+.coding-proposal-tools > summary { cursor: pointer; font-weight: 500; }
+.coding-proposal-tools[open] > summary { margin-bottom: 10px; }
 .repository-file-viewport { flex: 1 1 auto; min-height: 240px; overflow: auto; overscroll-behavior: contain; border-block: 1px solid var(--fusion-line-soft); background: #fffefc; }
 .repository-file-viewport pre { display: block; margin: 0; padding: 20px; white-space: pre; font: 12px/1.65 "IBM Plex Mono", Consolas, monospace; overflow-wrap: normal; min-width: max-content; }
 .repository-empty { padding: 40px; text-align: center; color: var(--fusion-muted); }

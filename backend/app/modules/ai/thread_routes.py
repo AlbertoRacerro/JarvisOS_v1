@@ -113,8 +113,9 @@ def _hermes_agent_availability(request: Request | None) -> AIConversationRouteAv
                     route_status = probe(route, binding.model_id)
                 except Exception:
                     route_status = None
-                if route_status is None or not route_status.runtime_reachable or route_status.model_installed is False:
-                    reason, message = "HERMES_RUNTIME_UNCONFIGURED", "The configured local Jarvis inference runtime is unavailable."
+                if (route_status is None or not route_status.runtime_reachable or route_status.model_installed is False
+                        or route_status.reason_code not in {None, "LLAMACPP_LOADING"}):
+                    reason, message = "HERMES_RUNTIME_UNCONFIGURED", "The configured local Jarvis inference model is not ready."
                 else:
                     reason, message = None, "Hermes agent is ready; its worker starts on the first turn."
     supervisor = request.app.state._state.get("hermes_supervisor") if request is not None else None
@@ -126,7 +127,7 @@ def _hermes_agent_availability(request: Request | None) -> AIConversationRouteAv
         and any(isinstance(item, dict) and item.get("last_error") == "worker_lost"
                 for item in per_thread.values())
     )
-    if worker_lost:
+    if worker_lost and reason is None:
         reason, message = "HERMES_WORKER_LOST", "Hermes worker was lost; the next turn will recover the session."
     return AIConversationRouteAvailability(
         # A lost worker is recovered by the next turn, so it must stay submittable.

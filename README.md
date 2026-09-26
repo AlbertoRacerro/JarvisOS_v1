@@ -48,6 +48,10 @@ The current frontend brings the main project surfaces into one application: Desi
 
 Some surfaces are already backed by real domain authority; others are deliberately present as honest scaffolds while their backend capabilities are still being built. Missing functionality is meant to stay visibly unavailable rather than be faked in the UI.
 
+### Local desktop launch (maintainer machine)
+
+On the configured Windows 11 + WSL2 workstation, the **JarvisOS** desktop shortcut starts the same-origin application and its managed local model, waits for Jarvis and Hermes readiness, then opens the browser. The one-time installer is `python3 scripts/jarvisos_launcher.py install-shortcut` from the canonical WSL checkout. Machine paths and runtime settings live in the private `~/.config/jarvisos/operator.env`; `python3 scripts/jarvisos_launcher.py setup` creates it when needed. Startup logs are under `~/.local/state/jarvisos/`. The launcher fast-forwards clean local master only and leaves dirty, divergent, or offline checkouts untouched.
+
 BLUECAD already provides a real 3D engineering path with parametric geometry and inspection, while the Process workspace is intentionally earlier in its evolution.
 
 ---
@@ -94,7 +98,7 @@ Hermes / another qualified orchestrator
 engineering and software capabilities
 ```
 
-Hermes is **not integrated as a production runtime today**. The older Hermes designs are intentionally frozen. After the Coding/Development foundations and Jarvis coding actions are in place, I want to re-evaluate Hermes from the then-current architecture, together with MCP and any other strong orchestration approaches that are worth testing.
+Hermes is available as a local Jarvis agent responder through the Sidecar when its isolated runtime and a local inference model are configured. JarvisOS keeps project and execution authority; the agent's answer remains advisory until an owning product action accepts a proposal. Older Hermes designs remain historical context.
 
 If Hermes proves to be the right runtime, I would rather integrate it behind JarvisOS-owned boundaries than maintain a weaker home-made agent framework. The same rule applies to future model routers, agent runtimes and tool protocols: **evaluate strong upstream projects first; integrate what survives testing.**
 

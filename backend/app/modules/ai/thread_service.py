@@ -715,6 +715,7 @@ SELECT
     flow.terminal_reason,
     flow.attempt_count,
     flow.terminal_attempt_id,
+    flow.requested_route_class,
     terminal_job.execution_class,
     terminal_job.model_id,
     capture.proposal_ids_json
@@ -795,6 +796,7 @@ def _interaction_from_row(row: sqlite3.Row) -> AIThreadInteractionRead:
         terminal_reason=row["terminal_reason"],
         attempt_count=int(row["attempt_count"]),
         terminal_attempt_id=row["terminal_attempt_id"],
+        route_class=row["requested_route_class"],
         execution_class=row["execution_class"],
         model_id=row["model_id"],
         proposal_ids=proposal_ids[:_MAX_PROPOSAL_IDS],

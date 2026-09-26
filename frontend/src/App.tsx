@@ -179,10 +179,10 @@ function App() {
         content = <><FinalWorkspaceHeader group="development" active="brainstorm" navigate={navigate} /><DevelopmentBrainstorm jarvis={jarvisSidecar} workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} /></>;
         break;
       case "coding-repository":
-        content = <><FinalWorkspaceHeader group="coding" active="repository" navigate={navigate} /><CodingWorkbench mode="repository" workspaceId={workspaceId} /></>;
+        content = <><FinalWorkspaceHeader group="coding" active="repository" navigate={navigate} /><CodingWorkbench mode="repository" workspaceId={workspaceId} jarvis={jarvisSidecar} /></>;
         break;
       case "coding-runtime":
-        content = <><FinalWorkspaceHeader group="coding" active="runtime" navigate={navigate} /><CodingWorkbench mode="runtime" workspaceId={workspaceId} /></>;
+        content = <><FinalWorkspaceHeader group="coding" active="runtime" navigate={navigate} /><CodingWorkbench mode="runtime" workspaceId={workspaceId} jarvis={jarvisSidecar} /></>;
         break;
       case "settings-appearance":
         content = <FinalSettingsSurface section="appearance" navigate={navigate} />;
@@ -224,7 +224,7 @@ function App() {
   const propertiesContent = <EngineeringPropertiesPanel controller={engineeringProperties} stageContext={stageSidecar} navigate={navigate} />;
   const effectiveShellRegions: ShellRegionContributions = {
     ...shellRegions,
-    sidecar: route.primaryNav === "settings" || workspaceLoadState !== "ready" || !workspaceId ? undefined : jarvisSidecar,
+    sidecar: route.primaryNav === "settings" || route.primaryNav === "coding" || workspaceLoadState !== "ready" || !workspaceId ? undefined : jarvisSidecar,
     ...(route.id === "runs" || route.id === "engineering-data" || route.id === "design-process" ? { dock: <AnalyticsDockContent workspaceId={workspaceId} /> } : {})
   };
 
