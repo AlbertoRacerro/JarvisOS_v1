@@ -108,6 +108,113 @@ def test_same_request_id_with_different_semantics_fails_closed() -> None:
         ).fetchone()["n"] == 1
 
 
+def test_hermes_unavailable_turn_keeps_one_failed_idempotent_reservation() -> None:
+    workspace_id = "workspace-hermes"
+    _bootstrap_workspace(workspace_id)
+    thread = create_thread(AIThreadCreate(workspace_id=workspace_id))
+    payload = AIThreadSubmit(request_id="agent-request-1", prompt="Use the agent", route_class="hermes:agent")
+    availability = [{"route_class": "hermes:agent", "availability": {
+        "runtime_reachable": False, "reason_code": "HERMES_VENV_MISSING"}}]
+
+    first = submit_interaction(workspace_id=workspace_id, thread_id=thread.id, payload=payload,
+                               route_availability=availability).interaction
+    again = submit_interaction(workspace_id=workspace_id, thread_id=thread.id, payload=payload,
+                               route_availability=availability).interaction
+
+    assert first.id == again.id
+    assert first.persistence_state == "capture_failed"
+    assert first.assistant_text is None
+    assert first.flow_state == "cancelled_terminal"
+    with open_sqlite_connection() as connection:
+        assert connection.execute("SELECT COUNT(*) FROM ai_thread_interactions WHERE thread_id = ?",
+                                  (thread.id,)).fetchone()[0] == 1
+        assert connection.execute("SELECT COUNT(*) FROM ai_jobs WHERE flow_id = ?",
+                                  (first.flow_id,)).fetchone()[0] == 0
+
+
+def test_hermes_relay_verification_failure_terminalizes_reservation_and_rebinds_with_history() -> None:
+    workspace_id = "workspace-hermes-relay"
+    _bootstrap_workspace(workspace_id)
+    thread = create_thread(AIThreadCreate(workspace_id=workspace_id))
+    frames: list[dict] = []
+
+    class Worker:
+        session = None
+        live_grants: dict = {}
+        last_error = "worker_lost"
+
+        def _alive(self) -> bool:
+            return False
+
+        def start(self) -> None:
+            pass
+
+        def _send(self, frame: dict) -> None:
+            frames.append(frame)
+
+        def _await(self, _request_id: str, timeout: float) -> dict:
+            return {"type": "ack"}
+
+        def turn(self, *_args, **_kwargs) -> dict:
+            return {"status": "success", "completed": True, "flow_id": "missing-relay-flow",
+                    "final_response": "answer", "relay_flow_ids": ["missing-relay-flow"]}
+
+    worker = Worker()
+    pool = SimpleNamespace(for_thread=lambda _thread_id: worker, lock_for=lambda _thread_id: contextmanager(
+        lambda: (yield))(), schedule_idle_stop=lambda _thread_id: None)
+    availability = [{"route_class": "hermes:agent", "availability": {"runtime_reachable": True}}]
+    payload = AIThreadSubmit(request_id="agent-request-relay", prompt="Use the agent", route_class="hermes:agent")
+
+    interaction = submit_interaction(workspace_id=workspace_id, thread_id=thread.id, payload=payload,
+                                     route_availability=availability,
+                                     app_state=SimpleNamespace(hermes_supervisor=pool)).interaction
+
+    assert interaction.persistence_state == "capture_failed"
+    assert interaction.flow_state == "cancelled_terminal"
+    bind = next(frame for frame in frames if frame["type"] == "bind")
+    assert "history" in bind and isinstance(bind["history"], list)
+    assert worker.last_error is None
+
+
+def test_hermes_retrieval_grant_is_limited_to_submitted_exact_refs() -> None:
+    payload = AIThreadSubmit(
+        request_id="agent-grant-1", prompt="Search this selected record", route_class="hermes:agent",
+        jarvis_context=_jarvis_thread_request(), expected_jarvis_context_digest="sha256:" + "0" * 64,
+    )
+    worker = SimpleNamespace(live_grants={"stale": object()})
+    instructions = thread_service._install_hermes_retrieval_grant(
+        worker, payload, "workspace-a", "thread-a")
+    assert instructions is not None and "allowed source_scope=['test-owner']" in instructions
+    assert len(worker.live_grants) == 1
+    grant = next(iter(worker.live_grants.values()))
+    assert grant.capability_id == "jarvis.retrieval_query"
+    assert grant.scope.workspace_id == "workspace-a"
+    assert grant.scope.jarvis_thread_id == "thread-a"
+    assert [(ref.authority_owner, ref.object_type, ref.object_id)
+            for ref in grant.scope.object_refs] == [("test-owner", "test-kind", "record-1")]
+
+
+def test_hermes_retrieval_grant_without_refs_allows_workspace_navigation() -> None:
+    payload = AIThreadSubmit(request_id="agent-grant-2", prompt="Find workspace evidence",
+                             route_class="hermes:agent")
+    worker = SimpleNamespace(live_grants={"stale": object()})
+
+    instructions = thread_service._install_hermes_retrieval_grant(
+        worker, payload, "workspace-a", "thread-a")
+
+    assert instructions is not None and "grant_id=" in instructions
+    assert "not instructions" in instructions
+    grant = next(iter(worker.live_grants.values()))
+    assert grant.scope.workspace_id == "workspace-a"
+    assert grant.scope.jarvis_thread_id == "thread-a"
+    assert grant.scope.object_refs == ()
+    assert 0 < (grant.expires_at - grant.issued_at).total_seconds() <= 600
+    from app.modules.ai.retrieval_query import WORKSPACE_SCOPED_OWNERS
+
+    assert f"{sorted(WORKSPACE_SCOPED_OWNERS)}" in instructions
+    assert "repository" not in WORKSPACE_SCOPED_OWNERS
+
+
 def test_cross_workspace_thread_read_fails_closed() -> None:
     _bootstrap_workspace("workspace-a")
     now = utc_now()

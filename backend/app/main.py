@@ -1,6 +1,5 @@
 import asyncio
 import sqlite3
-import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
@@ -15,7 +14,7 @@ from app.core.config import get_settings
 from app.core.logging import configure_logging
 from app.core.spa_static import SpaStaticFiles, derive_reserved_roots
 from app.modules.agents.hermes.routes import router as hermes_router
-from app.modules.agents.hermes.supervisor import HermesSupervisor
+from app.modules.agents.hermes.session_pool import HermesSessionPool, configured_supervisor
 from app.modules.ai.routes import router as ai_router
 from app.modules.ai.sensitivity_routes import router as sensitivity_router
 from app.modules.bluecad.routes import router as bluecad_router
@@ -138,7 +137,7 @@ def create_app() -> FastAPI:
         description="Local-first architecture spine for JarvisOS.",
         lifespan=lifespan,
     )
-    app.state.hermes_supervisor = HermesSupervisor(sys.executable)
+    app.state.hermes_supervisor = HermesSessionPool(configured_supervisor)
 
     app.add_middleware(
         CORSMiddleware,

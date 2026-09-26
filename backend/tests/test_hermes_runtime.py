@@ -6,6 +6,8 @@ import os
 import socket
 import sqlite3
 import subprocess
+import threading
+import time
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -17,7 +19,9 @@ from fastapi.testclient import TestClient
 
 import app.modules.agents.hermes.supervisor as hermes_supervisor_module
 from app.modules.agents.hermes.broker_mcp import _reply
+from app.modules.agents.hermes.session_pool import HermesSessionPool
 from app.modules.agents.hermes.supervisor import (
+    RELAY_TOOL_PROTOCOL,
     HermesSupervisor,
     bind_session,
     current_mapping,
@@ -170,8 +174,30 @@ def test_text_tool_proposal_requires_the_registered_broker() -> None:
                               tools)["content"] is not None
     envelope = infer_envelope(_frame() | {"tools": tools})
     assert "mcp__jarvis__jarvis_context_preview" in envelope.prompt
+    assert envelope.prompt.endswith(RELAY_TOOL_PROTOCOL)
+    assert RELAY_TOOL_PROTOCOL not in infer_envelope(_frame()).prompt
     with pytest.raises(ValueError):
         infer_envelope(_frame() | {"tools": [{"function": {"name": "terminal"}}]})
+
+
+def test_turn_without_a_model_answer_is_reported_failed() -> None:
+    from app.modules.agents.hermes.worker_shim import Worker as ShimWorker
+
+    shim = ShimWorker.__new__(ShimWorker)  # no loopback relay server needed
+    shim.turn_lock, shim.session, shim.history = threading.Lock(), None, []
+    frames: list[dict[str, Any]] = []
+    shim.send = frames.append
+    shim.event = lambda *_args: None
+    shim.session_id = lambda: "hermes-session"
+    for exit_reason, final, status in (
+        ("empty_response_exhausted", "No reply: jarvis-relay didn't produce a reply", "failed"),
+        ("text_response(finish_reason=stop)", "The beacon is ORCHID-1.", "success"),
+    ):
+        result = {"final_response": final, "completed": True, "turn_exit_reason": exit_reason, "messages": []}
+        shim.agent = SimpleNamespace(run_conversation=lambda _result=result, **_kwargs: _result)
+        shim.run_turn("turn-1", "hello")
+        assert frames[-1]["status"] == status
+    assert "empty_response_exhausted" in frames[0]["error"]
 
 
 def test_governed_inference_maps_result_and_cancellation() -> None:
@@ -188,6 +214,31 @@ def test_governed_inference_maps_result_and_cancellation() -> None:
     assert run_governed_inference(envelope, runner=fake_runner,
                                   cancelled=lambda _id: True) == {"status": "cancelled"}
     assert len(calls) == 1
+
+
+def test_relay_defaults_to_explicit_llamacpp_and_accepts_only_explicit_local_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observed: list[str | None] = []
+
+    def governed(envelope: InferenceEnvelope, **_kwargs: Any) -> dict[str, str]:
+        observed.append(envelope.route_class)
+        return {"status": "refused"}
+
+    monkeypatch.setattr(hermes_supervisor_module, "run_governed_inference", governed)
+    supervisor = HermesSupervisor("unused")
+    supervisor.session = SESSION
+    monkeypatch.setattr(supervisor, "_send", lambda _frame: None)
+    supervisor._handle_relay(_frame())
+    assert observed == ["local:llamacpp"]
+
+    supervisor.route_for_task = lambda _task: "local:ollama"
+    supervisor._handle_relay(_frame())
+    assert observed == ["local:llamacpp", "local:ollama"]
+
+    supervisor.route_for_task = lambda _task: "openai:external"
+    supervisor._handle_relay(_frame())
+    assert observed == ["local:llamacpp", "local:ollama"]
 
 
 def test_session_mapping_control_event_order_and_recovery() -> None:
@@ -258,6 +309,79 @@ def test_network_isolation_never_silently_falls_back_without_bwrap(
         supervisor.start()
 
 
+def test_session_pool_keeps_bounded_per_thread_workers_and_idle_stop() -> None:
+    created = []
+
+    class Worker:
+        process = None
+        session = object()
+
+        def status(self) -> dict[str, Any]:
+            return {"state": "stopped"}
+
+    def factory() -> Worker:
+        worker = Worker()
+        created.append(worker)
+        return worker
+
+    pool = HermesSessionPool(factory, maximum=2, idle_seconds=60)
+    first = pool.for_thread("thread-a")
+    assert pool.for_thread("thread-a") is first
+    second = pool.for_thread("thread-b")
+    assert second is not first
+    pool.for_thread("thread-c")
+    assert len(created) == 3 and first.session is None
+    assert pool.status()["state"] == "stopped"
+
+
+def test_session_pool_idle_stop_yields_to_a_newer_claim() -> None:
+    class Worker:
+        process = None
+        session = object()
+
+        def status(self) -> dict[str, Any]:
+            return {"state": "running"}
+
+    pool = HermesSessionPool(Worker, maximum=2, idle_seconds=60)
+    worker = pool.for_thread("thread-a")
+    pool.schedule_idle_stop("thread-a")
+    assert pool.for_thread("thread-a") is worker  # a new turn claims the worker
+    pool._idle_stop("thread-a")  # the superseded timer fires late
+    assert pool.for_thread("thread-a") is worker and worker.session is not None
+
+    pool.idle_seconds = 0.01
+    pool.schedule_idle_stop("thread-a")
+    deadline = time.monotonic() + 5
+    while worker.session is not None and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert worker.session is None and pool.status()["state"] == "stopped"
+
+
+def test_tool_refusal_emits_bounded_correlated_event_without_secrets(monkeypatch: pytest.MonkeyPatch) -> None:
+    connection = _connection()
+    connection.commit()
+    monkeypatch.setattr("app.modules.agents.hermes.supervisor.open_sqlite_connection",
+                        lambda: _existing_connection(connection))
+    supervisor = HermesSupervisor("unused")
+    supervisor.session = SESSION
+    supervisor.active_interaction_id = "interaction-1"
+    monkeypatch.setattr(supervisor, "_send", lambda _frame: None)
+    supervisor._handle_tool({"id": "tool-call-1", "session_ref": SESSION.model_dump(mode="json"),
+                             "arguments": {"tool_name": "jarvis_retrieval_query", "grant_id": "missing",
+                                           "query": "pump", "source_scope": ["modeling"],
+                                           "api_token": "must-not-persist"}})
+    row = connection.execute("SELECT payload FROM events WHERE event_type = 'hermes.tool_result'").fetchone()
+    assert row is not None
+    payload = json.loads(row["payload"])
+    assert payload["call_id"] == "tool-call-1"
+    assert payload["interaction_id"] == "interaction-1"
+    assert payload["correlation_id"] == "interaction-1"
+    assert payload["generation"] == SESSION.generation
+    assert payload["status"] == "refused"
+    assert "api_token" not in payload["arguments"]
+    assert payload["result_digest"].startswith("sha256:")
+
+
 def test_native_windows_requires_the_configured_wsl_worker(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -305,7 +429,7 @@ def test_expected_worker_exit_is_not_reported_as_worker_loss(
     assert supervisor.last_error is None
 
 
-def test_successful_turn_is_captured_in_ai_thread_owner(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_successful_turn_returns_relay_flow_without_creating_a_second_interaction(monkeypatch: pytest.MonkeyPatch) -> None:
     connection = _connection()
     connection.commit()
     monkeypatch.setattr("app.modules.agents.hermes.supervisor.open_sqlite_connection",
@@ -327,13 +451,7 @@ def test_successful_turn_is_captured_in_ai_thread_owner(monkeypatch: pytest.Monk
 
     monkeypatch.setattr(supervisor, "_await", answer)
     assert supervisor.turn("question")["status"] == "success"
-    row = connection.execute("SELECT user_text, assistant_text, flow_id, persistence_state "
-                             "FROM ai_thread_interactions").fetchone()
-    assert tuple(row) == ("question", "Recorded answer", "flow-1", "captured")
-    last_activity = connection.execute(
-        "SELECT last_activity_at FROM ai_threads WHERE id = 'thread-1'"
-    ).fetchone()[0]
-    assert last_activity > "2000-01-01T00:00:00+00:00"
+    assert connection.execute("SELECT COUNT(*) FROM ai_thread_interactions").fetchone()[0] == 0
 
 
 @contextmanager
@@ -397,6 +515,87 @@ def test_retrieval_tool_pins_workspace_and_enforces_granted_source_scope(monkeyp
     assert dispatch_tool(over_limit, live_grants={"grant-1": grant}).status == "refused"
     over_budget = call.model_copy(update={"arguments": call.arguments | {"token_budget": 1025}})
     assert dispatch_tool(over_budget, live_grants={"grant-1": grant}).status == "refused"
+
+
+def test_workspace_retrieval_grant_navigates_allowed_owners_without_exact_refs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.modules.ai.retrieval_query import WORKSPACE_SCOPED_OWNERS
+
+    now = datetime.now(UTC)
+    call = StructuredToolCall(call_id="workspace-query", capability_id="jarvis.retrieval_query",
+                              grant_id="workspace-grant", correlation_id="workspace-query",
+                              session_ref=SESSION,
+                              arguments={"query": "pump", "source_scope": ["modeling"], "limit": 4,
+                                         "token_budget": 512}, requested_at=now,
+                              deadline_at=now + timedelta(minutes=1))
+    grant = CapabilityGrantRef(grant_id="workspace-grant", capability_id=call.capability_id,
+                               issuer="jarvis_policy",
+                               scope=CapabilityScope(workspace_id=SESSION.workspace_id,
+                                                     jarvis_thread_id=SESSION.jarvis_thread_id),
+                               issued_at=now, expires_at=now + timedelta(minutes=10))
+    observed: dict[str, Any] = {}
+
+    def query_context(query: str, **kwargs: Any) -> dict[str, Any]:
+        observed.update(query=query, **kwargs)
+        return {"evidence": [{"source_ref": {"authority_owner": "modeling", "object_type": "decision",
+                                               "object_id": "decision-1", "workspace_id": SESSION.workspace_id}}]}
+
+    from app.modules.ai import retrieval_query
+
+    monkeypatch.setattr(retrieval_query, "query_context", query_context)
+    assert "modeling" in WORKSPACE_SCOPED_OWNERS
+    result = dispatch_tool(call, live_grants={"workspace-grant": grant})
+
+    assert result.status == "succeeded"
+    assert observed == {"query": "pump", "workspace_id": SESSION.workspace_id,
+                        "source_scope": ("modeling",), "allowed_refs": None,
+                        "limit": 4, "token_budget": 512}
+    over_limit = call.model_copy(update={"arguments": call.arguments | {"limit": 9}})
+    assert dispatch_tool(over_limit, live_grants={"workspace-grant": grant}).status == "refused"
+    over_budget = call.model_copy(update={"arguments": call.arguments | {"token_budget": 1025}})
+    assert dispatch_tool(over_budget, live_grants={"workspace-grant": grant}).status == "refused"
+    denied_owner = call.model_copy(update={"arguments": {"query": "pump", "source_scope": ["repository"]}})
+    assert dispatch_tool(denied_owner, live_grants={"workspace-grant": grant}).error_code == "scope_denied"
+    denied_thread = grant.model_copy(update={
+        "scope": CapabilityScope(workspace_id=SESSION.workspace_id, jarvis_thread_id="different-thread")})
+    assert dispatch_tool(call, live_grants={"workspace-grant": denied_thread}).error_code == "scope_denied"
+    expired = grant.model_copy(update={"expires_at": datetime.now(UTC) - timedelta(seconds=1)})
+    assert dispatch_tool(call, live_grants={"workspace-grant": expired}).status == "refused"
+
+
+def test_workspace_retrieval_event_records_evidence_refs(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.modules.ai import retrieval_query
+
+    connection = _connection()
+    connection.commit()
+    monkeypatch.setattr("app.modules.agents.hermes.supervisor.open_sqlite_connection",
+                        lambda: _existing_connection(connection))
+    monkeypatch.setattr(retrieval_query, "query_context", lambda *_args, **_kwargs: {
+        "evidence": [{"source_ref": {"authority_owner": "modeling", "object_type": "decision",
+                                      "object_id": "decision-1", "workspace_id": SESSION.workspace_id}}]})
+    now = datetime.now(UTC)
+    grant = CapabilityGrantRef(grant_id="event-grant", capability_id="jarvis.retrieval_query",
+                               issuer="jarvis_policy",
+                               scope=CapabilityScope(workspace_id=SESSION.workspace_id,
+                                                     jarvis_thread_id=SESSION.jarvis_thread_id),
+                               issued_at=now, expires_at=now + timedelta(minutes=1))
+    supervisor = HermesSupervisor("unused")
+    supervisor.session = SESSION
+    supervisor.active_interaction_id = "interaction-evidence"
+    supervisor.live_grants[grant.grant_id] = grant
+    monkeypatch.setattr(supervisor, "_send", lambda _frame: None)
+
+    supervisor._handle_tool({"id": "evidence-call", "session_ref": SESSION.model_dump(mode="json"),
+                             "arguments": {"tool_name": "jarvis_retrieval_query", "grant_id": grant.grant_id,
+                                           "query": "pump", "source_scope": ["modeling"]}})
+
+    row = connection.execute("SELECT payload FROM events WHERE event_type = 'hermes.tool_result'").fetchone()
+    assert row is not None
+    payload = json.loads(row["payload"])
+    assert payload["status"] == "succeeded"
+    assert len(payload["evidence_refs"]) == 1
+    assert '"object_id":"decision-1"' in payload["evidence_refs"][0]
 
 
 @pytest.mark.skipif(not os.environ.get("JARVIS_HERMES_VENV"), reason="requires installed Hermes venv")

@@ -13,6 +13,12 @@ MAX_QUERY_CHARS = 2_000
 MAX_LIMIT = 32
 MAX_TOKEN_BUDGET = 8_192
 SCHEMA_VERSION = "retrieval-query.v1"
+# Canonical owners indexed with a workspace identity and reread from their owner.
+# Repository documents have no workspace identity and are intentionally excluded.
+WORKSPACE_SCOPED_OWNERS = frozenset({
+    "ai_threads", "bluecad", "brainstorm", "development", "engineering",
+    "literature", "modeling", "process_stack", "project_knowledge",
+})
 
 
 def query_context(

@@ -1,3 +1,5 @@
+from functools import lru_cache
+
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from app.modules.ai.thread_models import (
@@ -25,14 +27,14 @@ router = APIRouter(prefix="/threads", tags=["ai-threads"])
 
 
 @router.get("/conversation-options", response_model=AIConversationOptions)
-def read_conversation_options() -> AIConversationOptions:
+def read_conversation_options(request: Request) -> AIConversationOptions:
     """Project local route availability without dispatching or exposing configuration."""
     from app.modules.ai.provider_registry import registry_bindings
 
     try:
         bindings = registry_bindings()
     except (OSError, ValueError):
-        return AIConversationOptions(routes=[], availability="unavailable")
+        bindings = {}
     routes: list[AIConversationRoute] = []
     probes = {"local_ollama": _ollama_route_availability, "local_llamacpp": _llamacpp_route_availability}
     for route, label in (
@@ -68,7 +70,98 @@ def read_conversation_options() -> AIConversationOptions:
             route_class=route, label=label, model_id=binding.model_id,
             execution_class=binding.execution_class, availability=availability,
         ))
+    agent_availability = _hermes_agent_availability(request)
+    routes.append(AIConversationRoute(
+        route_class="hermes:agent", label="Jarvis agent (Hermes)", model_id="hermes:agent",
+        execution_class="agent", availability=agent_availability,
+    ))
     return AIConversationOptions(routes=routes, availability="configured" if routes else "unavailable")
+
+
+def _hermes_agent_availability(request: Request | None) -> AIConversationRouteAvailability:
+    import os
+    import shutil
+    from pathlib import Path
+
+    from app.modules.agents.hermes.supervisor import UPSTREAM_REVISION
+
+    venv = os.getenv("JARVIS_HERMES_VENV", "")
+    python = Path(venv) / ("Scripts/python.exe" if os.name == "nt" else "bin/python") if venv else None
+    if python is None or not python.is_file():
+        reason, message = "HERMES_VENV_MISSING", "Hermes agent runtime is not configured."
+    elif os.name == "nt" and not os.getenv("JARVIS_HERMES_WSL_DISTRO"):
+        reason, message = "HERMES_ISOLATION_UNAVAILABLE", "Hermes requires a configured isolated WSL runtime."
+    elif os.name != "nt" and not shutil.which("bwrap"):
+        reason, message = "HERMES_ISOLATION_UNAVAILABLE", "Hermes network isolation is unavailable."
+    elif not _hermes_revision_qualified(python, UPSTREAM_REVISION):
+        reason, message = "HERMES_REVISION_UNQUALIFIED", "The configured Hermes runtime does not match the pinned revision."
+    else:
+        route = os.getenv("JARVIS_HERMES_INFERENCE_ROUTE", "local:llamacpp")
+        if not route.startswith("local:"):
+            reason, message = "HERMES_RUNTIME_UNCONFIGURED", "Hermes requires an explicitly configured local Jarvis inference route."
+        else:
+            from app.modules.ai.execution import resolve_binding
+            try:
+                binding, _ = resolve_binding(route)
+            except Exception:
+                binding = None
+            if binding is None:
+                reason, message = "HERMES_RUNTIME_UNCONFIGURED", "The configured local Jarvis inference route is unavailable."
+            else:
+                probe = _llamacpp_route_availability if binding.provider_id == "local_llamacpp" else _ollama_route_availability
+                try:
+                    route_status = probe(route, binding.model_id)
+                except Exception:
+                    route_status = None
+                if route_status is None or not route_status.runtime_reachable or route_status.model_installed is False:
+                    reason, message = "HERMES_RUNTIME_UNCONFIGURED", "The configured local Jarvis inference runtime is unavailable."
+                else:
+                    reason, message = None, "Hermes agent is ready; its worker starts on the first turn."
+    supervisor = request.app.state._state.get("hermes_supervisor") if request is not None else None
+    status = supervisor.status() if supervisor is not None else {}
+    state = status.get("state")
+    per_thread = status.get("threads")
+    worker_lost = state == "lost" or (
+        isinstance(per_thread, dict)
+        and any(isinstance(item, dict) and item.get("last_error") == "worker_lost"
+                for item in per_thread.values())
+    )
+    if worker_lost:
+        reason, message = "HERMES_WORKER_LOST", "Hermes worker was lost; the next turn will recover the session."
+    return AIConversationRouteAvailability(
+        # A lost worker is recovered by the next turn, so it must stay submittable.
+        configured=bool(python and python.is_file()), runtime_reachable=reason in {None, "HERMES_WORKER_LOST"},
+        model_installed=bool(python and python.is_file()), model_loaded=state == "running",
+        qualified="unknown", reason_code=reason, message=message,
+    )
+
+
+def _hermes_revision_qualified(python: object, revision: str) -> bool:
+    # Probing spawns Python and git; cache per interpreter identity so conversation
+    # options (read on every Sidecar load and submit) stay cheap.
+    from pathlib import Path
+    try:
+        stat = Path(str(python)).stat()
+    except OSError:
+        return False
+    return _hermes_revision_probe(str(python), stat.st_mtime_ns, revision)
+
+
+@lru_cache(maxsize=4)
+def _hermes_revision_probe(python: str, mtime_ns: int, revision: str) -> bool:
+    del mtime_ns  # cache key only
+    import subprocess
+    try:
+        code = ("from importlib import metadata, util; import subprocess; from pathlib import Path; "
+                "s=util.find_spec('run_agent'); "
+                "print(metadata.version('hermes-agent') + ':' + subprocess.run(['git','-C',"
+                "str(Path(s.origin).parent),'rev-parse','HEAD'],capture_output=True,text=True,check=True)"
+                ".stdout.strip())")
+        result = subprocess.run([python, "-c", code],
+                                capture_output=True, text=True, timeout=3, check=False)
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return result.returncode == 0 and result.stdout.strip() == f"0.21.4:{revision}"
 
 
 def _ollama_route_availability(route: str, model_id: str) -> AIConversationRouteAvailability:
@@ -175,7 +268,7 @@ def submit_ai_thread_interaction(
             thread_id=thread_id,
             payload=payload,
             app_state=request.app.state,
-            route_availability=[route.model_dump() for route in read_conversation_options().routes],
+            route_availability=[route.model_dump() for route in read_conversation_options(request).routes],
         )
     except AIThreadNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

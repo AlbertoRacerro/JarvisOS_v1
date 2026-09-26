@@ -5,7 +5,7 @@ export type ConversationRoute = {
   route_class: string;
   label: string;
   model_id: string;
-  execution_class: "local_compute" | "synthetic";
+  execution_class: "local_compute" | "synthetic" | "agent";
   availability: {
     configured: boolean;
     runtime_reachable: boolean | null;

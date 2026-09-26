@@ -27,7 +27,7 @@ class AIConversationRoute(BaseModel):
     route_class: str
     label: str
     model_id: str
-    execution_class: Literal["local_compute", "synthetic"]
+    execution_class: Literal["local_compute", "synthetic", "agent"]
     availability: AIConversationRouteAvailability
 
 
