@@ -175,6 +175,10 @@ def test_lane_states_including_reparented_worker(world) -> None:
     (out / "done1.report.md").write_text("# report")
     (out / "done1.done").write_text("EXIT")
     (out / "empty1.done").write_text("EXIT")
+    (out / "suite0.a1.log").write_text("3 passed")
+    (out / "suite0.done").write_text("EXIT 0")
+    (out / "suite1.a1.log").write_text("1 failed")
+    (out / "suite1.done").write_text("EXIT 1")
     (out / "dead1.a1.log").write_text("partial")
     (out / "live1.a1.log").write_text("working")
     (out / "live2.a1.log").write_text("working")
@@ -190,6 +194,7 @@ def test_lane_states_including_reparented_worker(world) -> None:
     states = {lane["lane"]: lane for lane in devctx.lane_state(env, procs)}
     assert states["done1"]["state"] == "done"
     assert states["empty1"]["state"] == "failed-empty-report"
+    assert states["suite0"]["state"] == "done-log-only" and states["suite1"]["state"] == "failed-exit-1"
     assert states["dead1"]["state"] == "incomplete-no-process"
     assert states["live1"]["state"] == "running" and states["live1"]["worktree"] == "/wt/k1"
     assert states["live2"]["state"] == "running"

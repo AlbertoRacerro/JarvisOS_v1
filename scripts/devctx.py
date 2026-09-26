@@ -443,6 +443,8 @@ def lane_state(env: Env, procs: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 lane["report_bytes"] = path.stat().st_size
             elif name.endswith(".done"):
                 lane["done"] = True
+                codes = re.findall(r"EXIT (-?\d+)", path.read_text(encoding="utf-8", errors="replace"))
+                lane["exit_code"] = int(codes[-1]) if codes else None
     for lane in lanes.values():
         token = re.compile(rf"(?<![\w.-]){re.escape(lane['lane'])}\.report\.md")
         log = re.compile(rf"/{re.escape(lane['lane'])}\.a\d+\.log$")
@@ -454,7 +456,12 @@ def lane_state(env: Env, procs: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if live:
             lane["state"] = "running"
         elif lane["done"]:
-            lane["state"] = "done" if lane["report_bytes"] else "failed-empty-report"
+            if lane["report_bytes"]:
+                lane["state"] = "done"
+            elif lane.get("exit_code") == 0:
+                lane["state"] = "done-log-only"  # e.g. a test-suite lane whose evidence is its log
+            else:
+                lane["state"] = "failed-empty-report" if lane.get("exit_code") is None else f"failed-exit-{lane['exit_code']}"
         else:
             lane["state"] = "incomplete-no-process" if not lane["report_bytes"] else "report-without-done-marker"
         lane["last_write_at"] = iso(datetime.fromtimestamp(lane.pop("last_write"), timezone.utc))
