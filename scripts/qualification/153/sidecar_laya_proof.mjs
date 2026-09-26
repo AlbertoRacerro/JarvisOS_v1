@@ -125,6 +125,7 @@ const showHermesUnavailable = async () => {
 };
 const runtimeRequest = async (action) => api(`/local-ai/runtime/llama-cpp${action ? `/${action}` : ""}`, { method: action ? "POST" : "GET" });
 const hermesStatus = async () => api("/agents/hermes/status");
+const threadDetail = async () => api(`/ai/threads/${proof.thread_id}?workspace_id=${proof.workspace_id}`);
 
 const metricSnapshot = (interactionId) => {
   const query = `import json,sqlite3,sys
