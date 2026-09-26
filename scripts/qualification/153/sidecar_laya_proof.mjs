@@ -252,14 +252,16 @@ try {
     await page.getByLabel("Jarvis responder").selectOption("hermes:agent");
     await page.getByRole("button", { name: "New thread" }).click();
     const threadSelect = page.getByLabel("Conversation");
-    await page.waitForFunction(() => Boolean(document.querySelector('[aria-label="Jarvis responder"]') && document.querySelector('select[aria-label="Conversation"]')?.value));
+    // The Conversation select is labelled by its wrapping <label>, not an aria-label attribute.
+    const threadDeadline = Date.now() + 30_000;
+    while (!(await threadSelect.inputValue()) && Date.now() < threadDeadline) await delay(250);
     proof.thread_id = await threadSelect.inputValue();
     assert(proof.thread_id, "Sidecar did not create and select a canonical thread");
     const prompt = "A tool step failed with a retryable error on its first attempt. Consult Jarvis using the jarvis_decide tool with kind retry_or_stop, previous_outcome failed, attempt_count 0, and retryable true. Report Jarvis's recommendation and whether it abstained.";
     const first = await send(prompt, "retry-advice");
     assert(first.interaction.flow_state === "complete" && first.interaction.persistence_state === "captured", `canonical interaction did not complete and capture: ${JSON.stringify(first.interaction)}`);
     assert(first.evidence.ai_jobs.length > 0 && first.evidence.ai_jobs.every((job) => job.selected_route_class === "local:llamacpp" && job.model_id === llamaConfig.model_id), `relay ai_jobs did not prove local:llamacpp and model ${llamaConfig.model_id}: ${JSON.stringify(first.evidence.ai_jobs)}`);
-    assert(first.evidence.ai_jobs.every((job) => job.status === "succeeded"), `relay job did not succeed: ${JSON.stringify(first.evidence.ai_jobs)}`);
+    assert(first.evidence.ai_jobs.every((job) => job.status === "success"), `relay job did not succeed: ${JSON.stringify(first.evidence.ai_jobs)}`);
     assert(!first.evidence.ai_jobs.some((job) => job.model_id === "local:fake"), "a relay ai_job used local:fake");
     const decideEvents = first.evidence.events.map((item) => item.payload).filter((item) => item?.tool_name === "jarvis_decide");
     const decideEvent = decideEvents.find((item) => item.capability_id === "jarvis.decide" && item.status === "succeeded");
