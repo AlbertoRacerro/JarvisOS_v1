@@ -1,7 +1,7 @@
 {
   "schema": "jarvisos.153-laya-qualification.v1",
-  "source_sha": "22982a386f6e462fb7491660b896de5ad2510e6d",
-  "created_at": "2026-09-26T07:45:47.597040+00:00",
+  "source_sha": "fa1c5b1c539def27727239a99c709033cc79e63f",
+  "created_at": "2026-09-26T08:39:05.370634+00:00",
   "configured_backend": "RulesDecisionBackend",
   "backend_model_refs": [
     "jarvis.laya-rules.v1",
@@ -343,8 +343,8 @@
       "case_count": 6,
       "abstentions": 6,
       "latency_ms": {
-        "p50": 60.0,
-        "max": 161
+        "p50": 69.5,
+        "max": 179
       },
       "backend_model_refs": [
         "jarvis.laya-rules.v1",
@@ -364,7 +364,7 @@
             "confidence": null,
             "reason_code": "low_confidence",
             "model_ref": "jarvis.rule-local-ranker.v1",
-            "latency_ms": 161,
+            "latency_ms": 179,
             "request_digest": "sha256:dc00886261d5dc31b5a86683c41fd5eca4a154f7163705ef44b3b36b9f84b6e5"
           },
           "pass": false
@@ -379,7 +379,7 @@
             "confidence": null,
             "reason_code": "low_confidence",
             "model_ref": "jarvis.rule-local-ranker.v1",
-            "latency_ms": 120,
+            "latency_ms": 142,
             "request_digest": "sha256:3b93733ae9e74c489e20224696705525af2aeda8d2998fdcaa32197c32c96318"
           },
           "pass": false
@@ -409,7 +409,7 @@
             "confidence": null,
             "reason_code": "low_confidence",
             "model_ref": "jarvis.rule-local-ranker.v1",
-            "latency_ms": 121,
+            "latency_ms": 139,
             "request_digest": "sha256:832422fffb73897803396542725de25c739844741d3762cd7bba9d89f0a53cac"
           },
           "pass": true
