@@ -44,14 +44,20 @@ FIXTURES: dict[str, list[dict[str, Any]]] = {
         {"id": "out-of-catalogue", "kind": "escalation_level", "request": {"summary": "No route available.", "stronger_route_ids": [], "local_route_available": False}, "expected": "abstained"},
     ],
     "model_select": [
-        {"id": "select-among-admitted-local-candidates", "request": {"task_kind": "general", "candidate_ids": ["local:llamacpp", "local:ollama"], "context_tokens": 1024, "capability": ""}, "expected": "one_of_candidates"},
-        {"id": "select-coding-candidate", "request": {"task_kind": "coding", "candidate_ids": ["local:llamacpp", "local:ollama"], "context_tokens": 2048, "capability": "coding"}, "expected": "one_of_candidates"},
-        {"id": "abstain-no-currently-available-candidate", "request": {"task_kind": "general", "candidate_ids": ["local:not-configured"], "context_tokens": 1024, "capability": ""}, "expected": "abstained"},
-        {"id": "abstain-candidates-do-not-fit-context", "request": {"task_kind": "general", "candidate_ids": ["local:llamacpp", "local:ollama"], "context_tokens": 1_000_000, "capability": ""}, "expected": "abstained"},
+        {"id": "select-among-admitted-local-candidates", "request": {"task_kind": "general", "candidate_ids": ["local:llamacpp", "local:general"], "context_tokens": 1024, "capability": ""}, "expected": "one_of_candidates"},
+        {"id": "select-coding-candidate", "request": {"task_kind": "coding", "candidate_ids": ["local:llamacpp", "local:general"], "context_tokens": 2048, "capability": "coding"}, "expected": "one_of_candidates"},
+        {"id": "abstain-no-currently-available-candidate", "request": {"task_kind": "general", "candidate_ids": ["local:coder"], "context_tokens": 1024, "capability": ""}, "expected": "abstained"},
+        {"id": "abstain-candidates-do-not-fit-context", "request": {"task_kind": "general", "candidate_ids": ["local:llamacpp", "local:general"], "context_tokens": 1_000_000, "capability": ""}, "expected": "abstained"},
         {"id": "malformed", "request": {"task_kind": "general", "candidate_ids": [], "context_tokens": -1}, "expected": "abstained"},
         {"id": "out-of-catalogue", "kind": "model_rank", "request": {"task_kind": "general", "candidate_ids": ["local:llamacpp"], "context_tokens": 1024, "capability": ""}, "expected": "abstained"},
     ],
 }
+
+
+# model_select ranks only candidates that are live at call time. The fixtures
+# declare that availability so they measure the backend, not whichever local
+# runtimes happen to be running on the qualification host.
+DECLARED_AVAILABLE_ROUTES = frozenset({"local:llamacpp", "local:general"})
 
 
 def _passed(expected: str, actual: dict[str, Any], request: dict[str, Any]) -> bool:
@@ -72,13 +78,15 @@ def _revision(model_ref: object) -> str:
 
 def main() -> None:
     gateway = DecisionGateway.from_config()
+    model_select_gateway = DecisionGateway(gateway.backend, available_routes=lambda: set(DECLARED_AVAILABLE_ROUTES))
     cases_by_kind: dict[str, dict[str, Any]] = {}
     backend_refs: set[str] = set()
     for kind, fixtures in FIXTURES.items():
         cases = []
         for fixture in fixtures:
             request = fixture["request"]
-            actual = gateway.decide(fixture.get("kind", kind), request)
+            actual = (model_select_gateway if kind == "model_select" else gateway).decide(
+                fixture.get("kind", kind), request)
             expected = fixture["expected"]
             backend_refs.add(str(actual.get("model_ref", "unknown")))
             cases.append({
@@ -114,6 +122,7 @@ def main() -> None:
         "created_at": datetime.now(UTC).isoformat(),
         "configured_backend": type(gateway.backend).__name__,
         "backend_model_refs": sorted(backend_refs),
+        "declared_available_routes_for_model_select": sorted(DECLARED_AVAILABLE_ROUTES),
         "fixture_source": "fixed contract-level fixtures in laya_qualification.py; no outputs are adapted to observed backend behavior",
         "kinds": cases_by_kind,
     }

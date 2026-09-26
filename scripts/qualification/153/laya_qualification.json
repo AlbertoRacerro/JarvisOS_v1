@@ -1,18 +1,23 @@
 {
   "schema": "jarvisos.153-laya-qualification.v1",
-  "source_sha": "595c15ce3c113e66f147fadfe439ed5c2eb252e7",
-  "created_at": "2026-09-26T07:41:44.699913+00:00",
+  "source_sha": "22982a386f6e462fb7491660b896de5ad2510e6d",
+  "created_at": "2026-09-26T07:45:47.597040+00:00",
   "configured_backend": "RulesDecisionBackend",
   "backend_model_refs": [
-    "jarvis.laya-rules.v1"
+    "jarvis.laya-rules.v1",
+    "jarvis.rule-local-ranker.v1"
+  ],
+  "declared_available_routes_for_model_select": [
+    "local:general",
+    "local:llamacpp"
   ],
   "fixture_source": "fixed contract-level fixtures in laya_qualification.py; no outputs are adapted to observed backend behavior",
   "kinds": {
     "route_class": {
-      "status": "unqualified",
-      "pass_count": 5,
+      "status": "qualified",
+      "pass_count": 6,
       "case_count": 6,
-      "abstentions": 2,
+      "abstentions": 3,
       "latency_ms": {
         "p50": 0.0,
         "max": 0
@@ -74,15 +79,15 @@
           "expected": "abstained",
           "actual": {
             "kind": "route_class",
-            "outcome": "decided",
-            "recommendation": "answer_directly",
-            "confidence": 1.0,
-            "reason_code": null,
+            "outcome": "abstained",
+            "recommendation": null,
+            "confidence": null,
+            "reason_code": "low_confidence",
             "model_ref": "jarvis.laya-rules.v1",
             "latency_ms": 0,
             "request_digest": "sha256:b0bdd39d64d83804f7b12b9aedf32f08a0bffe45a54ed117ee4100d32c664cb6"
           },
-          "pass": false
+          "pass": true
         },
         {
           "id": "malformed",
@@ -338,11 +343,12 @@
       "case_count": 6,
       "abstentions": 6,
       "latency_ms": {
-        "p50": 0.0,
-        "max": 431
+        "p50": 60.0,
+        "max": 161
       },
       "backend_model_refs": [
-        "jarvis.laya-rules.v1"
+        "jarvis.laya-rules.v1",
+        "jarvis.rule-local-ranker.v1"
       ],
       "backend_revisions": [
         "v1"
@@ -356,10 +362,10 @@
             "outcome": "abstained",
             "recommendation": null,
             "confidence": null,
-            "reason_code": "invalid_or_backend_error",
-            "model_ref": "jarvis.laya-rules.v1",
-            "latency_ms": 431,
-            "request_digest": "sha256:f9f2591bb9442c537d5aaec47a6ccbb15fa7d046ad5f359158c8ed4ae7e9dfe8"
+            "reason_code": "low_confidence",
+            "model_ref": "jarvis.rule-local-ranker.v1",
+            "latency_ms": 161,
+            "request_digest": "sha256:dc00886261d5dc31b5a86683c41fd5eca4a154f7163705ef44b3b36b9f84b6e5"
           },
           "pass": false
         },
@@ -371,10 +377,10 @@
             "outcome": "abstained",
             "recommendation": null,
             "confidence": null,
-            "reason_code": "invalid_or_backend_error",
-            "model_ref": "jarvis.laya-rules.v1",
-            "latency_ms": 0,
-            "request_digest": "sha256:a8aca90a5f6abddf2da8ced9790d29be001cb6b616d058fcaf99b6f45692f09f"
+            "reason_code": "low_confidence",
+            "model_ref": "jarvis.rule-local-ranker.v1",
+            "latency_ms": 120,
+            "request_digest": "sha256:3b93733ae9e74c489e20224696705525af2aeda8d2998fdcaa32197c32c96318"
           },
           "pass": false
         },
@@ -389,7 +395,7 @@
             "reason_code": "invalid_or_backend_error",
             "model_ref": "jarvis.laya-rules.v1",
             "latency_ms": 0,
-            "request_digest": "sha256:d80ec17e597e3fa22d949f562fe9f37c0019aa29728be65a8d11025cfd040758"
+            "request_digest": "sha256:498aa81e6c311c49da89b79f0ab9b7c913f9f7682c36488d9bb64cfba2c018fe"
           },
           "pass": true
         },
@@ -401,10 +407,10 @@
             "outcome": "abstained",
             "recommendation": null,
             "confidence": null,
-            "reason_code": "invalid_or_backend_error",
-            "model_ref": "jarvis.laya-rules.v1",
-            "latency_ms": 0,
-            "request_digest": "sha256:1eabb1f8ce9fb9855be8a4c39e6e39a422b9c61912a5bfa6608679e9958133b9"
+            "reason_code": "low_confidence",
+            "model_ref": "jarvis.rule-local-ranker.v1",
+            "latency_ms": 121,
+            "request_digest": "sha256:832422fffb73897803396542725de25c739844741d3762cd7bba9d89f0a53cac"
           },
           "pass": true
         },

@@ -143,3 +143,10 @@ def test_model_select_intersects_safe_bindings_with_fresh_available_routes(
     available_reads.append({"local:coder"})
     result = gateway.decide("model_select", payload)
     assert result["outcome"] == "decided" and result["recommendation"] == "local:coder"
+
+
+def test_rules_route_class_abstains_on_contentless_summary() -> None:
+    result = DecisionGateway(available_routes=lambda: set()).decide("route_class", {
+        "summary": "?", "read_tool_ids": [], "required_capability_available": True})
+    assert result["outcome"] == "abstained"
+    assert result["reason_code"] == "low_confidence"

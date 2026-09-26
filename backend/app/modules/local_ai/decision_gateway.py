@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from time import perf_counter
@@ -80,6 +81,7 @@ _ENUMS: dict[str, tuple[str, ...]] = {
     "escalate": ("stay_local", "ask_human", "suggest_stronger_route"),
 }
 _CONFIDENCE_THRESHOLD = 0.5
+_WORD_RE = re.compile(r"\w+")
 _REQUEST_DEADLINE = timedelta(seconds=10)
 
 
@@ -120,10 +122,13 @@ class RulesDecisionBackend:
                 "suggest_stronger_route" if payload.stronger_route_ids
                 else "stay_local" if payload.local_route_available else "ask_human"
             )
+        # A route_class summary with no words carries no evidence for any route, so
+        # the rule reports zero confidence and the gateway abstains.
+        confidence = 0.0 if isinstance(payload, RouteClassRequest) and len(_WORD_RE.findall(payload.summary)) < 2 else 1.0
         return DecisionResult(
             decision_id=request.decision_id, outcome="decided",
             outputs=(EnumDecisionOutput(name="recommendation", value=recommendation),
-                     ScoreDecisionOutput(name="confidence", value=1.0)),
+                     ScoreDecisionOutput(name="confidence", value=confidence)),
             model_ref=self.model_ref, reason_code="rules_advice", decided_at=now,
         )
 
