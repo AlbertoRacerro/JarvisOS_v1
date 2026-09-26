@@ -113,7 +113,8 @@ def _hermes_agent_availability(request: Request | None) -> AIConversationRouteAv
                     route_status = probe(route, binding.model_id)
                 except Exception:
                     route_status = None
-                if route_status is None or not route_status.runtime_reachable or route_status.model_installed is False or route_status.model_loaded is not True:
+                if (route_status is None or not route_status.runtime_reachable or route_status.model_installed is False
+                        or route_status.reason_code not in {None, "LLAMACPP_LOADING"}):
                     reason, message = "HERMES_RUNTIME_UNCONFIGURED", "The configured local Jarvis inference model is not ready."
                 else:
                     reason, message = None, "Hermes agent is ready; its worker starts on the first turn."
