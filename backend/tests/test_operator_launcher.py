@@ -56,6 +56,7 @@ def test_launcher_rejects_noncanonical_worktree(monkeypatch, tmp_path):
 
 def test_wsl_distro_without_inherited_environment(monkeypatch):
     monkeypatch.delenv("WSL_DISTRO_NAME", raising=False)
+    monkeypatch.setattr(launcher, "windows_tool", lambda name: name)
     monkeypatch.setattr(launcher.subprocess, "run", lambda *args, **kwargs: SimpleNamespace(
         stdout="Ubuntu-24.04\r\n".encode("utf-16-le")))
     assert launcher.wsl_distro({}) == "Ubuntu-24.04"
