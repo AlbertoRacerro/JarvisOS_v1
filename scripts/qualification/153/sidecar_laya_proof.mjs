@@ -245,6 +245,13 @@ try {
     proof.proof_status = "incomplete";
     proof.proof_failures.push("intentional --until=unavailable dry run; runtime turns were not executed");
   } else {
+    const loadStarted = Date.now();
+    const started = await runtimeRequest("start");
+    llamaStarted = true;
+    proof.runtime_status.push({ phase: "start", status: started });
+    const loaded = await waitForLlamaLoaded();
+    proof.runtime_status.push({ phase: "loaded", status: loaded });
+    proof.cold_load_ms = Date.now() - loadStarted;
     await page.reload({ waitUntil: "networkidle" });
     await openSidecar();
     const optionsReady = await optionRecords();
