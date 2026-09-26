@@ -670,6 +670,42 @@ def test_malformed_decision_call_is_refused_as_decide(monkeypatch: pytest.Monkey
     assert payload["error_code"] == "invalid_arguments"
 
 
+def test_decide_call_without_grant_never_persists_request_text(monkeypatch: pytest.MonkeyPatch) -> None:
+    connection = _connection()
+    connection.commit()
+    monkeypatch.setattr("app.modules.agents.hermes.supervisor.open_sqlite_connection",
+                        lambda: _existing_connection(connection))
+    supervisor = HermesSupervisor("unused")
+    supervisor.session = SESSION
+    sent: list[dict[str, Any]] = []
+    monkeypatch.setattr(supervisor, "_send", sent.append)
+    supervisor._handle_tool({"id": "decision-call", "session_ref": SESSION.model_dump(mode="json"),
+                             "arguments": {"tool_name": "jarvis_decide", "kind": "route_class",
+                                           "request": {"summary": "private-request-text"}}})
+    row = connection.execute("SELECT payload FROM events WHERE event_type = 'hermes.tool_result'").fetchone()
+    assert "private-request-text" not in row["payload"]
+    payload = json.loads(row["payload"])
+    assert payload["capability_id"] == "jarvis.decide"
+    assert payload["status"] == "refused"
+    assert sent and sent[0]["tool_result"]["status"] == "refused"
+
+
+def test_non_object_tool_arguments_are_refused_with_a_response(monkeypatch: pytest.MonkeyPatch) -> None:
+    connection = _connection()
+    connection.commit()
+    monkeypatch.setattr("app.modules.agents.hermes.supervisor.open_sqlite_connection",
+                        lambda: _existing_connection(connection))
+    supervisor = HermesSupervisor("unused")
+    supervisor.session = SESSION
+    sent: list[dict[str, Any]] = []
+    monkeypatch.setattr(supervisor, "_send", sent.append)
+    supervisor._handle_tool({"id": "list-call", "session_ref": SESSION.model_dump(mode="json"),
+                             "arguments": ["jarvis_decide", "private-request-text"]})
+    assert sent and sent[0]["tool_result"]["status"] == "refused"
+    row = connection.execute("SELECT payload FROM events WHERE event_type = 'hermes.tool_result'").fetchone()
+    assert "private-request-text" not in row["payload"]
+
+
 def test_decision_grant_requires_exact_thread_scope_and_active_grant() -> None:
     now = datetime.now(UTC)
     call = StructuredToolCall(call_id="decide-call", capability_id="jarvis.decide", grant_id="decide-grant",

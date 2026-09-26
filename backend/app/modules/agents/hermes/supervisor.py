@@ -506,17 +506,19 @@ class HermesSupervisor:
         ref: AgentSessionRef | None = None
         arguments: dict[str, Any] = {}
         tool_name = "unknown"
+        capability_id = "jarvis.context_preview"
         call_id = str(frame.get("id", "unknown"))
         try:
             ref = AgentSessionRef.model_validate(frame["session_ref"])
-            arguments = frame["arguments"]
-            if ref != self.session or not isinstance(arguments, dict):
+            raw_arguments = frame["arguments"]
+            if ref != self.session or not isinstance(raw_arguments, dict):
                 raise ValueError("stale or malformed tool call")
+            arguments = raw_arguments
             tool_name = arguments.pop("tool_name", "")
-            grant_id = arguments.pop("grant_id")
             capability_id = ("jarvis.retrieval_query" if tool_name == "jarvis_retrieval_query"
                              else "jarvis.decide" if tool_name == "jarvis_decide"
                              else "jarvis.context_preview")
+            grant_id = arguments.pop("grant_id")
             call = StructuredToolCall(
                 call_id=str(frame["id"]), capability_id=capability_id,
                 grant_id=grant_id, correlation_id=str(frame["id"]),
@@ -527,7 +529,7 @@ class HermesSupervisor:
             result = dispatch_tool(call, live_grants=self.live_grants)
         except (ValueError, KeyError, sqlite3.Error):
             result = StructuredToolResult(
-                call_id=call_id, capability_id="jarvis.context_preview",
+                call_id=call_id, capability_id=capability_id,
                 status="refused", error_code="capability_denied", completed_at=now,
             )
         try:

@@ -234,7 +234,8 @@ class DecisionGateway:
 
 def _constraints(payload: RequestByKind) -> dict[str, str | int | float | bool]:
     if isinstance(payload, ModelSelectRequest):
-        return {"context_tokens": payload.context_tokens, "capability": payload.capability}
+        return {"task_kind": payload.task_kind, "context_tokens": payload.context_tokens,
+                "capability": payload.capability}
     return {"request_kind": type(payload).__name__}
 
 
