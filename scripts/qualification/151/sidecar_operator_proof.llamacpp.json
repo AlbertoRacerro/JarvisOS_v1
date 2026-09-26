@@ -1,7 +1,7 @@
 {
   "schema": "jarvisos.151-sidecar-operator-proof.v1",
-  "source_sha": "b9bb99da3a2ab8129076bbad53118c071fafa8e8",
-  "workspace_id": "878ab459-8f3d-43f4-a287-424c306da4ac",
+  "source_sha": "2739bd087099a127af2076ff5e2f45c54293ca0b",
+  "workspace_id": "e4d2c915-f097-4ae8-a6c4-897e35ea0523",
   "runtime_endpoint_kind": "Jarvis-owned llama.cpp runtime",
   "runtime_endpoint": "Jarvis-owned loopback llama.cpp runtime on port 18081",
   "route_class": "local:llamacpp",
@@ -28,7 +28,7 @@
     "max_direct_continuations_min": 0,
     "max_direct_continuations_max": 16,
     "direct_continuation_policy_version": "token-flow-v0",
-    "updated_at": "2026-09-25T21:11:55.027125+00:00"
+    "updated_at": "2026-09-26T06:17:43.871387+00:00"
   },
   "model_id": "qwen3.8-27b-iq2m",
   "runtime_configuration": {
@@ -60,7 +60,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -85,7 +85,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -146,7 +146,7 @@
   },
   "runtime_status_snapshots": [
     {
-      "at": "2026-09-25T21:11:55.094Z",
+      "at": "2026-09-26T06:17:43.928Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -172,7 +172,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:11:56.313Z",
+      "at": "2026-09-26T06:17:45.121Z",
       "action": "start",
       "status": {
         "backend": "llama.cpp",
@@ -186,7 +186,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -198,7 +198,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:11:56.367Z",
+      "at": "2026-09-26T06:17:45.170Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -212,7 +212,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -224,7 +224,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:11:58.394Z",
+      "at": "2026-09-26T06:17:47.182Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -238,7 +238,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -250,7 +250,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:12:00.409Z",
+      "at": "2026-09-26T06:17:49.195Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -264,7 +264,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -276,7 +276,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:12:02.425Z",
+      "at": "2026-09-26T06:17:51.204Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -290,7 +290,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -302,7 +302,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:12:04.436Z",
+      "at": "2026-09-26T06:17:53.214Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -316,7 +316,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -328,7 +328,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:12:06.450Z",
+      "at": "2026-09-26T06:17:55.226Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -342,7 +342,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -354,7 +354,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:12:08.464Z",
+      "at": "2026-09-26T06:17:57.239Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -368,7 +368,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -380,7 +380,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:12:10.488Z",
+      "at": "2026-09-26T06:17:59.252Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -394,7 +394,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -406,7 +406,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:12:12.500Z",
+      "at": "2026-09-26T06:18:01.261Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -420,7 +420,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -432,7 +432,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:12:15.176Z",
+      "at": "2026-09-26T06:18:03.276Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -446,7 +446,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -458,7 +458,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:12:17.186Z",
+      "at": "2026-09-26T06:18:05.287Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -472,7 +472,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -484,7 +484,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:12:19.204Z",
+      "at": "2026-09-26T06:18:07.299Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -498,7 +498,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -510,7 +510,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:12:21.218Z",
+      "at": "2026-09-26T06:18:09.310Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -524,7 +524,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -536,7 +536,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:12:23.233Z",
+      "at": "2026-09-26T06:18:11.327Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -550,7 +550,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -562,7 +562,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:12:25.249Z",
+      "at": "2026-09-26T06:18:13.342Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -576,7 +576,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -588,7 +588,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:12:27.270Z",
+      "at": "2026-09-26T06:18:15.353Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -602,7 +602,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -614,7 +614,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:12:29.290Z",
+      "at": "2026-09-26T06:18:17.364Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -628,7 +628,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -640,7 +640,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:12:31.308Z",
+      "at": "2026-09-26T06:18:19.379Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -654,7 +654,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -666,7 +666,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:12:33.320Z",
+      "at": "2026-09-26T06:18:21.391Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -680,7 +680,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -692,7 +692,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:12:35.353Z",
+      "at": "2026-09-26T06:18:23.400Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -706,7 +706,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -718,7 +718,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:12:37.363Z",
+      "at": "2026-09-26T06:18:25.409Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -732,7 +732,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -744,7 +744,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:12:39.373Z",
+      "at": "2026-09-26T06:18:27.420Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -758,7 +758,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -770,7 +770,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:12:41.386Z",
+      "at": "2026-09-26T06:18:29.432Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -784,7 +784,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -796,7 +796,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:12:43.399Z",
+      "at": "2026-09-26T06:18:31.447Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -810,7 +810,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -822,7 +822,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:12:45.416Z",
+      "at": "2026-09-26T06:18:33.458Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -836,7 +836,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -848,7 +848,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:12:48.097Z",
+      "at": "2026-09-26T06:18:35.471Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -862,7 +862,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -874,7 +874,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:12:50.109Z",
+      "at": "2026-09-26T06:18:37.481Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -888,7 +888,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -900,7 +900,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:12:52.121Z",
+      "at": "2026-09-26T06:18:39.493Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -914,7 +914,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -926,7 +926,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:12:54.132Z",
+      "at": "2026-09-26T06:18:41.504Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -940,7 +940,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -952,7 +952,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:12:56.144Z",
+      "at": "2026-09-26T06:18:43.520Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -966,7 +966,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -978,7 +978,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:12:58.154Z",
+      "at": "2026-09-26T06:18:45.530Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -992,7 +992,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -1004,7 +1004,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:13:00.174Z",
+      "at": "2026-09-26T06:18:47.543Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -1018,7 +1018,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -1030,7 +1030,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:13:02.189Z",
+      "at": "2026-09-26T06:18:49.553Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -1044,7 +1044,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -1056,7 +1056,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:13:04.200Z",
+      "at": "2026-09-26T06:18:51.571Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -1070,7 +1070,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -1082,7 +1082,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:13:06.215Z",
+      "at": "2026-09-26T06:18:53.587Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -1096,7 +1096,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -1108,7 +1108,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:13:08.225Z",
+      "at": "2026-09-26T06:18:55.597Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -1122,7 +1122,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -1134,7 +1134,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:13:10.235Z",
+      "at": "2026-09-26T06:18:57.607Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -1148,7 +1148,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -1160,7 +1160,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:13:12.245Z",
+      "at": "2026-09-26T06:18:59.616Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -1174,7 +1174,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -1186,7 +1186,215 @@
       }
     },
     {
-      "at": "2026-09-25T21:13:14.260Z",
+      "at": "2026-09-26T06:19:01.626Z",
+      "action": "status",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 687400,
+        "ctx_size": 8192,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T06:19:03.639Z",
+      "action": "status",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 687400,
+        "ctx_size": 8192,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T06:19:05.651Z",
+      "action": "status",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 687400,
+        "ctx_size": 8192,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T06:19:07.660Z",
+      "action": "status",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 687400,
+        "ctx_size": 8192,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T06:19:09.671Z",
+      "action": "status",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 687400,
+        "ctx_size": 8192,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T06:19:11.681Z",
+      "action": "status",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 687400,
+        "ctx_size": 8192,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T06:19:13.695Z",
+      "action": "status",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 687400,
+        "ctx_size": 8192,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T06:19:15.704Z",
+      "action": "status",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 687400,
+        "ctx_size": 8192,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T06:19:17.719Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -1200,7 +1408,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -1212,7 +1420,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:15:54.510Z",
+      "at": "2026-09-26T06:27:28.066Z",
       "action": "restart",
       "status": {
         "backend": "llama.cpp",
@@ -1226,7 +1434,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -1238,7 +1446,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:15:54.536Z",
+      "at": "2026-09-26T06:27:28.113Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -1252,7 +1460,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -1264,7 +1472,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:15:56.652Z",
+      "at": "2026-09-26T06:27:30.126Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -1278,7 +1486,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -1290,7 +1498,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:15:58.664Z",
+      "at": "2026-09-26T06:27:32.141Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -1304,7 +1512,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -1316,7 +1524,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:16:00.676Z",
+      "at": "2026-09-26T06:27:34.154Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -1330,7 +1538,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -1342,7 +1550,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:16:02.689Z",
+      "at": "2026-09-26T06:27:36.165Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -1356,7 +1564,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -1368,7 +1576,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:16:05.337Z",
+      "at": "2026-09-26T06:27:38.178Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -1382,7 +1590,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -1394,7 +1602,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:16:07.353Z",
+      "at": "2026-09-26T06:27:40.190Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -1408,7 +1616,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -1420,7 +1628,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:16:09.367Z",
+      "at": "2026-09-26T06:27:42.387Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -1434,7 +1642,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -1446,7 +1654,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:16:11.382Z",
+      "at": "2026-09-26T06:27:44.399Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -1460,7 +1668,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -1472,7 +1680,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:16:13.396Z",
+      "at": "2026-09-26T06:27:46.412Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -1486,7 +1694,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -1498,7 +1706,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:16:15.408Z",
+      "at": "2026-09-26T06:27:48.424Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -1512,7 +1720,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -1524,7 +1732,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:16:17.422Z",
+      "at": "2026-09-26T06:27:50.438Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -1538,7 +1746,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -1550,7 +1758,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:16:19.438Z",
+      "at": "2026-09-26T06:27:52.449Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -1564,7 +1772,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -1576,7 +1784,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:16:21.451Z",
+      "at": "2026-09-26T06:27:54.465Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -1590,7 +1798,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -1602,7 +1810,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:16:23.462Z",
+      "at": "2026-09-26T06:27:56.483Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -1616,7 +1824,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -1628,7 +1836,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:16:25.488Z",
+      "at": "2026-09-26T06:27:58.497Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -1642,7 +1850,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -1654,7 +1862,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:16:27.501Z",
+      "at": "2026-09-26T06:28:00.507Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -1668,7 +1876,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -1680,7 +1888,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:16:29.526Z",
+      "at": "2026-09-26T06:28:02.521Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -1694,7 +1902,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -1706,7 +1914,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:16:31.536Z",
+      "at": "2026-09-26T06:28:04.543Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -1720,7 +1928,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -1732,7 +1940,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:16:33.548Z",
+      "at": "2026-09-26T06:28:06.554Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -1746,7 +1954,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -1758,7 +1966,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:16:35.559Z",
+      "at": "2026-09-26T06:28:08.562Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -1772,7 +1980,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -1784,7 +1992,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:16:38.200Z",
+      "at": "2026-09-26T06:28:10.575Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -1798,7 +2006,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -1810,7 +2018,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:16:40.213Z",
+      "at": "2026-09-26T06:28:12.584Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -1824,7 +2032,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -1836,7 +2044,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:16:42.224Z",
+      "at": "2026-09-26T06:28:14.596Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -1850,7 +2058,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -1862,7 +2070,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:16:44.235Z",
+      "at": "2026-09-26T06:28:16.606Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -1876,7 +2084,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -1888,7 +2096,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:16:46.272Z",
+      "at": "2026-09-26T06:28:18.619Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -1902,7 +2110,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -1914,7 +2122,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:16:48.280Z",
+      "at": "2026-09-26T06:28:20.636Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -1928,7 +2136,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -1940,7 +2148,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:16:50.331Z",
+      "at": "2026-09-26T06:28:22.648Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -1954,7 +2162,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -1966,7 +2174,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:16:52.341Z",
+      "at": "2026-09-26T06:28:24.657Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -1980,7 +2188,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -1992,7 +2200,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:16:54.351Z",
+      "at": "2026-09-26T06:28:26.672Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -2006,7 +2214,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -2018,7 +2226,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:16:56.362Z",
+      "at": "2026-09-26T06:28:28.685Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -2032,7 +2240,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -2044,7 +2252,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:16:58.373Z",
+      "at": "2026-09-26T06:28:30.698Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -2058,7 +2266,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -2070,7 +2278,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:17:00.386Z",
+      "at": "2026-09-26T06:28:32.712Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -2084,7 +2292,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -2096,7 +2304,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:17:02.401Z",
+      "at": "2026-09-26T06:28:34.756Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -2110,7 +2318,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -2122,7 +2330,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:17:04.409Z",
+      "at": "2026-09-26T06:28:36.764Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -2136,7 +2344,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -2148,7 +2356,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:17:06.423Z",
+      "at": "2026-09-26T06:28:38.774Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -2162,7 +2370,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -2174,7 +2382,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:17:08.436Z",
+      "at": "2026-09-26T06:28:40.783Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -2188,7 +2396,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -2200,7 +2408,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:17:11.087Z",
+      "at": "2026-09-26T06:28:42.797Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -2214,7 +2422,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -2226,7 +2434,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:17:13.097Z",
+      "at": "2026-09-26T06:28:44.813Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -2240,7 +2448,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -2252,7 +2460,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:17:15.108Z",
+      "at": "2026-09-26T06:28:46.825Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -2266,7 +2474,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -2278,7 +2486,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:17:17.132Z",
+      "at": "2026-09-26T06:28:48.835Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -2292,7 +2500,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -2304,7 +2512,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:17:19.142Z",
+      "at": "2026-09-26T06:28:50.848Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -2318,7 +2526,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -2330,7 +2538,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:17:21.156Z",
+      "at": "2026-09-26T06:28:52.860Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -2344,7 +2552,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -2356,7 +2564,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:17:23.166Z",
+      "at": "2026-09-26T06:28:54.886Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -2370,7 +2578,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -2382,7 +2590,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:17:25.189Z",
+      "at": "2026-09-26T06:28:56.897Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -2396,7 +2604,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -2408,7 +2616,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:17:27.199Z",
+      "at": "2026-09-26T06:28:58.909Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -2422,7 +2630,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -2434,7 +2642,189 @@
       }
     },
     {
-      "at": "2026-09-25T21:17:29.213Z",
+      "at": "2026-09-26T06:29:00.922Z",
+      "action": "status",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 690804,
+        "ctx_size": 8192,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T06:29:02.934Z",
+      "action": "status",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 690804,
+        "ctx_size": 8192,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T06:29:04.943Z",
+      "action": "status",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 690804,
+        "ctx_size": 8192,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T06:29:06.952Z",
+      "action": "status",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 690804,
+        "ctx_size": 8192,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T06:29:08.965Z",
+      "action": "status",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 690804,
+        "ctx_size": 8192,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T06:29:10.974Z",
+      "action": "status",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 690804,
+        "ctx_size": 8192,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T06:29:12.985Z",
+      "action": "status",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 690804,
+        "ctx_size": 8192,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T06:29:14.996Z",
       "action": "status",
       "status": {
         "backend": "llama.cpp",
@@ -2448,7 +2838,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -2460,7 +2850,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:17:30.169Z",
+      "at": "2026-09-26T06:29:38.683Z",
       "action": "stop",
       "status": {
         "backend": "llama.cpp",
@@ -2488,7 +2878,7 @@
   ],
   "loading_snapshots": [
     {
-      "at": "2026-09-25T21:11:58.394Z",
+      "at": "2026-09-26T06:17:47.182Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -2501,7 +2891,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -2513,7 +2903,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:12:00.409Z",
+      "at": "2026-09-26T06:17:49.195Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -2526,7 +2916,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -2538,7 +2928,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:12:02.425Z",
+      "at": "2026-09-26T06:17:51.204Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -2551,7 +2941,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -2563,7 +2953,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:12:04.436Z",
+      "at": "2026-09-26T06:17:53.214Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -2576,7 +2966,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -2588,7 +2978,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:12:06.450Z",
+      "at": "2026-09-26T06:17:55.226Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -2601,7 +2991,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -2613,7 +3003,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:12:08.464Z",
+      "at": "2026-09-26T06:17:57.239Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -2626,7 +3016,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -2638,7 +3028,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:12:10.488Z",
+      "at": "2026-09-26T06:17:59.252Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -2651,7 +3041,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -2663,7 +3053,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:12:12.500Z",
+      "at": "2026-09-26T06:18:01.261Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -2676,7 +3066,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -2688,7 +3078,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:12:15.176Z",
+      "at": "2026-09-26T06:18:03.276Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -2701,7 +3091,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -2713,7 +3103,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:12:17.186Z",
+      "at": "2026-09-26T06:18:05.287Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -2726,7 +3116,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -2738,7 +3128,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:12:19.204Z",
+      "at": "2026-09-26T06:18:07.299Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -2751,7 +3141,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -2763,7 +3153,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:12:21.218Z",
+      "at": "2026-09-26T06:18:09.310Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -2776,7 +3166,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -2788,7 +3178,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:12:23.233Z",
+      "at": "2026-09-26T06:18:11.327Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -2801,7 +3191,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -2813,7 +3203,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:12:25.249Z",
+      "at": "2026-09-26T06:18:13.342Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -2826,7 +3216,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -2838,7 +3228,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:12:27.270Z",
+      "at": "2026-09-26T06:18:15.353Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -2851,7 +3241,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -2863,7 +3253,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:12:29.290Z",
+      "at": "2026-09-26T06:18:17.364Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -2876,7 +3266,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -2888,7 +3278,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:12:31.308Z",
+      "at": "2026-09-26T06:18:19.379Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -2901,7 +3291,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -2913,7 +3303,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:12:33.320Z",
+      "at": "2026-09-26T06:18:21.391Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -2926,7 +3316,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -2938,7 +3328,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:12:35.353Z",
+      "at": "2026-09-26T06:18:23.400Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -2951,7 +3341,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -2963,7 +3353,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:12:37.363Z",
+      "at": "2026-09-26T06:18:25.409Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -2976,7 +3366,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -2988,7 +3378,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:12:39.373Z",
+      "at": "2026-09-26T06:18:27.420Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -3001,7 +3391,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -3013,7 +3403,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:12:41.386Z",
+      "at": "2026-09-26T06:18:29.432Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -3026,7 +3416,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -3038,7 +3428,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:12:43.399Z",
+      "at": "2026-09-26T06:18:31.447Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -3051,7 +3441,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -3063,7 +3453,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:12:45.416Z",
+      "at": "2026-09-26T06:18:33.458Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -3076,7 +3466,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -3088,7 +3478,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:12:48.097Z",
+      "at": "2026-09-26T06:18:35.471Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -3101,7 +3491,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -3113,7 +3503,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:12:50.109Z",
+      "at": "2026-09-26T06:18:37.481Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -3126,7 +3516,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -3138,7 +3528,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:12:52.121Z",
+      "at": "2026-09-26T06:18:39.493Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -3151,7 +3541,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -3163,7 +3553,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:12:54.132Z",
+      "at": "2026-09-26T06:18:41.504Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -3176,7 +3566,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -3188,7 +3578,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:12:56.144Z",
+      "at": "2026-09-26T06:18:43.520Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -3201,7 +3591,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -3213,7 +3603,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:12:58.154Z",
+      "at": "2026-09-26T06:18:45.530Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -3226,7 +3616,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -3238,7 +3628,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:13:00.174Z",
+      "at": "2026-09-26T06:18:47.543Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -3251,7 +3641,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -3263,7 +3653,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:13:02.189Z",
+      "at": "2026-09-26T06:18:49.553Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -3276,7 +3666,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -3288,7 +3678,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:13:04.200Z",
+      "at": "2026-09-26T06:18:51.571Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -3301,7 +3691,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -3313,7 +3703,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:13:06.215Z",
+      "at": "2026-09-26T06:18:53.587Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -3326,7 +3716,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -3338,7 +3728,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:13:08.225Z",
+      "at": "2026-09-26T06:18:55.597Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -3351,7 +3741,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -3363,7 +3753,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:13:10.235Z",
+      "at": "2026-09-26T06:18:57.607Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -3376,7 +3766,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -3388,7 +3778,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:13:12.245Z",
+      "at": "2026-09-26T06:18:59.616Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -3401,7 +3791,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 667801,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -3413,7 +3803,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:15:56.652Z",
+      "at": "2026-09-26T06:19:01.626Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -3426,7 +3816,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -3438,7 +3828,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:15:58.664Z",
+      "at": "2026-09-26T06:19:03.639Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -3451,7 +3841,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -3463,7 +3853,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:16:00.676Z",
+      "at": "2026-09-26T06:19:05.651Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -3476,7 +3866,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -3488,7 +3878,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:16:02.689Z",
+      "at": "2026-09-26T06:19:07.660Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -3501,7 +3891,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -3513,7 +3903,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:16:05.337Z",
+      "at": "2026-09-26T06:19:09.671Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -3526,7 +3916,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -3538,7 +3928,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:16:07.354Z",
+      "at": "2026-09-26T06:19:11.681Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -3551,7 +3941,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -3563,7 +3953,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:16:09.367Z",
+      "at": "2026-09-26T06:19:13.695Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -3576,7 +3966,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -3588,7 +3978,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:16:11.382Z",
+      "at": "2026-09-26T06:19:15.704Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -3601,7 +3991,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 687400,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -3613,7 +4003,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:16:13.396Z",
+      "at": "2026-09-26T06:27:30.126Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -3626,7 +4016,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -3638,7 +4028,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:16:15.408Z",
+      "at": "2026-09-26T06:27:32.141Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -3651,7 +4041,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -3663,7 +4053,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:16:17.423Z",
+      "at": "2026-09-26T06:27:34.154Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -3676,7 +4066,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -3688,7 +4078,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:16:19.438Z",
+      "at": "2026-09-26T06:27:36.165Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -3701,7 +4091,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -3713,7 +4103,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:16:21.451Z",
+      "at": "2026-09-26T06:27:38.178Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -3726,7 +4116,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -3738,7 +4128,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:16:23.462Z",
+      "at": "2026-09-26T06:27:40.190Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -3751,7 +4141,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -3763,7 +4153,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:16:25.488Z",
+      "at": "2026-09-26T06:27:42.387Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -3776,7 +4166,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -3788,7 +4178,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:16:27.501Z",
+      "at": "2026-09-26T06:27:44.399Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -3801,7 +4191,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -3813,7 +4203,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:16:29.526Z",
+      "at": "2026-09-26T06:27:46.412Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -3826,7 +4216,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -3838,7 +4228,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:16:31.536Z",
+      "at": "2026-09-26T06:27:48.424Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -3851,7 +4241,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -3863,7 +4253,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:16:33.548Z",
+      "at": "2026-09-26T06:27:50.438Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -3876,7 +4266,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -3888,7 +4278,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:16:35.559Z",
+      "at": "2026-09-26T06:27:52.449Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -3901,7 +4291,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -3913,7 +4303,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:16:38.200Z",
+      "at": "2026-09-26T06:27:54.465Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -3926,7 +4316,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -3938,7 +4328,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:16:40.213Z",
+      "at": "2026-09-26T06:27:56.483Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -3951,7 +4341,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -3963,7 +4353,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:16:42.224Z",
+      "at": "2026-09-26T06:27:58.497Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -3976,7 +4366,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -3988,7 +4378,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:16:44.235Z",
+      "at": "2026-09-26T06:28:00.507Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -4001,7 +4391,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -4013,7 +4403,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:16:46.272Z",
+      "at": "2026-09-26T06:28:02.521Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -4026,7 +4416,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -4038,7 +4428,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:16:48.280Z",
+      "at": "2026-09-26T06:28:04.543Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -4051,7 +4441,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -4063,7 +4453,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:16:50.331Z",
+      "at": "2026-09-26T06:28:06.554Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -4076,7 +4466,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -4088,7 +4478,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:16:52.341Z",
+      "at": "2026-09-26T06:28:08.562Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -4101,7 +4491,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -4113,7 +4503,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:16:54.351Z",
+      "at": "2026-09-26T06:28:10.575Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -4126,7 +4516,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -4138,7 +4528,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:16:56.362Z",
+      "at": "2026-09-26T06:28:12.584Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -4151,7 +4541,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -4163,7 +4553,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:16:58.373Z",
+      "at": "2026-09-26T06:28:14.596Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -4176,7 +4566,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -4188,7 +4578,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:17:00.386Z",
+      "at": "2026-09-26T06:28:16.606Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -4201,7 +4591,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -4213,7 +4603,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:17:02.401Z",
+      "at": "2026-09-26T06:28:18.619Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -4226,7 +4616,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -4238,7 +4628,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:17:04.409Z",
+      "at": "2026-09-26T06:28:20.636Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -4251,7 +4641,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -4263,7 +4653,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:17:06.423Z",
+      "at": "2026-09-26T06:28:22.648Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -4276,7 +4666,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -4288,7 +4678,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:17:08.436Z",
+      "at": "2026-09-26T06:28:24.657Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -4301,7 +4691,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -4313,7 +4703,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:17:11.087Z",
+      "at": "2026-09-26T06:28:26.672Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -4326,7 +4716,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -4338,7 +4728,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:17:13.097Z",
+      "at": "2026-09-26T06:28:28.685Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -4351,7 +4741,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -4363,7 +4753,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:17:15.108Z",
+      "at": "2026-09-26T06:28:30.698Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -4376,7 +4766,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -4388,7 +4778,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:17:17.132Z",
+      "at": "2026-09-26T06:28:32.712Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -4401,7 +4791,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -4413,7 +4803,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:17:19.142Z",
+      "at": "2026-09-26T06:28:34.756Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -4426,7 +4816,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -4438,7 +4828,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:17:21.156Z",
+      "at": "2026-09-26T06:28:36.764Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -4451,7 +4841,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -4463,7 +4853,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:17:23.167Z",
+      "at": "2026-09-26T06:28:38.774Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -4476,7 +4866,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -4488,7 +4878,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:17:25.189Z",
+      "at": "2026-09-26T06:28:40.784Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -4501,7 +4891,7 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -4513,7 +4903,7 @@
       }
     },
     {
-      "at": "2026-09-25T21:17:27.199Z",
+      "at": "2026-09-26T06:28:42.797Z",
       "status": {
         "backend": "llama.cpp",
         "configured": true,
@@ -4526,7 +4916,382 @@
         "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
         "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
         "model_sha256": null,
-        "pid": 668647,
+        "pid": 690804,
+        "ctx_size": 8192,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T06:28:44.813Z",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 690804,
+        "ctx_size": 8192,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T06:28:46.825Z",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 690804,
+        "ctx_size": 8192,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T06:28:48.835Z",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 690804,
+        "ctx_size": 8192,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T06:28:50.848Z",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 690804,
+        "ctx_size": 8192,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T06:28:52.860Z",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 690804,
+        "ctx_size": 8192,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T06:28:54.886Z",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 690804,
+        "ctx_size": 8192,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T06:28:56.897Z",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 690804,
+        "ctx_size": 8192,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T06:28:58.909Z",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 690804,
+        "ctx_size": 8192,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T06:29:00.922Z",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 690804,
+        "ctx_size": 8192,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T06:29:02.934Z",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 690804,
+        "ctx_size": 8192,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T06:29:04.943Z",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 690804,
+        "ctx_size": 8192,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T06:29:06.952Z",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 690804,
+        "ctx_size": 8192,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T06:29:08.965Z",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 690804,
+        "ctx_size": 8192,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T06:29:10.974Z",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 690804,
+        "ctx_size": 8192,
+        "n_gpu_layers": 99,
+        "vram_bytes": null,
+        "ram_bytes": null,
+        "request_slots": null,
+        "spawned_by_jarvis": true,
+        "digest_state": "not_verified",
+        "last_exit_code": null
+      }
+    },
+    {
+      "at": "2026-09-26T06:29:12.985Z",
+      "status": {
+        "backend": "llama.cpp",
+        "configured": true,
+        "runtime_reachable": false,
+        "model_installed": true,
+        "model_loaded": false,
+        "reason_code": "LLAMACPP_LOADING",
+        "message": "llama-server is loading the configured model.",
+        "build_id": "b11178-f9af9be21",
+        "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
+        "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
+        "model_sha256": null,
+        "pid": 690804,
         "ctx_size": 8192,
         "n_gpu_layers": 99,
         "vram_bytes": null,
@@ -4540,7 +5305,7 @@
   ],
   "cold_load": {
     "phase": "cold_start",
-    "duration_ms": 156181,
+    "duration_ms": 185510,
     "status": {
       "backend": "llama.cpp",
       "configured": true,
@@ -4553,7 +5318,7 @@
       "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
       "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
       "model_sha256": null,
-      "pid": 667801,
+      "pid": 687400,
       "ctx_size": 8192,
       "n_gpu_layers": 99,
       "vram_bytes": null,
@@ -4566,7 +5331,7 @@
   },
   "warm_restart": {
     "phase": "warm_restart",
-    "duration_ms": 190726,
+    "duration_ms": 215354,
     "status": {
       "backend": "llama.cpp",
       "configured": true,
@@ -4579,7 +5344,7 @@
       "model_file": "/mnt/d/Sovereign-AI/models/Qwen3.8-27B/gguf/Qwen3.8-27B-IQ2_M.gguf",
       "configured_sha256": "9cea2418408b6dd2a98ac5b1c9561fd95a5689fb1b8e851288a9e249431b4b06",
       "model_sha256": null,
-      "pid": 668647,
+      "pid": 690804,
       "ctx_size": 8192,
       "n_gpu_layers": 99,
       "vram_bytes": null,
@@ -4591,82 +5356,126 @@
     }
   },
   "server_log": {
-    "path": "/tmp/jarvisos-151p-data-Alo53X/logs/llama-server.log",
+    "path": "/tmp/jarvisos-151p-data-birH2S/logs/llama-server.log",
     "relevant_lines": [
-      "1.16.560.308 I srv    load_model: initializing, n_slots = 4, n_ctx_slot = 8192, kv_unified = 'true'",
-      "1.18.973.064 I slot get_availabl: id  3 | task -1 | selected slot by LRU, t_last = -1",
-      "1.18.973.188 I slot launch_slot_: id  3 | task 3 | processing task, is_child = 0",
-      "1.25.196.215 I slot print_timing: id  3 | task 3 | n_gen =    100, tg =  23.94 t/s, tg_3s =  24.18 t/s",
-      "1.28.224.093 I slot print_timing: id  3 | task 3 | n_gen =    174, tg =  24.15 t/s, tg_3s =  24.44 t/s",
-      "1.31.253.142 I slot print_timing: id  3 | task 3 | n_gen =    247, tg =  24.14 t/s, tg_3s =  24.10 t/s",
-      "1.34.255.724 I slot print_timing: id  3 | task 3 | n_gen =    320, tg =  24.18 t/s, tg_3s =  24.31 t/s",
-      "1.37.260.047 I slot print_timing: id  3 | task 3 | n_gen =    394, tg =  24.26 t/s, tg_3s =  24.63 t/s",
-      "1.40.288.764 I slot print_timing: id  3 | task 3 | n_gen =    468, tg =  24.29 t/s, tg_3s =  24.43 t/s",
-      "1.43.309.162 I slot print_timing: id  3 | task 3 | n_gen =    542, tg =  24.32 t/s, tg_3s =  24.50 t/s",
-      "1.46.349.348 I slot print_timing: id  3 | task 3 | n_gen =    615, tg =  24.28 t/s, tg_3s =  24.01 t/s",
-      "1.49.355.941 I slot print_timing: id  3 | task 3 | n_gen =    686, tg =  24.21 t/s, tg_3s =  23.61 t/s",
-      "1.52.389.090 I slot print_timing: id  3 | task 3 | n_gen =    759, tg =  24.20 t/s, tg_3s =  24.07 t/s",
-      "1.56.027.831 I slot print_timing: id  3 | task 3 | n_gen =    832, tg =  24.19 t/s, tg_3s =  24.13 t/s",
-      "1.59.062.074 I slot print_timing: id  3 | task 3 | n_gen =    906, tg =  24.21 t/s, tg_3s =  24.39 t/s",
-      "2.02.097.596 I slot print_timing: id  3 | task 3 | n_gen =    980, tg =  24.22 t/s, tg_3s =  24.38 t/s",
-      "2.05.126.489 I slot print_timing: id  3 | task 3 | n_gen =   1054, tg =  24.23 t/s, tg_3s =  24.43 t/s",
-      "2.08.138.796 I slot print_timing: id  3 | task 3 | n_gen =   1126, tg =  24.21 t/s, tg_3s =  23.90 t/s",
-      "2.11.144.937 I slot print_timing: id  3 | task 3 | n_gen =   1198, tg =  24.20 t/s, tg_3s =  23.95 t/s",
-      "2.14.147.010 I slot print_timing: id  3 | task 3 | n_gen =   1271, tg =  24.20 t/s, tg_3s =  24.32 t/s",
-      "2.17.166.972 I slot print_timing: id  3 | task 3 | n_gen =   1340, tg =  24.13 t/s, tg_3s =  22.85 t/s",
-      "2.19.417.857 I slot print_timing: id  3 | task 3 | prompt eval time =    1492.35 ms /   520 tokens (    2.87 ms per token,   348.44 tokens per second)",
-      "2.19.417.865 I slot print_timing: id  3 | task 3 |        eval time =   57742.49 ms /  1388 tokens (   41.63 ms per token,    24.02 tokens per second)",
-      "2.19.417.865 I slot print_timing: id  3 | task 3 |       total time =   59234.83 ms /  1908 tokens",
-      "2.19.417.872 I slot print_timing: id  3 | task 3 |    graphs reused =       1382",
-      "2.19.417.952 I slot      release: id  3 | task 3 | stop processing: n_tokens = 1907, truncated = 0",
-      "2.20.063.390 I slot get_availabl: id  3 | task -1 | selected slot by LCP similarity, f_sim_best = 0.983 (> 0.100 thold), f_keep = 0.266",
-      "2.20.858.881 I slot launch_slot_: id  3 | task 1408 | processing task, is_child = 0",
-      "2.26.208.592 I slot print_timing: id  3 | task 1408 | n_gen =    100, tg =  22.71 t/s, tg_3s =  22.94 t/s",
-      "2.29.648.792 I slot print_timing: id  3 | task 1408 | prompt eval time =     991.27 ms /   475 tokens (    2.09 ms per token,   479.18 tokens per second)",
-      "2.29.648.801 I slot print_timing: id  3 | task 1408 |        eval time =    7161.73 ms /   168 tokens (   42.88 ms per token,    23.32 tokens per second)",
-      "2.29.648.801 I slot print_timing: id  3 | task 1408 |       total time =    8153.00 ms /   643 tokens",
-      "2.29.648.803 I slot print_timing: id  3 | task 1408 |    graphs reused =       1548",
-      "2.29.648.876 I slot      release: id  3 | task 1408 | stop processing: n_tokens = 684, truncated = 0",
-      "2.30.269.448 I slot get_availabl: id  3 | task -1 | selected slot by LCP similarity, f_sim_best = 0.946 (> 0.100 thold), f_keep = 0.743",
-      "2.30.269.604 I slot launch_slot_: id  3 | task 1581 | processing task, is_child = 0",
-      "2.35.536.674 I slot print_timing: id  3 | task 1581 | n_gen =    100, tg =  22.98 t/s, tg_3s =  23.21 t/s",
-      "2.38.537.203 I slot print_timing: id  3 | task 1581 | n_gen =    170, tg =  23.12 t/s, tg_3s =  23.33 t/s",
-      "2.41.569.702 I slot print_timing: id  3 | task 1581 | n_gen =    240, tg =  23.11 t/s, tg_3s =  23.08 t/s",
-      "2.44.604.914 I slot print_timing: id  3 | task 1581 | n_gen =    312, tg =  23.25 t/s, tg_3s =  23.72 t/s",
-      "2.47.616.995 I slot print_timing: id  3 | task 1581 | n_gen =    383, tg =  23.31 t/s, tg_3s =  23.57 t/s",
-      "2.50.642.561 I slot print_timing: id  3 | task 1581 | n_gen =    453, tg =  23.28 t/s, tg_3s =  23.14 t/s",
-      "2.53.662.315 I slot print_timing: id  3 | task 1581 | n_gen =    527, tg =  23.45 t/s, tg_3s =  24.51 t/s",
-      "2.56.693.056 I slot print_timing: id  3 | task 1581 | n_gen =    601, tg =  23.56 t/s, tg_3s =  24.42 t/s",
-      "2.59.732.136 I slot print_timing: id  3 | task 1581 | n_gen =    673, tg =  23.58 t/s, tg_3s =  23.69 t/s",
-      "3.03.378.446 I slot print_timing: id  3 | task 1581 | n_gen =    745, tg =  23.60 t/s, tg_3s =  23.85 t/s",
-      "3.06.386.754 I slot print_timing: id  3 | task 1581 | n_gen =    818, tg =  23.66 t/s, tg_3s =  24.27 t/s",
-      "3.09.398.725 I slot print_timing: id  3 | task 1581 | n_gen =    891, tg =  23.71 t/s, tg_3s =  24.24 t/s",
-      "3.12.412.896 I slot print_timing: id  3 | task 1581 | n_gen =    965, tg =  23.77 t/s, tg_3s =  24.55 t/s",
-      "3.15.419.620 I slot print_timing: id  3 | task 1581 | n_gen =   1036, tg =  23.76 t/s, tg_3s =  23.61 t/s",
-      "3.18.441.992 I slot print_timing: id  3 | task 1581 | n_gen =   1109, tg =  23.78 t/s, tg_3s =  24.15 t/s",
-      "3.21.444.579 I slot print_timing: id  3 | task 1581 | n_gen =   1181, tg =  23.80 t/s, tg_3s =  23.98 t/s",
-      "3.24.480.600 I slot print_timing: id  3 | task 1581 | n_gen =   1254, tg =  23.81 t/s, tg_3s =  24.04 t/s",
-      "3.27.511.228 I slot print_timing: id  3 | task 1581 | n_gen =   1321, tg =  23.72 t/s, tg_3s =  22.11 t/s",
-      "3.30.541.480 I slot print_timing: id  3 | task 1581 | n_gen =   1397, tg =  23.79 t/s, tg_3s =  25.08 t/s",
-      "3.33.549.317 I slot print_timing: id  3 | task 1581 | n_gen =   1473, tg =  23.86 t/s, tg_3s =  25.27 t/s",
-      "3.37.197.646 I slot print_timing: id  3 | task 1581 | n_gen =   1545, tg =  23.87 t/s, tg_3s =  23.98 t/s",
-      "3.40.214.518 I slot print_timing: id  3 | task 1581 | n_gen =   1618, tg =  23.88 t/s, tg_3s =  24.20 t/s",
-      "3.43.242.711 I slot print_timing: id  3 | task 1581 | n_gen =   1693, tg =  23.92 t/s, tg_3s =  24.77 t/s",
-      "3.46.267.972 I slot print_timing: id  3 | task 1581 | n_gen =   1771, tg =  23.99 t/s, tg_3s =  25.78 t/s",
-      "3.49.268.544 I slot print_timing: id  3 | task 1581 | n_gen =   1849, tg =  24.07 t/s, tg_3s =  26.00 t/s",
-      "3.52.305.434 I slot print_timing: id  3 | task 1581 | n_gen =   1930, tg =  24.17 t/s, tg_3s =  26.67 t/s",
-      "3.55.341.350 I slot print_timing: id  3 | task 1581 | n_gen =   2011, tg =  24.26 t/s, tg_3s =  26.68 t/s",
-      "3.56.780.004 I slot print_timing: id  3 | task 1581 | prompt eval time =     958.19 ms /   495 tokens (    1.94 ms per token,   516.60 tokens per second)",
-      "3.56.780.016 I slot print_timing: id  3 | task 1581 |        eval time =   84279.01 ms /  2048 tokens (   41.17 ms per token,    24.29 tokens per second)",
-      "3.56.780.017 I slot print_timing: id  3 | task 1581 |       total time =   85237.20 ms /  2543 tokens",
-      "3.56.780.019 I slot print_timing: id  3 | task 1581 |    graphs reused =       3586",
-      "3.56.780.160 I slot      release: id  3 | task 1581 | stop processing: n_tokens = 2584, truncated = 0",
-      "1.34.311.386 I srv    load_model: initializing, n_slots = 4, n_ctx_slot = 8192, kv_unified = 'true'"
+      "6.08.584.942 I slot print_timing: id  2 | task 3667 | n_gen =   1927, tg =  20.82 t/s, tg_3s =  20.87 t/s",
+      "6.11.627.348 I slot print_timing: id  2 | task 3667 | n_gen =   1992, tg =  20.84 t/s, tg_3s =  21.36 t/s",
+      "6.14.454.069 I slot print_timing: id  2 | task 3667 | prompt eval time =    2405.96 ms /  1107 tokens (    2.17 ms per token,   460.11 tokens per second)",
+      "6.14.454.080 I slot print_timing: id  2 | task 3667 |        eval time =   98377.07 ms /  2048 tokens (   48.06 ms per token,    20.81 tokens per second)",
+      "6.14.454.081 I slot print_timing: id  2 | task 3667 |       total time =  100783.03 ms /  3155 tokens",
+      "6.14.454.083 I slot print_timing: id  2 | task 3667 |    graphs reused =       5639",
+      "6.14.454.280 I slot      release: id  2 | task 3667 | stop processing: n_tokens = 3154, truncated = 0",
+      "6.15.764.208 I slot get_availabl: id  1 | task -1 | selected slot by LRU, t_last = -1",
+      "6.15.905.102 I slot launch_slot_: id  1 | task 5741 | processing task, is_child = 0",
+      "6.21.008.284 I slot print_timing: id  1 | task 5741 | prompt processing, n_tokens =   2510, progress = 0.83, t =   4.44 s / 565.38 tokens per second",
+      "6.21.962.980 I slot print_timing: id  1 | task 5741 | prompt processing, n_tokens =   3022, progress = 1.00, t =   5.39 s / 560.23 tokens per second",
+      "6.27.126.314 I slot print_timing: id  1 | task 5741 | n_gen =    100, tg =  21.29 t/s, tg_3s =  21.51 t/s",
+      "6.30.163.473 I slot print_timing: id  1 | task 5741 | n_gen =    166, tg =  21.47 t/s, tg_3s =  21.73 t/s",
+      "6.33.208.462 I slot print_timing: id  1 | task 5741 | n_gen =    226, tg =  20.97 t/s, tg_3s =  19.70 t/s",
+      "6.36.247.849 I slot print_timing: id  1 | task 5741 | n_gen =    292, tg =  21.13 t/s, tg_3s =  21.71 t/s",
+      "6.39.283.283 I slot print_timing: id  1 | task 5741 | n_gen =    358, tg =  21.24 t/s, tg_3s =  21.74 t/s",
+      "6.42.315.465 I slot print_timing: id  1 | task 5741 | n_gen =    425, tg =  21.37 t/s, tg_3s =  22.10 t/s",
+      "6.45.356.612 I slot print_timing: id  1 | task 5741 | n_gen =    493, tg =  21.50 t/s, tg_3s =  22.36 t/s",
+      "6.48.368.946 I slot print_timing: id  1 | task 5741 | n_gen =    561, tg =  21.63 t/s, tg_3s =  22.57 t/s",
+      "6.51.390.148 I slot print_timing: id  1 | task 5741 | n_gen =    621, tg =  21.44 t/s, tg_3s =  19.86 t/s",
+      "6.54.392.611 I slot print_timing: id  1 | task 5741 | n_gen =    686, tg =  21.46 t/s, tg_3s =  21.65 t/s",
+      "6.57.399.395 I slot print_timing: id  1 | task 5741 | n_gen =    754, tg =  21.56 t/s, tg_3s =  22.62 t/s",
+      "7.00.440.718 I slot print_timing: id  1 | task 5741 | n_gen =    820, tg =  21.57 t/s, tg_3s =  21.70 t/s",
+      "7.03.479.723 I slot print_timing: id  1 | task 5741 | n_gen =    887, tg =  21.61 t/s, tg_3s =  22.05 t/s",
+      "7.06.531.162 I slot print_timing: id  1 | task 5741 | n_gen =    948, tg =  21.50 t/s, tg_3s =  19.99 t/s",
+      "7.09.549.711 I slot print_timing: id  1 | task 5741 | n_gen =   1015, tg =  21.54 t/s, tg_3s =  22.20 t/s",
+      "7.12.586.391 I slot print_timing: id  1 | task 5741 | n_gen =   1081, tg =  21.55 t/s, tg_3s =  21.73 t/s",
+      "7.15.594.756 I slot print_timing: id  1 | task 5741 | n_gen =   1139, tg =  21.42 t/s, tg_3s =  19.28 t/s",
+      "7.18.611.240 I slot print_timing: id  1 | task 5741 | n_gen =   1203, tg =  21.41 t/s, tg_3s =  21.22 t/s",
+      "7.21.622.065 I slot print_timing: id  1 | task 5741 | n_gen =   1272, tg =  21.49 t/s, tg_3s =  22.92 t/s",
+      "7.24.637.677 I slot print_timing: id  1 | task 5741 | n_gen =   1337, tg =  21.49 t/s, tg_3s =  21.55 t/s",
+      "7.27.646.361 I slot print_timing: id  1 | task 5741 | n_gen =   1404, tg =  21.53 t/s, tg_3s =  22.27 t/s",
+      "7.30.679.311 I slot print_timing: id  1 | task 5741 | n_gen =   1473, tg =  21.58 t/s, tg_3s =  22.75 t/s",
+      "7.33.701.739 I slot print_timing: id  1 | task 5741 | n_gen =   1543, tg =  21.65 t/s, tg_3s =  23.16 t/s",
+      "7.36.738.391 I slot print_timing: id  1 | task 5741 | n_gen =   1611, tg =  21.68 t/s, tg_3s =  22.39 t/s",
+      "7.39.781.664 I slot print_timing: id  1 | task 5741 | n_gen =   1680, tg =  21.72 t/s, tg_3s =  22.67 t/s",
+      "7.42.809.358 I slot print_timing: id  1 | task 5741 | n_gen =   1748, tg =  21.75 t/s, tg_3s =  22.46 t/s",
+      "7.45.824.473 I slot print_timing: id  1 | task 5741 | n_gen =   1818, tg =  21.80 t/s, tg_3s =  23.22 t/s",
+      "7.48.845.640 I slot print_timing: id  1 | task 5741 | n_gen =   1892, tg =  21.89 t/s, tg_3s =  24.49 t/s",
+      "7.51.857.042 I slot print_timing: id  1 | task 5741 | n_gen =   1965, tg =  21.97 t/s, tg_3s =  24.24 t/s",
+      "7.54.872.413 I slot print_timing: id  1 | task 5741 | n_gen =   2038, tg =  22.05 t/s, tg_3s =  24.21 t/s",
+      "7.55.289.037 I slot print_timing: id  1 | task 5741 | prompt eval time =    5908.53 ms /  3026 tokens (    1.95 ms per token,   512.14 tokens per second)",
+      "7.55.289.050 I slot print_timing: id  1 | task 5741 |        eval time =   92811.70 ms /  2048 tokens (   45.34 ms per token,    22.06 tokens per second)",
+      "7.55.289.052 I slot print_timing: id  1 | task 5741 |       total time =   98720.23 ms /  5074 tokens",
+      "7.55.289.055 I slot print_timing: id  1 | task 5741 |    graphs reused =       7681",
+      "7.55.289.188 I slot      release: id  1 | task 5741 | stop processing: n_tokens = 5115, truncated = 0",
+      "7.55.331.451 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = -1",
+      "7.55.331.609 I slot launch_slot_: id  0 | task 7813 | processing task, is_child = 0",
+      "7.59.844.993 I slot print_timing: id  0 | task 7813 | prompt processing, n_tokens =   2090, progress = 0.50, t =   3.27 s / 639.15 tokens per second",
+      "8.03.134.655 I slot print_timing: id  0 | task 7813 | prompt processing, n_tokens =   3671, progress = 0.88, t =   6.56 s / 559.63 tokens per second",
+      "8.03.800.513 I slot print_timing: id  0 | task 7813 | prompt processing, n_tokens =   4183, progress = 1.00, t =   7.23 s / 578.92 tokens per second",
+      "8.08.510.679 I slot print_timing: id  0 | task 7813 | n_gen =    100, tg =  23.68 t/s, tg_3s =  23.92 t/s",
+      "8.11.546.865 I slot print_timing: id  0 | task 7813 | n_gen =    171, tg =  23.56 t/s, tg_3s =  23.38 t/s",
+      "8.14.559.678 I slot print_timing: id  0 | task 7813 | n_gen =    241, tg =  23.46 t/s, tg_3s =  23.23 t/s",
+      "8.17.577.332 I slot print_timing: id  0 | task 7813 | n_gen =    311, tg =  23.40 t/s, tg_3s =  23.20 t/s",
+      "8.20.617.555 I slot print_timing: id  0 | task 7813 | n_gen =    379, tg =  23.21 t/s, tg_3s =  22.37 t/s",
+      "8.23.633.144 I slot print_timing: id  0 | task 7813 | n_gen =    445, tg =  23.00 t/s, tg_3s =  21.89 t/s",
+      "8.26.666.291 I slot print_timing: id  0 | task 7813 | n_gen =    511, tg =  22.83 t/s, tg_3s =  21.76 t/s",
+      "8.29.695.111 I slot print_timing: id  0 | task 7813 | n_gen =    577, tg =  22.71 t/s, tg_3s =  21.79 t/s",
+      "8.32.724.039 I slot print_timing: id  0 | task 7813 | n_gen =    643, tg =  22.61 t/s, tg_3s =  21.79 t/s",
+      "8.35.764.971 I slot print_timing: id  0 | task 7813 | n_gen =    709, tg =  22.52 t/s, tg_3s =  21.70 t/s",
+      "8.38.798.806 I slot print_timing: id  0 | task 7813 | n_gen =    775, tg =  22.46 t/s, tg_3s =  21.75 t/s",
+      "8.41.825.505 I slot print_timing: id  0 | task 7813 | n_gen =    841, tg =  22.40 t/s, tg_3s =  21.81 t/s",
+      "8.44.857.458 I slot print_timing: id  0 | task 7813 | n_gen =    907, tg =  22.36 t/s, tg_3s =  21.77 t/s",
+      "8.47.859.106 I slot print_timing: id  0 | task 7813 | n_gen =    972, tg =  22.31 t/s, tg_3s =  21.65 t/s",
+      "8.50.892.816 I slot print_timing: id  0 | task 7813 | n_gen =   1038, tg =  22.27 t/s, tg_3s =  21.76 t/s",
+      "8.53.931.223 I slot print_timing: id  0 | task 7813 | n_gen =   1104, tg =  22.24 t/s, tg_3s =  21.72 t/s",
+      "8.56.969.703 I slot print_timing: id  0 | task 7813 | n_gen =   1170, tg =  22.21 t/s, tg_3s =  21.72 t/s",
+      "8.59.981.534 I slot print_timing: id  0 | task 7813 | n_gen =   1235, tg =  22.17 t/s, tg_3s =  21.58 t/s",
+      "9.03.004.387 I slot print_timing: id  0 | task 7813 | n_gen =   1296, tg =  22.07 t/s, tg_3s =  20.18 t/s",
+      "9.06.023.560 I slot print_timing: id  0 | task 7813 | n_gen =   1361, tg =  22.04 t/s, tg_3s =  21.53 t/s",
+      "9.09.054.265 I slot print_timing: id  0 | task 7813 | n_gen =   1420, tg =  21.92 t/s, tg_3s =  19.47 t/s",
+      "9.12.073.769 I slot print_timing: id  0 | task 7813 | n_gen =   1481, tg =  21.85 t/s, tg_3s =  20.20 t/s",
+      "9.15.094.007 I slot print_timing: id  0 | task 7813 | n_gen =   1543, tg =  21.79 t/s, tg_3s =  20.53 t/s",
+      "9.18.132.974 I slot print_timing: id  0 | task 7813 | n_gen =   1602, tg =  21.69 t/s, tg_3s =  19.41 t/s",
+      "9.21.168.432 I slot print_timing: id  0 | task 7813 | n_gen =   1661, tg =  21.60 t/s, tg_3s =  19.44 t/s",
+      "9.24.171.622 I slot print_timing: id  0 | task 7813 | n_gen =   1719, tg =  21.52 t/s, tg_3s =  19.31 t/s",
+      "9.27.212.280 I slot print_timing: id  0 | task 7813 | n_gen =   1778, tg =  21.44 t/s, tg_3s =  19.40 t/s",
+      "9.30.253.415 I slot print_timing: id  0 | task 7813 | n_gen =   1837, tg =  21.37 t/s, tg_3s =  19.40 t/s",
+      "9.33.291.902 I slot print_timing: id  0 | task 7813 | n_gen =   1896, tg =  21.30 t/s, tg_3s =  19.42 t/s",
+      "9.36.329.761 I slot print_timing: id  0 | task 7813 | n_gen =   1955, tg =  21.24 t/s, tg_3s =  19.42 t/s",
+      "9.39.345.829 I slot print_timing: id  0 | task 7813 | n_gen =   2014, tg =  21.19 t/s, tg_3s =  19.56 t/s",
+      "9.41.098.786 I slot print_timing: id  0 | task 7813 | prompt eval time =    7755.32 ms /  4187 tokens (    1.85 ms per token,   539.89 tokens per second)",
+      "9.41.098.815 I slot print_timing: id  0 | task 7813 |        eval time =   96768.48 ms /  2048 tokens (   47.27 ms per token,    21.15 tokens per second)",
+      "9.41.098.816 I slot print_timing: id  0 | task 7813 |       total time =  104523.79 ms /  6235 tokens",
+      "9.41.098.818 I slot print_timing: id  0 | task 7813 |    graphs reused =       9719",
+      "9.41.099.076 I slot      release: id  0 | task 7813 | stop processing: n_tokens = 6234, truncated = 0",
+      "1.46.262.829 I srv    load_model: initializing, n_slots = 4, n_ctx_slot = 8192, kv_unified = 'true'",
+      "1.50.132.490 I slot get_availabl: id  3 | task -1 | selected slot by LRU, t_last = -1",
+      "1.50.132.864 I slot launch_slot_: id  3 | task 3 | processing task, is_child = 0",
+      "1.56.382.902 I slot print_timing: id  3 | task 3 | n_gen =    100, tg =  22.24 t/s, tg_3s =  22.46 t/s",
+      "1.59.417.411 I slot print_timing: id  3 | task 3 | n_gen =    168, tg =  22.31 t/s, tg_3s =  22.41 t/s",
+      "2.02.453.662 I slot print_timing: id  3 | task 3 | n_gen =    236, tg =  22.33 t/s, tg_3s =  22.40 t/s",
+      "2.05.459.794 I slot print_timing: id  3 | task 3 | n_gen =    305, tg =  22.47 t/s, tg_3s =  22.95 t/s",
+      "2.08.495.786 I slot print_timing: id  3 | task 3 | n_gen =    376, tg =  22.64 t/s, tg_3s =  23.39 t/s",
+      "2.09.464.219 I slot print_timing: id  3 | task 3 | prompt eval time =    1797.68 ms /   521 tokens (    3.45 ms per token,   289.82 tokens per second)",
+      "2.09.464.226 I slot print_timing: id  3 | task 3 |        eval time =   17533.59 ms /   399 tokens (   44.05 ms per token,    22.70 tokens per second)",
+      "2.09.464.227 I slot print_timing: id  3 | task 3 |       total time =   19331.28 ms /   920 tokens",
+      "2.09.464.236 I slot print_timing: id  3 | task 3 |    graphs reused =        397",
+      "2.09.464.504 I slot      release: id  3 | task 3 | stop processing: n_tokens = 919, truncated = 0"
     ]
   },
+  "ollama_unload": {
+    "checked": true,
+    "models_before": [],
+    "unloaded": [],
+    "models_after": []
+  },
+  "gpu_gate": {
+    "qualification_path": "/home/thera/src/worktrees/k151a/scripts/qualification/151/llamacpp_iq2m_qualification.json",
+    "qualification_exists": true,
+    "gen_tok_s": 23.806689679800026,
+    "identity_completion_tokens": 695,
+    "llama_server_pids": []
+  },
   "launch_arguments": {
-    "pid": 667801,
-    "source": "/proc/667801/cmdline",
+    "pid": 687400,
+    "source": "/proc/687400/cmdline",
     "argv": [
       "/home/thera/jarvis-control/work/tools/llama.cpp/b11178/dist/llama-b11178/llama-server",
       "--model",
@@ -4746,113 +5555,188 @@
   "flows": [
     {
       "prompt": "funzioni jarvis?",
-      "answer": "In questo workspace, le funzioni di JarvisOS sono quelle di assistenza tecnica locale governata da Jarvis, ma dallo stato attuale quasi tutte le capacità operative risultano non disponibili.\n\nStato attuale:\n- Hermes: non disponibile (HERMES_WORKER_STOPPED)\n- Local decision routing: non disponibile (LOCAL_MODEL_RUNTIME_UNAVAILABLE)\n- Retrieval: non configurato (RETRIEVAL_INDEX_NOT_BUILT)\n- dwsim: non disponibile (dwsim_mcp_path_unset)\n- OpenFOAM: non disponibile (TOOL_DISABLED)\n- PBR: non disponibile (fluids_not_installed)\n\nRoute conversazionali:\n- local:general: configurato, ma runtime non raggiungibile\n- local:fast: configurato, ma runtime non raggiungibile\n- local:coder: configurato, ma runtime non raggiungibile\n- local:llamacpp: configurato e loaded, ma qualified=unknown\n- local:fake: configurato, reason=TEST_O\n\nCosa posso fare qui:\n- rispondere a domande tecniche;\n- spiegare configurazioni, errori o stati;\n- preparare proposte, note o istruzioni;\n- aiutarti a interpretare i dati di contesto.\n\nNon posso eseguire solvers, modificare modelli di processo o cambiare lo stato del progetto. Quelle azioni vanno eseguite nell’UI JarvisOS e promosse da te. Non ho eseguito né modificato nulla.",
+      "answer": "In questo workspace JarvisOS fornisce assistenza tecnica locale per ingegneria di processo/pianta, ma **non esegue solvers, non modifica modelli e non cambia lo stato del progetto**.\n\nFunzioni attualmente disponibili in chat:\n- Spiegazione di processi, variabili, ipotesi, parametri e risultati.\n- Verifica di coerenza di dati, unità, vincoli e ipotesi.\n- Preparazione di proposte, comandi o checklist da eseguire/promuovere nell’UI di JarvisOS.\n- Supporto conversazionale locale: la route `local:llamacpp` risulta raggiungibile.\n\nFunzioni attualmente non disponibili:\n- `hermes`: unavailable\n- `local_decision_routing`: unavailable\n- `retrieval`: not configured\n- `dwsim`: unavailable\n- `openfoam`: unavailable\n- `pbr`: unavailable\n\nSe vuoi eseguire un solver, modificare un modello o promuovere una proposta, devi farlo tramite l’UI di JarvisOS; io posso aiutarti a preparare la richiesta, ma non posso eseguirlo.",
       "state": "complete",
       "model_id": "qwen3.8-27b-iq2m",
       "finish_reason": "stop",
       "eval_counts": {
-        "prompt": 520,
-        "output": 1388,
+        "prompt": 519,
+        "output": 1255,
         "source": "actual"
       },
       "usage_totals": {
         "cache_read_tokens": 0,
-        "input_tokens": 520,
-        "latency_ms": 59246,
-        "output_tokens": 1388,
+        "input_tokens": 519,
+        "latency_ms": 63508,
+        "output_tokens": 1255,
         "reasoning_tokens": 0,
-        "total_tokens": 1908,
+        "total_tokens": 1774,
         "usage_source_counts": {
           "actual": 1
         }
       },
       "reasoning_tokens": null,
-      "duration_ms": 61094
+      "duration_ms": 63826
     },
     {
       "prompt": "ciao",
-      "answer": "Ciao! Sono JarvisOS, assistente tecnico locale. Come posso aiutarti con l’ingegneria di processo o di impianto?",
+      "answer": "Ciao! Sono JarvisOS, il tuo assistente tecnico locale. Sono pronto ad aiutarti con i tuoi processi e l'ingegneria di impianto.\n\n**Stato attuale del workspace:**\n- **Workspace attivo:** `e4d2c915-f097-4ae8-a6c4-897e35ea0523` / 151 Sidecar Operator Proof\n- **Runtime locale (llamacpp):** disponibile e caricato\n- **Altri runtime (general, fast, coder):** configurati ma runtime non raggiungibili\n- **Hermes / dwsim / openfoam / pbr:** non disponibili\n\nPosso aiutarti con domande tecniche, analisi di processo, revisione di modelli o qualsiasi altro compito di ingegneria. Non posso eseguire solver, modificare modelli di processo o cambiare lo stato del progetto — quelle operazioni le esegui tu tramite le UI di ingegneria di JarvisOS.\n\nCome posso aiutarti oggi?",
       "state": "complete",
       "model_id": "qwen3.8-27b-iq2m",
       "finish_reason": "stop",
       "eval_counts": {
-        "prompt": 517,
-        "output": 168,
+        "prompt": 516,
+        "output": 316,
         "source": "actual"
       },
       "usage_totals": {
         "cache_read_tokens": 0,
-        "input_tokens": 517,
-        "latency_ms": 8962,
-        "output_tokens": 168,
+        "input_tokens": 516,
+        "latency_ms": 17686,
+        "output_tokens": 316,
         "reasoning_tokens": 0,
-        "total_tokens": 685,
+        "total_tokens": 832,
         "usage_source_counts": {
           "actual": 1
         }
       },
       "reasoning_tokens": null,
-      "duration_ms": 10136
+      "duration_ms": 18023
     },
     {
       "prompt": "Scrivi i numeri da 1 a 3000, uno per riga, senza commenti.",
-      "answer": "",
-      "state": "failed_terminal",
+      "answer": "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n17\n18\n19\n20\n21\n22\n23\n24\n25\n26\n27\n28\n29\n30\n31\n32\n33\n34\n35\n36\n37\n38\n39\n40\n41\n42\n43\n44\n45\n46\n47\n48\n49\n50\n51\n52\n53\n54\n55\n56\n57\n58\n59\n60\n61\n62\n63\n64\n65\n66\n67\n68\n69\n70\n71\n72\n73\n74\n75\n76\n77\n78\n79\n80\n81\n82\n83\n84\n85\n86\n87\n88\n89\n90\n91\n92\n93\n94\n95\n96\n97\n98\n99\n100\n101\n102\n103\n104\n105\n106\n107\n108\n109\n110\n111\n112\n113\n114\n115\n116\n117\n118\n119\n120\n121\n122\n123\n124\n125\n126\n127\n128\n129\n130\n131\n132\n133\n134\n135\n136\n137\n138\n139\n140\n141\n142\n143\n144\n145\n146\n147\n148\n149\n150\n151\n152\n153\n154\n155\n156\n157\n158\n159\n160161\n162\n163\n164\n165\n166\n167\n168\n169\n170\n171\n172\n173\n174\n175\n176\n177\n178\n179\n180\n181\n182\n183\n184\n185\n186\n187\n188\n189\n190\n191\n192\n193\n194\n195\n196\n197\n198\n199\n200\n201\n202\n203\n204\n205\n206\n207\n208\n209\n210\n211\n212\n213\n214\n215\n216\n217\n218\n219\n220\n221\n222\n223\n224\n225\n226\n227\n228\n229\n230\n231\n232\n233\n234\n235\n236\n237\n238\n239\n240\n241\n242\n243\n244\n245\n246\n247\n248\n249\n250\n251\n252\n253\n254\n255\n256\n257\n258\n259\n260\n261\n262\n263\n264\n265\n266\n267\n268\n269\n270\n271\n272\n273\n274\n275\n276\n277\n278\n279\n280\n281\n282\n283\n284\n285\n286\n287\n288\n289\n290\n291\n292\n293\n294\n295\n296\n297\n298\n299\n300\n301\n302\n303\n304\n305\n306\n307\n308\n309\n310\n311\n312\n313\n314\n315\n316\n317\n318\n319\n320\n321\n322\n323\n324\n325\n326\n327\n328\n329\n330\n331\n332\n333\n334\n335\n336\n337\n338\n339\n340\n341\n342\n343\n344\n345\n346\n347\n348\n349\n350\n351\n352\n353\n354\n355\n356\n357\n358\n359\n360\n361\n362\n363\n364\n365\n366\n367\n368\n369\n370\n371\n372\n373\n374\n375\n376\n377\n378\n379\n380\n381\n382\n383\n384\n385\n386\n387\n388\n389\n390\n391\n392\n393\n394\n395\n396\n397\n398\n399\n400\n401\n402\n403\n404\n405\n406\n407\n408\n409\n410\n411\n412\n413\n414\n415\n416\n417\n418\n419\n420\n421\n422\n423\n424\n425\n426\n427\n428\n429\n430\n431\n432\n433\n434\n435\n436\n437\n438\n439\n440\n441\n442\n443\n444\n445\n446\n447\n448\n449\n450\n451\n452\n453\n454\n455\n456\n457\n458\n459\n460\n461\n462\n463\n464\n465\n466\n467\n468\n469\n470\n471\n472\n473\n474\n475\n476\n477\n478\n479\n480\n481\n482\n483\n484\n485\n486\n487\n488\n489\n490\n491\n492\n493\n494\n495\n496\n497\n498\n499\n500\n501\n502\n503\n504\n505\n506\n507\n508\n509\n510\n511\n512\n513\n514\n515\n516\n517\n518\n519\n520\n521\n522\n523\n524\n525\n526\n527\n528\n529\n530\n531\n532\n533\n534\n535\n536\n537\n538\n539\n540\n541\n542\n543\n544\n545\n546\n547\n548\n549\n550\n551\n552\n553\n554\n555\n556\n557\n558\n559\n560\n561\n562\n563\n564\n565\n566\n567\n568\n569\n570\n571\n572\n573\n574\n575\n576\n577\n578\n579\n580\n581\n582\n583\n584\n585\n586\n587\n588\n589\n590\n591\n592\n593\n594\n595\n596\n597\n598\n599\n600\n601\n602\n603\n604\n605\n606\n607\n608\n609\n610\n611\n612\n613\n614\n615\n616\n617\n618\n619\n620\n621\n622\n623\n624\n625\n626\n627\n628\n629\n630\n631\n632\n633\n634\n635\n636\n637\n638\n639\n640\n641\n642\n643\n644\n645\n646\n647\n648\n649\n650\n651\n652\n653\n654\n6",
+      "state": "partial_terminal",
       "model_id": "qwen3.8-27b-iq2m",
       "finish_reason": "length",
       "eval_counts": {
-        "prompt": 537,
+        "prompt": 1107,
         "output": 2048,
         "source": "actual"
       },
       "usage_totals": {
         "cache_read_tokens": 0,
-        "input_tokens": 537,
-        "latency_ms": 85253,
-        "output_tokens": 2048,
+        "input_tokens": 1643,
+        "latency_ms": 198979,
+        "output_tokens": 4096,
         "reasoning_tokens": 0,
-        "total_tokens": 2585,
+        "total_tokens": 5739,
+        "usage_source_counts": {
+          "actual": 2
+        }
+      },
+      "reasoning_tokens": null,
+      "duration_ms": 199273
+    },
+    {
+      "prompt": "Continue the previous answer from where it stopped. Do not repeat the completed part. Original request: Scrivi i numeri da 1 a 3000, uno per riga, senza commenti.\n\nPrevious partial answer:\n1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n17\n18\n19\n20\n21\n22\n23\n24\n25\n26\n27\n28\n29\n30\n31\n32\n33\n34\n35\n36\n37\n38\n39\n40\n41\n42\n43\n44\n45\n46\n47\n48\n49\n50\n51\n52\n53\n54\n55\n56\n57\n58\n59\n60\n61\n62\n63\n64\n65\n66\n67\n68\n69\n70\n71\n72\n73\n74\n75\n76\n77\n78\n79\n80\n81\n82\n83\n84\n85\n86\n87\n88\n89\n90\n91\n92\n93\n94\n95\n96\n97\n98\n99\n100\n101\n102\n103\n104\n105\n106\n107\n108\n109\n110\n111\n112\n113\n114\n115\n116\n117\n118\n119\n120\n121\n122\n123\n124\n125\n126\n127\n128\n129\n130\n131\n132\n133\n134\n135\n136\n137\n138\n139\n140\n141\n142\n143\n144\n145\n146\n147\n148\n149\n150\n151\n152\n153\n154\n155\n156\n157\n158\n159\n160161\n162\n163\n164\n165\n166\n167\n168\n169\n170\n171\n172\n173\n174\n175\n176\n177\n178\n179\n180\n181\n182\n183\n184\n185\n186\n187\n188\n189\n190\n191\n192\n193\n194\n195\n196\n197\n198\n199\n200\n201\n202\n203\n204\n205\n206\n207\n208\n209\n210\n211\n212\n213\n214\n215\n216\n217\n218\n219\n220\n221\n222\n223\n224\n225\n226\n227\n228\n229\n230\n231\n232\n233\n234\n235\n236\n237\n238\n239\n240\n241\n242\n243\n244\n245\n246\n247\n248\n249\n250\n251\n252\n253\n254\n255\n256\n257\n258\n259\n260\n261\n262\n263\n264\n265\n266\n267\n268\n269\n270\n271\n272\n273\n274\n275\n276\n277\n278\n279\n280\n281\n282\n283\n284\n285\n286\n287\n288\n289\n290\n291\n292\n293\n294\n295\n296\n297\n298\n299\n300\n301\n302\n303\n304\n305\n306\n307\n308\n309\n310\n311\n312\n313\n314\n315\n316\n317\n318\n319\n320\n321\n322\n323\n324\n325\n326\n327\n328\n329\n330\n331\n332\n333\n334\n335\n336\n337\n338\n339\n340\n341\n342\n343\n344\n345\n346\n347\n348\n349\n350\n351\n352\n353\n354\n355\n356\n357\n358\n359\n360\n361\n362\n363\n364\n365\n366\n367\n368\n369\n370\n371\n372\n373\n374\n375\n376\n377\n378\n379\n380\n381\n382\n383\n384\n385\n386\n387\n388\n389\n390\n391\n392\n393\n394\n395\n396\n397\n398\n399\n400\n401\n402\n403\n404\n405\n406\n407\n408\n409\n410\n411\n412\n413\n414\n415\n416\n417\n418\n419\n420\n421\n422\n423\n424\n425\n426\n427\n428\n429\n430\n431\n432\n433\n434\n435\n436\n437\n438\n439\n440\n441\n442\n443\n444\n445\n446\n447\n448\n449\n450\n451\n452\n453\n454\n455\n456\n457\n458\n459\n460\n461\n462\n463\n464\n465\n466\n467\n468\n469\n470\n471\n472\n473\n474\n475\n476\n477\n478\n479\n480\n481\n482\n483\n484\n485\n486\n487\n488\n489\n490\n491\n492\n493\n494\n495\n496\n497\n498\n499\n500\n501\n502\n503\n504\n505\n506\n507\n508\n509\n510\n511\n512\n513\n514\n515\n516\n517\n518\n519\n520\n521\n522\n523\n524\n525\n526\n527\n528\n529\n530\n531\n532\n533\n534\n535\n536\n537\n538\n539\n540\n541\n542\n543\n544\n545\n546\n547\n548\n549\n550\n551\n552\n553\n554\n555\n556\n557\n558\n559\n560\n561\n562\n563\n564\n565\n566\n567\n568\n569\n570\n571\n572\n573\n574\n575\n576\n577\n578\n579\n580\n581\n582\n583\n584\n585\n586\n587\n588\n589\n590\n591\n592\n593\n594\n595\n596\n597\n598\n599\n600\n601\n602\n603\n604\n605\n606\n607\n608\n609\n610\n611\n612\n613\n614\n615\n616\n617\n618\n619\n620\n621\n622\n623\n624\n625\n626\n627\n628\n629\n630\n631\n632\n633\n634\n635\n636\n637\n638\n639\n640\n641\n642\n643\n644\n645\n646\n647\n648\n649\n650\n651\n652\n653\n654\n6",
+      "answer": "655\n656\n657\n658\n659\n660\n661\n662\n663\n664\n665\n666\n667\n668\n669\n670\n671\n672\n673\n674\n675\n676\n677\n678\n679\n680\n681\n682\n683\n684\n685\n686\n687\n688\n689\n690\n691\n692\n693\n694\n695\n696\n697\n698\n699\n700\n701\n702\n703\n704\n705\n706\n707\n708\n709\n710\n711\n712\n713\n714\n715\n716\n717\n718\n719\n720\n721\n722\n723\n724\n725\n726\n727\n728\n729\n730\n731\n732\n733\n734\n735\n736\n737\n738\n739\n740\n741\n742\n743\n744\n745\n746\n747\n748\n749\n750\n751\n752\n753\n754\n755\n756\n757\n758\n759\n760\n761\n762\n763\n764\n765\n766\n767\n768\n769\n770\n771\n772\n773\n774\n775\n776\n777\n778\n779\n780\n781\n782\n783\n784\n785\n786\n787\n788\n789\n790\n791\n792\n793\n794\n795\n796\n797\n798\n799\n800\n801\n802\n803\n804\n805\n806\n807\n808\n809\n810\n811\n812\n813\n814\n815\n816\n817\n818\n819\n820\n821\n822\n823\n824\n825\n826\n827\n828\n829\n830\n831\n832\n833\n834\n835\n836\n837\n838\n839\n840\n841\n842\n843\n844\n845\n846\n847\n848\n849\n850\n851\n852\n853\n854\n855\n856\n857\n858\n859\n860\n861\n862\n863\n864\n865\n866\n867\n868\n869\n870\n871\n872\n873\n874\n875\n876\n877\n878\n879\n880\n881\n882\n883\n884\n885\n886\n887\n888\n889\n890\n891\n892\n893\n894\n895\n896\n897\n898\n899\n900\n901\n902\n903\n904\n905\n906\n907\n908\n909\n910\n911\n912\n913\n914\n915\n916\n917\n918\n919\n920\n921\n922\n923\n924925\n926\n927\n928\n929\n930\n931\n932\n933\n934\n935\n936\n937\n938\n939\n940\n941\n942\n943\n944\n945\n946\n947\n948\n949\n950\n951\n952\n953\n954\n955\n956\n957\n958\n959\n960\n961\n962\n963\n964\n965\n966\n967\n968\n969\n970\n971\n972\n973\n974\n975\n976\n977\n978\n979\n980\n981\n982\n983\n984\n985\n986\n987\n988\n989\n990\n991\n992\n993\n994\n995\n996\n997\n998\n999\n1000\n1001\n1002\n1003\n1004\n1005\n1006\n1007\n1008\n1009\n1010\n1011\n1012\n1013\n1014\n1015\n1016\n1017\n1018\n1019\n1020\n1021\n1022\n1023\n1024\n1025\n1026\n1027\n1028\n1029\n1030\n1031\n1032\n1033\n1034\n1035\n1036\n1037\n1038\n1039\n1040\n1041\n1042\n1043\n1044\n1045\n1046\n1047\n1048\n1049\n1050\n1051\n1052\n1053\n1054\n1055\n1056\n1057\n1058\n1059\n1060\n1061\n1062\n1063\n1064\n1065\n1066\n1067\n1068\n1069\n1070\n1071\n1072\n1073\n1074\n1075\n1076\n1077\n1078\n1079\n1080\n1081\n1082\n1083\n1084\n1085\n1086\n1087\n1088\n1089\n1090\n1091\n1092\n1093\n1094\n1095\n1096\n1097\n1098\n1099\n1100\n1101\n1102\n1103\n1104\n1105\n1106\n1107\n1108\n1109\n1110\n1111\n1112\n1113\n1114\n1115\n1116\n1117\n1118\n1119\n1120\n1121\n1122\n1123\n1124\n1125\n1126\n1127\n1128\n1129\n1130\n1131\n1132\n1133\n1134\n1135\n1136\n1137\n1138\n1139\n1140\n1141\n1142\n1143\n1144\n1145\n1146\n1147\n1148\n1149\n1150\n1151\n1152\n1153\n1154\n1155\n1156\n1157\n1158\n1159\n1160\n1161\n1162\n1163\n1164\n1165\n1166\n1167\n1168\n1169\n1170\n1171\n1172\n1173\n1174\n1175\n1176\n1177\n1178\n1179\n1180\n1181\n1182\n1183\n1184\n1185\n1186\n1187\n1188\n1189\n1190\n1191\n1192\n1193\n1194\n1195\n1196\n1197\n1198\n1199\n1200\n1201\n1202\n1203\n1204\n1205\n1206\n1207\n1208\n1209\n1210\n1211\n1212\n1213\n1214\n1215\n1216\n1217\n1218\n1219\n1220\n1221\n1222\n1223\n1224\n1225\n1226\n1227\n1228\n1229\n1230\n1231\n1232\n1233\n1234\n1235\n1236\n1237\n1238\n1239\n1240\n1241\n1242\n1243\n1244\n1245\n1246\n1247\n1248\n1249\n1250\n1251\n1252\n1253\n1254\n1255\n1256\n1257\n1258\n1259\n1260\n1261\n1262\n1263\n1264\n1265\n1266\n1267\n1268\n1269\n1270\n1271\n1272\n1273\n1274\n1275\n1276\n1277\n1278\n1279\n1280\n1281\n1282\n1283\n1284\n1285\n1286\n1287\n1288\n1289\n1290\n1291\n1292\n1293\n1294\n1295\n1296\n1297\n1298\n1299\n1300\n1301\n1302\n1303\n1304\n1305\n1306\n1307\n1308\n1309\n1310\n1311\n1312\n1313\n1314\n1315\n1316\n1317\n1318\n1319\n1320\n1321\n1322\n1323\n1324\n1325\n1326\n1327\n1328\n1329\n1330\n1331\n1332\n1333",
+      "state": "partial_terminal",
+      "model_id": "qwen3.8-27b-iq2m",
+      "finish_reason": "length",
+      "eval_counts": {
+        "prompt": 4187,
+        "output": 2048,
+        "source": "actual"
+      },
+      "usage_totals": {
+        "cache_read_tokens": 0,
+        "input_tokens": 7255,
+        "latency_ms": 205318,
+        "output_tokens": 4096,
+        "reasoning_tokens": 0,
+        "total_tokens": 11351,
+        "usage_source_counts": {
+          "actual": 2
+        }
+      },
+      "reasoning_tokens": null,
+      "duration_ms": 206849
+    },
+    {
+      "prompt": "ciao dopo il riavvio",
+      "answer": "Ciao. Dopo il riavvio, posso aiutarti con analisi, verifica e proposte, ma non posso eseguire solvers, modificare modelli o cambiare lo stato del progetto: quelle azioni vanno fatte da te nell’interfaccia JarvisOS.\n\nStato attuale delle capacità rilevanti:\n- `hermes`: non disponibile\n- `local_decision_routing`: non disponibile\n- `retrieval`: non configurato\n- `dwsim`: non disponibile\n- `openfoam`: disabilitato\n- `pbr`: non disponibile\n\nDimmi cosa vuoi fare dopo il riavvio: posso aiutarti a preparare la verifica, la documentazione o la proposta da promuovere.",
+      "state": "complete",
+      "model_id": "qwen3.8-27b-iq2m",
+      "finish_reason": "stop",
+      "eval_counts": {
+        "prompt": 521,
+        "output": 399,
+        "source": "actual"
+      },
+      "usage_totals": {
+        "cache_read_tokens": 0,
+        "input_tokens": 521,
+        "latency_ms": 19351,
+        "output_tokens": 399,
+        "reasoning_tokens": 0,
+        "total_tokens": 920,
         "usage_source_counts": {
           "actual": 1
         }
       },
       "reasoning_tokens": null,
-      "duration_ms": 86874
+      "duration_ms": 22999
     }
   ],
   "length_finish": {
     "status": "observed",
     "interaction": {
       "prompt": "Scrivi i numeri da 1 a 3000, uno per riga, senza commenti.",
-      "answer": "",
-      "state": "failed_terminal",
+      "answer": "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n17\n18\n19\n20\n21\n22\n23\n24\n25\n26\n27\n28\n29\n30\n31\n32\n33\n34\n35\n36\n37\n38\n39\n40\n41\n42\n43\n44\n45\n46\n47\n48\n49\n50\n51\n52\n53\n54\n55\n56\n57\n58\n59\n60\n61\n62\n63\n64\n65\n66\n67\n68\n69\n70\n71\n72\n73\n74\n75\n76\n77\n78\n79\n80\n81\n82\n83\n84\n85\n86\n87\n88\n89\n90\n91\n92\n93\n94\n95\n96\n97\n98\n99\n100\n101\n102\n103\n104\n105\n106\n107\n108\n109\n110\n111\n112\n113\n114\n115\n116\n117\n118\n119\n120\n121\n122\n123\n124\n125\n126\n127\n128\n129\n130\n131\n132\n133\n134\n135\n136\n137\n138\n139\n140\n141\n142\n143\n144\n145\n146\n147\n148\n149\n150\n151\n152\n153\n154\n155\n156\n157\n158\n159\n160161\n162\n163\n164\n165\n166\n167\n168\n169\n170\n171\n172\n173\n174\n175\n176\n177\n178\n179\n180\n181\n182\n183\n184\n185\n186\n187\n188\n189\n190\n191\n192\n193\n194\n195\n196\n197\n198\n199\n200\n201\n202\n203\n204\n205\n206\n207\n208\n209\n210\n211\n212\n213\n214\n215\n216\n217\n218\n219\n220\n221\n222\n223\n224\n225\n226\n227\n228\n229\n230\n231\n232\n233\n234\n235\n236\n237\n238\n239\n240\n241\n242\n243\n244\n245\n246\n247\n248\n249\n250\n251\n252\n253\n254\n255\n256\n257\n258\n259\n260\n261\n262\n263\n264\n265\n266\n267\n268\n269\n270\n271\n272\n273\n274\n275\n276\n277\n278\n279\n280\n281\n282\n283\n284\n285\n286\n287\n288\n289\n290\n291\n292\n293\n294\n295\n296\n297\n298\n299\n300\n301\n302\n303\n304\n305\n306\n307\n308\n309\n310\n311\n312\n313\n314\n315\n316\n317\n318\n319\n320\n321\n322\n323\n324\n325\n326\n327\n328\n329\n330\n331\n332\n333\n334\n335\n336\n337\n338\n339\n340\n341\n342\n343\n344\n345\n346\n347\n348\n349\n350\n351\n352\n353\n354\n355\n356\n357\n358\n359\n360\n361\n362\n363\n364\n365\n366\n367\n368\n369\n370\n371\n372\n373\n374\n375\n376\n377\n378\n379\n380\n381\n382\n383\n384\n385\n386\n387\n388\n389\n390\n391\n392\n393\n394\n395\n396\n397\n398\n399\n400\n401\n402\n403\n404\n405\n406\n407\n408\n409\n410\n411\n412\n413\n414\n415\n416\n417\n418\n419\n420\n421\n422\n423\n424\n425\n426\n427\n428\n429\n430\n431\n432\n433\n434\n435\n436\n437\n438\n439\n440\n441\n442\n443\n444\n445\n446\n447\n448\n449\n450\n451\n452\n453\n454\n455\n456\n457\n458\n459\n460\n461\n462\n463\n464\n465\n466\n467\n468\n469\n470\n471\n472\n473\n474\n475\n476\n477\n478\n479\n480\n481\n482\n483\n484\n485\n486\n487\n488\n489\n490\n491\n492\n493\n494\n495\n496\n497\n498\n499\n500\n501\n502\n503\n504\n505\n506\n507\n508\n509\n510\n511\n512\n513\n514\n515\n516\n517\n518\n519\n520\n521\n522\n523\n524\n525\n526\n527\n528\n529\n530\n531\n532\n533\n534\n535\n536\n537\n538\n539\n540\n541\n542\n543\n544\n545\n546\n547\n548\n549\n550\n551\n552\n553\n554\n555\n556\n557\n558\n559\n560\n561\n562\n563\n564\n565\n566\n567\n568\n569\n570\n571\n572\n573\n574\n575\n576\n577\n578\n579\n580\n581\n582\n583\n584\n585\n586\n587\n588\n589\n590\n591\n592\n593\n594\n595\n596\n597\n598\n599\n600\n601\n602\n603\n604\n605\n606\n607\n608\n609\n610\n611\n612\n613\n614\n615\n616\n617\n618\n619\n620\n621\n622\n623\n624\n625\n626\n627\n628\n629\n630\n631\n632\n633\n634\n635\n636\n637\n638\n639\n640\n641\n642\n643\n644\n645\n646\n647\n648\n649\n650\n651\n652\n653\n654\n6",
+      "state": "partial_terminal",
       "model_id": "qwen3.8-27b-iq2m",
       "finish_reason": "length",
       "eval_counts": {
-        "prompt": 537,
+        "prompt": 1107,
         "output": 2048,
         "source": "actual"
       },
       "usage_totals": {
         "cache_read_tokens": 0,
-        "input_tokens": 537,
-        "latency_ms": 85253,
-        "output_tokens": 2048,
+        "input_tokens": 1643,
+        "latency_ms": 198979,
+        "output_tokens": 4096,
         "reasoning_tokens": 0,
-        "total_tokens": 2585,
+        "total_tokens": 5739,
         "usage_source_counts": {
-          "actual": 1
+          "actual": 2
         }
       },
       "reasoning_tokens": null,
-      "duration_ms": 86874
+      "duration_ms": 199273
     },
-    "hidden_reasoning_empty_visible_answer": true,
-    "incomplete_warning_rendered": false,
-    "continue_button_rendered": false,
-    "continuation_clicked": false,
-    "continuation_prompt": "",
-    "continuation_result": null
+    "hidden_reasoning_empty_visible_answer": false,
+    "budget_exhausted_attempts": [],
+    "incomplete_warning_rendered": true,
+    "continue_button_rendered": true,
+    "continuation_clicked": true,
+    "continuation_prompt": "Continue the previous answer from where it stopped. Do not repeat the completed part. Original request: Scrivi i numeri da 1 a 3000, uno per riga, senza commenti.\n\nPrevious partial answer:\n1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n17\n18\n19\n20\n21\n22\n23\n24\n25\n26\n27\n28\n29\n30\n31\n32\n33\n34\n35\n36\n37\n38\n39\n40\n41\n42\n43\n44\n45\n46\n47\n48\n49\n50\n51\n52\n53\n54\n55\n56\n57\n58\n59\n60\n61\n62\n63\n64\n65\n66\n67\n68\n69\n70\n71\n72\n73\n74\n75\n76\n77\n78\n79\n80\n81\n82\n83\n84\n85\n86\n87\n88\n89\n90\n91\n92\n93\n94\n95\n96\n97\n98\n99\n100\n101\n102\n103\n104\n105\n106\n107\n108\n109\n110\n111\n112\n113\n114\n115\n116\n117\n118\n119\n120\n121\n122\n123\n124\n125\n126\n127\n128\n129\n130\n131\n132\n133\n134\n135\n136\n137\n138\n139\n140\n141\n142\n143\n144\n145\n146\n147\n148\n149\n150\n151\n152\n153\n154\n155\n156\n157\n158\n159\n160161\n162\n163\n164\n165\n166\n167\n168\n169\n170\n171\n172\n173\n174\n175\n176\n177\n178\n179\n180\n181\n182\n183\n184\n185\n186\n187\n188\n189\n190\n191\n192\n193\n194\n195\n196\n197\n198\n199\n200\n201\n202\n203\n204\n205\n206\n207\n208\n209\n210\n211\n212\n213\n214\n215\n216\n217\n218\n219\n220\n221\n222\n223\n224\n225\n226\n227\n228\n229\n230\n231\n232\n233\n234\n235\n236\n237\n238\n239\n240\n241\n242\n243\n244\n245\n246\n247\n248\n249\n250\n251\n252\n253\n254\n255\n256\n257\n258\n259\n260\n261\n262\n263\n264\n265\n266\n267\n268\n269\n270\n271\n272\n273\n274\n275\n276\n277\n278\n279\n280\n281\n282\n283\n284\n285\n286\n287\n288\n289\n290\n291\n292\n293\n294\n295\n296\n297\n298\n299\n300\n301\n302\n303\n304\n305\n306\n307\n308\n309\n310\n311\n312\n313\n314\n315\n316\n317\n318\n319\n320\n321\n322\n323\n324\n325\n326\n327\n328\n329\n330\n331\n332\n333\n334\n335\n336\n337\n338\n339\n340\n341\n342\n343\n344\n345\n346\n347\n348\n349\n350\n351\n352\n353\n354\n355\n356\n357\n358\n359\n360\n361\n362\n363\n364\n365\n366\n367\n368\n369\n370\n371\n372\n373\n374\n375\n376\n377\n378\n379\n380\n381\n382\n383\n384\n385\n386\n387\n388\n389\n390\n391\n392\n393\n394\n395\n396\n397\n398\n399\n400\n401\n402\n403\n404\n405\n406\n407\n408\n409\n410\n411\n412\n413\n414\n415\n416\n417\n418\n419\n420\n421\n422\n423\n424\n425\n426\n427\n428\n429\n430\n431\n432\n433\n434\n435\n436\n437\n438\n439\n440\n441\n442\n443\n444\n445\n446\n447\n448\n449\n450\n451\n452\n453\n454\n455\n456\n457\n458\n459\n460\n461\n462\n463\n464\n465\n466\n467\n468\n469\n470\n471\n472\n473\n474\n475\n476\n477\n478\n479\n480\n481\n482\n483\n484\n485\n486\n487\n488\n489\n490\n491\n492\n493\n494\n495\n496\n497\n498\n499\n500\n501\n502\n503\n504\n505\n506\n507\n508\n509\n510\n511\n512\n513\n514\n515\n516\n517\n518\n519\n520\n521\n522\n523\n524\n525\n526\n527\n528\n529\n530\n531\n532\n533\n534\n535\n536\n537\n538\n539\n540\n541\n542\n543\n544\n545\n546\n547\n548\n549\n550\n551\n552\n553\n554\n555\n556\n557\n558\n559\n560\n561\n562\n563\n564\n565\n566\n567\n568\n569\n570\n571\n572\n573\n574\n575\n576\n577\n578\n579\n580\n581\n582\n583\n584\n585\n586\n587\n588\n589\n590\n591\n592\n593\n594\n595\n596\n597\n598\n599\n600\n601\n602\n603\n604\n605\n606\n607\n608\n609\n610\n611\n612\n613\n614\n615\n616\n617\n618\n619\n620\n621\n622\n623\n624\n625\n626\n627\n628\n629\n630\n631\n632\n633\n634\n635\n636\n637\n638\n639\n640\n641\n642\n643\n644\n645\n646\n647\n648\n649\n650\n651\n652\n653\n654\n6",
+    "continuation_result": {
+      "prompt": "Continue the previous answer from where it stopped. Do not repeat the completed part. Original request: Scrivi i numeri da 1 a 3000, uno per riga, senza commenti.\n\nPrevious partial answer:\n1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n17\n18\n19\n20\n21\n22\n23\n24\n25\n26\n27\n28\n29\n30\n31\n32\n33\n34\n35\n36\n37\n38\n39\n40\n41\n42\n43\n44\n45\n46\n47\n48\n49\n50\n51\n52\n53\n54\n55\n56\n57\n58\n59\n60\n61\n62\n63\n64\n65\n66\n67\n68\n69\n70\n71\n72\n73\n74\n75\n76\n77\n78\n79\n80\n81\n82\n83\n84\n85\n86\n87\n88\n89\n90\n91\n92\n93\n94\n95\n96\n97\n98\n99\n100\n101\n102\n103\n104\n105\n106\n107\n108\n109\n110\n111\n112\n113\n114\n115\n116\n117\n118\n119\n120\n121\n122\n123\n124\n125\n126\n127\n128\n129\n130\n131\n132\n133\n134\n135\n136\n137\n138\n139\n140\n141\n142\n143\n144\n145\n146\n147\n148\n149\n150\n151\n152\n153\n154\n155\n156\n157\n158\n159\n160161\n162\n163\n164\n165\n166\n167\n168\n169\n170\n171\n172\n173\n174\n175\n176\n177\n178\n179\n180\n181\n182\n183\n184\n185\n186\n187\n188\n189\n190\n191\n192\n193\n194\n195\n196\n197\n198\n199\n200\n201\n202\n203\n204\n205\n206\n207\n208\n209\n210\n211\n212\n213\n214\n215\n216\n217\n218\n219\n220\n221\n222\n223\n224\n225\n226\n227\n228\n229\n230\n231\n232\n233\n234\n235\n236\n237\n238\n239\n240\n241\n242\n243\n244\n245\n246\n247\n248\n249\n250\n251\n252\n253\n254\n255\n256\n257\n258\n259\n260\n261\n262\n263\n264\n265\n266\n267\n268\n269\n270\n271\n272\n273\n274\n275\n276\n277\n278\n279\n280\n281\n282\n283\n284\n285\n286\n287\n288\n289\n290\n291\n292\n293\n294\n295\n296\n297\n298\n299\n300\n301\n302\n303\n304\n305\n306\n307\n308\n309\n310\n311\n312\n313\n314\n315\n316\n317\n318\n319\n320\n321\n322\n323\n324\n325\n326\n327\n328\n329\n330\n331\n332\n333\n334\n335\n336\n337\n338\n339\n340\n341\n342\n343\n344\n345\n346\n347\n348\n349\n350\n351\n352\n353\n354\n355\n356\n357\n358\n359\n360\n361\n362\n363\n364\n365\n366\n367\n368\n369\n370\n371\n372\n373\n374\n375\n376\n377\n378\n379\n380\n381\n382\n383\n384\n385\n386\n387\n388\n389\n390\n391\n392\n393\n394\n395\n396\n397\n398\n399\n400\n401\n402\n403\n404\n405\n406\n407\n408\n409\n410\n411\n412\n413\n414\n415\n416\n417\n418\n419\n420\n421\n422\n423\n424\n425\n426\n427\n428\n429\n430\n431\n432\n433\n434\n435\n436\n437\n438\n439\n440\n441\n442\n443\n444\n445\n446\n447\n448\n449\n450\n451\n452\n453\n454\n455\n456\n457\n458\n459\n460\n461\n462\n463\n464\n465\n466\n467\n468\n469\n470\n471\n472\n473\n474\n475\n476\n477\n478\n479\n480\n481\n482\n483\n484\n485\n486\n487\n488\n489\n490\n491\n492\n493\n494\n495\n496\n497\n498\n499\n500\n501\n502\n503\n504\n505\n506\n507\n508\n509\n510\n511\n512\n513\n514\n515\n516\n517\n518\n519\n520\n521\n522\n523\n524\n525\n526\n527\n528\n529\n530\n531\n532\n533\n534\n535\n536\n537\n538\n539\n540\n541\n542\n543\n544\n545\n546\n547\n548\n549\n550\n551\n552\n553\n554\n555\n556\n557\n558\n559\n560\n561\n562\n563\n564\n565\n566\n567\n568\n569\n570\n571\n572\n573\n574\n575\n576\n577\n578\n579\n580\n581\n582\n583\n584\n585\n586\n587\n588\n589\n590\n591\n592\n593\n594\n595\n596\n597\n598\n599\n600\n601\n602\n603\n604\n605\n606\n607\n608\n609\n610\n611\n612\n613\n614\n615\n616\n617\n618\n619\n620\n621\n622\n623\n624\n625\n626\n627\n628\n629\n630\n631\n632\n633\n634\n635\n636\n637\n638\n639\n640\n641\n642\n643\n644\n645\n646\n647\n648\n649\n650\n651\n652\n653\n654\n6",
+      "answer": "655\n656\n657\n658\n659\n660\n661\n662\n663\n664\n665\n666\n667\n668\n669\n670\n671\n672\n673\n674\n675\n676\n677\n678\n679\n680\n681\n682\n683\n684\n685\n686\n687\n688\n689\n690\n691\n692\n693\n694\n695\n696\n697\n698\n699\n700\n701\n702\n703\n704\n705\n706\n707\n708\n709\n710\n711\n712\n713\n714\n715\n716\n717\n718\n719\n720\n721\n722\n723\n724\n725\n726\n727\n728\n729\n730\n731\n732\n733\n734\n735\n736\n737\n738\n739\n740\n741\n742\n743\n744\n745\n746\n747\n748\n749\n750\n751\n752\n753\n754\n755\n756\n757\n758\n759\n760\n761\n762\n763\n764\n765\n766\n767\n768\n769\n770\n771\n772\n773\n774\n775\n776\n777\n778\n779\n780\n781\n782\n783\n784\n785\n786\n787\n788\n789\n790\n791\n792\n793\n794\n795\n796\n797\n798\n799\n800\n801\n802\n803\n804\n805\n806\n807\n808\n809\n810\n811\n812\n813\n814\n815\n816\n817\n818\n819\n820\n821\n822\n823\n824\n825\n826\n827\n828\n829\n830\n831\n832\n833\n834\n835\n836\n837\n838\n839\n840\n841\n842\n843\n844\n845\n846\n847\n848\n849\n850\n851\n852\n853\n854\n855\n856\n857\n858\n859\n860\n861\n862\n863\n864\n865\n866\n867\n868\n869\n870\n871\n872\n873\n874\n875\n876\n877\n878\n879\n880\n881\n882\n883\n884\n885\n886\n887\n888\n889\n890\n891\n892\n893\n894\n895\n896\n897\n898\n899\n900\n901\n902\n903\n904\n905\n906\n907\n908\n909\n910\n911\n912\n913\n914\n915\n916\n917\n918\n919\n920\n921\n922\n923\n924925\n926\n927\n928\n929\n930\n931\n932\n933\n934\n935\n936\n937\n938\n939\n940\n941\n942\n943\n944\n945\n946\n947\n948\n949\n950\n951\n952\n953\n954\n955\n956\n957\n958\n959\n960\n961\n962\n963\n964\n965\n966\n967\n968\n969\n970\n971\n972\n973\n974\n975\n976\n977\n978\n979\n980\n981\n982\n983\n984\n985\n986\n987\n988\n989\n990\n991\n992\n993\n994\n995\n996\n997\n998\n999\n1000\n1001\n1002\n1003\n1004\n1005\n1006\n1007\n1008\n1009\n1010\n1011\n1012\n1013\n1014\n1015\n1016\n1017\n1018\n1019\n1020\n1021\n1022\n1023\n1024\n1025\n1026\n1027\n1028\n1029\n1030\n1031\n1032\n1033\n1034\n1035\n1036\n1037\n1038\n1039\n1040\n1041\n1042\n1043\n1044\n1045\n1046\n1047\n1048\n1049\n1050\n1051\n1052\n1053\n1054\n1055\n1056\n1057\n1058\n1059\n1060\n1061\n1062\n1063\n1064\n1065\n1066\n1067\n1068\n1069\n1070\n1071\n1072\n1073\n1074\n1075\n1076\n1077\n1078\n1079\n1080\n1081\n1082\n1083\n1084\n1085\n1086\n1087\n1088\n1089\n1090\n1091\n1092\n1093\n1094\n1095\n1096\n1097\n1098\n1099\n1100\n1101\n1102\n1103\n1104\n1105\n1106\n1107\n1108\n1109\n1110\n1111\n1112\n1113\n1114\n1115\n1116\n1117\n1118\n1119\n1120\n1121\n1122\n1123\n1124\n1125\n1126\n1127\n1128\n1129\n1130\n1131\n1132\n1133\n1134\n1135\n1136\n1137\n1138\n1139\n1140\n1141\n1142\n1143\n1144\n1145\n1146\n1147\n1148\n1149\n1150\n1151\n1152\n1153\n1154\n1155\n1156\n1157\n1158\n1159\n1160\n1161\n1162\n1163\n1164\n1165\n1166\n1167\n1168\n1169\n1170\n1171\n1172\n1173\n1174\n1175\n1176\n1177\n1178\n1179\n1180\n1181\n1182\n1183\n1184\n1185\n1186\n1187\n1188\n1189\n1190\n1191\n1192\n1193\n1194\n1195\n1196\n1197\n1198\n1199\n1200\n1201\n1202\n1203\n1204\n1205\n1206\n1207\n1208\n1209\n1210\n1211\n1212\n1213\n1214\n1215\n1216\n1217\n1218\n1219\n1220\n1221\n1222\n1223\n1224\n1225\n1226\n1227\n1228\n1229\n1230\n1231\n1232\n1233\n1234\n1235\n1236\n1237\n1238\n1239\n1240\n1241\n1242\n1243\n1244\n1245\n1246\n1247\n1248\n1249\n1250\n1251\n1252\n1253\n1254\n1255\n1256\n1257\n1258\n1259\n1260\n1261\n1262\n1263\n1264\n1265\n1266\n1267\n1268\n1269\n1270\n1271\n1272\n1273\n1274\n1275\n1276\n1277\n1278\n1279\n1280\n1281\n1282\n1283\n1284\n1285\n1286\n1287\n1288\n1289\n1290\n1291\n1292\n1293\n1294\n1295\n1296\n1297\n1298\n1299\n1300\n1301\n1302\n1303\n1304\n1305\n1306\n1307\n1308\n1309\n1310\n1311\n1312\n1313\n1314\n1315\n1316\n1317\n1318\n1319\n1320\n1321\n1322\n1323\n1324\n1325\n1326\n1327\n1328\n1329\n1330\n1331\n1332\n1333",
+      "state": "partial_terminal",
+      "model_id": "qwen3.8-27b-iq2m",
+      "finish_reason": "length",
+      "eval_counts": {
+        "prompt": 4187,
+        "output": 2048,
+        "source": "actual"
+      },
+      "usage_totals": {
+        "cache_read_tokens": 0,
+        "input_tokens": 7255,
+        "latency_ms": 205318,
+        "output_tokens": 4096,
+        "reasoning_tokens": 0,
+        "total_tokens": 11351,
+        "usage_source_counts": {
+          "actual": 2
+        }
+      },
+      "reasoning_tokens": null,
+      "duration_ms": 206849
+    }
   },
   "screenshots": [
     {
@@ -4861,11 +5745,11 @@
     },
     {
       "path": "scripts/qualification/151/sidecar-llamacpp-complete-answers.jpg",
-      "size_bytes": 92356
+      "size_bytes": 95898
     },
     {
       "path": "scripts/qualification/151/sidecar-llamacpp-incomplete-answer.jpg",
-      "size_bytes": 92750
+      "size_bytes": 95157
     }
   ],
   "console_errors": [],
@@ -4873,20 +5757,26 @@
   "timings_ms": [
     {
       "prompt": "funzioni jarvis?",
-      "duration_ms": 61094
+      "duration_ms": 63826
     },
     {
       "prompt": "ciao",
-      "duration_ms": 10136
+      "duration_ms": 18023
     },
     {
       "prompt": "Scrivi i numeri da 1 a 3000, uno per riga, senza commenti.",
-      "duration_ms": 86874
+      "duration_ms": 199273
+    },
+    {
+      "prompt": "Continue the previous answer from where it stopped. Do not repeat the completed part. Original request: Scrivi i numeri da 1 a 3000, uno per riga, senza commenti.\n\nPrevious partial answer:\n1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n17\n18\n19\n20\n21\n22\n23\n24\n25\n26\n27\n28\n29\n30\n31\n32\n33\n34\n35\n36\n37\n38\n39\n40\n41\n42\n43\n44\n45\n46\n47\n48\n49\n50\n51\n52\n53\n54\n55\n56\n57\n58\n59\n60\n61\n62\n63\n64\n65\n66\n67\n68\n69\n70\n71\n72\n73\n74\n75\n76\n77\n78\n79\n80\n81\n82\n83\n84\n85\n86\n87\n88\n89\n90\n91\n92\n93\n94\n95\n96\n97\n98\n99\n100\n101\n102\n103\n104\n105\n106\n107\n108\n109\n110\n111\n112\n113\n114\n115\n116\n117\n118\n119\n120\n121\n122\n123\n124\n125\n126\n127\n128\n129\n130\n131\n132\n133\n134\n135\n136\n137\n138\n139\n140\n141\n142\n143\n144\n145\n146\n147\n148\n149\n150\n151\n152\n153\n154\n155\n156\n157\n158\n159\n160161\n162\n163\n164\n165\n166\n167\n168\n169\n170\n171\n172\n173\n174\n175\n176\n177\n178\n179\n180\n181\n182\n183\n184\n185\n186\n187\n188\n189\n190\n191\n192\n193\n194\n195\n196\n197\n198\n199\n200\n201\n202\n203\n204\n205\n206\n207\n208\n209\n210\n211\n212\n213\n214\n215\n216\n217\n218\n219\n220\n221\n222\n223\n224\n225\n226\n227\n228\n229\n230\n231\n232\n233\n234\n235\n236\n237\n238\n239\n240\n241\n242\n243\n244\n245\n246\n247\n248\n249\n250\n251\n252\n253\n254\n255\n256\n257\n258\n259\n260\n261\n262\n263\n264\n265\n266\n267\n268\n269\n270\n271\n272\n273\n274\n275\n276\n277\n278\n279\n280\n281\n282\n283\n284\n285\n286\n287\n288\n289\n290\n291\n292\n293\n294\n295\n296\n297\n298\n299\n300\n301\n302\n303\n304\n305\n306\n307\n308\n309\n310\n311\n312\n313\n314\n315\n316\n317\n318\n319\n320\n321\n322\n323\n324\n325\n326\n327\n328\n329\n330\n331\n332\n333\n334\n335\n336\n337\n338\n339\n340\n341\n342\n343\n344\n345\n346\n347\n348\n349\n350\n351\n352\n353\n354\n355\n356\n357\n358\n359\n360\n361\n362\n363\n364\n365\n366\n367\n368\n369\n370\n371\n372\n373\n374\n375\n376\n377\n378\n379\n380\n381\n382\n383\n384\n385\n386\n387\n388\n389\n390\n391\n392\n393\n394\n395\n396\n397\n398\n399\n400\n401\n402\n403\n404\n405\n406\n407\n408\n409\n410\n411\n412\n413\n414\n415\n416\n417\n418\n419\n420\n421\n422\n423\n424\n425\n426\n427\n428\n429\n430\n431\n432\n433\n434\n435\n436\n437\n438\n439\n440\n441\n442\n443\n444\n445\n446\n447\n448\n449\n450\n451\n452\n453\n454\n455\n456\n457\n458\n459\n460\n461\n462\n463\n464\n465\n466\n467\n468\n469\n470\n471\n472\n473\n474\n475\n476\n477\n478\n479\n480\n481\n482\n483\n484\n485\n486\n487\n488\n489\n490\n491\n492\n493\n494\n495\n496\n497\n498\n499\n500\n501\n502\n503\n504\n505\n506\n507\n508\n509\n510\n511\n512\n513\n514\n515\n516\n517\n518\n519\n520\n521\n522\n523\n524\n525\n526\n527\n528\n529\n530\n531\n532\n533\n534\n535\n536\n537\n538\n539\n540\n541\n542\n543\n544\n545\n546\n547\n548\n549\n550\n551\n552\n553\n554\n555\n556\n557\n558\n559\n560\n561\n562\n563\n564\n565\n566\n567\n568\n569\n570\n571\n572\n573\n574\n575\n576\n577\n578\n579\n580\n581\n582\n583\n584\n585\n586\n587\n588\n589\n590\n591\n592\n593\n594\n595\n596\n597\n598\n599\n600\n601\n602\n603\n604\n605\n606\n607\n608\n609\n610\n611\n612\n613\n614\n615\n616\n617\n618\n619\n620\n621\n622\n623\n624\n625\n626\n627\n628\n629\n630\n631\n632\n633\n634\n635\n636\n637\n638\n639\n640\n641\n642\n643\n644\n645\n646\n647\n648\n649\n650\n651\n652\n653\n654\n6",
+      "duration_ms": 206849
+    },
+    {
+      "prompt": "ciao dopo il riavvio",
+      "duration_ms": 22999
     }
   ],
-  "elapsed_seconds": 336.702,
-  "proof_status": "incomplete",
-  "proof_failures": [
-    "Error: interaction model null did not match configured llama.cpp model qwen3.8-27b-iq2m"
-  ]
+  "elapsed_seconds": 716.113,
+  "proof_status": "passed",
+  "proof_failures": []
 }
