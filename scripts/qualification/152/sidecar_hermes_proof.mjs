@@ -31,8 +31,12 @@ const llamaConfig = {
   model_id: "qwen3.8-27b-iq2m",
   pinned_build_id: "b11178-f9af9be21",
   port: 18081,
-  ctx_size: 8192,
+  // Agent mode re-sends Hermes' system prompt, tool schemas and tool results each
+  // relay call; 8192 overflowed (8654-token request). A q8_0 KV cache keeps 16k
+  // fully on the GPU (measured 10.8 of 12.2 GB, same prompt/generation speed).
+  ctx_size: 16384,
   n_gpu_layers: 99,
+  extra_args: ["-fa", "on", "-ctk", "q8_0", "-ctv", "q8_0"],
 };
 const dataRoot = await mkdtemp(join(tmpdir(), "jarvisos-152p-data-"));
 const tempDir = await mkdtemp(join(tmpdir(), "jarvisos-152p-proof-"));
@@ -388,8 +392,13 @@ try {
   if (proof.proof_status !== "passed") proof.proof_status = "incomplete";
   await writeFile(proofFile, `${JSON.stringify(proof, null, 2)}\n`);
   evidenceWritten = true;
-  await rm(dataRoot, { recursive: true, force: true });
-  await rm(tempDir, { recursive: true, force: true });
+  // Failed runs keep their data root (backend log, Hermes worker stderr, database) for diagnosis.
+  if (proof.proof_status === "passed" || env.JARVISOS_PROOF_DISCARD_FAILED === "1") {
+    await rm(dataRoot, { recursive: true, force: true });
+    await rm(tempDir, { recursive: true, force: true });
+  } else {
+    proof.retained_data_root = dataRoot;
+  }
 }
 console.log(JSON.stringify(proof, null, 2));
 if (fatalError || proof.proof_status !== "passed") process.exitCode = 1;
