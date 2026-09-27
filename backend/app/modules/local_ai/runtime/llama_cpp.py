@@ -9,6 +9,7 @@ import signal
 import subprocess
 import threading
 import time
+from collections import deque
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -43,6 +44,7 @@ class LlamaCppRuntimeConfig:
     request_timeout_s: float = 900.0
     startup_wait_s: float = 10.0
     log_path: str = ""
+    thinking: str = "default"
 
     @property
     def origin(self) -> str:
@@ -71,6 +73,9 @@ def llama_cpp_runtime_config() -> LlamaCppRuntimeConfig:
     if isinstance(library_dirs, str):
         library_dirs = library_dirs.split(os.pathsep)
     n_gpu_layers = get("n_gpu_layers", "JARVISOS_LLAMACPP_N_GPU_LAYERS", None)
+    thinking = str(get("thinking", "JARVISOS_LLAMACPP_THINKING", "default"))
+    if thinking not in {"default", "on", "off"}:
+        thinking = "default"
     return LlamaCppRuntimeConfig(
         binary_path=str(get("binary_path", "JARVISOS_LLAMACPP_BINARY", "")),
         model_path=str(get("model_path", "JARVISOS_LLAMACPP_MODEL", "")),
@@ -88,6 +93,7 @@ def llama_cpp_runtime_config() -> LlamaCppRuntimeConfig:
         request_timeout_s=float(get("request_timeout_s", "JARVISOS_LLAMACPP_REQUEST_TIMEOUT_S", 900.0)),
         startup_wait_s=float(get("startup_wait_s", "JARVISOS_LLAMACPP_STARTUP_WAIT_S", 10.0)),
         log_path=str(get("log_path", "JARVISOS_LLAMACPP_LOG", build_paths().data_root / "logs" / "llama-server.log")),
+        thinking=thinking,
     )
 
 
@@ -185,6 +191,12 @@ class LlamaCppRuntimeOwner:
         self._api_key: str | None = None
         self._exit_code: int | None = None
         self._lock = threading.RLock()
+        self._stop_requested = False
+        self._crash_count = 0
+        self._last_crash_at: str | None = None
+        self._crashed = False
+        self._recovery_in_flight = False
+        self._automatic_restart_times: deque[float] = deque()
 
     @property
     def api_key(self) -> str | None:
@@ -198,9 +210,18 @@ class LlamaCppRuntimeOwner:
     def _reap(self) -> None:
         if self._process is not None and self._process.poll() is not None:
             self._exit_code = self._process.returncode
+            if not self._stop_requested:
+                self._crash_count += 1
+                self._last_crash_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+                self._crashed = True
             self._process, self._api_key = None, None
+            self._stop_requested = False
 
     def status(self) -> dict[str, Any]:
+        with self._lock:
+            return self._status_locked()
+
+    def _status_locked(self, *, include_recovery: bool = True) -> dict[str, Any]:
         config = self.config
         self._reap()
         reason = validate_loopback_host(config.host)
@@ -215,7 +236,13 @@ class LlamaCppRuntimeOwner:
             "n_gpu_layers": config.n_gpu_layers, "vram_bytes": None, "ram_bytes": None,
             "request_slots": None, "spawned_by_jarvis": self._process is not None,
             "digest_state": None, "last_exit_code": self._exit_code,
+            "thinking": config.thinking, "crash_count": self._crash_count,
+            "last_crash_at": self._last_crash_at,
         }
+        if include_recovery and self._recovery_in_flight:
+            row["reason_code"] = "LLAMACPP_RECOVERING"
+            row["message"] = "Local llama-server crashed; automatic recovery is loading the configured model."
+            return row
         if reason:
             row["message"] = (
                 "Windows-to-WSL llama-server endpoints are unsupported; run Jarvis and llama-server in the same network namespace."
@@ -270,7 +297,7 @@ class LlamaCppRuntimeOwner:
 
     def start(self) -> dict[str, Any]:
         with self._lock:
-            existing = self.status()
+            existing = self._status_locked(include_recovery=False)
             if existing["runtime_reachable"]:
                 return existing
             reason = validate_loopback_host(self.config.host)
@@ -308,18 +335,21 @@ class LlamaCppRuntimeOwner:
                 if log_path is not None:
                     log.close()  # type: ignore[union-attr]
             self._api_key, self._exit_code = api_key, None
+            self._stop_requested = False
+            self._crashed = False
             # A cold GGUF load can take minutes; status reports LLAMACPP_LOADING meanwhile.
             deadline = time.monotonic() + config.startup_wait_s
             while time.monotonic() < deadline:
-                snapshot = self.status()
+                snapshot = self._status_locked(include_recovery=False)
                 if snapshot["runtime_reachable"]:
                     return snapshot
                 self._sleep(0.1)
-            return self.status()
+            return self._status_locked(include_recovery=False)
 
     def stop(self) -> dict[str, Any]:
         with self._lock:
             if self._process is not None:
+                self._stop_requested = True
                 process, self._process = self._process, None
                 try:
                     if os.name != "nt":
@@ -331,6 +361,42 @@ class LlamaCppRuntimeOwner:
                     process.kill()
                 self._api_key = None
             return self.status()
+
+    def recover_if_crashed(self) -> dict[str, Any]:
+        """Schedule one bounded restart after an unexpected exit of our managed process."""
+        with self._lock:
+            self._reap()
+            now = time.monotonic()
+            while self._automatic_restart_times and now - self._automatic_restart_times[0] >= 600:
+                self._automatic_restart_times.popleft()
+            if self._recovery_in_flight:
+                row = self._status_locked()
+                row["reason_code"] = "LLAMACPP_RECOVERING"
+                row["message"] = "Local llama-server crashed; automatic recovery is loading the configured model."
+                return row
+            if not self._crashed or not self.config.manage or self._process is not None:
+                return self._status_locked()
+            if len(self._automatic_restart_times) >= 3:
+                row = self._status_locked()
+                row["reason_code"] = "LLAMACPP_CRASH_LOOP"
+                row["message"] = "Local model crashed repeatedly; restart it from Settings / AI or the launcher"
+                return row
+            self._automatic_restart_times.append(now)
+            self._crashed = False
+            self._recovery_in_flight = True
+            thread = threading.Thread(target=self._recover, daemon=True, name="llamacpp-recovery")
+            thread.start()
+            row = self._status_locked()
+            row["reason_code"] = "LLAMACPP_RECOVERING"
+            row["message"] = "Local llama-server crashed; automatic recovery is loading the configured model."
+            return row
+
+    def _recover(self) -> None:
+        try:
+            self.start()
+        finally:
+            with self._lock:
+                self._recovery_in_flight = False
 
     def verify_digest(self) -> dict[str, Any]:
         """Schedule one background SHA-256 of the configured model; poll status for the result."""

@@ -76,6 +76,9 @@ class LocalLlamaCppAdapter:
             "max_tokens": request.max_output_tokens or 2048,
             "stream": False,
         }
+        config = llama_cpp_runtime_config()
+        if config.thinking in {"on", "off"}:
+            payload["chat_template_kwargs"] = {"enable_thinking": config.thinking == "on"}
         client = self._client_factory()
         try:
             response = client.post(f"{base_url}/chat/completions", json=payload,
@@ -91,12 +94,19 @@ class LocalLlamaCppAdapter:
             cause = (f"HTTP {exc.response.status_code}" if isinstance(exc, httpx.HTTPStatusError)
                      else type(exc).__name__)
             logger.warning("llama-server request failed: %s", cause)
+            recovery_in_progress = False
+            if isinstance(exc, httpx.RequestError):
+                recovery = get_llama_cpp_runtime_owner().recover_if_crashed()
+                recovery_in_progress = recovery.get("reason_code") == "LLAMACPP_RECOVERING"
+            failure_message = f"Local llama-server request failed ({cause})."
+            if recovery_in_progress:
+                failure_message += " Automatic recovery is in progress."
             return AIResponse(
                 provider_id=self.provider_id, model_id=model_id, request_id=request.request_id,
                 correlation_id=request.correlation_id, finish_reason="error", safety_status="allowed",
                 usage=AIUsage(provider_id=self.provider_id, model_id=model_id),
                 error=AIProviderError(code=AIProviderErrorCode.provider_unavailable,
-                                      message=f"Local llama-server request failed ({cause}).", retryable=True),
+                                      message=failure_message, retryable=True),
             )
         finally:
             close = getattr(client, "close", None)
