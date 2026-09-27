@@ -130,3 +130,27 @@ def test_real_git_fast_forward_then_dirty_and_offline_safe_mode(monkeypatch, tmp
     git("remote", "set-url", "origin", str(tmp_path / "missing-origin"), cwd=checkout)
     assert launcher.update_checkout(False).head == state_after_update.head
     assert (checkout / "operator.txt").read_text() == "private work\n"
+
+
+def test_self_update_continues_on_the_updated_launcher(monkeypatch, tmp_path):
+    heads = iter(["a" * 40])
+    monkeypatch.setattr(launcher, "CANONICAL_REPO", launcher.REPO)
+    monkeypatch.setattr(launcher, "STATE_DIR", tmp_path)
+    monkeypatch.setattr(launcher, "say", lambda message: None)
+    monkeypatch.setattr(launcher, "load_config", lambda: {})
+    monkeypatch.setattr(launcher, "read_git_state", lambda fetch: state(head=next(heads)))
+    monkeypatch.setattr(launcher, "update_checkout", lambda no_update: state(head="b" * 40))
+    monkeypatch.setattr(launcher.sys, "argv", ["jarvisos_launcher.py", "start", "--pause-on-error"])
+
+    class Relaunched(Exception):
+        pass
+
+    def relaunch(argv):
+        raise Relaunched(argv)
+
+    monkeypatch.setattr(launcher, "relaunch", relaunch)
+    with pytest.raises(Relaunched) as exc:
+        launcher.start(SimpleNamespace(no_update=False, no_browser=True))
+    argv = exc.value.args[0]
+    assert argv[1] == str(launcher.REPO / "scripts" / "jarvisos_launcher.py")
+    assert argv[2:] == ["start", "--pause-on-error", "--no-update"]

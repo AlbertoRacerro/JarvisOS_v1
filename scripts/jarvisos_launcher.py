@@ -674,6 +674,11 @@ def resolve_port_conflict(port: int) -> None:
         raise LaunchError(f"Port {port} is still in use by a process this launcher cannot identify (for example another user or Windows). Close it, or set JARVISOS_PORT in {CONFIG_FILE}.")
 
 
+def relaunch(argv: list[str]) -> None:
+    sys.stdout.flush()
+    os.execv(argv[0], argv)
+
+
 def start(args: argparse.Namespace) -> int:
     if REPO.resolve() != CANONICAL_REPO.resolve():
         raise LaunchError(f"This launcher starts only the canonical checkout at {CANONICAL_REPO}; this copy is at {REPO}.")
@@ -690,7 +695,13 @@ def start(args: argparse.Namespace) -> int:
         say(f"No configuration at {CONFIG_FILE}; using defaults (local model and Hermes need `setup`).")
     port = port_of(config)
     url = f"http://127.0.0.1:{port}/"
+    loaded_head = read_git_state(fetch=False).head
     state = update_checkout(args.no_update)
+    if state.head != loaded_head:
+        # This process still runs the code it loaded before the update; continue on the updated launcher.
+        say("Continuing with the updated launcher…")
+        lock.close()
+        relaunch([sys.executable, str(REPO / "scripts" / "jarvisos_launcher.py"), *sys.argv[1:], "--no-update"])
     if state.branch != "master":
         raise LaunchError(f"The canonical checkout is on {state.branch}. Switch it to master without discarding local work before starting JarvisOS.")
     ensure_backend_env()
