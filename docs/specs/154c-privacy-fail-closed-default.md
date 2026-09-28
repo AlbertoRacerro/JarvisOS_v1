@@ -1,6 +1,6 @@
 # 154c — Privacy fail-closed default
 
-State: **ready**. Combined definition, contract and readiness, authorized by the maintainer's 2026-09-28 pre-155 directive: strategic, proprietary, confidential or credential-bearing information must never reach an external provider unless Jarvis first builds an explicitly permitted derivative. Smallest change inside the accepted 059 egress contract; no new authority, provider or egress surface.
+State: **ready**. Combined definition, contract and readiness, authorized by the maintainer's 2026-09-28 pre-155 directive: strategic, proprietary, confidential or credential-bearing information must never reach an external provider unless Jarvis first builds an explicitly permitted derivative. Smallest change inside the accepted 059/059b egress contract; no new authority, provider or egress surface.
 
 ## Fresh baseline
 

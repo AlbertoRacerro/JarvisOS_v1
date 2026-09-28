@@ -446,7 +446,7 @@ SCHEMA_STATEMENTS = [
     """
     CREATE TABLE IF NOT EXISTS ai_settings (
         id TEXT PRIMARY KEY,
-        policy_mode TEXT NOT NULL DEFAULT 'FAST_DEV',
+        policy_mode TEXT NOT NULL DEFAULT 'STRICT_IP',
         monthly_api_budget_usd REAL NOT NULL DEFAULT 0,
         api_spend_month_to_date_usd REAL NOT NULL DEFAULT 0,
         paid_ai_enabled INTEGER NOT NULL DEFAULT 0,
@@ -471,7 +471,7 @@ SCHEMA_STATEMENTS = [
 ]
 
 SCHEMA_MIGRATION_STATEMENTS = [
-    "ALTER TABLE ai_settings ADD COLUMN policy_mode TEXT NOT NULL DEFAULT 'FAST_DEV'",
+    "ALTER TABLE ai_settings ADD COLUMN policy_mode TEXT NOT NULL DEFAULT 'STRICT_IP'",
     "ALTER TABLE ai_settings ADD COLUMN scaleway_smoke_test_enabled INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE ai_settings ADD COLUMN scaleway_live_smoke_test_enabled INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE ai_settings ADD COLUMN scaleway_monthly_token_cap INTEGER NOT NULL DEFAULT 500000",

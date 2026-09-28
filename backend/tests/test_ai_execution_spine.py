@@ -9,11 +9,18 @@ import pytest
 
 from app.modules.ai.contracts import (
     AIExternalDispatchState,
+    AIPolicyMode,
     AIRequest,
     AIResponse,
     AIUsage,
     AIUsageSource,
 )
+
+
+@pytest.fixture(autouse=True)
+def _fast_dev_policy(monkeypatch: pytest.MonkeyPatch) -> None:
+    """These flows exercise the opt-in FAST_DEV prompt default; the product default is STRICT_IP."""
+    monkeypatch.setattr("app.modules.ai.settings.DEFAULT_POLICY_MODE", AIPolicyMode.FAST_DEV)
 
 
 def _isolate_and_init(monkeypatch, tmp_path) -> None:

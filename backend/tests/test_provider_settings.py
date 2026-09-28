@@ -646,3 +646,16 @@ def test_disabled_policy_blocks_credential_free_providers_124(client: TestClient
         assert projection.available is False
         assert projection.blocking_reason == "ai_policy_disabled"
         assert projection.budget_exhausted is True
+
+
+def test_default_policy_is_strict_ip_and_unclassified_prompts_are_not_external_eligible(client: TestClient) -> None:
+    from app.modules.ai.egress_authority import authorize_prompt
+    from app.modules.ai.settings import _policy_mode, get_ai_settings
+
+    settings = get_ai_settings()
+    assert settings.policy_mode == "STRICT_IP"
+    assert _policy_mode("not-a-mode") == "STRICT_IP" and _policy_mode(None) == "STRICT_IP"
+    authority = authorize_prompt(raw_prompt="Summarize our reactor layout tradeoffs.",
+                                 task_kind="synthesis", policy_mode=settings.policy_mode)
+    assert authority.result == "pause" and authority.reason_code == "prompt_classification_required"
+    assert authority.effective_prompt is None

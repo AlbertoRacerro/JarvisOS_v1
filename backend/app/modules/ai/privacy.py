@@ -131,7 +131,7 @@ class PrivacyPolicyEngine:
         self,
         text: str,
         *,
-        policy_mode: AIPolicyMode | str = AIPolicyMode.FAST_DEV,
+        policy_mode: AIPolicyMode | str = AIPolicyMode.STRICT_IP,
     ) -> PrivacyDecision:
         mode = self._policy_mode(policy_mode)
         normalized = " ".join(text.strip().lower().split())
@@ -172,7 +172,7 @@ class PrivacyPolicyEngine:
         try:
             return AIPolicyMode(str(value))
         except ValueError:
-            return AIPolicyMode.FAST_DEV
+            return AIPolicyMode.STRICT_IP
 
     def _contains_fast_dev_structural_secret(self, text: str) -> bool:
         normalized = " ".join(text.strip().lower().split())

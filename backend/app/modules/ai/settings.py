@@ -28,11 +28,15 @@ def _to_bool(value: int | bool) -> bool:
     return bool(value)
 
 
+# Fail closed: unclassified prompt text is never external-eligible unless the operator opts into FAST_DEV.
+DEFAULT_POLICY_MODE = AIPolicyMode.STRICT_IP
+
+
 def _policy_mode(value: object) -> AIPolicyMode:
     try:
-        return AIPolicyMode(str(value or AIPolicyMode.FAST_DEV.value))
+        return AIPolicyMode(str(value or DEFAULT_POLICY_MODE.value))
     except ValueError:
-        return AIPolicyMode.FAST_DEV
+        return DEFAULT_POLICY_MODE
 
 
 def _policy_mode_value(value: object) -> str:
@@ -85,9 +89,9 @@ def ensure_ai_settings() -> AISettingsRead:
                 scaleway_monthly_token_cap, scaleway_hard_stop_token_cap,
                 scaleway_free_tier_reference_tokens, scaleway_input_tokens_month_to_date,
                 scaleway_output_tokens_month_to_date, smoke_test_mode_enabled, updated_at
-            ) VALUES (?, 'FAST_DEV', 0, 0, 0, 'fake', 'fake-modeling-draft-v1', 'fake', 1, 0, 0, 0, 0, 0, 500000, 800000, 1000000, 0, 0, 0, ?)
+            ) VALUES (?, ?, 0, 0, 0, 'fake', 'fake-modeling-draft-v1', 'fake', 1, 0, 0, 0, 0, 0, 500000, 800000, 1000000, 0, 0, 0, ?)
             """,
-            (SETTINGS_ID, now),
+            (SETTINGS_ID, DEFAULT_POLICY_MODE.value, now),
         )
         connection.commit()
     return get_ai_settings()
