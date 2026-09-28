@@ -1,0 +1,32 @@
+# 157 — Relay safe workspace and Sidecar gateway
+
+State: **ready**. Combined definition and readiness under the maintainer's 2026-09-28 directive to make the Sidecar the normal interface to Agent Relay before 155 populates Jarvis with strategic domain IP. Dependency 156 is merged.
+
+## Outcome
+
+An operator can hand a cloud-safe engineering task from a Sidecar thread to a Relay-managed coding agent (Claude or Codex) without opening a Relay terminal. Jarvis decides whether the task may leave, which workspace and approved context the agent sees, and records the run. The agent runs inside a Jarvis-owned sandbox in which strategic data, credentials and unrelated host state are **technically absent**, not merely forbidden by prompt. Later turns in the same thread continue the same Relay session. Relay stays an unmodified worker substrate; Jarvis keeps classification, context release, admission and execution authority.
+
+## Accepted capability
+
+1. **Classification policy.** The repository's cloud classification comes from a configuration file on the existing S0–S4 ladder: S0 public, S1 cloud-safe, S2 sanitized-only, S3 restricted, S4 secret. For JarvisOS v1 the repository is S1. When the repository level is S0/S1, the agent works in a persistent Jarvis-owned clone of the real repository with read-write access. At S2 or above, the real source is not mounted. The agent instead gets a derivative workspace containing only released approved derivatives and stable context. Changing the configured level is the whole policy change; neither Relay nor the gateway contract changes.
+2. **Persistent safe context.** Stable cloud-safe context (operating rules, conventions, architecture, tool contracts, synthetic fixtures) lives in the repository under `docs/relay-context/`. Dynamic cloud-readable facts are the existing `sanitized_derivatives`. A governed release record attaches one approved S0/S1 derivative to Relay context with persistent or thread scope, purpose, releasing actor, digest, optional expiry and an active/revoked state. Each run rebuilds the read-only context view from active releases whose derivative is still approved and digest-identical. Revocation, staleness, expiry or digest drift removes the derivative from the next run without Git history edits. Released derivative ids are recorded per run.
+3. **Admission.** Jarvis admits a task only after deterministic screening. Secret material (S4 floor) is denied. S2/S3 prompts require an approved prompt derivative, which is then sent instead of the raw prompt. Otherwise they stop for sanitization. Under `STRICT_IP`, a marker-free prompt needs an explicit operator cloud-safe attestation recorded on the run. The agent must come from the configured allowlist. Denials record a truthful terminal reason, and nothing is dispatched.
+4. **Sandbox boundary.** Relay starts the worker through a Jarvis shim inside bubblewrap. The shim uses fresh user/mount/PID/IPC/UTS/network namespaces and a cleared environment. It mounts system binaries read-only, the agent tool install read-only, the workspace read-write, the context view read-only, and a persistent per-workspace agent home. The only credential mounted is that agent's own provider login file. The Relay journal inside the workspace is masked. The Jarvis data root, `C:\JarvisOS`, the WSL encrypted credential store, the operator's real home, other repositories, browser profiles, GitHub credentials and `/mnt` are not mounted. The shim fails closed when no Jarvis manifest exists for the working directory. The sandbox has no network interface except loopback. Its only egress is a Jarvis-run CONNECT proxy that allows configured provider, GitHub and package hosts and refuses private, loopback and link-local destinations. Jarvis's backend, local model servers and other host services are therefore unreachable.
+5. **Gateway and persistence.** The Sidecar submits a task to a thread-scoped endpoint. Jarvis prepares or reuses the thread's workspace and invokes the installed `relay run` for the first turn, or `relay run --continue <session>` for later turns, as a background run. It exposes run state (queued/running/completed/failed/denied), agent, Relay session id, repository level and access mode, released derivative ids, stop reason and the bounded final result text. Workers cannot publish: no GitHub credential is mounted, so resulting commits stay in the Jarvis workspace until an operator or coordinator takes them.
+
+## Boundaries
+
+- No modification or re-implementation of Agent Relay, Claude Code or Codex. The operator's manual Relay usage and Opus delegation are unchanged; the shim is on `PATH` only for Jarvis-launched runs.
+- No worker bridge to Jarvis tools, memory, retrieval or data. A future broker-mediated lookup would be a separate slice.
+- No sanitized fork of v1 source, no automatic push/PR, no learned routing, no general network-security platform, no real-time terminal clone.
+- The agent's own provider login is necessarily visible to that agent. This residual is accepted and documented, and it is never any Jarvis or provider credential managed by Jarvis.
+- Safe defaults: the gateway is off unless enabled in configuration, and CI never launches real Relay/agents.
+
+## Required evidence
+
+- Deterministic tests cover classification-to-mode mapping, admission (S4 deny, S2/S3 derivative or pause, STRICT_IP attestation, agent allowlist), release lifecycle (revoked/stale/expired/digest-drift exclusion), manifest fail-closed behavior, sandbox argument construction (no forbidden mounts, cleared environment, network unshared), proxy destination policy, and session continuation.
+- Host proof on the canonical WSL host covers five things. (a) Recursive search commands run inside the real sandbox find no Jarvis DB, retrieval index, secrets, encrypted credentials, operator home or `/mnt`, and cannot reach the backend or llama ports. (b) A real Sidecar-submitted cloud-safe coding task runs through Relay in the sandbox and returns its result to the Sidecar. (c) A follow-up turn continues the same Relay session. (d) A proprietary-geometry prompt is stopped before dispatch. (e) Setting the repository level to S2 yields a derivative workspace without source.
+
+## Completion
+
+The Sidecar can drive persistent sandboxed Relay work on cloud-safe code and approved context, and strategic data is outside the agent's reachable world. After merge, 155 can populate local domain state behind this boundary.
