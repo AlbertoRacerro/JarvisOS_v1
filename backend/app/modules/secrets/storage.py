@@ -4,6 +4,7 @@ import base64
 import hashlib
 import json
 import os
+import re
 import stat
 import tempfile
 import threading
@@ -32,6 +33,7 @@ PERSISTED_CORRUPTED: Final = "corrupted"
 PERSISTED_UNAVAILABLE: Final = "unavailable"
 MAX_SCALEWAY_API_KEY_LENGTH: Final = 4096
 MAX_SECRET_FILE_BYTES: Final = 64 * 1024
+MAX_SYSTEMD_CREDENTIAL_BYTES: Final = 4096
 _INNER_SCHEMA: Final = 1
 _ENVELOPE_SCHEMA: Final = 1
 _MUTATION_LOCK = threading.RLock()
@@ -353,6 +355,13 @@ def get_effective_scaleway_api_key(
             persisted_state=persisted.state,
             last_updated_at=persisted.last_updated_at,
         )
+    credential = _systemd_credential(SCALEWAY_API_KEY_ENV_VAR)
+    if credential is not None:
+        try:
+            normalized = normalize_scaleway_api_key(credential)
+        except ValueError:
+            return EffectiveSecret(value=None, source=NONE_SOURCE, reason_code="secret_credential_invalid")
+        return EffectiveSecret(value=normalized, source=PERSISTED_SOURCE, persisted_state=PERSISTED_USABLE)
     if persisted.state == PERSISTED_USABLE:
         return EffectiveSecret(
             value=persisted.value,
@@ -395,13 +404,42 @@ def resolve_secret_ref(secret_ref: str | None) -> EffectiveSecret:
     if not secret_ref.startswith("env:"):
         raise ValueError("Only env: secret references are supported.")
     env_name = secret_ref.removeprefix("env:")
+    if not re.fullmatch(r"[A-Z][A-Z0-9_]*", env_name):
+        raise ValueError("Invalid credential reference name.")
     if env_name == SCALEWAY_API_KEY_ENV_VAR:
         return get_effective_scaleway_api_key()
-    value = os.getenv(env_name)
+    env_value = os.getenv(env_name)
+    value = env_value or _systemd_credential(env_name)
     return EffectiveSecret(
         value=value if value else None,
-        source=ENV_SOURCE if value else NONE_SOURCE,
+        source=(ENV_SOURCE if env_value else PERSISTED_SOURCE) if value else NONE_SOURCE,
     )
+
+
+def _systemd_credential(name: str) -> str | None:
+    """Read a named credential supplied by the service manager, never its store."""
+    directory = os.getenv("CREDENTIALS_DIRECTORY")
+    if not directory:
+        return None
+    path = Path(directory) / name
+    try:
+        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    except FileNotFoundError:
+        return None
+    except OSError:
+        return None
+    try:
+        metadata = os.fstat(descriptor)
+        if not stat.S_ISREG(metadata.st_mode) or metadata.st_size > MAX_SYSTEMD_CREDENTIAL_BYTES:
+            return None
+        value = os.read(descriptor, MAX_SYSTEMD_CREDENTIAL_BYTES + 1)
+        if not value or len(value) > MAX_SYSTEMD_CREDENTIAL_BYTES:
+            return None
+        return value.decode("utf-8").strip()
+    except (OSError, UnicodeDecodeError):
+        return None
+    finally:
+        os.close(descriptor)
 
 
 def normalize_scaleway_api_key(api_key: str | None) -> str:

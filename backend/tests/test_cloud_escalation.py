@@ -65,7 +65,7 @@ def test_catalog_cheapest_adequate_and_unknown_family() -> None:
     general = select_candidate(catalog, task_family="general", derivative_content="generic")
     engineering = select_candidate(catalog, task_family="engineering", derivative_content="generic")
     assert general.binding.model_id == "deepseek-flash"
-    assert engineering.binding.model_id == "deepseek-v4-pro"
+    assert engineering.binding.model_id == "deepseek-v4-flash-0731"
     with pytest.raises(ValueError, match="unqualified task family"):
         select_candidate(catalog, task_family="secret_design", derivative_content="generic")
     stale = replace(catalog, candidates=tuple((route, tier, quality, evidence, date(2026, 1, 1), source)
@@ -91,6 +91,30 @@ def test_unapproved_derivative_does_not_enter_egress(monkeypatch: pytest.MonkeyP
                                                                derivative_id=drafted.id, task_family="engineering"))
     with open_sqlite_connection() as connection:
         assert connection.execute("SELECT COUNT(*) FROM cloud_escalations").fetchone()[0] == 0
+
+
+def test_protected_unclassified_prompt_stops_before_network(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.modules.ai.contracts import AIPolicyMode
+    from app.modules.ai.execution import run_ai_task
+    from app.modules.ai.models import AISettingsUpdate
+    from app.modules.ai.settings import update_ai_settings
+
+    workspace_id, _, _, _ = _source()
+    monkeypatch.setenv("SCALEWAY_API_KEY", "synthetic-test-only")
+    update_ai_settings(AISettingsUpdate(
+        policy_mode=AIPolicyMode.STRICT_IP, provider_mode="scaleway",
+        paid_ai_enabled=True, monthly_api_budget_usd=1, scaleway_enabled=True,
+        scaleway_monthly_token_cap=5000, scaleway_hard_stop_token_cap=5000,
+    ))
+    result = run_ai_task(
+        user_prompt="Analyze this proprietary unpublished design without classification.",
+        task_kind="engineering", route_class="external:scaleway",
+        max_output_tokens=64, workspace_id=workspace_id,
+    )
+    assert result.status == "validation_error"
+    assert result.decision.blocked_reason == "prompt_sanitization_required"
+    with open_sqlite_connection() as connection:
+        assert connection.execute("SELECT COUNT(*) FROM egress_attempts WHERE network_attempt = 1").fetchone()[0] == 0
 
 
 def test_approved_derivative_zero_budget_fails_without_network_and_is_idempotent() -> None:
@@ -125,7 +149,7 @@ def test_thread_cap_counts_concurrent_holds(monkeypatch: pytest.MonkeyPatch) -> 
         )
 
     monkeypatch.setattr(cloud_escalation, "run_ai_task", fake_run)
-    monkeypatch.setattr(cloud_escalation, "load_catalog", lambda: replace(catalog, max_thread_usd=Decimal("0.004")))
+    monkeypatch.setattr(cloud_escalation, "load_catalog", lambda: replace(catalog, max_thread_usd=Decimal("0.001")))
     first = create_cloud_escalation(workspace_id=workspace_id, thread_id=thread_id,
                                     payload=CloudEscalationRequest(request_id="cloud-1", source_interaction_id=interaction_id,
                                                                    derivative_id=derivative_id, task_family="engineering"))

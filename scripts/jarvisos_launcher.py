@@ -27,9 +27,11 @@ import fcntl
 import hashlib
 import json
 import os
+import pwd
 import re
 import shutil
 import signal
+import stat
 import subprocess
 import sys
 import time
@@ -43,6 +45,7 @@ REPO = Path(__file__).resolve().parents[1]
 CANONICAL_REPO = Path.home() / "src" / "JarvisOS_v1"
 CONFIG_FILE = Path(os.getenv("JARVISOS_LAUNCHER_CONFIG", Path.home() / ".config" / "jarvisos" / "operator.env"))
 STATE_DIR = Path(os.getenv("JARVISOS_LAUNCHER_STATE", Path.home() / ".local" / "state" / "jarvisos"))
+ENCRYPTED_CREDENTIALS_DIR = Path.home() / ".config" / "jarvisos" / "credentials.encrypted"
 DEFAULT_PORT = 8000
 DEV_ORIGINS = "http://127.0.0.1:5173,http://localhost:5173"
 # Keys copied from a running backend by `setup --from-pid`. Secrets never are.
@@ -584,9 +587,29 @@ def spawn_backend() -> None:
         distro = wsl_distro(load_config())
         overrides = [f"{key}={os.environ[key]}" for key in ("JARVISOS_LAUNCHER_CONFIG", "JARVISOS_LAUNCHER_STATE") if key in os.environ]
         words = [*overrides, "/usr/bin/python3", script, "serve"]
+        credential_files = []
+        if os.path.lexists(ENCRYPTED_CREDENTIALS_DIR):
+            metadata = ENCRYPTED_CREDENTIALS_DIR.lstat()
+            if not stat.S_ISDIR(metadata.st_mode) or metadata.st_uid != os.getuid() or metadata.st_mode & 0o077:
+                raise LaunchError("The encrypted credential store is not a regular directory.")
+            for path in sorted(ENCRYPTED_CREDENTIALS_DIR.iterdir()):
+                if not re.fullmatch(r"[A-Z][A-Z0-9_]*", path.name) or path.is_symlink() or not path.is_file():
+                    raise LaunchError("The encrypted credential store contains an invalid entry.")
+                credential_files.append(path)
+        if credential_files:
+            account = pwd.getpwuid(os.getuid()).pw_name
+            properties = ["-p", "Type=exec", "-p", f"User={account}", "-p", f"WorkingDirectory={REPO}"]
+            for key in ("JARVISOS_LAUNCHER_CONFIG", "JARVISOS_LAUNCHER_STATE"):
+                if key in os.environ:
+                    properties.extend(["-p", f"Environment={key}={os.environ[key]}"])
+            for path in credential_files:
+                properties.extend(["-p", f"LoadCredentialEncrypted={path.name}:{path}"])
+            words = ["/usr/bin/systemd-run", "--wait", "--collect", "--unit=jarvisos-backend", *properties,
+                     "/usr/bin/python3", script, "serve"]
         if any(re.search(r"[\s'\"]", word) for word in [*words, str(REPO)]):
             raise LaunchError("Paths containing spaces or quotes are not supported by the WSL launcher.")
-        args = f"-d {distro} --cd {REPO} -- /usr/bin/env {' '.join(words)}"
+        root_option = "-u root " if credential_files else ""
+        args = f"-d {distro} {root_option}--cd {REPO} -- /usr/bin/env {' '.join(words)}"
         command = f"Start-Process -WindowStyle Hidden -FilePath \"$env:WINDIR\\System32\\wsl.exe\" -ArgumentList '{args}'"
         subprocess.run([windows_tool("powershell.exe"), "-NoProfile", "-NonInteractive", "-Command", command], check=True,
                        cwd="/mnt/c/Windows", capture_output=True, timeout=60)

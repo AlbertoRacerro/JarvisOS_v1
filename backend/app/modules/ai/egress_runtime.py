@@ -63,7 +63,7 @@ from app.modules.ai.token_flow_service import (
 )
 
 _LOCAL_SANITIZER_ROUTE = "local:fast"
-_LEVEL_RANK = {"S0": 0, "S1": 1}
+_LEVEL_RANK = {"S0": 0, "S1": 1, "S2": 2, "S3": 3, "S4": 4}
 _TERMINAL_RESERVATION_STATES = frozenset({"expired", "reconciled", "released"})
 
 

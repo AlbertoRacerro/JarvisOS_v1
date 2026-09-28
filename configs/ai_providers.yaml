@@ -76,19 +76,20 @@ providers:
     monthly_token_cap: 1000000
     monthly_cost_cap_usd: 25
     models:
-      gemma-4-26b-a4b-it:
-        provider_model_name: gemma-4-26b-a4b-it
+      deepseek-v4-flash-0731:
+        provider_model_name: deepseek-v4-flash-0731
         route_classes: [external:scaleway]
-        # Conservative JarvisOS operating bound, below current provider capability.
+        # Conservative JarvisOS operating bound; Scaleway documents 256k context.
         context_window_tokens: 8192
-        max_output_tokens: 256
-        # Conservative USD execution ceiling, not a vendor-price claim.
+        max_output_tokens: 512
+        # Scaleway €0.40/€0.80 per million, converted at ECB 2026-09-25 1.1403 USD/EUR.
+        # https://www.scaleway.com/en/pricing/model-as-a-service/ reviewed 2026-09-28.
         pricing:
           currency: USD
-          input_usd_per_1m_tokens: 5.0
-          output_usd_per_1m_tokens: 20.0
-          pricing_version: operator-conservative-scaleway-v1
-          pricing_effective_at: "2026-08-04T00:00:00Z"
+          input_usd_per_1m_tokens: 0.45612
+          output_usd_per_1m_tokens: 0.91224
+          pricing_version: scaleway-eur-2026-09-28-ecb-2026-09-25
+          pricing_effective_at: "2026-09-28T00:00:00Z"
   deepseek:
     kind: openai_compatible
     execution_class: external_provider

@@ -13,6 +13,14 @@
   },
   "candidates": [
     {
+      "route_class": "external:scaleway",
+      "quality_tier": 2,
+      "qualification_evidence_ref": "docs/specs/156-governed-cloud-escalation.md#scaleway-live-qualification-2026-09-28",
+      "pricing_reviewed_on": "2026-09-28",
+      "pricing_source_url": "https://www.scaleway.com/en/pricing/model-as-a-service/",
+      "qualification": "One approved synthetic textbook engineering task answered correctly; scope limited to acceptance"
+    },
+    {
       "route_class": "external:deepseek_flash",
       "quality_tier": 1,
       "qualification_evidence_ref": null,
