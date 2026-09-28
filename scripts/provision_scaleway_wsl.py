@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -23,6 +24,9 @@ def main() -> int:
         return 1
     distro = os.environ.get("JARVISOS_WSL_DISTRO", "Ubuntu-24.04")
     account = os.environ.get("JARVISOS_WSL_USER", "thera")
+    if not re.fullmatch(r"[A-Za-z0-9._-]+", distro) or not re.fullmatch(r"[a-z_][a-z0-9_-]*", account):
+        print("Invalid WSL distro or account name.", file=sys.stderr)
+        return 1
     helper = f"/home/{account}/src/JarvisOS_v1/scripts/wsl_encrypt_credential.py"
     result = subprocess.run(
         ["wsl.exe", "-d", distro, "-u", "root", "--", "/usr/bin/python3", helper,
