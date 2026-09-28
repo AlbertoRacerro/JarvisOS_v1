@@ -186,7 +186,9 @@ def test_coding_task_runs_in_repository_clone_and_later_turn_continues_session(g
     assert "--continue" not in argv and first.continued_from_session_id is None
     assert launch["env"]["PATH"].startswith(str(gateway["runtime"].root / "bin") + ":")
     # Relay's own permission settings are untouched; only the sandboxed worker gets its flags.
-    assert set(launch["env"]) == {"PATH", "HOME", "USER", "LOGNAME", "LANG", "TERM"}
+    assert set(launch["env"]) == {"PATH", "HOME", "USER", "LOGNAME", "LANG", "TERM", "GIT_CEILING_DIRECTORIES",
+                                  *service.HOST_GIT_ENV}
+    assert launch["env"]["GIT_CONFIG_KEY_0"] == "core.fsmonitor" and launch["env"]["GIT_CONFIG_VALUE_0"] == "false"
 
     second = _wait(workspace_id, thread_id, _submit(workspace_id, thread_id).id)
     argv = gateway["launches"][1]["argv"]
@@ -241,6 +243,55 @@ def test_sandboxed_claude_gets_non_interactive_permissions_only_inside_bwrap(gat
     binary = args.index(manifest["agents"]["claude"]["binary"])
     assert args[binary + 1:] == ["--permission-mode", "bypassPermissions", "-p", "hi", "--output-format", "stream-json"]
     assert "--permission-mode" not in " ".join(gateway["launches"][0]["argv"])
+
+
+def test_agent_planted_git_metadata_never_executes_on_the_host(gateway, tmp_path: Path) -> None:
+    workspace_id, thread_id = _thread()
+    run = _wait(workspace_id, thread_id, _submit(workspace_id, thread_id).id)
+    workspace = Path(run.workspace_path or "")
+    root = gateway["runtime"].root
+    manifest = json.loads((root / "manifests" / sandbox.manifest_name(str(workspace))).read_text(encoding="utf-8"))
+    args = sandbox.build_bwrap_args(manifest, "claude", str(root / "sandbox-runs" / "run-x"), [])
+    joined = " ".join(args)
+    assert f"--ro-bind {manifest['git_config']} {workspace}/.git/config" in joined
+    assert f"--tmpfs {workspace}/.git/hooks" in joined
+    trusted = Path(manifest["git_config"]).read_bytes()
+
+    # What a prompt-injected agent could leave behind if it escaped the read-only bind.
+    canary = tmp_path / "PWNED"
+    _git(workspace, "config", "core.fsmonitor", f"touch {canary}; false")
+    (workspace / ".git" / "hooks" / "post-checkout").write_text(f"#!/bin/sh\ntouch {canary}\n", encoding="utf-8")
+    (workspace / ".git" / "commondir").write_text(str(tmp_path), encoding="utf-8")
+    nested = workspace / "vendor" / "sub"
+    nested.mkdir(parents=True)
+    _git(nested, "init", "-q")
+    _git(nested, "config", "core.fsmonitor", f"touch {canary}; false")
+
+    sandbox.restore_workspace_git(str(workspace), manifest["git_config"])
+    assert (workspace / ".git" / "config").read_bytes() == trusted
+    assert list((workspace / ".git" / "hooks").iterdir()) == []
+    assert not (workspace / ".git" / "commondir").exists() and not (nested / ".git").exists()
+    subprocess.run(["git", "status", "--short"], cwd=workspace, check=True, capture_output=True)
+    assert not canary.exists()
+
+
+def test_host_git_ignores_repository_fsmonitor_and_gitfile_redirects(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-q")
+    canary = tmp_path / "PWNED"
+    _git(repo, "config", "core.fsmonitor", f"touch {canary}; false")
+    service._git("status", "--short", "--ignore-submodules=all", cwd=repo)
+    assert not canary.exists()
+    trusted = tmp_path / "trusted.config"
+    trusted.write_text("[core]\n", encoding="utf-8")
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    gitfile = tmp_path / "ws"
+    gitfile.mkdir()
+    (gitfile / ".git").write_text(f"gitdir: {elsewhere}\n", encoding="utf-8")
+    sandbox.restore_workspace_git(str(gitfile), str(trusted))
+    assert not (gitfile / ".git").exists()
 
 
 def test_manifest_and_shim_bind_only_admitted_paths(gateway) -> None:

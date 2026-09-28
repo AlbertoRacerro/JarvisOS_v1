@@ -40,6 +40,16 @@ DEFAULT_CONFIG_PATH = REPOSITORY_ROOT / "configs" / "relay_gateway.json"
 LEVELS = ("S0", "S1", "S2", "S3", "S4")
 CLOUD_READABLE_LEVELS = frozenset({"S0", "S1"})
 MASKED_WORKSPACE_PATHS = (".agent-relay",)
+# Command-line-scope git config for every host-side git run in an agent workspace (Relay's and
+# Jarvis's): it outranks repository config, so a planted fsmonitor or hooks path never executes.
+HOST_GIT_ENV = {
+    "GIT_CONFIG_NOSYSTEM": "1",
+    "GIT_CONFIG_COUNT": "2",
+    "GIT_CONFIG_KEY_0": "core.fsmonitor",
+    "GIT_CONFIG_VALUE_0": "false",
+    "GIT_CONFIG_KEY_1": "core.hooksPath",
+    "GIT_CONFIG_VALUE_1": "/dev/null",
+}
 AccessMode = Literal["repository", "derivative"]
 RunState = Literal["queued", "running", "completed", "failed", "denied"]
 
@@ -419,6 +429,8 @@ def _start_run(config: dict[str, Any], workspace_id: str, thread_id: str, run_id
         "LOGNAME": os.getenv("LOGNAME", ""),
         "LANG": "C.UTF-8",
         "TERM": "dumb",
+        "GIT_CEILING_DIRECTORIES": str(runtime.root / "workspaces"),
+        **HOST_GIT_ENV,
     }
     turn_index = _turn_index(relay_workspace["id"])
     start_commit = _head_commit(Path(relay_workspace["path"]))
@@ -528,13 +540,16 @@ def _record_changes(run_id: str, relay_workspace_id: str, start_commit: str | No
     with open_sqlite_connection() as connection:
         row = connection.execute("SELECT path FROM relay_workspaces WHERE id = ?", (relay_workspace_id,)).fetchone()
     workspace = Path(row["path"])
+    # The shim already restored git metadata when the sandbox exited; repeat it before host git runs.
+    sandbox.restore_workspace_git(str(workspace), str(trusted_git_config(_runtime(), workspace)))
     head = _head_commit(workspace)
     sections = []
     try:
         if start_commit and head and head != start_commit:
             sections.append("Commits:\n" + _git("log", "--oneline", f"{start_commit}..{head}", cwd=workspace))
-            sections.append("Diffstat:\n" + _git("diff", "--stat", start_commit, head, cwd=workspace))
-        status = _git("status", "--short", cwd=workspace)
+            sections.append("Diffstat:\n" + _git("diff", "--stat", "--no-ext-diff", "--no-textconv",
+                                                  start_commit, head, cwd=workspace))
+        status = _git("status", "--short", "--ignore-submodules=all", cwd=workspace)
         if status:
             sections.append("Uncommitted:\n" + status)
     except (subprocess.CalledProcessError, OSError) as exc:
@@ -590,8 +605,23 @@ def _ensure_relay_workspace(runtime: RelayRuntime, config: dict[str, Any], works
 
 
 def _git(*args: str, cwd: Path | None = None) -> str:
-    return subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True, text=True,
+    env = {**os.environ, **HOST_GIT_ENV}
+    if cwd is not None:
+        env["GIT_CEILING_DIRECTORIES"] = str(Path(cwd).parent)
+    return subprocess.run(["git", *args], cwd=cwd, env=env, check=True, capture_output=True, text=True,
                           timeout=600).stdout.rstrip()
+
+
+def trusted_git_config(runtime: RelayRuntime, workspace: Path) -> Path:
+    """Jarvis-owned copy of a workspace's git config, outside anything the agent can write."""
+    return runtime.root / "git-config" / sandbox.manifest_name(str(workspace))
+
+
+def _save_trusted_git_config(runtime: RelayRuntime, workspace: Path) -> None:
+    target = trusted_git_config(runtime, workspace)
+    target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    shutil.copyfile(workspace / ".git" / "config", target)
+    target.chmod(0o600)
 
 
 def _create_workspace(runtime: RelayRuntime, config: dict[str, Any], path: Path, mode: AccessMode,
@@ -627,6 +657,7 @@ def _create_workspace(runtime: RelayRuntime, config: dict[str, Any], path: Path,
     exclude.parent.mkdir(parents=True, exist_ok=True)
     with open(exclude, "a", encoding="utf-8") as handle:
         handle.write("\n.agent-relay/\n")
+    _save_trusted_git_config(runtime, path)
     return base
 
 
@@ -694,6 +725,10 @@ def build_manifest(runtime: RelayRuntime, config: dict[str, Any], agent: str, wo
             if source.is_dir():
                 dependency_mounts.append({"source": str(source), "target": mount["target"]})
     allow = sorted({*config.get("common_egress", []), *config["agents"][agent].get("egress", [])})
+    git_config = trusted_git_config(runtime, workspace)
+    if not git_config.is_file():
+        # Only workspaces Jarvis created (and recorded a trusted config for) may be handed to agents.
+        raise RelayGatewayError("relay_workspace_git_config_untrusted")
     return {
         "version": sandbox.MANIFEST_VERSION,
         "workspace": os.path.realpath(workspace),
@@ -704,6 +739,7 @@ def build_manifest(runtime: RelayRuntime, config: dict[str, Any], agent: str, wo
         "masked": list(MASKED_WORKSPACE_PATHS),
         "dependency_mounts": dependency_mounts,
         "egress_allow": allow,
+        "git_config": str(git_config),
     }
 
 

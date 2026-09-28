@@ -16,6 +16,7 @@ import hashlib
 import ipaddress
 import json
 import os
+import shutil
 import socket
 import subprocess
 import sys
@@ -105,6 +106,11 @@ def build_bwrap_args(manifest: dict[str, Any], agent: str, runtime_dir: str, arg
         target = f"{SANDBOX_HOME}/{credential['target']}"
         args += ["--bind", credential["source"], target]
     args += ["--bind", workspace, workspace]
+    if manifest.get("git_config"):
+        # Host-side git (Relay's and Jarvis's) later runs in this repository; the agent must not
+        # be able to plant config (core.fsmonitor, filters, includes) or hooks that it executes.
+        args += ["--ro-bind", manifest["git_config"], f"{workspace}/.git/config"]
+        args += ["--tmpfs", f"{workspace}/.git/hooks"]
     for masked in manifest.get("masked", []):
         args += ["--tmpfs", f"{workspace}/{masked}"]
     for mount in manifest.get("dependency_mounts", []):
@@ -240,6 +246,54 @@ class EgressProxy:
         _pipe(upstream, client)
 
 
+# ---- git metadata trust boundary ---------------------------------------------------------
+
+
+def _remove(path: str) -> None:
+    if os.path.isdir(path) and not os.path.islink(path):
+        shutil.rmtree(path)
+    elif os.path.lexists(path):
+        os.unlink(path)
+
+
+def restore_workspace_git(workspace: str, trusted_config: str) -> None:
+    """Undo agent changes to git metadata that host-side git would read or execute.
+
+    Runs on the host after the sandbox exits, before Relay or Jarvis runs git in the workspace:
+    the trusted config replaces ``.git/config``, hooks are emptied, gitdir redirects are
+    removed, and nested repositories (whose own config a recursing ``git status`` would read)
+    are deleted. A ``.git`` that is not a real directory is removed, so git finds no repository.
+    """
+    root = os.path.join(workspace, ".git")
+    if os.path.islink(root) or (os.path.lexists(root) and not os.path.isdir(root)):
+        os.unlink(root)
+        return
+    if not os.path.isdir(root):
+        return
+    with open(trusted_config, "rb") as handle:
+        trusted = handle.read()
+    config = os.path.join(root, "config")
+    current = None
+    if os.path.isfile(config) and not os.path.islink(config):
+        with open(config, "rb") as handle:
+            current = handle.read()
+    if current != trusted:
+        _remove(config)
+        descriptor = os.open(config, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(trusted)
+    for name in ("commondir", "config.worktree", "hooks"):
+        _remove(os.path.join(root, name))
+    os.mkdir(os.path.join(root, "hooks"), 0o700)
+    for directory, dirnames, filenames in os.walk(workspace):
+        if directory == workspace:
+            dirnames[:] = [name for name in dirnames if name != ".git"]
+            continue
+        if ".git" in dirnames or ".git" in filenames:
+            _remove(os.path.join(directory, ".git"))
+            dirnames[:] = [name for name in dirnames if name != ".git"]
+
+
 # ---- entry points ---------------------------------------------------------------------
 
 
@@ -260,6 +314,8 @@ def run_shim(agent: str, manifest_dir: str, argv: list[str]) -> int:
     try:
         return subprocess.call(build_bwrap_args(manifest, agent, runtime_dir, argv))
     finally:
+        if manifest.get("git_config"):
+            restore_workspace_git(manifest["workspace"], manifest["git_config"])
         proxy.server.close()
         try:
             os.unlink(socket_path)
