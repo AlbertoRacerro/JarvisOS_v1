@@ -138,6 +138,17 @@
   padding-inline-start: var(--space-4);
 }
 
+.jarvis-relay-result {
+  margin: 0;
+  padding: 8px;
+  border: 1px solid #d6ded2;
+  background: #f7f8f4;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+  font-size: .92em;
+}
+
 .jarvis-sidecar__composer {
   padding-block-start: var(--space-2);
   border-block-start: 1px solid var(--color-border-default);

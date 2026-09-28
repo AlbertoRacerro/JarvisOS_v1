@@ -36,6 +36,7 @@ from app.modules.modeling.routes import router as modeling_router
 from app.modules.process_stack.editor_routes import router as dwsim_editor_router
 from app.modules.project_knowledge.routes import router as project_knowledge_router
 from app.modules.project_search.routes import router as project_search_router
+from app.modules.relay_gateway.routes import router as relay_gateway_router
 from app.modules.runner.local_python import execution_ownership_state
 from app.modules.runner.recovery import (
     live_stranded_runner_working_dirs,
@@ -169,6 +170,7 @@ def create_app() -> FastAPI:
     app.include_router(local_ai_runtime_router)
     app.include_router(development_router)
     app.include_router(brainstorm_router)
+    app.include_router(relay_gateway_router)
 
     frontend_dist = _frontend_dist_path()
     if frontend_dist.is_dir():

@@ -7,12 +7,17 @@ import {
   approveCloudDerivative,
   confirmCloudEscalation,
   getConversationOptions,
+  getRelayStatus,
   listCloudEscalations,
+  listRelayRuns,
   prepareCloudDerivative,
   submitCloudEscalation,
+  submitRelayRun,
   type CloudEscalation,
   type CloudDerivative,
   type ConversationRoute,
+  type RelayRunRead,
+  type RelayStatus,
   listThreads,
   getThread,
   createThread,
@@ -128,6 +133,16 @@ function outcomeNotice(interaction: ThreadInteraction): string | null {
   return null;
 }
 
+function relayRunTone(state: RelayRunRead["state"]): Readiness["tone"] {
+  if (state === "queued" || state === "running") return "busy";
+  if (state === "completed") return "ready";
+  return "down";
+}
+
+function accessModeLabel(accessMode: "repository" | "derivative"): string {
+  return accessMode === "repository" ? "real repository (read-write clone)" : "derivative workspace, no source";
+}
+
 function failureMessage(caught: unknown): string {
   if (caught instanceof ThreadsRequestError) {
     if (caught.status === 503) return "Jarvis is temporarily unavailable (the local runtime is busy or starting). Your message is kept — send it again in a moment.";
@@ -170,6 +185,18 @@ export function useJarvisSidecar(
     const timer = window.setInterval(refresh, 5000);
     return () => { alive = false; window.clearInterval(timer); };
   }, []);
+
+  // Relay availability and the allowed agent list are host configuration, not
+  // per-workspace state; fetch once and let the agent select pick up a default.
+  useEffect(() => {
+    let alive = true;
+    void getRelayStatus().then(result => {
+      if (!alive) return;
+      setRelayStatus(result);
+      setRelayAgent(current => current || result.agents[0] || "");
+    }).catch(() => { if (alive) setRelayStatus(null); });
+    return () => { alive = false; };
+  }, []);
   const [previewNonce, setPreviewNonce] = useState(0);
   const [prompt, setPrompt] = useState("");
   const [pending, setPending] = useState<PendingSubmit | null>(null);
@@ -186,6 +213,12 @@ export function useJarvisSidecar(
   const [cloudDraft, setCloudDraft] = useState<CloudDerivative | null>(null);
   const [cloudFamily, setCloudFamily] = useState("engineering");
   const [cloudWorking, setCloudWorking] = useState(false);
+  const [relayStatus, setRelayStatus] = useState<RelayStatus | null>(null);
+  const [relayRuns, setRelayRuns] = useState<RelayRunRead[]>([]);
+  const [relayAgent, setRelayAgent] = useState("");
+  const [relayPrompt, setRelayPrompt] = useState("");
+  const [relayAttested, setRelayAttested] = useState(false);
+  const [relayWorking, setRelayWorking] = useState(false);
   const submitting = inFlight !== null;
   const workspaceOwner = useRef(0);
   const listOwner = useRef(0);
@@ -219,6 +252,7 @@ export function useJarvisSidecar(
     setCloudResults([]);
     setCloudSource(null);
     setCloudDraft(null);
+    setRelayRuns([]);
     if (!workspaceId) return;
 
     setLoadingThreads(true);
@@ -261,14 +295,34 @@ export function useJarvisSidecar(
     setCloudResults([]);
     setCloudSource(null);
     setCloudDraft(null);
+    setRelayRuns([]);
     if (!workspaceId || !selectedThreadId) return;
     let active = true;
     loadDetail(selectedThreadId, false);
     void listCloudEscalations(workspaceId, selectedThreadId).then(result => {
       if (active) setCloudResults(result);
     }).catch(() => {});
+    if (relayStatus?.enabled) {
+      void listRelayRuns(workspaceId, selectedThreadId).then(result => {
+        if (active) setRelayRuns(result);
+      }).catch(() => {});
+    }
     return () => { active = false; };
-  }, [workspaceId, selectedThreadId, loadDetail]);
+  }, [workspaceId, selectedThreadId, loadDetail, relayStatus?.enabled]);
+
+  // Later turns in a thread continue the same Relay session; keep the run list
+  // current while anything is still queued or running, then stop polling.
+  const relayRunsActive = relayRuns.some(run => run.state === "queued" || run.state === "running");
+  useEffect(() => {
+    if (!workspaceId || !selectedThreadId || !relayRunsActive) return;
+    const targetThread = selectedThreadId;
+    const timer = window.setInterval(() => {
+      void listRelayRuns(workspaceId, targetThread).then(result => {
+        if (selectedThreadRef.current === targetThread) setRelayRuns(result);
+      }).catch(() => {});
+    }, 3000);
+    return () => window.clearInterval(timer);
+  }, [workspaceId, selectedThreadId, relayRunsActive]);
 
   const sendCloud = async () => {
     if (!workspaceId || !selectedThreadId || !cloudSource || !cloudDerivative.trim() || cloudWorking) return;
@@ -330,6 +384,35 @@ export function useJarvisSidecar(
     } catch {
       setError("The cloud confirmation could not be used. The approved derivative or provider policy may have changed.");
     } finally { setCloudWorking(false); }
+  };
+
+  const sendRelay = async () => {
+    if (!workspaceId || !relayAgent || !relayPrompt.trim() || !relayAttested || relayWorking) return;
+    setRelayWorking(true);
+    setError(null);
+    try {
+      let targetThread = selectedThreadId;
+      if (!targetThread) {
+        // A new conversation has no thread until its first submission, as with ordinary messages.
+        const created = await createThread(workspaceId, relayPrompt.trim().slice(0, 70));
+        targetThread = created.id;
+        setThreads((current) => [created, ...current]);
+        selectedThreadRef.current = created.id;
+        setSelectedThreadId(created.id);
+      }
+      const result = await submitRelayRun(workspaceId, targetThread, {
+        prompt: relayPrompt.trim(), agent: relayAgent, cloud_safe_attested: relayAttested
+      });
+      if (selectedThreadRef.current === targetThread) {
+        setRelayRuns(current => [...current.filter(item => item.id !== result.id), result]);
+        setRelayPrompt("");
+        setRelayAttested(false);
+      }
+    } catch (caught) {
+      setError(caught instanceof ThreadsRequestError && caught.status === 409
+        ? "A Relay run is already in progress for this conversation. Wait for it to finish, then send again."
+        : "The Relay run could not be started. Check that Relay is enabled and the agent is on the allowed list.");
+    } finally { setRelayWorking(false); }
   };
 
   // A turn keeps running on the server while you navigate, refresh or switch
@@ -629,6 +712,35 @@ export function useJarvisSidecar(
         <p>{item.cost_basis === "actual_priced" ? "Reported usage at reviewed tariff" : item.cost_basis === "zero_before_network" ? "No provider spend" : "Conservative spend hold"}: €{item.accounted_cost_eur} (USD {item.accounted_cost_usd}; ECB {item.fx_date}, 1 EUR = {item.eur_usd_rate} USD). {item.calculated_usage_cost_eur === null ? "Actual billed cost unknown. " : ""}Price: {item.pricing_version} effective {item.pricing_effective_at}, reviewed {item.pricing_reviewed_on}.</p>
         <p>Provider tokens: {item.actual_input_tokens ?? "unknown"} input, {item.actual_output_tokens ?? "unknown"} output. <a href={item.pricing_source_url} target="_blank" rel="noreferrer">Price source</a> · <a href={item.fx_source} target="_blank" rel="noreferrer">FX source</a>. Derivative: <code>{item.derivative_id}</code> · context: <code>{item.context_digest ?? "none"}</code> · packet: <code>{item.egress_packet_digest ?? "none"}</code></p>
         {item.state === "confirmation_required" ? <button type="button" disabled={cloudWorking} onClick={() => void confirmCloud(item.id)}>Confirm this packet</button> : null}
+      </details>)}
+    </section> : null}
+
+    {relayStatus?.enabled && workspaceId ? <section className="jarvis-sidecar__context" aria-label="Cloud agent (Relay)">
+      <strong>Cloud agent (Relay)</strong>
+      <p>Jarvis level {relayStatus.repository_level} · the agent works in a {accessModeLabel(relayStatus.access_mode)}. No strategic or domain IP may leave through this control.</p>
+      {relayStatus.blocked_reason ? <p className="jarvis-sidecar__error" role="status">Relay runs are blocked: {relayStatus.blocked_reason}. Private domain data is enabled, and the hardened sandbox has not been accepted yet.</p> : null}
+      <label className="jarvis-sidecar__field"><span>Agent</span><select value={relayAgent} disabled={relayWorking || !relayStatus.agents.length} onChange={event => setRelayAgent(event.target.value)}>
+        {!relayStatus.agents.length && <option value="">No agent configured</option>}
+        {relayStatus.agents.map(agent => <option key={agent} value={agent}>{agent}</option>)}
+      </select></label>
+      <label className="jarvis-sidecar__field"><span>Task for the Relay agent</span><textarea value={relayPrompt} onChange={event => setRelayPrompt(event.target.value)} rows={3} /></label>
+      <label className="jarvis-sidecar__toggle"><input type="checkbox" checked={relayAttested} disabled={relayWorking} onChange={event => setRelayAttested(event.target.checked)} />This task contains no strategic/domain IP (cloud-safe)</label>
+      <button type="button" disabled={!relayAgent || !relayPrompt.trim() || !relayAttested || relayWorking || Boolean(relayStatus.blocked_reason)} onClick={() => void sendRelay()}>{relayWorking ? "Sending…" : "Send to Relay agent"}</button>
+      {!selectedThreadId ? <p className="jarvis-sidecar__hint">Sending starts a new conversation; later tasks in it continue the same Relay conversation.</p> : null}
+    </section> : null}
+    {relayRuns.length ? <section className="jarvis-sidecar__context" aria-label="Relay runs">
+      <strong>Relay runs</strong>
+      <p>Later submissions in this conversation continue the same Relay conversation, from its newest linked session.</p>
+      {relayRuns.map(run => <details key={run.id} open={run.state === "queued" || run.state === "running" || run.state === "denied"}>
+        <summary>{run.agent} · <span className={`jarvis-status jarvis-status--${relayRunTone(run.state)}`} role="status"><i aria-hidden="true" />{run.state}</span> · turn {run.turn_index}</summary>
+        <p>Access: {accessModeLabel(run.access_mode)} (level {run.repository_level}). Relay session: {run.relay_session_id ? <code>{run.relay_session_id}</code> : "not yet assigned"}{run.continued_from_session_id ? <> (continues <code>{run.continued_from_session_id}</code>)</> : null}.</p>
+        {run.workspace_path ? <p>Workspace: <code>{run.workspace_path}</code>{run.head_commit ? <> · head <code>{run.head_commit.slice(0, 10)}</code></> : null}{run.base_commit ? <> · base <code>{run.base_commit.slice(0, 10)}</code></> : null}</p> : null}
+        {run.released_derivative_ids.length ? <p>Released derivatives: {run.released_derivative_ids.map(id => <code key={id}>{id}</code>)}</p> : null}
+        {run.reason_code ? <p>Reason: {run.reason_code}</p> : null}
+        {run.stop_reason ? <p>Stop reason: {run.stop_reason}</p> : null}
+        {run.exit_code !== null ? <p>Exit code: {run.exit_code}</p> : null}
+        {run.result_text ? <details open={run.state === "completed"}><summary>Result</summary><pre className="jarvis-relay-result">{run.result_text}</pre></details> : null}
+        {run.change_summary ? <details><summary>Changes</summary><pre className="jarvis-relay-result">{run.change_summary}</pre></details> : null}
       </details>)}
     </section> : null}
 
