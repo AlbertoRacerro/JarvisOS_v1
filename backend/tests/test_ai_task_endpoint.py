@@ -6,6 +6,14 @@ from collections.abc import Iterator
 import pytest
 from fastapi.testclient import TestClient
 
+from app.modules.ai.contracts import AIPolicyMode
+
+
+@pytest.fixture(autouse=True)
+def _fast_dev_policy(monkeypatch: pytest.MonkeyPatch) -> None:
+    """These flows exercise the opt-in FAST_DEV prompt default; the product default is STRICT_IP."""
+    monkeypatch.setattr("app.modules.ai.settings.DEFAULT_POLICY_MODE", AIPolicyMode.FAST_DEV)
+
 
 @pytest.fixture
 def client(tmp_path, monkeypatch) -> Iterator[TestClient]:
