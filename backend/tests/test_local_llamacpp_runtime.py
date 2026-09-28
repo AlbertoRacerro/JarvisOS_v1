@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import threading
+import time
 
 import httpx
 import pytest
@@ -58,6 +60,55 @@ def test_adapter_is_loopback_only_and_sends_route_budget(monkeypatch: pytest.Mon
     monkeypatch.setattr(adapter_module, "llama_cpp_runtime_config", lambda: _config(host="192.168.1.2"))
     with pytest.raises(ValueError, match="loopback"):
         adapter.complete(AIRequest(task_type=AITaskType.synthesis, prompt="hello"))
+
+
+@pytest.mark.parametrize(("thinking", "expected"), [("on", True), ("off", False)])
+def test_adapter_sends_per_request_thinking_control(
+    thinking: str, expected: bool, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload: dict[str, object] = {}
+    monkeypatch.setattr(adapter_module, "llama_cpp_runtime_config", lambda: _config(thinking=thinking))
+    transport = httpx.MockTransport(lambda request: _capture_payload(request, payload))
+    LocalLlamaCppAdapter(client_factory=lambda: httpx.Client(transport=transport)).complete(
+        AIRequest(task_type=AITaskType.synthesis, prompt="hello")
+    )
+    assert payload["chat_template_kwargs"] == {"enable_thinking": expected}
+
+
+def _capture_payload(request: httpx.Request, payload: dict[str, object]) -> httpx.Response:
+    payload.update(json.loads(request.content))
+    return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}, "finish_reason": "stop"}]})
+
+
+def test_adapter_default_thinking_keeps_payload_unchanged(monkeypatch: pytest.MonkeyPatch) -> None:
+    payload: dict[str, object] = {}
+    monkeypatch.setattr(adapter_module, "llama_cpp_runtime_config", lambda: _config(thinking="default"))
+    transport = httpx.MockTransport(lambda request: _capture_payload(request, payload))
+    LocalLlamaCppAdapter(client_factory=lambda: httpx.Client(transport=transport)).complete(
+        AIRequest(task_type=AITaskType.synthesis, prompt="hello")
+    )
+    assert payload == {
+        "model": "qwen3.8-27b-q4kxl", "messages": [{"role": "user", "content": "hello"}],
+        "temperature": 0, "max_tokens": 2048, "stream": False,
+    }
+
+
+def test_runtime_config_thinking_file_env_and_invalid(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.modules.local_ai.runtime import llama_cpp as runtime_module
+
+    config_file = tmp_path / "llama_cpp.json"
+    config_file.write_text(json.dumps({"thinking": "on"}), encoding="utf-8")
+    monkeypatch.setenv("JARVISOS_LLAMACPP_CONFIG", str(config_file))
+    monkeypatch.delenv("JARVISOS_LLAMACPP_THINKING", raising=False)
+    runtime_module.clear_llama_cpp_config_cache()
+    assert runtime_module.llama_cpp_runtime_config().thinking == "on"
+    monkeypatch.setenv("JARVISOS_LLAMACPP_THINKING", "off")
+    runtime_module.clear_llama_cpp_config_cache()
+    assert runtime_module.llama_cpp_runtime_config().thinking == "off"
+    monkeypatch.setenv("JARVISOS_LLAMACPP_THINKING", "sometimes")
+    runtime_module.clear_llama_cpp_config_cache()
+    assert runtime_module.llama_cpp_runtime_config().thinking == "default"
+    runtime_module.clear_llama_cpp_config_cache()
 
 
 @pytest.mark.parametrize(("finish", "expected"), [("stop", "stop"), ("length", "length"), ("error", "error")])
@@ -290,7 +341,158 @@ def test_spawn_defaults_fit_offload_and_reports_loading_auth_and_exit(tmp_path) 
     process.returncode = 1
     exited = owner.status()
     assert exited["spawned_by_jarvis"] is False and exited["last_exit_code"] == 1
+    assert exited["crash_count"] == 1 and exited["last_crash_at"]
     assert owner.auth_headers() == {}
+
+
+def _offline_server(**kwargs: object) -> httpx.Client:
+    def respond(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/health"):
+            return httpx.Response(503)
+        if request.url.path.endswith("/props"):
+            return httpx.Response(200, json={"build_id": "fake"})
+        if request.url.path.endswith("/v1/models"):
+            return httpx.Response(200, json={"data": []})
+        return httpx.Response(200, json=[])
+
+    return httpx.Client(transport=httpx.MockTransport(respond), **kwargs)
+
+
+def _wait_until(predicate) -> None:
+    deadline = time.monotonic() + 2
+    while not predicate() and time.monotonic() < deadline:
+        time.sleep(0.005)
+    assert predicate()
+
+
+def test_crashed_managed_process_recovers_once_in_background(tmp_path) -> None:
+    binary = tmp_path / "llama-server"
+    model = tmp_path / "model.gguf"
+    binary.write_text("fake executable")
+    model.write_bytes(b"fake model")
+    processes: list[_FakeProcess] = []
+
+    def popen(*_args: object, **_kwargs: object) -> _FakeProcess:
+        process = _FakeProcess()
+        processes.append(process)
+        return process
+
+    owner = LlamaCppRuntimeOwner(
+        _config(binary_path=str(binary), model_path=str(model), manage=True, startup_wait_s=0),
+        popen=popen, client_factory=_offline_server,
+    )
+    owner.start()
+    processes[0].returncode = 7
+    recovery = owner.recover_if_crashed()
+    assert recovery["reason_code"] == "LLAMACPP_RECOVERING"
+    _wait_until(lambda: len(processes) == 2 and not owner._recovery_in_flight)
+    assert len(processes) == 2
+    assert owner.status()["crash_count"] == 1
+    assert owner.recover_if_crashed()["reason_code"] != "LLAMACPP_RECOVERING"
+
+
+def test_stop_is_not_counted_as_crash(tmp_path) -> None:
+    binary = tmp_path / "llama-server"
+    model = tmp_path / "model.gguf"
+    binary.write_text("fake executable")
+    model.write_bytes(b"fake model")
+    process = _FakeProcess()
+    owner = LlamaCppRuntimeOwner(
+        _config(binary_path=str(binary), model_path=str(model), manage=True, startup_wait_s=0),
+        popen=lambda *_args, **_kwargs: process, client_factory=_offline_server,
+        kill_group=lambda *_args: None,
+    )
+    owner.start()
+    owner.stop()
+    row = owner.status()
+    assert row["crash_count"] == 0
+    assert row["last_crash_at"] is None
+
+
+def test_recovery_budget_exhaustion_reports_crash_loop(tmp_path) -> None:
+    binary = tmp_path / "llama-server"
+    model = tmp_path / "model.gguf"
+    binary.write_text("fake executable")
+    model.write_bytes(b"fake model")
+    processes: list[_FakeProcess] = []
+
+    def popen(*_args: object, **_kwargs: object) -> _FakeProcess:
+        process = _FakeProcess()
+        processes.append(process)
+        return process
+
+    owner = LlamaCppRuntimeOwner(
+        _config(binary_path=str(binary), model_path=str(model), manage=True, startup_wait_s=0),
+        popen=popen, client_factory=_offline_server,
+    )
+    owner.start()
+    for expected_process_count in (2, 3, 4):
+        processes[-1].returncode = 3
+        assert owner.recover_if_crashed()["reason_code"] == "LLAMACPP_RECOVERING"
+        _wait_until(lambda count=expected_process_count: len(processes) == count and not owner._recovery_in_flight)
+    processes[-1].returncode = 3
+    row = owner.recover_if_crashed()
+    assert row["reason_code"] == "LLAMACPP_CRASH_LOOP"
+    assert row["message"] == "Local model crashed repeatedly; restart it from Settings / AI or the launcher"
+    assert len(processes) == 4
+
+
+def test_adopted_server_is_never_restarted(tmp_path) -> None:
+    binary = tmp_path / "llama-server"
+    model = tmp_path / "model.gguf"
+    binary.write_text("fake executable")
+    model.write_bytes(b"fake model")
+    spawn_calls = 0
+
+    def popen(*_args: object, **_kwargs: object) -> _FakeProcess:
+        nonlocal spawn_calls
+        spawn_calls += 1
+        return _FakeProcess()
+
+    def healthy_server(**kwargs: object) -> httpx.Client:
+        def respond(request: httpx.Request) -> httpx.Response:
+            if request.url.path.endswith("/health"):
+                return httpx.Response(200)
+            if request.url.path.endswith("/props"):
+                return httpx.Response(200, json={"build_id": "fake"})
+            if request.url.path.endswith("/v1/models"):
+                return httpx.Response(200, json={"data": [{"id": "qwen3.8-27b-q4kxl"}]})
+            return httpx.Response(200, json=[])
+        return httpx.Client(transport=httpx.MockTransport(respond), **kwargs)
+
+    owner = LlamaCppRuntimeOwner(
+        _config(binary_path=str(binary), model_path=str(model), manage=True),
+        popen=popen, client_factory=healthy_server,
+    )
+    assert owner.start()["runtime_reachable"] is True
+    assert owner.recover_if_crashed()["runtime_reachable"] is True
+    assert spawn_calls == 0
+
+
+def test_adapter_transport_failure_recovers_but_http_500_does_not(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(adapter_module, "llama_cpp_runtime_config", lambda: _config())
+    calls: list[int] = []
+
+    class Owner:
+        def auth_headers(self) -> dict[str, str]:
+            return {}
+
+        def recover_if_crashed(self) -> dict[str, str]:
+            calls.append(1)
+            return {"reason_code": "LLAMACPP_RECOVERING"}
+
+    monkeypatch.setattr(adapter_module, "get_llama_cpp_runtime_owner", lambda: Owner())
+    transport = httpx.MockTransport(_refuse)
+    failed = LocalLlamaCppAdapter(client_factory=lambda: httpx.Client(transport=transport)).complete(
+        AIRequest(task_type=AITaskType.synthesis, prompt="hello")
+    )
+    assert len(calls) == 1 and failed.error is not None
+    assert failed.error.retryable is True and "recovery is in progress" in failed.error.message
+    transport = httpx.MockTransport(lambda _: httpx.Response(500))
+    failed = LocalLlamaCppAdapter(client_factory=lambda: httpx.Client(transport=transport)).complete(
+        AIRequest(task_type=AITaskType.synthesis, prompt="hello")
+    )
+    assert len(calls) == 1 and failed.error is not None
 
 
 def test_adapter_sends_assembled_prompt_with_auth_and_route_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -315,3 +517,25 @@ def test_adapter_sends_assembled_prompt_with_auth_and_route_timeout(monkeypatch:
     assert captured["auth"] == "Bearer local-token"
     assert captured["timeout"] == 900.0
     assert captured["messages"] == [{"role": "user", "content": "SYSTEM: envelope\nUSER: ciao"}]
+
+
+def test_status_does_not_wait_for_a_loading_start(tmp_path) -> None:
+    binary = tmp_path / "llama-server"
+    model = tmp_path / "model.gguf"
+    binary.write_text("fake executable")
+    model.write_bytes(b"fake model")
+    release = threading.Event()
+    owner = LlamaCppRuntimeOwner(
+        _config(binary_path=str(binary), model_path=str(model), manage=True, startup_wait_s=2.0),
+        popen=lambda *_a, **_k: _FakeProcess(), client_factory=_offline_server,
+        sleep=lambda _s: release.wait(2),
+    )
+    starter = threading.Thread(target=owner.start)
+    starter.start()
+    _wait_until(lambda: owner._process is not None)
+    began = time.monotonic()
+    assert owner.status()["reason_code"] in {"LLAMACPP_LOADING", "LLAMACPP_RUNTIME_UNREACHABLE"}
+    assert time.monotonic() - began < 1.0
+    release.set()
+    starter.join(10)
+    owner.stop()
