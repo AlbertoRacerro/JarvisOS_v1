@@ -52,6 +52,11 @@ from app.core.project_knowledge_schema import (
     PROJECT_KNOWLEDGE_MIGRATION_STATEMENTS,
     PROJECT_KNOWLEDGE_SCHEMA_STATEMENTS,
 )
+from app.core.relay_gateway_schema import (
+    RELAY_GATEWAY_INDEX_STATEMENTS,
+    RELAY_GATEWAY_MIGRATION_RECORD,
+    RELAY_GATEWAY_SCHEMA_STATEMENTS,
+)
 from app.core.schema import (
     CONTEXT_RECORDS_FTS_BACKFILL_STATEMENT,
     SCHEMA_FTS_STATEMENTS,
@@ -161,6 +166,8 @@ def initialize_database() -> DatabaseInfo:
             connection.execute(statement)
         for statement in CLOUD_ESCALATION_SCHEMA_STATEMENTS:
             connection.execute(statement)
+        for statement in RELAY_GATEWAY_SCHEMA_STATEMENTS:
+            connection.execute(statement)
         for statement in PROJECT_KNOWLEDGE_SCHEMA_STATEMENTS:
             connection.execute(statement)
         for statement in LITERATURE_SCHEMA_STATEMENTS:
@@ -197,6 +204,8 @@ def initialize_database() -> DatabaseInfo:
         for statement in AI_THREAD_SCHEMA_INDEX_STATEMENTS:
             connection.execute(statement)
         for statement in CLOUD_ESCALATION_INDEX_STATEMENTS:
+            connection.execute(statement)
+        for statement in RELAY_GATEWAY_INDEX_STATEMENTS:
             connection.execute(statement)
         for statement in RUNNER_CREATE_REQUEST_INDEX_STATEMENTS:
             connection.execute(statement)
@@ -249,6 +258,7 @@ def is_database_initialized() -> bool:
         "ai_threads",
         "ai_thread_interactions",
         "cloud_escalations",
+        "relay_runs",
         "sensitivity_labels",
         "sanitized_derivatives",
         "egress_prompt_derivatives",
@@ -362,6 +372,7 @@ def _record_schema_migrations(connection: sqlite3.Connection) -> None:
         DEVELOPMENT_SCHEMA_MIGRATION_RECORD,
         BRAINSTORM_SCHEMA_MIGRATION_RECORD,
         CLOUD_ESCALATION_MIGRATION_RECORD,
+        RELAY_GATEWAY_MIGRATION_RECORD,
     ]
     for record in records:
         connection.execute(

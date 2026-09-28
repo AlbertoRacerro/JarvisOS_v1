@@ -1,3 +1,4 @@
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -65,3 +66,12 @@ def ensure_data_directories(paths: JarvisPaths | None = None) -> JarvisPaths:
 def resolve_paths(settings: Settings | None = None) -> JarvisPaths:
     """Compatibility alias for callers that need the resolved data-root paths."""
     return build_paths(settings)
+
+
+def relay_root() -> Path:
+    """Relay workspaces, agent homes and sandbox manifests (spec 157).
+
+    Kept on the WSL filesystem, apart from the data root: these hold only cloud-safe code
+    and context, and the sandbox must never be handed a path inside the data root.
+    """
+    return Path(os.getenv("JARVISOS_RELAY_ROOT", str(Path.home() / ".local" / "share" / "jarvisos" / "relay")))

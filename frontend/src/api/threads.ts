@@ -246,3 +246,64 @@ export function approveCloudDerivative(workspaceId: string, derivativeId: string
     method: "POST", body: JSON.stringify({ reviewer_notes: "Reviewed for one-step governed cloud escalation" })
   });
 }
+
+// Spec 157: hand a cloud-safe coding task to a Relay-managed agent from the thread.
+// Jarvis decides admission, workspace access and context release; the frontend
+// only ever talks to these backend endpoints, never to Relay or a provider directly.
+export type RelayStatus = {
+  enabled: boolean;
+  repository_level: "S0" | "S1" | "S2" | "S3" | "S4";
+  access_mode: "repository" | "derivative";
+  agents: string[];
+  private_domain_data_enabled: boolean;
+  blocked_reason: string | null;
+};
+
+export type RelayRunState = "queued" | "running" | "completed" | "failed" | "denied";
+
+export type RelayRunRead = {
+  id: string;
+  thread_id: string;
+  relay_workspace_id: string | null;
+  agent: string;
+  state: RelayRunState;
+  reason_code: string | null;
+  relay_session_id: string | null;
+  continued_from_session_id: string | null;
+  turn_index: number;
+  repository_level: string;
+  access_mode: "repository" | "derivative";
+  released_derivative_ids: string[];
+  prompt_source: "operator_attested" | "approved_derivative" | null;
+  stop_reason: string | null;
+  exit_code: number | null;
+  result_text: string | null;
+  workspace_path: string | null;
+  base_commit: string | null;
+  head_commit: string | null;
+  change_summary: string | null;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+};
+
+export function getRelayStatus(): Promise<RelayStatus> {
+  return requestJson("/ai/relay/status");
+}
+
+export function listRelayRuns(workspaceId: string, threadId: string): Promise<RelayRunRead[]> {
+  return requestJson(`/ai/threads/${encodeURIComponent(threadId)}/relay-runs?workspace_id=${encodeURIComponent(workspaceId)}`);
+}
+
+export function getRelayRun(workspaceId: string, threadId: string, runId: string): Promise<RelayRunRead> {
+  return requestJson(`/ai/threads/${encodeURIComponent(threadId)}/relay-runs/${encodeURIComponent(runId)}?workspace_id=${encodeURIComponent(workspaceId)}`);
+}
+
+export function submitRelayRun(
+  workspaceId: string, threadId: string,
+  request: { prompt: string; agent: string; cloud_safe_attested: boolean }
+): Promise<RelayRunRead> {
+  return requestJson(`/ai/threads/${encodeURIComponent(threadId)}/relay-runs?workspace_id=${encodeURIComponent(workspaceId)}`, {
+    method: "POST", body: JSON.stringify(request)
+  });
+}
