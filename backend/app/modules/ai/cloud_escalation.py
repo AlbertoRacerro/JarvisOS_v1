@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import sqlite3
 from decimal import Decimal
 from uuid import uuid4
 
@@ -77,7 +78,7 @@ def create_cloud_escalation(*, workspace_id: str, thread_id: str, payload: Cloud
     derivative = revalidate_sanitized_derivative(workspace_id, payload.derivative_id)
     if derivative.status != "approved" or derivative.effective_level not in {"S0", "S1"}:
         raise CloudEscalationError("approved S0/S1 derivative required")
-    block = {"source": f"derivative:{derivative.id}", "id": derivative.id, "content": derivative.content}
+    block: dict[str, object] = {"source": f"derivative:{derivative.id}", "id": derivative.id, "content": derivative.content}
     context = authorize_manual_context(workspace_id=workspace_id, raw_blocks=[block], budget_chars=32_000)
     if context.result != "eligible" or len(context.blocks) != 1:
         raise CloudEscalationError("derivative authority changed")
@@ -268,7 +269,7 @@ def _mark_dispatch_uncertain(escalation_id: str) -> None:
         connection.commit()
 
 
-def _read(row: object) -> CloudEscalationRead:
+def _read(row: sqlite3.Row) -> CloudEscalationRead:
     amount = Decimal(row["accounted_cost_usd"])
     return CloudEscalationRead(
         id=row["id"], state=row["state"], task_family=row["task_family"],
