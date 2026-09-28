@@ -391,6 +391,28 @@ def test_crashed_managed_process_recovers_once_in_background(tmp_path) -> None:
     assert owner.recover_if_crashed()["reason_code"] != "LLAMACPP_RECOVERING"
 
 
+def test_status_poll_alone_recovers_a_crashed_managed_process(tmp_path) -> None:
+    binary = tmp_path / "llama-server"
+    model = tmp_path / "model.gguf"
+    binary.write_text("fake executable")
+    model.write_bytes(b"fake model")
+    processes: list[_FakeProcess] = []
+
+    def popen(*_args: object, **_kwargs: object) -> _FakeProcess:
+        processes.append(_FakeProcess())
+        return processes[-1]
+
+    owner = LlamaCppRuntimeOwner(
+        _config(binary_path=str(binary), model_path=str(model), manage=True, startup_wait_s=0),
+        popen=popen, client_factory=_offline_server,
+    )
+    owner.start()
+    processes[0].returncode = -9
+    assert owner.status()["reason_code"] == "LLAMACPP_RECOVERING"
+    _wait_until(lambda: len(processes) == 2 and not owner._recovery_in_flight)
+    assert owner.status()["crash_count"] == 1 and len(processes) == 2
+
+
 def test_stop_is_not_counted_as_crash(tmp_path) -> None:
     binary = tmp_path / "llama-server"
     model = tmp_path / "model.gguf"
