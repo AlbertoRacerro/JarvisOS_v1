@@ -13,7 +13,7 @@ from app.modules.ai.settings import ensure_ai_settings, update_ai_settings
 from app.modules.events.service import utc_now
 
 WORKSPACE_ID = "bluerev"
-MODEL_ID = "gemma-4-26b-a4b-it"
+MODEL_ID = "deepseek-v4-flash-0731"
 NOW = datetime(2026, 8, 4, 9, 0, tzinfo=UTC)
 
 

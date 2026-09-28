@@ -52,10 +52,11 @@ class _ConfirmedLengthSequenceAdapter:
                 input_tokens=40 + index,
                 output_tokens=10 + index,
                 usage_source=integration.AIUsageSource.actual,
-                provider_cost_estimate=(
-                    (40 + index) * 5.0 + (10 + index) * 20.0
-                )
-                / 1_000_000,
+                provider_cost_estimate=integration.actual_registry_cost_usd(
+                    provider_id=integration.BINDING.provider_id,
+                    model_id=integration.BINDING.model_id,
+                    input_tokens=40 + index, output_tokens=10 + index,
+                ),
                 currency="USD",
             ),
             finish_reason=finish_reason,

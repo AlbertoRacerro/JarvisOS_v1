@@ -456,6 +456,7 @@ def run_confirmation_ticket(
         continuation_authority is not None
         and status == "success"
         and finish_reason == "length"
+        and not metadata.task_kind.startswith("cloud_escalation_")
     ):
         outcome = continue_after_confirmed_length(
             initial_outcome=outcome,

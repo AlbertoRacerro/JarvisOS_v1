@@ -12,7 +12,7 @@ from app.modules.ai.egress_service import (
     sanitizer_should_sample,
     sha256_text,
 )
-from app.modules.ai.provider_registry import load_default_provider_registry
+from app.modules.ai.provider_registry import load_default_provider_registry, resolve_model_pricing
 
 
 def _material(**overrides) -> EgressPacketMaterial:
@@ -63,10 +63,12 @@ def test_projection_is_deterministic_and_binds_exact_attempt_metadata():
     assert first.prompt_digest == sha256_text(material.prompt)
     assert first.projected_input_tokens == len(first.packet_json.encode("utf-8"))
     assert first.projected_output_tokens == 128
+    price = resolve_model_pricing(registry, material.provider_id, material.model_id)
     assert first.projected_cost_upper_usd == pytest.approx(
-        (first.projected_input_tokens * 5.0 + 128 * 20.0) / 1_000_000
+        (first.projected_input_tokens * price.input_usd_per_1m_tokens
+         + 128 * price.output_usd_per_1m_tokens) / 1_000_000
     )
-    assert first.pricing_version == "operator-conservative-v1"
+    assert first.pricing_version == price.pricing_version
     assert first.policy_version == policy.policy_version
     assert first.trigger_version == policy.trigger_version
     assert first.config_digest == policy.config_digest

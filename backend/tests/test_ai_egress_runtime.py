@@ -25,7 +25,9 @@ from app.modules.ai.egress_service import EgressPacketMaterial
 from app.modules.ai.egress_spine import create_queued_ai_job, finalize_queued_ai_job
 from app.modules.ai.execution_types import ProviderBinding
 from app.modules.ai.models import AISettingsUpdate
+from app.modules.ai.provider_registry import load_default_provider_registry, resolve_model_pricing
 from app.modules.ai.settings import ensure_ai_settings, update_ai_settings
+from app.modules.ai.usage_cost import actual_registry_cost_usd
 from app.modules.events.service import utc_now
 
 WORKSPACE_ID = "bluerev"
@@ -58,6 +60,7 @@ class CountingAdapter:
     def complete(self, request: AIRequest) -> AIResponse:
         self.calls += 1
         self.requests.append(request)
+        pricing = resolve_model_pricing(load_default_provider_registry(), self.response_provider_id, self.response_model_id)
         return AIResponse(
             provider_id=self.response_provider_id,
             model_id=self.response_model_id,
@@ -71,7 +74,7 @@ class CountingAdapter:
                 input_tokens=11,
                 output_tokens=5,
                 usage_source=AIUsageSource.actual,
-                provider_cost_estimate=(11 * 5.0 + 5 * 20.0) / 1_000_000,
+                provider_cost_estimate=(11 * pricing.input_usd_per_1m_tokens + 5 * pricing.output_usd_per_1m_tokens) / 1_000_000,
                 currency="USD",
             ),
             finish_reason="stop",
@@ -188,7 +191,10 @@ def _seed_prior_network_attempt() -> None:
             input_tokens=1,
             output_tokens=1,
             usage_source=AIUsageSource.actual,
-            provider_cost_estimate=(1 * 5.0 + 1 * 20.0) / 1_000_000,
+            provider_cost_estimate=actual_registry_cost_usd(
+                provider_id="deepseek", model_id="deepseek-v4-pro",
+                input_tokens=1, output_tokens=1,
+            ),
             currency="USD",
         ),
         finish_reason="stop",

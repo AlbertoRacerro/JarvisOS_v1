@@ -54,6 +54,51 @@ export type ThreadDetail = ThreadSummary & {
   has_older: boolean;
 };
 
+export type CloudEscalation = {
+  id: string;
+  state: "held" | "confirmation_required" | "complete" | "partial" | "failed";
+  task_family: string;
+  quality_floor: number;
+  quality_tier: number;
+  qualification: string;
+  qualification_evidence_ref: string;
+  provider_id: string;
+  model_id: string;
+  derivative_id: string;
+  derivative_digest: string;
+  projected_cost_usd: string;
+  accounted_cost_usd: string;
+  accounted_cost_eur: string;
+  calculated_usage_cost_eur: string | null;
+  pricing_version: string;
+  pricing_reviewed_on: string;
+  pricing_source_url: string;
+  pricing_effective_at: string;
+  cost_basis: "hold" | "actual_priced" | "zero_before_network" | "upper_unknown";
+  actual_input_tokens: number | null;
+  actual_output_tokens: number | null;
+  context_digest: string | null;
+  source_interaction_id: string;
+  fx_date: string;
+  eur_usd_rate: string;
+  fx_source: string;
+  flow_id: string | null;
+  ai_job_id: string | null;
+  ticket_id: string | null;
+  egress_packet_digest: string | null;
+  reason_code: string | null;
+  response_text: string | null;
+};
+
+export type CloudDerivative = {
+  id: string;
+  workspace_id: string;
+  content: string;
+  content_digest: string;
+  status: "draft" | "approved" | "revoked" | "stale";
+  effective_level: string;
+};
+
 export type ContextSelection = {
   kinds?: string[];
   statuses?: Record<string, string[]> | string[] | null;
@@ -162,4 +207,42 @@ export async function submitThreadInteraction(
     }
   );
   return result.interaction;
+}
+
+export function listCloudEscalations(workspaceId: string, threadId: string): Promise<CloudEscalation[]> {
+  return requestJson(`/ai/threads/${encodeURIComponent(threadId)}/cloud-escalations?workspace_id=${encodeURIComponent(workspaceId)}`);
+}
+
+export function submitCloudEscalation(
+  workspaceId: string, threadId: string,
+  request: {request_id: string; source_interaction_id: string; derivative_id: string; task_family: string}
+): Promise<CloudEscalation> {
+  return requestJson(`/ai/threads/${encodeURIComponent(threadId)}/cloud-escalations?workspace_id=${encodeURIComponent(workspaceId)}`, {
+    method: "POST", body: JSON.stringify(request)
+  });
+}
+
+export function confirmCloudEscalation(workspaceId: string, threadId: string, escalationId: string): Promise<CloudEscalation> {
+  return requestJson(`/ai/threads/${encodeURIComponent(threadId)}/cloud-escalations/${encodeURIComponent(escalationId)}/confirm?workspace_id=${encodeURIComponent(workspaceId)}`, {
+    method: "POST"
+  });
+}
+
+export function prepareCloudDerivative(workspaceId: string, sourceRef: string, content: string): Promise<CloudDerivative> {
+  return requestJson("/ai/sensitivity/derivatives", {
+    method: "POST",
+    body: JSON.stringify({
+      workspace_id: workspaceId,
+      source_refs: [sourceRef],
+      content,
+      effective_level: "S1",
+      transformations: ["Operator removed identifying, confidential, and project-specific detail"]
+    })
+  });
+}
+
+export function approveCloudDerivative(workspaceId: string, derivativeId: string): Promise<CloudDerivative> {
+  return requestJson(`/ai/sensitivity/derivatives/${encodeURIComponent(derivativeId)}/approve?workspace_id=${encodeURIComponent(workspaceId)}`, {
+    method: "POST", body: JSON.stringify({ reviewer_notes: "Reviewed for one-step governed cloud escalation" })
+  });
 }

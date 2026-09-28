@@ -32,6 +32,7 @@ from app.modules.ai.models import AISettingsUpdate
 from app.modules.ai.settings import ensure_ai_settings, update_ai_settings
 from app.modules.ai.token_flow_service import get_flow
 from app.modules.ai.token_flow_status import get_continuation_flow_status
+from app.modules.ai.usage_cost import actual_registry_cost_usd
 from app.modules.events.service import utc_now
 
 WORKSPACE_ID = "bluerev"
@@ -89,8 +90,10 @@ class SequenceExternalAdapter:
                 input_tokens=20 + index,
                 output_tokens=5 + index,
                 usage_source=AIUsageSource.actual,
-                provider_cost_estimate=((20 + index) * 5.0 + (5 + index) * 20.0)
-                / 1_000_000,
+                provider_cost_estimate=actual_registry_cost_usd(
+                    provider_id="deepseek", model_id="deepseek-v4-pro",
+                    input_tokens=20 + index, output_tokens=5 + index,
+                ),
                 currency="USD",
             ),
             finish_reason=finish_reason,
@@ -399,7 +402,10 @@ class ConfirmedExternalAdapter:
                 input_tokens=31,
                 output_tokens=9,
                 usage_source=AIUsageSource.actual,
-                provider_cost_estimate=(31 * 5.0 + 9 * 20.0) / 1_000_000,
+                provider_cost_estimate=actual_registry_cost_usd(
+                    provider_id="deepseek", model_id="deepseek-v4-pro",
+                    input_tokens=31, output_tokens=9,
+                ),
                 currency="USD",
             ),
             finish_reason=self.finish_reason,

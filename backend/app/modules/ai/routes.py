@@ -121,6 +121,12 @@ def preview_context_pack(payload: ContextPackPreviewRequest) -> ContextPackPrevi
 @router.post("/tasks/escalations/confirm", response_model=EscalationConfirmResponse)
 def confirm_ai_task_escalation(payload: EscalationConfirmRequest) -> EscalationConfirmResponse:
     ensure_ai_settings()
+    with open_sqlite_connection() as connection:
+        governed = connection.execute(
+            "SELECT 1 FROM cloud_escalations WHERE ticket_id = ?", (payload.ticket_id,)
+        ).fetchone()
+    if governed is not None:
+        raise HTTPException(status_code=409, detail="confirm this ticket through its thread escalation")
     try:
         return confirm_escalation(payload)
     except EgressStateError as exc:
