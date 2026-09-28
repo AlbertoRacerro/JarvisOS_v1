@@ -150,7 +150,10 @@ def test_openai_adapter_prices_only_provider_reported_usage(monkeypatch) -> None
         )
     assert actual.usage.usage_source == AIUsageSource.actual
     assert actual.usage.provider_cost_estimate == pytest.approx(
-        (10 * 5.0 + 20 * 20.0) / 1_000_000
+        actual_registry_cost_usd(
+            provider_id="deepseek", model_id="deepseek-v4-pro",
+            input_tokens=10, output_tokens=20,
+        )
     )
     assert actual.usage.currency == "USD"
 

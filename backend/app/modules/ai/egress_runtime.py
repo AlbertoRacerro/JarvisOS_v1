@@ -289,6 +289,7 @@ def run_external_task(
             outcome.status == "provider_error"
             and outcome.retryable_error_code is not None
             and fallback_index + 1 < len(chain)
+            and not task_kind.startswith("cloud_escalation_")
         ):
             prior_retryable_error_code = outcome.retryable_error_code
             continue
@@ -306,6 +307,9 @@ def run_external_task(
             and bool(outcome.response.text)
             and finish_reason == "length"
         ):
+            if task_kind.startswith("cloud_escalation_"):
+                _terminalize_external_flow(flow_id, outcome)
+                return outcome
             if max_output_tokens is None:
                 raise EgressSpineStateError(
                     "successful external attempt omitted output ceiling"

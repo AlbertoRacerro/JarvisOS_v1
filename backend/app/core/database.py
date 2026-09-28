@@ -19,6 +19,11 @@ from app.core.cad_link_schema import (
     CAD_LINK_SCHEMA_MIGRATION_RECORD,
     CAD_LINK_SCHEMA_STATEMENTS,
 )
+from app.core.cloud_escalation_schema import (
+    CLOUD_ESCALATION_INDEX_STATEMENTS,
+    CLOUD_ESCALATION_MIGRATION_RECORD,
+    CLOUD_ESCALATION_SCHEMA_STATEMENTS,
+)
 from app.core.development_schema import (
     DEVELOPMENT_SCHEMA_INDEX_STATEMENTS,
     DEVELOPMENT_SCHEMA_MIGRATION_RECORD,
@@ -154,6 +159,8 @@ def initialize_database() -> DatabaseInfo:
             connection.execute(statement)
         for statement in AI_THREAD_SCHEMA_STATEMENTS:
             connection.execute(statement)
+        for statement in CLOUD_ESCALATION_SCHEMA_STATEMENTS:
+            connection.execute(statement)
         for statement in PROJECT_KNOWLEDGE_SCHEMA_STATEMENTS:
             connection.execute(statement)
         for statement in LITERATURE_SCHEMA_STATEMENTS:
@@ -188,6 +195,8 @@ def initialize_database() -> DatabaseInfo:
         for statement in GRADE_SCHEMA_INDEX_STATEMENTS:
             connection.execute(statement)
         for statement in AI_THREAD_SCHEMA_INDEX_STATEMENTS:
+            connection.execute(statement)
+        for statement in CLOUD_ESCALATION_INDEX_STATEMENTS:
             connection.execute(statement)
         for statement in RUNNER_CREATE_REQUEST_INDEX_STATEMENTS:
             connection.execute(statement)
@@ -239,6 +248,7 @@ def is_database_initialized() -> bool:
         "ai_flow_grade_events",
         "ai_threads",
         "ai_thread_interactions",
+        "cloud_escalations",
         "sensitivity_labels",
         "sanitized_derivatives",
         "egress_prompt_derivatives",
@@ -351,6 +361,7 @@ def _record_schema_migrations(connection: sqlite3.Connection) -> None:
         LITERATURE_SCHEMA_MIGRATION_RECORD,
         DEVELOPMENT_SCHEMA_MIGRATION_RECORD,
         BRAINSTORM_SCHEMA_MIGRATION_RECORD,
+        CLOUD_ESCALATION_MIGRATION_RECORD,
     ]
     for record in records:
         connection.execute(

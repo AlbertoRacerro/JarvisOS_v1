@@ -15,6 +15,7 @@ from app.modules.ai.egress_policy import EXTERNAL_PROVIDER_OPERATION
 from app.modules.ai.egress_service import EgressPacketMaterial
 from app.modules.ai.models import AISettingsUpdate
 from app.modules.ai.settings import ensure_ai_settings, update_ai_settings
+from app.modules.ai.usage_cost import actual_registry_cost_usd
 from app.modules.events.service import utc_now
 
 WORKSPACE_ID = "bluerev"
@@ -84,7 +85,11 @@ def _insert_ai_job() -> str:
 def _finalize_ai_job_usage(
     ai_job_id: str, *, input_tokens: int, output_tokens: int
 ) -> float:
-    cost = (input_tokens * 5.0 + output_tokens * 20.0) / 1_000_000
+    cost = actual_registry_cost_usd(
+        provider_id="deepseek", model_id="deepseek-v4-pro",
+        input_tokens=input_tokens, output_tokens=output_tokens,
+    )
+    assert cost is not None
     with open_sqlite_connection() as connection:
         connection.execute(
             """

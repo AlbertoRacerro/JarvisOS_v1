@@ -100,19 +100,33 @@ providers:
     monthly_token_cap: 1000000
     monthly_cost_cap_usd: 25
     models:
+      deepseek-flash:
+        provider_model_name: deepseek-flash
+        route_classes: [external:deepseek_flash]
+        context_window_tokens: 8192
+        max_output_tokens: 512
+        # Peak-rate ceiling; off-peak billing may be lower.
+        # https://api-docs.deepseek.com/quick_start/pricing/ checked 2026-09-28.
+        pricing:
+          currency: USD
+          input_usd_per_1m_tokens: 0.30
+          output_usd_per_1m_tokens: 1.20
+          pricing_version: deepseek-peak-2026-09-28
+          pricing_effective_at: "2026-08-16T16:00:00Z"
       deepseek-v4-pro:
         provider_model_name: deepseek-v4-pro
         route_classes: [external:cheap, external:deepseek]
         # Conservative accepted JarvisOS bound, not a live-provider capability claim.
         context_window_tokens: 8192
         max_output_tokens: 512
-        # Conservative operator upper bound, not a live-provider price claim.
+        # Peak-rate ceiling; off-peak billing may be lower.
+        # https://api-docs.deepseek.com/quick_start/pricing/ checked 2026-09-28.
         pricing:
           currency: USD
-          input_usd_per_1m_tokens: 5.0
-          output_usd_per_1m_tokens: 20.0
-          pricing_version: operator-conservative-v1
-          pricing_effective_at: "2026-07-13T00:00:00Z"
+          input_usd_per_1m_tokens: 1.32
+          output_usd_per_1m_tokens: 3.96
+          pricing_version: deepseek-peak-2026-09-28
+          pricing_effective_at: "2026-08-16T16:00:00Z"
   glm:
     kind: openai_compatible
     execution_class: external_provider

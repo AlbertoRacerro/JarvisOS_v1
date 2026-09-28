@@ -2,6 +2,14 @@ from functools import lru_cache
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
+from app.modules.ai.cloud_escalation import (
+    CloudEscalationError,
+    CloudEscalationRead,
+    CloudEscalationRequest,
+    confirm_cloud_escalation,
+    create_cloud_escalation,
+    list_cloud_escalations,
+)
 from app.modules.ai.thread_models import (
     AIConversationOptions,
     AIConversationRoute,
@@ -24,6 +32,27 @@ from app.modules.ai.thread_service import (
 )
 
 router = APIRouter(prefix="/threads", tags=["ai-threads"])
+
+
+@router.post("/{thread_id}/cloud-escalations", response_model=CloudEscalationRead)
+def submit_cloud_escalation(thread_id: str, workspace_id: str, payload: CloudEscalationRequest) -> CloudEscalationRead:
+    try:
+        return create_cloud_escalation(workspace_id=workspace_id, thread_id=thread_id, payload=payload)
+    except (CloudEscalationError, ValueError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.get("/{thread_id}/cloud-escalations", response_model=list[CloudEscalationRead])
+def read_cloud_escalations(thread_id: str, workspace_id: str) -> list[CloudEscalationRead]:
+    return list_cloud_escalations(workspace_id=workspace_id, thread_id=thread_id)
+
+
+@router.post("/{thread_id}/cloud-escalations/{escalation_id}/confirm", response_model=CloudEscalationRead)
+def confirm_thread_cloud_escalation(thread_id: str, escalation_id: str, workspace_id: str) -> CloudEscalationRead:
+    try:
+        return confirm_cloud_escalation(workspace_id=workspace_id, thread_id=thread_id, escalation_id=escalation_id)
+    except (CloudEscalationError, ValueError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.get("/conversation-options", response_model=AIConversationOptions)

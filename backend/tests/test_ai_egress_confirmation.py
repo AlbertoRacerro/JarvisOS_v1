@@ -21,7 +21,7 @@ from app.modules.ai.egress_persistence import EgressStateError
 from app.modules.ai.egress_policy import load_default_egress_policy
 from app.modules.ai.egress_runtime import run_external_task
 from app.modules.ai.models import AISettingsUpdate, EscalationConfirmRequest
-from app.modules.ai.provider_registry import load_default_provider_registry
+from app.modules.ai.provider_registry import load_default_provider_registry, resolve_model_pricing
 from app.modules.ai.settings import ensure_ai_settings, update_ai_settings
 
 
@@ -100,6 +100,7 @@ def _pending_ticket(
 
 
 def _success_response(provider_id: str = "deepseek", model_id: str = "deepseek-v4-pro") -> AIResponse:
+    pricing = resolve_model_pricing(load_default_provider_registry(), provider_id, model_id)
     return AIResponse(
         provider_id=provider_id,
         model_id=model_id,
@@ -112,7 +113,7 @@ def _success_response(provider_id: str = "deepseek", model_id: str = "deepseek-v
             input_tokens=11,
             output_tokens=7,
             usage_source=AIUsageSource.actual,
-            provider_cost_estimate=(11 * 5.0 + 7 * 20.0) / 1_000_000,
+            provider_cost_estimate=(11 * pricing.input_usd_per_1m_tokens + 7 * pricing.output_usd_per_1m_tokens) / 1_000_000,
             currency="USD",
         ),
         finish_reason="stop",

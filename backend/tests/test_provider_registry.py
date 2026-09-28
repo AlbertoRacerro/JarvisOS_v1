@@ -74,10 +74,10 @@ def test_default_provider_registry_loads_with_complete_execution_metadata(monkey
 
     deepseek_price = resolve_model_pricing(registry, "deepseek", "deepseek-v4-pro")
     assert deepseek_price.currency == "USD"
-    assert deepseek_price.input_usd_per_1m_tokens == 5.0
-    assert deepseek_price.output_usd_per_1m_tokens == 20.0
+    assert deepseek_price.input_usd_per_1m_tokens == 1.32
+    assert deepseek_price.output_usd_per_1m_tokens == 3.96
     assert deepseek_price.cache_read_input_usd_per_million is None
-    assert deepseek_price.pricing_version == "operator-conservative-v1"
+    assert deepseek_price.pricing_version == "deepseek-peak-2026-09-28"
 
 
 def test_exact_external_model_override_uses_canonical_registry_metadata(monkeypatch):

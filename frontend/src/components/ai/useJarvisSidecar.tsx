@@ -4,7 +4,14 @@ import type { KnowledgeContextPreview } from "../../api/knowledgeActions";
 import type { StageSelection } from "../../app/selection";
 import {
   ThreadsRequestError,
+  approveCloudDerivative,
+  confirmCloudEscalation,
   getConversationOptions,
+  listCloudEscalations,
+  prepareCloudDerivative,
+  submitCloudEscalation,
+  type CloudEscalation,
+  type CloudDerivative,
   type ConversationRoute,
   listThreads,
   getThread,
@@ -171,6 +178,14 @@ export function useJarvisSidecar(
   const [loadingThreads, setLoadingThreads] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [cloudResults, setCloudResults] = useState<CloudEscalation[]>([]);
+  const [cloudSource, setCloudSource] = useState<string | null>(null);
+  const [cloudDerivative, setCloudDerivative] = useState("");
+  const [cloudSourceRef, setCloudSourceRef] = useState("");
+  const [cloudSafeText, setCloudSafeText] = useState("");
+  const [cloudDraft, setCloudDraft] = useState<CloudDerivative | null>(null);
+  const [cloudFamily, setCloudFamily] = useState("engineering");
+  const [cloudWorking, setCloudWorking] = useState(false);
   const submitting = inFlight !== null;
   const workspaceOwner = useRef(0);
   const listOwner = useRef(0);
@@ -201,6 +216,9 @@ export function useJarvisSidecar(
     setPreviewLoading(false);
     setSubmitting(false);
     setError(null);
+    setCloudResults([]);
+    setCloudSource(null);
+    setCloudDraft(null);
     if (!workspaceId) return;
 
     setLoadingThreads(true);
@@ -240,9 +258,79 @@ export function useJarvisSidecar(
 
   useEffect(() => {
     setDetail(null);
+    setCloudResults([]);
+    setCloudSource(null);
+    setCloudDraft(null);
     if (!workspaceId || !selectedThreadId) return;
+    let active = true;
     loadDetail(selectedThreadId, false);
+    void listCloudEscalations(workspaceId, selectedThreadId).then(result => {
+      if (active) setCloudResults(result);
+    }).catch(() => {});
+    return () => { active = false; };
   }, [workspaceId, selectedThreadId, loadDetail]);
+
+  const sendCloud = async () => {
+    if (!workspaceId || !selectedThreadId || !cloudSource || !cloudDerivative.trim() || cloudWorking) return;
+    const targetThread = selectedThreadId;
+    setCloudWorking(true);
+    setError(null);
+    try {
+      const result = await submitCloudEscalation(workspaceId, targetThread, {
+        request_id: requestId(), source_interaction_id: cloudSource,
+        derivative_id: cloudDerivative.trim(), task_family: cloudFamily
+      });
+      if (selectedThreadRef.current === targetThread) {
+        setCloudResults(current => [result, ...current.filter(item => item.id !== result.id)]);
+        setCloudSource(null);
+      }
+    } catch (caught) {
+      setError(caught instanceof ThreadsRequestError
+        ? `Cloud escalation was not dispatched (${caught.status}). Check that the derivative is approved and the provider and budgets are enabled.`
+        : "Cloud escalation could not be completed. Check its status before retrying.");
+    } finally { setCloudWorking(false); }
+  };
+
+  const prepareDerivative = async () => {
+    if (!workspaceId || !cloudSourceRef.trim() || !cloudSafeText.trim() || cloudWorking) return;
+    setCloudWorking(true);
+    setError(null);
+    try {
+      const draft = await prepareCloudDerivative(workspaceId, cloudSourceRef.trim(), cloudSafeText.trim());
+      setCloudDraft(draft);
+      setCloudDerivative("");
+    } catch {
+      setError("Jarvis could not prepare the derivative. Use one existing source reference and remove protected details.");
+    } finally { setCloudWorking(false); }
+  };
+
+  const approveDerivative = async () => {
+    if (!workspaceId || !cloudDraft || cloudWorking) return;
+    setCloudWorking(true);
+    setError(null);
+    try {
+      const approved = await approveCloudDerivative(workspaceId, cloudDraft.id);
+      setCloudDraft(approved);
+      setCloudDerivative(approved.id);
+    } catch {
+      setError("The derivative could not be approved. Its source or classification may have changed.");
+    } finally { setCloudWorking(false); }
+  };
+
+  const confirmCloud = async (escalationId: string) => {
+    if (!workspaceId || !selectedThreadId || cloudWorking) return;
+    const targetThread = selectedThreadId;
+    setCloudWorking(true);
+    setError(null);
+    try {
+      const result = await confirmCloudEscalation(workspaceId, targetThread, escalationId);
+      if (selectedThreadRef.current === targetThread) {
+        setCloudResults(current => current.map(item => item.id === result.id ? result : item));
+      }
+    } catch {
+      setError("The cloud confirmation could not be used. The approved derivative or provider policy may have changed.");
+    } finally { setCloudWorking(false); }
+  };
 
   // A turn keeps running on the server while you navigate, refresh or switch
   // conversations; poll the selected conversation until it settles.
@@ -463,6 +551,7 @@ export function useJarvisSidecar(
         <div className="jarvis-bubble__actions">
           {interaction.flow_state === "partial_terminal" ? <button type="button" className="jarvis-link-button" disabled={submitting} onClick={() => setPrompt(`Continue the previous answer from where it stopped. Do not repeat the completed part. Original request: ${interaction.user_text.slice(0, 1500)}\n\nPrevious partial answer:\n${(interaction.assistant_text ?? "").slice(-8500)}`)}>Continue answer</button> : null}
           {interaction.flow_state === "failed_terminal" ? <button type="button" className="jarvis-link-button" disabled={submitting} onClick={() => setPrompt(interaction.user_text)}>Try again</button> : null}
+          {!running && interaction.execution_class === "local_compute" ? <button type="button" className="jarvis-link-button" disabled={submitting || cloudWorking} onClick={() => setCloudSource(interaction.id)}>Escalate approved derivative</button> : null}
           <details className="jarvis-bubble__details"><summary>Details</summary><dl><div><dt>Responder</dt><dd>{viaAgent ? "Jarvis agent (Hermes)" : interaction.route_class ?? "Unknown"}</dd></div><div><dt>Model</dt><dd>{interaction.model_id ?? "Unknown"}</dd></div><div><dt>Canonical state</dt><dd>{interaction.flow_state}</dd></div><div><dt>Persistence</dt><dd>{interaction.persistence_state}</dd></div><div><dt>Attempts</dt><dd>{interaction.attempt_count}</dd></div><div><dt>Flow</dt><dd><code>{interaction.flow_id}</code></dd></div></dl>{interaction.persistence_error ? <p>Persistence diagnostic: {interaction.persistence_error}</p> : null}{interaction.proposal_ids.length ? <p>Proposal refs: {interaction.proposal_ids.join(", ")}</p> : null}</details>
         </div>
       </div>
@@ -515,6 +604,33 @@ export function useJarvisSidecar(
         </div>
       </li> : null}
     </ol>
+
+    {cloudSource ? <section className="jarvis-sidecar__context" aria-label="Governed cloud escalation">
+      <strong>One cloud reasoning step</strong>
+      <p>Only the approved derivative identified below is sent. The conversation and local tool results stay here. Jarvis enforces the provider and spend limits.</p>
+      <details><summary>Prepare a safe derivative from a project record</summary>
+        <label className="jarvis-sidecar__field"><span>Source reference (for example, decision:id)</span><input value={cloudSourceRef} onChange={event => { setCloudSourceRef(event.target.value); setCloudDraft(null); }} /></label>
+        <label className="jarvis-sidecar__field"><span>Safe rewritten task</span><textarea value={cloudSafeText} onChange={event => { setCloudSafeText(event.target.value); setCloudDraft(null); }} /></label>
+        <button type="button" disabled={!cloudSourceRef.trim() || !cloudSafeText.trim() || cloudWorking} onClick={() => void prepareDerivative()}>Prepare for review</button>
+        {cloudDraft ? <div><p>Review this exact outbound derivative:</p><p>{cloudDraft.content}</p><p>Digest <code>{cloudDraft.content_digest}</code></p>{cloudDraft.status === "draft" ? <button type="button" disabled={cloudWorking} onClick={() => void approveDerivative()}>Approve this safe derivative</button> : <p>Approved derivative ready.</p>}</div> : null}
+      </details>
+      <label className="jarvis-sidecar__field"><span>Approved derivative ID</span><input value={cloudDerivative} onChange={event => setCloudDerivative(event.target.value)} /></label>
+      <label className="jarvis-sidecar__field"><span>Task family</span><select value={cloudFamily} onChange={event => setCloudFamily(event.target.value)}><option value="general">General</option><option value="engineering">Engineering</option><option value="coding">Coding</option></select></label>
+      <button type="button" disabled={!cloudDerivative.trim() || cloudWorking} onClick={() => void sendCloud()}>{cloudWorking ? "Checking…" : "Request governed escalation"}</button>
+      <button type="button" className="jarvis-link-button" onClick={() => setCloudSource(null)}>Cancel</button>
+    </section> : null}
+    {cloudResults.length ? <section className="jarvis-sidecar__context" aria-label="Cloud advice">
+      <strong>Cloud advice</strong>
+      {cloudResults.map(item => <details key={item.id} open={item.state === "confirmation_required"}>
+        <summary>{item.provider_id}/{item.model_id} · {item.state}</summary>
+        {item.response_text ? <JarvisMessageText text={item.response_text} /> : <p>{item.reason_code ?? "No response yet."}</p>}
+        <p>Advisory only · no local action was applied.</p>
+        <p>Task family: {item.task_family}. Quality tier {item.quality_tier} meets configured floor {item.quality_floor}; qualification: {item.qualification} ({item.qualification_evidence_ref}).</p>
+        <p>{item.cost_basis === "actual_priced" ? "Reported usage at reviewed tariff" : item.cost_basis === "zero_before_network" ? "No provider spend" : "Conservative spend hold"}: €{item.accounted_cost_eur} (USD {item.accounted_cost_usd}; ECB {item.fx_date}, 1 EUR = {item.eur_usd_rate} USD). {item.calculated_usage_cost_eur === null ? "Actual billed cost unknown. " : ""}Price: {item.pricing_version} effective {item.pricing_effective_at}, reviewed {item.pricing_reviewed_on}.</p>
+        <p>Provider tokens: {item.actual_input_tokens ?? "unknown"} input, {item.actual_output_tokens ?? "unknown"} output. <a href={item.pricing_source_url} target="_blank" rel="noreferrer">Price source</a> · <a href={item.fx_source} target="_blank" rel="noreferrer">FX source</a>. Derivative: <code>{item.derivative_id}</code> · context: <code>{item.context_digest ?? "none"}</code> · packet: <code>{item.egress_packet_digest ?? "none"}</code></p>
+        {item.state === "confirmation_required" ? <button type="button" disabled={cloudWorking} onClick={() => void confirmCloud(item.id)}>Confirm this packet</button> : null}
+      </details>)}
+    </section> : null}
 
     {error ? <p className="jarvis-sidecar__error" role="alert">{error}</p> : null}
     {basisDiscussionBlocked && <p className="jarvis-sidecar__error" role="status">Project Basis discussion is unavailable under the current sensitivity controls. Prepare a written proposal above, or clear selected context to ask a general question.</p>}
