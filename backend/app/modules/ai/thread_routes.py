@@ -10,6 +10,7 @@ from app.modules.ai.cloud_escalation import (
     create_cloud_escalation,
     list_cloud_escalations,
 )
+from app.modules.ai.egress_persistence import EgressStateError
 from app.modules.ai.thread_models import (
     AIConversationOptions,
     AIConversationRoute,
@@ -38,7 +39,7 @@ router = APIRouter(prefix="/threads", tags=["ai-threads"])
 def submit_cloud_escalation(thread_id: str, workspace_id: str, payload: CloudEscalationRequest) -> CloudEscalationRead:
     try:
         return create_cloud_escalation(workspace_id=workspace_id, thread_id=thread_id, payload=payload)
-    except (CloudEscalationError, ValueError) as exc:
+    except (CloudEscalationError, ValueError, LookupError) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
@@ -51,7 +52,7 @@ def read_cloud_escalations(thread_id: str, workspace_id: str) -> list[CloudEscal
 def confirm_thread_cloud_escalation(thread_id: str, escalation_id: str, workspace_id: str) -> CloudEscalationRead:
     try:
         return confirm_cloud_escalation(workspace_id=workspace_id, thread_id=thread_id, escalation_id=escalation_id)
-    except (CloudEscalationError, ValueError) as exc:
+    except (CloudEscalationError, EgressStateError, ValueError, LookupError) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
