@@ -517,3 +517,25 @@ def test_adapter_sends_assembled_prompt_with_auth_and_route_timeout(monkeypatch:
     assert captured["auth"] == "Bearer local-token"
     assert captured["timeout"] == 900.0
     assert captured["messages"] == [{"role": "user", "content": "SYSTEM: envelope\nUSER: ciao"}]
+
+
+def test_status_does_not_wait_for_a_loading_start(tmp_path) -> None:
+    binary = tmp_path / "llama-server"
+    model = tmp_path / "model.gguf"
+    binary.write_text("fake executable")
+    model.write_bytes(b"fake model")
+    release = threading.Event()
+    owner = LlamaCppRuntimeOwner(
+        _config(binary_path=str(binary), model_path=str(model), manage=True, startup_wait_s=2.0),
+        popen=lambda *_a, **_k: _FakeProcess(), client_factory=_offline_server,
+        sleep=lambda _s: release.wait(2),
+    )
+    starter = threading.Thread(target=owner.start)
+    starter.start()
+    _wait_until(lambda: owner._process is not None)
+    began = time.monotonic()
+    assert owner.status()["reason_code"] in {"LLAMACPP_LOADING", "LLAMACPP_RUNTIME_UNREACHABLE"}
+    assert time.monotonic() - began < 1.0
+    release.set()
+    starter.join(10)
+    owner.stop()

@@ -180,6 +180,39 @@ def test_text_tool_proposal_requires_the_registered_broker() -> None:
         infer_envelope(_frame() | {"tools": [{"function": {"name": "terminal"}}]})
 
 
+@pytest.mark.parametrize(("text", "arguments"), [
+    ('```json\n{"tool_calls":[{"name":"mcp__jarvis__jarvis_retrieval_query","arguments":{"q":"a\\"}"}}]}\n```',
+     {"q": 'a"}'}),
+    ('{"tool_calls":[{"name":"mcp__jarvis__jarvis_retrieval_query","arguments":{"q":"x"}}]',
+     {"q": "x"}),
+    ('{"tool_calls":[{"name":"mcp__jarvis__jarvis_retrieval_query","arguments":"{\\"q\\":\\"x\\"}"}]}',
+     {"q": "x"}),
+    ('<|tool_call>call:mcp__jarvis__jarvis_retrieval_query{q:<|"|>pump curve<|"|>,limit:3}<tool_call|>',
+     {"q": "pump curve", "limit": 3}),
+])
+def test_malformed_tool_proposals_are_repaired_under_the_same_admission(text: str, arguments: dict) -> None:
+    tools = [{"function": {"name": "mcp__jarvis__jarvis_retrieval_query"}}]
+    message = completion_message(text, tools)
+    assert message["content"] is None
+    call = message["tool_calls"][0]["function"]
+    assert call["name"] == "mcp__jarvis__jarvis_retrieval_query"
+    assert json.loads(call["arguments"]) == arguments
+
+
+@pytest.mark.parametrize("text", [
+    "The pump curve shows {\"tool_calls\" in prose.",
+    '<|tool_call>call:terminal{cmd:<|"|>ls<|"|>}<tool_call|>',
+    'Sure. <|tool_call>call:mcp__jarvis__jarvis_retrieval_query{q:<|"|>x<|"|>}<tool_call|>',
+    '{"tool_calls":[{"name":"mcp__jarvis__jarvis_retrieval_query","arguments":"not json"}]}',
+    '{"tool_calls":[{"name":"mcp__jarvis__jarvis_retrieval_query","arguments":[1]}]}',
+    json.dumps({"tool_calls": [{"name": "mcp__jarvis__jarvis_retrieval_query", "arguments": {}}] * 5}),
+    '{"answer": "42"}',
+])
+def test_unrepairable_or_inadmissible_text_stays_an_answer(text: str) -> None:
+    tools = [{"function": {"name": "mcp__jarvis__jarvis_retrieval_query"}}]
+    assert completion_message(text, tools) == {"role": "assistant", "content": text}
+
+
 def test_turn_without_a_model_answer_is_reported_failed() -> None:
     from app.modules.agents.hermes.worker_shim import Worker as ShimWorker
 

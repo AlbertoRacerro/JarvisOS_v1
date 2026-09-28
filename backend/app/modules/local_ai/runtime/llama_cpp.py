@@ -191,6 +191,7 @@ class LlamaCppRuntimeOwner:
         self._api_key: str | None = None
         self._exit_code: int | None = None
         self._lock = threading.RLock()
+        self._reap_lock = threading.Lock()
         self._stop_requested = False
         self._crash_count = 0
         self._last_crash_at: str | None = None
@@ -208,6 +209,10 @@ class LlamaCppRuntimeOwner:
         return {"Authorization": f"Bearer {key}"} if key else {}
 
     def _reap(self) -> None:
+        with self._reap_lock:
+            self._reap_unlocked()
+
+    def _reap_unlocked(self) -> None:
         if self._process is not None and self._process.poll() is not None:
             self._exit_code = self._process.returncode
             if not self._stop_requested:
@@ -218,10 +223,10 @@ class LlamaCppRuntimeOwner:
             self._stop_requested = False
 
     def status(self) -> dict[str, Any]:
-        with self._lock:
-            return self._status_locked()
+        # Lock-free for callers: status polls must not wait behind a model load in start().
+        return self._snapshot()
 
-    def _status_locked(self, *, include_recovery: bool = True) -> dict[str, Any]:
+    def _snapshot(self, *, include_recovery: bool = True) -> dict[str, Any]:
         config = self.config
         self._reap()
         reason = validate_loopback_host(config.host)
@@ -297,7 +302,7 @@ class LlamaCppRuntimeOwner:
 
     def start(self) -> dict[str, Any]:
         with self._lock:
-            existing = self._status_locked(include_recovery=False)
+            existing = self._snapshot(include_recovery=False)
             if existing["runtime_reachable"]:
                 return existing
             reason = validate_loopback_host(self.config.host)
@@ -340,11 +345,11 @@ class LlamaCppRuntimeOwner:
             # A cold GGUF load can take minutes; status reports LLAMACPP_LOADING meanwhile.
             deadline = time.monotonic() + config.startup_wait_s
             while time.monotonic() < deadline:
-                snapshot = self._status_locked(include_recovery=False)
+                snapshot = self._snapshot(include_recovery=False)
                 if snapshot["runtime_reachable"]:
                     return snapshot
                 self._sleep(0.1)
-            return self._status_locked(include_recovery=False)
+            return self._snapshot(include_recovery=False)
 
     def stop(self) -> dict[str, Any]:
         with self._lock:
@@ -370,14 +375,14 @@ class LlamaCppRuntimeOwner:
             while self._automatic_restart_times and now - self._automatic_restart_times[0] >= 600:
                 self._automatic_restart_times.popleft()
             if self._recovery_in_flight:
-                row = self._status_locked()
+                row = self._snapshot()
                 row["reason_code"] = "LLAMACPP_RECOVERING"
                 row["message"] = "Local llama-server crashed; automatic recovery is loading the configured model."
                 return row
             if not self._crashed or not self.config.manage or self._process is not None:
-                return self._status_locked()
+                return self._snapshot()
             if len(self._automatic_restart_times) >= 3:
-                row = self._status_locked()
+                row = self._snapshot()
                 row["reason_code"] = "LLAMACPP_CRASH_LOOP"
                 row["message"] = "Local model crashed repeatedly; restart it from Settings / AI or the launcher"
                 return row
@@ -386,7 +391,7 @@ class LlamaCppRuntimeOwner:
             self._recovery_in_flight = True
             thread = threading.Thread(target=self._recover, daemon=True, name="llamacpp-recovery")
             thread.start()
-            row = self._status_locked()
+            row = self._snapshot()
             row["reason_code"] = "LLAMACPP_RECOVERING"
             row["message"] = "Local llama-server crashed; automatic recovery is loading the configured model."
             return row

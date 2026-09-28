@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import queue
+import re
 import secrets
 import subprocess
 import sys
@@ -25,6 +26,72 @@ AUXILIARY_TASKS = (
 )
 
 
+_FENCE = re.compile(r"^```(?:json)?\s*(.*?)\s*```$", re.S)
+_GEMMA_CALL = re.compile(r"<\|tool_call>call:([A-Za-z0-9_\-]+)(\{.*?\})<tool_call\|>", re.S)
+_BARE_KEY = re.compile(r'([{,]\s*)([A-Za-z_][A-Za-z0-9_]*)\s*:')
+
+
+def _close_open_brackets(text: str) -> str:
+    """Append at most three closers still open outside strings; never removes text."""
+    stack: list[str] = []
+    in_string = escaped = False
+    for char in text:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+        elif char == '"':
+            in_string = True
+        elif char in "{[":
+            stack.append("}" if char == "{" else "]")
+        elif char in "}]" and stack and stack[-1] == char:
+            stack.pop()
+    return text + "".join(reversed(stack)) if not in_string and len(stack) <= 3 else text
+
+
+def repair_proposal(text: str) -> Any:
+    """Recover a tool proposal from recognised malformed forms; None when there is none.
+
+    Handles a code fence, missing closers, string-encoded JSON arguments and Gemma's native
+    ``<|tool_call>call:name{...}<tool_call|>`` form. It only reshapes what the model wrote;
+    completion_message still applies every admission rule to the result.
+    """
+    if not isinstance(text, str):
+        return None
+    stripped = text.strip()
+    fenced = _FENCE.match(stripped)
+    candidate = fenced.group(1) if fenced else stripped
+    if candidate.startswith("{") and '"tool_calls"' in candidate:
+        for attempt in (candidate, _close_open_brackets(candidate)):
+            try:
+                proposal = json.loads(attempt)
+            except ValueError:
+                continue
+            if isinstance(proposal, dict) and isinstance(proposal.get("tool_calls"), list):
+                for call in proposal["tool_calls"]:
+                    if isinstance(call, dict) and isinstance(call.get("arguments"), str):
+                        try:
+                            call["arguments"] = json.loads(call["arguments"])
+                        except ValueError:
+                            return None
+            return proposal
+        return None
+    natives = _GEMMA_CALL.findall(stripped)
+    if not natives or _GEMMA_CALL.sub("", stripped).strip():
+        return None
+    calls = []
+    for name, body in natives:
+        try:
+            calls.append({"name": name,
+                          "arguments": json.loads(_BARE_KEY.sub(r'\1"\2":', body.replace('<|"|>', '"')))})
+        except ValueError:
+            return None
+    return {"tool_calls": calls}
+
+
 def completion_message(text: str, tools: Any) -> dict[str, Any]:
     """Promote a bounded text proposal into the one broker tool OpenAI shape."""
     if not isinstance(tools, list) or not tools:
@@ -32,7 +99,11 @@ def completion_message(text: str, tools: Any) -> dict[str, Any]:
     try:
         proposal = json.loads(text)
     except (ValueError, TypeError):
-        return {"role": "assistant", "content": text}
+        proposal = None
+    calls = proposal.get("tool_calls") if isinstance(proposal, dict) else None
+    if not isinstance(calls, list) or any(isinstance(call, dict) and isinstance(call.get("arguments"), str)
+                                          for call in calls):
+        proposal = repair_proposal(text)
     if not isinstance(proposal, dict) or set(proposal) != {"tool_calls"}:
         return {"role": "assistant", "content": text}
     calls = proposal["tool_calls"]
