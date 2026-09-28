@@ -126,8 +126,8 @@ def test_legacy_ai_settings_without_policy_mode_is_upgraded(monkeypatch, tmp_pat
     row = rows[0]
     # The pre-existing row survived with its sentinel data intact.
     assert row["monthly_api_budget_usd"] == 42.0
-    # CURRENT BEHAVIOR: the migration default populates the legacy row.
-    assert row["policy_mode"] == "FAST_DEV"
+    # The migration default populates the legacy row fail-closed (154c).
+    assert row["policy_mode"] == "STRICT_IP"
 
     # A second initialize_database() after upgrade is still a no-op.
     initialize_database()

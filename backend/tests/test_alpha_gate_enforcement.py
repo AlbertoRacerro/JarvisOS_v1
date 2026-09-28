@@ -10,6 +10,7 @@ from pydantic import ValidationError
 
 from app.modules.ai.contracts import (
     AIExternalDispatchState,
+    AIPolicyMode,
     AIProviderError,
     AIProviderErrorCode,
     AIRequest,
@@ -35,7 +36,9 @@ def _configure_external_allowed(monkeypatch) -> None:
     from app.modules.ai.models import AISettingsUpdate
     from app.modules.ai.settings import update_ai_settings
 
-    update_ai_settings(AISettingsUpdate(paid_ai_enabled=True, monthly_api_budget_usd=100))
+    # External-dispatch gating is exercised on the explicit FAST_DEV opt-in (STRICT_IP is the default).
+    update_ai_settings(AISettingsUpdate(paid_ai_enabled=True, monthly_api_budget_usd=100,
+                                        policy_mode=AIPolicyMode.FAST_DEV))
 
 
 def _all_ai_jobs() -> list[dict]:
