@@ -10,7 +10,7 @@ from app.modules.ai.providers.openai_compat_adapter import OpenAICompatAdapter
 from app.modules.ai.providers.scaleway import ScalewayChatResult, ScalewayProvider
 from app.modules.ai.providers.scaleway_adapter import ScalewayProviderAdapter
 
-MODEL_ID = "gemma-4-26b-a4b-it"
+MODEL_ID = "deepseek-v4-flash-0731"
 LEGACY_SMOKE_MODEL = "llama-3.1-8b-instruct"
 
 

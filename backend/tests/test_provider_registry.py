@@ -49,11 +49,11 @@ def test_default_provider_registry_loads_with_complete_execution_metadata(monkey
     assert registry.providers["scaleway"].kind == "scaleway"
     assert registry.providers["scaleway"].api_key_ref == "env:SCALEWAY_API_KEY"
     assert scaleway.provider_id == "scaleway"
-    assert scaleway.model_id == "gemma-4-26b-a4b-it"
+    assert scaleway.model_id == "deepseek-v4-flash-0731"
     assert scaleway.execution_class == "external_provider"
     assert scaleway.requires_network is True
     assert scaleway.context_window_tokens == 8192
-    assert scaleway.max_output_tokens == 256
+    assert scaleway.max_output_tokens == 512
     assert "external:scaleway" not in registry.fallback_chains
 
     cheap = registry.bindings["external:cheap"]
