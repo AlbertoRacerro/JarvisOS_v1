@@ -223,8 +223,16 @@ class LlamaCppRuntimeOwner:
             self._stop_requested = False
 
     def status(self) -> dict[str, Any]:
-        # Lock-free for callers: status polls must not wait behind a model load in start().
-        return self._snapshot()
+        # Status polls must not wait behind a model load in start(). They are also what notices
+        # an unexpected exit when no request is in flight (the UI stops sending to an
+        # unavailable route), so they schedule the bounded recovery whenever the lock is free.
+        row = self._snapshot()
+        if self._crashed and self.config.manage and self._lock.acquire(blocking=False):
+            try:
+                return self.recover_if_crashed()
+            finally:
+                self._lock.release()
+        return row
 
     def _snapshot(self, *, include_recovery: bool = True) -> dict[str, Any]:
         config = self.config
