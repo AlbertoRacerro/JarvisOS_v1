@@ -744,6 +744,9 @@ def agent_view(workspace_id: str, draft_id: str | None) -> dict[str, Any]:
             "property_package": view["property_package"], "objects": objects,
             "findings": [f"{item['object']}: {item['message']}" for item in view["findings"]][:12],
             "results": view["results"],
+            "to_change_values": (f"call jarvis_process_propose with base_revision '{view['revision']}' and changes "
+                                 "[{target: <tag>, property: <name from proposable>, proposed: {value, unit}}]; "
+                                 "the operator approves before anything changes"),
             "proposable": {"stream": [*STREAM_SPECS, "composition"],
                            **{spec.type: ["mode", *[param.key for param in spec.params]]
                               for spec in UNIT_REGISTRY.values() if spec.params}}}

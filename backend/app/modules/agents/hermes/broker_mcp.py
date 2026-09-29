@@ -60,8 +60,10 @@ _PROCESS_READ_TOOL = {
 }
 _PROCESS_PROPOSE_TOOL = {
     "name": "jarvis_process_propose",
-    "description": "Propose typed changes to the process draft for operator approval. Nothing changes until "
-                   "the operator approves. Each change names a target tag, a property and the proposed value.",
+    "description": "Propose typed changes to the process draft for operator approval. Call this whenever the "
+                   "operator asks to change, set, raise, lower or fix a flowsheet value; describing a change in "
+                   "text does not propose it. Nothing changes until the operator approves. Each change names a "
+                   "target tag, a property and the proposed value with its unit.",
     "inputSchema": {
         "type": "object", "properties": {
             "grant_id": {"type": "string", "minLength": 1, "maxLength": 128},

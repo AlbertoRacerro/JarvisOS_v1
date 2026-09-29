@@ -396,3 +396,23 @@ def test_workspace_isolation(api: Any) -> None:
     response = client.get(f"/workspaces/{other}/process/drafts/{state['draft_id']}")
     assert response.status_code == 404
     assert client.get("/workspaces/nope/process/drafts").status_code == 404
+
+
+def test_confused_process_grant_is_refused_with_a_correcting_code(api: Any) -> None:
+    from app.modules.agents.hermes.supervisor import dispatch_tool
+
+    client, base, state, workspace_id = api
+    _built(client, base, state)
+    now = datetime.now(UTC)
+    session = AgentSessionRef(jarvis_thread_id="thread-1", hermes_session_id="hermes-1", profile_id="default",
+                              workspace_id=workspace_id, generation=1, upstream_revision="r" * 40)
+    read_grant = CapabilityGrantRef(grant_id="read", capability_id="jarvis.process_read", issuer="jarvis_policy",
+                                    scope=CapabilityScope(workspace_id=workspace_id, jarvis_thread_id="thread-1"),
+                                    issued_at=now - timedelta(seconds=1), expires_at=now + timedelta(minutes=5))
+    call = StructuredToolCall(call_id="c", capability_id="jarvis.process_propose", grant_id="read", correlation_id="c",
+                              session_ref=session, requested_at=now, deadline_at=now + timedelta(minutes=1),
+                              arguments={"base_revision": state["revision"], "changes": [
+                                  {"target": "V1", "property": "outlet_pressure", "proposed": {"value": 2, "unit": "bar"}}]})
+    result = dispatch_tool(call, live_grants={"read": read_grant})
+    assert result.status == "refused" and result.error_code == "use_process_propose_grant_id"
+    assert client.get(f"{base}/{state['draft_id']}/proposals").json() == []

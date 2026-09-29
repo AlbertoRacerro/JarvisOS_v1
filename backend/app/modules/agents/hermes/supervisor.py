@@ -256,6 +256,12 @@ def dispatch_tool(
     now = datetime.now(UTC)
     grant = live_grants.get(call.grant_id)
     error = "capability_denied"
+    process_tools = {"jarvis.process_read", "jarvis.process_propose"}
+    if grant is not None and grant.capability_id != call.capability_id and {
+            grant.capability_id, call.capability_id} <= process_tools:
+        # Tell the agent which grant it confused so it can retry; the grant still authorizes nothing else.
+        error = "use_process_propose_grant_id" if call.capability_id == "jarvis.process_propose" \
+            else "use_process_read_grant_id"
     result: dict[str, Any] | None = None
     if (grant is not None and call.capability_id == "jarvis.retrieval_query"
             and grant.scope.jarvis_thread_id not in (None, call.session_ref.jarvis_thread_id

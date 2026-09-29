@@ -505,11 +505,12 @@ def _install_process_grants(worker: HermesSupervisor, workspace_id: str, thread_
             scope=CapabilityScope(workspace_id=workspace_id, jarvis_thread_id=thread_id),
             issued_at=now, expires_at=now + timedelta(minutes=10),
         )
-    return (f" Process draft {draft_id}: process_read_grant_id={grant_ids['jarvis.process_read']} "
-            f"(jarvis_process_read); process_propose_grant_id={grant_ids['jarvis.process_propose']} "
-            "(jarvis_process_propose). Read the draft first; propose changes with exact target tags, properties, "
-            "values and units from the read result and its base revision. Proposals only take effect after "
-            "operator approval; never claim a change was applied.")[:600]
+    return (f" Process draft {draft_id}. Each process tool takes its own grant_id: "
+            f"jarvis_process_read grant_id={grant_ids['jarvis.process_read']}; "
+            f"jarvis_process_propose grant_id={grant_ids['jarvis.process_propose']}. When the operator asks for a flowsheet change, read the draft, then call "
+            "jarvis_process_propose with its revision as base_revision and exact tags, properties, values and "
+            "units; a change written only as text is not a proposal. Proposals take effect only after operator "
+            "approval; never claim a change was applied.")[:700]
 
 
 def _envelope_value(value: object, limit: int = 100) -> str:
