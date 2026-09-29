@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { PointerEvent as ReactPointerEvent } from "react";
+import type { PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import type {
   EditorCommand,
   EditorObjectRead,
@@ -19,6 +19,7 @@ import {
 } from "../api/dwsimEditor";
 import type { EditorCaseRead } from "../api/generated/dwsimEditor";
 import type { PrimaryStageProps } from "./registry";
+import ProcessDraftEditor from "./ProcessDraftEditor";
 import "./ProcessStage.css";
 
 const unitTypes = [
@@ -125,11 +126,67 @@ function readProjectKnowledgeHandoff() {
     : null;
 }
 
-function ProcessStage({
+type ProcessMode = "draft" | "native";
+
+function ProcessModeTabs({ mode, onChange }: { mode: ProcessMode; onChange(next: ProcessMode): void }) {
+  return (
+    <div className="process-mode-tabs" role="tablist" aria-label="Process editor">
+      <button type="button" role="tab" aria-selected={mode === "draft"} onClick={() => onChange("draft")}>
+        Flowsheet draft
+      </button>
+      <button type="button" role="tab" aria-selected={mode === "native"} onClick={() => onChange("native")}>
+        Native DWSIM cases (advanced)
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Spec 155: the Jarvis-owned draft is the primary editor; DWSIM is contacted only on
+ * Validate/Run. The 149 native case editor stays available for imported cases and dynamics.
+ */
+function ProcessStage(props: PrimaryStageProps) {
+  const { workspaceId, navigate, onShellRegionsChange } = props;
+  const [mode, setMode] = useState<ProcessMode>("draft");
+  useEffect(() => {
+    if (mode === "draft") onShellRegionsChange({});
+  }, [mode, onShellRegionsChange]);
+  const tabs = <ProcessModeTabs mode={mode} onChange={setMode} />;
+  if (mode === "native") return <NativeDwsimCaseEditor {...props} modeTabs={tabs} />;
+  return (
+    <section className="process-stage design-stage" aria-labelledby="process-draft-title" data-testid="process-draft-surface">
+      <header className="design-stage__header process-stage__header">
+        <div className="design-stage__title-row">
+          <div>
+            <p className="eyebrow">Design · Process</p>
+            <h1 id="process-draft-title">Process workspace</h1>
+            <p className="panel-subtitle">
+              Jarvis flowsheet draft: edits are instant revisions. DWSIM verifies and solves the exact revision on
+              Validate/Run.
+            </p>
+          </div>
+        </div>
+        <nav className="design-stage__tabs" aria-label="Design workspaces">
+          <button type="button" className="is-active" aria-current="page">
+            Process
+          </button>
+          <button type="button" onClick={() => navigate("/design/bluecad")}>
+            BLUECAD
+          </button>
+        </nav>
+        {tabs}
+      </header>
+      {workspaceId ? <ProcessDraftEditor workspaceId={workspaceId} /> : <p>Select a workspace to edit its process draft.</p>}
+    </section>
+  );
+}
+
+function NativeDwsimCaseEditor({
   workspaceId,
   navigate,
   onShellRegionsChange,
-}: PrimaryStageProps) {
+  modeTabs,
+}: PrimaryStageProps & { modeTabs: ReactNode }) {
   const [cases, setCases] = useState<EditorCaseRead[]>([]);
   const [caseId, setCaseId] = useState("");
   const [projection, setProjection] = useState<EditorProjectionRead | null>(
@@ -636,6 +693,7 @@ function ProcessStage({
             BLUECAD
           </button>
         </nav>
+        {modeTabs}
         <div className="dwsim-truth">
           <label>
             Case

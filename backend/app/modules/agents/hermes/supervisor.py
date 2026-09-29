@@ -43,6 +43,7 @@ _SEED_CHARS = 60_000
 # capabilities; memory and session search remain read-only worker-local tools.
 HERMES_TOOL_ALLOWLIST = frozenset({"mcp__jarvis__jarvis_context_preview",
                                   "mcp__jarvis__jarvis_retrieval_query", "mcp__jarvis__jarvis_decide",
+                                  "mcp__jarvis__jarvis_process_read", "mcp__jarvis__jarvis_process_propose",
                                   "memory", "session_search"})
 _BWRAP_PREFIX = ("bwrap", "--dev-bind", "/", "/", "--unshare-net", "--die-with-parent", "--")
 
@@ -58,6 +59,24 @@ _HERMES_DECISION_CAPABILITY = JarvisCapabilityDescriptor(
     capability_id="jarvis.decide", route_id="ai-threads", action_class="PROPOSE",
     label="Request bounded decision advice",
 )
+# 155: read the Jarvis process draft and propose typed changes; only operator approval mutates the draft.
+_HERMES_PROCESS_READ_CAPABILITY = JarvisCapabilityDescriptor(
+    capability_id="jarvis.process_read", route_id="ai-threads", action_class="READ",
+    label="Read the Jarvis process draft",
+)
+_HERMES_PROCESS_PROPOSE_CAPABILITY = JarvisCapabilityDescriptor(
+    capability_id="jarvis.process_propose", route_id="ai-threads", action_class="PROPOSE",
+    label="Propose process draft changes for operator approval",
+)
+_TOOL_CAPABILITIES = {
+    "jarvis_retrieval_query": "jarvis.retrieval_query",
+    "jarvis_decide": "jarvis.decide",
+    "jarvis_process_read": "jarvis.process_read",
+    "jarvis_process_propose": "jarvis.process_propose",
+}
+for _descriptor in (_HERMES_PROCESS_READ_CAPABILITY, _HERMES_PROCESS_PROPOSE_CAPABILITY):
+    if _descriptor not in PRODUCTION_CAPABILITY_REGISTRY.for_route("ai-threads"):
+        PRODUCTION_CAPABILITY_REGISTRY.register(_descriptor)
 if _HERMES_CONTEXT_CAPABILITY not in PRODUCTION_CAPABILITY_REGISTRY.for_route("ai-threads"):
     PRODUCTION_CAPABILITY_REGISTRY.register(_HERMES_CONTEXT_CAPABILITY)
 if _HERMES_RETRIEVAL_CAPABILITY not in PRODUCTION_CAPABILITY_REGISTRY.for_route("ai-threads"):
@@ -237,6 +256,12 @@ def dispatch_tool(
     now = datetime.now(UTC)
     grant = live_grants.get(call.grant_id)
     error = "capability_denied"
+    process_tools = {"jarvis.process_read", "jarvis.process_propose"}
+    if grant is not None and grant.capability_id != call.capability_id and {
+            grant.capability_id, call.capability_id} <= process_tools:
+        # Tell the agent which grant it confused so it can retry; the grant still authorizes nothing else.
+        error = "use_process_propose_grant_id" if call.capability_id == "jarvis.process_propose" \
+            else "use_process_read_grant_id"
     result: dict[str, Any] | None = None
     if (grant is not None and call.capability_id == "jarvis.retrieval_query"
             and grant.scope.jarvis_thread_id not in (None, call.session_ref.jarvis_thread_id
@@ -309,12 +334,43 @@ def dispatch_tool(
                             error = "invalid_arguments"
                     except (TypeError, ValueError):
                         error = "invalid_arguments"
+                elif call.capability_id in {"jarvis.process_read", "jarvis.process_propose"}:
+                    result, error = _process_tool(call, scope.workspace_id, error)
     return StructuredToolResult(
         call_id=call.call_id, capability_id=call.capability_id,
         status="succeeded" if result is not None else "refused",
         result=result, error_code=None if result is not None else error,
         completed_at=now,
     )
+
+
+def _process_tool(call: StructuredToolCall, workspace_id: str, error: str) -> tuple[dict[str, Any] | None, str]:
+    """Draft read or pending-proposal creation; the draft owner re-validates everything."""
+    from app.modules.process_stack import draft
+    from app.modules.process_stack.draft_models import ProposalRequest
+
+    arguments = dict(call.arguments)
+    draft_id = arguments.pop("draft_id", None)
+    try:
+        if draft_id is not None and not isinstance(draft_id, str):
+            return None, "invalid_arguments"
+        if call.capability_id == "jarvis.process_read":
+            if arguments:
+                return None, "invalid_arguments"
+            return draft.agent_view(workspace_id, draft_id or None), error
+        target = draft_id or draft.latest_draft_id(workspace_id)
+        if target is None:
+            return None, "draft_not_found"
+        thread = call.session_ref.jarvis_thread_id if call.session_ref is not None else "unknown"
+        request = ProposalRequest.model_validate({**arguments, "source": f"hermes:{thread}"})
+        proposal = draft.create_proposal(workspace_id, target, request)
+        return {"proposal_id": proposal["proposal_id"], "draft_id": target, "state": proposal["state"],
+                "changes": proposal["changes"],
+                "note": "Pending operator approval in the Sidecar/Process page; the draft is unchanged."}, error
+    except draft.DraftError as exc:
+        return None, exc.code
+    except ValueError:
+        return None, "invalid_arguments"
 
 
 def _decision_evidence(result: dict[str, Any] | None, supervisor: HermesSupervisor,
@@ -515,14 +571,12 @@ class HermesSupervisor:
                 raise ValueError("stale or malformed tool call")
             arguments = raw_arguments
             tool_name = arguments.pop("tool_name", "")
-            capability_id = ("jarvis.retrieval_query" if tool_name == "jarvis_retrieval_query"
-                             else "jarvis.decide" if tool_name == "jarvis_decide"
-                             else "jarvis.context_preview")
+            capability_id = _TOOL_CAPABILITIES.get(tool_name, "jarvis.context_preview")
             grant_id = arguments.pop("grant_id")
             call = StructuredToolCall(
                 call_id=str(frame["id"]), capability_id=capability_id,
                 grant_id=grant_id, correlation_id=str(frame["id"]),
-                session_ref=ref, arguments=(arguments if capability_id in {"jarvis.retrieval_query", "jarvis.decide"}
+                session_ref=ref, arguments=(arguments if capability_id != "jarvis.context_preview"
                                             else arguments["request"]),
                 requested_at=now, deadline_at=now + timedelta(seconds=120),
             )

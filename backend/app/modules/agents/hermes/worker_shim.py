@@ -145,6 +145,7 @@ WITHHELD_TOOLS = frozenset({"skill_manage"})
 # Tool names Jarvis admits in a relayed request; mirrors supervisor.HERMES_TOOL_ALLOWLIST.
 ADMITTED_TOOLS = frozenset({"mcp__jarvis__jarvis_context_preview",
                             "mcp__jarvis__jarvis_retrieval_query", "mcp__jarvis__jarvis_decide",
+                            "mcp__jarvis__jarvis_process_read", "mcp__jarvis__jarvis_process_propose",
                             "memory", "session_search"})
 
 
@@ -172,7 +173,8 @@ def pinned_config(base_url: str, token: str, python: str | None = None) -> dict[
             "args": [str(Path(__file__).with_name("broker_mcp.py"))],
             "env": {"JARVIS_HERMES_BROKER_URL": base_url + "/jarvis/tool",
                     "JARVIS_HERMES_BROKER_TOKEN": token},
-            "tools": {"include": ["jarvis_context_preview", "jarvis_retrieval_query", "jarvis_decide"]},
+            "tools": {"include": ["jarvis_context_preview", "jarvis_retrieval_query", "jarvis_decide",
+                                  "jarvis_process_read", "jarvis_process_propose"]},
         }},
         "model_catalog": {"enabled": False}, "updates": {"check": False},
         "telemetry": {"enabled": False, "send": False},
