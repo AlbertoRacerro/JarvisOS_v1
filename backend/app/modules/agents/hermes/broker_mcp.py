@@ -45,6 +45,42 @@ _DECISION_TOOL = {
 }
 
 
+_QUANTITY = {"type": "object", "properties": {"value": {"type": "number"}, "unit": {"type": "string"}},
+             "required": ["value", "unit"], "additionalProperties": False}
+_PROCESS_READ_TOOL = {
+    "name": "jarvis_process_read",
+    "description": "Read the current Jarvis process flowsheet draft: tags, typed parameters with units, "
+                   "findings and whether DWSIM results are current or stale.",
+    "inputSchema": {
+        "type": "object", "properties": {
+            "grant_id": {"type": "string", "minLength": 1, "maxLength": 128},
+            "draft_id": {"type": "string", "maxLength": 64},
+        }, "required": ["grant_id"], "additionalProperties": False,
+    },
+}
+_PROCESS_PROPOSE_TOOL = {
+    "name": "jarvis_process_propose",
+    "description": "Propose typed changes to the process draft for operator approval. Nothing changes until "
+                   "the operator approves. Each change names a target tag, a property and the proposed value.",
+    "inputSchema": {
+        "type": "object", "properties": {
+            "grant_id": {"type": "string", "minLength": 1, "maxLength": 128},
+            "draft_id": {"type": "string", "maxLength": 64},
+            "base_revision": {"type": "string", "maxLength": 40},
+            "changes": {"type": "array", "minItems": 1, "maxItems": 12, "items": {
+                "type": "object", "properties": {
+                    "target": {"type": "string"}, "property": {"type": "string"},
+                    "proposed": {"anyOf": [_QUANTITY, {"type": "string"},
+                                           {"type": "object", "additionalProperties": {"type": "number"}}]},
+                }, "required": ["target", "property", "proposed"], "additionalProperties": False}},
+            "rationale": {"type": "string", "maxLength": 600},
+        }, "required": ["grant_id", "base_revision", "changes"], "additionalProperties": False,
+    },
+}
+_TOOLS = [_TOOL, _RETRIEVAL_TOOL, _DECISION_TOOL, _PROCESS_READ_TOOL, _PROCESS_PROPOSE_TOOL]
+_NAMED = {tool["name"] for tool in _TOOLS if tool is not _TOOL}
+
+
 class _DenyRedirects(HTTPRedirectHandler):
     def redirect_request(self, *_args: Any, **_kwargs: Any) -> None:
         return None
@@ -60,16 +96,14 @@ def _reply(message: dict[str, Any]) -> dict[str, Any] | None:
             "protocolVersion": "2024-11-05", "capabilities": {"tools": {}},
             "serverInfo": {"name": "jarvis", "version": "1"}}}
     if method == "tools/list":
-        return {"jsonrpc": "2.0", "id": request_id, "result": {"tools": [_TOOL, _RETRIEVAL_TOOL, _DECISION_TOOL]}}
+        return {"jsonrpc": "2.0", "id": request_id, "result": {"tools": _TOOLS}}
     if method == "tools/call":
         params = message.get("params") or {}
-        if params.get("name") not in {_TOOL["name"], _RETRIEVAL_TOOL["name"], _DECISION_TOOL["name"]}:
+        if params.get("name") not in {tool["name"] for tool in _TOOLS}:
             return {"jsonrpc": "2.0", "id": request_id, "error": {"code": -32601, "message": "unknown tool"}}
         body = params.get("arguments") or {}
-        if params.get("name") == _RETRIEVAL_TOOL["name"] and isinstance(body, dict):
-            body = {**body, "tool_name": _RETRIEVAL_TOOL["name"]}
-        if params.get("name") == _DECISION_TOOL["name"] and isinstance(body, dict):
-            body = {**body, "tool_name": _DECISION_TOOL["name"]}
+        if params.get("name") in _NAMED and isinstance(body, dict):
+            body = {**body, "tool_name": params["name"]}
         encoded = json.dumps(body).encode()
         broker_url = os.environ["JARVIS_HERMES_BROKER_URL"]
         parsed = urlsplit(broker_url)

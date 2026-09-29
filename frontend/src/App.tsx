@@ -7,6 +7,7 @@ import Layout from "./components/Layout";
 import PageErrorBoundary from "./components/PageErrorBoundary";
 import JarvisKnowledgeActions from "./components/ai/JarvisKnowledgeActions";
 import { useJarvisSidecar } from "./components/ai/useJarvisSidecar";
+import ProcessProposals from "./components/process/ProcessProposals";
 import AnalyticsDockContent from "./components/analytics/AnalyticsDockContent";
 import {
   EngineeringPropertiesPanel,
@@ -143,7 +144,7 @@ function App() {
   const knowledgeActions = <JarvisKnowledgeActions workspaceId={workspaceId} routeId={route.id} stableRef={knowledgeStableRef} selectedLabel={selectedKnowledgeLabel} onContextChange={setKnowledgeContext} />;
   const jarvisLocalContext = KNOWLEDGE_ROUTES.has(route.id)
     ? knowledgeActions
-    : <>{semanticSelectionContext}<JarvisEngineeringActions controller={engineeringProperties} />{knowledgeActions}</>;
+    : <>{route.id === "design-process" && workspaceId ? <ProcessProposals workspaceId={workspaceId} /> : null}{semanticSelectionContext}<JarvisEngineeringActions controller={engineeringProperties} />{knowledgeActions}</>;
   const jarvisSidecar = useJarvisSidecar(workspaceId, route.id, selection, jarvisLocalContext, knowledgeContext);
 
   let content: ReactNode;

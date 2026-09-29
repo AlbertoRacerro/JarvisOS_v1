@@ -33,6 +33,7 @@ from app.modules.local_ai.runtime.routes import router as local_ai_runtime_route
 from app.modules.memory.literature_routes import router as literature_router
 from app.modules.memory.routes import router as memory_router
 from app.modules.modeling.routes import router as modeling_router
+from app.modules.process_stack.draft_routes import router as process_draft_router
 from app.modules.process_stack.editor_routes import router as dwsim_editor_router
 from app.modules.project_knowledge.routes import router as project_knowledge_router
 from app.modules.project_search.routes import router as project_search_router
@@ -165,6 +166,7 @@ def create_app() -> FastAPI:
     app.include_router(flowsheet_router)
     app.include_router(engineering_operator_router)
     app.include_router(dwsim_editor_router)
+    app.include_router(process_draft_router)
     app.include_router(project_knowledge_router)
     app.include_router(coding_runtime_router)
     app.include_router(local_ai_runtime_router)
