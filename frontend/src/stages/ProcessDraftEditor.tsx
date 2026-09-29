@@ -208,6 +208,13 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
     void getDraftRun(workspaceId, draft.draft_id, solvedRunId).then(setSolvedRun).catch(() => undefined);
   }, [draft, solvedRun?.run_id, solvedRunId, workspaceId]);
 
+  // The last DWSIM attempt (including refused materializations) is shown after reloads too.
+  const lastAttemptId = draft?.results.last_attempt?.run_id;
+  useEffect(() => {
+    if (!draft || !lastAttemptId || lastRun?.run_id === lastAttemptId) return;
+    void getDraftRun(workspaceId, draft.draft_id, lastAttemptId).then(setLastRun).catch(() => undefined);
+  }, [draft, lastAttemptId, lastRun?.run_id, workspaceId]);
+
   const apply = useCallback(
     (ops: DraftOp[]) => {
       if (!draft) return Promise.resolve();
@@ -289,13 +296,13 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
   };
 
   const addUnit = (type: string) => {
-    const spot = { x: 80 + (objects.length % 6) * 110, y: 80 + Math.floor(objects.length / 6) * 110 };
+    const spot = { x: 80 + (objects.length % 6) * 130, y: 90 + Math.floor(objects.length / 6) * 130 };
     const prefix = { Heater: "H", Cooler: "C", Pump: "P", Valve: "V", Mixer: "M", Flash: "F" }[type] ?? "U";
     const id = nextId(objects, "u");
     void apply([{ op: "add_unit", id, type, tag: nextTag(objects, `${prefix}-`), ...spot }]).then(() => setSelectedId(id));
   };
   const addStream = () => {
-    const spot = { x: 80 + (objects.length % 6) * 110, y: 60 + Math.floor(objects.length / 6) * 110 };
+    const spot = { x: 80 + (objects.length % 6) * 130, y: 70 + Math.floor(objects.length / 6) * 130 };
     const id = nextId(objects, "s");
     void apply([{ op: "add_stream", id, tag: nextTag(objects, "S"), ...spot }]).then(() => setSelectedId(id));
   };
@@ -419,8 +426,9 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
         <circle cx={point.x} cy={point.y} r={STREAM_R} className={feed ? "is-feed" : ""} />
         <text x={point.x} y={point.y + 20} textAnchor="middle" className="draft-node__tag">{item.tag}</text>
         {shown && (
-          <text x={point.x} y={point.y + 33} textAnchor="middle" className={`draft-node__result${results.state === "stale" ? " is-stale" : ""}`}>
-            {[shown.temperature, shown.pressure, shown.mass_flow].filter(Boolean).map((value) => formatQuantity(value)).join(" · ")}
+          <text x={point.x} y={point.y + 32} textAnchor="middle" className={`draft-node__result${results.state === "stale" ? " is-stale" : ""}`}>
+            <tspan x={point.x}>{[shown.temperature, shown.pressure].filter(Boolean).map((value) => formatQuantity(value)).join(" · ")}</tspan>
+            {shown.mass_flow && <tspan x={point.x} dy={11}>{formatQuantity(shown.mass_flow)}</tspan>}
           </text>
         )}
         {renderBadge(item, point)}
@@ -587,7 +595,7 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
         {reported && Object.keys(reported).length > 0 && (
           <dl className={`draft-results-inline${results.state === "stale" ? " is-stale" : ""}`}>
             {Object.entries(reported).slice(0, 8).map(([key, value]) => (
-              <div key={key}><dt>{key}</dt><dd>{value.value} {value.units}</dd></div>
+              <div key={key}><dt>{key}</dt><dd>{Number.isFinite(Number(value.value)) && value.value !== "" ? Number(Number(value.value).toPrecision(6)) : value.value} {value.units}</dd></div>
             ))}
           </dl>
         )}

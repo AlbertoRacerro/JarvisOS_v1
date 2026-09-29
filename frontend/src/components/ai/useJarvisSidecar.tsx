@@ -156,7 +156,8 @@ export function useJarvisSidecar(
   routeId: string,
   selection: StageSelection | null,
   contextualContent?: ReactNode,
-  knowledgeContext?: KnowledgeContextPreview | null
+  knowledgeContext?: KnowledgeContextPreview | null,
+  pinnedContent?: ReactNode
 ): ReactNode {
   const [threads, setThreads] = useState<ThreadSummary[]>([]);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
@@ -744,6 +745,7 @@ export function useJarvisSidecar(
       </details>)}
     </section> : null}
 
+    {pinnedContent}
     {error ? <p className="jarvis-sidecar__error" role="alert">{error}</p> : null}
     {basisDiscussionBlocked && <p className="jarvis-sidecar__error" role="status">Project Basis discussion is unavailable under the current sensitivity controls. Prepare a written proposal above, or clear selected context to ask a general question.</p>}
     <form onSubmit={(event) => void submit(event)} className="jarvis-sidecar__composer">

@@ -144,8 +144,10 @@ function App() {
   const knowledgeActions = <JarvisKnowledgeActions workspaceId={workspaceId} routeId={route.id} stableRef={knowledgeStableRef} selectedLabel={selectedKnowledgeLabel} onContextChange={setKnowledgeContext} />;
   const jarvisLocalContext = KNOWLEDGE_ROUTES.has(route.id)
     ? knowledgeActions
-    : <>{route.id === "design-process" && workspaceId ? <ProcessProposals workspaceId={workspaceId} /> : null}{semanticSelectionContext}<JarvisEngineeringActions controller={engineeringProperties} />{knowledgeActions}</>;
-  const jarvisSidecar = useJarvisSidecar(workspaceId, route.id, selection, jarvisLocalContext, knowledgeContext);
+    : <>{semanticSelectionContext}<JarvisEngineeringActions controller={engineeringProperties} />{knowledgeActions}</>;
+  // 155: pending process proposals stay visible above the composer, not inside the collapsed context.
+  const processProposals = route.id === "design-process" && workspaceId ? <ProcessProposals workspaceId={workspaceId} /> : null;
+  const jarvisSidecar = useJarvisSidecar(workspaceId, route.id, selection, jarvisLocalContext, knowledgeContext, processProposals);
 
   let content: ReactNode;
   const workspaceRequired = !WORKSPACE_OPTIONAL_ROUTES.has(route.id);

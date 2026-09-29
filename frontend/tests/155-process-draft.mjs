@@ -51,7 +51,8 @@ has(proposals, "rejectProposal(", "proposals must be rejectable");
 has(proposals, "The draft is unchanged until you approve.", "the pending state must be explicit");
 has(proposals, 'proposal.state === "stale"', "stale proposals cannot be approved");
 has(proposals, "announceDraftChanged(", "Sidecar decisions must refresh the canvas");
-has(app, '<ProcessProposals workspaceId={workspaceId} />', "the Sidecar must present process proposals");
+has(app, "<ProcessProposals workspaceId={workspaceId} />", "the Sidecar must present process proposals");
+has(read("src/components/ai/useJarvisSidecar.tsx"), "{pinnedContent}", "proposals must be pinned visibly in the Sidecar");
 has(stage, "<ProcessDraftEditor", "the Process stage must open the draft editor");
 has(stage, "Native DWSIM cases (advanced)", "the 149 native editor must stay reachable");
 

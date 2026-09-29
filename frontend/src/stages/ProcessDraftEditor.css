@@ -383,6 +383,14 @@
   border-color: var(--color-border-default, #d8d1c5);
   background: var(--color-bg-subtle, #f4f1ea);
 }
+.process-proposal th {
+  white-space: nowrap;
+  font-size: 11px;
+}
+.jarvis-sidecar .process-proposal td,
+.jarvis-sidecar .process-proposal th {
+  padding: 2px 3px;
+}
 .process-proposal__new {
   font-weight: 600;
   color: #6b3a00;
