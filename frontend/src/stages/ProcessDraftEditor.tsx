@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import ProcessProposals from "../components/process/ProcessProposals";
+import ResultProperties from "../components/process/ResultProperties";
 import {
   createDraft,
   DRAFT_CHANGED_EVENT,
@@ -12,9 +13,14 @@ import {
   getDraftRun,
   listDraftRevisions,
   listDrafts,
+  modeKey,
+  modeLabel,
+  optionLabel,
+  optionValue,
   patchDraft,
   restoreDraftRevision,
   unitLabel,
+  type DraftReaction,
   type DraftObject,
   type DraftOp,
   type DraftProjection,
@@ -22,15 +28,31 @@ import {
   type DraftRegistry,
   type DraftRun,
   type DraftSummary,
+  type OptionValue,
   type Proposal,
+  type RegistryOption,
+  type RegistryParam,
   type RegistryUnit,
   type RevisionSummary,
+  type ResultProperty,
   type StoredQuantity,
 } from "../api/processDraft";
+import {
+  addBend,
+  editableSegment,
+  midpoint,
+  offsetSegment,
+  pathData,
+  removeVertex,
+  routeStream,
+  type Anchor,
+  type Point,
+} from "./processRouting";
 import "./ProcessDraftEditor.css";
 
-type Point = { x: number; y: number };
 type Drag = { id: string; pointer: Point; origin: Point; moved: boolean };
+// Segment drag on an orthogonal route: moves perpendicular to the segment, layout only.
+type RouteDrag = { stream: string; index: number; points: Point[]; pointer: Point; moved: boolean };
 type Notice = { tone: "info" | "danger" | "success"; text: string } | null;
 
 const UNIT_W = 76;
@@ -43,6 +65,14 @@ const errorText = (cause: unknown) =>
     : "The request failed.";
 
 const portY = (count: number, port: number) => (port - (count - 1) / 2) * 14;
+const energyPortX = (count: number, index: number) => (index - (count - 1) / 2) * 16;
+const isEnergy = (item: DraftObject) => item.type === "EnergyStream";
+const isOptionParam = (param: RegistryParam) => Boolean(param.options?.length) || param.kind === "bool" || param.kind === "boolean";
+const boolOptions: RegistryOption[] = [{ value: true, label: "Yes" }, { value: false, label: "No" }];
+const TAG_PREFIX: Record<string, string> = {
+  Heater: "H", Cooler: "C", Pump: "P", Valve: "V", Mixer: "M", Flash: "F", Splitter: "SP",
+  HeatExchanger: "HX", Recycle: "R", PFR: "PFR", CSTR: "CSTR", DistillationColumn: "T",
+};
 
 function nextTag(objects: DraftObject[], prefix: string) {
   const used = new Set(objects.map((item) => item.tag));
@@ -128,7 +158,11 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
   const [revisions, setRevisions] = useState<RevisionSummary[] | null>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
   const [overrides, setOverrides] = useState<Record<string, Point>>({});
+  const [routeDrag, setRouteDrag] = useState<RouteDrag | null>(null);
+  const [routeOverrides, setRouteOverrides] = useState<Record<string, Point[]>>({});
   const [form, setForm] = useState<FormState>({});
+  const [optionForm, setOptionForm] = useState<Record<string, OptionValue>>({});
+  const [reactionPick, setReactionPick] = useState<string[] | null>(null);
   const [composition, setComposition] = useState<Record<string, string>>({});
   const [mode, setMode] = useState<string>("");
   const [rename, setRename] = useState("");
@@ -174,7 +208,7 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
     if (!draft) return;
     const draftId = draft.draft_id;
     const refresh = () => {
-      if (drag || busy) return;
+      if (drag || routeDrag || busy) return;
       void getDraft(workspaceId, draftId)
         .then((next) => {
           setDraft((current) => {
@@ -198,7 +232,7 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
       window.clearInterval(timer);
       window.removeEventListener(DRAFT_CHANGED_EVENT, refresh);
     };
-  }, [busy, drag, draft, workspaceId]);
+  }, [busy, drag, draft, routeDrag, workspaceId]);
 
   // Results shown on the canvas always come from the recorded run bound to a revision.
   const solvedRunId = draft?.results.run_id;
@@ -234,6 +268,7 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
           return false;
         } finally {
           setOverrides({});
+          setRouteOverrides({});
         }
       });
       return queue.current;
@@ -257,6 +292,8 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
   // Inspector drafts reset whenever the selection or its revision changes.
   useEffect(() => {
     setForm({});
+    setOptionForm({});
+    setReactionPick(null);
     setRename(selected?.tag ?? "");
     setMode(selected?.mode ?? "");
     setComposition(
@@ -273,13 +310,69 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
     return { x: point.x, y: point.y };
   };
 
+  // Port geometry: material inlets left, outlets right; energy ports along the bottom edge.
+  const portAnchor = (unit: DraftObject, end: "source" | "target", port: number, energy: boolean): Anchor => {
+    const spec = unitSpec(unit.type);
+    const u = position(unit);
+    if (energy) {
+      const inlets = spec?.energy_inlets ?? [];
+      const all = inlets.length + (spec?.energy_outlets ?? []).length || 1;
+      const index = end === "target" ? port : inlets.length + port;
+      return { at: { x: u.x + energyPortX(all, index), y: u.y + UNIT_H / 2 }, side: "bottom" };
+    }
+    const count = end === "source" ? spec?.outlets.length ?? 1 : spec?.inlets.length ?? 1;
+    return end === "source"
+      ? { at: { x: u.x + UNIT_W / 2, y: u.y + portY(count, port) }, side: "right" }
+      : { at: { x: u.x - UNIT_W / 2, y: u.y + portY(count, port) }, side: "left" };
+  };
+  // Orthogonal polyline from the source port (or feed marker) to the target port (or product marker).
+  const streamRoute = (stream: DraftObject): Point[] | null => {
+    if (stream.kind !== "stream" || (!stream.source && !stream.target)) return null;
+    const at = position(stream);
+    const endAnchor = (end: "source" | "target"): Anchor => {
+      const endpoint = stream[end];
+      const unit = endpoint ? byId.get(endpoint.unit) : undefined;
+      if (endpoint && unit) return portAnchor(unit, end, endpoint.port, isEnergy(stream));
+      return end === "source" ? { at: { x: at.x + STREAM_R, y: at.y }, side: "right" } : { at: { x: at.x - STREAM_R, y: at.y }, side: "left" };
+    };
+    return routeStream(endAnchor("source"), endAnchor("target"), routeOverrides[stream.id] ?? stream.route ?? [], UNIT_H / 2 + 22);
+  };
+  // A stream connected at both ends sits on its route; a feed or product sits at its own position.
+  const markerAt = (stream: DraftObject, route: Point[] | null): Point =>
+    route && stream.source && stream.target ? midpoint(route) : position(stream);
+
   const onPointerDown = (event: ReactPointerEvent, item: DraftObject) => {
     event.stopPropagation();
-    (event.target as Element).setPointerCapture?.(event.pointerId);
     setSelectedId(item.id);
+    if (item.kind === "stream" && item.source && item.target) return;
+    (event.target as Element).setPointerCapture?.(event.pointerId);
     setDrag({ id: item.id, pointer: toSvg(event), origin: position(item), moved: false });
   };
+  const onSegmentDown = (event: ReactPointerEvent, stream: DraftObject, points: Point[], index: number) => {
+    event.stopPropagation();
+    setSelectedId(stream.id);
+    if (!editableSegment(points, index)) return;
+    (event.target as Element).setPointerCapture?.(event.pointerId);
+    setRouteDrag({ stream: stream.id, index, points, pointer: toSvg(event), moved: false });
+  };
+  // Route edits are layout-only: one set_route op, optimistic, never Validate/Run.
+  const saveRoute = (streamId: string, points: Point[] | null) => {
+    if (!points) return setNotice({ tone: "danger", text: "A route holds at most 12 bends." });
+    setRouteOverrides((current) => ({ ...current, [streamId]: points }));
+    void apply([{ op: "set_route", stream: streamId, points }]);
+  };
   const onPointerMove = (event: ReactPointerEvent) => {
+    if (routeDrag) {
+      const point = toSvg(event);
+      const a = routeDrag.points[routeDrag.index];
+      const b = routeDrag.points[routeDrag.index + 1];
+      const offset = Math.round(a.y === b.y ? point.y - routeDrag.pointer.y : point.x - routeDrag.pointer.x);
+      if (!routeDrag.moved && Math.abs(offset) < 3) return;
+      if (!routeDrag.moved) setRouteDrag({ ...routeDrag, moved: true });
+      const next = offsetSegment(routeDrag.points, routeDrag.index, offset);
+      if (next) setRouteOverrides((current) => ({ ...current, [routeDrag.stream]: next }));
+      return;
+    }
     if (!drag) return;
     const point = toSvg(event);
     const dx = point.x - drag.pointer.x;
@@ -289,6 +382,12 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
     setOverrides({ [drag.id]: { x: Math.round(drag.origin.x + dx), y: Math.round(drag.origin.y + dy) } });
   };
   const onPointerUp = () => {
+    if (routeDrag) {
+      const next = routeOverrides[routeDrag.stream];
+      setRouteDrag(null);
+      if (routeDrag.moved && next) saveRoute(routeDrag.stream, next);
+      return;
+    }
     if (!drag) return;
     const moved = overrides[drag.id];
     setDrag(null);
@@ -297,14 +396,15 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
 
   const addUnit = (type: string) => {
     const spot = { x: 80 + (objects.length % 6) * 130, y: 90 + Math.floor(objects.length / 6) * 130 };
-    const prefix = { Heater: "H", Cooler: "C", Pump: "P", Valve: "V", Mixer: "M", Flash: "F" }[type] ?? "U";
+    const prefix = TAG_PREFIX[type] ?? (type.replace(/[^A-Z]/g, "") || "U");
     const id = nextId(objects, "u");
     void apply([{ op: "add_unit", id, type, tag: nextTag(objects, `${prefix}-`), ...spot }]).then(() => setSelectedId(id));
   };
-  const addStream = () => {
-    const spot = { x: 80 + (objects.length % 6) * 130, y: 70 + Math.floor(objects.length / 6) * 130 };
-    const id = nextId(objects, "s");
-    void apply([{ op: "add_stream", id, tag: nextTag(objects, "S"), ...spot }]).then(() => setSelectedId(id));
+  const addStream = (streamType: "material" | "energy") => {
+    const spot = { x: 80 + (objects.length % 6) * 130, y: (streamType === "energy" ? 120 : 70) + Math.floor(objects.length / 6) * 130 };
+    const id = nextId(objects, streamType === "energy" ? "e" : "s");
+    const tag = nextTag(objects, streamType === "energy" ? "E" : "S");
+    void apply([{ op: "add_stream", id, tag, stream_type: streamType, ...spot }]).then(() => setSelectedId(id));
   };
 
   const act = async (action: "validate" | "run", revision?: string) => {
@@ -344,6 +444,7 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
     );
 
   const results = draft.results;
+  const energyUnsupported = registry.unsupported.EnergyStream;
   const streamResult = (tag: string) => solvedRun?.streams?.[tag]?.display;
   const bounds = objects.reduce(
     (acc, item) => {
@@ -352,32 +453,65 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
     },
     { minX: 0, minY: 0, maxX: 760, maxY: 360 },
   );
+  for (const item of objects)
+    for (const point of item.route ?? []) {
+      bounds.minX = Math.min(bounds.minX, point.x - 40);
+      bounds.minY = Math.min(bounds.minY, point.y - 40);
+      bounds.maxX = Math.max(bounds.maxX, point.x + 40);
+      bounds.maxY = Math.max(bounds.maxY, point.y + 40);
+    }
 
+  const routes = new Map(objects.filter((item) => item.kind === "stream").map((item) => [item.id, streamRoute(item)]));
   const renderEdges = () =>
     objects
       .filter((item) => item.kind === "stream")
-      .flatMap((stream) => {
-        const at = position(stream);
-        const lines = [];
-        for (const end of ["source", "target"] as const) {
-          const endpoint = stream[end];
-          const unit = endpoint ? byId.get(endpoint.unit) : undefined;
-          if (!endpoint || !unit) continue;
-          const spec = unitSpec(unit.type);
-          const u = position(unit);
-          const count = end === "source" ? spec?.outlets.length ?? 1 : spec?.inlets.length ?? 1;
-          const unitPoint = { x: u.x + (end === "source" ? UNIT_W / 2 : -UNIT_W / 2), y: u.y + portY(count, endpoint.port) };
-          const [from, to] = end === "source" ? [unitPoint, { x: at.x - STREAM_R, y: at.y }] : [{ x: at.x + STREAM_R, y: at.y }, unitPoint];
-          lines.push(
-            <path
-              key={`${stream.id}-${end}`}
-              className="draft-edge"
-              d={`M${from.x},${from.y} C${(from.x + to.x) / 2},${from.y} ${(from.x + to.x) / 2},${to.y} ${to.x},${to.y}`}
-              markerEnd="url(#draft-arrow)"
-            />,
-          );
-        }
-        return lines;
+      .map((stream) => {
+        const points = routes.get(stream.id);
+        if (!points) return null;
+        const classes = [
+          "draft-edge",
+          isEnergy(stream) ? "draft-edge--energy" : "",
+          selectedId === stream.id ? "is-selected" : "",
+          proposalTargets.has(stream.id) ? "is-proposal-target" : "",
+        ].join(" ");
+        return (
+          <g key={`edge-${stream.id}`} data-testid={`route-${stream.tag}`}>
+            <path className={classes} d={pathData(points)} markerEnd={isEnergy(stream) ? "url(#draft-arrow-energy)" : "url(#draft-arrow)"} />
+            {points.slice(1).map((point, index) => (
+              <line
+                key={index}
+                className={`draft-edge-hit${editableSegment(points, index) ? (points[index].y === point.y ? " is-row" : " is-col") : ""}`}
+                x1={points[index].x}
+                y1={points[index].y}
+                x2={point.x}
+                y2={point.y}
+                onPointerDown={(event) => onSegmentDown(event, stream, points, index)}
+                onDoubleClick={(event) => {
+                  event.stopPropagation();
+                  if (editableSegment(points, index)) saveRoute(stream.id, addBend(points, index, toSvg(event)));
+                }}
+              />
+            ))}
+            {selectedId === stream.id &&
+              points.slice(2, -2).map((point, offset) => (
+                <rect
+                  key={`bend-${offset}`}
+                  className="draft-bend"
+                  x={point.x - 3}
+                  y={point.y - 3}
+                  width={6}
+                  height={6}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onDoubleClick={(event) => {
+                    event.stopPropagation();
+                    saveRoute(stream.id, removeVertex(points, offset + 2));
+                  }}
+                >
+                  <title>Double-click to remove this bend</title>
+                </rect>
+              ))}
+          </g>
+        );
       });
 
   const renderBadge = (item: DraftObject, point: Point) => {
@@ -399,35 +533,42 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
   };
 
   const renderObject = (item: DraftObject) => {
-    const point = position(item);
     const findings = draft.findings.filter((finding) => finding.object === item.tag && finding.severity === "blocker");
     const classes = [
       "draft-node",
       `draft-node--${item.kind}`,
+      isEnergy(item) ? "draft-node--energy" : "",
       selectedId === item.id ? "is-selected" : "",
       findings.length ? "has-findings" : "",
       proposalTargets.has(item.id) ? "is-proposal-target" : "",
     ].join(" ");
     if (item.kind === "unit") {
+      const point = position(item);
       const spec = unitSpec(item.type);
       return (
         <g key={item.id} className={classes} onPointerDown={(event) => onPointerDown(event, item)} data-testid={`node-${item.tag}`}>
           <rect x={point.x - UNIT_W / 2} y={point.y - UNIT_H / 2} width={UNIT_W} height={UNIT_H} rx={6} />
           <text x={point.x} y={point.y - 3} textAnchor="middle" className="draft-node__tag">{item.tag}</text>
           <text x={point.x} y={point.y + 12} textAnchor="middle" className="draft-node__type">{spec?.label ?? item.type}</text>
+          {[...(spec?.energy_inlets ?? []), ...(spec?.energy_outlets ?? [])].map((name, index, all) => (
+            <rect key={`energy-${index}`} className="draft-port--energy" x={point.x + energyPortX(all.length, index) - 3} y={point.y + UNIT_H / 2 - 3} width={6} height={6}>
+              <title>{name} (energy)</title>
+            </rect>
+          ))}
           {renderBadge(item, point)}
         </g>
       );
     }
     const shown = streamResult(item.tag);
     const feed = !item.source;
+    const point = markerAt(item, routes.get(item.id) ?? null);
     return (
       <g key={item.id} className={classes} onPointerDown={(event) => onPointerDown(event, item)} data-testid={`node-${item.tag}`}>
         <circle cx={point.x} cy={point.y} r={STREAM_R} className={feed ? "is-feed" : ""} />
         <text x={point.x} y={point.y + 20} textAnchor="middle" className="draft-node__tag">{item.tag}</text>
         {shown && (
           <text x={point.x} y={point.y + 32} textAnchor="middle" className={`draft-node__result${results.state === "stale" ? " is-stale" : ""}`}>
-            <tspan x={point.x}>{[shown.temperature, shown.pressure].filter(Boolean).map((value) => formatQuantity(value)).join(" · ")}</tspan>
+            <tspan x={point.x}>{[shown.temperature, shown.pressure, shown.duty].filter(Boolean).map((value) => formatQuantity(value)).join(" · ")}</tspan>
             {shown.mass_flow && <tspan x={point.x} dy={11}>{formatQuantity(shown.mass_flow)}</tspan>}
           </text>
         )}
@@ -436,23 +577,47 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
     );
   };
 
-  const streamOptions = (end: "source" | "target") =>
+  const streamOptions = (end: "source" | "target", energy: boolean) =>
     units.flatMap((unit) => {
       const spec = unitSpec(unit.type);
-      const ports = end === "source" ? spec?.outlets ?? [] : spec?.inlets ?? [];
+      const ports = energy
+        ? end === "source" ? spec?.energy_outlets ?? [] : spec?.energy_inlets ?? []
+        : end === "source" ? spec?.outlets ?? [] : spec?.inlets ?? [];
       return ports.map((name, port) => ({ value: `${unit.id}:${port}`, label: `${unit.tag} · ${name}` }));
     });
 
+  /** Read-only DWSIM results for the selection, only after a run and bound to its revision. */
+  const renderResultSection = (properties: ResultProperty[] | undefined, legacy: React.ReactNode) => {
+    if (!solvedRun || results.state === "none") return null;
+    return (
+      <fieldset className={`draft-fieldset draft-outputs${results.state === "stale" ? " is-stale" : ""}`} aria-label="Results (read-only)">
+        <legend>Results · DWSIM{results.state === "stale" ? " (stale)" : ""}</legend>
+        {properties?.length ? <ResultProperties properties={properties} stale={results.state === "stale"} label="Result properties" /> : legacy}
+      </fieldset>
+    );
+  };
+
+  // An energy stream's duty is an input only where the connected unit's mode reads it.
+  const dutyIsInput = (stream: DraftObject) => {
+    const unit = stream.target ? byId.get(stream.target.unit) : undefined;
+    const spec = unit ? unitSpec(unit.type) : undefined;
+    const reading = spec?.energy_spec_modes;
+    if (reading) return Boolean(unit?.mode && reading.includes(unit.mode));
+    return !stream.source;
+  };
+
   const renderStreamInspector = (stream: DraftObject) => {
     const units_ = registry.quantity_units;
+    const energy = isEnergy(stream);
     const feed = !stream.source;
     const sum = Object.values(composition).reduce((acc, text) => acc + (Number(text) || 0), 0);
     const shown = solvedRun?.streams?.[stream.tag];
+    const powerUnits = units_.power?.display ?? [];
     return (
       <>
         {(["source", "target"] as const).map((end) => (
           <label key={end} className="draft-field">
-            <span>{end === "source" ? "From (unit outlet)" : "To (unit inlet)"}</span>
+            <span>{end === "source" ? (energy ? "From (energy outlet)" : "From (unit outlet)") : energy ? "To (energy inlet)" : "To (unit inlet)"}</span>
             <select
               aria-label={end === "source" ? "Stream source" : "Stream target"}
               value={stream[end] ? `${stream[end]!.unit}:${stream[end]!.port}` : ""}
@@ -466,15 +631,52 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
               }}
             >
               <option value="">{end === "source" ? "— feed (no source)" : "— product (no target)"}</option>
-              {streamOptions(end).map((option) => (
+              {streamOptions(end, energy).map((option) => (
                 <option key={option.value} value={option.value}>{option.label}</option>
               ))}
             </select>
           </label>
         ))}
-        {feed ? (
-          <fieldset className="draft-fieldset">
-            <legend>Feed specification</legend>
+        <div className="draft-route-tools">
+          <span className="draft-hint">Route: drag a segment to offset it, double-click to add a bend.</span>
+          <button
+            type="button"
+            disabled={!stream.route?.length && !routeOverrides[stream.id]?.length}
+            onClick={() => saveRoute(stream.id, [])}
+          >
+            Reset route
+          </button>
+        </div>
+        {energy ? (
+          dutyIsInput(stream) && powerUnits.length ? (
+            <fieldset className="draft-fieldset draft-inputs" aria-label="Inputs">
+              <legend>Inputs</legend>
+              <QuantityInput
+                label="Duty"
+                kind="power"
+                stored={stream.spec?.duty}
+                units={powerUnits}
+                value={form.duty}
+                onChange={(next) => setForm((current) => ({ ...current, duty: next }))}
+              />
+              <button
+                type="button"
+                disabled={!form.duty}
+                onClick={() => {
+                  const values = quantitiesFrom(form);
+                  if (!values) return setNotice({ tone: "danger", text: "Enter numbers only." });
+                  void apply([{ op: "set_stream_spec", stream: stream.id, ...values }]);
+                }}
+              >
+                Apply duty
+              </button>
+            </fieldset>
+          ) : (
+            <p className="draft-hint">Duty is calculated by DWSIM in the connected unit&apos;s current mode.</p>
+          )
+        ) : feed ? (
+          <fieldset className="draft-fieldset draft-inputs" aria-label="Inputs">
+            <legend>Inputs · feed specification</legend>
             {registry.stream_specs.map((spec) => (
               <QuantityInput
                 key={spec.key}
@@ -533,71 +735,142 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
         ) : (
           <p className="draft-hint">Computed by DWSIM from its upstream unit. Only feed streams take specifications.</p>
         )}
-        {shown?.display && (
-          <dl className={`draft-results-inline${results.state === "stale" ? " is-stale" : ""}`}>
-            {Object.entries(shown.display).map(([key, value]) => (
-              <div key={key}><dt>{key.replace("_", " ")}</dt><dd>{formatQuantity(value)}</dd></div>
-            ))}
-            {shown.vapor_fraction != null && <div><dt>vapor fraction</dt><dd>{shown.vapor_fraction.toPrecision(4)}</dd></div>}
-          </dl>
+        {renderResultSection(
+          shown?.properties,
+          shown?.display && (
+            <dl className={`draft-results-inline${results.state === "stale" ? " is-stale" : ""}`}>
+              {Object.entries(shown.display).map(([key, value]) => (
+                <div key={key}><dt>{key.replace("_", " ")}</dt><dd>{formatQuantity(value)}</dd></div>
+              ))}
+              {shown.vapor_fraction != null && <div><dt>vapor fraction</dt><dd>{shown.vapor_fraction.toPrecision(4)}</dd></div>}
+            </dl>
+          ),
         )}
       </>
+    );
+  };
+
+  const optionControl = (param: RegistryParam, stored: OptionValue | undefined) => {
+    const choices = param.options?.length ? param.options : boolOptions;
+    const current = param.key in optionForm ? optionForm[param.key] : stored ?? (param.default as OptionValue | null) ?? undefined;
+    return (
+      <label key={param.key} className="draft-field">
+        <span>{param.label}</span>
+        <select
+          aria-label={param.label}
+          value={current === undefined ? "" : String(current)}
+          onChange={(event) => {
+            const picked = choices.find((choice) => String(optionValue(choice)) === event.target.value);
+            if (picked !== undefined) setOptionForm((form_) => ({ ...form_, [param.key]: optionValue(picked) }));
+          }}
+        >
+          {current === undefined && <option value="">Choose…</option>}
+          {choices.map((choice) => (
+            <option key={String(optionValue(choice))} value={String(optionValue(choice))}>{optionLabel(choice)}</option>
+          ))}
+        </select>
+      </label>
     );
   };
 
   const renderUnitInspector = (unit: DraftObject) => {
     const spec = unitSpec(unit.type);
     if (!spec) return <p>Unsupported unit type.</p>;
+    const modes = spec.modes.map(modeKey);
     const activeMode = mode || unit.mode || "";
-    const params = spec.params.filter((param) => param.modes.includes(activeMode));
-    const connected = (end: "source" | "target", port: number) =>
-      objects.find((item) => item.kind === "stream" && item[end]?.unit === unit.id && item[end]?.port === port)?.tag ?? "—";
-    const reported = solvedRun?.units?.[unit.tag]?.reported;
+    const params = spec.params.filter(
+      (param) => (param.classification ?? "input") === "input" && (!param.modes.length || param.modes.includes(activeMode)),
+    );
+    const quantities = params.filter((param) => !isOptionParam(param));
+    const options = params.filter(isOptionParam);
+    const connected = (end: "source" | "target", port: number, energy: boolean) =>
+      objects.find((item) => item.kind === "stream" && isEnergy(item) === energy && item[end]?.unit === unit.id && item[end]?.port === port)?.tag ?? "—";
+    const reported = solvedRun?.units?.[unit.tag];
+    const reactions = Object.entries(draft.reactions ?? {});
+    const assigned = reactionPick ?? unit.reactions ?? [];
+    const reactionsChanged = reactionPick !== null && JSON.stringify(reactionPick) !== JSON.stringify(unit.reactions ?? []);
+    const optionsChanged = Object.keys(optionForm).length > 0;
     return (
       <>
         <dl className="draft-ports">
-          {spec.inlets.map((name, port) => (<div key={`in${port}`}><dt>{name}</dt><dd>{connected("target", port)}</dd></div>))}
-          {spec.outlets.map((name, port) => (<div key={`out${port}`}><dt>{name}</dt><dd>{connected("source", port)}</dd></div>))}
+          {spec.inlets.map((name, port) => (<div key={`in${port}`}><dt>{name}</dt><dd>{connected("target", port, false)}</dd></div>))}
+          {spec.outlets.map((name, port) => (<div key={`out${port}`}><dt>{name}</dt><dd>{connected("source", port, false)}</dd></div>))}
+          {(spec.energy_inlets ?? []).map((name, port) => (<div key={`ein${port}`} className="is-energy"><dt>{name}</dt><dd>{connected("target", port, true)}</dd></div>))}
+          {(spec.energy_outlets ?? []).map((name, port) => (<div key={`eout${port}`} className="is-energy"><dt>{name}</dt><dd>{connected("source", port, true)}</dd></div>))}
         </dl>
-        {spec.modes.length > 0 && (
-          <fieldset className="draft-fieldset">
-            <legend>Specification</legend>
-            <label className="draft-field">
-              <span>Mode</span>
-              <select aria-label="Unit mode" value={activeMode} onChange={(event) => { setMode(event.target.value); setForm({}); }}>
-                {spec.modes.map((item) => (<option key={item} value={item}>{item.replace(/_/g, " ")}</option>))}
-              </select>
-            </label>
-            {params.map((param) => (
+        {(modes.length > 0 || params.length > 0 || spec.reactions) && (
+          <fieldset className="draft-fieldset draft-inputs" aria-label="Inputs">
+            <legend>Inputs</legend>
+            {modes.length > 0 && (
+              <label className="draft-field">
+                <span>Mode</span>
+                <select aria-label="Unit mode" value={activeMode} onChange={(event) => { setMode(event.target.value); setForm({}); setOptionForm({}); }}>
+                  {spec.modes.map((item) => (<option key={modeKey(item)} value={modeKey(item)}>{modeLabel(item)}</option>))}
+                </select>
+              </label>
+            )}
+            {quantities.map((param) => (
               <QuantityInput
                 key={param.key}
                 label={param.label}
                 kind={param.kind}
-                stored={activeMode === unit.mode ? unit.params?.[param.key] : undefined}
-                units={registry.quantity_units[param.kind].display}
+                stored={activeMode === (unit.mode ?? "") ? unit.params?.[param.key] : undefined}
+                units={registry.quantity_units[param.kind]?.display ?? []}
                 value={form[param.key]}
                 onChange={(next) => setForm((current) => ({ ...current, [param.key]: next }))}
               />
             ))}
+            {options.map((param) => optionControl(param, unit.options?.[param.key]))}
+            {spec.reactions && (
+              <div className="draft-field" role="group" aria-label="Reactions">
+                <span>Reactions (kinetic)</span>
+                {reactions.length ? (
+                  reactions.map(([id, reaction]) => (
+                    <label key={id} className="draft-check">
+                      <input
+                        type="checkbox"
+                        checked={assigned.includes(id)}
+                        onChange={(event) => setReactionPick(event.target.checked ? [...assigned, id] : assigned.filter((item) => item !== id))}
+                      />
+                      {reaction.name || id}
+                    </label>
+                  ))
+                ) : (
+                  <p className="draft-hint">Define kinetic reactions under Thermo (click the empty canvas).</p>
+                )}
+              </div>
+            )}
             <button
               type="button"
-              disabled={!Object.keys(form).length && activeMode === unit.mode}
+              disabled={!Object.keys(form).length && activeMode === (unit.mode ?? "") && !optionsChanged && !reactionsChanged}
               onClick={() => {
                 const values = quantitiesFrom(form);
                 if (!values) return setNotice({ tone: "danger", text: "Enter numbers only." });
-                void apply([{ op: "set_unit_params", unit: unit.id, ...(activeMode !== unit.mode ? { mode: activeMode } : {}), values }]);
+                void apply([
+                  {
+                    op: "set_unit_params",
+                    unit: unit.id,
+                    ...(activeMode && activeMode !== unit.mode ? { mode: activeMode } : {}),
+                    values,
+                    ...(optionsChanged ? { options: optionForm } : {}),
+                    ...(reactionsChanged ? { reactions: reactionPick } : {}),
+                  },
+                ]);
               }}
             >
-              Apply specification
+              Apply inputs
             </button>
           </fieldset>
         )}
-        {reported && Object.keys(reported).length > 0 && (
-          <dl className={`draft-results-inline${results.state === "stale" ? " is-stale" : ""}`}>
-            {Object.entries(reported).slice(0, 8).map(([key, value]) => (
-              <div key={key}><dt>{key}</dt><dd>{Number.isFinite(Number(value.value)) && value.value !== "" ? Number(Number(value.value).toPrecision(6)) : value.value} {value.units}</dd></div>
-            ))}
-          </dl>
+        {renderResultSection(
+          reported?.properties,
+          reported && Object.keys(reported.reported ?? {}).length > 0 && (
+            <dl className={`draft-results-inline${results.state === "stale" ? " is-stale" : ""}`}>
+              {Object.entries(reported.reported).slice(0, 8).map(([key, value]) => (
+                <div key={key}><dt>{key}</dt><dd>{Number.isFinite(Number(value.value)) && value.value !== "" ? Number(Number(value.value).toPrecision(6)) : value.value} {value.units}</dd></div>
+              ))}
+            </dl>
+          ),
         )}
       </>
     );
@@ -703,13 +976,27 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
       <div className="draft-body">
         <aside className="draft-palette" aria-label="Palette">
           <h3>Add</h3>
-          <button type="button" onClick={addStream}>Material stream</button>
+          <button type="button" onClick={() => addStream("material")}>Material stream</button>
+          <button
+            type="button"
+            className="draft-palette__energy"
+            disabled={energyUnsupported !== undefined}
+            title={energyUnsupported}
+            onClick={() => addStream("energy")}
+          >
+            Energy stream
+          </button>
           {registry.units.map((unit) => (
             <button key={unit.type} type="button" onClick={() => addUnit(unit.type)}>{unit.label}</button>
           ))}
           <h3>Not yet supported</h3>
           <ul className="draft-unsupported">
-            {Object.entries(registry.unsupported).map(([type, reason]) => (<li key={type} title={reason}>{type}</li>))}
+            {Object.entries(registry.unsupported).map(([type, reason]) => (
+              <li key={type}>
+                <button type="button" disabled aria-disabled="true" title={reason} data-unsupported={type}>{type}</button>
+                <small>{reason}</small>
+              </li>
+            ))}
           </ul>
         </aside>
         <div className="draft-canvas-wrap">
@@ -725,6 +1012,9 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
           >
             <defs>
               <marker id="draft-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" />
+              </marker>
+              <marker id="draft-arrow-energy" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
                 <path d="M 0 0 L 10 5 L 0 10 z" />
               </marker>
             </defs>
