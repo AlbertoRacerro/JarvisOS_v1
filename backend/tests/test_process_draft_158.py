@@ -16,18 +16,6 @@ _GENERATOR = _ROOT / "scripts" / "qualification" / "158" / "generate_manifest.py
 _MANIFEST = _ROOT / "backend" / "app" / "modules" / "process_stack" / "dwsim_10_2_9_manifest.json"
 _CONNECT_ROLES = {"feed_port": "feed", "product_port": "product",
                   "energy_feed_port": "energy_feed", "energy_product_port": "energy_product"}
-# Properties Jarvis writes through dwsim_unitop_set that no checked-in 158 probe capture proves
-# settable on the pinned runtime. Heater OutletTemperature/CalcMode, Pump CalcMode/Pout/Efficiency
-# and Valve CalcMode/OutletPressure were exercised by the 155 host acceptance, whose capture is not
-# checked in; the others have no capture at all. This set must equal the observed gap exactly, so
-# it can only shrink as probe evidence is recaptured or the fields are withdrawn.
-_UNCAPTURED_INPUTS = {
-    ("Heater", "OutletTemperature"), ("Heater", "DeltaT"), ("Heater", "OutletVaporFraction"),
-    ("Cooler", "CalcMode"), ("Cooler", "OutletTemperature"), ("Cooler", "DeltaT"),
-    ("Cooler", "OutletVaporFraction"),
-    ("Pump", "CalcMode"), ("Pump", "Pout"), ("Pump", "Efficiency"),
-    ("Valve", "CalcMode"), ("Valve", "OutletPressure"),
-}
 
 
 def _modes(unit_type: str) -> tuple[str | None, ...]:
@@ -95,8 +83,8 @@ def test_every_compiled_input_property_is_settable_in_the_manifest() -> None:
     assert ("EnergyStream", "EnergyFlow") in written
     missing = {(unit_type, prop) for unit_type, prop in written
                if prop not in _manifest_object(unit_type)["settable_properties"]}
-    assert missing == _UNCAPTURED_INPUTS
-    for unit_type, prop in written - _UNCAPTURED_INPUTS:
+    assert missing == set()
+    for unit_type, prop in written:
         assert _manifest_object(unit_type)["settable_property_evidence"][prop]
     for unit_type, spec in UNIT_REGISTRY.items():
         native_xml = _manifest_object(unit_type)["native_xml_inputs"]
@@ -135,11 +123,14 @@ def test_every_registry_and_compiled_port_is_a_manifest_native_port() -> None:
         assert port in entries, (unit_type, role, port)
         assert entries[port]["evidence"], (unit_type, role, port)
     evidence_dir = _MANIFEST.parent / "evidence" / "158"
-    for capability in _capability_manifest()["objects"].values():
-        for entries in capability["ports"].values():
+    for native, capability in _capability_manifest()["objects"].items():
+        for role, entries in capability["ports"].items():
             for entry in entries:
                 if entry["captured"]:
                     assert all((evidence_dir / source.split(":", 1)[0]).is_file() for source in entry["evidence"])
+                else:  # the MCP refuses column energy connections; native XML + reload, verified by read-back
+                    assert (native, role) in {("DistillationColumn", "energy_feed"),
+                                              ("DistillationColumn", "energy_product")}
 
 
 def test_registry_modes_and_ports_are_present_in_pinned_manifest() -> None:

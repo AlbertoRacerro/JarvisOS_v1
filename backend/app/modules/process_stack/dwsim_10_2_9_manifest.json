@@ -3,7 +3,8 @@
     "evidence/158/units.json",
     "evidence/158/ports.json",
     "evidence/158/pfr_ok.json",
-    "evidence/158/column2.json"
+    "evidence/158/column2.json",
+    "evidence/158/inputs.json"
   ],
   "objects": {
     "Cooler": {
@@ -31,23 +32,61 @@
       "enum_values": {},
       "mode_evidence": {
         "EnergyStream": [
+          "inputs.json:cases.Cooler_energy_stream.calls[13].result (applied)",
+          "inputs.json:cases.Cooler_energy_stream.read_back (calculation_modes)",
+          "inputs.json:cases.Cooler_heat_removed.read_back (calculation_modes)",
+          "inputs.json:cases.Cooler_outlet_temperature.read_back (calculation_modes)",
+          "inputs.json:cases.Cooler_outlet_vapor_fraction.read_back (calculation_modes)",
+          "inputs.json:cases.Cooler_temperature_change.read_back (calculation_modes)",
           "units.json:Cooler.results (calculation_modes)"
         ],
         "HeatRemoved": [
+          "inputs.json:cases.Cooler_energy_stream.read_back (calculation_modes)",
+          "inputs.json:cases.Cooler_heat_removed.calls[13].result (applied)",
+          "inputs.json:cases.Cooler_heat_removed.read_back (calculation_modes)",
+          "inputs.json:cases.Cooler_outlet_temperature.read_back (calculation_modes)",
+          "inputs.json:cases.Cooler_outlet_vapor_fraction.read_back (calculation_modes)",
+          "inputs.json:cases.Cooler_temperature_change.read_back (calculation_modes)",
           "units.json:Cooler.dof (dof)",
           "units.json:Cooler.results (calculation_modes)"
         ],
         "OutletTemperature": [
+          "inputs.json:cases.Cooler_energy_stream.read_back (calculation_modes)",
+          "inputs.json:cases.Cooler_heat_removed.read_back (calculation_modes)",
+          "inputs.json:cases.Cooler_outlet_temperature.calls[13].result (applied)",
+          "inputs.json:cases.Cooler_outlet_temperature.read_back (calculation_modes)",
+          "inputs.json:cases.Cooler_outlet_vapor_fraction.read_back (calculation_modes)",
+          "inputs.json:cases.Cooler_temperature_change.read_back (calculation_modes)",
           "units.json:Cooler.results (calculation_modes)"
         ],
         "OutletVaporFraction": [
+          "inputs.json:cases.Cooler_energy_stream.read_back (calculation_modes)",
+          "inputs.json:cases.Cooler_heat_removed.read_back (calculation_modes)",
+          "inputs.json:cases.Cooler_outlet_temperature.read_back (calculation_modes)",
+          "inputs.json:cases.Cooler_outlet_vapor_fraction.calls[13].result (applied)",
+          "inputs.json:cases.Cooler_outlet_vapor_fraction.read_back (calculation_modes)",
+          "inputs.json:cases.Cooler_temperature_change.read_back (calculation_modes)",
           "units.json:Cooler.results (calculation_modes)"
         ],
         "TemperatureChange": [
+          "inputs.json:cases.Cooler_energy_stream.read_back (calculation_modes)",
+          "inputs.json:cases.Cooler_heat_removed.read_back (calculation_modes)",
+          "inputs.json:cases.Cooler_outlet_temperature.read_back (calculation_modes)",
+          "inputs.json:cases.Cooler_outlet_vapor_fraction.read_back (calculation_modes)",
+          "inputs.json:cases.Cooler_temperature_change.calls[13].result (applied)",
+          "inputs.json:cases.Cooler_temperature_change.read_back (calculation_modes)",
           "units.json:Cooler.results (calculation_modes)"
         ]
       },
-      "mode_property": {},
+      "mode_property": {
+        "CalcMode": [
+          "inputs.json:cases.Cooler_energy_stream.calls[13].result (applied)",
+          "inputs.json:cases.Cooler_heat_removed.calls[13].result (applied)",
+          "inputs.json:cases.Cooler_outlet_temperature.calls[13].result (applied)",
+          "inputs.json:cases.Cooler_outlet_vapor_fraction.calls[13].result (applied)",
+          "inputs.json:cases.Cooler_temperature_change.calls[13].result (applied)"
+        ]
+      },
       "modes": [
         "HeatRemoved",
         "OutletTemperature",
@@ -61,27 +100,39 @@
       "ports": {
         "energy_feed": [
           {
-            "captured": false,
+            "captured": true,
             "evidence": [
-              "docs/specs/158-process-dwsim-parity-beta.md#probe-findings (Heater and Cooler energy feed on native port 1)"
+              "inputs.json:cases.Cooler_energy_stream.calls[12].result",
+              "inputs.json:cases.Cooler_heat_removed.calls[12].result",
+              "inputs.json:cases.Cooler_outlet_temperature.calls[12].result",
+              "inputs.json:cases.Cooler_outlet_vapor_fraction.calls[12].result",
+              "inputs.json:cases.Cooler_temperature_change.calls[12].result"
             ],
             "port": 1
           }
         ],
         "feed": [
           {
-            "captured": false,
+            "captured": true,
             "evidence": [
-              "backend/app/modules/process_stack/draft_compiler.py:plan (draft material port is the native port; Heater-family wiring)"
+              "inputs.json:cases.Cooler_energy_stream.calls[10].result",
+              "inputs.json:cases.Cooler_heat_removed.calls[10].result",
+              "inputs.json:cases.Cooler_outlet_temperature.calls[10].result",
+              "inputs.json:cases.Cooler_outlet_vapor_fraction.calls[10].result",
+              "inputs.json:cases.Cooler_temperature_change.calls[10].result"
             ],
             "port": 0
           }
         ],
         "product": [
           {
-            "captured": false,
+            "captured": true,
             "evidence": [
-              "backend/app/modules/process_stack/draft_compiler.py:plan (draft material port is the native port; Heater-family wiring)"
+              "inputs.json:cases.Cooler_energy_stream.calls[11].result",
+              "inputs.json:cases.Cooler_heat_removed.calls[11].result",
+              "inputs.json:cases.Cooler_outlet_temperature.calls[11].result",
+              "inputs.json:cases.Cooler_outlet_vapor_fraction.calls[11].result",
+              "inputs.json:cases.Cooler_temperature_change.calls[11].result"
             ],
             "port": 0
           }
@@ -101,19 +152,45 @@
         }
       ],
       "settable_properties": [
+        "CalcMode",
         "DeltaP",
         "DeltaQ",
-        "Eficiencia"
+        "DeltaT",
+        "Eficiencia",
+        "OutletTemperature",
+        "OutletVaporFraction"
       ],
       "settable_property_evidence": {
+        "CalcMode": [
+          "inputs.json:cases.Cooler_energy_stream.calls[13].result (applied)",
+          "inputs.json:cases.Cooler_heat_removed.calls[13].result (applied)",
+          "inputs.json:cases.Cooler_outlet_temperature.calls[13].result (applied)",
+          "inputs.json:cases.Cooler_outlet_vapor_fraction.calls[13].result (applied)",
+          "inputs.json:cases.Cooler_temperature_change.calls[13].result (applied)"
+        ],
         "DeltaP": [
+          "inputs.json:cases.Cooler_energy_stream.calls[13].result (applied)",
+          "inputs.json:cases.Cooler_heat_removed.calls[13].result (applied)",
+          "inputs.json:cases.Cooler_outlet_temperature.calls[13].result (applied)",
+          "inputs.json:cases.Cooler_outlet_vapor_fraction.calls[13].result (applied)",
+          "inputs.json:cases.Cooler_temperature_change.calls[13].result (applied)",
           "units.json:Cooler.dof (dof_slot)"
         ],
         "DeltaQ": [
+          "inputs.json:cases.Cooler_heat_removed.calls[13].result (applied)",
           "units.json:Cooler.dof (dof_slot)"
+        ],
+        "DeltaT": [
+          "inputs.json:cases.Cooler_temperature_change.calls[13].result (applied)"
         ],
         "Eficiencia": [
           "units.json:Cooler.dof (dof_slot)"
+        ],
+        "OutletTemperature": [
+          "inputs.json:cases.Cooler_outlet_temperature.calls[13].result (applied)"
+        ],
+        "OutletVaporFraction": [
+          "inputs.json:cases.Cooler_outlet_vapor_fraction.calls[13].result (applied)"
         ]
       }
     },
@@ -862,6 +939,22 @@
       ],
       "settable_property_evidence": {
         "EnergyFlow": [
+          "inputs.json:cases.Cooler_energy_stream.calls[14].result (applied)",
+          "inputs.json:cases.Cooler_heat_removed.calls[14].result (applied)",
+          "inputs.json:cases.Cooler_outlet_temperature.calls[14].result (applied)",
+          "inputs.json:cases.Cooler_outlet_vapor_fraction.calls[14].result (applied)",
+          "inputs.json:cases.Cooler_temperature_change.calls[14].result (applied)",
+          "inputs.json:cases.Heater_energy_stream.calls[14].result (applied)",
+          "inputs.json:cases.Heater_heat_added.calls[14].result (applied)",
+          "inputs.json:cases.Heater_heat_added_removed.calls[14].result (applied)",
+          "inputs.json:cases.Heater_outlet_temperature.calls[14].result (applied)",
+          "inputs.json:cases.Heater_outlet_vapor_fraction.calls[14].result (applied)",
+          "inputs.json:cases.Heater_temperature_change.calls[14].result (applied)",
+          "inputs.json:cases.PFR_adiabatic.calls[14].result (applied)",
+          "inputs.json:cases.PFR_heat_exchange.calls[14].result (applied)",
+          "inputs.json:cases.PFR_isothermic.calls[14].result (applied)",
+          "inputs.json:cases.PFR_nonisothermal_nonadiabatic.calls[14].result (applied)",
+          "inputs.json:cases.PFR_outlet_temperature.calls[14].result (applied)",
           "ports.json:q_set (applied)"
         ]
       }
@@ -1303,34 +1396,82 @@
       "enum_values": {},
       "mode_evidence": {
         "EnergyStream": [
+          "inputs.json:cases.Heater_energy_stream.calls[13].result (applied)",
+          "inputs.json:cases.Heater_energy_stream.read_back (calculation_modes)",
+          "inputs.json:cases.Heater_heat_added.read_back (calculation_modes)",
+          "inputs.json:cases.Heater_heat_added_removed.read_back (calculation_modes)",
+          "inputs.json:cases.Heater_outlet_temperature.read_back (calculation_modes)",
+          "inputs.json:cases.Heater_outlet_vapor_fraction.read_back (calculation_modes)",
+          "inputs.json:cases.Heater_temperature_change.read_back (calculation_modes)",
           "ports.json:h_res (calculation_modes)",
           "ports.json:h_set (applied)",
           "units.json:Heater.results (calculation_modes)"
         ],
         "HeatAdded": [
+          "inputs.json:cases.Heater_energy_stream.read_back (calculation_modes)",
+          "inputs.json:cases.Heater_heat_added.calls[13].result (applied)",
+          "inputs.json:cases.Heater_heat_added.read_back (calculation_modes)",
+          "inputs.json:cases.Heater_heat_added_removed.read_back (calculation_modes)",
+          "inputs.json:cases.Heater_outlet_temperature.read_back (calculation_modes)",
+          "inputs.json:cases.Heater_outlet_vapor_fraction.read_back (calculation_modes)",
+          "inputs.json:cases.Heater_temperature_change.read_back (calculation_modes)",
           "ports.json:h_res (calculation_modes)",
           "units.json:Heater.dof (dof)",
           "units.json:Heater.results (calculation_modes)"
         ],
         "HeatAddedRemoved": [
+          "inputs.json:cases.Heater_energy_stream.read_back (calculation_modes)",
+          "inputs.json:cases.Heater_heat_added.read_back (calculation_modes)",
+          "inputs.json:cases.Heater_heat_added_removed.calls[13].result (applied)",
+          "inputs.json:cases.Heater_heat_added_removed.read_back (calculation_modes)",
+          "inputs.json:cases.Heater_outlet_temperature.read_back (calculation_modes)",
+          "inputs.json:cases.Heater_outlet_vapor_fraction.read_back (calculation_modes)",
+          "inputs.json:cases.Heater_temperature_change.read_back (calculation_modes)",
           "ports.json:h_res (calculation_modes)",
           "units.json:Heater.results (calculation_modes)"
         ],
         "OutletTemperature": [
+          "inputs.json:cases.Heater_energy_stream.read_back (calculation_modes)",
+          "inputs.json:cases.Heater_heat_added.read_back (calculation_modes)",
+          "inputs.json:cases.Heater_heat_added_removed.read_back (calculation_modes)",
+          "inputs.json:cases.Heater_outlet_temperature.calls[13].result (applied)",
+          "inputs.json:cases.Heater_outlet_temperature.read_back (calculation_modes)",
+          "inputs.json:cases.Heater_outlet_vapor_fraction.read_back (calculation_modes)",
+          "inputs.json:cases.Heater_temperature_change.read_back (calculation_modes)",
           "ports.json:h_res (calculation_modes)",
           "units.json:Heater.results (calculation_modes)"
         ],
         "OutletVaporFraction": [
+          "inputs.json:cases.Heater_energy_stream.read_back (calculation_modes)",
+          "inputs.json:cases.Heater_heat_added.read_back (calculation_modes)",
+          "inputs.json:cases.Heater_heat_added_removed.read_back (calculation_modes)",
+          "inputs.json:cases.Heater_outlet_temperature.read_back (calculation_modes)",
+          "inputs.json:cases.Heater_outlet_vapor_fraction.calls[13].result (applied)",
+          "inputs.json:cases.Heater_outlet_vapor_fraction.read_back (calculation_modes)",
+          "inputs.json:cases.Heater_temperature_change.read_back (calculation_modes)",
           "ports.json:h_res (calculation_modes)",
           "units.json:Heater.results (calculation_modes)"
         ],
         "TemperatureChange": [
+          "inputs.json:cases.Heater_energy_stream.read_back (calculation_modes)",
+          "inputs.json:cases.Heater_heat_added.read_back (calculation_modes)",
+          "inputs.json:cases.Heater_heat_added_removed.read_back (calculation_modes)",
+          "inputs.json:cases.Heater_outlet_temperature.read_back (calculation_modes)",
+          "inputs.json:cases.Heater_outlet_vapor_fraction.read_back (calculation_modes)",
+          "inputs.json:cases.Heater_temperature_change.calls[13].result (applied)",
+          "inputs.json:cases.Heater_temperature_change.read_back (calculation_modes)",
           "ports.json:h_res (calculation_modes)",
           "units.json:Heater.results (calculation_modes)"
         ]
       },
       "mode_property": {
         "CalcMode": [
+          "inputs.json:cases.Heater_energy_stream.calls[13].result (applied)",
+          "inputs.json:cases.Heater_heat_added.calls[13].result (applied)",
+          "inputs.json:cases.Heater_heat_added_removed.calls[13].result (applied)",
+          "inputs.json:cases.Heater_outlet_temperature.calls[13].result (applied)",
+          "inputs.json:cases.Heater_outlet_vapor_fraction.calls[13].result (applied)",
+          "inputs.json:cases.Heater_temperature_change.calls[13].result (applied)",
           "ports.json:h_set (applied)"
         ]
       },
@@ -1350,6 +1491,12 @@
           {
             "captured": true,
             "evidence": [
+              "inputs.json:cases.Heater_energy_stream.calls[12].result",
+              "inputs.json:cases.Heater_heat_added.calls[12].result",
+              "inputs.json:cases.Heater_heat_added_removed.calls[12].result",
+              "inputs.json:cases.Heater_outlet_temperature.calls[12].result",
+              "inputs.json:cases.Heater_outlet_vapor_fraction.calls[12].result",
+              "inputs.json:cases.Heater_temperature_change.calls[12].result",
               "ports.json:h_q1"
             ],
             "port": 1
@@ -1359,6 +1506,12 @@
           {
             "captured": true,
             "evidence": [
+              "inputs.json:cases.Heater_energy_stream.calls[10].result",
+              "inputs.json:cases.Heater_heat_added.calls[10].result",
+              "inputs.json:cases.Heater_heat_added_removed.calls[10].result",
+              "inputs.json:cases.Heater_outlet_temperature.calls[10].result",
+              "inputs.json:cases.Heater_outlet_vapor_fraction.calls[10].result",
+              "inputs.json:cases.Heater_temperature_change.calls[10].result",
               "ports.json:h_conn[0]"
             ],
             "port": 0
@@ -1368,6 +1521,12 @@
           {
             "captured": true,
             "evidence": [
+              "inputs.json:cases.Heater_energy_stream.calls[11].result",
+              "inputs.json:cases.Heater_heat_added.calls[11].result",
+              "inputs.json:cases.Heater_heat_added_removed.calls[11].result",
+              "inputs.json:cases.Heater_outlet_temperature.calls[11].result",
+              "inputs.json:cases.Heater_outlet_vapor_fraction.calls[11].result",
+              "inputs.json:cases.Heater_temperature_change.calls[11].result",
               "ports.json:h_conn[1]"
             ],
             "port": 0
@@ -1386,20 +1545,46 @@
         "CalcMode",
         "DeltaP",
         "DeltaQ",
-        "Eficiencia"
+        "DeltaT",
+        "Eficiencia",
+        "OutletTemperature",
+        "OutletVaporFraction"
       ],
       "settable_property_evidence": {
         "CalcMode": [
+          "inputs.json:cases.Heater_energy_stream.calls[13].result (applied)",
+          "inputs.json:cases.Heater_heat_added.calls[13].result (applied)",
+          "inputs.json:cases.Heater_heat_added_removed.calls[13].result (applied)",
+          "inputs.json:cases.Heater_outlet_temperature.calls[13].result (applied)",
+          "inputs.json:cases.Heater_outlet_vapor_fraction.calls[13].result (applied)",
+          "inputs.json:cases.Heater_temperature_change.calls[13].result (applied)",
           "ports.json:h_set (applied)"
         ],
         "DeltaP": [
+          "inputs.json:cases.Heater_energy_stream.calls[13].result (applied)",
+          "inputs.json:cases.Heater_heat_added.calls[13].result (applied)",
+          "inputs.json:cases.Heater_heat_added_removed.calls[13].result (applied)",
+          "inputs.json:cases.Heater_outlet_temperature.calls[13].result (applied)",
+          "inputs.json:cases.Heater_outlet_vapor_fraction.calls[13].result (applied)",
+          "inputs.json:cases.Heater_temperature_change.calls[13].result (applied)",
           "units.json:Heater.dof (dof_slot)"
         ],
         "DeltaQ": [
+          "inputs.json:cases.Heater_heat_added.calls[13].result (applied)",
+          "inputs.json:cases.Heater_heat_added_removed.calls[13].result (applied)",
           "units.json:Heater.dof (dof_slot)"
+        ],
+        "DeltaT": [
+          "inputs.json:cases.Heater_temperature_change.calls[13].result (applied)"
         ],
         "Eficiencia": [
           "units.json:Heater.dof (dof_slot)"
+        ],
+        "OutletTemperature": [
+          "inputs.json:cases.Heater_outlet_temperature.calls[13].result (applied)"
+        ],
+        "OutletVaporFraction": [
+          "inputs.json:cases.Heater_outlet_vapor_fraction.calls[13].result (applied)"
         ]
       }
     },
@@ -1419,32 +1604,32 @@
       "ports": {
         "feed": [
           {
-            "captured": false,
+            "captured": true,
             "evidence": [
-              "backend/app/modules/process_stack/draft_compiler.py:plan (155 registry: 2-3 feeds)"
+              "inputs.json:cases.Mixer_default.calls[12].result"
             ],
             "port": 0
           },
           {
-            "captured": false,
+            "captured": true,
             "evidence": [
-              "backend/app/modules/process_stack/draft_compiler.py:plan (155 registry: 2-3 feeds)"
+              "inputs.json:cases.Mixer_default.calls[13].result"
             ],
             "port": 1
           },
           {
-            "captured": false,
+            "captured": true,
             "evidence": [
-              "backend/app/modules/process_stack/draft_compiler.py:plan (155 registry: 2-3 feeds)"
+              "inputs.json:cases.Mixer_default.calls[14].result"
             ],
             "port": 2
           }
         ],
         "product": [
           {
-            "captured": false,
+            "captured": true,
             "evidence": [
-              "backend/app/modules/process_stack/draft_compiler.py:plan (155 registry)"
+              "inputs.json:cases.Mixer_default.calls[15].result"
             ],
             "port": 0
           }
@@ -1495,24 +1680,31 @@
       "enum_values": {},
       "mode_evidence": {
         "Adiabatic": [
+          "inputs.json:cases.PFR_adiabatic.calls[13].result (applied)",
           "units.json:PFR.dof (dof)"
         ],
         "HeatExchange": [
+          "inputs.json:cases.PFR_heat_exchange.calls[13].result (applied)",
           "pfr_ok.json:dof (dof)",
           "pfr_ok.json:set (applied)"
         ],
         "Isothermic": [
-          "docs/specs/158-process-dwsim-parity-beta.md#probe-findings"
+          "inputs.json:cases.PFR_isothermic.calls[13].result (applied)"
         ],
         "NonIsothermalNonAdiabatic": [
-          "docs/specs/158-process-dwsim-parity-beta.md#probe-findings"
+          "inputs.json:cases.PFR_nonisothermal_nonadiabatic.calls[13].result (applied)"
         ],
         "OutletTemperature": [
-          "docs/specs/158-process-dwsim-parity-beta.md#probe-findings"
+          "inputs.json:cases.PFR_outlet_temperature.calls[13].result (applied)"
         ]
       },
       "mode_property": {
         "ReactorOperationMode": [
+          "inputs.json:cases.PFR_adiabatic.calls[13].result (applied)",
+          "inputs.json:cases.PFR_heat_exchange.calls[13].result (applied)",
+          "inputs.json:cases.PFR_isothermic.calls[13].result (applied)",
+          "inputs.json:cases.PFR_nonisothermal_nonadiabatic.calls[13].result (applied)",
+          "inputs.json:cases.PFR_outlet_temperature.calls[13].result (applied)",
           "pfr_ok.json:set (applied)"
         ]
       },
@@ -1536,6 +1728,11 @@
           {
             "captured": true,
             "evidence": [
+              "inputs.json:cases.PFR_adiabatic.calls[12].result",
+              "inputs.json:cases.PFR_heat_exchange.calls[12].result",
+              "inputs.json:cases.PFR_isothermic.calls[12].result",
+              "inputs.json:cases.PFR_nonisothermal_nonadiabatic.calls[12].result",
+              "inputs.json:cases.PFR_outlet_temperature.calls[12].result",
               "pfr_ok.json:ce"
             ],
             "port": 1
@@ -1545,6 +1742,11 @@
           {
             "captured": true,
             "evidence": [
+              "inputs.json:cases.PFR_adiabatic.calls[10].result",
+              "inputs.json:cases.PFR_heat_exchange.calls[10].result",
+              "inputs.json:cases.PFR_isothermic.calls[10].result",
+              "inputs.json:cases.PFR_nonisothermal_nonadiabatic.calls[10].result",
+              "inputs.json:cases.PFR_outlet_temperature.calls[10].result",
               "pfr_ok.json:c1"
             ],
             "port": 0
@@ -1554,6 +1756,11 @@
           {
             "captured": true,
             "evidence": [
+              "inputs.json:cases.PFR_adiabatic.calls[11].result",
+              "inputs.json:cases.PFR_heat_exchange.calls[11].result",
+              "inputs.json:cases.PFR_isothermic.calls[11].result",
+              "inputs.json:cases.PFR_nonisothermal_nonadiabatic.calls[11].result",
+              "inputs.json:cases.PFR_outlet_temperature.calls[11].result",
               "pfr_ok.json:c2"
             ],
             "port": 0
@@ -1762,28 +1969,43 @@
           "units.json:PFR.dof (dof_slot)"
         ],
         "CoolantInletTemperature": [
+          "inputs.json:cases.PFR_heat_exchange.calls[13].result (applied)",
           "pfr_ok.json:dof (dof_slot)",
           "pfr_ok.json:set (applied)"
         ],
         "CoolantMassFlowRate": [
+          "inputs.json:cases.PFR_heat_exchange.calls[13].result (applied)",
           "pfr_ok.json:set (applied)"
         ],
         "CoolantSpecificHeat": [
+          "inputs.json:cases.PFR_heat_exchange.calls[13].result (applied)",
           "pfr_ok.json:set (applied)"
         ],
         "DeltaP": [
+          "inputs.json:cases.PFR_adiabatic.calls[13].result (applied)",
+          "inputs.json:cases.PFR_heat_exchange.calls[13].result (applied)",
+          "inputs.json:cases.PFR_isothermic.calls[13].result (applied)",
+          "inputs.json:cases.PFR_nonisothermal_nonadiabatic.calls[13].result (applied)",
+          "inputs.json:cases.PFR_outlet_temperature.calls[13].result (applied)",
           "pfr_ok.json:dof (dof_slot)",
           "units.json:PFR.dof (dof_slot)"
         ],
         "HeatExchangeArea": [
+          "inputs.json:cases.PFR_heat_exchange.calls[13].result (applied)",
           "pfr_ok.json:set (applied)"
         ],
         "Length": [
+          "inputs.json:cases.PFR_adiabatic.calls[13].result (applied)",
+          "inputs.json:cases.PFR_heat_exchange.calls[13].result (applied)",
+          "inputs.json:cases.PFR_isothermic.calls[13].result (applied)",
+          "inputs.json:cases.PFR_nonisothermal_nonadiabatic.calls[13].result (applied)",
+          "inputs.json:cases.PFR_outlet_temperature.calls[13].result (applied)",
           "pfr_ok.json:dof (dof_slot)",
           "pfr_ok.json:set (applied)",
           "units.json:PFR.dof (dof_slot)"
         ],
         "OverallHeatTransferCoefficient": [
+          "inputs.json:cases.PFR_heat_exchange.calls[13].result (applied)",
           "pfr_ok.json:dof (dof_slot)",
           "pfr_ok.json:set (applied)"
         ],
@@ -1793,10 +2015,20 @@
           "units.json:PFR.dof (dof_slot)"
         ],
         "ReactorOperationMode": [
+          "inputs.json:cases.PFR_adiabatic.calls[13].result (applied)",
+          "inputs.json:cases.PFR_heat_exchange.calls[13].result (applied)",
+          "inputs.json:cases.PFR_isothermic.calls[13].result (applied)",
+          "inputs.json:cases.PFR_nonisothermal_nonadiabatic.calls[13].result (applied)",
+          "inputs.json:cases.PFR_outlet_temperature.calls[13].result (applied)",
           "pfr_ok.json:set (applied)",
           "units.json:PFR.dof (dof_slot)"
         ],
         "Volume": [
+          "inputs.json:cases.PFR_adiabatic.calls[13].result (applied)",
+          "inputs.json:cases.PFR_heat_exchange.calls[13].result (applied)",
+          "inputs.json:cases.PFR_isothermic.calls[13].result (applied)",
+          "inputs.json:cases.PFR_nonisothermal_nonadiabatic.calls[13].result (applied)",
+          "inputs.json:cases.PFR_outlet_temperature.calls[13].result (applied)",
           "pfr_ok.json:dof (dof_slot)",
           "pfr_ok.json:set (applied)",
           "units.json:PFR.dof (dof_slot)"
@@ -1823,23 +2055,40 @@
       "enum_values": {},
       "mode_evidence": {
         "Curves": [
+          "inputs.json:cases.Pump_outlet_pressure.read_back (calculation_modes)",
+          "inputs.json:cases.Pump_pressure_increase.read_back (calculation_modes)",
           "units.json:Pump.results (calculation_modes)"
         ],
         "Delta_P": [
+          "inputs.json:cases.Pump_outlet_pressure.read_back (calculation_modes)",
+          "inputs.json:cases.Pump_pressure_increase.calls[10].result (applied)",
+          "inputs.json:cases.Pump_pressure_increase.read_back (calculation_modes)",
           "units.json:Pump.dof (dof)",
           "units.json:Pump.results (calculation_modes)"
         ],
         "EnergyStream": [
+          "inputs.json:cases.Pump_outlet_pressure.read_back (calculation_modes)",
+          "inputs.json:cases.Pump_pressure_increase.read_back (calculation_modes)",
           "units.json:Pump.results (calculation_modes)"
         ],
         "OutletPressure": [
+          "inputs.json:cases.Pump_outlet_pressure.calls[10].result (applied)",
+          "inputs.json:cases.Pump_outlet_pressure.read_back (calculation_modes)",
+          "inputs.json:cases.Pump_pressure_increase.read_back (calculation_modes)",
           "units.json:Pump.results (calculation_modes)"
         ],
         "Power": [
+          "inputs.json:cases.Pump_outlet_pressure.read_back (calculation_modes)",
+          "inputs.json:cases.Pump_pressure_increase.read_back (calculation_modes)",
           "units.json:Pump.results (calculation_modes)"
         ]
       },
-      "mode_property": {},
+      "mode_property": {
+        "CalcMode": [
+          "inputs.json:cases.Pump_outlet_pressure.calls[10].result (applied)",
+          "inputs.json:cases.Pump_pressure_increase.calls[10].result (applied)"
+        ]
+      },
       "modes": [
         "Delta_P",
         "OutletPressure",
@@ -1853,18 +2102,20 @@
       "ports": {
         "feed": [
           {
-            "captured": false,
+            "captured": true,
             "evidence": [
-              "scripts/qualification/155/draft_smoke.py (155 exact-head host acceptance; capture not checked in)"
+              "inputs.json:cases.Pump_outlet_pressure.calls[8].result",
+              "inputs.json:cases.Pump_pressure_increase.calls[8].result"
             ],
             "port": 0
           }
         ],
         "product": [
           {
-            "captured": false,
+            "captured": true,
             "evidence": [
-              "scripts/qualification/155/draft_smoke.py (155 exact-head host acceptance; capture not checked in)"
+              "inputs.json:cases.Pump_outlet_pressure.calls[9].result",
+              "inputs.json:cases.Pump_pressure_increase.calls[9].result"
             ],
             "port": 0
           }
@@ -1909,15 +2160,30 @@
         }
       ],
       "settable_properties": [
+        "CalcMode",
         "DeltaP",
-        "Eficiencia"
+        "Efficiency",
+        "Eficiencia",
+        "Pout"
       ],
       "settable_property_evidence": {
+        "CalcMode": [
+          "inputs.json:cases.Pump_outlet_pressure.calls[10].result (applied)",
+          "inputs.json:cases.Pump_pressure_increase.calls[10].result (applied)"
+        ],
         "DeltaP": [
+          "inputs.json:cases.Pump_pressure_increase.calls[10].result (applied)",
           "units.json:Pump.dof (dof_slot)"
+        ],
+        "Efficiency": [
+          "inputs.json:cases.Pump_outlet_pressure.calls[10].result (applied)",
+          "inputs.json:cases.Pump_pressure_increase.calls[10].result (applied)"
         ],
         "Eficiencia": [
           "units.json:Pump.dof (dof_slot)"
+        ],
+        "Pout": [
+          "inputs.json:cases.Pump_outlet_pressure.calls[10].result (applied)"
         ]
       }
     },
@@ -1937,18 +2203,18 @@
       "ports": {
         "feed": [
           {
-            "captured": false,
+            "captured": true,
             "evidence": [
-              "docs/specs/158-process-dwsim-parity-beta.md#probe-findings (Recycle: 1 inlet and 1 outlet)"
+              "inputs.json:cases.Recycle_default.calls[8].result"
             ],
             "port": 0
           }
         ],
         "product": [
           {
-            "captured": false,
+            "captured": true,
             "evidence": [
-              "docs/specs/158-process-dwsim-parity-beta.md#probe-findings (Recycle: 1 inlet and 1 outlet)"
+              "inputs.json:cases.Recycle_default.calls[9].result"
             ],
             "port": 0
           }
@@ -2178,26 +2444,45 @@
       "enum_values": {},
       "mode_evidence": {
         "DeltaP": [
+          "inputs.json:cases.Valve_outlet_pressure.read_back (calculation_modes)",
+          "inputs.json:cases.Valve_pressure_drop.calls[10].result (applied)",
+          "inputs.json:cases.Valve_pressure_drop.read_back (calculation_modes)",
           "units.json:Valve.dof (dof)",
           "units.json:Valve.results (calculation_modes)"
         ],
         "Kv_Gas": [
+          "inputs.json:cases.Valve_outlet_pressure.read_back (calculation_modes)",
+          "inputs.json:cases.Valve_pressure_drop.read_back (calculation_modes)",
           "units.json:Valve.results (calculation_modes)"
         ],
         "Kv_General": [
+          "inputs.json:cases.Valve_outlet_pressure.read_back (calculation_modes)",
+          "inputs.json:cases.Valve_pressure_drop.read_back (calculation_modes)",
           "units.json:Valve.results (calculation_modes)"
         ],
         "Kv_Liquid": [
+          "inputs.json:cases.Valve_outlet_pressure.read_back (calculation_modes)",
+          "inputs.json:cases.Valve_pressure_drop.read_back (calculation_modes)",
           "units.json:Valve.results (calculation_modes)"
         ],
         "Kv_Steam": [
+          "inputs.json:cases.Valve_outlet_pressure.read_back (calculation_modes)",
+          "inputs.json:cases.Valve_pressure_drop.read_back (calculation_modes)",
           "units.json:Valve.results (calculation_modes)"
         ],
         "OutletPressure": [
+          "inputs.json:cases.Valve_outlet_pressure.calls[10].result (applied)",
+          "inputs.json:cases.Valve_outlet_pressure.read_back (calculation_modes)",
+          "inputs.json:cases.Valve_pressure_drop.read_back (calculation_modes)",
           "units.json:Valve.results (calculation_modes)"
         ]
       },
-      "mode_property": {},
+      "mode_property": {
+        "CalcMode": [
+          "inputs.json:cases.Valve_outlet_pressure.calls[10].result (applied)",
+          "inputs.json:cases.Valve_pressure_drop.calls[10].result (applied)"
+        ]
+      },
       "modes": [
         "DeltaP",
         "OutletPressure",
@@ -2212,18 +2497,20 @@
       "ports": {
         "feed": [
           {
-            "captured": false,
+            "captured": true,
             "evidence": [
-              "scripts/qualification/155/draft_smoke.py (155 exact-head host acceptance; capture not checked in)"
+              "inputs.json:cases.Valve_outlet_pressure.calls[8].result",
+              "inputs.json:cases.Valve_pressure_drop.calls[8].result"
             ],
             "port": 0
           }
         ],
         "product": [
           {
-            "captured": false,
+            "captured": true,
             "evidence": [
-              "scripts/qualification/155/draft_smoke.py (155 exact-head host acceptance; capture not checked in)"
+              "inputs.json:cases.Valve_outlet_pressure.calls[9].result",
+              "inputs.json:cases.Valve_pressure_drop.calls[9].result"
             ],
             "port": 0
           }
@@ -2243,11 +2530,21 @@
         }
       ],
       "settable_properties": [
-        "DeltaP"
+        "CalcMode",
+        "DeltaP",
+        "OutletPressure"
       ],
       "settable_property_evidence": {
+        "CalcMode": [
+          "inputs.json:cases.Valve_outlet_pressure.calls[10].result (applied)",
+          "inputs.json:cases.Valve_pressure_drop.calls[10].result (applied)"
+        ],
         "DeltaP": [
+          "inputs.json:cases.Valve_pressure_drop.calls[10].result (applied)",
           "units.json:Valve.dof (dof_slot)"
+        ],
+        "OutletPressure": [
+          "inputs.json:cases.Valve_outlet_pressure.calls[10].result (applied)"
         ]
       }
     },
@@ -2278,25 +2575,25 @@
       "ports": {
         "feed": [
           {
-            "captured": false,
+            "captured": true,
             "evidence": [
-              "scripts/qualification/155/draft_smoke.py (155 exact-head host acceptance; capture not checked in)"
+              "inputs.json:cases.Flash_default.calls[10].result"
             ],
             "port": 0
           }
         ],
         "product": [
           {
-            "captured": false,
+            "captured": true,
             "evidence": [
-              "scripts/qualification/155/draft_smoke.py (155 exact-head host acceptance; capture not checked in) (vapor)"
+              "inputs.json:cases.Flash_default.calls[11].result"
             ],
             "port": 0
           },
           {
-            "captured": false,
+            "captured": true,
             "evidence": [
-              "scripts/qualification/155/draft_smoke.py (155 exact-head host acceptance; capture not checked in) (liquid)"
+              "inputs.json:cases.Flash_default.calls[12].result"
             ],
             "port": 1
           }

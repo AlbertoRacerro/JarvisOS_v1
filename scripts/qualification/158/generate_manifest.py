@@ -29,7 +29,7 @@ TYPES = (
     "PFR",
     "DistillationColumn",
 )
-CAPTURES = ("units.json", "ports.json", "pfr_ok.json", "column2.json")
+CAPTURES = ("units.json", "ports.json", "pfr_ok.json", "column2.json", "inputs.json")
 # Native object type names reported by solve/DOF/result captures -> manifest type.
 NATIVE_ALIASES = {"NodeOut": "Splitter", "NodeIn": "Mixer", "RCT_PFR": "PFR", "PFR reactor": "PFR"}
 # Properties whose written value selects a calculation mode or a native enum.
@@ -102,7 +102,7 @@ NATIVE_XML_INPUTS: dict[str, dict[str, dict[str, str]]] = {
 }
 
 _CONNECTION = re.compile(r"^(feed|product|energy_feed|energy_product):[^-]+->port(\d+)$")
-_REFUSED = re.compile(r"'([^']+)' has no settable property '([^']+)'\. Available: (.*)$", re.S)
+_REFUSED = re.compile(r"'([^']+)' has no settable property '([^']+)'\. Available: (.*)$", re.DOTALL)
 
 
 def _walk(node: Any, path: str) -> Iterator[tuple[str, dict[str, Any]]]:
