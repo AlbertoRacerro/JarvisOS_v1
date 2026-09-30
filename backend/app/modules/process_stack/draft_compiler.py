@@ -51,7 +51,8 @@ def _energy_streams(document: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _native_energy_port(unit: dict[str, Any], port: int) -> int:
-    return port + (10 if unit["type"] == "DistillationColumn" else 1 if unit["type"] in {"Heater", "Cooler"} else 0)
+    return port + (10 if unit["type"] == "DistillationColumn" else
+                   1 if unit["type"] in {"Heater", "Cooler", "PFR"} else 0)
 
 
 def _units(document: dict[str, Any]) -> list[dict[str, Any]]:
@@ -280,6 +281,19 @@ def expected(document: dict[str, Any]) -> dict[str, Any]:
         "energy_streams": {stream["tag"]: ({"EnergyFlow": float(stream["spec"]["duty"]["si"])}
                                            if "duty" in stream["spec"] else {})
                            for stream in _energy_streams(document)},
+        "reactions": {reaction_id: {
+            "name": reaction["name"], "stoichiometry": reaction["stoichiometry"],
+            "orders": {compound: float(reaction["orders"].get(
+                compound, 1.0 if compound == reaction["base_reactant"] else 0.0))
+                       for compound in reaction["stoichiometry"]},
+            "base_reactant": reaction["base_reactant"], "phase": reaction["phase"],
+            "basis": reaction["basis"], "A_forward": float(reaction["A_forward"]["value"]),
+            "A_forward_unit": reaction["A_forward"]["unit"],
+            "E_forward": float(reaction["E_forward"]["value"]),
+            "E_forward_unit": reaction["E_forward"]["unit"],
+        } for reaction_id, reaction in document.get("reactions", {}).items()},
+        "reaction_sets": {f"JARVIS_{unit['tag']}": list(unit["reactions"])
+                          for unit in _units(document) if unit["type"] == "PFR" and unit.get("reactions")},
         "units": {unit["tag"]: _unit_properties(unit) for unit in _units(document)},
     }
 
@@ -454,9 +468,33 @@ def read_back(client: DwsimMcpClient, flow: str, case_path: Path, exp: dict[str,
     for tag, wanted in exp.get("energy_streams", {}).items():
         node = sim_nodes.get(next((native for native, native_tag in tags.items() if native_tag == tag), ""))
         energy_streams[tag] = {key: _float(node.findtext(key)) if node is not None else None for key in wanted}
+    reactions = {}
+    for reaction_id in exp.get("reactions", {}):
+        reaction = root.find(f"./Reactions/Reaction[ID='{reaction_id}']")
+        compounds_node = None if reaction is None else reaction.find("Compounds")
+        compounds = list(compounds_node or [])
+        reactions[reaction_id] = {
+            "name": reaction.findtext("Name") if reaction is not None else None,
+            "stoichiometry": {item.get("Name"): _float(item.get("StoichCoeff")) for item in compounds},
+            "orders": {item.get("Name"): _float(item.get("DirectOrder")) for item in compounds},
+            "base_reactant": reaction.findtext("BaseReactant") if reaction is not None else None,
+            "phase": reaction.findtext("ReactionPhase") if reaction is not None else None,
+            "basis": reaction.findtext("ReactionBasis") if reaction is not None else None,
+            "A_forward": _float(reaction.findtext("A_Forward")) if reaction is not None else None,
+            "A_forward_unit": reaction.findtext("VelUnit") if reaction is not None else None,
+            "E_forward": _float(reaction.findtext("E_Forward")) if reaction is not None else None,
+            "E_forward_unit": reaction.findtext("E_Forward_Unit") if reaction is not None else None,
+        }
+    reaction_sets = {}
+    for reaction_set_id in exp.get("reaction_sets", {}):
+        reaction_set = root.find(f"./ReactionSets/ReactionSet[ID='{reaction_set_id}']")
+        reaction_sets[reaction_set_id] = [item.get("ReactionID") or item.get("Key")
+                                          for item in (reaction_set.findall("./Reactions/Reaction")
+                                                       if reaction_set is not None else [])]
     return {"compounds": compounds, "property_package": package, "objects": objects,
             "connections": sorted(connections), "feeds": feeds,
-            "energy_streams": energy_streams, "units": units}
+            "energy_streams": energy_streams, "reactions": reactions,
+            "reaction_sets": reaction_sets, "units": units}
 
 
 def _same(actual: Any, wanted: Any) -> bool:
@@ -489,7 +527,8 @@ def compare(exp: dict[str, Any], actual: dict[str, Any]) -> list[dict[str, Any]]
         elif not _same(got, wanted):
             diffs.append({"path": path, "expected": wanted, "actual": got})
 
-    for section in ("compounds", "property_package", "objects", "connections", "feeds", "units"):
+    for section in ("compounds", "property_package", "objects", "connections", "feeds", "energy_streams",
+                    "reactions", "reaction_sets", "units"):
         walk(section, exp[section], actual.get(section))
     return diffs
 

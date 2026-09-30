@@ -66,6 +66,24 @@ def test_energy_stream_and_layout_routes_compile_orthogonally() -> None:
         "op": "set_route", "stream": "duty", "points": [{"x": 0, "y": 0}, {"x": 10, "y": 0}],
     })])
     assert draft_compiler.expected(routed) == expected
+    assert draft_compiler._native_energy_port({"type": "PFR"}, 0) == 1
+
+
+def test_readback_comparison_covers_energy_duty_and_reaction_configuration() -> None:
+    expected = {
+        "compounds": [], "property_package": None, "objects": {}, "connections": [], "feeds": {},
+        "energy_streams": {"Q": {"EnergyFlow": 12.0}},
+        "reactions": {"R1": {"name": "hydration", "stoichiometry": {"A": -1.0, "B": 1.0},
+                              "orders": {"A": 1.0, "B": 0.0}, "base_reactant": "A", "phase": "Mixture",
+                              "basis": "MolarConc", "A_forward": 0.005, "A_forward_unit": "kmol/[m3.h]",
+                              "E_forward": 1000.0, "E_forward_unit": "J/mol"}},
+        "reaction_sets": {"JARVIS_R": ["R1"]}, "units": {},
+    }
+    actual = {**expected, "energy_streams": {"Q": {"EnergyFlow": 11.0}},
+              "reactions": {"R1": {**expected["reactions"]["R1"], "A_forward": 0.006}}}
+    paths = {item["path"] for item in draft_compiler.compare(expected, actual)}
+    assert "energy_streams.Q.EnergyFlow" in paths
+    assert "reactions.R1.A_forward" in paths
 
 
 def test_kinetic_reaction_is_typed_attached_and_materialized_by_native_set() -> None:
