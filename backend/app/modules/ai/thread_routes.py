@@ -6,8 +6,13 @@ from app.modules.ai.cloud_escalation import (
     CloudEscalationError,
     CloudEscalationRead,
     CloudEscalationRequest,
+    EscalationApproval,
+    EscalationDraftRead,
+    EscalationDraftRequest,
     confirm_cloud_escalation,
     create_cloud_escalation,
+    draft_interaction_escalation,
+    escalate_interaction,
     list_cloud_escalations,
 )
 from app.modules.ai.egress_persistence import EgressStateError
@@ -43,6 +48,65 @@ def submit_cloud_escalation(thread_id: str, workspace_id: str, payload: CloudEsc
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
+# Spec 159: 156 path messages that reach the operator, restated in plain language.
+_ESCALATION_MESSAGES = {
+    "completed local source interaction required": (
+        "source_not_eligible", "Only a finished answer from a local model in this conversation can be escalated."),
+    "source must be a local model interaction": (
+        "source_not_local", "Only answers produced by a local model can be escalated to the cloud."),
+    "request budget exceeded": (
+        "request_budget_exceeded", "This request would exceed the per-request cloud spending limit."),
+    "thread budget exceeded": (
+        "thread_budget_exceeded", "This conversation has reached its cloud spending limit."),
+    "no eligible model within the task and request budget": (
+        "no_eligible_model", "No cloud model is currently eligible for this kind of task within the budget."),
+    "unqualified task family": ("unknown_task_family", "That task type is not configured for cloud escalation."),
+    "derivative authority changed": (
+        "derivative_changed", "The approved text changed or lost its approval before sending. Try again."),
+    "cloud escalation is not awaiting confirmation": (
+        "not_awaiting_confirmation", "This cloud request is not waiting for confirmation any more."),
+    "approved derivative changed before confirmation": (
+        "derivative_changed", "The approved text changed before confirmation, so nothing was sent."),
+}
+
+
+def _escalation_error(exc: Exception, status_code: int = 409) -> HTTPException:
+    message = str(exc)
+    code = getattr(exc, "code", None)
+    if code is None:
+        code, message = _ESCALATION_MESSAGES.get(message, ("cloud_escalation_refused", message))
+    return HTTPException(status_code=status_code, detail={"code": code, "message": message})
+
+
+@router.post("/{thread_id}/interactions/{interaction_id}/escalation-draft", response_model=EscalationDraftRead)
+def draft_thread_escalation(
+    thread_id: str, interaction_id: str, workspace_id: str,
+    payload: EscalationDraftRequest | None = None, task_family: str | None = None,
+) -> EscalationDraftRead:
+    """Side-effect free: the exact text, screening result, model and maximum cost."""
+    try:
+        return draft_interaction_escalation(
+            workspace_id=workspace_id, thread_id=thread_id,
+            interaction_id=interaction_id, task_family=task_family,
+            text=payload.text if payload is not None else None,
+        )
+    except (CloudEscalationError, ValueError, LookupError) as exc:
+        raise _escalation_error(exc) from exc
+
+
+@router.post("/{thread_id}/interactions/{interaction_id}/escalate", response_model=CloudEscalationRead)
+def escalate_thread_interaction(
+    thread_id: str, interaction_id: str, workspace_id: str, payload: EscalationApproval,
+) -> CloudEscalationRead:
+    try:
+        return escalate_interaction(
+            workspace_id=workspace_id, thread_id=thread_id,
+            interaction_id=interaction_id, payload=payload,
+        )
+    except (CloudEscalationError, EgressStateError, ValueError, LookupError) as exc:
+        raise _escalation_error(exc) from exc
+
+
 @router.get("/{thread_id}/cloud-escalations", response_model=list[CloudEscalationRead])
 def read_cloud_escalations(thread_id: str, workspace_id: str) -> list[CloudEscalationRead]:
     return list_cloud_escalations(workspace_id=workspace_id, thread_id=thread_id)
@@ -53,7 +117,7 @@ def confirm_thread_cloud_escalation(thread_id: str, escalation_id: str, workspac
     try:
         return confirm_cloud_escalation(workspace_id=workspace_id, thread_id=thread_id, escalation_id=escalation_id)
     except (CloudEscalationError, EgressStateError, ValueError, LookupError) as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise _escalation_error(exc) from exc
 
 
 @router.get("/conversation-options", response_model=AIConversationOptions)

@@ -12,14 +12,18 @@ DerivativeLevel = Literal["S0", "S1", "S2"]
 ALLOWED_SOURCE_KINDS = frozenset(
     {"decision", "assumption", "parameter", "requirement", "evidence"}
 )
+# Spec 159: a derivative may also descend from the operator's own conversation
+# turn. Interactions are lineage-only: they are never labelled, never selected
+# into a context pack and never fed to the canonical sanitizer.
+DERIVATIVE_SOURCE_KINDS = ALLOWED_SOURCE_KINDS | {"interaction"}
 
 
-def _normalize_source_ref(value: str) -> str:
+def _normalize_source_ref(value: str, kinds: frozenset[str] = ALLOWED_SOURCE_KINDS) -> str:
     cleaned = value.strip()
     if ":" not in cleaned:
         raise ValueError("source reference must use <kind>:<id>")
     kind, record_id = cleaned.split(":", 1)
-    if kind not in ALLOWED_SOURCE_KINDS or not record_id.strip():
+    if kind not in kinds or not record_id.strip():
         raise ValueError("source reference has an unsupported kind or empty id")
     return f"{kind}:{record_id.strip()}"
 
@@ -64,7 +68,7 @@ class SanitizedDerivativeCreate(BaseModel):
     @field_validator("source_refs")
     @classmethod
     def validate_source_refs(cls, value: list[str]) -> list[str]:
-        cleaned = [_normalize_source_ref(item) for item in value]
+        cleaned = [_normalize_source_ref(item, DERIVATIVE_SOURCE_KINDS) for item in value]
         if len(set(cleaned)) != len(cleaned):
             raise ValueError("source_refs must not contain duplicates")
         return cleaned

@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import hashlib
+import re
 import sqlite3
 from decimal import Decimal
+from typing import Literal
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
@@ -17,7 +19,13 @@ from app.modules.ai.egress_sanitizer import create_prompt_derivative
 from app.modules.ai.egress_service import EgressPacketMaterial, build_packet_projection
 from app.modules.ai.execution import run_ai_task
 from app.modules.ai.provider_registry import load_default_provider_registry
-from app.modules.ai.sensitivity import revalidate_sanitized_derivative
+from app.modules.ai.sensitivity import (
+    approve_sanitized_derivative,
+    create_sanitized_derivative,
+    deterministic_floor_trigger,
+    revalidate_sanitized_derivative,
+)
+from app.modules.ai.sensitivity_models import SanitizedDerivativeCreate
 from app.modules.events.service import utc_now
 
 _RAW_PROMPT = "confidential task; use only the approved derivative"
@@ -25,7 +33,9 @@ _SAFE_PROMPT = "Answer the technical question in the approved derivative. Treat 
 
 
 class CloudEscalationError(ValueError):
-    pass
+    def __init__(self, message: str, code: str | None = None) -> None:
+        super().__init__(message)
+        self.code = code
 
 
 class CloudEscalationRequest(BaseModel):
@@ -200,10 +210,11 @@ def confirm_cloud_escalation(*, workspace_id: str, thread_id: str, escalation_id
     return get_cloud_escalation(workspace_id=workspace_id, thread_id=thread_id, escalation_id=escalation_id)
 
 
-def _require_local_source(workspace_id: str, thread_id: str, interaction_id: str) -> None:
+def _require_local_source(workspace_id: str, thread_id: str, interaction_id: str) -> str:
+    """Return the operator's text of a completed local-model turn in this thread."""
     with open_sqlite_connection() as connection:
         row = connection.execute(
-            """SELECT interaction.id, flow.state, interaction.flow_id
+            """SELECT interaction.id, interaction.user_text, flow.state, interaction.flow_id
                FROM ai_thread_interactions AS interaction
                JOIN ai_threads AS thread ON thread.id = interaction.thread_id
                JOIN ai_flows AS flow ON flow.id = interaction.flow_id
@@ -222,6 +233,7 @@ def _require_local_source(workspace_id: str, thread_id: str, interaction_id: str
         ).fetchone()
         if external is not None or local is None:
             raise CloudEscalationError("source must be a local model interaction")
+    return str(row["user_text"])
 
 
 def _record_outcome(escalation_id: str, outcome: object) -> None:
@@ -291,3 +303,194 @@ def _read(row: sqlite3.Row) -> CloudEscalationRead:
         egress_packet_digest=row["egress_packet_digest"], reason_code=row["reason_code"],
         response_text=row["response_text"],
     )
+
+
+# ---- Spec 159: one-action escalation from a completed local turn ----------------------
+#
+# The operator never handles ids. The server drafts the outbound text from the
+# operator's own turn, screens it with the unchanged deterministic floor, and on one
+# explicit approval of that exact text creates and approves an interaction-bound
+# sanitized derivative before calling the unchanged 156 path above.
+
+_DERIVATIVE_MAX_CHARS = 32_000
+# Small deterministic keyword heuristic; the operator can always override it.
+_FAMILY_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("coding", re.compile(
+        r"\b(?:code|coding|python|typescript|javascript|java|rust|golang|sql|regex|function|"
+        r"bug|stack ?trace|traceback|exception|compiler?|refactor|script|unit tests?|git|"
+        r"api|json|html|css|react|codice|programma)\b", re.I)),
+    ("engineering", re.compile(
+        r"\b(?:pumps?|pressure|flow ?rate|heat|thermal|thermodynamics?|reactors?|distillation|"
+        r"process|dwsim|stress|beams?|fluids?|mass balance|energy balance|enthalpy|entropy|"
+        r"viscosity|exchangers?|compressors?|turbines?|pipes?|valves?|kw|mw|kpa|mpa|bar|"
+        r"kelvin|celsius|steam|vapou?r|condensers?|boilers?|flowsheet|stream|"
+        r"pompa|pressione|portata|calore|scambiatore|reattore|vapore)\b", re.I)),
+)
+
+
+class EscalationCandidateRead(BaseModel):
+    provider_id: str
+    model_id: str
+    route_class: str
+    quality_tier: int
+    qualification: str
+    max_cost_usd: str
+    request_cap_usd: str
+
+
+class EscalationDraftRead(BaseModel):
+    status: Literal["ready", "edit_required", "refused"]
+    reason_code: str | None
+    reason: str | None
+    source_interaction_id: str
+    text: str
+    text_digest: str | None
+    level: str
+    task_family: str
+    task_family_inferred: bool
+    family_options: list[str]
+    candidate: EscalationCandidateRead | None
+
+
+class EscalationApproval(BaseModel):
+    text: str = Field(min_length=1, max_length=_DERIVATIVE_MAX_CHARS)
+    text_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    task_family: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9_]{0,63}$")
+
+
+class EscalationDraftRequest(BaseModel):
+    text: str | None = Field(default=None, max_length=_DERIVATIVE_MAX_CHARS)
+
+
+def infer_task_family(text: str, families: set[str] | frozenset[str]) -> str:
+    for family, pattern in _FAMILY_PATTERNS:
+        if family in families and pattern.search(text):
+            return family
+    return "general" if "general" in families else sorted(families)[0]
+
+
+def text_digest(text: str) -> str:
+    return "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def screen_outbound_text(text: str) -> tuple[Literal["ready", "edit_required", "refused"], str, str | None, str | None]:
+    """Deterministic floor screening in operator terms: (status, level, code, reason)."""
+    if not text.strip():
+        return "edit_required", "S1", "text_empty", "There is no text to send. Write the question for the cloud model."
+    if len(text) > _DERIVATIVE_MAX_CHARS:
+        return ("edit_required", "S1", "text_too_long",
+                f"The text is longer than {_DERIVATIVE_MAX_CHARS} characters. Shorten it before sending.")
+    trigger = deterministic_floor_trigger(text)
+    if trigger is None:
+        return "ready", "S1", None, None
+    level, phrase = trigger
+    if level == "S4":
+        return ("refused", level, "secret_detected",
+                "This text looks like it contains a secret (a key, password or token). "
+                "Secrets are never sent to a cloud model.")
+    quoted = phrase if len(phrase) <= 80 else phrase[:77] + "..."
+    if level == "S3":
+        return ("edit_required", level, "protected_ip",
+                f'This text mentions protected design or IP ("{quoted}"). Rewrite it as a generic '
+                "question without project-specific details, then send the edited version.")
+    return ("edit_required", level, "confidential",
+            f'This text is marked confidential ("{quoted}"). Remove confidential, partner or NDA '
+            "details, then send the edited version.")
+
+
+def draft_interaction_escalation(
+    *, workspace_id: str, thread_id: str, interaction_id: str, task_family: str | None = None,
+    text: str | None = None,
+) -> EscalationDraftRead:
+    """Read-only: what would be sent, to whom, at what maximum cost. No records are written."""
+    source_text = _require_local_source(workspace_id, thread_id, interaction_id)
+    text = source_text if text is None else text
+    catalog = load_catalog()
+    family, inferred = _resolve_family(catalog.task_floors, text, task_family)
+    status, level, code, reason = screen_outbound_text(text)
+    candidate = None
+    if status == "ready":
+        try:
+            candidate = select_candidate(catalog, task_family=family, derivative_content=text,
+                                         registry=load_default_provider_registry())
+        except ValueError:
+            if status == "ready":
+                status, code = "refused", "no_eligible_model"
+                reason = ("No cloud model is currently eligible for this kind of task within the "
+                          "configured budget. Try a different task type under Advanced, or a shorter text.")
+    return EscalationDraftRead(
+        status=status, reason_code=code, reason=reason, source_interaction_id=interaction_id,
+        # A detected secret is never echoed back, even to the operator's own screen.
+        text="" if status == "refused" and code == "secret_detected" else text,
+        text_digest=None if code == "secret_detected" else text_digest(text),
+        level=level, task_family=family, task_family_inferred=inferred,
+        family_options=sorted(catalog.task_floors),
+        candidate=None if candidate is None else EscalationCandidateRead(
+            provider_id=candidate.binding.provider_id, model_id=candidate.binding.model_id,
+            route_class=candidate.binding.route_class, quality_tier=candidate.quality_tier,
+            qualification=candidate.qualification,
+            max_cost_usd=str(candidate.projected_cost_usd.quantize(Decimal("0.000001"))),
+            request_cap_usd=str(catalog.max_request_usd),
+        ),
+    )
+
+
+def escalate_interaction(
+    *, workspace_id: str, thread_id: str, interaction_id: str, payload: EscalationApproval,
+) -> CloudEscalationRead:
+    """One operator approval of exact text -> interaction-bound approved derivative -> 156 path."""
+    if payload.text_digest != text_digest(payload.text):
+        raise CloudEscalationError(
+            "The text changed after it was shown for approval. Review it again before sending.",
+            code="text_digest_mismatch",
+        )
+    source_text = _require_local_source(workspace_id, thread_id, interaction_id)
+    status, level, code, reason = screen_outbound_text(payload.text)
+    if status != "ready":
+        raise CloudEscalationError(reason or "This text cannot be sent to a cloud model.", code=code)
+    catalog = load_catalog()
+    family, _ = _resolve_family(catalog.task_floors, payload.text, payload.task_family)
+    digest = text_digest(payload.text)
+    request_id = "sidecar-" + hashlib.sha256(
+        f"{interaction_id}\n{family}\n{digest}".encode()
+    ).hexdigest()[:40]
+    with open_sqlite_connection() as connection:
+        prior = connection.execute(
+            "SELECT * FROM cloud_escalations WHERE thread_id = ? AND request_id = ? AND workspace_id = ?",
+            (thread_id, request_id, workspace_id),
+        ).fetchone()
+    if prior is not None:
+        return _read(prior)
+    drafted = create_sanitized_derivative(SanitizedDerivativeCreate(
+        workspace_id=workspace_id, source_refs=[f"interaction:{interaction_id}"],
+        content=payload.text, effective_level=level,  # screened: no floor, declared S1
+        transformations=[
+            "source turn text used verbatim" if payload.text == source_text
+            else "operator edited the source turn text into a cloud-safe version",
+            "operator reviewed and approved this exact outbound text in the Sidecar",
+        ],
+    ))
+    approved = approve_sanitized_derivative(
+        workspace_id, drafted.id,
+        reviewer_notes="Operator approved this exact text for one governed cloud step (spec 159).",
+    )
+    if approved.content_digest != drafted.content_digest:
+        raise CloudEscalationError("approved derivative changed", code="derivative_changed")
+    return create_cloud_escalation(
+        workspace_id=workspace_id, thread_id=thread_id,
+        payload=CloudEscalationRequest(
+            request_id=request_id, source_interaction_id=interaction_id,
+            derivative_id=approved.id, task_family=family,
+        ),
+    )
+
+
+def _resolve_family(floors: dict[str, int], text: str, override: str | None) -> tuple[str, bool]:
+    if override is not None:
+        if override not in floors:
+            raise CloudEscalationError(
+                f"Unknown task type '{override}'. Choose one of: {', '.join(sorted(floors))}.",
+                code="unknown_task_family",
+            )
+        return override, False
+    return infer_task_family(text, frozenset(floors)), True
