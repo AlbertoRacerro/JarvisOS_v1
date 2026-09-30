@@ -37,7 +37,6 @@ includesAll(api, [
 check(!/api\.github\.com|github\.com\/api|Authorization|GITHUB_TOKEN|ghp_/i.test(api), "browser API client gained provider/credential authority");
 
 includesAll(workbench, [
-  "Exact repository state available",
   "resolvedSha",
   "readRepositoryTree",
   "readRepositoryFile",
@@ -51,8 +50,8 @@ includesAll(workbench, [
   "Truncated evidence is not presented as complete.",
   "treePath",
   "openDirectory",
-  ">Root<",
-  ">Up<",
+  "Repository breadcrumb",
+  "Parent directory",
   "fileReadGeneration",
   "prEvidenceGeneration",
   "proposalGeneration",
@@ -109,7 +108,7 @@ includesAll(workbench, [
   "No synthetic stages are shown.",
   "inspectCodingTarget",
   "previewCodingContext",
-  "Add to proposal context",
+  "Add to Jarvis context",
   "context_digest",
   "added_context_refs",
   "suggestCodingModification",

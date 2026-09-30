@@ -59,13 +59,13 @@ def fixture_route(route, root: Path, sha: str) -> None:
                         "observed_at": "2026-09-26T00:00:00Z"})
 
 
-def run(base_url: str, cdp_url: str | None, screenshots: Path | None, mock_repository: bool, repo_root: Path, fixture_sha: str | None) -> None:
+def run(base_url: str, cdp_url: str | None, screenshots: Path | None, mock_repository: bool, repo_root: Path, fixture_sha: str | None, width: int) -> None:
     with sync_playwright() as playwright:
         browser = (
             playwright.chromium.connect_over_cdp(cdp_url)
             if cdp_url else playwright.chromium.launch(headless=True)
         )
-        page = browser.new_page(viewport={"width": 1600, "height": 1000}, device_scale_factor=1)
+        page = browser.new_page(viewport={"width": width, "height": 1000}, device_scale_factor=1)
         failures: list[str] = []
         page.on("pageerror", lambda error: failures.append(str(error)))
         if mock_repository:
@@ -75,35 +75,53 @@ def run(base_url: str, cdp_url: str | None, screenshots: Path | None, mock_repos
         page.goto(f"{base_url.rstrip('/')}/coding/repository", wait_until="networkidle")
         surface = page.get_by_test_id("coding-repository-surface")
         expect(surface).to_be_visible()
-        tree = surface.locator(":scope > section").first
-        viewport = surface.get_by_label("File content")
+        viewport = surface.locator(".repository-viewport")
 
-        def choose(name: str) -> None:
-            row = tree.locator("button.final-fusion__disclosure-row").filter(
-                has_text=re.compile(re.escape(name))
-            )
+        def choose_folder(name: str) -> None:
+            row = surface.get_by_role("button", name=re.compile(rf"^Folder {re.escape(name)}(?:,|$)"))
+            expect(row).to_have_count(1)
+            row.click()
+
+        def choose_file(name: str) -> None:
+            row = surface.get_by_role("button", name=re.compile(rf"^File {re.escape(name)}(?:,|$)"))
             expect(row).to_have_count(1)
             row.click()
 
         def open_path(path: str, expected: str) -> None:
-            tree.get_by_role("button", name="Root", exact=True).click() if "Tree path · Root" not in tree.inner_text() else None
+            root_crumb = surface.get_by_role("navigation", name="Repository breadcrumb").get_by_role("button", name="JarvisOS_v1", exact=True)
+            if root_crumb.is_visible():
+                root_crumb.click()
             parts = path.split("/")
-            for part in parts:
-                choose(part)
-            expect(surface.get_by_text(f"Selected path · {path}")).to_be_visible()
-            expect(viewport).to_contain_text(expected)
+            for part in parts[:-1]:
+                choose_folder(part)
+            if len(parts) > 2:
+                expect(surface.get_by_role("navigation", name="Repository breadcrumb")).to_contain_text(parts[-2])
+                page.go_back()
+                expect(surface.get_by_role("navigation", name="Repository breadcrumb")).to_contain_text(parts[-3])
+                page.go_forward()
+                expect(surface.get_by_role("navigation", name="Repository breadcrumb")).to_contain_text(parts[-2])
+            choose_file(parts[-1])
+            expect(surface.get_by_role("navigation", name="Repository breadcrumb").get_by_text(parts[-1], exact=True)).to_be_visible()
+            expect(surface.get_by_label("File content")).to_contain_text(expected)
+            page.go_back()
+            expect(surface.get_by_role("list", name="Repository files")).to_be_visible()
+            page.go_forward()
+            expect(surface.get_by_label("File content")).to_contain_text(expected)
+            surface.get_by_role("button", name="Back to directory").click()
+            expect(surface.get_by_role("list", name="Repository files")).to_be_visible()
 
         open_path("AGENTS.md", "JarvisOS")
         open_path("docs/specs/STATUS.md", "STATUS")
         open_path("backend/app/main.py", "FastAPI")
         open_path("frontend/src/App.tsx", "Layout")
 
-        tree.get_by_label("Literal repository search").fill("JarvisOS")
-        tree.get_by_role("button", name="Search", exact=True).click()
-        expect(tree.get_by_role("status")).to_contain_text("matches", timeout=60000)
+        surface.get_by_text("Search repository contents", exact=True).click()
+        surface.get_by_label("Literal repository search").fill("JarvisOS")
+        surface.get_by_role("button", name="Search", exact=True).click()
+        expect(surface.get_by_role("status")).to_contain_text("matches", timeout=60000)
         if screenshots:
             screenshots.mkdir(parents=True, exist_ok=True)
-            page.screenshot(path=str(screenshots / "coding-repository-1600x1000.png"), full_page=True)
+            page.screenshot(path=str(screenshots / f"coding-repository-{width}x1000.png"), full_page=True)
         assert not failures, f"Browser errors: {failures}"
         print(f"Coding Repository browser regression passed ({'local repository fixture' if mock_repository else 'live remote'}): four files, nested tree, search, no page errors")
         browser.close()
@@ -117,5 +135,6 @@ if __name__ == "__main__":
     parser.add_argument("--mock-repository", action="store_true", help="Intercept Coding repository reads with current local file contents for repeatable UI proof")
     parser.add_argument("--repo-root", type=Path, default=Path(__file__).resolve().parents[2])
     parser.add_argument("--fixture-sha", help="Exact local commit for fixture mode when Windows Git cannot read a WSL UNC worktree")
+    parser.add_argument("--width", type=int, default=1600, help="Browser CSS viewport width (default: 1600)")
     args = parser.parse_args()
-    run(args.base_url, args.cdp_url, args.screenshots, args.mock_repository, args.repo_root, args.fixture_sha)
+    run(args.base_url, args.cdp_url, args.screenshots, args.mock_repository, args.repo_root, args.fixture_sha, args.width)
