@@ -354,7 +354,7 @@ def plan(document: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
             if unit["type"] == "DistillationColumn":
                 properties["Condenser_Specification_Value"] = properties["__CondenserSpec"]
                 properties["Reboiler_Specification_Value"] = properties["__ReboilerSpec"]
-            if unit["type"] == "Splitter":
+            if unit["type"] == "Splitter" and "__SplitRatio1" in properties:  # flow-spec modes carry no ratios
                 properties["SR1"] = properties["__SplitRatio1"]
                 outlet_count = sum(1 for stream in _streams(document)
                                    if stream["source"] and stream["source"]["unit"] == unit["id"])

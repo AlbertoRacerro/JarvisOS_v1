@@ -1,11 +1,145 @@
 """Evidence-derived DWSIM capability contract for process drafts (spec 158)."""
 
+import importlib.util
+from pathlib import Path
+from typing import Any
+
 from pydantic import TypeAdapter
 
 from app.modules.process_stack import draft_compiler
-from app.modules.process_stack.draft import apply_ops, empty_document, registry_projection
-from app.modules.process_stack.draft_compiler import _stream_result
+from app.modules.process_stack.draft import _capability_manifest, apply_ops, empty_document, registry_projection
+from app.modules.process_stack.draft_compiler import _native_energy_port, _stream_result, _unit_properties
 from app.modules.process_stack.draft_models import UNIT_REGISTRY, UNSUPPORTED_TYPES, DraftOp
+
+_ROOT = Path(__file__).resolve().parents[2]
+_GENERATOR = _ROOT / "scripts" / "qualification" / "158" / "generate_manifest.py"
+_MANIFEST = _ROOT / "backend" / "app" / "modules" / "process_stack" / "dwsim_10_2_9_manifest.json"
+_CONNECT_ROLES = {"feed_port": "feed", "product_port": "product",
+                  "energy_feed_port": "energy_feed", "energy_product_port": "energy_product"}
+# Properties Jarvis writes through dwsim_unitop_set that no checked-in 158 probe capture proves
+# settable on the pinned runtime. Heater OutletTemperature/CalcMode, Pump CalcMode/Pout/Efficiency
+# and Valve CalcMode/OutletPressure were exercised by the 155 host acceptance, whose capture is not
+# checked in; the others have no capture at all. This set must equal the observed gap exactly, so
+# it can only shrink as probe evidence is recaptured or the fields are withdrawn.
+_UNCAPTURED_INPUTS = {
+    ("Heater", "OutletTemperature"), ("Heater", "DeltaT"), ("Heater", "OutletVaporFraction"),
+    ("Cooler", "CalcMode"), ("Cooler", "OutletTemperature"), ("Cooler", "DeltaT"),
+    ("Cooler", "OutletVaporFraction"),
+    ("Pump", "CalcMode"), ("Pump", "Pout"), ("Pump", "Efficiency"),
+    ("Valve", "CalcMode"), ("Valve", "OutletPressure"),
+}
+
+
+def _modes(unit_type: str) -> tuple[str | None, ...]:
+    return tuple(UNIT_REGISTRY[unit_type].modes) or (None,)
+
+
+def _synthetic_document(unit_type: str, mode: str | None) -> dict[str, Any]:
+    """A compile-ready draft with every parameter of ``mode`` set and every port occupied."""
+    spec = UNIT_REGISTRY[unit_type]
+    objects: dict[str, Any] = {"u": {
+        "id": "u", "kind": "unit", "type": unit_type, "tag": "U", "x": 0, "y": 0, "mode": mode,
+        "params": {item.key: {"si": 1.0} for item in spec.params_for(mode)}, "options": {},
+        "reactions": ["R1"] if unit_type == "PFR" else []}}
+
+    def stream(tag: str, kind: str, end: str, port: int) -> None:
+        feed = {"temperature": {"si": 300.0}, "pressure": {"si": 1e5}, "mass_flow": {"si": 1.0}}
+        objects[tag.lower()] = {"id": tag.lower(), "kind": "stream", "type": kind, "tag": tag, "x": 0, "y": 0,
+                                "source": {"unit": "u", "port": port} if end == "source" else None,
+                                "target": {"unit": "u", "port": port} if end == "target" else None,
+                                "spec": {"duty": {"si": 1.0}} if kind == "EnergyStream" else
+                                feed if end == "target" else {}}
+
+    for port in range(len(spec.inlets)):
+        stream(f"F{port}", "MaterialStream", "target", port)
+    for port in range(len(spec.outlets)):
+        stream(f"P{port}", "MaterialStream", "source", port)
+    for port in range(len(spec.energy_inlets)):
+        stream(f"QF{port}", "EnergyStream", "target", port)
+    for port in range(len(spec.energy_outlets)):
+        stream(f"QP{port}", "EnergyStream", "source", port)
+    return {"compounds": [], "property_package": "NRTL", "objects": objects, "reactions": {}}
+
+
+def _compiled_writes() -> tuple[set[tuple[str, str]], set[tuple[str, str, int]]]:
+    """Every (type, property) the compiler sets and every (type, role, port) it connects over MCP."""
+    written: set[tuple[str, str]] = set()
+    connected: set[tuple[str, str, int]] = set()
+    for unit_type in UNIT_REGISTRY:
+        for mode in _modes(unit_type):
+            for name, args in draft_compiler.plan(_synthetic_document(unit_type, mode)):
+                owner = unit_type if args.get("name", args.get("unitop")) == "U" else "EnergyStream"
+                if name == "dwsim_unitop_set":
+                    written |= {(owner, key) for key in args["properties"]}
+                elif name == "dwsim_unitop_connect":
+                    connected |= {(unit_type, role, args[key]) for key, role in _CONNECT_ROLES.items() if key in args}
+    return written, connected
+
+
+def _manifest_object(unit_type: str) -> dict[str, Any]:
+    manifest = _capability_manifest()
+    native = UNIT_REGISTRY[unit_type].dwsim_type if unit_type in UNIT_REGISTRY else unit_type
+    return manifest["objects"][native]
+
+
+def test_checked_in_manifest_equals_generator_output() -> None:
+    spec = importlib.util.spec_from_file_location("generate_manifest_158", _GENERATOR)
+    assert spec and spec.loader
+    generator = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(generator)
+    assert _MANIFEST.read_text(encoding="utf-8") == generator.render()
+
+
+def test_every_compiled_input_property_is_settable_in_the_manifest() -> None:
+    written, _connected = _compiled_writes()
+    assert ("EnergyStream", "EnergyFlow") in written
+    missing = {(unit_type, prop) for unit_type, prop in written
+               if prop not in _manifest_object(unit_type)["settable_properties"]}
+    assert missing == _UNCAPTURED_INPUTS
+    for unit_type, prop in written - _UNCAPTURED_INPUTS:
+        assert _manifest_object(unit_type)["settable_property_evidence"][prop]
+    for unit_type, spec in UNIT_REGISTRY.items():
+        native_xml = _manifest_object(unit_type)["native_xml_inputs"]
+        registry_native = {item.dwsim_property for item in spec.params if item.dwsim_property.startswith("__")}
+        compiled_native = {key for mode in _modes(unit_type)
+                           for key in _unit_properties(_synthetic_document(unit_type, mode)["objects"]["u"])
+                           if key.startswith("__") and not key.startswith("__SplitRatio")}
+        assert registry_native | compiled_native <= set(native_xml), unit_type
+
+
+def test_every_registry_mode_and_enum_value_is_in_the_manifest() -> None:
+    for unit_type, spec in UNIT_REGISTRY.items():
+        capability = _manifest_object(unit_type)
+        assert set(spec.modes.values()) <= set(capability["modes"]), unit_type
+        assert all(capability["mode_evidence"][mode] for mode in spec.modes.values())
+        for mode in _modes(unit_type):
+            properties = _unit_properties(_synthetic_document(unit_type, mode)["objects"]["u"])
+            for key in {"CalcMode", "CalculationMode", "OperationMode", "ReactorOperationMode"} & set(properties):
+                assert properties[key] in capability["modes"], (unit_type, key)
+            if "CondenserType" in properties:
+                assert properties["CondenserType"] in capability["enum_values"]["CondenserType"]
+
+
+def test_every_registry_and_compiled_port_is_a_manifest_native_port() -> None:
+    _written, connected = _compiled_writes()
+    used = set(connected)
+    for unit_type, spec in UNIT_REGISTRY.items():
+        unit = {"type": unit_type}
+        used |= {(unit_type, "feed", port) for port in range(len(spec.inlets))}
+        used |= {(unit_type, "product", port) for port in range(len(spec.outlets))}
+        used |= {(unit_type, "energy_feed", _native_energy_port(unit, port)) for port in range(len(spec.energy_inlets))}
+        used |= {(unit_type, "energy_product", _native_energy_port(unit, port))
+                 for port in range(len(spec.energy_outlets))}
+    for unit_type, role, port in used:
+        entries = {item["port"]: item for item in _manifest_object(unit_type)["ports"].get(role, [])}
+        assert port in entries, (unit_type, role, port)
+        assert entries[port]["evidence"], (unit_type, role, port)
+    evidence_dir = _MANIFEST.parent / "evidence" / "158"
+    for capability in _capability_manifest()["objects"].values():
+        for entries in capability["ports"].values():
+            for entry in entries:
+                if entry["captured"]:
+                    assert all((evidence_dir / source.split(":", 1)[0]).is_file() for source in entry["evidence"])
 
 
 def test_registry_modes_and_ports_are_present_in_pinned_manifest() -> None:
