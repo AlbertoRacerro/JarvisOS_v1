@@ -16,7 +16,7 @@ from app.modules.bluecad.models import BluecadCandidateCreate, BluecadLoopConfig
 from app.modules.bluecad.spec import SpecValidationError
 
 FIXTURES = Path(__file__).parent / "fixtures"
-CORPUS = json.loads((FIXTURES / "adversarial_proposals.json").read_text(encoding="utf-8"))
+CORPUS = json.loads((Path(__file__).parent / "corpus" / "adversarial_proposals.json").read_text(encoding="utf-8"))
 
 
 def _responses() -> list[tuple[str, str]]:
