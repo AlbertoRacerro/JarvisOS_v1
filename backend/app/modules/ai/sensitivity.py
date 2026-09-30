@@ -27,6 +27,7 @@ from app.modules.ai.context_builder import (
 )
 from app.modules.ai.sensitivity_models import (
     ALLOWED_SOURCE_KINDS,
+    DERIVATIVE_SOURCE_KINDS,
     SanitizedDerivativeCreate,
     SanitizedDerivativeRead,
     SensitivityContextPreviewResponse,
@@ -114,12 +115,21 @@ class _CandidateBlock:
 
 def deterministic_floor(content: str) -> str | None:
     """Return only a hard lower bound; never a permission decision."""
-    if any(pattern.search(content) for pattern in _SECRET_PATTERNS):
-        return "S4"
-    if any(pattern.search(content) for pattern in _IP_PATTERNS):
-        return "S3"
-    if any(pattern.search(content) for pattern in _CONFIDENTIAL_PATTERNS):
-        return "S2"
+    trigger = deterministic_floor_trigger(content)
+    return trigger[0] if trigger is not None else None
+
+
+def deterministic_floor_trigger(content: str) -> tuple[str, str] | None:
+    """The floor level plus the first phrase that raised it, for operator explanation."""
+    for level, patterns in (
+        ("S4", _SECRET_PATTERNS),
+        ("S3", _IP_PATTERNS),
+        ("S2", _CONFIDENTIAL_PATTERNS),
+    ):
+        for pattern in patterns:
+            match = pattern.search(content)
+            if match is not None:
+                return level, match.group(0)
     return None
 
 
@@ -826,7 +836,7 @@ def _candidate_from_derivative(
             "inclusion_reason": "approved_derivative",
         },
         drop_priority=max(
-            _source_kind_priority(_parse_subject_ref(ref)[0])
+            _source_kind_priority(_parse_subject_ref(ref, DERIVATIVE_SOURCE_KINDS)[0])
             for ref in derivative.source_refs
         ),
     )
@@ -1015,8 +1025,10 @@ def _resolve_source_snapshot_and_label_in_connection(
     workspace_id: str,
     subject_ref: str,
 ) -> tuple[SourceSnapshot, SensitivityLabelRead | None]:
-    kind, record_id = _parse_subject_ref(subject_ref)
+    kind, record_id = _parse_subject_ref(subject_ref, DERIVATIVE_SOURCE_KINDS)
     _require_workspace(connection, workspace_id)
+    if kind == "interaction":
+        return _interaction_snapshot_in_connection(connection, workspace_id, record_id), None
     source_row = connection.execute(
         f"SELECT * FROM {_SOURCE_TABLES[kind]} "
         "WHERE id = ? AND workspace_id = ?",
@@ -1055,6 +1067,34 @@ def _resolve_source_snapshot_and_label_in_connection(
     )
 
 
+def _interaction_snapshot_in_connection(
+    connection: sqlite3.Connection,
+    workspace_id: str,
+    interaction_id: str,
+) -> SourceSnapshot:
+    """The operator's own turn text, bound to its workspace through its thread."""
+    row = connection.execute(
+        """
+        SELECT interaction.id, interaction.user_text
+        FROM ai_thread_interactions AS interaction
+        JOIN ai_threads AS thread ON thread.id = interaction.thread_id
+        WHERE interaction.id = ? AND thread.workspace_id = ?
+        """,
+        (interaction_id, workspace_id),
+    ).fetchone()
+    if row is None:
+        raise SensitivityNotFoundError(f"Source not found: interaction:{interaction_id}")
+    return _snapshot_from_block(
+        workspace_id,
+        {
+            "source": f"interaction:{row['id']}",
+            "type": "interaction",
+            "id": str(row["id"]),
+            "content": str(row["user_text"]),
+        },
+    )
+
+
 def _latest_label_row_in_connection(
     connection: sqlite3.Connection,
     workspace_id: str,
@@ -1087,7 +1127,7 @@ def _snapshot_from_block(
     block: dict[str, Any],
 ) -> SourceSnapshot:
     subject_ref = str(block["source"])
-    kind, record_id = _parse_subject_ref(subject_ref)
+    kind, record_id = _parse_subject_ref(subject_ref, DERIVATIVE_SOURCE_KINDS)
     content = str(block["content"])
     return SourceSnapshot(
         workspace_id=workspace_id,
@@ -1104,11 +1144,14 @@ def _snapshot_from_block(
     )
 
 
-def _parse_subject_ref(subject_ref: str) -> tuple[str, str]:
+def _parse_subject_ref(
+    subject_ref: str,
+    kinds: frozenset[str] = ALLOWED_SOURCE_KINDS,
+) -> tuple[str, str]:
     if not isinstance(subject_ref, str) or ":" not in subject_ref:
         raise SensitivityPolicyError("subject_ref must use <kind>:<id>")
     kind, record_id = subject_ref.split(":", 1)
-    if kind not in ALLOWED_SOURCE_KINDS or not record_id.strip():
+    if kind not in kinds or not record_id.strip():
         raise SensitivityPolicyError("Unsupported or malformed subject_ref")
     return kind, record_id.strip()
 

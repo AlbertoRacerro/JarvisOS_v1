@@ -42,6 +42,15 @@ export type ThreadInteraction = {
   route_class?: string | null;
   execution_class?: string | null;
   model_id?: string | null;
+  provider_id?: string | null;
+  input_tokens?: number | null;
+  output_tokens?: number | null;
+  cost_estimate_usd?: number | null;
+  usage_source?: string | null;
+  latency_ms?: number | null;
+  completed_at?: string | null;
+  elapsed_ms?: number | null;
+  activity?: string | null;
   proposal_ids: string[];
   proposal_count: number;
   proposals_truncated: boolean;
@@ -119,10 +128,12 @@ export type ContextPackPreview = {
 
 export class ThreadsRequestError extends Error {
   readonly status: number;
-  constructor(status: number) {
-    super(`AI thread request failed with ${status}`);
+  readonly detail: string | null;
+  constructor(status: number, detail: string | null = null) {
+    super(detail ?? `AI thread request failed with ${status}`);
     this.name = "ThreadsRequestError";
     this.status = status;
+    this.detail = detail;
   }
 }
 
@@ -131,7 +142,17 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
     headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) }
   });
-  if (!response.ok) throw new ThreadsRequestError(response.status);
+  if (!response.ok) {
+    let detail: string | null = null;
+    try {
+      const body = await response.json() as { detail?: unknown };
+      const value = body.detail;
+      detail = typeof value === "string" ? value
+        : value && typeof value === "object" && "message" in value && typeof value.message === "string" ? value.message
+        : null;
+    } catch { /* The server may return an empty or non-JSON error. */ }
+    throw new ThreadsRequestError(response.status, detail);
+  }
   return response.json() as Promise<T>;
 }
 
@@ -211,6 +232,31 @@ export async function submitThreadInteraction(
 
 export function listCloudEscalations(workspaceId: string, threadId: string): Promise<CloudEscalation[]> {
   return requestJson(`/ai/threads/${encodeURIComponent(threadId)}/cloud-escalations?workspace_id=${encodeURIComponent(workspaceId)}`);
+}
+
+export type EscalationDraft = {
+  status: "ready" | "edit_required" | "refused";
+  reason_code: string | null;
+  reason: string | null;
+  source_interaction_id: string;
+  text: string;
+  text_digest: string | null;
+  level: string;
+  task_family: string;
+  task_family_inferred: boolean;
+  family_options: string[];
+  candidate: null | { provider_id: string; model_id: string; route_class: string; quality_tier: number; qualification: string; max_cost_usd: string; request_cap_usd: string };
+};
+
+export function draftInteractionEscalation(workspaceId: string, threadId: string, interactionId: string, taskFamily?: string, text?: string): Promise<EscalationDraft> {
+  const family = taskFamily ? `&task_family=${encodeURIComponent(taskFamily)}` : "";
+  return requestJson(`/ai/threads/${encodeURIComponent(threadId)}/interactions/${encodeURIComponent(interactionId)}/escalation-draft?workspace_id=${encodeURIComponent(workspaceId)}${family}`, { method: "POST", body: JSON.stringify({ text: text ?? null }) });
+}
+
+export function escalateInteraction(workspaceId: string, threadId: string, interactionId: string, text: string, textDigest: string, taskFamily?: string): Promise<CloudEscalation> {
+  return requestJson(`/ai/threads/${encodeURIComponent(threadId)}/interactions/${encodeURIComponent(interactionId)}/escalate?workspace_id=${encodeURIComponent(workspaceId)}`, {
+    method: "POST", body: JSON.stringify({ text, text_digest: textDigest, ...(taskFamily ? { task_family: taskFamily } : {}) })
+  });
 }
 
 export function submitCloudEscalation(

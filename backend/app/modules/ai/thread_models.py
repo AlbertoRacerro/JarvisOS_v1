@@ -88,6 +88,17 @@ class AIThreadInteractionRead(BaseModel):
     proposal_ids: list[str] = Field(default_factory=list)
     proposal_count: int = 0
     proposals_truncated: bool = False
+    # Spec 159: per-turn usage from the existing ai_jobs rows of this flow.
+    provider_id: str | None = None
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    cost_estimate_usd: float | None = None
+    usage_source: str | None = None
+    latency_ms: int | None = None
+    completed_at: str | None = None
+    elapsed_ms: int | None = None
+    # Concise status of a running turn, derived from recorded tool events.
+    activity: str | None = None
     created_at: str
     updated_at: str
 

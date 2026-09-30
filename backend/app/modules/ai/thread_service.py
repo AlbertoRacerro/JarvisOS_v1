@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
@@ -125,12 +126,13 @@ def get_thread(
             "ORDER BY interaction.interaction_index DESC LIMIT ? OFFSET ?",
             (thread_id, interaction_limit + 1, interaction_offset),
         ).fetchall()
-    has_older = len(rows) > interaction_limit
-    rows = rows[:interaction_limit]
-    rows.reverse()
+        has_older = len(rows) > interaction_limit
+        rows = rows[:interaction_limit]
+        rows.reverse()
+        interactions = [_interaction_from_row(row, connection) for row in rows]
     return AIThreadDetail(
         **_summary_from_row(thread).model_dump(),
-        interactions=[_interaction_from_row(row) for row in rows],
+        interactions=interactions,
         has_older=has_older,
     )
 
@@ -145,9 +147,9 @@ def get_interaction(*, workspace_id: str, interaction_id: str) -> AIThreadIntera
             "WHERE interaction.id = ? AND thread.workspace_id = ?",
             (interaction_id, workspace_id),
         ).fetchone()
-    if row is None:
-        raise AIThreadNotFoundError("thread interaction does not exist in the requested workspace")
-    return _interaction_from_row(row)
+        if row is None:
+            raise AIThreadNotFoundError("thread interaction does not exist in the requested workspace")
+        return _interaction_from_row(row, connection)
 
 
 def submit_interaction(
@@ -748,12 +750,46 @@ SELECT
     flow.requested_route_class,
     terminal_job.execution_class,
     terminal_job.model_id,
+    terminal_job.provider_id,
+    terminal_job.usage_source,
+    flow.completed_at,
+    (SELECT SUM(job.input_tokens) FROM ai_jobs AS job WHERE job.flow_id = interaction.flow_id) AS input_tokens,
+    (SELECT SUM(job.output_tokens) FROM ai_jobs AS job WHERE job.flow_id = interaction.flow_id) AS output_tokens,
+    (SELECT SUM(job.cost_estimate) FROM ai_jobs AS job WHERE job.flow_id = interaction.flow_id) AS cost_estimate,
+    (SELECT SUM(job.latency_ms) FROM ai_jobs AS job WHERE job.flow_id = interaction.flow_id) AS latency_ms,
     capture.proposal_ids_json
 FROM ai_thread_interactions AS interaction
 JOIN ai_flows AS flow ON flow.id = interaction.flow_id
 LEFT JOIN ai_jobs AS terminal_job ON terminal_job.id = flow.terminal_attempt_id
 LEFT JOIN ai_flow_record_captures AS capture ON capture.flow_id = interaction.flow_id
 """
+
+_TERMINAL_FLOW_STATES = frozenset({"complete", "partial_terminal", "failed_terminal", "cancelled_terminal"})
+# Spec 159: the one table mapping recorded agent tool use to an operator-facing status.
+_TOOL_ACTIVITY = {
+    "jarvis_process_read": "Using process draft…",
+    "jarvis_process_propose": "Using process draft…",
+    "jarvis_retrieval_query": "Searching knowledge…",
+    "jarvis_context_preview": "Searching knowledge…",
+    "jarvis_decide": "Deciding route…",
+}
+
+
+def interaction_activity(connection: sqlite3.Connection, interaction_id: str) -> str:
+    """Status of a running turn from its latest recorded tool event; never invented."""
+    row = connection.execute(
+        """
+        SELECT json_extract(payload, '$.tool_name') AS tool_name
+        FROM events
+        WHERE event_type = 'hermes.tool_result'
+          AND json_extract(payload, '$.interaction_id') = ?
+        ORDER BY rowid DESC LIMIT 1
+        """,
+        (interaction_id,),
+    ).fetchone()
+    if row is None:
+        return "Thinking…"
+    return _TOOL_ACTIVITY.get(str(row["tool_name"] or ""), "Working…")
 
 
 def _read_interaction(
@@ -765,9 +801,9 @@ def _read_interaction(
             _INTERACTION_SELECT + " WHERE interaction.id = ? AND interaction.thread_id = ?",
             (interaction_id, thread_id),
         ).fetchone()
-    if row is None:
-        raise AIThreadNotFoundError("thread interaction is not readable")
-    return _interaction_from_row(row)
+        if row is None:
+            raise AIThreadNotFoundError("thread interaction is not readable")
+        return _interaction_from_row(row, connection)
 
 
 def _thread_summary(thread_id: str, workspace_id: str) -> AIThreadSummary:
@@ -810,9 +846,27 @@ def _summary_from_row(row: sqlite3.Row) -> AIThreadSummary:
     )
 
 
-def _interaction_from_row(row: sqlite3.Row) -> AIThreadInteractionRead:
+def _interaction_from_row(
+    row: sqlite3.Row, connection: sqlite3.Connection | None = None
+) -> AIThreadInteractionRead:
     proposal_ids = _proposal_ids(row["proposal_ids_json"])
+    terminal = str(row["flow_state"]) in _TERMINAL_FLOW_STATES and row["persistence_state"] not in {
+        "reserved", "dispatching"
+    }
+    completed_at = (row["completed_at"] or row["updated_at"]) if terminal else None
+    activity = None
+    if not terminal and connection is not None:
+        activity = interaction_activity(connection, str(row["id"]))
     return AIThreadInteractionRead(
+        provider_id=row["provider_id"],
+        input_tokens=row["input_tokens"],
+        output_tokens=row["output_tokens"],
+        cost_estimate_usd=row["cost_estimate"],
+        usage_source=row["usage_source"],
+        latency_ms=row["latency_ms"],
+        completed_at=completed_at,
+        elapsed_ms=_elapsed_ms(str(row["created_at"]), completed_at),
+        activity=activity,
         id=str(row["id"]),
         request_id=str(row["request_id"]),
         interaction_index=int(row["interaction_index"]),
@@ -835,6 +889,16 @@ def _interaction_from_row(row: sqlite3.Row) -> AIThreadInteractionRead:
         created_at=str(row["created_at"]),
         updated_at=str(row["updated_at"]),
     )
+
+
+def _elapsed_ms(started: str, completed: str | None) -> int | None:
+    if completed is None:
+        return None
+    try:
+        delta = datetime.fromisoformat(str(completed)) - datetime.fromisoformat(started)
+    except ValueError:
+        return None
+    return max(0, int(delta.total_seconds() * 1000))
 
 
 def _proposal_ids(value: object) -> list[str]:

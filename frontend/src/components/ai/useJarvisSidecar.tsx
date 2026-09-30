@@ -4,17 +4,16 @@ import type { KnowledgeContextPreview } from "../../api/knowledgeActions";
 import type { StageSelection } from "../../app/selection";
 import {
   ThreadsRequestError,
-  approveCloudDerivative,
   confirmCloudEscalation,
+  draftInteractionEscalation,
+  escalateInteraction,
   getConversationOptions,
   getRelayStatus,
   listCloudEscalations,
   listRelayRuns,
-  prepareCloudDerivative,
-  submitCloudEscalation,
   submitRelayRun,
   type CloudEscalation,
-  type CloudDerivative,
+  type EscalationDraft,
   type ConversationRoute,
   type RelayRunRead,
   type RelayStatus,
@@ -123,11 +122,11 @@ function outcomeNotice(interaction: ThreadInteraction): string | null {
   if (interaction.flow_state === "partial_terminal") {
     return interaction.terminal_reason === "output_length_limit"
       ? "This answer stopped at the output limit. You can ask Jarvis to continue."
-      : `This answer ended early (${interaction.terminal_reason?.replace(/_/g, " ") ?? "incomplete"}).`;
+      : "This answer ended before completion. You can try again or continue from the last visible text.";
   }
   if (interaction.flow_state === "failed_terminal") {
     if (interaction.terminal_reason?.endsWith("output_budget_exhausted")) return "The model spent its whole output budget before producing a visible answer. Try a shorter or more direct request.";
-    return `Jarvis could not answer (${interaction.terminal_reason?.replace(/_/g, " ") ?? "unknown failure"}). Check that the local model is running, then try again.`;
+    return "Jarvis could not complete this request. Check that the selected responder is available, then try again.";
   }
   if (interaction.flow_state === "cancelled_terminal") return "This request was cancelled.";
   return null;
@@ -208,16 +207,15 @@ export function useJarvisSidecar(
   const [error, setError] = useState<string | null>(null);
   const [cloudResults, setCloudResults] = useState<CloudEscalation[]>([]);
   const [cloudSource, setCloudSource] = useState<string | null>(null);
-  const [cloudDerivative, setCloudDerivative] = useState("");
-  const [cloudSourceRef, setCloudSourceRef] = useState("");
-  const [cloudSafeText, setCloudSafeText] = useState("");
-  const [cloudDraft, setCloudDraft] = useState<CloudDerivative | null>(null);
-  const [cloudFamily, setCloudFamily] = useState("engineering");
+  const [cloudDraft, setCloudDraft] = useState<EscalationDraft | null>(null);
+  const [cloudEditText, setCloudEditText] = useState("");
+  const [cloudFamily, setCloudFamily] = useState("");
   const [cloudWorking, setCloudWorking] = useState(false);
+  const [cloudPendingStarted, setCloudPendingStarted] = useState<number | null>(null);
   const [relayStatus, setRelayStatus] = useState<RelayStatus | null>(null);
   const [relayRuns, setRelayRuns] = useState<RelayRunRead[]>([]);
   const [relayAgent, setRelayAgent] = useState("");
-  const [relayPrompt, setRelayPrompt] = useState("");
+  const [composerTarget, setComposerTarget] = useState<"jarvis" | "relay">("jarvis");
   const [relayAttested, setRelayAttested] = useState(false);
   const [relayWorking, setRelayWorking] = useState(false);
   const submitting = inFlight !== null;
@@ -326,49 +324,38 @@ export function useJarvisSidecar(
   }, [workspaceId, selectedThreadId, relayRunsActive]);
 
   const sendCloud = async () => {
-    if (!workspaceId || !selectedThreadId || !cloudSource || !cloudDerivative.trim() || cloudWorking) return;
+    if (!workspaceId || !selectedThreadId || !cloudSource || !cloudDraft || cloudWorking) return;
+    if (cloudDraft.status !== "ready" || !cloudDraft.text_digest || cloudEditText !== cloudDraft.text) return;
     const targetThread = selectedThreadId;
     setCloudWorking(true);
+    setCloudPendingStarted(Date.now());
     setError(null);
     try {
-      const result = await submitCloudEscalation(workspaceId, targetThread, {
-        request_id: requestId(), source_interaction_id: cloudSource,
-        derivative_id: cloudDerivative.trim(), task_family: cloudFamily
-      });
+      const result = await escalateInteraction(workspaceId, targetThread, cloudSource,
+        cloudDraft.text, cloudDraft.text_digest, cloudFamily || undefined);
       if (selectedThreadRef.current === targetThread) {
         setCloudResults(current => [result, ...current.filter(item => item.id !== result.id)]);
         setCloudSource(null);
+        setCloudDraft(null);
       }
     } catch (caught) {
       setError(caught instanceof ThreadsRequestError
-        ? `Cloud escalation was not dispatched (${caught.status}). Check that the derivative is approved and the provider and budgets are enabled.`
+        ? caught.detail ?? `Cloud escalation was not dispatched (${caught.status}). Check the provider and budget settings.`
         : "Cloud escalation could not be completed. Check its status before retrying.");
-    } finally { setCloudWorking(false); }
+    } finally { setCloudWorking(false); setCloudPendingStarted(null); }
   };
 
-  const prepareDerivative = async () => {
-    if (!workspaceId || !cloudSourceRef.trim() || !cloudSafeText.trim() || cloudWorking) return;
+  const prepareEscalation = async (family?: string, sourceInteraction = cloudSource, editedText?: string) => {
+    if (!workspaceId || !selectedThreadId || !sourceInteraction || cloudWorking) return;
     setCloudWorking(true);
     setError(null);
     try {
-      const draft = await prepareCloudDerivative(workspaceId, cloudSourceRef.trim(), cloudSafeText.trim());
+      const draft = await draftInteractionEscalation(workspaceId, selectedThreadId, sourceInteraction, family, editedText);
       setCloudDraft(draft);
-      setCloudDerivative("");
-    } catch {
-      setError("Jarvis could not prepare the derivative. Use one existing source reference and remove protected details.");
-    } finally { setCloudWorking(false); }
-  };
-
-  const approveDerivative = async () => {
-    if (!workspaceId || !cloudDraft || cloudWorking) return;
-    setCloudWorking(true);
-    setError(null);
-    try {
-      const approved = await approveCloudDerivative(workspaceId, cloudDraft.id);
-      setCloudDraft(approved);
-      setCloudDerivative(approved.id);
-    } catch {
-      setError("The derivative could not be approved. Its source or classification may have changed.");
+      setCloudEditText(draft.text);
+      setCloudFamily(family ?? "");
+    } catch (caught) {
+      setError(caught instanceof ThreadsRequestError ? caught.detail ?? "This turn cannot be escalated." : "Jarvis could not prepare the cloud request.");
     } finally { setCloudWorking(false); }
   };
 
@@ -388,25 +375,26 @@ export function useJarvisSidecar(
   };
 
   const sendRelay = async () => {
-    if (!workspaceId || !relayAgent || !relayPrompt.trim() || !relayAttested || relayWorking) return;
+    const relayText = prompt.trim();
+    if (!workspaceId || !relayAgent || !relayText || !relayAttested || relayWorking) return;
     setRelayWorking(true);
     setError(null);
     try {
       let targetThread = selectedThreadId;
       if (!targetThread) {
         // A new conversation has no thread until its first submission, as with ordinary messages.
-        const created = await createThread(workspaceId, relayPrompt.trim().slice(0, 70));
+        const created = await createThread(workspaceId, relayText.slice(0, 70));
         targetThread = created.id;
         setThreads((current) => [created, ...current]);
         selectedThreadRef.current = created.id;
         setSelectedThreadId(created.id);
       }
       const result = await submitRelayRun(workspaceId, targetThread, {
-        prompt: relayPrompt.trim(), agent: relayAgent, cloud_safe_attested: relayAttested
+        prompt: relayText, agent: relayAgent, cloud_safe_attested: relayAttested
       });
       if (selectedThreadRef.current === targetThread) {
         setRelayRuns(current => [...current.filter(item => item.id !== result.id), result]);
-        setRelayPrompt("");
+        setPrompt("");
         setRelayAttested(false);
       }
     } catch (caught) {
@@ -427,15 +415,15 @@ export function useJarvisSidecar(
   }, [selectedThreadId, detailRunning, inFlightHere, loadDetail]);
 
   useEffect(() => {
-    if (!inFlight && !detailRunning) return;
+    if (!inFlight && !detailRunning && !relayRunsActive && cloudPendingStarted === null) return;
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
-  }, [inFlight, detailRunning]);
+  }, [inFlight, detailRunning, relayRunsActive, cloudPendingStarted]);
 
   useEffect(() => {
     const list = transcriptRef.current;
     if (list) list.scrollTop = list.scrollHeight;
-  }, [detail, inFlightHere]);
+  }, [detail, inFlightHere, cloudDraft, cloudSource, cloudResults, relayRuns]);
 
   useEffect(() => {
     const token = ++previewOwner.current;
@@ -484,6 +472,7 @@ export function useJarvisSidecar(
 
   const submit = async (event?: FormEvent) => {
     event?.preventDefault();
+    if (composerTarget === "relay") { await sendRelay(); return; }
     const text = prompt.trim();
     // Wait for thread ownership to settle before auto-creating or dispatching.
     // Otherwise a delayed initial list (or explicit creation) can select a
@@ -616,8 +605,11 @@ export function useJarvisSidecar(
   const renderInteraction = (interaction: ThreadInteraction) => {
     const running = !TERMINAL_FLOW_STATES.has(interaction.flow_state);
     const notice = outcomeNotice(interaction);
-    const viaAgent = interaction.route_class === "hermes:agent";
+    const viaAgent = interaction.execution_class === "agent";
     const synthetic = interaction.execution_class === "synthetic";
+    const elapsed = interaction.elapsed_ms ?? interaction.latency_ms;
+    const providerKind = interaction.execution_class === "external_provider" ? "cloud" : interaction.execution_class === "synthetic" ? "synthetic" : "local";
+    const metadata = [interaction.model_id ?? "Model unknown", `${providerKind} · ${interaction.provider_id ?? "provider unknown"}`, elapsed != null ? `${(elapsed / 1000).toFixed(1)}s` : null, interaction.cost_estimate_usd != null ? `$${interaction.cost_estimate_usd.toFixed(6)}` : null].filter(Boolean).join(" · ");
     return <li key={interaction.id} className="jarvis-turn">
       <div className="jarvis-bubble jarvis-bubble--user"><p>{interaction.user_text}</p></div>
       <div className={`jarvis-bubble jarvis-bubble--jarvis${running ? " is-working" : ""}${notice && !interaction.assistant_text ? " is-failed" : ""}`}>
@@ -626,7 +618,7 @@ export function useJarvisSidecar(
           <span>{running ? "working…" : viaAgent ? `agent · ${interaction.model_id ?? "local model"}` : interaction.model_id ?? ""}</span>
         </div>
         {running
-          ? <p className="jarvis-working"><span className="jarvis-working__dots" aria-hidden="true"><i /><i /><i /></span>{workingLabel(Date.parse(interaction.created_at), interaction.route_class ?? routeClass)}</p>
+          ? <p className="jarvis-working"><span className="jarvis-working__dots" aria-hidden="true"><i /><i /><i /></span>{interaction.activity ?? "Thinking…"} · {Math.max(0, Math.floor((now - Date.parse(interaction.created_at)) / 1000))}s</p>
           : interaction.assistant_text ? <JarvisMessageText text={interaction.assistant_text} /> : null}
         {notice ? <p className="jarvis-bubble__notice" role="status">{notice}</p> : null}
         {interaction.assistant_text_truncated ? <p className="jarvis-bubble__notice">This saved answer was shortened for storage.</p> : null}
@@ -635,10 +627,14 @@ export function useJarvisSidecar(
         <div className="jarvis-bubble__actions">
           {interaction.flow_state === "partial_terminal" ? <button type="button" className="jarvis-link-button" disabled={submitting} onClick={() => setPrompt(`Continue the previous answer from where it stopped. Do not repeat the completed part. Original request: ${interaction.user_text.slice(0, 1500)}\n\nPrevious partial answer:\n${(interaction.assistant_text ?? "").slice(-8500)}`)}>Continue answer</button> : null}
           {interaction.flow_state === "failed_terminal" ? <button type="button" className="jarvis-link-button" disabled={submitting} onClick={() => setPrompt(interaction.user_text)}>Try again</button> : null}
-          {!running && interaction.execution_class === "local_compute" ? <button type="button" className="jarvis-link-button" disabled={submitting || cloudWorking} onClick={() => setCloudSource(interaction.id)}>Escalate approved derivative</button> : null}
-          <details className="jarvis-bubble__details"><summary>Details</summary><dl><div><dt>Responder</dt><dd>{viaAgent ? "Jarvis agent (Hermes)" : interaction.route_class ?? "Unknown"}</dd></div><div><dt>Model</dt><dd>{interaction.model_id ?? "Unknown"}</dd></div><div><dt>Canonical state</dt><dd>{interaction.flow_state}</dd></div><div><dt>Persistence</dt><dd>{interaction.persistence_state}</dd></div><div><dt>Attempts</dt><dd>{interaction.attempt_count}</dd></div><div><dt>Flow</dt><dd><code>{interaction.flow_id}</code></dd></div></dl>{interaction.persistence_error ? <p>Persistence diagnostic: {interaction.persistence_error}</p> : null}{interaction.proposal_ids.length ? <p>Proposal refs: {interaction.proposal_ids.join(", ")}</p> : null}</details>
+          {interaction.assistant_text && !running ? <p className="jarvis-bubble__metadata">{metadata}</p> : null}
+          {!running && interaction.execution_class === "local_compute" && interaction.assistant_text ? <button type="button" className="jarvis-link-button" disabled={submitting || cloudWorking} onClick={() => { setCloudSource(interaction.id); setCloudDraft(null); setCloudEditText(""); void prepareEscalation(undefined, interaction.id); }}>Escalate</button> : null}
+          <details className="jarvis-bubble__details"><summary aria-label="Show answer information">ⓘ Info</summary><dl><div><dt>Responder</dt><dd>{viaAgent ? "Jarvis agent (Hermes)" : interaction.route_class ?? "Unknown"}</dd></div><div><dt>Model</dt><dd>{interaction.model_id ?? "Unknown"}</dd></div><div><dt>Provider</dt><dd>{interaction.provider_id ?? "Unknown"}</dd></div><div><dt>Run state</dt><dd>{interaction.flow_state}</dd></div><div><dt>Persistence</dt><dd>{interaction.persistence_state}</dd></div><div><dt>Attempts</dt><dd>{interaction.attempt_count}</dd></div><div><dt>Tokens</dt><dd>{interaction.input_tokens ?? "unknown"} in · {interaction.output_tokens ?? "unknown"} out</dd></div><div><dt>Cost</dt><dd>{interaction.cost_estimate_usd == null ? "unknown" : `$${interaction.cost_estimate_usd}`}</dd></div><div><dt>Latency</dt><dd>{interaction.latency_ms == null ? "unknown" : `${interaction.latency_ms} ms`}</dd></div><div><dt>Flow</dt><dd><code>{interaction.flow_id}</code></dd></div></dl>{interaction.persistence_error ? <p>Persistence diagnostic: {interaction.persistence_error}</p> : null}{interaction.proposal_ids.length ? <p>Proposal refs: {interaction.proposal_ids.join(", ")}</p> : null}</details>
         </div>
       </div>
+      {cloudSource === interaction.id ? <section className="jarvis-linked-result" aria-label="Governed cloud escalation"><strong>Review cloud request</strong>{cloudPendingStarted !== null ? <p className="jarvis-working" role="status"><span className="jarvis-working__dots" aria-hidden="true"><i /><i /><i /></span>Checking cloud request… · {Math.max(0, Math.floor((now - cloudPendingStarted) / 1000))}s</p> : null}<p>Only the approved text below can leave this conversation.</p>{!cloudDraft ? <p role="status">{cloudWorking ? "Checking provider, cost and sensitivity…" : error ?? "Could not prepare this cloud request."}</p> : <><p>{cloudDraft.reason}</p><label className="jarvis-sidecar__field"><span>Exact text for the cloud model</span><textarea value={cloudEditText} onChange={event => { setCloudEditText(event.target.value); setCloudDraft({ ...cloudDraft, status: "edit_required", text_digest: null }); }} rows={4} /></label><p>{cloudDraft.candidate ? `${cloudDraft.candidate.provider_id}/${cloudDraft.candidate.model_id} · maximum $${cloudDraft.candidate.max_cost_usd} · ${cloudDraft.task_family}${cloudDraft.task_family_inferred ? " (inferred)" : ""}` : `Task type: ${cloudDraft.task_family}`}</p><details><summary>Advanced · task type</summary><label className="jarvis-sidecar__field"><span>Override task type</span><select value={cloudFamily || cloudDraft.task_family} onChange={event => void prepareEscalation(event.target.value, cloudSource, cloudEditText)}>{cloudDraft.family_options.map(family => <option key={family}>{family}</option>)}</select></label></details>{cloudDraft.status === "ready" && cloudDraft.text_digest && cloudEditText === cloudDraft.text ? <button type="button" disabled={cloudWorking} onClick={() => void sendCloud()}>{cloudWorking ? "Checking and sending…" : "Approve text and escalate"}</button> : cloudDraft.status !== "refused" && cloudEditText.trim() ? <button type="button" disabled={cloudWorking} onClick={() => void prepareEscalation(cloudFamily || undefined, cloudSource, cloudEditText)}>{cloudWorking ? "Checking…" : "Review edited text"}</button> : null}<button type="button" className="jarvis-link-button" onClick={() => { setCloudSource(null); setCloudDraft(null); }}>Cancel</button></>}</section> : null}
+      {cloudResults.filter(item => item.source_interaction_id === interaction.id).map(item => <section className="jarvis-linked-result" key={item.id} aria-label="Cloud advice"><strong>Cloud advice · {item.provider_id}/{item.model_id} · {item.state}</strong>{item.response_text ? <JarvisMessageText text={item.response_text} /> : <p>{item.reason_code ?? "Waiting for cloud model…"}</p>}<p className="jarvis-bubble__advisory">Advisory only · no local action was applied.</p><details><summary>Cloud provenance</summary><p>{item.task_family} · tier {item.quality_tier} · maximum ${item.projected_cost_usd} · actual €{item.accounted_cost_eur}</p><p>Tokens: {item.actual_input_tokens ?? "unknown"} in · {item.actual_output_tokens ?? "unknown"} out · derivative {item.derivative_digest} · packet {item.egress_packet_digest ?? "none"}</p>{item.state === "confirmation_required" ? <button type="button" disabled={cloudWorking} onClick={() => void confirmCloud(item.id)}>Approve packet</button> : null}</details></section>)}
+      {detail?.interactions[detail.interactions.length - 1]?.id === interaction.id ? relayRuns.map(run => <section className="jarvis-linked-result" key={run.id} aria-label="Relay run"><strong>Relay · {run.agent} · {run.state}</strong>{run.state === "queued" || run.state === "running" ? <p className="jarvis-working"><span className="jarvis-working__dots" aria-hidden="true"><i /><i /><i /></span>Waiting for Relay… · {Math.max(0, Math.floor((now - Date.parse(run.started_at ?? run.created_at)) / 1000))}s</p> : null}{run.result_text ? <p>{run.result_text}</p> : null}<details><summary>Relay run information</summary><p>{accessModeLabel(run.access_mode)} · turn {run.turn_index}</p>{run.reason_code || run.stop_reason ? <p>{run.reason_code ?? run.stop_reason}</p> : null}{run.workspace_path ? <p>Workspace <code>{run.workspace_path}</code> · head {run.head_commit ?? "unknown"}</p> : null}{run.change_summary ? <pre className="jarvis-relay-result">{run.change_summary}</pre> : null}</details></section>) : null}
     </li>;
   };
 
@@ -689,71 +685,22 @@ export function useJarvisSidecar(
       </li> : null}
     </ol>
 
-    {cloudSource ? <section className="jarvis-sidecar__context" aria-label="Governed cloud escalation">
-      <strong>One cloud reasoning step</strong>
-      <p>Only the approved derivative identified below is sent. The conversation and local tool results stay here. Jarvis enforces the provider and spend limits.</p>
-      <details><summary>Prepare a safe derivative from a project record</summary>
-        <label className="jarvis-sidecar__field"><span>Source reference (for example, decision:id)</span><input value={cloudSourceRef} onChange={event => { setCloudSourceRef(event.target.value); setCloudDraft(null); }} /></label>
-        <label className="jarvis-sidecar__field"><span>Safe rewritten task</span><textarea value={cloudSafeText} onChange={event => { setCloudSafeText(event.target.value); setCloudDraft(null); }} /></label>
-        <button type="button" disabled={!cloudSourceRef.trim() || !cloudSafeText.trim() || cloudWorking} onClick={() => void prepareDerivative()}>Prepare for review</button>
-        {cloudDraft ? <div><p>Review this exact outbound derivative:</p><p>{cloudDraft.content}</p><p>Digest <code>{cloudDraft.content_digest}</code></p>{cloudDraft.status === "draft" ? <button type="button" disabled={cloudWorking} onClick={() => void approveDerivative()}>Approve this safe derivative</button> : <p>Approved derivative ready.</p>}</div> : null}
-      </details>
-      <label className="jarvis-sidecar__field"><span>Approved derivative ID</span><input value={cloudDerivative} onChange={event => setCloudDerivative(event.target.value)} /></label>
-      <label className="jarvis-sidecar__field"><span>Task family</span><select value={cloudFamily} onChange={event => setCloudFamily(event.target.value)}><option value="general">General</option><option value="engineering">Engineering</option><option value="coding">Coding</option></select></label>
-      <button type="button" disabled={!cloudDerivative.trim() || cloudWorking} onClick={() => void sendCloud()}>{cloudWorking ? "Checking…" : "Request governed escalation"}</button>
-      <button type="button" className="jarvis-link-button" onClick={() => setCloudSource(null)}>Cancel</button>
-    </section> : null}
-    {cloudResults.length ? <section className="jarvis-sidecar__context" aria-label="Cloud advice">
-      <strong>Cloud advice</strong>
-      {cloudResults.map(item => <details key={item.id} open={item.state === "confirmation_required"}>
-        <summary>{item.provider_id}/{item.model_id} · {item.state}</summary>
-        {item.response_text ? <JarvisMessageText text={item.response_text} /> : <p>{item.reason_code ?? "No response yet."}</p>}
-        <p>Advisory only · no local action was applied.</p>
-        <p>Task family: {item.task_family}. Quality tier {item.quality_tier} meets configured floor {item.quality_floor}; qualification: {item.qualification} ({item.qualification_evidence_ref}).</p>
-        <p>{item.cost_basis === "actual_priced" ? "Reported usage at reviewed tariff" : item.cost_basis === "zero_before_network" ? "No provider spend" : "Conservative spend hold"}: €{item.accounted_cost_eur} (USD {item.accounted_cost_usd}; ECB {item.fx_date}, 1 EUR = {item.eur_usd_rate} USD). {item.calculated_usage_cost_eur === null ? "Actual billed cost unknown. " : ""}Price: {item.pricing_version} effective {item.pricing_effective_at}, reviewed {item.pricing_reviewed_on}.</p>
-        <p>Provider tokens: {item.actual_input_tokens ?? "unknown"} input, {item.actual_output_tokens ?? "unknown"} output. <a href={item.pricing_source_url} target="_blank" rel="noreferrer">Price source</a> · <a href={item.fx_source} target="_blank" rel="noreferrer">FX source</a>. Derivative: <code>{item.derivative_id}</code> · context: <code>{item.context_digest ?? "none"}</code> · packet: <code>{item.egress_packet_digest ?? "none"}</code></p>
-        {item.state === "confirmation_required" ? <button type="button" disabled={cloudWorking} onClick={() => void confirmCloud(item.id)}>Confirm this packet</button> : null}
-      </details>)}
-    </section> : null}
-
-    {relayStatus?.enabled && workspaceId ? <section className="jarvis-sidecar__context" aria-label="Cloud agent (Relay)">
-      <strong>Cloud agent (Relay)</strong>
-      <p>Jarvis level {relayStatus.repository_level} · the agent works in a {accessModeLabel(relayStatus.access_mode)}. No strategic or domain IP may leave through this control.</p>
-      {relayStatus.blocked_reason ? <p className="jarvis-sidecar__error" role="status">Relay runs are blocked: {relayStatus.blocked_reason}. Private domain data is enabled, and the hardened sandbox has not been accepted yet.</p> : null}
-      <label className="jarvis-sidecar__field"><span>Agent</span><select value={relayAgent} disabled={relayWorking || !relayStatus.agents.length} onChange={event => setRelayAgent(event.target.value)}>
-        {!relayStatus.agents.length && <option value="">No agent configured</option>}
-        {relayStatus.agents.map(agent => <option key={agent} value={agent}>{agent}</option>)}
-      </select></label>
-      <label className="jarvis-sidecar__field"><span>Task for the Relay agent</span><textarea value={relayPrompt} onChange={event => setRelayPrompt(event.target.value)} rows={3} /></label>
-      <label className="jarvis-sidecar__toggle"><input type="checkbox" checked={relayAttested} disabled={relayWorking} onChange={event => setRelayAttested(event.target.checked)} />This task contains no strategic/domain IP (cloud-safe)</label>
-      <button type="button" disabled={!relayAgent || !relayPrompt.trim() || !relayAttested || relayWorking || Boolean(relayStatus.blocked_reason)} onClick={() => void sendRelay()}>{relayWorking ? "Sending…" : "Send to Relay agent"}</button>
-      {!selectedThreadId ? <p className="jarvis-sidecar__hint">Sending starts a new conversation; later tasks in it continue the same Relay conversation.</p> : null}
-    </section> : null}
-    {relayRuns.length ? <section className="jarvis-sidecar__context" aria-label="Relay runs">
-      <strong>Relay runs</strong>
-      <p>Later submissions in this conversation continue the same Relay conversation, from its newest linked session.</p>
-      {relayRuns.map(run => <details key={run.id} open={run.state === "queued" || run.state === "running" || run.state === "denied"}>
-        <summary>{run.agent} · <span className={`jarvis-status jarvis-status--${relayRunTone(run.state)}`} role="status"><i aria-hidden="true" />{run.state}</span> · turn {run.turn_index}</summary>
-        <p>Access: {accessModeLabel(run.access_mode)} (level {run.repository_level}). Relay session: {run.relay_session_id ? <code>{run.relay_session_id}</code> : "not yet assigned"}{run.continued_from_session_id ? <> (continues <code>{run.continued_from_session_id}</code>)</> : null}.</p>
-        {run.workspace_path ? <p>Workspace: <code>{run.workspace_path}</code>{run.head_commit ? <> · head <code>{run.head_commit.slice(0, 10)}</code></> : null}{run.base_commit ? <> · base <code>{run.base_commit.slice(0, 10)}</code></> : null}</p> : null}
-        {run.released_derivative_ids.length ? <p>Released derivatives: {run.released_derivative_ids.map(id => <code key={id}>{id}</code>)}</p> : null}
-        {run.reason_code ? <p>Reason: {run.reason_code}</p> : null}
-        {run.stop_reason ? <p>Stop reason: {run.stop_reason}</p> : null}
-        {run.exit_code !== null ? <p>Exit code: {run.exit_code}</p> : null}
-        {run.result_text ? <details open={run.state === "completed"}><summary>Result</summary><pre className="jarvis-relay-result">{run.result_text}</pre></details> : null}
-        {run.change_summary ? <details><summary>Changes</summary><pre className="jarvis-relay-result">{run.change_summary}</pre></details> : null}
-      </details>)}
-    </section> : null}
 
     {pinnedContent}
     {error ? <p className="jarvis-sidecar__error" role="alert">{error}</p> : null}
     {basisDiscussionBlocked && <p className="jarvis-sidecar__error" role="status">Project Basis discussion is unavailable under the current sensitivity controls. Prepare a written proposal above, or clear selected context to ask a general question.</p>}
     <form onSubmit={(event) => void submit(event)} className="jarvis-sidecar__composer">
-      <label htmlFor="jarvis-prompt" className="visually-hidden">Message to Jarvis</label>
-      <textarea id="jarvis-prompt" value={prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} maxLength={12000} rows={Math.min(8, Math.max(2, prompt.split("\n").length))} disabled={!workspaceId} placeholder={activeRoute?.execution_class === "agent" ? "Ask the Jarvis agent…" : "Ask Jarvis…"} />
+      <label className="jarvis-sidecar__field"><span>Send to</span><select value={composerTarget} onChange={event => setComposerTarget(event.target.value as "jarvis" | "relay")} disabled={submitting || relayWorking}><option value="jarvis">Jarvis</option>{relayStatus?.enabled ? <option value="relay">Relay agent</option> : null}</select></label>
+      {composerTarget === "relay" && relayStatus?.enabled ? <>
+        <label className="jarvis-sidecar__field"><span>Relay agent</span><select value={relayAgent} disabled={relayWorking || !relayStatus.agents.length} onChange={event => setRelayAgent(event.target.value)}>{relayStatus.agents.map(agent => <option key={agent}>{agent}</option>)}</select></label>
+        <p className="jarvis-sidecar__hint">Relay uses {accessModeLabel(relayStatus.access_mode)} access at level {relayStatus.repository_level}. {relayStatus.blocked_reason ?? "Only submit a task that contains no strategic or domain IP."}</p>
+        <label className="jarvis-sidecar__toggle"><input type="checkbox" checked={relayAttested} disabled={relayWorking} onChange={event => setRelayAttested(event.target.checked)} />This task contains no strategic/domain IP (cloud-safe)</label>
+      </> : null}
+      <label htmlFor="jarvis-prompt" className="visually-hidden">{composerTarget === "relay" ? "Message to Relay" : "Message to Jarvis"}</label>
+      <textarea id="jarvis-prompt" value={prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} maxLength={12000} rows={Math.min(8, Math.max(2, prompt.split("\n").length))} disabled={!workspaceId} placeholder={composerTarget === "relay" ? "Task for the Relay agent…" : activeRoute?.execution_class === "agent" ? "Ask the Jarvis agent…" : "Ask Jarvis…"} />
       <div className="jarvis-sidecar__composer-bar">
         <small>{sendDisabledReason && !activeRouteAvailable ? sendDisabledReason : "Enter to send · Shift+Enter for a new line"}</small>
-        <button type="submit" disabled={!workspaceId || !activeRoute || !activeRouteAvailable || !prompt.trim() || loadingThreads || submitting || !contextReady} aria-label={composerLabel} title={composerLabel}>{submitting ? "Working…" : loadingThreads ? "Loading…" : "Send"}</button>
+        <button type="submit" disabled={!workspaceId || !prompt.trim() || loadingThreads || (composerTarget === "jarvis" ? (!activeRoute || !activeRouteAvailable || submitting || !contextReady) : (!relayAgent || !relayAttested || relayWorking || Boolean(relayStatus?.blocked_reason)))} aria-label={composerTarget === "relay" ? "Send to Relay agent" : composerLabel} title={composerTarget === "relay" ? "Send to Relay agent" : composerLabel}>{submitting || relayWorking ? "Working…" : loadingThreads ? "Loading…" : "Send"}</button>
       </div>
     </form>
   </div>;

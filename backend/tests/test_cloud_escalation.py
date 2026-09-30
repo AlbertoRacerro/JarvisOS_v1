@@ -78,6 +78,119 @@ def test_catalog_cheapest_adequate_and_unknown_family() -> None:
         select_candidate(unqualified, task_family="general", derivative_content="generic")
 
 
+def test_interaction_escalation_draft_is_read_only_and_infers_family() -> None:
+    workspace_id, thread_id, interaction_id, _ = _source()
+    draft = cloud_escalation.draft_interaction_escalation(
+        workspace_id=workspace_id, thread_id=thread_id, interaction_id=interaction_id,
+    )
+    assert draft.status == "ready"
+    assert draft.text == "local question"
+    assert draft.text_digest == cloud_escalation.text_digest(draft.text)
+    assert draft.task_family == "general"
+    assert draft.task_family_inferred is True
+    assert draft.candidate is not None
+    override = cloud_escalation.draft_interaction_escalation(
+        workspace_id=workspace_id, thread_id=thread_id, interaction_id=interaction_id,
+        task_family="engineering",
+    )
+    assert override.task_family == "engineering"
+    assert override.task_family_inferred is False
+    edited = cloud_escalation.draft_interaction_escalation(
+        workspace_id=workspace_id, thread_id=thread_id, interaction_id=interaction_id,
+        text="Explain a generic heat balance.",
+    )
+    assert edited.status == "ready"
+    assert edited.text == "Explain a generic heat balance."
+    assert edited.task_family == "engineering"
+    with open_sqlite_connection() as connection:
+        assert connection.execute("SELECT COUNT(*) FROM sanitized_derivatives").fetchone()[0] == 0
+        assert connection.execute("SELECT COUNT(*) FROM cloud_escalations").fetchone()[0] == 0
+
+
+def test_interaction_escalation_approval_binds_derivative_to_source_and_text(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace_id, thread_id, interaction_id, _ = _source()
+    text = "Explain a generic heat balance with symbolic values only."
+    captured: list[CloudEscalationRequest] = []
+
+    def fake_create(*, workspace_id: str, thread_id: str, payload: CloudEscalationRequest):
+        captured.append(payload)
+        return payload
+
+    monkeypatch.setattr(cloud_escalation, "create_cloud_escalation", fake_create)
+    result = cloud_escalation.escalate_interaction(
+        workspace_id=workspace_id, thread_id=thread_id, interaction_id=interaction_id,
+        payload=cloud_escalation.EscalationApproval(
+            text=text, text_digest=cloud_escalation.text_digest(text),
+        ),
+    )
+    assert result == captured[0]
+    derivative = cloud_escalation.revalidate_sanitized_derivative(workspace_id, result.derivative_id)
+    assert derivative.status == "approved"
+    assert derivative.content == text
+    assert derivative.source_refs == [f"interaction:{interaction_id}"]
+    with pytest.raises(CloudEscalationError, match="changed after it was shown"):
+        cloud_escalation.escalate_interaction(
+            workspace_id=workspace_id, thread_id=thread_id, interaction_id=interaction_id,
+            payload=cloud_escalation.EscalationApproval(text=text + " changed", text_digest=cloud_escalation.text_digest(text)),
+        )
+    assert len(captured) == 1
+
+
+def test_interaction_escalation_refuses_secrets_protected_text_and_foreign_sources() -> None:
+    workspace_id, thread_id, interaction_id, _ = _source()
+    for text, code in (("api_key=synthetic-test-value", "secret_detected"),
+                       ("Explain my proprietary unpublished design", "protected_ip")):
+        with pytest.raises(CloudEscalationError) as refused:
+            cloud_escalation.escalate_interaction(
+                workspace_id=workspace_id, thread_id=thread_id, interaction_id=interaction_id,
+                payload=cloud_escalation.EscalationApproval(text=text, text_digest=cloud_escalation.text_digest(text)),
+            )
+        assert refused.value.code == code
+    with pytest.raises(CloudEscalationError, match="completed local source"):
+        cloud_escalation.draft_interaction_escalation(
+            workspace_id=workspace_id, thread_id=str(uuid4()), interaction_id=interaction_id,
+        )
+    with open_sqlite_connection() as connection:
+        assert connection.execute("SELECT COUNT(*) FROM sanitized_derivatives").fetchone()[0] == 0
+
+
+def test_interaction_read_exposes_recorded_usage_and_tool_activity() -> None:
+    from app.modules.ai.thread_service import get_thread
+
+    workspace_id, thread_id, interaction_id, _ = _source()
+    with open_sqlite_connection() as connection:
+        flow_id = connection.execute(
+            "SELECT flow_id FROM ai_thread_interactions WHERE id = ?", (interaction_id,)
+        ).fetchone()[0]
+        job_id = connection.execute("SELECT id FROM ai_jobs WHERE flow_id = ?", (flow_id,)).fetchone()[0]
+        connection.execute("UPDATE ai_flows SET terminal_attempt_id = ? WHERE id = ?", (job_id, flow_id))
+        connection.execute(
+            "UPDATE ai_jobs SET input_tokens = 31, output_tokens = 9, cost_estimate = 0.002, "
+            "usage_source = 'actual', latency_ms = 850 WHERE id = ?", (job_id,)
+        )
+        connection.commit()
+    completed = get_thread(workspace_id=workspace_id, thread_id=thread_id).interactions[0]
+    assert completed.provider_id == "local_llamacpp"
+    assert (completed.input_tokens, completed.output_tokens, completed.latency_ms) == (31, 9, 850)
+    assert completed.cost_estimate_usd == pytest.approx(0.002)
+    assert completed.activity is None
+
+    with open_sqlite_connection() as connection:
+        connection.execute("UPDATE ai_flows SET state = 'running' WHERE id = ?", (flow_id,))
+        connection.execute(
+            "INSERT INTO events (id, workspace_id, event_type, actor, target_type, payload, created_at) "
+            "VALUES (?, ?, 'hermes.tool_result', 'jarvis', 'agent_tool_call', ?, ?)",
+            (str(uuid4()), workspace_id,
+             '{"interaction_id":"' + interaction_id + '","tool_name":"jarvis_process_read"}', utc_now()),
+        )
+        connection.commit()
+    running = get_thread(workspace_id=workspace_id, thread_id=thread_id).interactions[0]
+    assert running.activity == "Using process draft…"
+    assert running.elapsed_ms is None
+
+
 def test_unapproved_derivative_does_not_enter_egress(monkeypatch: pytest.MonkeyPatch) -> None:
     workspace_id, thread_id, interaction_id, record_id = _source()
     drafted = create_sanitized_derivative(SanitizedDerivativeCreate(
