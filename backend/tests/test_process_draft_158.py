@@ -1,13 +1,25 @@
 """Evidence-derived DWSIM capability contract for process drafts (spec 158)."""
 
+import copy
 import importlib.util
 from pathlib import Path
 from typing import Any
 
+import pytest
+from fastapi.testclient import TestClient
 from pydantic import TypeAdapter
 
-from app.modules.process_stack import draft_compiler
-from app.modules.process_stack.draft import _capability_manifest, apply_ops, empty_document, registry_projection
+from app.core.database import initialize_database
+from app.main import app
+from app.modules.process_stack import draft, draft_compiler, editor
+from app.modules.process_stack.draft import (
+    DraftError,
+    _capability_manifest,
+    apply_ops,
+    empty_document,
+    registry_projection,
+    validate_document,
+)
 from app.modules.process_stack.draft_compiler import _native_energy_port, _stream_result, _unit_properties
 from app.modules.process_stack.draft_models import UNIT_REGISTRY, UNSUPPORTED_TYPES, DraftOp
 
@@ -259,3 +271,276 @@ def test_kinetic_reaction_is_typed_attached_and_materialized_by_native_set() -> 
         "CoolantInletTemperature": 300.0, "CoolantMassFlowRate": 2.0,
         "CoolantSpecificHeat": 4180.0,
     }})
+
+
+# ---------------------------------------------------------------- 158 required deterministic evidence
+
+Q = lambda value, unit: {"value": value, "unit": unit}  # noqa: E731
+_OPS: TypeAdapter[Any] = TypeAdapter(DraftOp)
+_THERMO = {"op": "set_thermo", "compounds": ["Water", "Ethylene oxide", "Ethylene glycol"],
+           "property_package": "NRTL"}
+_FEED_SPEC = {"op": "set_stream_spec", "stream": "feed", "temperature": Q(25, "degC"), "pressure": Q(1, "bar"),
+              "mass_flow": Q(1, "kg/s"), "composition": {"Water": 1.0}}
+_HYDRATION: dict[str, Any] = {
+    "name": "Hydration", "stoichiometry": {"Ethylene oxide": -1, "Water": -1, "Ethylene glycol": 1},
+    "orders": {"Ethylene oxide": 1}, "base_reactant": "Ethylene oxide", "phase": "Mixture",
+    "basis": "MolarConc", "A_forward": Q(0.005, "kmol/[m3.h]"), "E_forward": Q(0, "J/mol")}
+
+
+def _doc(*ops: dict[str, Any], base: dict[str, Any] | None = None) -> dict[str, Any]:
+    return apply_ops(base or empty_document("158"), [_OPS.validate_python(op) for op in ops])
+
+
+def _codes(document: dict[str, Any]) -> set[str]:
+    return {item["code"] for item in validate_document(document)}
+
+
+def _refused(document: dict[str, Any], *ops: dict[str, Any]) -> str:
+    with pytest.raises(DraftError) as caught:
+        _doc(*ops, base=document)
+    return caught.value.code
+
+
+def _unit(uid: str, kind: str) -> dict[str, Any]:
+    return {"op": "add_unit", "id": uid, "type": kind, "tag": uid.upper(), "x": 0, "y": 0}
+
+
+def _link(stream: str, source: str | None, target: str | None, *, out: int = 0, into: int = 0,
+          energy: bool = False) -> list[dict[str, Any]]:
+    ops: list[dict[str, Any]] = [{"op": "add_stream", "id": stream, "tag": stream.upper(), "x": 0, "y": 0,
+                                  "stream_type": "energy" if energy else "material"}]
+    if source:
+        ops.append({"op": "connect", "stream": stream, "end": "source", "unit": source, "port": out})
+    if target:
+        ops.append({"op": "connect", "stream": stream, "end": "target", "unit": target, "port": into})
+    return ops
+
+
+def _loop(with_recycle: bool) -> dict[str, Any]:
+    """Mixer -> Heater -> Splitter with the splitter's second outlet returned to the mixer."""
+    back = (_link("s3", "sp1", "rc1", out=1) + _link("s4", "rc1", "m1", into=1) if with_recycle
+            else _link("s3", "sp1", "m1", out=1, into=1))
+    return _doc({"op": "set_thermo", "compounds": ["Water"], "property_package": "NRTL"},
+                _unit("m1", "Mixer"), _unit("h1", "Heater"), _unit("sp1", "Splitter"),
+                *([_unit("rc1", "Recycle")] if with_recycle else []),
+                *_link("s1", "m1", "h1"), *_link("s2", "h1", "sp1"), *back, *_link("out", "sp1", None))
+
+
+def _reactive_train_ops() -> list[dict[str, Any]]:
+    """Feed -> PFR (kinetic R1) -> heater (energy-stream mode) -> heat exchanger hot side."""
+    return [_THERMO, {"op": "set_reactions", "reactions": {"R1": _HYDRATION}},
+            _unit("pfr", "PFR"), _unit("h1", "Heater"), _unit("hx", "HeatExchanger"),
+            {"op": "set_unit_params", "unit": "pfr", "mode": "adiabatic", "reactions": ["R1"],
+             "values": {"volume": Q(2, "m3"), "length": Q(4, "m")}},
+            {"op": "set_unit_params", "unit": "h1", "mode": "energy_stream"},
+            *_link("feed", None, "pfr"), _FEED_SPEC, *_link("s1", "pfr", "h1"), *_link("s2", "h1", "hx"),
+            *_link("q", None, "h1", energy=True),
+            {"op": "set_stream_spec", "stream": "q", "duty": Q(50, "kW")}]
+
+
+def _reactive_train() -> dict[str, Any]:
+    return _doc(*_reactive_train_ops())
+
+
+def test_process_loop_requires_a_recycle_block(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(editor, "_client", lambda: pytest.fail("validation must not contact DWSIM"))
+    monkeypatch.setattr(draft_compiler, "materialize", lambda *_a, **_k: pytest.fail("validation must not run DWSIM"))
+    open_loop = [item for item in validate_document(_loop(False)) if item["code"] == "RECYCLE_REQUIRED"]
+    assert len(open_loop) == 1 and open_loop[0]["field"] == "connections"
+    assert {"M1", "H1", "SP1"} >= {open_loop[0]["object"]}
+    assert "RECYCLE_REQUIRED" not in _codes(_loop(True))
+    # The op layer refuses only the degenerate one-unit loop; multi-unit loops are a validation finding.
+    assert _refused(_loop(False), _unit("h2", "Heater"), *_link("self", "h2", "h2")) == "port_invalid"
+
+
+def test_reactor_and_energy_stream_units_need_reaction_set_and_energy_stream(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(editor, "_client", lambda: pytest.fail("validation must not contact DWSIM"))
+    bare = _doc(_THERMO, _unit("pfr", "PFR"), _unit("h1", "Heater"), _unit("col", "DistillationColumn"),
+                {"op": "set_unit_params", "unit": "pfr", "mode": "heat_exchange"},
+                {"op": "set_unit_params", "unit": "h1", "mode": "energy_stream"})
+    findings = {(item["object"], item["code"]) for item in validate_document(bare)}
+    assert {("PFR", "REACTION_SET_MISSING"), ("PFR", "UNIT_ENERGY_INLET_MISSING"),
+            ("H1", "UNIT_ENERGY_INLET_MISSING"), ("COL", "UNIT_ENERGY_INLET_MISSING"),
+            ("COL", "UNIT_ENERGY_OUTLET_MISSING")} <= findings
+    wired = _doc({"op": "set_reactions", "reactions": {"R1": _HYDRATION}},
+                 {"op": "set_unit_params", "unit": "pfr", "reactions": ["R1"]},
+                 *_link("qr", None, "pfr", energy=True), *_link("qh", None, "h1", energy=True),
+                 *_link("qb", None, "col", energy=True), *_link("qc", "col", None, energy=True), base=bare)
+    remaining = {(item["object"], item["code"]) for item in validate_document(wired)}
+    assert not {code for _tag, code in remaining} & {"REACTION_SET_MISSING", "UNIT_ENERGY_INLET_MISSING",
+                                                      "UNIT_ENERGY_OUTLET_MISSING"}
+    # A heater that is not in energy-stream mode does not need one, and a duty on its stream is flagged.
+    fixed = _doc({"op": "set_unit_params", "unit": "h1", "mode": "outlet_temperature"},
+                 {"op": "set_stream_spec", "stream": "qh", "duty": Q(10, "kW")}, base=wired)
+    assert ("QH", "ENERGY_DUTY_MODE_MISMATCH") in {(item["object"], item["code"]) for item in validate_document(fixed)}
+    assert ("H1", "UNIT_ENERGY_INLET_MISSING") not in {(item["object"], item["code"])
+                                                       for item in validate_document(fixed)}
+    assert _refused(bare, {"op": "set_unit_params", "unit": "pfr", "reactions": ["NOPE"]}) == "reaction_not_found"
+
+
+def test_energy_streams_connect_only_to_registered_energy_ports() -> None:
+    document = _doc(_THERMO, _unit("h1", "Heater"), _unit("m1", "Mixer"), _unit("col", "DistillationColumn"),
+                    {"op": "add_stream", "id": "q", "tag": "Q", "stream_type": "energy", "x": 0, "y": 0},
+                    {"op": "add_stream", "id": "q2", "tag": "Q2", "stream_type": "energy", "x": 0, "y": 0})
+    for op in ({"op": "connect", "stream": "q", "end": "target", "unit": "h1", "port": 1},  # one energy inlet
+               {"op": "connect", "stream": "q", "end": "source", "unit": "h1", "port": 0},  # no energy outlet
+               {"op": "connect", "stream": "q", "end": "target", "unit": "m1", "port": 0},  # no energy ports
+               {"op": "connect", "stream": "q", "end": "source", "unit": "col", "port": 1}):
+        assert _refused(document, op) == "port_invalid", op
+    occupied = _doc({"op": "connect", "stream": "q", "end": "target", "unit": "h1", "port": 0}, base=document)
+    assert _refused(occupied, {"op": "connect", "stream": "q2", "end": "target", "unit": "h1",
+                               "port": 0}) == "port_occupied"
+    # Material and energy ports are distinct namespaces: material inlet 0 stays free.
+    shared = _doc(*_link("feed", None, "h1"), _FEED_SPEC, {"op": "set_unit_params", "unit": "h1", "mode": "energy_stream"},
+                  base=occupied)
+    assert shared["objects"]["feed"]["target"] == {"unit": "h1", "port": 0}
+    assert _refused(occupied, {"op": "set_stream_spec", "stream": "q",
+                               "temperature": Q(300, "K")}) == "spec_on_energy_stream"
+    assert draft_compiler.expected(shared)["connections"] == ["FEED>H1:in0", "Q>H1:in1"]
+
+
+def test_reaction_stoichiometry_compounds_and_base_reactant_are_checked() -> None:
+    document = _doc(_THERMO)
+    cases = [
+        ({"stoichiometry": {"Ethylene oxide": -1, "Methanol": 1}}, "compound_undeclared"),
+        ({"orders": {"Methanol": 1}}, "compound_undeclared"),
+        ({"base_reactant": "Ethylene glycol"}, "reaction_base_invalid"),  # a product, not consumed
+        ({"base_reactant": "Methanol"}, "reaction_base_invalid"),  # not in the stoichiometry at all
+        ({"A_forward": Q(0.005, "mol/[m3.s]")}, "reaction_unit_unsupported"),
+    ]
+    for override, code in cases:
+        op = {"op": "set_reactions", "reactions": {"R1": {**_HYDRATION, **override}}}
+        assert _refused(document, op) == code, override
+    assert _refused(document, {"op": "set_reactions", "reactions": {"1bad": _HYDRATION}}) == "reaction_id_invalid"
+    for override in ({"stoichiometry": {"Ethylene oxide": 0, "Water": 1}}, {"orders": {"Water": -1}},
+                     {"A_forward": Q(-1, "kmol/[m3.h]")}):
+        with pytest.raises(ValueError):
+            _OPS.validate_python({"op": "set_reactions", "reactions": {"R1": {**_HYDRATION, **override}}})
+    accepted = _doc({"op": "set_reactions", "reactions": {"R1": _HYDRATION}}, base=document)
+    assert accepted["reactions"]["R1"]["base_reactant"] == "Ethylene oxide"
+
+
+def test_split_ratios_must_close_for_two_outlets() -> None:
+    document = _doc({"op": "set_thermo", "compounds": ["Water"], "property_package": "NRTL"},
+                    _unit("sp", "Splitter"), *_link("a", "sp", None), *_link("b", "sp", None, out=1),
+                    {"op": "set_unit_params", "unit": "sp", "values": {"split_ratio_1": Q(0.5, "dimensionless"),
+                                                                        "split_ratio_2": Q(0.3, "dimensionless")}})
+    assert "SPLIT_RATIOS_INVALID" in _codes(document)
+    closed = _doc({"op": "set_unit_params", "unit": "sp", "values": {"split_ratio_2": Q(0.5, "dimensionless")}}, base=document)
+    assert "SPLIT_RATIOS_INVALID" not in _codes(closed)
+
+
+def test_readback_mismatch_is_reported_on_new_unit_reaction_and_energy_connection() -> None:
+    document = _reactive_train()
+    expected = draft_compiler.expected(document)
+    assert draft_compiler.compare(expected, copy.deepcopy(expected)) == []
+    energy_link = next(item for item in expected["connections"] if item.startswith("Q>"))
+    assert energy_link == "Q>H1:in1"
+    actual = copy.deepcopy(expected)
+    actual["units"]["HX"]["OverallCoefficient"] = 900.0
+    actual["reactions"]["R1"]["stoichiometry"]["Water"] = -2.0
+    actual["reactions"]["R1"]["base_reactant"] = "Water"
+    actual["reaction_sets"]["JARVIS_PFR"] = []
+    actual["connections"].remove(energy_link)
+    diffs = {item["path"]: item for item in draft_compiler.compare(expected, actual)}
+    assert diffs["units.HX.OverallCoefficient"]["expected"] == 1000.0
+    assert diffs["units.HX.OverallCoefficient"]["actual"] == 900.0
+    assert "reactions.R1.stoichiometry.Water" in diffs and "reactions.R1.base_reactant" in diffs
+    assert "reaction_sets.JARVIS_PFR[R1]" in diffs
+    assert diffs[f"connections[{energy_link}]"]["actual"] == "<missing>"
+    # A connection to the wrong native energy port is also a mismatch, not a silent pass.
+    wrong_port = copy.deepcopy(expected)
+    wrong_port["connections"] = sorted([*(item for item in expected["connections"] if item != energy_link), "Q>H1:in0"])
+    assert {item["path"] for item in draft_compiler.compare(expected, wrong_port)} == {
+        f"connections[{energy_link}]", "connections[Q>H1:in0]"}
+
+
+def test_route_ops_leave_materialization_fingerprint_and_results_state_unchanged() -> None:
+    document = _reactive_train()
+    routed = _doc({"op": "set_route", "stream": "s1", "points": [{"x": 0, "y": 0}, {"x": 40, "y": 0},
+                                                                 {"x": 40, "y": 30}]},
+                  {"op": "set_route", "stream": "q", "points": []}, base=document)
+    assert routed["objects"]["s1"]["route"] and routed != document
+    assert draft_compiler.expected(routed) == draft_compiler.expected(document)
+    assert draft_compiler.plan(routed) == draft_compiler.plan(document)
+
+    def fp(value: dict[str, Any]) -> str:
+        return draft_compiler.fingerprint(draft_compiler.expected(value), dwsim_version="10.2.9", mcp_sha256="a" * 64)
+
+    assert fp(routed) == fp(document)
+    solved = {"run_id": "run-1", "action": "run", "status": "completed", "draft_revision": "4:solved",
+              "started_at": "2026-01-01T00:00:00+00:00", "dwsim_version": "10.2.9", "mcp_sha256": "a" * 64,
+              "materialization_fingerprint": fp(document)}
+    head = {"revision": "6:routed", "seq": 6}
+    state = draft.results_state(head, [solved], routed, edits_since=0)
+    assert state["state"] == "current" and state["edits_since"] == 0
+    moved = _doc({"op": "move", "id": "h1", "x": 10, "y": 0}, base=routed)
+    stale = draft.results_state({"revision": "7:moved", "seq": 7}, [solved], moved, edits_since=1)
+    assert stale["state"] == "stale" and stale["edits_since"] == 1
+    assert draft.results_state(head, [], routed)["state"] == "none"
+
+
+@pytest.fixture()
+def workspace_draft() -> Any:
+    initialize_database()
+    with TestClient(app) as client:
+        workspace = client.post("/workspaces", json={"name": "158 draft", "slug": f"draft-158-{id(client)}"})
+        workspace.raise_for_status()
+        workspace_id = workspace.json()["id"]
+        yield client, workspace_id, draft.create_draft(workspace_id, "158 train")
+
+
+def _patched(workspace_id: str, state: dict[str, Any], *ops: dict[str, Any]) -> dict[str, Any]:
+    return draft.patch(workspace_id, state["draft_id"], state["revision"], [_OPS.validate_python(op) for op in ops])
+
+
+def test_route_only_revisions_do_not_count_as_edits_since_a_run(workspace_draft: Any) -> None:
+    _client, workspace_id, state = workspace_draft
+    build = [_THERMO, {"op": "set_reactions", "reactions": {"R1": _HYDRATION}}, _unit("pfr", "PFR"),
+             {"op": "set_unit_params", "unit": "pfr", "reactions": ["R1"],
+              "values": {"volume": Q(2, "m3"), "length": Q(4, "m")}},
+             *_link("feed", None, "pfr"), _FEED_SPEC, *_link("out", "pfr", None)]
+    state = _patched(workspace_id, state, *build)
+    directory = draft.draft_dir(workspace_id, state["draft_id"])
+    document = draft.load_revision(directory, state["revision"])["document"]
+    draft.record_run(directory, {
+        "run_id": "run-158", "action": "run", "status": "completed", "draft_revision": state["revision"],
+        "started_at": "2026-01-01T00:00:00+00:00", "dwsim_version": "10.2.9", "mcp_sha256": "a" * 64,
+        "materialization_fingerprint": draft_compiler.fingerprint(
+            draft_compiler.expected(document), dwsim_version="10.2.9", mcp_sha256="a" * 64)})
+    assert draft.projection(workspace_id, state["draft_id"])["results"]["state"] == "current"
+    route = {"op": "set_route", "stream": "out", "points": [{"x": 0, "y": 0}, {"x": 0, "y": 50}]}
+    state = _patched(workspace_id, state, route)
+    state = _patched(workspace_id, state, {**route, "points": [{"x": 0, "y": 0}, {"x": 60, "y": 0}]})
+    assert state["results"]["state"] == "current" and state["results"]["edits_since"] == 0
+    state = _patched(workspace_id, state, {"op": "move", "id": "pfr", "x": 5, "y": 5})
+    assert state["results"]["state"] == "stale"
+    assert state["results"]["edits_since"] == 1  # the two route revisions are not counted
+
+
+def test_only_input_properties_are_proposable(workspace_draft: Any) -> None:
+    client, workspace_id, state = workspace_draft
+    state = _patched(workspace_id, state, *_reactive_train_ops())
+    view = draft.agent_view(workspace_id, state["draft_id"])
+    registry = {item["type"]: item for item in registry_projection()["units"]}
+    for unit_type, allowed in view["proposable"].items():
+        if unit_type == "stream":
+            assert set(allowed) == {"temperature", "pressure", "mass_flow", "composition"}
+            continue
+        inputs = {param["key"] for param in registry[unit_type]["params"] if param["classification"] == "input"}
+        assert set(allowed) == {"mode"} | inputs, unit_type
+        results = {row["name"] for row in registry[unit_type]["result_properties"]}
+        assert not results & set(allowed), unit_type
+    url = f"/workspaces/{workspace_id}/process/drafts/{state['draft_id']}/proposals"
+    heater_results = [row["name"] for row in registry["Heater"]["result_properties"]]
+    assert heater_results, "the manifest reports Heater result properties"
+    for target, prop in [("H1", heater_results[0]), ("H1", "DeltaQ"), ("HX", "OverallCoefficient"),
+                         ("PFR", "reactions"), ("S1", "enthalpy"), ("Q", "EnergyFlow")]:
+        response = client.post(url, json={"base_revision": state["revision"], "changes": [
+            {"target": target, "property": prop, "proposed": Q(1, "kW")}]})
+        assert response.status_code == 422, (target, prop, response.text)
+        assert response.json()["detail"]["code"] == "proposal_property_unsupported", (target, prop)
+    accepted = client.post(url, json={"base_revision": state["revision"], "changes": [
+        {"target": "HX", "property": "overall_coefficient", "proposed": Q(800, "W/[m2.K]")}]})
+    assert accepted.status_code == 200, accepted.text
+    assert accepted.json()["changes"][0]["current"] == {"value": 1000.0, "unit": "W/[m2.K]"}

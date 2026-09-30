@@ -157,3 +157,6 @@ export function hitSegment(points: Point[], at: Point, tolerance = 6): number {
   }
   return best;
 }
+
+/** The draft ops a route edit produces: exactly one layout-only set_route, never a process op. */
+export const routeEditOps = (stream: string, points: Point[]) => [{ op: "set_route" as const, stream, points: points.map(({ x, y }) => ({ x, y })) }];

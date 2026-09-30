@@ -44,6 +44,7 @@ import {
   offsetSegment,
   pathData,
   removeVertex,
+  routeEditOps,
   routeStream,
   type Anchor,
   type Point,
@@ -359,7 +360,7 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
   const saveRoute = (streamId: string, points: Point[] | null) => {
     if (!points) return setNotice({ tone: "danger", text: "A route holds at most 12 bends." });
     setRouteOverrides((current) => ({ ...current, [streamId]: points }));
-    void apply([{ op: "set_route", stream: streamId, points }]);
+    void apply(routeEditOps(streamId, points));
   };
   const onPointerMove = (event: ReactPointerEvent) => {
     if (routeDrag) {
