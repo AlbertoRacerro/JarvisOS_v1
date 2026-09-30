@@ -15,6 +15,7 @@ assert.match(sidecar, /draftInteractionEscalation/);
 assert.match(sidecar, /Approve text and escalate/);
 assert.match(sidecar, /Review edited text/);
 assert.match(sidecar, /cloudDraft\.text_digest && cloudEditText === cloudDraft\.text/);
+assert.match(sidecar, /Checking cloud request…/);
 assert.doesNotMatch(sidecar, /Approved derivative ID|Source reference \(for example/);
 assert.match(sidecar, /<option value="relay">Relay agent<\/option>/);
 assert.match(sidecar, /submitRelayRun\(workspaceId, targetThread/);
