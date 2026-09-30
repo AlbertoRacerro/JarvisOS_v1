@@ -13,7 +13,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-COMPILER_VERSION = "155.1"
+COMPILER_VERSION = "158.1"
 MAX_OBJECTS = 60
 ID_PATTERN = r"^[a-z][a-z0-9_-]{0,39}$"
 TAG_PATTERN = r"^[A-Za-z][A-Za-z0-9_-]{0,31}$"
@@ -28,7 +28,7 @@ PROPERTY_PACKAGES: tuple[str, ...] = (
     "Steam Tables (IAPWS-IF97)",
 )
 
-QuantityKind = Literal["temperature", "pressure", "pressure_difference", "mass_flow", "percent"]
+QuantityKind = Literal["temperature", "pressure", "pressure_difference", "mass_flow", "percent", "power", "flow_ratio", "dimensionless", "length", "volume", "area", "heat_transfer_coefficient", "molar_flow"]
 
 # SI storage unit and the display units offered by inspectors, per quantity kind.
 QUANTITY_UNITS: dict[str, tuple[str, tuple[str, ...]]] = {
@@ -37,6 +37,14 @@ QUANTITY_UNITS: dict[str, tuple[str, tuple[str, ...]]] = {
     "pressure_difference": ("Pa", ("bar", "kPa", "Pa", "psi")),
     "mass_flow": ("kg/s", ("kg/h", "kg/s", "t/h")),
     "percent": ("percent", ("percent",)),
+    "power": ("kW", ("kW", "W")),
+    "flow_ratio": ("dimensionless", ("dimensionless",)),
+    "dimensionless": ("dimensionless", ("dimensionless",)),
+    "length": ("m", ("m", "mm")),
+    "volume": ("m3", ("m3",)),
+    "area": ("m2", ("m2",)),
+    "heat_transfer_coefficient": ("W/[m2.K]", ("W/[m2.K]",)),
+    "molar_flow": ("mol/s", ("mol/s",)),
 }
 
 
@@ -62,6 +70,8 @@ class UnitSpec:
     inlets: tuple[str, ...]
     outlets: tuple[str, ...]
     required_inlets: int
+    energy_inlets: tuple[str, ...] = ()
+    energy_outlets: tuple[str, ...] = ()
     modes: dict[str, str] = field(default_factory=dict)
     params: tuple[ParamSpec, ...] = ()
 
@@ -74,16 +84,34 @@ class UnitSpec:
 
 
 def _heat(label: str, dwsim_type: str) -> UnitSpec:
+    modes = ({"outlet_temperature": "OutletTemperature", "heat_added": "HeatAdded", "energy_stream": "EnergyStream",
+              "outlet_vapor_fraction": "OutletVaporFraction", "temperature_change": "TemperatureChange",
+              "heat_added_removed": "HeatAddedRemoved"} if dwsim_type == "Heater" else
+             {"outlet_temperature": "OutletTemperature", "heat_removed": "HeatRemoved", "energy_stream": "EnergyStream",
+              "outlet_vapor_fraction": "OutletVaporFraction", "temperature_change": "TemperatureChange"})
+    if dwsim_type == "Cooler":
+        heat_duty_mode = ("heat_removed",)
+        all_modes = tuple(modes)
+    else:
+        heat_duty_mode = ("heat_added", "heat_added_removed")
+        all_modes = tuple(modes)
     return UnitSpec(
         type=dwsim_type, label=label, dwsim_type=dwsim_type, native_types=(dwsim_type,),
         inlets=("inlet",), outlets=("outlet",), required_inlets=1,
-        modes={"outlet_temperature": "OutletTemperature"},
+        modes=modes,
         params=(
             ParamSpec("outlet_temperature", "Outlet temperature", "temperature", "OutletTemperature",
                       ("outlet_temperature",), minimum_si=1.0),
             ParamSpec("pressure_drop", "Pressure drop", "pressure_difference", "DeltaP",
-                      ("outlet_temperature",), default=0.0, minimum_si=0.0),
+                      all_modes, default=0.0, minimum_si=0.0),
+            ParamSpec("heat_duty", "Heat duty", "power", "DeltaQ",
+                      heat_duty_mode),
+            ParamSpec("temperature_change", "Temperature change", "temperature", "DeltaT",
+                      ("temperature_change",)),
+            ParamSpec("vapor_fraction", "Outlet vapor fraction", "flow_ratio", "OutletVaporFraction",
+                      ("outlet_vapor_fraction",), minimum_si=0.0, maximum_si=1.0),
         ),
+        energy_inlets=("energy feed",),
     )
 
 
@@ -122,15 +150,55 @@ UNIT_REGISTRY: dict[str, UnitSpec] = {
         type="Flash", label="Flash vessel", dwsim_type="Vessel", native_types=("Vessel",),
         inlets=("feed",), outlets=("vapor", "liquid"), required_inlets=1,
     ),
+    "Splitter": UnitSpec(
+        type="Splitter", label="Splitter", dwsim_type="Splitter", native_types=("Splitter",),
+        inlets=("inlet",), outlets=("outlet 1", "outlet 2", "outlet 3"), required_inlets=1,
+        modes={"split_ratios": "SplitRatios"},
+    ),
+    "HeatExchanger": UnitSpec(
+        type="HeatExchanger", label="Heat exchanger", dwsim_type="HeatExchanger", native_types=("HeatExchanger",),
+        inlets=("hot inlet", "cold inlet"), outlets=("hot outlet", "cold outlet"), required_inlets=2,
+        modes={"calc_both_temp_ua": "CalcBothTemp_UA"},
+        params=(ParamSpec("overall_coefficient", "Overall heat transfer coefficient", "heat_transfer_coefficient", "OverallCoefficient", ("calc_both_temp_ua",), default=1000.0, minimum_si=0.0),
+                ParamSpec("area", "Heat transfer area", "area", "Area", ("calc_both_temp_ua",), default=1.0, minimum_si=0.0),
+                ParamSpec("hot_pressure_drop", "Hot side pressure drop", "pressure_difference", "HotSidePressureDrop", ("calc_both_temp_ua",), default=0.0, minimum_si=0.0),
+                ParamSpec("cold_pressure_drop", "Cold side pressure drop", "pressure_difference", "ColdSidePressureDrop", ("calc_both_temp_ua",), default=0.0, minimum_si=0.0),
+                ParamSpec("heat_loss", "Heat loss", "power", "HeatLoss", ("calc_both_temp_ua",), default=0.0)),
+    ),
+    "Recycle": UnitSpec(
+        type="Recycle", label="Recycle", dwsim_type="Recycle", native_types=("Recycle",),
+        inlets=("inlet",), outlets=("outlet",), required_inlets=1,
+    ),
+    "PFR": UnitSpec(
+        type="PFR", label="Plug flow reactor", dwsim_type="PFR", native_types=("PFR",),
+        inlets=("inlet",), outlets=("outlet",), required_inlets=1, energy_inlets=("energy feed",),
+        modes={"adiabatic": "Adiabatic", "isothermic": "Isothermic", "outlet_temperature": "OutletTemperature",
+               "nonisothermal_nonadiabatic": "NonIsothermalNonAdiabatic", "heat_exchange": "HeatExchange"},
+        params=(ParamSpec("volume", "Volume", "volume", "Volume", tuple(("adiabatic", "isothermic", "outlet_temperature", "nonisothermal_nonadiabatic", "heat_exchange")), minimum_si=0.0),
+                ParamSpec("length", "Length", "length", "Length", tuple(("adiabatic", "isothermic", "outlet_temperature", "nonisothermal_nonadiabatic", "heat_exchange")), minimum_si=0.0),
+                ParamSpec("pressure_drop", "Pressure drop", "pressure_difference", "DeltaP", tuple(("adiabatic", "isothermic", "outlet_temperature", "nonisothermal_nonadiabatic", "heat_exchange")), default=0.0, minimum_si=0.0),
+                ParamSpec("overall_coefficient", "Overall heat transfer coefficient", "heat_transfer_coefficient", "OverallHeatTransferCoefficient", ("heat_exchange",), minimum_si=0.0),
+                ParamSpec("heat_exchange_area", "Heat exchange area", "area", "HeatExchangeArea", ("heat_exchange",), minimum_si=0.0),
+                ParamSpec("coolant_inlet_temperature", "Coolant inlet temperature", "temperature", "CoolantInletTemperature", ("heat_exchange",)),
+                ParamSpec("coolant_mass_flow", "Coolant mass flow rate", "mass_flow", "CoolantMassFlowRate", ("heat_exchange",), minimum_si=0.0),
+                ParamSpec("coolant_specific_heat", "Coolant specific heat", "dimensionless", "CoolantSpecificHeat", ("heat_exchange",), minimum_si=0.0)),
+    ),
+    "DistillationColumn": UnitSpec(
+        type="DistillationColumn", label="Distillation column", dwsim_type="DistillationColumn",
+        native_types=("DistillationColumn",), inlets=("feed",), outlets=("distillate", "bottoms"),
+        required_inlets=1, energy_inlets=("reboiler duty",), energy_outlets=("condenser duty",),
+        params=(ParamSpec("number_of_stages", "Number of stages", "dimensionless", "NumberOfStages", ("column",), default=15, minimum_si=3, maximum_si=200),
+                ParamSpec("feed_stage", "Feed stage", "dimensionless", "__FeedStage", ("column",), default=7, minimum_si=0, maximum_si=199),
+                ParamSpec("top_pressure", "Top pressure", "pressure", "__TopPressure", ("column",), default=101325.0, minimum_si=1),
+                ParamSpec("bottom_pressure", "Bottom pressure", "pressure", "__BottomPressure", ("column",), default=101325.0, minimum_si=1),
+                ParamSpec("condenser_spec", "Condenser reflux ratio", "dimensionless", "Condenser_Specification_Value", ("column",), default=2.0, minimum_si=0),
+                ParamSpec("reboiler_spec", "Bottoms molar flow", "molar_flow", "Reboiler_Specification_Value", ("column",), default=27.5, minimum_si=0)),
+        modes={"column": "Wang-Henke (Bubble Point)"},
+    ),
 }
 
 UNSUPPORTED_TYPES: dict[str, str] = {
-    "EnergyStream": "Units compute their own duty in 155; energy streams are not yet materialized.",
-    "Splitter": "Split specifications are not yet in the supported registry.",
-    "HeatExchanger": "Two-side exchanger specifications are not yet in the supported registry.",
-    "DistillationColumn": "Columns are outside the 155 supported subset.",
-    "Reactor": "Reactors are outside the 155 supported subset.",
-    "Recycle": "Recycle loops are outside the 155 supported subset.",
+    "Reactor": "Only the kinetically defined PFR subset is supported.",
 }
 
 # Feed-stream specification keys: SI storage and DWSIM MCP argument names.
@@ -168,6 +236,7 @@ class AddStream(_Op):
     op: Literal["add_stream"]
     id: str | None = Field(default=None, pattern=ID_PATTERN)
     tag: str = Field(pattern=TAG_PATTERN)
+    stream_type: Literal["material", "energy"] = "material"
     x: int = Field(ge=-5000, le=5000)
     y: int = Field(ge=-5000, le=5000)
 
@@ -204,14 +273,26 @@ class Disconnect(_Op):
     end: Literal["source", "target"]
 
 
+class RoutePoint(BaseModel):
+    x: int = Field(ge=-5000, le=5000)
+    y: int = Field(ge=-5000, le=5000)
+
+
+class SetRoute(_Op):
+    op: Literal["set_route"]
+    stream: str = Field(pattern=ID_PATTERN)
+    points: list[RoutePoint] = Field(max_length=32)
+
+
 class SetStreamSpec(_Op):
     op: Literal["set_stream_spec"]
     stream: str = Field(pattern=ID_PATTERN)
     temperature: DraftQuantity | None = None
     pressure: DraftQuantity | None = None
     mass_flow: DraftQuantity | None = None
+    duty: DraftQuantity | None = None
     composition: dict[str, float] | None = None
-    clear: list[Literal["temperature", "pressure", "mass_flow", "composition"]] = Field(default_factory=list)
+    clear: list[Literal["temperature", "pressure", "mass_flow", "composition", "duty"]] = Field(default_factory=list)
 
     @field_validator("composition")
     @classmethod
@@ -235,7 +316,7 @@ class SetThermo(_Op):
 
 
 DraftOp = Annotated[
-    AddUnit | AddStream | Delete | Move | Rename | Connect | Disconnect | SetStreamSpec | SetUnitParams | SetThermo,
+    AddUnit | AddStream | Delete | Move | Rename | Connect | Disconnect | SetRoute | SetStreamSpec | SetUnitParams | SetThermo,
     Field(discriminator="op"),
 ]
 

@@ -1,0 +1,68 @@
+"""Evidence-derived DWSIM capability contract for process drafts (spec 158)."""
+
+from pydantic import TypeAdapter
+
+from app.modules.process_stack import draft_compiler
+from app.modules.process_stack.draft import apply_ops, empty_document, registry_projection
+from app.modules.process_stack.draft_compiler import _stream_result
+from app.modules.process_stack.draft_models import UNIT_REGISTRY, UNSUPPORTED_TYPES, DraftOp
+
+
+def test_registry_modes_and_ports_are_present_in_pinned_manifest() -> None:
+    projection = registry_projection()
+    manifest = projection["dwsim_capabilities"]
+    assert manifest["runtime"] == "DWSIM 10.2.9"
+    for unit in UNIT_REGISTRY.values():
+        capability = manifest["objects"][unit.dwsim_type]
+        assert set(unit.modes.values()) <= set(capability["modes"])
+        assert capability["native_type"] in unit.native_types
+
+
+def test_manifest_exposes_reported_property_catalogue_and_column_limit() -> None:
+    projection = registry_projection()
+    entries = {item["type"]: item for item in projection["units"]}
+    assert entries["Heater"]["result_properties"]
+    assert {item["classification"] for item in entries["Heater"]["result_properties"]} <= {"input", "result"}
+    assert "DistillationColumn" in UNIT_REGISTRY
+    assert "DistillationColumn" not in UNSUPPORTED_TYPES
+
+
+def test_stream_result_keeps_dwsim_report_without_recalculation() -> None:
+    reported = {
+        "temperature_K": 300.0,
+        "properties": {"Cp": {"value": "4.2", "units": "kJ/kg.K", "specification": False}},
+        "phases": [{"name": "Mixture", "compounds": {"Water": {"mass_fraction": 1.0}}}],
+    }
+    result = _stream_result(reported)
+    assert result["reported"] == reported
+    assert result["temperature_K"] == 300.0
+
+
+def test_energy_stream_and_layout_routes_compile_orthogonally() -> None:
+    document = empty_document("Energy train")
+    ops = [
+        {"op": "set_thermo", "compounds": ["Water"], "property_package": "NRTL"},
+        {"op": "add_unit", "id": "heater", "type": "Heater", "tag": "H1", "x": 0, "y": 0},
+        {"op": "add_stream", "id": "feed", "tag": "F", "x": 0, "y": 0},
+        {"op": "add_stream", "id": "product", "tag": "P", "x": 0, "y": 0},
+        {"op": "add_stream", "id": "duty", "tag": "Q", "stream_type": "energy", "x": 0, "y": 0},
+        {"op": "set_stream_spec", "stream": "feed", "temperature": {"value": 25, "unit": "degC"},
+         "pressure": {"value": 1, "unit": "bar"}, "mass_flow": {"value": 1, "unit": "kg/s"},
+         "composition": {"Water": 1.0}},
+        {"op": "connect", "stream": "feed", "end": "target", "unit": "heater", "port": 0},
+        {"op": "connect", "stream": "product", "end": "source", "unit": "heater", "port": 0},
+        {"op": "connect", "stream": "duty", "end": "target", "unit": "heater", "port": 0},
+        {"op": "set_unit_params", "unit": "heater", "mode": "energy_stream"},
+        {"op": "set_stream_spec", "stream": "duty", "duty": {"value": 50, "unit": "kW"}},
+    ]
+    adapter = TypeAdapter(DraftOp)
+    canonical = apply_ops(document, [adapter.validate_python(op) for op in ops])
+    calls = draft_compiler.plan(canonical)
+    assert ("dwsim_stream_add_energy", {"name": "Q"}) in calls
+    assert ("dwsim_unitop_connect", {"unitop": "H1", "energy_feed": "Q", "energy_feed_port": 1}) in calls
+    assert ("dwsim_unitop_set", {"name": "Q", "properties": {"EnergyFlow": 50.0}}) in calls
+    expected = draft_compiler.expected(canonical)
+    routed = apply_ops(canonical, [adapter.validate_python({
+        "op": "set_route", "stream": "duty", "points": [{"x": 0, "y": 0}, {"x": 10, "y": 0}],
+    })])
+    assert draft_compiler.expected(routed) == expected

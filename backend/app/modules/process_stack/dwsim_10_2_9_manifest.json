@@ -1,0 +1,991 @@
+{
+  "objects": {
+    "Cooler": {
+      "dof": {
+        "mode": "HeatRemoved",
+        "slots": [
+          {
+            "property": "DeltaQ",
+            "required": true,
+            "units": "kW"
+          },
+          {
+            "property": "DeltaP",
+            "required": false,
+            "units": "Pa"
+          },
+          {
+            "property": "Eficiencia",
+            "required": false,
+            "units": "%"
+          }
+        ],
+        "supported": true
+      },
+      "modes": [
+        "HeatRemoved",
+        "OutletTemperature",
+        "OutletVaporFraction",
+        "TemperatureChange",
+        "EnergyStream"
+      ],
+      "native_type": "Cooler",
+      "observed_mode": "HeatRemoved",
+      "result_properties": [
+        {
+          "classification": "result",
+          "name": "Outlet Molar Vapor Fraction",
+          "unit": ""
+        },
+        {
+          "classification": "result",
+          "name": "Temperature Difference",
+          "unit": "C."
+        }
+      ]
+    },
+    "DistillationColumn": {
+      "dof": {
+        "mode": "Wang-Henke (Bubble Point)",
+        "slots": [
+          {
+            "property": "NumberOfStages",
+            "required": true,
+            "units": null
+          },
+          {
+            "property": "Stages[0].P",
+            "required": true,
+            "units": "Pa"
+          },
+          {
+            "property": "Stages[N].P",
+            "required": true,
+            "units": "Pa"
+          },
+          {
+            "property": "Specs[C]",
+            "required": true,
+            "units": null
+          },
+          {
+            "property": "Specs[R]",
+            "required": true,
+            "units": "mol/s"
+          },
+          {
+            "property": "CondenserType",
+            "required": false,
+            "units": null
+          }
+        ],
+        "supported": true
+      },
+      "modes": [
+        "Wang-Henke (Bubble Point)"
+      ],
+      "native_type": "DistillationColumn",
+      "observed_mode": null,
+      "result_properties": [
+        {
+          "classification": "result",
+          "name": "Condenser Duty",
+          "unit": "kW"
+        },
+        {
+          "classification": "result",
+          "name": "Number of Stages",
+          "unit": ""
+        },
+        {
+          "classification": "result",
+          "name": "Reboiler Duty",
+          "unit": "kW"
+        },
+        {
+          "classification": "result",
+          "name": "Stage_LiquidFlow_1",
+          "unit": "kmol/h"
+        },
+        {
+          "classification": "result",
+          "name": "Stage_LiquidFlow_10",
+          "unit": "kmol/h"
+        },
+        {
+          "classification": "result",
+          "name": "Stage_LiquidFlow_11",
+          "unit": "kmol/h"
+        },
+        {
+          "classification": "result",
+          "name": "Stage_LiquidFlow_12",
+          "unit": "kmol/h"
+        },
+        {
+          "classification": "result",
+          "name": "Stage_LiquidFlow_2",
+          "unit": "kmol/h"
+        },
+        {
+          "classification": "result",
+          "name": "Stage_LiquidFlow_3",
+          "unit": "kmol/h"
+        },
+        {
+          "classification": "result",
+          "name": "Stage_LiquidFlow_4",
+          "unit": "kmol/h"
+        },
+        {
+          "classification": "result",
+          "name": "Stage_LiquidFlow_5",
+          "unit": "kmol/h"
+        },
+        {
+          "classification": "result",
+          "name": "Stage_LiquidFlow_6",
+          "unit": "kmol/h"
+        },
+        {
+          "classification": "result",
+          "name": "Stage_LiquidFlow_7",
+          "unit": "kmol/h"
+        },
+        {
+          "classification": "result",
+          "name": "Stage_LiquidFlow_8",
+          "unit": "kmol/h"
+        },
+        {
+          "classification": "result",
+          "name": "Stage_LiquidFlow_9",
+          "unit": "kmol/h"
+        },
+        {
+          "classification": "result",
+          "name": "Stage_Temperature_1",
+          "unit": "C"
+        },
+        {
+          "classification": "result",
+          "name": "Stage_Temperature_10",
+          "unit": "C"
+        },
+        {
+          "classification": "result",
+          "name": "Stage_Temperature_11",
+          "unit": "C"
+        },
+        {
+          "classification": "result",
+          "name": "Stage_Temperature_12",
+          "unit": "C"
+        },
+        {
+          "classification": "result",
+          "name": "Stage_Temperature_2",
+          "unit": "C"
+        },
+        {
+          "classification": "result",
+          "name": "Stage_Temperature_3",
+          "unit": "C"
+        },
+        {
+          "classification": "result",
+          "name": "Stage_Temperature_4",
+          "unit": "C"
+        },
+        {
+          "classification": "result",
+          "name": "Stage_Temperature_5",
+          "unit": "C"
+        },
+        {
+          "classification": "result",
+          "name": "Stage_Temperature_6",
+          "unit": "C"
+        },
+        {
+          "classification": "result",
+          "name": "Stage_Temperature_7",
+          "unit": "C"
+        },
+        {
+          "classification": "result",
+          "name": "Stage_Temperature_8",
+          "unit": "C"
+        },
+        {
+          "classification": "result",
+          "name": "Stage_Temperature_9",
+          "unit": "C"
+        },
+        {
+          "classification": "result",
+          "name": "Stage_VaporFlow_1",
+          "unit": "kmol/h"
+        },
+        {
+          "classification": "result",
+          "name": "Stage_VaporFlow_10",
+          "unit": "kmol/h"
+        },
+        {
+          "classification": "result",
+          "name": "Stage_VaporFlow_11",
+          "unit": "kmol/h"
+        },
+        {
+          "classification": "result",
+          "name": "Stage_VaporFlow_12",
+          "unit": "kmol/h"
+        },
+        {
+          "classification": "result",
+          "name": "Stage_VaporFlow_2",
+          "unit": "kmol/h"
+        },
+        {
+          "classification": "result",
+          "name": "Stage_VaporFlow_3",
+          "unit": "kmol/h"
+        },
+        {
+          "classification": "result",
+          "name": "Stage_VaporFlow_4",
+          "unit": "kmol/h"
+        },
+        {
+          "classification": "result",
+          "name": "Stage_VaporFlow_5",
+          "unit": "kmol/h"
+        },
+        {
+          "classification": "result",
+          "name": "Stage_VaporFlow_6",
+          "unit": "kmol/h"
+        },
+        {
+          "classification": "result",
+          "name": "Stage_VaporFlow_7",
+          "unit": "kmol/h"
+        },
+        {
+          "classification": "result",
+          "name": "Stage_VaporFlow_8",
+          "unit": "kmol/h"
+        },
+        {
+          "classification": "result",
+          "name": "Stage_VaporFlow_9",
+          "unit": "kmol/h"
+        },
+        {
+          "classification": "result",
+          "name": "Sump_LiquidLevel",
+          "unit": "m"
+        }
+      ]
+    },
+    "HeatExchanger": {
+      "dof": {
+        "mode": "CalcBothTemp_UA",
+        "slots": [
+          {
+            "property": "OverallCoefficient",
+            "required": true,
+            "units": "W/[m2.K]"
+          },
+          {
+            "property": "Area",
+            "required": true,
+            "units": "m2"
+          },
+          {
+            "property": "HotSidePressureDrop",
+            "required": false,
+            "units": "Pa"
+          },
+          {
+            "property": "ColdSidePressureDrop",
+            "required": false,
+            "units": "Pa"
+          },
+          {
+            "property": "HeatLoss",
+            "required": false,
+            "units": "kW"
+          }
+        ],
+        "supported": true
+      },
+      "modes": [
+        "CalcTempHotOut",
+        "CalcTempColdOut",
+        "CalcBothTemp",
+        "CalcBothTemp_UA",
+        "CalcArea",
+        "ShellandTube_Rating",
+        "ShellandTube_CalcFoulingFactor",
+        "PinchPoint",
+        "ThermalEfficiency",
+        "OutletVaporFraction1",
+        "OutletVaporFraction2"
+      ],
+      "native_type": "HeatExchanger",
+      "observed_mode": "",
+      "result_properties": [
+        {
+          "classification": "result",
+          "name": "Calculated MITA",
+          "unit": "C."
+        },
+        {
+          "classification": "result",
+          "name": "Cold fluid outlet temperature",
+          "unit": "C"
+        },
+        {
+          "classification": "result",
+          "name": "Heat Load",
+          "unit": "kW"
+        },
+        {
+          "classification": "result",
+          "name": "Hot fluid outlet temperature",
+          "unit": "C"
+        },
+        {
+          "classification": "result",
+          "name": "Logarithmic mean temperature difference LMTD",
+          "unit": "C."
+        },
+        {
+          "classification": "result",
+          "name": "Maximum Theoretical Heat Exchange",
+          "unit": "kW"
+        },
+        {
+          "classification": "result",
+          "name": "PROP_HX_49",
+          "unit": "mm"
+        },
+        {
+          "classification": "result",
+          "name": "PROP_HX_50",
+          "unit": "m"
+        },
+        {
+          "classification": "result",
+          "name": "PROP_HX_51",
+          "unit": "m2"
+        },
+        {
+          "classification": "result",
+          "name": "PROP_HX_52",
+          "unit": "m2"
+        },
+        {
+          "classification": "result",
+          "name": "PROP_HX_53",
+          "unit": ""
+        },
+        {
+          "classification": "result",
+          "name": "PROP_HX_54",
+          "unit": "m2"
+        },
+        {
+          "classification": "result",
+          "name": "PROP_HX_55",
+          "unit": "m2"
+        },
+        {
+          "classification": "result",
+          "name": "PROP_HX_56",
+          "unit": "m/s"
+        },
+        {
+          "classification": "result",
+          "name": "PROP_HX_57",
+          "unit": "m/s"
+        },
+        {
+          "classification": "result",
+          "name": "PROP_HX_58",
+          "unit": "m/s"
+        },
+        {
+          "classification": "result",
+          "name": "PROP_HX_59",
+          "unit": "m/s"
+        },
+        {
+          "classification": "result",
+          "name": "PROP_HX_60",
+          "unit": "m/s"
+        },
+        {
+          "classification": "result",
+          "name": "PROP_HX_61",
+          "unit": "m/s"
+        },
+        {
+          "classification": "result",
+          "name": "PROP_HX_62",
+          "unit": "bar"
+        },
+        {
+          "classification": "result",
+          "name": "PROP_HX_63",
+          "unit": "bar"
+        },
+        {
+          "classification": "result",
+          "name": "PROP_HX_64",
+          "unit": "bar"
+        },
+        {
+          "classification": "result",
+          "name": "PROP_HX_65",
+          "unit": "bar"
+        },
+        {
+          "classification": "result",
+          "name": "PROP_HX_66",
+          "unit": "m3"
+        },
+        {
+          "classification": "result",
+          "name": "PROP_HX_67",
+          "unit": "m3"
+        },
+        {
+          "classification": "result",
+          "name": "PROP_HX_68",
+          "unit": "kg"
+        },
+        {
+          "classification": "result",
+          "name": "PROP_HX_69",
+          "unit": "kg"
+        },
+        {
+          "classification": "result",
+          "name": "PROP_HX_70",
+          "unit": "kg"
+        },
+        {
+          "classification": "result",
+          "name": "Thermal Efficiency",
+          "unit": "%"
+        },
+        {
+          "classification": "result",
+          "name": "[Shell and Tube] Fouling Factor (Design)",
+          "unit": "K.m2/W"
+        },
+        {
+          "classification": "result",
+          "name": "[Shell and Tube] LMTD Correction Factor (F)",
+          "unit": ""
+        },
+        {
+          "classification": "result",
+          "name": "[Shell and Tube] Resistance heat transfer pipes",
+          "unit": "K.m2/W"
+        },
+        {
+          "classification": "result",
+          "name": "[Shell and Tube] Resistance heat transfer shell",
+          "unit": "K.m2/W"
+        },
+        {
+          "classification": "result",
+          "name": "[Shell and Tube] Resistance thermal conductivity pipes",
+          "unit": "K.m2/W"
+        },
+        {
+          "classification": "result",
+          "name": "[Shell and Tube] Reynolds number shell",
+          "unit": ""
+        },
+        {
+          "classification": "result",
+          "name": "[Shell and Tube] Reynolds number tubes",
+          "unit": ""
+        }
+      ]
+    },
+    "Heater": {
+      "dof": {
+        "mode": "HeatAdded",
+        "slots": [
+          {
+            "property": "DeltaQ",
+            "required": true,
+            "units": "kW"
+          },
+          {
+            "property": "DeltaP",
+            "required": false,
+            "units": "Pa"
+          },
+          {
+            "property": "Eficiencia",
+            "required": false,
+            "units": "%"
+          }
+        ],
+        "supported": true
+      },
+      "modes": [
+        "HeatAdded",
+        "OutletTemperature",
+        "EnergyStream",
+        "OutletVaporFraction",
+        "TemperatureChange",
+        "HeatAddedRemoved"
+      ],
+      "native_type": "Heater",
+      "observed_mode": "HeatAdded",
+      "result_properties": [
+        {
+          "classification": "result",
+          "name": "Temperature Difference",
+          "unit": "C."
+        }
+      ]
+    },
+    "Mixer": {
+      "dof": {
+        "mode": "",
+        "slots": [],
+        "supported": false
+      },
+      "modes": [],
+      "native_type": "Mixer",
+      "observed_mode": null,
+      "result_properties": []
+    },
+    "PFR": {
+      "dof": {
+        "mode": "Adiabatic",
+        "slots": [
+          {
+            "property": "ReactionSetID",
+            "required": true,
+            "units": null
+          },
+          {
+            "property": "ReactorOperationMode",
+            "required": false,
+            "units": null
+          },
+          {
+            "property": "Volume",
+            "required": true,
+            "units": "m3"
+          },
+          {
+            "property": "Length",
+            "required": true,
+            "units": "m"
+          },
+          {
+            "property": "CatalystLoading",
+            "required": false,
+            "units": "kg/m3"
+          },
+          {
+            "property": "DeltaP",
+            "required": false,
+            "units": "Pa"
+          }
+        ],
+        "supported": true
+      },
+      "modes": [
+        "Isothermic",
+        "Adiabatic",
+        "OutletTemperature",
+        "NonIsothermalNonAdiabatic",
+        "HeatExchange"
+      ],
+      "native_type": "PFR",
+      "observed_mode": null,
+      "result_properties": [
+        {
+          "classification": "result",
+          "name": "Area Calculation Mode",
+          "unit": ""
+        },
+        {
+          "classification": "result",
+          "name": "Calculate External HTC",
+          "unit": ""
+        },
+        {
+          "classification": "result",
+          "name": "Calculate Internal HTC",
+          "unit": ""
+        },
+        {
+          "classification": "result",
+          "name": "Calculated External HTC",
+          "unit": "W/m2.K"
+        },
+        {
+          "classification": "result",
+          "name": "Calculated Internal HTC",
+          "unit": "W/m2.K"
+        },
+        {
+          "classification": "result",
+          "name": "Calculated Overall HTC",
+          "unit": "W/m2.K"
+        },
+        {
+          "classification": "result",
+          "name": "Catalyst Particle Sphericity",
+          "unit": ""
+        },
+        {
+          "classification": "result",
+          "name": "Catalyst diameter",
+          "unit": "mm"
+        },
+        {
+          "classification": "result",
+          "name": "Catalyst loading",
+          "unit": "kg/m3"
+        },
+        {
+          "classification": "result",
+          "name": "Catalyst void fraction",
+          "unit": ""
+        },
+        {
+          "classification": "result",
+          "name": "Coolant Density",
+          "unit": "kg/m3"
+        },
+        {
+          "classification": "result",
+          "name": "Coolant Flow Direction",
+          "unit": ""
+        },
+        {
+          "classification": "result",
+          "name": "Coolant Inlet Temperature",
+          "unit": "C"
+        },
+        {
+          "classification": "result",
+          "name": "Coolant Mass Flow Rate",
+          "unit": "kg/h"
+        },
+        {
+          "classification": "result",
+          "name": "Coolant Specific Heat",
+          "unit": "J/kg.K"
+        },
+        {
+          "classification": "result",
+          "name": "Coolant Thermal Conductivity",
+          "unit": "W/m.K"
+        },
+        {
+          "classification": "result",
+          "name": "Coolant Viscosity",
+          "unit": "Pa.s"
+        },
+        {
+          "classification": "result",
+          "name": "External Heat Transfer Coefficient",
+          "unit": "W/m2.K"
+        },
+        {
+          "classification": "result",
+          "name": "Heat Exchange Area",
+          "unit": "m2"
+        },
+        {
+          "classification": "result",
+          "name": "Heat load",
+          "unit": "kW"
+        },
+        {
+          "classification": "result",
+          "name": "Integration Step",
+          "unit": ""
+        },
+        {
+          "classification": "result",
+          "name": "Internal Heat Transfer Coefficient",
+          "unit": "W/m2.K"
+        },
+        {
+          "classification": "result",
+          "name": "Jacket Diameter",
+          "unit": "mm"
+        },
+        {
+          "classification": "result",
+          "name": "Number of Tubes",
+          "unit": ""
+        },
+        {
+          "classification": "result",
+          "name": "Outlet Temperature",
+          "unit": "C"
+        },
+        {
+          "classification": "result",
+          "name": "Overall Heat Transfer Coefficient",
+          "unit": "W/m2.K"
+        },
+        {
+          "classification": "result",
+          "name": "Pressure Drop",
+          "unit": "bar"
+        },
+        {
+          "classification": "result",
+          "name": "Residence time",
+          "unit": "s"
+        },
+        {
+          "classification": "result",
+          "name": "Select the calculation mode of this reactor.",
+          "unit": ""
+        },
+        {
+          "classification": "result",
+          "name": "Temperature delta",
+          "unit": "C."
+        },
+        {
+          "classification": "result",
+          "name": "Tube Diameter",
+          "unit": "mm"
+        },
+        {
+          "classification": "result",
+          "name": "Tube Length",
+          "unit": "m"
+        },
+        {
+          "classification": "result",
+          "name": "Use Utility Stream",
+          "unit": ""
+        },
+        {
+          "classification": "result",
+          "name": "Use Wall Properties",
+          "unit": ""
+        },
+        {
+          "classification": "input",
+          "name": "Volume",
+          "unit": "m3"
+        },
+        {
+          "classification": "result",
+          "name": "Wall Thickness",
+          "unit": "m"
+        }
+      ]
+    },
+    "Pump": {
+      "dof": {
+        "mode": "Delta_P",
+        "slots": [
+          {
+            "property": "DeltaP",
+            "required": true,
+            "units": "Pa"
+          },
+          {
+            "property": "Eficiencia",
+            "required": false,
+            "units": "%"
+          }
+        ],
+        "supported": true
+      },
+      "modes": [
+        "Delta_P",
+        "OutletPressure",
+        "EnergyStream",
+        "Curves",
+        "Power"
+      ],
+      "native_type": "Pump",
+      "observed_mode": "Delta_P",
+      "result_properties": [
+        {
+          "classification": "result",
+          "name": "Available NPSH",
+          "unit": "m"
+        },
+        {
+          "classification": "result",
+          "name": "Head",
+          "unit": "m"
+        },
+        {
+          "classification": "result",
+          "name": "NPSH Available",
+          "unit": "m"
+        },
+        {
+          "classification": "result",
+          "name": "Outlet Pressure",
+          "unit": "bar"
+        },
+        {
+          "classification": "result",
+          "name": "PROP_PU_8",
+          "unit": "rpm"
+        },
+        {
+          "classification": "result",
+          "name": "Power Required",
+          "unit": "kW"
+        },
+        {
+          "classification": "result",
+          "name": "Temperature Difference",
+          "unit": "C."
+        }
+      ]
+    },
+    "Recycle": {
+      "dof": {
+        "mode": "",
+        "slots": [],
+        "supported": true
+      },
+      "modes": [],
+      "native_type": "Recycle",
+      "observed_mode": null,
+      "result_properties": [
+        {
+          "classification": "result",
+          "name": "Mass Flow Error",
+          "unit": "kg/h"
+        },
+        {
+          "classification": "result",
+          "name": "Pressure Error",
+          "unit": "bar"
+        },
+        {
+          "classification": "result",
+          "name": "Temperature Error",
+          "unit": "C."
+        }
+      ]
+    },
+    "Splitter": {
+      "dof": {
+        "mode": "",
+        "slots": [],
+        "supported": false
+      },
+      "modes": [
+        "SplitRatios",
+        "StreamMassFlowSpec",
+        "StreamMoleFlowSpec",
+        "StreamVolumetricFlowSpec"
+      ],
+      "native_type": "Splitter",
+      "observed_mode": "",
+      "result_properties": [
+        {
+          "classification": "result",
+          "name": "SR0",
+          "unit": ""
+        },
+        {
+          "classification": "result",
+          "name": "Stream 1 Flow Spec",
+          "unit": ""
+        },
+        {
+          "classification": "result",
+          "name": "Stream 2 Flow Spec",
+          "unit": ""
+        }
+      ]
+    },
+    "Valve": {
+      "dof": {
+        "mode": "DeltaP",
+        "slots": [
+          {
+            "property": "DeltaP",
+            "required": true,
+            "units": "Pa"
+          }
+        ],
+        "supported": true
+      },
+      "modes": [
+        "DeltaP",
+        "OutletPressure",
+        "Kv_Liquid",
+        "Kv_Gas",
+        "Kv_Steam",
+        "Kv_General"
+      ],
+      "native_type": "Valve",
+      "observed_mode": "DeltaP",
+      "result_properties": [
+        {
+          "classification": "result",
+          "name": "Actual Flow Coefficient",
+          "unit": ""
+        },
+        {
+          "classification": "result",
+          "name": "Temperature Drop",
+          "unit": "C."
+        }
+      ]
+    },
+    "Vessel": {
+      "dof": {
+        "mode": "From the inlet",
+        "slots": [
+          {
+            "property": "FlashTemperature",
+            "required": false,
+            "units": "K"
+          },
+          {
+            "property": "FlashPressure",
+            "required": false,
+            "units": "Pa"
+          }
+        ],
+        "supported": true
+      },
+      "modes": [],
+      "native_type": "Vessel",
+      "observed_mode": null,
+      "result_properties": []
+    }
+  },
+  "probe_sha256": "d20f9742",
+  "runtime": "DWSIM 10.2.9",
+  "source": "evidence/158/units.json",
+  "verified": {
+    "distillation_column": "column2.json: condenser/reboiler connection rejected; solve missing streams",
+    "energy_stream": "ports.json: energy port 1 and EnergyFlow setter",
+    "pfr_heat_exchange_reaction": "pfr_ok.json: native reaction-set reload and solve"
+  }
+}
