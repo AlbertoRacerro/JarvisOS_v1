@@ -4,6 +4,8 @@ import { API_BASE_URL } from "./client";
 export type DraftQuantity = { value: number; unit: string };
 export type StoredQuantity = DraftQuantity & { si: number };
 export type Endpoint = { unit: string; port: number };
+export type RoutePoint = { x: number; y: number };
+export type OptionValue = string | number | boolean;
 export type DraftObject = {
   id: string;
   kind: "unit" | "stream";
@@ -13,6 +15,9 @@ export type DraftObject = {
   y: number;
   mode?: string | null;
   params?: Record<string, StoredQuantity>;
+  // Spec 158: enum/bool unit options and the kinetic reactions a reactor uses.
+  options?: Record<string, OptionValue>;
+  reactions?: string[];
   source?: Endpoint | null;
   target?: Endpoint | null;
   spec?: {
@@ -20,7 +25,23 @@ export type DraftObject = {
     pressure?: StoredQuantity;
     mass_flow?: StoredQuantity;
     composition?: Record<string, number>;
+    duty?: StoredQuantity;
   };
+  // Layout-only orthogonal route waypoints; never materialized, never stale results.
+  route?: RoutePoint[];
+};
+/** Spec 158 typed kinetic reaction over declared compounds. */
+export type DraftReaction = {
+  id?: string;
+  name: string;
+  stoichiometry: Record<string, number>;
+  orders?: Record<string, number>;
+  base_reactant?: string | null;
+  phase?: string | null;
+  basis?: string | null;
+  A_forward?: StoredQuantity | DraftQuantity | number | null;
+  E_forward?: StoredQuantity | DraftQuantity | number | null;
+  [field: string]: unknown;
 };
 export type Finding = {
   severity: "blocker" | "warning" | string;
@@ -68,19 +89,45 @@ export type DraftProjection = {
   compounds: string[];
   property_package: string | null;
   objects: DraftObject[];
+  reactions?: Record<string, DraftReaction>;
   findings: Finding[];
   results: ResultsState;
   proposals: Proposal[];
 };
-export type RegistryParam = { key: string; label: string; kind: string; modes: string[]; default: number | null };
+export type RegistryOption = string | { value: string | boolean; label: string };
+export type RegistryParam = {
+  key: string;
+  label: string;
+  kind: string;
+  modes: string[];
+  default: number | string | boolean | null;
+  // Present for enum/bool options; quantity params use registry.quantity_units[kind].display.
+  options?: RegistryOption[];
+  minimum?: number | null;
+  maximum?: number | null;
+  classification?: "input" | "result" | "advanced";
+};
+export type RegistryMode = string | { key: string; label: string };
 export type RegistryUnit = {
   type: string;
   label: string;
   inlets: string[];
   outlets: string[];
+  energy_inlets?: string[];
+  energy_outlets?: string[];
+  energy_spec_modes?: string[];
   required_inlets: number;
-  modes: string[];
+  modes: RegistryMode[];
   params: RegistryParam[];
+  // Reactors reference kinetic reactions (spec 158).
+  reactions?: boolean;
+};
+export type RegistryReactionField = { key: string; label: string; kind: string; options?: RegistryOption[] };
+export type RegistryReactions = {
+  phases?: RegistryOption[];
+  bases?: RegistryOption[];
+  fields?: RegistryReactionField[];
+  [key: string]: unknown;
 };
 export type DraftRegistry = {
   compiler_version: string;
@@ -89,7 +136,17 @@ export type DraftRegistry = {
   quantity_units: Record<string, { si: string; display: string[] }>;
   stream_specs: { key: string; label: string; kind: string }[];
   units: RegistryUnit[];
+  reactions?: RegistryReactions;
   unsupported: Record<string, string>;
+};
+/** One DWSIM-reported property, captured at solve time; units verbatim from DWSIM. */
+export type ResultProperty = {
+  id: string;
+  name: string;
+  group: "conditions" | "phases" | "composition" | "thermodynamic" | "transport" | "equilibrium" | "other" | string;
+  unit: string;
+  value: number | string | boolean | null;
+  specification: boolean;
 };
 export type StreamResult = {
   temperature_K: number | null;
@@ -98,6 +155,7 @@ export type StreamResult = {
   vapor_fraction: number | null;
   mass_fractions: Record<string, number>;
   display?: Record<string, DraftQuantity>;
+  properties?: ResultProperty[];
 };
 export type MaterializationDiff = { path: string; expected: unknown; actual: unknown };
 export type DraftRun = {
@@ -116,7 +174,10 @@ export type DraftRun = {
   dwsim_check?: { ready: boolean; findings: Finding[] };
   solve?: { ok: boolean; errors: unknown[]; failed_objects: { tag: string; error: string }[] };
   streams?: Record<string, StreamResult>;
-  units?: Record<string, { calculated: boolean; error: string; reported: Record<string, { value: string; units: string }> }>;
+  units?: Record<
+    string,
+    { calculated: boolean; error: string; reported: Record<string, { value: string; units: string }>; properties?: ResultProperty[] }
+  >;
   mass_balance?: { status: string; residual_kg_s?: number; boundary_kg_s?: Record<string, number>; error?: string };
   compile_seconds?: number;
   error?: string;
@@ -216,6 +277,12 @@ export const formatQuantity = (value: unknown): string => {
     .map(([name, fraction]) => `${name} ${fraction}`)
     .join(", ");
 };
+
+export const modeKey = (mode: RegistryMode) => (typeof mode === "string" ? mode : mode.key);
+export const modeLabel = (mode: RegistryMode) => (typeof mode === "string" ? mode.replace(/_/g, " ") : mode.label);
+export const optionValue = (option: RegistryOption) => (typeof option === "string" ? option : option.value);
+export const optionLabel = (option: RegistryOption) =>
+  typeof option === "string" ? option : option.label;
 
 export const unitLabel = (unit: string) =>
   ({ degC: "°C", percent: "%", "kg/h": "kg/h", "kg/s": "kg/s", "t/h": "t/h" })[unit] ?? unit;

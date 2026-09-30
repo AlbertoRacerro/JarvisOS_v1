@@ -207,7 +207,6 @@ def test_registry_refuses_unsupported_constructs(api: Any) -> None:
            {"op": "add_unit", "id": "p1", "type": "Pump", "tag": "P1", "x": 0, "y": 0},
            {"op": "add_stream", "id": "a", "tag": "A", "x": 0, "y": 0})
     cases = [
-        ({"op": "add_unit", "type": "DistillationColumn", "tag": "C1", "x": 0, "y": 0}, "unsupported_type"),
         ({"op": "connect", "stream": "a", "end": "target", "unit": "p1", "port": 1}, "port_invalid"),
         ({"op": "set_unit_params", "unit": "p1", "mode": "curves"}, "mode_unsupported"),
         ({"op": "set_unit_params", "unit": "p1", "values": {"pressure_increase": Q(1, "bar")}}, "param_inactive"),
@@ -275,6 +274,10 @@ def test_run_binds_revision_goes_stale_and_refuses_mismatch(api: Any, monkeypatc
     assert body["run"]["streams"]["Feed"]["display"]["temperature"] == {"value": 25, "unit": "degC"}
     again = client.post(f"{base}/{state['draft_id']}/revisions/{solved}/validate").json()["run"]
     assert again["materialization_fingerprint"] == body["run"]["materialization_fingerprint"]
+
+    _patch(client, base, state, {"op": "set_route", "stream": "feed",
+                                  "points": [{"x": 40, "y": 120}, {"x": 90, "y": 120}]})
+    assert state["results"]["state"] == "current"
 
     _use(monkeypatch, _FakeDwsim(drop="V1"))
     refused = client.post(f"{base}/{state['draft_id']}/revisions/{solved}/run").json()

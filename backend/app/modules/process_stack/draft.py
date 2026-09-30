@@ -14,6 +14,7 @@ import math
 import os
 import re
 from datetime import UTC, datetime
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -42,6 +43,8 @@ from app.modules.process_stack.draft_models import (
     ParamSpec,
     ProposalRequest,
     Rename,
+    SetReactions,
+    SetRoute,
     SetStreamSpec,
     SetThermo,
     SetUnitParams,
@@ -51,6 +54,18 @@ from app.modules.process_stack.editor import _lock
 from app.modules.workspaces.service import get_workspace
 
 _COMPOSITION_TOL = 1e-6
+
+
+@lru_cache(maxsize=1)
+def _capability_manifest() -> dict[str, Any]:
+    path = Path(__file__).with_name("dwsim_10_2_9_manifest.json")
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:  # a missing checked-in contract is a packaging defect
+        raise RuntimeError("DWSIM 10.2.9 capability manifest is unavailable") from exc
+    if value.get("runtime") != "DWSIM 10.2.9" or not isinstance(value.get("objects"), dict):
+        raise RuntimeError("DWSIM capability manifest has an invalid identity")
+    return value
 
 
 class DraftError(RuntimeError):
@@ -108,7 +123,7 @@ def _si(quantity: DraftQuantity, kind: str, field: str) -> dict[str, Any]:
     if quantity.unit not in allowed:
         raise DraftError("unit_unsupported", f"{field}: unit {quantity.unit!r} is not offered; use one of {list(allowed)}",
                          field=field)
-    if kind == "percent":
+    if kind == "percent" or quantity.unit == si_unit:
         value = quantity.value
     else:
         try:
@@ -132,7 +147,8 @@ def convert_si(value_si: float, kind: str, unit: str) -> float:
 
 
 def empty_document(name: str) -> dict[str, Any]:
-    return {"schema_version": 1, "name": name, "compounds": [], "property_package": None, "objects": {}}
+    return {"schema_version": 1, "name": name, "compounds": [], "property_package": None,
+            "objects": {}, "reactions": {}}
 
 
 def _by_tag(document: dict[str, Any], tag: str) -> dict[str, Any] | None:
@@ -167,9 +183,10 @@ def _unit_spec(unit: dict[str, Any]) -> UnitSpec:
     return UNIT_REGISTRY[unit["type"]]
 
 
-def _occupant(document: dict[str, Any], unit_id: str, end: str, port: int) -> dict[str, Any] | None:
+def _occupant(document: dict[str, Any], unit_id: str, end: str, port: int, *, energy: bool = False) -> dict[str, Any] | None:
     return next(
         (item for item in document["objects"].values() if item["kind"] == "stream"
+         and (item["type"] == "EnergyStream") is energy
          and (item.get(end) or {}).get("unit") == unit_id and item[end]["port"] == port),
         None,
     )
@@ -195,11 +212,12 @@ def apply_op(document: dict[str, Any], op: Any) -> None:
         params = {item.key: _default_param(item) for item in spec.params_for(spec.default_mode)
                   if item.default is not None}
         objects[object_id] = {"id": object_id, "kind": "unit", "type": op.type, "tag": op.tag, "x": op.x, "y": op.y,
-                              "mode": spec.default_mode, "params": params}
+                              "mode": spec.default_mode, "params": params, "options": {}, "reactions": []}
     elif isinstance(op, AddStream):
         _unique_tag(document, op.tag)
         object_id = _new_id(document, "s", op.id)
-        objects[object_id] = {"id": object_id, "kind": "stream", "type": "MaterialStream", "tag": op.tag,
+        stream_type = "EnergyStream" if op.stream_type == "energy" else "MaterialStream"
+        objects[object_id] = {"id": object_id, "kind": "stream", "type": stream_type, "tag": op.tag,
                               "x": op.x, "y": op.y, "source": None, "target": None, "spec": {}}
     elif isinstance(op, Delete):
         item = _object(document, op.id)
@@ -220,14 +238,16 @@ def apply_op(document: dict[str, Any], op: Any) -> None:
         stream = _object(document, op.stream, "stream")
         unit = _object(document, op.unit, "unit")
         spec = _unit_spec(unit)
-        ports = spec.outlets if op.end == "source" else spec.inlets
+        stream_is_energy = stream["type"] == "EnergyStream"
+        ports = ((spec.energy_outlets if op.end == "source" else spec.energy_inlets) if stream_is_energy
+                 else (spec.outlets if op.end == "source" else spec.inlets))
         if op.port >= len(ports):
-            raise DraftError("port_invalid", f"{spec.label} has no {'outlet' if op.end == 'source' else 'inlet'} "
+            raise DraftError("port_invalid", f"{spec.label} has no {'energy ' if stream_is_energy else ''}{'outlet' if op.end == 'source' else 'inlet'} "
                              f"port {op.port}", field="port")
         other_end = "target" if op.end == "source" else "source"
         if (stream.get(other_end) or {}).get("unit") == op.unit:
             raise DraftError("port_invalid", "A stream cannot leave and enter the same unit (recycles are unsupported)")
-        occupant = _occupant(document, op.unit, op.end, op.port)
+        occupant = _occupant(document, op.unit, op.end, op.port, energy=stream_is_energy)
         if occupant is not None and occupant["id"] != op.stream:
             raise DraftError("port_occupied", f"{unit['tag']} {ports[op.port]} is already connected to "
                              f"{occupant['tag']}", field="port")
@@ -238,8 +258,24 @@ def apply_op(document: dict[str, Any], op: Any) -> None:
     elif isinstance(op, Disconnect):
         stream = _object(document, op.stream, "stream")
         stream[op.end] = None
+    elif isinstance(op, SetRoute):
+        stream = _object(document, op.stream, "stream")
+        points = [{"x": point.x, "y": point.y} for point in op.points]
+        if any(a == b for a, b in zip(points, points[1:], strict=False)) or any(
+            a["x"] != b["x"] and a["y"] != b["y"] for a, b in zip(points, points[1:], strict=False)
+        ):
+            raise DraftError("route_invalid", "Route points must form nonzero axis-parallel segments", field="points")
+        stream["route"] = points
     elif isinstance(op, SetStreamSpec):
         stream = _object(document, op.stream, "stream")
+        if stream["type"] == "EnergyStream":
+            if any((op.temperature, op.pressure, op.mass_flow, op.composition is not None)):
+                raise DraftError("spec_on_energy_stream", "Energy streams accept only duty", field="spec")
+            if "duty" in op.clear:
+                stream["spec"].pop("duty", None)
+            if op.duty is not None:
+                stream["spec"]["duty"] = _si(op.duty, "power", "Energy flow")
+            return
         if stream.get("source") is not None and (
             op.temperature or op.pressure or op.mass_flow or op.composition is not None
         ):
@@ -247,6 +283,8 @@ def apply_op(document: dict[str, Any], op: Any) -> None:
                              "streams (no source) take specifications", field="spec")
         for cleared in op.clear:
             stream["spec"].pop(cleared, None)
+        if op.duty is not None:
+            raise DraftError("spec_unsupported", "Material streams do not accept a duty", field="duty")
         for spec_key, (kind, _arg, label) in STREAM_SPECS.items():
             value = getattr(op, spec_key)
             if value is not None:
@@ -287,6 +325,33 @@ def apply_op(document: dict[str, Any], op: Any) -> None:
             ):
                 raise DraftError("quantity_out_of_range", f"{param.label} is outside its supported range", field=key)
             unit["params"][key] = converted
+        if op.options:
+            raise DraftError("option_unsupported", f"{spec.label} does not expose verified enum/boolean inputs", field="options")
+        if op.reactions is not None:
+            missing = sorted(set(op.reactions) - set(document.get("reactions", {})))
+            if missing:
+                raise DraftError("reaction_not_found", f"Reaction ids {missing} are not defined", field="reactions")
+            unit["reactions"] = list(dict.fromkeys(op.reactions))
+    elif isinstance(op, SetReactions):
+        reactions = {}
+        for reaction_id, reaction in op.reactions.items():
+            if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_-]{0,31}", reaction_id):
+                raise DraftError("reaction_id_invalid", f"Reaction id {reaction_id!r} is invalid", field="reactions")
+            item = reaction.model_dump(mode="json")
+            compounds = set(item["stoichiometry"]) | set(item["orders"])
+            unknown = sorted(compounds - set(document["compounds"]))
+            if unknown:
+                raise DraftError("compound_undeclared", f"Reaction compounds {unknown} are not declared in Thermo",
+                                 field="reactions")
+            base = item["base_reactant"]
+            if base not in item["stoichiometry"] or item["stoichiometry"][base] >= 0:
+                raise DraftError("reaction_base_invalid", "Base reactant must have a negative stoichiometric coefficient",
+                                 field="base_reactant")
+            if item["A_forward"]["unit"] != "kmol/[m3.h]" or item["E_forward"]["unit"] not in {"J/mol", "kJ/mol"}:
+                raise DraftError("reaction_unit_unsupported", "Use A in kmol/[m3.h] and activation energy in J/mol or kJ/mol",
+                                 field="A_forward")
+            reactions[reaction_id] = item
+        document["reactions"] = reactions
     elif isinstance(op, SetThermo):
         if op.compounds is not None:
             unknown = [name for name in op.compounds if name not in COMPOUNDS]
@@ -343,15 +408,49 @@ def validate_document(document: dict[str, Any]) -> list[dict[str, Any]]:
             add("blocker", "UNIT_INLET_MISSING",
                 f"{spec.label} needs {spec.required_inlets} connected inlet(s); {len(inlets)} connected.", unit["tag"],
                 "inlets")
-        for port, name in enumerate(spec.outlets):
-            if not _occupant(document, unit["id"], "source", port):
-                add("blocker", "UNIT_OUTLET_MISSING", f"Connect a stream to the {name} outlet.", unit["tag"], name)
         for param in spec.params_for(unit["mode"]):
             if param.key not in unit["params"]:
                 add("blocker", "UNIT_PARAM_MISSING", f"Set {param.label}.", unit["tag"], param.key)
+        if unit["type"] == "PFR" and not unit.get("reactions"):
+            add("blocker", "REACTION_SET_MISSING", "Assign at least one kinetic reaction to the PFR.", unit["tag"],
+                "reactions")
+        needs_energy = (unit["type"] == "DistillationColumn" or
+                        unit["type"] == "PFR" and unit["mode"] == "heat_exchange" or
+                        unit["type"] in {"Heater", "Cooler"} and unit["mode"] == "energy_stream")
+        if needs_energy and not any(_occupant(document, unit["id"], "target", port, energy=True)
+                                    for port in range(len(spec.energy_inlets))):
+            add("blocker", "UNIT_ENERGY_INLET_MISSING", f"Connect an energy stream to {spec.label}.", unit["tag"],
+                "energy_inlets")
+        if unit["type"] == "DistillationColumn" and not any(
+            _occupant(document, unit["id"], "source", port, energy=True) for port in range(len(spec.energy_outlets))
+        ):
+            add("blocker", "UNIT_ENERGY_OUTLET_MISSING", "Connect the condenser duty energy stream.", unit["tag"],
+                "energy_outlets")
+        outlet_count = sum(bool(_occupant(document, unit["id"], "source", port))
+                           for port in range(len(spec.outlets)))
+        for port, name in enumerate(spec.outlets):
+            if unit["type"] == "Splitter" and port == 2:
+                continue
+            if not _occupant(document, unit["id"], "source", port):
+                add("blocker", "UNIT_OUTLET_MISSING", f"Connect a stream to the {name} outlet.", unit["tag"], name)
+        if unit["type"] == "Splitter" and unit["mode"] == "split_ratios":
+            ratio1 = unit["params"].get("split_ratio_1", {}).get("si")
+            ratio2 = unit["params"].get("split_ratio_2", {}).get("si")
+            if ratio1 is not None and ratio2 is not None:
+                total = float(ratio1) + float(ratio2)
+                invalid = total > 1.0 + _COMPOSITION_TOL or outlet_count == 2 and abs(total - 1.0) > _COMPOSITION_TOL
+                if invalid:
+                    add("blocker", "SPLIT_RATIOS_INVALID", "Split ratios must sum to 1 for two outlets and at most 1 for three.",
+                        unit["tag"], "split_ratios")
     for stream in sorted((item for item in objects.values() if item["kind"] == "stream"), key=lambda item: item["tag"]):
         if stream["source"] is None and stream["target"] is None:
             add("blocker", "STREAM_DANGLING", "This stream is connected to nothing.", stream["tag"])
+            continue
+        if stream["type"] == "EnergyStream":
+            if "duty" in stream["spec"]:
+                consumer = objects.get(stream["target"]["unit"]) if stream.get("target") else None
+                if consumer is None or consumer["mode"] != "energy_stream":
+                    add("blocker", "ENERGY_DUTY_MODE_MISMATCH", "A specified energy duty requires a connected unit in EnergyStream mode.", stream["tag"], "duty")
             continue
         if stream["source"] is None:
             for key, (_kind, _arg, label) in STREAM_SPECS.items():
@@ -369,6 +468,35 @@ def validate_document(document: dict[str, Any]) -> list[dict[str, Any]]:
                 if undeclared:
                     add("blocker", "COMPOUND_UNDECLARED", f"{undeclared} are not declared in Thermo.", stream["tag"],
                         "composition")
+    graph: dict[str, list[str]] = {}
+    for stream in objects.values():
+        if stream["kind"] == "stream" and stream.get("source") and stream.get("target"):
+            graph.setdefault(stream["source"]["unit"], []).append(stream["target"]["unit"])
+    visiting: list[str] = []
+    visited: set[str] = set()
+    reported_cycles: set[frozenset[str]] = set()
+
+    def visit(unit_id: str) -> None:
+        if unit_id in visiting:
+            cycle = visiting[visiting.index(unit_id):]
+            if not any(objects.get(item, {}).get("type") == "Recycle" for item in cycle):
+                cycle_key = frozenset(cycle)
+                if cycle_key not in reported_cycles:
+                    reported_cycles.add(cycle_key)
+                    tags = [objects[item]["tag"] for item in cycle]
+                    add("blocker", "RECYCLE_REQUIRED", f"Process loop {tags} requires a Recycle block.", tags[0],
+                        "connections")
+            return
+        if unit_id in visited:
+            return
+        visiting.append(unit_id)
+        for next_id in graph.get(unit_id, []):
+            visit(next_id)
+        visiting.pop()
+        visited.add(unit_id)
+
+    for unit_id in graph:
+        visit(unit_id)
     return findings
 
 
@@ -487,15 +615,21 @@ def record_run(directory: Path, run: dict[str, Any]) -> None:
     _write_json(runs_dir(directory) / run["run_id"] / "run.json", run)
 
 
-def results_state(head: dict[str, Any], runs: list[dict[str, Any]]) -> dict[str, Any]:
+def results_state(head: dict[str, Any], runs: list[dict[str, Any]], document: dict[str, Any] | None = None,
+                  edits_since: int | None = None) -> dict[str, Any]:
     solved = next((run for run in runs if run["action"] == "run" and run["status"] == "completed"), None)
     last = runs[0] if runs else None
     if solved is None:
         return {"state": "none", "last_attempt": _attempt(last)}
     seq = int(solved["draft_revision"].split(":", 1)[0])
     current = solved["draft_revision"] == head["revision"]
+    if not current and document is not None:
+        from app.modules.process_stack.draft_compiler import expected, fingerprint
+        current = fingerprint(expected(document), dwsim_version=solved["dwsim_version"],
+                             mcp_sha256=solved["mcp_sha256"]) == solved["materialization_fingerprint"]
     return {"state": "current" if current else "stale", "run_id": solved["run_id"],
-            "draft_revision": solved["draft_revision"], "edits_since": 0 if current else head["seq"] - seq,
+            "draft_revision": solved["draft_revision"],
+            "edits_since": 0 if current else edits_since if edits_since is not None else head["seq"] - seq,
             "materialization_fingerprint": solved["materialization_fingerprint"], "last_attempt": _attempt(last)}
 
 
@@ -509,6 +643,7 @@ def _attempt(run: dict[str, Any] | None) -> dict[str, Any] | None:
 
 
 def registry_projection() -> dict[str, Any]:
+    capabilities = _capability_manifest()
     return {
         "compiler_version": COMPILER_VERSION,
         "compounds": list(COMPOUNDS),
@@ -517,11 +652,16 @@ def registry_projection() -> dict[str, Any]:
         "stream_specs": [{"key": key, "label": label, "kind": kind} for key, (kind, _arg, label) in STREAM_SPECS.items()],
         "units": [
             {"type": spec.type, "label": spec.label, "inlets": list(spec.inlets), "outlets": list(spec.outlets),
-             "required_inlets": spec.required_inlets, "modes": list(spec.modes),
+             "energy_inlets": list(spec.energy_inlets), "energy_outlets": list(spec.energy_outlets),
+             "energy_spec_modes": [], "required_inlets": spec.required_inlets, "modes": list(spec.modes),
              "params": [{"key": item.key, "label": item.label, "kind": item.kind, "modes": list(item.modes),
-                         "default": item.default} for item in spec.params]}
+                         "default": item.default, "classification": "input", "minimum": item.minimum_si,
+                         "maximum": item.maximum_si} for item in spec.params],
+             "reactions": spec.type == "PFR",
+             "result_properties": capabilities["objects"].get(spec.dwsim_type, {}).get("result_properties", [])}
             for spec in UNIT_REGISTRY.values()
         ],
+        "dwsim_capabilities": capabilities,
         "unsupported": UNSUPPORTED_TYPES,
     }
 
@@ -539,6 +679,14 @@ def projection(workspace_id: str, draft_id: str) -> dict[str, Any]:
     record = load_revision(directory, head["revision"])
     document = record["document"]
     runs = list_runs(directory)
+    solved = next((run for run in runs if run["action"] == "run" and run["status"] == "completed"), None)
+    edits_since = None
+    if solved is not None:
+        solved_seq = int(solved["draft_revision"].split(":", 1)[0])
+        edits_since = 0
+        for seq in range(solved_seq + 1, head["seq"] + 1):
+            revision = _read_json(directory / "revisions" / f"{seq}.json", "revision_not_found", "Draft revision was not found")
+            edits_since += sum(1 for op in revision.get("ops", []) if op.get("op") != "set_route")
     return {
         "workspace_id": workspace_id,
         "draft_id": draft_id,
@@ -548,8 +696,9 @@ def projection(workspace_id: str, draft_id: str) -> dict[str, Any]:
         "compounds": document["compounds"],
         "property_package": document["property_package"],
         "objects": _display(document),
+        "reactions": copy.deepcopy(document.get("reactions", {})),
         "findings": validate_document(document),
-        "results": results_state(head, runs),
+        "results": results_state(head, runs, document, edits_since),
         "proposals": [proposal for proposal in list_proposals(workspace_id, draft_id) if proposal["state"] == "pending"
                       or proposal["state"] == "stale"],
     }
