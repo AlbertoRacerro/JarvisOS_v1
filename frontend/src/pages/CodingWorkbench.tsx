@@ -1,7 +1,8 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { FileText, Folder } from "@phosphor-icons/react";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 
 import {
   CODING_REPOSITORY,
@@ -92,6 +93,22 @@ function errorText(cause: unknown): string {
 
 function exactSha(value: unknown): string {
   return typeof value === "string" && /^[0-9a-f]{40}$/.test(value) ? value : "Unknown";
+}
+
+type RepositoryNavigation = Readonly<{ path: string; file: string | null }>;
+
+function validRepositoryPath(value: unknown): value is string {
+  return typeof value === "string" && value.length <= 1024 && !/[\u0000-\u001f]/.test(value) && !value.startsWith("/") && !value.includes("\\") && value.split("/").every((part) => part !== "." && part !== "..");
+}
+
+function readRepositoryNavigation(state: unknown): RepositoryNavigation | null {
+  if (typeof state !== "object" || state === null) return null;
+  const value = (state as Record<string, unknown>).jarvisCodingRepository;
+  if (typeof value !== "object" || value === null) return null;
+  const candidate = value as Record<string, unknown>;
+  return validRepositoryPath(candidate.path) && (candidate.file === null || validRepositoryPath(candidate.file))
+    ? { path: candidate.path, file: candidate.file }
+    : null;
 }
 
 function canonicalPrNumber(value: string): number | null {
@@ -217,6 +234,7 @@ function RepositorySurface({ workspaceId, jarvis }: Readonly<{ workspaceId: stri
   const [intent, setIntent] = useState("");
   const [proposal, setProposal] = useState<CodingActionResult | null>(null);
   const [busy, setBusy] = useState(false);
+  const [treeLoading, setTreeLoading] = useState(false);
   const [fileLoading, setFileLoading] = useState(false);
   const [fileLoaded, setFileLoaded] = useState(false);
   const [searchState, setSearchState] = useState<"idle" | "loading" | "done">("idle");
@@ -231,13 +249,21 @@ function RepositorySurface({ workspaceId, jarvis }: Readonly<{ workspaceId: stri
   const treeReadGeneration = useRef(0);
   const searchGeneration = useRef(0);
   const fileViewport = useRef<HTMLDivElement>(null);
+  const directoryViewport = useRef<HTMLDivElement>(null);
+  const directoryScrollPositions = useRef(new Map<string, number>());
 
   useEffect(() => { fileViewport.current?.scrollTo(0, 0); }, [selectedPath, preview, rendered]);
 
   const resolvedSha = truth?.resolved_sha ?? null;
+  const recordRepositoryNavigation = (path: string, file: string | null) => {
+    if (!validRepositoryPath(path) || (file !== null && !validRepositoryPath(file))) return;
+    const currentState = window.history.state;
+    const state = typeof currentState === "object" && currentState !== null ? currentState as Record<string, unknown> : {};
+    const navigation = { path, file };
+    window.history.pushState({ ...state, jarvisCodingRepository: navigation }, "", window.location.href);
+  };
   const anyPartial = truth?.partial || Object.values(partial).some(Boolean);
   const repositoryReadError = repositoryErrors.repository ?? repositoryErrors.tree;
-  const evidenceError = repositoryErrors.file ?? repositoryErrors.search ?? repositoryErrors.pr ?? repositoryErrors.checks ?? repositoryErrors.reviews;
   const jarvisError = repositoryErrors.inspect ?? repositoryErrors.context ?? repositoryErrors.proposal;
   const setRepositoryError = (key: keyof RepositoryErrors, value: string | null) => {
     setRepositoryErrors((current) => ({ ...current, [key]: value }));
@@ -267,8 +293,11 @@ function RepositorySurface({ workspaceId, jarvis }: Readonly<{ workspaceId: stri
     const requestGeneration = ++refreshGeneration.current;
     const requestTreeGeneration = ++treeReadGeneration.current;
     searchGeneration.current += 1;
-    setBusy(true); setTruth(null); setTree([]); clearSelectedEvidence();
+    setBusy(true); setTreeLoading(false); setTruth(null); setTree([]); clearSelectedEvidence();
     setTreePath("");
+    const currentState = window.history.state;
+    const navigationState = typeof currentState === "object" && currentState !== null ? { ...(currentState as Record<string, unknown>), jarvisCodingRepository: { path: "", file: null } } : { jarvisCodingRepository: { path: "", file: null } };
+    window.history.replaceState(navigationState, "", window.location.href);
     try {
       const nextTruth = await readRepositoryRef(repository, ref);
       if (refreshGeneration.current !== requestGeneration) return;
@@ -298,7 +327,10 @@ function RepositorySurface({ workspaceId, jarvis }: Readonly<{ workspaceId: stri
     setRepositoryErrors((current) => ({ ...current, inspect: null, context: null, proposal: null }));
   }, [workspaceId]);
 
-  const openFile = async (path: string) => {
+  const openFile = async (path: string, recordHistory = true) => {
+    if (!validRepositoryPath(path)) return;
+    if (recordHistory) recordRepositoryNavigation(path.split("/").slice(0, -1).join("/"), path);
+    if (!selectedPath && directoryViewport.current) directoryScrollPositions.current.set(treePath, directoryViewport.current.scrollTop);
     if (path !== selectedPath) setIntent("");
     const requestGeneration = ++fileReadGeneration.current;
     proposalGeneration.current += 1;
@@ -327,10 +359,18 @@ function RepositorySurface({ workspaceId, jarvis }: Readonly<{ workspaceId: stri
   };
 
   const openDirectory = async (path: string) => {
+    fileReadGeneration.current += 1;
+    proposalGeneration.current += 1;
+    contextPreviewGeneration.current += 1;
+    inspectGeneration.current += 1;
+    setSelectedPath(""); setPreview(""); setSafeUrl(null); setFileLoading(false); setFileLoaded(false);
+    setContextBinding(null); setInspectResult(null); setProposal(null); setPendingAction(null);
+    setRepositoryErrors((current) => ({ ...current, file: null, inspect: null, context: null, proposal: null }));
+    setTreePath(path);
     const requestSha = resolvedSha;
     if (!requestSha) { setRepositoryError("tree", "missing_exact_sha"); return; }
     const requestGeneration = ++treeReadGeneration.current;
-    setTree([]); setRepositoryError("tree", null);
+    setTree([]); setTreeLoading(true); setRepositoryError("tree", null);
     setPartial((current) => ({ ...current, tree: false }));
     try {
       const result = await readRepositoryTree(repository, requestSha, path);
@@ -339,10 +379,45 @@ function RepositorySurface({ workspaceId, jarvis }: Readonly<{ workspaceId: stri
       setTree(Array.isArray(entries) ? entries as TreeEntry[] : []);
       setTreePath(path);
       setPartial((current) => ({ ...current, tree: result.partial }));
+      requestAnimationFrame(() => {
+        if (treeReadGeneration.current === requestGeneration && directoryViewport.current) {
+          directoryViewport.current.scrollTop = directoryScrollPositions.current.get(path) ?? 0;
+        }
+      });
     } catch (cause) {
       if (treeReadGeneration.current === requestGeneration) setRepositoryError("tree", errorText(cause));
+    } finally {
+      if (treeReadGeneration.current === requestGeneration) setTreeLoading(false);
     }
   };
+
+  const navigateDirectory = (path: string, direction?: "back" | "forward") => {
+    if (!validRepositoryPath(path)) return;
+    if (!selectedPath && directoryViewport.current) directoryScrollPositions.current.set(treePath, directoryViewport.current.scrollTop);
+    if (direction) {
+      if (direction === "back") window.history.back(); else window.history.forward();
+      return;
+    }
+    recordRepositoryNavigation(path, null);
+    void openDirectory(path);
+  };
+
+  useEffect(() => {
+    const current = readRepositoryNavigation(window.history.state);
+    if (!current) {
+      const state = typeof window.history.state === "object" && window.history.state !== null ? window.history.state as Record<string, unknown> : {};
+      window.history.replaceState({ ...state, jarvisCodingRepository: { path: "", file: null } }, "", window.location.href);
+      return;
+    }
+    const onPopState = (event: PopStateEvent) => {
+      const target = readRepositoryNavigation(event.state);
+      if (!target) return;
+      if (target.file) void openFile(target.file, false);
+      else void openDirectory(target.path);
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [resolvedSha]);
 
   const runSearch = async () => {
     const requestLiteral = literal.trim();
@@ -480,32 +555,26 @@ function RepositorySurface({ workspaceId, jarvis }: Readonly<{ workspaceId: stri
   };
 
   return <div className="final-fusion__workbench final-fusion__workbench--coding" data-testid="coding-repository-surface">
-    <Panel title="Repository" status={busy ? "Loading" : repositoryReadError ? "Read error" : anyPartial ? "Partial" : truth ? "Exact READ" : "Unknown"}>
-      <div className="final-fusion__repo-status"><div><strong>{repository}</strong><span>Target branch · {ref}</span></div><span className={resolvedSha ? "" : "final-fusion__unknown"}>{truth ? "Exact repository state available" : "Repository state unknown"}</span></div>
-      {truth ? <TechnicalDetails><p>Requested ref · {ref}</p><p>Resolved commit · {resolvedSha ?? "Unknown"}</p><RawJson value={truth} /></TechnicalDetails> : null}
-      <div className="final-fusion__toolbar-line"><span>Repository files</span><button type="button" onClick={() => void refresh()} disabled={busy}>Refresh repository</button></div>
+    <Panel title="Repository" status={busy || treeLoading ? "Loading" : repositoryReadError ? "Read error" : anyPartial ? "Partial" : truth ? "Exact READ" : "Unknown"}>
+      <div className="repository-browser-heading"><div><strong>{repository}</strong><span>Target branch · {ref}</span></div><button type="button" onClick={() => void refresh()} disabled={busy}>Refresh</button></div>
+      {truth ? <details className="repository-truth"><summary>Repository truth · {resolvedSha?.slice(0, 12) ?? "Unknown commit"}</summary><p>Requested ref · {ref}</p><p>Resolved commit · {resolvedSha ?? "Unknown"}</p><RawJson value={truth} /></details> : null}
       {partialLabel(partial) ? <div className="final-fusion__source-empty" role="status"><strong>{partialLabel(partial)}</strong><span>Truncated evidence is not presented as complete.</span></div> : null}
       {repositoryReadError ? <div className="final-fusion__source-empty" role="status"><strong>Repository read refused / unavailable</strong><span>{readableReason(repositoryReadError)}</span></div> : null}
-      <div className="final-fusion__toolbar-line"><input aria-label="Literal repository search" value={literal} onChange={(event) => { searchGeneration.current += 1; setLiteral(event.target.value); setSearchState("idle"); setMatches([]); setRepositoryError("search", null); setPartial((current) => ({ ...current, search: false })); }} onKeyDown={(event) => { if (event.key === "Enter") void runSearch(); }} placeholder="Search file contents" maxLength={512}/><button type="button" onClick={() => void runSearch()} disabled={!literal.trim() || !resolvedSha || searchState === "loading"}>Search</button></div>
-      {repositoryErrors.search ? <div className="final-fusion__source-empty" role="status"><strong>Repository search refused / unavailable</strong><span>{readableReason(repositoryErrors.search)}</span></div> : null}
-      {searchState !== "idle" ? <p className="coding-search-status" role="status">{searchState === "loading" ? "Searching repository…" : matches.length ? `${matches.length} matches${partial.search ? " · partial results" : ""}` : partial.search ? "No matches in the searched portion. Results are incomplete." : "No matching file contents found."}</p> : null}
-      <div className="final-fusion__source-list">{matches.map((match, index) => <div className="final-fusion__disclosure-row final-fusion__disclosure-row--plain" key={`${match.path}:${match.offset}:${index}`}><button type="button" disabled={!match.path} onClick={() => match.path && void openFile(match.path)}>{match.path ?? "Unknown"} · line {match.line ?? "?"}</button></div>)}</div>
-      <div className="final-fusion__toolbar-line">
-        <span>Tree path · {treePath || "Root"}</span>
-        <div><button type="button" onClick={() => void openDirectory("")} disabled={!resolvedSha || !treePath}>Root</button><button type="button" onClick={() => void openDirectory(treePath.split("/").slice(0, -1).join("/"))} disabled={!resolvedSha || !treePath}>Up</button></div>
+      <div className="repository-viewport">
+        {selectedPath ? <>
+          <div className="repository-navigation"><button type="button" onClick={() => void navigateDirectory(selectedPath.split("/").slice(0, -1).join("/"))} aria-label="Back to directory">← Back</button><nav aria-label="Repository breadcrumb"><button type="button" onClick={() => void navigateDirectory("")}>{repository.split("/").slice(-1)[0]}</button>{selectedPath.split("/").slice(0, -1).map((part, index, parts) => { const path = parts.slice(0, index + 1).join("/"); return <Fragment key={path}><span aria-hidden="true">/</span><button type="button" onClick={() => void navigateDirectory(path)}>{part}</button></Fragment>; })}<span aria-hidden="true">/</span><strong aria-current="page">{selectedPath.split("/").slice(-1)[0]}</strong></nav>{safeUrl ? <a href={safeUrl} target="_blank" rel="noreferrer">Open on GitHub</a> : null}</div>
+          {selectedPath.endsWith(".md") && preview && <div className="file-view-tabs" role="group" aria-label="Markdown view"><button aria-pressed={rendered} onClick={() => setRendered(true)}>Rendered</button><button aria-pressed={!rendered} onClick={() => setRendered(false)}>Raw</button></div>}
+          <div ref={fileViewport} className="repository-file-viewport" tabIndex={0} aria-label="File content">{fileLoading ? <p className="repository-empty" role="status">Loading file…</p> : repositoryErrors.file ? <p className="repository-empty">File content is unavailable. Reopen the file to retry.</p> : !preview ? <p className="repository-empty">This file contains no readable text.</p> : selectedPath.endsWith(".md") && rendered ? <article className="markdown-preview"><ReactMarkdown remarkPlugins={[remarkGfm]} components={{img: ({alt}) => <span>[Image: {alt || "image"} · open on GitHub]</span>, a: ({href, children}) => { const target = repositoryMarkdownLink(href, safeUrl); return target ? <a href={target} target="_blank" rel="noreferrer">{children}</a> : <span title="Link unavailable at this repository commit">{children}</span>; }}}>{preview}</ReactMarkdown></article> : <pre>{preview || "No readable text returned for this file."}</pre>}</div>
+          {repositoryErrors.file ? <div className="final-fusion__source-empty" role="status"><strong>File preview refused / unavailable</strong><span>{readableReason(repositoryErrors.file)}</span></div> : null}
+          <details className="repository-pr-evidence"><summary>Pull request evidence</summary><div className="final-fusion__toolbar-line"><input aria-label="Pull request number" inputMode="numeric" value={prInput} onChange={(event) => { prEvidenceGeneration.current += 1; setPrInput(event.target.value); setPrEvidence(null); setRepositoryErrors((current) => ({ ...current, pr: null, checks: null, reviews: null })); setPartial((current) => ({ ...current, pr: false, checks: false, reviews: false })); }} placeholder="PR number"/><button type="button" onClick={() => void loadPr()} disabled={!prInput}>Load PR evidence</button></div>{repositoryErrors.pr ? <div className="final-fusion__source-empty" role="status"><strong>PR evidence refused / unavailable</strong><span>{readableReason(repositoryErrors.pr)}</span></div> : null}{repositoryErrors.checks ? <div className="final-fusion__source-empty" role="status"><strong>Checks evidence refused / unavailable</strong><span>{readableReason(repositoryErrors.checks)}</span></div> : null}{repositoryErrors.reviews ? <div className="final-fusion__source-empty" role="status"><strong>Reviews evidence refused / unavailable</strong><span>{readableReason(repositoryErrors.reviews)}</span></div> : null}{prEvidence ? <EvidenceSummary value={prEvidence} label={`Pull request ${prInput}`} /> : null}</details>
+        </> : <>
+          <div className="repository-navigation"><div className="repository-history"><button type="button" onClick={() => navigateDirectory("", "back")} aria-label="Back">←</button><button type="button" onClick={() => navigateDirectory("", "forward")} aria-label="Forward">→</button></div><nav aria-label="Repository breadcrumb"><button type="button" onClick={() => void navigateDirectory("")}>{repository.split("/").slice(-1)[0]}</button>{treePath.split("/").filter(Boolean).map((part, index, parts) => { const path = parts.slice(0, index + 1).join("/"); return <Fragment key={path}><span aria-hidden="true">/</span><button type="button" onClick={() => void navigateDirectory(path)}>{part}</button></Fragment>; })}</nav><button type="button" onClick={() => void navigateDirectory(treePath.split("/").slice(0, -1).join("/"))} disabled={!treePath}>Parent directory</button></div>
+          <div ref={directoryViewport} className="repository-directory" role="list" aria-label="Repository files">{tree.length ? tree.map((entry) => { if (!entry.path) return null; const name = entry.path.split("/").slice(-1)[0]; const isDirectory = entry.type === "dir"; return <div role="listitem" className="repository-entry-wrap" key={entry.path}><button type="button" className="repository-entry" aria-label={`${isDirectory ? "Folder" : "File"} ${name}${typeof entry.size === "number" ? `, ${entry.size} bytes` : ""}`} onClick={() => isDirectory ? void navigateDirectory(entry.path!) : entry.type === "file" ? void openFile(entry.path!) : undefined} disabled={entry.type !== "file" && !isDirectory}><span className="repository-entry-name"><span aria-hidden="true" className="repository-entry-icon">{isDirectory ? <Folder size={18} weight="regular" /> : <FileText size={18} weight="regular" />}</span><strong title={entry.path}>{name}</strong></span><span>{isDirectory ? "Folder" : entry.type === "file" ? "File" : humanize(entry.type)}</span><span>{typeof entry.size === "number" ? `${entry.size.toLocaleString()} B` : "—"}</span></button></div>; }) : <div className="repository-empty"><h3>{busy || treeLoading ? "Loading repository…" : repositoryErrors.tree ? "Directory unavailable" : "No repository entries"}</h3><p>{busy || treeLoading ? "Reading the selected directory." : repositoryErrors.tree ? <>{readableReason(repositoryErrors.tree)} <button type="button" onClick={() => void openDirectory(treePath)}>Retry directory</button></> : "This directory has no current readable entries."}</p></div>}</div>
+          <details className="repository-pr-evidence"><summary>Pull request evidence</summary><div className="final-fusion__toolbar-line"><input aria-label="Pull request number" inputMode="numeric" value={prInput} onChange={(event) => { prEvidenceGeneration.current += 1; setPrInput(event.target.value); setPrEvidence(null); setRepositoryErrors((current) => ({ ...current, pr: null, checks: null, reviews: null })); setPartial((current) => ({ ...current, pr: false, checks: false, reviews: false })); }} placeholder="PR number"/><button type="button" onClick={() => void loadPr()} disabled={!prInput}>Load PR evidence</button></div>{repositoryErrors.pr ? <div className="final-fusion__source-empty" role="status"><strong>PR evidence refused / unavailable</strong><span>{readableReason(repositoryErrors.pr)}</span></div> : null}{repositoryErrors.checks ? <div className="final-fusion__source-empty" role="status"><strong>Checks evidence refused / unavailable</strong><span>{readableReason(repositoryErrors.checks)}</span></div> : null}{repositoryErrors.reviews ? <div className="final-fusion__source-empty" role="status"><strong>Reviews evidence refused / unavailable</strong><span>{readableReason(repositoryErrors.reviews)}</span></div> : null}{prEvidence ? <EvidenceSummary value={prEvidence} label={`Pull request ${prInput}`} /> : null}</details>
+
+        </>}
       </div>
-      <div className="final-fusion__source-list">{tree.length ? tree.map((entry) => entry.path ? <button type="button" className="final-fusion__disclosure-row final-fusion__disclosure-row--plain" key={entry.path} aria-current={selectedPath === entry.path ? "true" : undefined} onClick={() => entry.type === "file" ? void openFile(entry.path!) : entry.type === "dir" ? void openDirectory(entry.path!) : undefined} disabled={entry.type !== "file" && entry.type !== "dir"}><strong title={entry.path}>{entry.path.split("/").slice(-1)[0]}</strong><em>{entry.type ?? "unknown"}{typeof entry.size === "number" ? ` · ${entry.size} B` : ""}</em></button> : null) : <div className="final-fusion__source-empty"><strong>No current tree evidence</strong></div>}</div>
-    </Panel>
-    <Panel title="Repository Inspector" status={evidenceError ? "Read error" : anyPartial ? "PARTIAL · READ only" : "READ only"}>
-      <div className="final-fusion__toolbar-line"><span>Selected path · {selectedPath || "None"}</span>{safeUrl ? <a href={safeUrl} target="_blank" rel="noreferrer">Open on GitHub</a> : null}</div>
-      {selectedPath.endsWith(".md") && preview && <div className="file-view-tabs" role="group" aria-label="Markdown view"><button aria-pressed={rendered} onClick={() => setRendered(true)}>Rendered</button><button aria-pressed={!rendered} onClick={() => setRendered(false)}>Raw</button></div>}
-      <div ref={fileViewport} className="repository-file-viewport" tabIndex={0} aria-label="File content">{!selectedPath ? <div className="repository-empty"><h3>Open a file to begin</h3><p>Choose a file in the repository tree, or search for text inside files.</p></div> : fileLoading ? <p className="repository-empty" role="status">Loading file…</p> : repositoryErrors.file ? <p className="repository-empty">File content is unavailable. Reopen the file to retry.</p> : !preview ? <p className="repository-empty">This file contains no readable text.</p> : selectedPath.endsWith(".md") && rendered ? <article className="markdown-preview"><ReactMarkdown remarkPlugins={[remarkGfm]} components={{img: ({alt}) => <span>[Image: {alt || "image"} · open on GitHub]</span>, a: ({href, children}) => { const target = repositoryMarkdownLink(href, safeUrl); return target ? <a href={target} target="_blank" rel="noreferrer">{children}</a> : <span title="Link unavailable at this repository commit">{children}</span>; }}}>{preview}</ReactMarkdown></article> : <pre>{preview || "No readable text returned for this file."}</pre>}</div>
-      {repositoryErrors.file ? <div className="final-fusion__source-empty" role="status"><strong>File preview refused / unavailable</strong><span>{readableReason(repositoryErrors.file)}</span></div> : null}
-      <details className="repository-pr-evidence"><summary>Pull request evidence</summary><div className="final-fusion__toolbar-line"><input aria-label="Pull request number" inputMode="numeric" value={prInput} onChange={(event) => { prEvidenceGeneration.current += 1; setPrInput(event.target.value); setPrEvidence(null); setRepositoryErrors((current) => ({ ...current, pr: null, checks: null, reviews: null })); setPartial((current) => ({ ...current, pr: false, checks: false, reviews: false })); }} placeholder="PR number"/><button type="button" onClick={() => void loadPr()} disabled={!prInput}>Load PR evidence</button></div>
-      {repositoryErrors.pr ? <div className="final-fusion__source-empty" role="status"><strong>PR evidence refused / unavailable</strong><span>{readableReason(repositoryErrors.pr)}</span></div> : null}
-      {repositoryErrors.checks ? <div className="final-fusion__source-empty" role="status"><strong>Checks evidence refused / unavailable</strong><span>{readableReason(repositoryErrors.checks)}</span></div> : null}
-      {repositoryErrors.reviews ? <div className="final-fusion__source-empty" role="status"><strong>Reviews evidence refused / unavailable</strong><span>{readableReason(repositoryErrors.reviews)}</span></div> : null}
-      {prEvidence ? <EvidenceSummary value={prEvidence} label={`Pull request ${prInput}`} /> : null}</details>
+                <details className="repository-search"><summary>Search repository contents</summary><div className="final-fusion__toolbar-line"><input aria-label="Literal repository search" value={literal} onChange={(event) => { searchGeneration.current += 1; setLiteral(event.target.value); setSearchState("idle"); setMatches([]); setRepositoryError("search", null); setPartial((current) => ({ ...current, search: false })); }} onKeyDown={(event) => { if (event.key === "Enter") void runSearch(); }} placeholder="Search file contents" maxLength={512}/><button type="button" onClick={() => void runSearch()} disabled={!literal.trim() || !resolvedSha || searchState === "loading"}>Search</button></div>{repositoryErrors.search ? <div className="final-fusion__source-empty" role="status"><strong>Repository search refused / unavailable</strong><span>{readableReason(repositoryErrors.search)}</span></div> : null}{searchState !== "idle" ? <p className="coding-search-status" role="status">{searchState === "loading" ? "Searching repository…" : matches.length ? `${matches.length} matches${partial.search ? " · partial results" : ""}` : partial.search ? "No matches in the searched portion. Results are incomplete." : "No matching file contents found."}</p> : null}<div className="repository-search-results">{matches.map((match, index) => <button type="button" key={`${match.path}:${match.offset}:${index}`} disabled={!match.path} onClick={() => match.path && void openFile(match.path)}>{match.path ?? "Unknown"} · line {match.line ?? "?"}</button>)}</div></details>
     </Panel>
     <Panel title="Jarvis Coding" status={jarvisError || inspectResult?.state === "refused" || proposal?.state === "refused" ? "Action unavailable" : "Proposals for review"}>
       {jarvis ? <div className="coding-jarvis-chat">{jarvis}</div> : null}
@@ -515,7 +584,7 @@ function RepositorySurface({ workspaceId, jarvis }: Readonly<{ workspaceId: stri
       <div className="final-fusion__toolbar-line"><button type="button" onClick={() => void inspect()} disabled={!workspaceId || !resolvedSha || !fileLoaded || partial.file || pendingAction !== null}>Inspect file</button><span>{pendingAction === "inspect" ? "Verifying file evidence…" : "Verify exact file evidence"}</span></div>
       {repositoryErrors.inspect ? <div className="final-fusion__source-empty" role="status"><strong>Inspect refused / unavailable</strong><span>{readableReason(repositoryErrors.inspect)}</span></div> : null}
       {inspectResult ? <ActionResult value={inspectResult} kind="inspect" /> : null}
-      <div className="final-fusion__toolbar-line"><button type="button" onClick={() => void addContext()} disabled={!workspaceId || !resolvedSha || !fileLoaded || partial.file || pendingAction !== null || !!contextBinding}>Add to proposal context</button><span>{pendingAction === "context" ? "Verifying context…" : contextBinding?.context_digest ? `In context: ${selectedPath}` : "Browsing has not entered proposal context"}</span></div>
+      <div className="final-fusion__toolbar-line"><button type="button" onClick={() => void addContext()} disabled={!workspaceId || !resolvedSha || !fileLoaded || partial.file || pendingAction !== null || !!contextBinding}>Add to Jarvis context</button><span>{pendingAction === "context" ? "Verifying context…" : contextBinding?.context_digest ? `In context: ${selectedPath}` : "Browsing has not entered proposal context"}</span></div>
       {contextBinding ? <div className="coding-context-binding"><span>{contextBinding.target_paths?.join(", ") ?? selectedPath}<small>Commit {contextBinding.base_sha?.slice(0, 8)} · for this proposal</small></span><button type="button" onClick={removeContext} disabled={pendingAction === "inspect"}>Remove context</button></div> : null}
       {repositoryErrors.context ? <div className="final-fusion__source-empty" role="status"><strong>Context insertion refused / unavailable</strong><span>{readableReason(repositoryErrors.context)}</span></div> : null}
       <textarea aria-label="Suggest modification intent" rows={4} maxLength={4000} disabled={pendingAction !== null} value={intent} onChange={(event) => { proposalGeneration.current += 1; setProposal(null); setRepositoryError("proposal", null); setIntent(event.target.value); }} placeholder="Describe a bounded proposal for the selected path" />
