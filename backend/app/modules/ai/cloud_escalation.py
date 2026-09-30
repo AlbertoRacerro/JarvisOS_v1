@@ -445,7 +445,7 @@ def escalate_interaction(
             code="text_digest_mismatch",
         )
     source_text = _require_local_source(workspace_id, thread_id, interaction_id)
-    status, level, code, reason = screen_outbound_text(payload.text)
+    status, _level, code, reason = screen_outbound_text(payload.text)
     if status != "ready":
         raise CloudEscalationError(reason or "This text cannot be sent to a cloud model.", code=code)
     catalog = load_catalog()
@@ -463,7 +463,7 @@ def escalate_interaction(
         return _read(prior)
     drafted = create_sanitized_derivative(SanitizedDerivativeCreate(
         workspace_id=workspace_id, source_refs=[f"interaction:{interaction_id}"],
-        content=payload.text, effective_level=level,  # screened: no floor, declared S1
+        content=payload.text, effective_level="S1",  # screened: no floor, declared S1
         transformations=[
             "source turn text used verbatim" if payload.text == source_text
             else "operator edited the source turn text into a cloud-safe version",

@@ -423,7 +423,7 @@ export function useJarvisSidecar(
   useEffect(() => {
     const list = transcriptRef.current;
     if (list) list.scrollTop = list.scrollHeight;
-  }, [detail, inFlightHere]);
+  }, [detail, inFlightHere, cloudDraft, cloudSource, cloudResults, relayRuns]);
 
   useEffect(() => {
     const token = ++previewOwner.current;
