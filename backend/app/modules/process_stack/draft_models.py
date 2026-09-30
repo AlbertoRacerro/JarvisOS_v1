@@ -92,6 +92,7 @@ def _heat(label: str, dwsim_type: str) -> UnitSpec:
               "heat_added_removed": "HeatAddedRemoved"} if dwsim_type == "Heater" else
              {"outlet_temperature": "OutletTemperature", "heat_removed": "HeatRemoved", "energy_stream": "EnergyStream",
               "outlet_vapor_fraction": "OutletVaporFraction", "temperature_change": "TemperatureChange"})
+    heat_duty_mode: tuple[str, ...]
     if dwsim_type == "Cooler":
         heat_duty_mode = ("heat_removed",)
         all_modes = tuple(modes)

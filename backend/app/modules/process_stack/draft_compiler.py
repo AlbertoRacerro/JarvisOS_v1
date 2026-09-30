@@ -90,6 +90,13 @@ def _unit_properties(unit: dict[str, Any]) -> dict[str, Any]:
     return properties
 
 
+def _child(parent: ElementTree.Element, path: str) -> ElementTree.Element:
+    node = parent.find(path)
+    if node is None:
+        raise MaterializationError("native_shape", f"DWSIM native element {path} is unavailable")
+    return node
+
+
 def _patch_native_xml(case_path: Path, document: dict[str, Any]) -> None:
     """Materialize proven native details absent from the pinned MCP connector."""
     if not any(unit["type"] == "DistillationColumn" or unit["type"] == "PFR" and unit.get("reactions")
@@ -98,7 +105,7 @@ def _patch_native_xml(case_path: Path, document: dict[str, Any]) -> None:
     tree = ElementTree.parse(case_path)
     root = tree.getroot()
     graphics = {node.findtext("Tag"): node for node in root.findall("./GraphicObjects/GraphicObject")}
-    native_by_tag = {tag: node.findtext("Name") for tag, node in graphics.items()}
+    native_by_tag = {tag: node.findtext("Name") or "" for tag, node in graphics.items()}
     simulations = {node.findtext("Name"): node for node in root.findall("./SimulationObjects/SimulationObject")}
 
     for unit in (item for item in _units(document) if item["type"] == "PFR" and item.get("reactions")):
@@ -160,7 +167,7 @@ def _patch_native_xml(case_path: Path, document: dict[str, Any]) -> None:
         sim = simulations.get(native_name or "")
         if sim is None:
             raise MaterializationError("reaction_unit_missing", f"PFR {unit['tag']} is missing from the saved case")
-        sim.find("ReactionSetID").text = set_id
+        _child(sim, "ReactionSetID").text = set_id
     def stream_info(kind: str, stream_id: str, behavior: str, stream_type: str, stage: str | None) -> ElementTree.Element:
         item = ElementTree.Element(kind, {"ID": stream_id})
         def sub(parent: ElementTree.Element, name: str, value: str | None = None) -> ElementTree.Element:
@@ -207,12 +214,12 @@ def _patch_native_xml(case_path: Path, document: dict[str, Any]) -> None:
         stage_ids = []
         for index, stage in enumerate(stages):
             stage_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{native_name}/stage/{index}"))
-            stage.find("ID").text = stage_id
-            stage.find("Name").text = f"Stage{index + 1}" + (" (Condenser)" if index == 0 else " (Reboiler)" if index == count - 1 else "")
+            _child(stage, "ID").text = stage_id
+            _child(stage, "Name").text = f"Stage{index + 1}" + (" (Condenser)" if index == 0 else " (Reboiler)" if index == count - 1 else "")
             stage_ids.append(stage_id)
             pressure_key = "__TopPressure" if index == 0 else "__BottomPressure" if index == count - 1 else None
             if pressure_key:
-                stage.find("P").text = repr(float(props[pressure_key]))
+                _child(stage, "P").text = repr(float(props[pressure_key]))
         for name in ("MaterialStreams", "EnergyStreams"):
             container = node.find(name)
             if container is None:
@@ -222,26 +229,26 @@ def _patch_native_xml(case_path: Path, document: dict[str, Any]) -> None:
             spec_node = node.find(f"./Specs/Spec[@ID='{spec_id}']")
             if spec_node is None:
                 raise MaterializationError("column_spec_template_missing", "DWSIM column specification template is unavailable")
-            spec_node.find("SpecValue").text = repr(float(props[key]))
+            _child(spec_node, "SpecValue").text = repr(float(props[key]))
         feed_stage = max(0, min(count - 1, int(props["__FeedStage"])))
-        material = node.find("MaterialStreams")
-        energy = node.find("EnergyStreams")
+        material = _child(node, "MaterialStreams")
+        energy = _child(node, "EnergyStreams")
         for stream in _streams(document):
             if stream["target"] and stream["target"]["unit"] == unit["id"] and stream["type"] != "EnergyStream":
                 material.append(stream_info("MaterialStream", native_by_tag[stream["tag"]], "Feed", "Material", stage_ids[feed_stage]))
             elif stream["source"] and stream["source"]["unit"] == unit["id"] and stream["type"] != "EnergyStream":
                 port = stream["source"]["port"]
-                behavior, stage = (("Distillate", stage_ids[0]) if port == 0 else ("BottomsLiquid", stage_ids[-1]))
-                material.append(stream_info("MaterialStream", native_by_tag[stream["tag"]], behavior, "Material", stage))
+                behavior, stage_id = (("Distillate", stage_ids[0]) if port == 0 else ("BottomsLiquid", stage_ids[-1]))
+                material.append(stream_info("MaterialStream", native_by_tag[stream["tag"]], behavior, "Material", stage_id))
             if stream["target"] and stream["target"]["unit"] == unit["id"] and stream["type"] == "EnergyStream":
                 energy.append(stream_info("EnergyStream", native_by_tag[stream["tag"]], "BottomsLiquid", "Energy", None))
-                _attach_column(graph.find("InputConnectors")[10], native_by_tag[stream["tag"]], 0, "input", "unit")
-                _attach_column(graphics[stream["tag"]].find("OutputConnectors")[0], native_name, 10,
+                _attach_column(_child(graph, "InputConnectors")[10], native_by_tag[stream["tag"]], 0, "input", "unit")
+                _attach_column(_child(graphics[stream["tag"]], "OutputConnectors")[0], native_name, 10,
                                "output", "stream")
             elif stream["source"] and stream["source"]["unit"] == unit["id"] and stream["type"] == "EnergyStream":
                 energy.append(stream_info("EnergyStream", native_by_tag[stream["tag"]], "Distillate", "Energy", None))
-                _attach_column(graph.find("OutputConnectors")[10], native_by_tag[stream["tag"]], 0, "output", "unit")
-                _attach_column(graphics[stream["tag"]].find("InputConnectors")[0], native_name, 10,
+                _attach_column(_child(graph, "OutputConnectors")[10], native_by_tag[stream["tag"]], 0, "output", "unit")
+                _attach_column(_child(graphics[stream["tag"]], "InputConnectors")[0], native_name, 10,
                                "input", "stream")
     tree.write(case_path, encoding="utf-8", xml_declaration=True)
 
@@ -484,8 +491,9 @@ def read_back(client: DwsimMcpClient, flow: str, case_path: Path, exp: dict[str,
                               for name in wanted}
     energy_streams = {}
     for tag, wanted in exp.get("energy_streams", {}).items():
-        node = sim_nodes.get(next((native for native, native_tag in tags.items() if native_tag == tag), ""))
-        energy_streams[tag] = {key: _float(node.findtext(key)) if node is not None else None for key in wanted}
+        energy_node = sim_nodes.get(next((native for native, native_tag in tags.items() if native_tag == tag), ""))
+        energy_streams[tag] = {key: _float(energy_node.findtext(key)) if energy_node is not None else None
+                               for key in wanted}
     reactions = {}
     for reaction_id in exp.get("reactions", {}):
         reaction = root.find(f"./Reactions/Reaction[ID='{reaction_id}']")
