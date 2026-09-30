@@ -323,8 +323,13 @@
 .draft-result-props__filter { width: 100%; }
 .draft-result-props__group { min-width: 0; }
 .draft-result-props__group table { width: 100%; table-layout: fixed; font-size: 11px; }
-.draft-result-props__group th { text-align: left; overflow-wrap: anywhere; }
-.draft-result-props__group td { overflow-wrap: anywhere; }
+.draft-result-props__group th { width: 48%; text-align: left; font-weight: 500; overflow-wrap: break-word; }
+.draft-result-props__group td { overflow-wrap: anywhere; vertical-align: top; }
+.draft-result-props__group td:nth-child(2) { width: 22%; font-variant-numeric: tabular-nums; }
+.draft-result-props__group td:nth-child(3) { width: 16%; }
+.draft-result-props__group td:nth-child(4) { width: 14%; }
+.draft-result-props__group th,
+.draft-result-props__group td { padding: 2px 4px 2px 0; }
 .draft-result-props__kind { color: var(--color-text-muted, #687068); }
 .draft-quantity {
   display: grid;
