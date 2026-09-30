@@ -74,6 +74,8 @@ def _unit_properties(unit: dict[str, Any]) -> dict[str, Any]:
         properties["ReactorOperationMode"] = spec.modes[unit["mode"]]
     elif unit["type"] == "Splitter":
         properties["OperationMode"] = spec.modes[unit["mode"]]
+    elif unit["type"] == "HeatExchanger":
+        properties["CalculationMode"] = spec.modes[unit["mode"]]
     elif unit["type"] != "DistillationColumn":
         properties["CalcMode"] = spec.modes[unit["mode"]]
     for param in spec.params_for(unit["mode"]):
@@ -233,23 +235,33 @@ def _patch_native_xml(case_path: Path, document: dict[str, Any]) -> None:
                 material.append(stream_info("MaterialStream", native_by_tag[stream["tag"]], behavior, "Material", stage))
             if stream["target"] and stream["target"]["unit"] == unit["id"] and stream["type"] == "EnergyStream":
                 energy.append(stream_info("EnergyStream", native_by_tag[stream["tag"]], "BottomsLiquid", "Energy", None))
-                _attach(graph.find("InputConnectors")[10], native_by_tag[stream["tag"]], 0, "input")
-                _attach(graphics[stream["tag"]].find("OutputConnectors")[0], native_name, 10, "output")
+                _attach_column(graph.find("InputConnectors")[10], native_by_tag[stream["tag"]], 0, "input", "unit")
+                _attach_column(graphics[stream["tag"]].find("OutputConnectors")[0], native_name, 10,
+                               "output", "stream")
             elif stream["source"] and stream["source"]["unit"] == unit["id"] and stream["type"] == "EnergyStream":
                 energy.append(stream_info("EnergyStream", native_by_tag[stream["tag"]], "Distillate", "Energy", None))
-                _attach(graph.find("OutputConnectors")[10], native_by_tag[stream["tag"]], 0, "output")
-                _attach(graphics[stream["tag"]].find("InputConnectors")[0], native_name, 10, "input")
+                _attach_column(graph.find("OutputConnectors")[10], native_by_tag[stream["tag"]], 0, "output", "unit")
+                _attach_column(graphics[stream["tag"]].find("InputConnectors")[0], native_name, 10,
+                               "input", "stream")
     tree.write(case_path, encoding="utf-8", xml_declaration=True)
 
 
-def _attach(connector: ElementTree.Element, other_id: str, other_index: int, direction: str) -> None:
+def _attach_column(connector: ElementTree.Element, other_id: str, other_index: int, direction: str,
+                   side: str) -> None:
+    """Write the native column connectors using DWSIM's stream-side connection flags."""
     connector.attrib.clear()
-    if direction == "input":
-        connector.attrib.update(IsAttached="true", ConnType="ConEn", AttachedFromObjID=other_id,
-                                AttachedFromConnIndex=str(other_index), AttachedFromEnergyConn="True")
+    if side == "unit":
+        connector.attrib.update(IsAttached="true", ConnType="ConEn",
+                                **({"AttachedFromObjID": other_id, "AttachedFromConnIndex": str(other_index),
+                                    "AttachedFromEnergyConn": "True"} if direction == "input" else
+                                   {"AttachedToObjID": other_id, "AttachedToConnIndex": str(other_index),
+                                    "AttachedToEnergyConn": "True"}))
     else:
-        connector.attrib.update(IsAttached="true", ConnType="ConEn", AttachedToObjID=other_id,
-                                AttachedToConnIndex=str(other_index), AttachedToEnergyConn="True")
+        connector.attrib.update(IsAttached="true", ConnType="ConIn" if direction == "input" else "ConOut",
+                                **({"AttachedFromObjID": other_id, "AttachedFromConnIndex": str(other_index),
+                                    "AttachedFromEnergyConn": "False"} if direction == "input" else
+                                   {"AttachedToObjID": other_id, "AttachedToConnIndex": str(other_index),
+                                    "AttachedToEnergyConn": "False"}))
 
 
 def expected(document: dict[str, Any]) -> dict[str, Any]:
@@ -344,7 +356,10 @@ def plan(document: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
                 properties["Reboiler_Specification_Value"] = properties["__ReboilerSpec"]
             if unit["type"] == "Splitter":
                 properties["SR1"] = properties["__SplitRatio1"]
-                properties["SR2"] = properties["__SplitRatio2"]
+                outlet_count = sum(1 for stream in _streams(document)
+                                   if stream["source"] and stream["source"]["unit"] == unit["id"])
+                if outlet_count == 3:
+                    properties["SR2"] = properties["__SplitRatio2"]
             properties = {key: value for key, value in properties.items() if not key.startswith("__")}
             calls.append(("dwsim_unitop_set", {"name": unit["tag"], "properties": properties}))
     for stream in _energy_streams(document):
@@ -461,6 +476,9 @@ def read_back(client: DwsimMcpClient, flow: str, case_path: Path, exp: dict[str,
                         units[tag][name] = node.findtext(name)
                     else:
                         units[tag][name] = _float(node.findtext(name))
+            elif objects[tag]["type"] == "HeatExchanger":
+                units[tag] = {name: (node.findtext("CalculationMode") if name == "CalculationMode"
+                                     else _float(node.findtext(name))) for name in wanted}
             else:
                 units[tag] = {name: _float(node.findtext(name)) if name != "CalcMode" else node.findtext(name)
                               for name in wanted}
@@ -472,11 +490,11 @@ def read_back(client: DwsimMcpClient, flow: str, case_path: Path, exp: dict[str,
     for reaction_id in exp.get("reactions", {}):
         reaction = root.find(f"./Reactions/Reaction[ID='{reaction_id}']")
         compounds_node = None if reaction is None else reaction.find("Compounds")
-        compounds = list(compounds_node or [])
+        reaction_compounds = list(compounds_node or [])
         reactions[reaction_id] = {
             "name": reaction.findtext("Name") if reaction is not None else None,
-            "stoichiometry": {item.get("Name"): _float(item.get("StoichCoeff")) for item in compounds},
-            "orders": {item.get("Name"): _float(item.get("DirectOrder")) for item in compounds},
+            "stoichiometry": {item.get("Name"): _float(item.get("StoichCoeff")) for item in reaction_compounds},
+            "orders": {item.get("Name"): _float(item.get("DirectOrder")) for item in reaction_compounds},
             "base_reactant": reaction.findtext("BaseReactant") if reaction is not None else None,
             "phase": reaction.findtext("ReactionPhase") if reaction is not None else None,
             "basis": reaction.findtext("ReactionBasis") if reaction is not None else None,
@@ -674,7 +692,7 @@ def materialize(document: dict[str, Any], *, action: str, client: DwsimMcpClient
                                     {"flowsheet_id": flow, "name": stream["tag"]}, 30)),
                                     "properties": _snapshot_properties(snapshot_rows, stream["tag"])}
                    for stream in _material_streams(document)}
-        energy_results = {stream["tag"]: client.call("dwsim_stream_get_results",
+        energy_results = {stream["tag"]: client.call("dwsim_unitop_get_results",
                                                        {"flowsheet_id": flow, "name": stream["tag"]}, 30)
                           for stream in _energy_streams(document)}
         for tag, result in energy_results.items():

@@ -182,7 +182,7 @@ UNIT_REGISTRY: dict[str, UnitSpec] = {
         inlets=("inlet",), outlets=("outlet",), required_inlets=1,
     ),
     "PFR": UnitSpec(
-        type="PFR", label="Plug flow reactor", dwsim_type="PFR", native_types=("PFR",),
+        type="PFR", label="Plug flow reactor", dwsim_type="PFR", native_types=("PFR", "Reactor_PFR"),
         inlets=("inlet",), outlets=("outlet",), required_inlets=1, energy_inlets=("energy feed",),
         modes={"adiabatic": "Adiabatic", "isothermic": "Isothermic", "outlet_temperature": "OutletTemperature",
                "nonisothermal_nonadiabatic": "NonIsothermalNonAdiabatic", "heat_exchange": "HeatExchange"},

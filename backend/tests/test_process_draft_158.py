@@ -25,6 +25,7 @@ def test_manifest_exposes_reported_property_catalogue_and_column_limit() -> None
     assert {item["classification"] for item in entries["Heater"]["result_properties"]} <= {"input", "result"}
     assert "DistillationColumn" in UNIT_REGISTRY
     assert "DistillationColumn" not in UNSUPPORTED_TYPES
+    assert draft_compiler._NATIVE_TO_TYPE["Reactor_PFR"] == "PFR"
 
 
 def test_stream_result_keeps_dwsim_report_without_recalculation() -> None:
@@ -67,6 +68,21 @@ def test_energy_stream_and_layout_routes_compile_orthogonally() -> None:
     })])
     assert draft_compiler.expected(routed) == expected
     assert draft_compiler._native_energy_port({"type": "PFR"}, 0) == 1
+
+
+def test_heat_exchanger_and_two_outlet_splitter_use_native_mode_fields() -> None:
+    adapter = TypeAdapter(DraftOp)
+    document = apply_ops(empty_document("Verified operation modes"), [
+        adapter.validate_python({"op": "set_thermo", "compounds": ["Water"], "property_package": "NRTL"}),
+        adapter.validate_python({"op": "add_unit", "id": "hx", "type": "HeatExchanger", "tag": "HX", "x": 0, "y": 0}),
+        adapter.validate_python({"op": "set_unit_params", "unit": "hx", "mode": "calc_both_temp_ua",
+                                "values": {"overall_coefficient": {"value": 1000, "unit": "W/[m2.K]"},
+                                           "area": {"value": 1, "unit": "m2"}}}),
+    ])
+    assert draft_compiler.expected(document)["units"]["HX"]["CalculationMode"] == "CalcBothTemp_UA"
+    unitop_set = next(args for name, args in draft_compiler.plan(document) if name == "dwsim_unitop_set")
+    assert unitop_set["properties"]["CalculationMode"] == "CalcBothTemp_UA"
+    assert "CalcMode" not in unitop_set["properties"]
 
 
 def test_readback_comparison_covers_energy_duty_and_reaction_configuration() -> None:
