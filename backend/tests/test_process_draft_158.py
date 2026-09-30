@@ -66,3 +66,37 @@ def test_energy_stream_and_layout_routes_compile_orthogonally() -> None:
         "op": "set_route", "stream": "duty", "points": [{"x": 0, "y": 0}, {"x": 10, "y": 0}],
     })])
     assert draft_compiler.expected(routed) == expected
+
+
+def test_kinetic_reaction_is_typed_attached_and_materialized_by_native_set() -> None:
+    adapter = TypeAdapter(DraftOp)
+    document = apply_ops(empty_document("Reactive train"), [
+        adapter.validate_python({"op": "set_thermo", "compounds": ["Water", "Ethylene oxide", "Ethylene glycol"],
+                                 "property_package": "NRTL"}),
+        adapter.validate_python({"op": "set_reactions", "reactions": {
+            "R1": {"name": "Hydration", "stoichiometry": {"Ethylene oxide": -1, "Water": -1,
+                                                                      "Ethylene glycol": 1},
+                   "orders": {"Ethylene oxide": 1}, "base_reactant": "Ethylene oxide", "phase": "Mixture",
+                   "basis": "MolarConc", "A_forward": {"value": 0.005, "unit": "kmol/[m3.h]"},
+                   "E_forward": {"value": 0, "unit": "J/mol"}},
+        }}),
+        adapter.validate_python({"op": "add_unit", "id": "pfr", "type": "PFR", "tag": "R", "x": 0, "y": 0}),
+        adapter.validate_python({"op": "set_unit_params", "unit": "pfr", "mode": "heat_exchange",
+                                 "reactions": ["R1"], "values": {
+                                     "volume": {"value": 2, "unit": "m3"}, "length": {"value": 4, "unit": "m"},
+                                     "overall_coefficient": {"value": 400, "unit": "W/[m2.K]"},
+                                     "heat_exchange_area": {"value": 12, "unit": "m2"},
+                                     "coolant_inlet_temperature": {"value": 26.85, "unit": "degC"},
+                                     "coolant_mass_flow": {"value": 2, "unit": "kg/s"},
+                                     "coolant_specific_heat": {"value": 4180, "unit": "J/kg.K"},
+                                 }}),
+    ])
+    normalized = draft_compiler.expected(document)
+    assert normalized["units"]["R"]["ReactorOperationMode"] == "HeatExchange"
+    assert normalized["units"]["R"]["__ReactionSetID"] == "JARVIS_R"
+    assert draft_compiler.plan(document)[-1] == ("dwsim_unitop_set", {"name": "R", "properties": {
+        "ReactorOperationMode": "HeatExchange", "Volume": 2.0, "Length": 4.0, "DeltaP": 0.0,
+        "OverallHeatTransferCoefficient": 400.0, "HeatExchangeArea": 12.0,
+        "CoolantInletTemperature": 300.0, "CoolantMassFlowRate": 2.0,
+        "CoolantSpecificHeat": 4180.0,
+    }})

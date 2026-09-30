@@ -69,25 +69,95 @@ def _unit_properties(unit: dict[str, Any]) -> dict[str, Any]:
     if not spec.modes:
         return {}
     properties: dict[str, Any] = {}
-    if unit["type"] != "DistillationColumn":
+    if unit["type"] == "PFR":
+        properties["ReactorOperationMode"] = spec.modes[unit["mode"]]
+    elif unit["type"] == "Splitter":
+        properties["OperationMode"] = spec.modes[unit["mode"]]
+    elif unit["type"] != "DistillationColumn":
         properties["CalcMode"] = spec.modes[unit["mode"]]
     for param in spec.params_for(unit["mode"]):
         key = "__CondenserSpec" if param.key == "condenser_spec" else "__ReboilerSpec" if param.key == "reboiler_spec" else param.dwsim_property
+        if unit["type"] == "Splitter" and param.key.startswith("split_ratio_"):
+            key = f"__SplitRatio{param.key[-1]}"
         properties[key] = float(unit["params"][param.key]["si"])
     if unit["type"] == "DistillationColumn":
         properties.update(CondenserType="Total_Condenser", MaxIterations=500)
+    if unit["type"] == "PFR" and unit.get("reactions"):
+        properties["__ReactionSetID"] = f"JARVIS_{unit['tag']}"
     return properties
 
 
-def _patch_column_xml(case_path: Path, document: dict[str, Any]) -> None:
-    """Materialize the column stream-stage links missing from the pinned MCP connector."""
-    if not any(unit["type"] == "DistillationColumn" for unit in _units(document)):
+def _patch_native_xml(case_path: Path, document: dict[str, Any]) -> None:
+    """Materialize proven native details absent from the pinned MCP connector."""
+    if not any(unit["type"] == "DistillationColumn" or unit["type"] == "PFR" and unit.get("reactions")
+               for unit in _units(document)):
         return
     tree = ElementTree.parse(case_path)
     root = tree.getroot()
     graphics = {node.findtext("Tag"): node for node in root.findall("./GraphicObjects/GraphicObject")}
     native_by_tag = {tag: node.findtext("Name") for tag, node in graphics.items()}
     simulations = {node.findtext("Name"): node for node in root.findall("./SimulationObjects/SimulationObject")}
+
+    for unit in (item for item in _units(document) if item["type"] == "PFR" and item.get("reactions")):
+        reaction_root = root.find("Reactions")
+        set_root = root.find("ReactionSets")
+        if reaction_root is None or set_root is None:
+            raise MaterializationError("reaction_native_shape", "DWSIM reaction template is unavailable")
+        set_id = f"JARVIS_{unit['tag']}"
+        selected = unit["reactions"]
+        for reaction_id in selected:
+            data = document["reactions"][reaction_id]
+            forward = data["A_forward"]
+            activation = data["E_forward"]
+            reaction = ElementTree.SubElement(reaction_root, "Reaction")
+            def sub(parent: ElementTree.Element, name: str, value: str = "") -> ElementTree.Element:
+                child = ElementTree.SubElement(parent, name)
+                child.text = value
+                return child
+            sub(reaction, "Type", "DWSIM.Thermodynamics.BaseClasses.Reaction")
+            sub(reaction, "BaseReactant", data["base_reactant"])
+            sub(reaction, "Description")
+            sub(reaction, "Equation", " + ".join(data["stoichiometry"]))
+            sub(reaction, "ID", reaction_id)
+            sub(reaction, "Name", data["name"])
+            sub(reaction, "ReactionBasis", data["basis"])
+            sub(reaction, "ReactionHeat", "0")
+            sub(reaction, "ReactionHeatCO", "0")
+            sub(reaction, "ReactionPhase", data["phase"])
+            sub(reaction, "ReactionType", "Kinetic")
+            sub(reaction, "StoichBalance", "0")
+            sub(reaction, "A_Forward", str(forward["value"]))
+            for name, value in (("A_Reverse", "0"), ("Approach", "0"), ("ConcUnit", "kmol/m3"),
+                                ("ConstantKeqValue", "0"), ("E_Forward", str(activation["value"])),
+                                ("E_Reverse", "0"), ("Expression", ""), ("KExprType", "Gibbs"),
+                                ("Kvalue", "0"), ("Rate", "0"), ("ReactionGibbsEnergy", "0"),
+                                ("Tmax", "2000"), ("Tmin", "0"), ("VelUnit", forward["unit"]),
+                                ("ReactionKinFwdType", "Arrhenius"), ("ReactionKinRevType", "Arrhenius"),
+                                ("ReactionKinFwdExpression", ""), ("ReactionKinRevExpression", ""),
+                                ("E_Forward_Unit", activation["unit"]), ("E_Reverse_Unit", "J/mol")):
+                sub(reaction, name, value)
+            compounds_node = sub(reaction, "Compounds")
+            for compound, coefficient in sorted(data["stoichiometry"].items()):
+                ElementTree.SubElement(compounds_node, "Compound", {
+                    "Name": compound, "StoichCoeff": str(coefficient),
+                    "DirectOrder": str(data["orders"].get(compound, 1.0 if compound == data["base_reactant"] else 0.0)),
+                    "ReverseOrder": "0", "IsBaseReactant": str(compound == data["base_reactant"]).lower(),
+                })
+        reaction_set = ElementTree.SubElement(set_root, "ReactionSet")
+        for key, value in (("ID", set_id), ("Name", set_id), ("Description", "")):
+            child = ElementTree.SubElement(reaction_set, key)
+            child.text = value
+        reactions_node = ElementTree.SubElement(reaction_set, "Reactions")
+        for rank, reaction_id in enumerate(selected):
+            ElementTree.SubElement(reactions_node, "Reaction", {"Key": reaction_id, "ReactionID": reaction_id,
+                                                                  "Rank": str(rank), "IsActive": "true"})
+        native_name = next((name for name, tag in ((node.findtext("Name"), node.findtext("Tag"))
+                                                   for node in root.findall("./GraphicObjects/GraphicObject"))
+                            if tag == unit["tag"]), None)
+        sim = simulations.get(native_name or "")
+        if sim is None:
+            raise MaterializationError("reaction_unit_missing", f"PFR {unit['tag']} is missing from the saved case")
+        sim.find("ReactionSetID").text = set_id
     def stream_info(kind: str, stream_id: str, behavior: str, stream_type: str, stage: str | None) -> ElementTree.Element:
         item = ElementTree.Element(kind, {"ID": stream_id})
         def sub(parent: ElementTree.Element, name: str, value: str | None = None) -> ElementTree.Element:
@@ -258,6 +328,9 @@ def plan(document: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
             if unit["type"] == "DistillationColumn":
                 properties["Condenser_Specification_Value"] = properties["__CondenserSpec"]
                 properties["Reboiler_Specification_Value"] = properties["__ReboilerSpec"]
+            if unit["type"] == "Splitter":
+                properties["SR1"] = properties["__SplitRatio1"]
+                properties["SR2"] = properties["__SplitRatio2"]
             properties = {key: value for key, value in properties.items() if not key.startswith("__")}
             calls.append(("dwsim_unitop_set", {"name": unit["tag"], "properties": properties}))
     for stream in _energy_streams(document):
@@ -359,6 +432,21 @@ def read_back(client: DwsimMcpClient, flow: str, case_path: Path, exp: dict[str,
                     spec_node = node.find(f"./Specs/Spec[@ID='{spec_id}']")
                     values[key] = _float(spec_node.findtext("SpecValue")) if spec_node is not None else None
                 units[tag] = {name: values.get(name, _float(node.findtext(name))) for name in wanted}
+            elif objects[tag]["type"] == "PFR":
+                units[tag] = {name: (node.findtext("ReactionSetID") if name == "__ReactionSetID"
+                                     else _float(node.findtext(name)) if name != "CalcMode" else node.findtext(name))
+                              for name in wanted}
+            elif objects[tag]["type"] == "Splitter":
+                ratios = [_float(item.text) for item in node.findall("./SplitRatios/SplitRatio")]
+                units[tag] = {}
+                for name in wanted:
+                    if name.startswith("__SplitRatio"):
+                        index = int(name[-1]) - 1
+                        units[tag][name] = ratios[index] if index < len(ratios) else None
+                    elif name == "OperationMode":
+                        units[tag][name] = node.findtext(name)
+                    else:
+                        units[tag][name] = _float(node.findtext(name))
             else:
                 units[tag] = {name: _float(node.findtext(name)) if name != "CalcMode" else node.findtext(name)
                               for name in wanted}
@@ -439,6 +527,38 @@ def _stream_result(result: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _property_group(name: str) -> str:
+    key = name.casefold()
+    if any(term in key for term in ("temperature", "pressure", "mass flow", "molar flow", "volume flow", "enthalpy flow")):
+        return "conditions"
+    if any(term in key for term in ("phase", "vapor fraction", "liquid fraction")):
+        return "phases"
+    if any(term in key for term in ("fraction", "compound flow", "composition")):
+        return "composition"
+    if any(term in key for term in ("viscosity", "conductivity", "diffusivity", "diffusion", "reynolds", "prandtl")):
+        return "transport"
+    if any(term in key for term in ("fugacity", "activity", "bubble point", "dew point", "equilibrium")):
+        return "equilibrium"
+    if any(term in key for term in ("enthalpy", "entropy", "heat capacity", "cp", "cv", "compressibility", "gibbs", "helmholtz", "density")):
+        return "thermodynamic"
+    return "other"
+
+
+def _snapshot_properties(rows: list[dict[str, Any]], tag: str) -> list[dict[str, Any]]:
+    result = []
+    for row in rows:
+        if row.get("object") != tag:
+            continue
+        value = row.get("b")
+        if isinstance(value, float) and not math.isfinite(value):
+            value = None
+        name = str(row.get("property") or row.get("id") or "")
+        result.append({"id": row.get("id", ""), "name": name, "group": _property_group(name),
+                       "unit": row.get("unit", ""), "value": value,
+                       "specification": bool(row.get("specification", False))})
+    return sorted(result, key=lambda item: (item["group"], item["name"], item["id"]))
+
+
 def materialize(document: dict[str, Any], *, action: str, client: DwsimMcpClient, dwsim_version: str,
                 mcp_sha256: str, label: str, keep_case: Path | None = None) -> dict[str, Any]:
     """Compile, read back, compare; then check (validate) or check+solve (run). Refuses on mismatch."""
@@ -458,14 +578,21 @@ def materialize(document: dict[str, Any], *, action: str, client: DwsimMcpClient
                 client.call(step, {"flowsheet_id": flow, **args}, 60)
             step = "dwsim_flowsheet_save"
             client.call("dwsim_flowsheet_save", {"flowsheet_id": flow, "filepath": str(case), "compressed": False}, 60)
-            if any(unit["type"] == "DistillationColumn" for unit in _units(document)):
+            native_patch_required = any(unit["type"] == "DistillationColumn" or
+                                        unit["type"] == "PFR" and unit.get("reactions")
+                                        for unit in _units(document))
+            if native_patch_required:
                 step = "column_native_patch"
-                _patch_column_xml(case, document)
+                _patch_native_xml(case, document)
                 step = "column_reload"
                 reloaded = client.call("dwsim_flowsheet_load", {"filepath": str(case)}, 60)
                 flow = reloaded.get("flowsheet_id")
                 if not isinstance(flow, str):
                     raise MaterializationError("column_reload_failed", "DWSIM did not reload the patched column case")
+                for unit in _units(document):
+                    if unit["type"] == "PFR" and unit.get("reactions"):
+                        client.call("dwsim_unitop_set", {"flowsheet_id": flow, "name": unit["tag"],
+                                                          "properties": {"ReactionSetID": f"JARVIS_{unit['tag']}"}}, 60)
             step = "read_back"
             actual = read_back(client, flow, case, exp)
         except DwsimMcpError as exc:
@@ -493,22 +620,32 @@ def materialize(document: dict[str, Any], *, action: str, client: DwsimMcpClient
             outcome.update(status="check_failed", compile_seconds=round(time.perf_counter() - started, 3))
             return outcome
         solve = client.call("dwsim_solve_run", {"flowsheet_id": flow, "timeout_s": 120}, 150)
+        snapshot_rows: list[dict[str, Any]] = []
+        if solve.get("ok") is True:
+            client.call("dwsim_scenario_snapshot", {"flowsheet_id": flow, "label": "jarvis_result"}, 60)
+            catalogue = client.call("dwsim_scenario_compare", {"flowsheet_id": flow, "label_a": "jarvis_result",
+                                     "label_b": "jarvis_result", "only_changed": False, "limit": 20000}, 90)
+            snapshot_rows = [row for row in catalogue.get("rows", []) if isinstance(row, dict)]
         solved_case = Path(tmp) / "solved.dwxmz"
         client.call("dwsim_flowsheet_save", {"flowsheet_id": flow, "filepath": str(solved_case), "compressed": True}, 60)
         listed = client.call("dwsim_flowsheet_list_objects", {"flowsheet_id": flow}, 30).get("objects", [])
         object_status = [{"tag": item.get("name"), "calculated": item.get("calculated"), "error": item.get("error", "")}
                          for item in listed if isinstance(item, dict)]
-        streams = {stream["tag"]: _stream_result(client.call("dwsim_stream_get_results",
-                                                              {"flowsheet_id": flow, "name": stream["tag"]}, 30))
+        streams = {stream["tag"]: {**_stream_result(client.call("dwsim_stream_get_results",
+                                    {"flowsheet_id": flow, "name": stream["tag"]}, 30)),
+                                    "properties": _snapshot_properties(snapshot_rows, stream["tag"])}
                    for stream in _material_streams(document)}
         energy_results = {stream["tag"]: client.call("dwsim_stream_get_results",
                                                        {"flowsheet_id": flow, "name": stream["tag"]}, 30)
                           for stream in _energy_streams(document)}
+        for tag, result in energy_results.items():
+            result["properties"] = _snapshot_properties(snapshot_rows, tag)
         units = {}
         for unit in _units(document):
             reported = client.call("dwsim_unitop_get_results", {"flowsheet_id": flow, "name": unit["tag"]}, 30)
             units[unit["tag"]] = {"calculated": reported.get("calculated"), "error": reported.get("error", ""),
-                                  "reported": reported.get("properties", {})}
+                                  "reported": reported.get("properties", {}),
+                                  "properties": _snapshot_properties(snapshot_rows, unit["tag"])}
         try:
             tagged = [{**item, "tag": item.get("name")} for item in listed if isinstance(item, dict)]
             residual, boundary = _mass_balance(client, flow, solved_case, tagged)

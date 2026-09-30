@@ -43,6 +43,7 @@ from app.modules.process_stack.draft_models import (
     ParamSpec,
     ProposalRequest,
     Rename,
+    SetReactions,
     SetRoute,
     SetStreamSpec,
     SetThermo,
@@ -122,7 +123,7 @@ def _si(quantity: DraftQuantity, kind: str, field: str) -> dict[str, Any]:
     if quantity.unit not in allowed:
         raise DraftError("unit_unsupported", f"{field}: unit {quantity.unit!r} is not offered; use one of {list(allowed)}",
                          field=field)
-    if kind == "percent":
+    if kind == "percent" or quantity.unit == si_unit:
         value = quantity.value
     else:
         try:
@@ -146,7 +147,8 @@ def convert_si(value_si: float, kind: str, unit: str) -> float:
 
 
 def empty_document(name: str) -> dict[str, Any]:
-    return {"schema_version": 1, "name": name, "compounds": [], "property_package": None, "objects": {}}
+    return {"schema_version": 1, "name": name, "compounds": [], "property_package": None,
+            "objects": {}, "reactions": {}}
 
 
 def _by_tag(document: dict[str, Any], tag: str) -> dict[str, Any] | None:
@@ -210,7 +212,7 @@ def apply_op(document: dict[str, Any], op: Any) -> None:
         params = {item.key: _default_param(item) for item in spec.params_for(spec.default_mode)
                   if item.default is not None}
         objects[object_id] = {"id": object_id, "kind": "unit", "type": op.type, "tag": op.tag, "x": op.x, "y": op.y,
-                              "mode": spec.default_mode, "params": params}
+                              "mode": spec.default_mode, "params": params, "options": {}, "reactions": []}
     elif isinstance(op, AddStream):
         _unique_tag(document, op.tag)
         object_id = _new_id(document, "s", op.id)
@@ -323,6 +325,33 @@ def apply_op(document: dict[str, Any], op: Any) -> None:
             ):
                 raise DraftError("quantity_out_of_range", f"{param.label} is outside its supported range", field=key)
             unit["params"][key] = converted
+        if op.options:
+            raise DraftError("option_unsupported", f"{spec.label} does not expose verified enum/boolean inputs", field="options")
+        if op.reactions is not None:
+            missing = sorted(set(op.reactions) - set(document.get("reactions", {})))
+            if missing:
+                raise DraftError("reaction_not_found", f"Reaction ids {missing} are not defined", field="reactions")
+            unit["reactions"] = list(dict.fromkeys(op.reactions))
+    elif isinstance(op, SetReactions):
+        reactions = {}
+        for reaction_id, reaction in op.reactions.items():
+            if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_-]{0,31}", reaction_id):
+                raise DraftError("reaction_id_invalid", f"Reaction id {reaction_id!r} is invalid", field="reactions")
+            item = reaction.model_dump(mode="json")
+            compounds = set(item["stoichiometry"]) | set(item["orders"])
+            unknown = sorted(compounds - set(document["compounds"]))
+            if unknown:
+                raise DraftError("compound_undeclared", f"Reaction compounds {unknown} are not declared in Thermo",
+                                 field="reactions")
+            base = item["base_reactant"]
+            if base not in item["stoichiometry"] or item["stoichiometry"][base] >= 0:
+                raise DraftError("reaction_base_invalid", "Base reactant must have a negative stoichiometric coefficient",
+                                 field="base_reactant")
+            if item["A_forward"]["unit"] != "kmol/[m3.h]" or item["E_forward"]["unit"] not in {"J/mol", "kJ/mol"}:
+                raise DraftError("reaction_unit_unsupported", "Use A in kmol/[m3.h] and activation energy in J/mol or kJ/mol",
+                                 field="A_forward")
+            reactions[reaction_id] = item
+        document["reactions"] = reactions
     elif isinstance(op, SetThermo):
         if op.compounds is not None:
             unknown = [name for name in op.compounds if name not in COMPOUNDS]
@@ -379,12 +408,12 @@ def validate_document(document: dict[str, Any]) -> list[dict[str, Any]]:
             add("blocker", "UNIT_INLET_MISSING",
                 f"{spec.label} needs {spec.required_inlets} connected inlet(s); {len(inlets)} connected.", unit["tag"],
                 "inlets")
-        for port, name in enumerate(spec.outlets):
-            if not _occupant(document, unit["id"], "source", port):
-                add("blocker", "UNIT_OUTLET_MISSING", f"Connect a stream to the {name} outlet.", unit["tag"], name)
         for param in spec.params_for(unit["mode"]):
             if param.key not in unit["params"]:
                 add("blocker", "UNIT_PARAM_MISSING", f"Set {param.label}.", unit["tag"], param.key)
+        if unit["type"] == "PFR" and not unit.get("reactions"):
+            add("blocker", "REACTION_SET_MISSING", "Assign at least one kinetic reaction to the PFR.", unit["tag"],
+                "reactions")
         needs_energy = (unit["type"] == "DistillationColumn" or
                         unit["type"] == "PFR" and unit["mode"] == "heat_exchange" or
                         unit["type"] in {"Heater", "Cooler"} and unit["mode"] == "energy_stream")
@@ -397,6 +426,22 @@ def validate_document(document: dict[str, Any]) -> list[dict[str, Any]]:
         ):
             add("blocker", "UNIT_ENERGY_OUTLET_MISSING", "Connect the condenser duty energy stream.", unit["tag"],
                 "energy_outlets")
+        outlet_count = sum(bool(_occupant(document, unit["id"], "source", port))
+                           for port in range(len(spec.outlets)))
+        for port, name in enumerate(spec.outlets):
+            if unit["type"] == "Splitter" and port == 2:
+                continue
+            if not _occupant(document, unit["id"], "source", port):
+                add("blocker", "UNIT_OUTLET_MISSING", f"Connect a stream to the {name} outlet.", unit["tag"], name)
+        if unit["type"] == "Splitter" and unit["mode"] == "split_ratios":
+            ratio1 = unit["params"].get("split_ratio_1", {}).get("si")
+            ratio2 = unit["params"].get("split_ratio_2", {}).get("si")
+            if ratio1 is not None and ratio2 is not None:
+                total = float(ratio1) + float(ratio2)
+                invalid = total > 1.0 + _COMPOSITION_TOL or outlet_count == 2 and abs(total - 1.0) > _COMPOSITION_TOL
+                if invalid:
+                    add("blocker", "SPLIT_RATIOS_INVALID", "Split ratios must sum to 1 for two outlets and at most 1 for three.",
+                        unit["tag"], "split_ratios")
     for stream in sorted((item for item in objects.values() if item["kind"] == "stream"), key=lambda item: item["tag"]):
         if stream["source"] is None and stream["target"] is None:
             add("blocker", "STREAM_DANGLING", "This stream is connected to nothing.", stream["tag"])
@@ -423,6 +468,35 @@ def validate_document(document: dict[str, Any]) -> list[dict[str, Any]]:
                 if undeclared:
                     add("blocker", "COMPOUND_UNDECLARED", f"{undeclared} are not declared in Thermo.", stream["tag"],
                         "composition")
+    graph: dict[str, list[str]] = {}
+    for stream in objects.values():
+        if stream["kind"] == "stream" and stream.get("source") and stream.get("target"):
+            graph.setdefault(stream["source"]["unit"], []).append(stream["target"]["unit"])
+    visiting: list[str] = []
+    visited: set[str] = set()
+    reported_cycles: set[frozenset[str]] = set()
+
+    def visit(unit_id: str) -> None:
+        if unit_id in visiting:
+            cycle = visiting[visiting.index(unit_id):]
+            if not any(objects.get(item, {}).get("type") == "Recycle" for item in cycle):
+                cycle_key = frozenset(cycle)
+                if cycle_key not in reported_cycles:
+                    reported_cycles.add(cycle_key)
+                    tags = [objects[item]["tag"] for item in cycle]
+                    add("blocker", "RECYCLE_REQUIRED", f"Process loop {tags} requires a Recycle block.", tags[0],
+                        "connections")
+            return
+        if unit_id in visited:
+            return
+        visiting.append(unit_id)
+        for next_id in graph.get(unit_id, []):
+            visit(next_id)
+        visiting.pop()
+        visited.add(unit_id)
+
+    for unit_id in graph:
+        visit(unit_id)
     return findings
 
 
@@ -622,6 +696,7 @@ def projection(workspace_id: str, draft_id: str) -> dict[str, Any]:
         "compounds": document["compounds"],
         "property_package": document["property_package"],
         "objects": _display(document),
+        "reactions": copy.deepcopy(document.get("reactions", {})),
         "findings": validate_document(document),
         "results": results_state(head, runs, document, edits_since),
         "proposals": [proposal for proposal in list_proposals(workspace_id, draft_id) if proposal["state"] == "pending"

@@ -8,6 +8,7 @@ from one table. Anything absent here is unsupported and refused, never approxima
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from typing import Annotated, Literal
 
@@ -21,14 +22,14 @@ TAG_PATTERN = r"^[A-Za-z][A-Za-z0-9_-]{0,31}$"
 COMPOUNDS: tuple[str, ...] = (
     "Water", "Methanol", "Ethanol", "Acetone", "Benzene", "Toluene", "Nitrogen", "Oxygen",
     "Carbon dioxide", "Methane", "Ethane", "Propane", "N-butane", "N-hexane", "Hydrogen",
-    "Argon", "Ammonia", "Acetic acid", "Isopropanol",
+    "Argon", "Ammonia", "Acetic acid", "Isopropanol", "Ethylene oxide", "Ethylene glycol",
 )
 PROPERTY_PACKAGES: tuple[str, ...] = (
     "NRTL", "Peng-Robinson (PR)", "Soave-Redlich-Kwong (SRK)", "Raoult's Law", "UNIQUAC",
     "Steam Tables (IAPWS-IF97)",
 )
 
-QuantityKind = Literal["temperature", "pressure", "pressure_difference", "mass_flow", "percent", "power", "flow_ratio", "dimensionless", "length", "volume", "area", "heat_transfer_coefficient", "molar_flow"]
+QuantityKind = Literal["temperature", "pressure", "pressure_difference", "mass_flow", "percent", "power", "flow_ratio", "dimensionless", "length", "volume", "area", "heat_transfer_coefficient", "molar_flow", "specific_heat", "volume_flow"]
 
 # SI storage unit and the display units offered by inspectors, per quantity kind.
 QUANTITY_UNITS: dict[str, tuple[str, tuple[str, ...]]] = {
@@ -45,6 +46,8 @@ QUANTITY_UNITS: dict[str, tuple[str, tuple[str, ...]]] = {
     "area": ("m2", ("m2",)),
     "heat_transfer_coefficient": ("W/[m2.K]", ("W/[m2.K]",)),
     "molar_flow": ("mol/s", ("mol/s",)),
+    "specific_heat": ("J/kg.K", ("J/kg.K",)),
+    "volume_flow": ("m3/s", ("m3/s",)),
 }
 
 
@@ -151,9 +154,18 @@ UNIT_REGISTRY: dict[str, UnitSpec] = {
         inlets=("feed",), outlets=("vapor", "liquid"), required_inlets=1,
     ),
     "Splitter": UnitSpec(
-        type="Splitter", label="Splitter", dwsim_type="Splitter", native_types=("Splitter",),
+        type="Splitter", label="Splitter", dwsim_type="Splitter", native_types=("Splitter", "NodeOut"),
         inlets=("inlet",), outlets=("outlet 1", "outlet 2", "outlet 3"), required_inlets=1,
-        modes={"split_ratios": "SplitRatios"},
+        modes={"split_ratios": "SplitRatios", "mass_flow_spec": "StreamMassFlowSpec",
+               "mole_flow_spec": "StreamMoleFlowSpec", "volumetric_flow_spec": "StreamVolumetricFlowSpec"},
+        params=(ParamSpec("split_ratio_1", "Outlet 1 split ratio", "flow_ratio", "SR1", ("split_ratios",), default=0.5, minimum_si=0.0, maximum_si=1.0),
+                ParamSpec("split_ratio_2", "Outlet 2 split ratio", "flow_ratio", "SR2", ("split_ratios",), default=0.5, minimum_si=0.0, maximum_si=1.0),
+                ParamSpec("flow_spec_1", "Outlet 1 flow specification", "mass_flow", "StreamFlowSpec", ("mass_flow_spec",), minimum_si=0.0),
+                ParamSpec("flow_spec_2", "Outlet 2 flow specification", "mass_flow", "Stream2FlowSpec", ("mass_flow_spec",), minimum_si=0.0),
+                ParamSpec("mole_flow_spec_1", "Outlet 1 molar flow specification", "molar_flow", "StreamFlowSpec", ("mole_flow_spec",), minimum_si=0.0),
+                ParamSpec("mole_flow_spec_2", "Outlet 2 molar flow specification", "molar_flow", "Stream2FlowSpec", ("mole_flow_spec",), minimum_si=0.0),
+                ParamSpec("volume_flow_spec_1", "Outlet 1 volumetric flow specification", "volume_flow", "StreamFlowSpec", ("volumetric_flow_spec",), minimum_si=0.0),
+                ParamSpec("volume_flow_spec_2", "Outlet 2 volumetric flow specification", "volume_flow", "Stream2FlowSpec", ("volumetric_flow_spec",), minimum_si=0.0)),
     ),
     "HeatExchanger": UnitSpec(
         type="HeatExchanger", label="Heat exchanger", dwsim_type="HeatExchanger", native_types=("HeatExchanger",),
@@ -181,7 +193,7 @@ UNIT_REGISTRY: dict[str, UnitSpec] = {
                 ParamSpec("heat_exchange_area", "Heat exchange area", "area", "HeatExchangeArea", ("heat_exchange",), minimum_si=0.0),
                 ParamSpec("coolant_inlet_temperature", "Coolant inlet temperature", "temperature", "CoolantInletTemperature", ("heat_exchange",)),
                 ParamSpec("coolant_mass_flow", "Coolant mass flow rate", "mass_flow", "CoolantMassFlowRate", ("heat_exchange",), minimum_si=0.0),
-                ParamSpec("coolant_specific_heat", "Coolant specific heat", "dimensionless", "CoolantSpecificHeat", ("heat_exchange",), minimum_si=0.0)),
+                ParamSpec("coolant_specific_heat", "Coolant specific heat", "specific_heat", "CoolantSpecificHeat", ("heat_exchange",), minimum_si=0.0)),
     ),
     "DistillationColumn": UnitSpec(
         type="DistillationColumn", label="Distillation column", dwsim_type="DistillationColumn",
@@ -307,6 +319,46 @@ class SetUnitParams(_Op):
     unit: str = Field(pattern=ID_PATTERN)
     mode: str | None = None
     values: dict[str, DraftQuantity] = Field(default_factory=dict)
+    options: dict[str, str | float | bool] = Field(default_factory=dict)
+    reactions: list[str] | None = None
+
+
+class KineticReaction(BaseModel):
+    model_config = {"extra": "forbid"}
+    name: str = Field(min_length=1, max_length=80)
+    stoichiometry: dict[str, float] = Field(min_length=2)
+    orders: dict[str, float] = Field(default_factory=dict)
+    base_reactant: str
+    phase: Literal["Mixture", "Vapor", "Liquid"] = "Mixture"
+    basis: Literal["MolarConc"] = "MolarConc"
+    A_forward: DraftQuantity
+    E_forward: DraftQuantity
+
+    @field_validator("stoichiometry")
+    @classmethod
+    def _nonzero_stoichiometry(cls, value: dict[str, float]) -> dict[str, float]:
+        if any(not float(item) or not math.isfinite(float(item)) for item in value.values()):
+            raise ValueError("stoichiometric coefficients must be finite and nonzero")
+        return value
+
+    @field_validator("orders")
+    @classmethod
+    def _nonnegative_orders(cls, value: dict[str, float]) -> dict[str, float]:
+        if any(not math.isfinite(float(item)) or float(item) < 0 for item in value.values()):
+            raise ValueError("reaction orders must be finite and nonnegative")
+        return value
+
+    @field_validator("A_forward", "E_forward")
+    @classmethod
+    def _nonnegative_constants(cls, value: DraftQuantity) -> DraftQuantity:
+        if value.value < 0:
+            raise ValueError("kinetic constants must be nonnegative")
+        return value
+
+
+class SetReactions(_Op):
+    op: Literal["set_reactions"]
+    reactions: dict[str, KineticReaction] = Field(max_length=12)
 
 
 class SetThermo(_Op):
@@ -316,7 +368,7 @@ class SetThermo(_Op):
 
 
 DraftOp = Annotated[
-    AddUnit | AddStream | Delete | Move | Rename | Connect | Disconnect | SetRoute | SetStreamSpec | SetUnitParams | SetThermo,
+    AddUnit | AddStream | Delete | Move | Rename | Connect | Disconnect | SetRoute | SetStreamSpec | SetUnitParams | SetReactions | SetThermo,
     Field(discriminator="op"),
 ]
 

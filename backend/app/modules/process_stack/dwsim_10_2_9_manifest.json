@@ -42,6 +42,11 @@
           "name": "Temperature Difference",
           "unit": "C."
         }
+      ],
+      "settable_properties": [
+        "DeltaP",
+        "DeltaQ",
+        "Eficiencia"
       ]
     },
     "DistillationColumn": {
@@ -287,6 +292,28 @@
           "name": "Sump_LiquidLevel",
           "unit": "m"
         }
+      ],
+      "settable_properties": [
+        "CondenserType",
+        "NumberOfStages",
+        "Specs[C]",
+        "Specs[R]",
+        "Stages[0].P",
+        "Stages[N].P"
+      ]
+    },
+    "EnergyStream": {
+      "dof": {
+        "mode": null,
+        "slots": [],
+        "supported": true
+      },
+      "modes": [],
+      "native_type": "EnergyStream",
+      "observed_mode": null,
+      "result_properties": [],
+      "settable_properties": [
+        "EnergyFlow"
       ]
     },
     "HeatExchanger": {
@@ -517,6 +544,13 @@
           "name": "[Shell and Tube] Reynolds number tubes",
           "unit": ""
         }
+      ],
+      "settable_properties": [
+        "Area",
+        "ColdSidePressureDrop",
+        "HeatLoss",
+        "HotSidePressureDrop",
+        "OverallCoefficient"
       ]
     },
     "Heater": {
@@ -557,6 +591,11 @@
           "name": "Temperature Difference",
           "unit": "C."
         }
+      ],
+      "settable_properties": [
+        "DeltaP",
+        "DeltaQ",
+        "Eficiencia"
       ]
     },
     "Mixer": {
@@ -568,7 +607,8 @@
       "modes": [],
       "native_type": "Mixer",
       "observed_mode": null,
-      "result_properties": []
+      "result_properties": [],
+      "settable_properties": []
     },
     "PFR": {
       "dof": {
@@ -797,6 +837,19 @@
           "name": "Wall Thickness",
           "unit": "m"
         }
+      ],
+      "settable_properties": [
+        "CatalystLoading",
+        "CoolantInletTemperature",
+        "CoolantMassFlowRate",
+        "CoolantSpecificHeat",
+        "DeltaP",
+        "HeatExchangeArea",
+        "Length",
+        "OverallHeatTransferCoefficient",
+        "ReactionSetID",
+        "ReactorOperationMode",
+        "Volume"
       ]
     },
     "Pump": {
@@ -861,6 +914,10 @@
           "name": "Temperature Difference",
           "unit": "C."
         }
+      ],
+      "settable_properties": [
+        "DeltaP",
+        "Eficiencia"
       ]
     },
     "Recycle": {
@@ -888,7 +945,8 @@
           "name": "Temperature Error",
           "unit": "C."
         }
-      ]
+      ],
+      "settable_properties": []
     },
     "Splitter": {
       "dof": {
@@ -920,7 +978,8 @@
           "name": "Stream 2 Flow Spec",
           "unit": ""
         }
-      ]
+      ],
+      "settable_properties": []
     },
     "Valve": {
       "dof": {
@@ -955,6 +1014,9 @@
           "name": "Temperature Drop",
           "unit": "C."
         }
+      ],
+      "settable_properties": [
+        "DeltaP"
       ]
     },
     "Vessel": {
@@ -977,7 +1039,11 @@
       "modes": [],
       "native_type": "Vessel",
       "observed_mode": null,
-      "result_properties": []
+      "result_properties": [],
+      "settable_properties": [
+        "FlashPressure",
+        "FlashTemperature"
+      ]
     }
   },
   "probe_sha256": "d20f9742",
