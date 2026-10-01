@@ -48,6 +48,8 @@ RELAY_GATEWAY_SCHEMA_STATEMENTS = [
         id TEXT PRIMARY KEY,
         workspace_id TEXT NOT NULL,
         thread_id TEXT NOT NULL,
+        source_interaction_id TEXT,
+        model TEXT,
         relay_workspace_id TEXT,
         agent TEXT NOT NULL,
         state TEXT NOT NULL CHECK (state IN ('queued', 'running', 'completed', 'failed', 'denied')),
@@ -79,6 +81,7 @@ RELAY_GATEWAY_SCHEMA_STATEMENTS = [
 
 # Spec 161: a Relay escalation is linked to its source turn and records the explicit model.
 RELAY_GATEWAY_MIGRATION_STATEMENTS = [
+    # Keep these for databases created before the columns were added to fresh installs.
     "ALTER TABLE relay_runs ADD COLUMN source_interaction_id TEXT",
     "ALTER TABLE relay_runs ADD COLUMN model TEXT",
 ]

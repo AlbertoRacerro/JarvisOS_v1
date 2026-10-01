@@ -61,6 +61,7 @@ _RELAY_ESCALATION_MESSAGES = {
     "text_digest_mismatch": "The text changed after it was shown for approval. Review it again before sending.",
     "source_turn_not_finished": "This answer is still running. Escalate it once it has finished.",
     "relay_run_in_progress": "A Relay run is already in progress for this conversation. Wait for it to finish.",
+    "relay_escalation_digest_conflict": "This answer already has a Relay run with different text. Review the existing run before sending another request.",
     "relay_gateway_disabled": "Relay is turned off on this machine, so nothing was sent.",
     "relay_agent_binary_missing": "The Relay agent program is not installed on this machine, so nothing was sent.",
     "relay_agent_login_missing": "The Relay agent is not signed in on this machine, so nothing was sent.",

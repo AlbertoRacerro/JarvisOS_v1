@@ -283,6 +283,7 @@ export function useJarvisSidecar(
   const detailOwner = useRef(0);
   const previewOwner = useRef(0);
   const submitOwner = useRef(0);
+  const relayEscalationInFlight = useRef(false);
   const selectedThreadRef = useRef<string | null>(null);
   const transcriptRef = useRef<HTMLOListElement | null>(null);
   const selectionKey = useMemo(() => selectionIdentity(selection), [selection]);
@@ -438,7 +439,8 @@ export function useJarvisSidecar(
 
   // Spec 161: the default escalation goes through Relay; the API path is a deliberate choice.
   const prepareRelayEscalation = async (sourceInteraction: string, editedText?: string) => {
-    if (!workspaceId || !selectedThreadId || relayEscalating) return;
+    if (!workspaceId || !selectedThreadId || relayEscalationInFlight.current) return;
+    relayEscalationInFlight.current = true;
     setCloudSource(null);
     setCloudDraft(null);
     setRelaySource(sourceInteraction);
@@ -451,12 +453,13 @@ export function useJarvisSidecar(
       setRelayEditText(draft.text);
     } catch (caught) {
       setError(caught instanceof ThreadsRequestError ? caught.detail ?? "This answer cannot be escalated through Relay." : "Jarvis could not prepare the Relay request.");
-    } finally { setRelayEscalating(false); }
+    } finally { relayEscalationInFlight.current = false; setRelayEscalating(false); }
   };
 
   const sendRelayEscalation = async () => {
-    if (!workspaceId || !selectedThreadId || !relaySource || !relayDraft || relayEscalating) return;
+    if (!workspaceId || !selectedThreadId || !relaySource || !relayDraft || relayEscalationInFlight.current) return;
     if (relayDraft.status !== "ready" || !relayDraft.text_digest || relayEditText !== relayDraft.text) return;
+    relayEscalationInFlight.current = true;
     const targetThread = selectedThreadId;
     setRelayEscalating(true);
     setError(null);
@@ -469,7 +472,7 @@ export function useJarvisSidecar(
       }
     } catch (caught) {
       setError(caught instanceof ThreadsRequestError ? caught.detail ?? "The Relay request was not sent." : "The Relay request could not be sent. Nothing was sent to a paid API.");
-    } finally { setRelayEscalating(false); }
+    } finally { relayEscalationInFlight.current = false; setRelayEscalating(false); }
   };
 
   const startApiEscalation = (sourceInteraction: string) => {

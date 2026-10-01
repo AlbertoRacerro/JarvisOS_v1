@@ -379,29 +379,49 @@ def _submit_run(config: dict[str, Any], workspace_id: str, thread_id: str, agent
     run_id = str(uuid4())
     now = utc_now()
     state = "queued" if admission.allowed else "denied"
+    existing_run_id = None
+    raw_prompt_digest = hashlib.sha256(raw_prompt.encode("utf-8")).hexdigest()
     with open_sqlite_connection() as connection:
         try:
-            connection.execute(
-                """
-                INSERT INTO relay_runs (
-                    id, workspace_id, thread_id, agent, state, reason_code, prompt_digest, prompt_source,
-                    prompt_derivative_id, repository_level, access_mode, created_at, finished_at,
-                    source_interaction_id, model
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (run_id, workspace_id, thread_id, agent, state, admission.reason_code,
-                 hashlib.sha256(raw_prompt.encode("utf-8")).hexdigest(), admission.prompt_source,
-                 admission.prompt_derivative_id, level, mode, now, None if admission.allowed else now,
-                 source_interaction_id, model),
-            )
+            if source_interaction_id is not None:
+                # Serialize approval replay checks across backend workers as well as threads.
+                connection.execute("BEGIN IMMEDIATE")
+                existing = connection.execute(
+                    """SELECT id, prompt_digest FROM relay_runs
+                       WHERE workspace_id = ? AND thread_id = ? AND source_interaction_id = ?
+                         AND state IN ('queued', 'running', 'completed')
+                       ORDER BY created_at, id LIMIT 1""",
+                    (workspace_id, thread_id, source_interaction_id),
+                ).fetchone()
+                if existing is not None:
+                    if existing["prompt_digest"] != raw_prompt_digest:
+                        raise RelayGatewayError("relay_escalation_digest_conflict")
+                    existing_run_id = existing["id"]
+                    connection.commit()
+            if existing_run_id is None:
+                connection.execute(
+                    """
+                    INSERT INTO relay_runs (
+                        id, workspace_id, thread_id, agent, state, reason_code, prompt_digest, prompt_source,
+                        prompt_derivative_id, repository_level, access_mode, created_at, finished_at,
+                        source_interaction_id, model
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (run_id, workspace_id, thread_id, agent, state, admission.reason_code,
+                     raw_prompt_digest, admission.prompt_source, admission.prompt_derivative_id,
+                     level, mode, now, None if admission.allowed else now, source_interaction_id, model),
+                )
+                connection.commit()
         except sqlite3.IntegrityError as exc:
             raise RelayGatewayError("relay_run_in_progress") from exc
-        connection.commit()
+    if existing_run_id is not None:
+        return get_relay_run(workspace_id, thread_id, existing_run_id)
     if admission.allowed:
         assert admission.effective_prompt is not None
         try:
             _start_run(config, workspace_id, thread_id, run_id, agent, mode, level,
-                       admission.effective_prompt, max_turns)
+                       admission.effective_prompt, max_turns,
+                       source_interaction_id is not None)
         except (OSError, subprocess.SubprocessError, RelayGatewayError) as exc:
             _finish(run_id, "failed", reason_code="relay_run_launch_failed", result_text=str(exc)[:500])
     return get_relay_run(workspace_id, thread_id, run_id)
@@ -413,11 +433,6 @@ def _submit_run(config: dict[str, Any], workspace_id: str, thread_id: str, agent
 # exact text is the cloud-safe attestation. Nothing here touches provider, budget or
 # derivative state, and a Relay failure never falls back to a metered provider.
 
-_ESCALATION_FRAME = (
-    "Advisory question escalated from a JarvisOS conversation. Answer it directly and concisely for "
-    "the operator; your answer is advice, not an action. Do not modify files, run builds or commit. "
-    "Read repository files only when they help answer.\n\nQuestion:\n"
-)
 _UNAVAILABLE_REASONS = {
     "relay_gateway_disabled": "Relay is turned off on this machine, so nothing can be escalated through it.",
     "private_domain_data_sandbox_not_accepted": (
@@ -474,6 +489,14 @@ def draft_relay_escalation(workspace_id: str, thread_id: str, interaction_id: st
                            text: str | None = None) -> RelayEscalationDraftRead:
     config = load_config()
     source_text = _source_turn_text(workspace_id, thread_id, interaction_id)
+    _source_status, _source_level, source_code, source_reason = screen_outbound_text(source_text)
+    if source_code == "secret_detected":
+        agent = escalation_agent(config)
+        return RelayEscalationDraftRead(
+            status="refused", reason_code=source_code, reason=source_reason,
+            source_interaction_id=interaction_id, text="", text_digest=None,
+            agent=agent, model=config["agents"][agent].get("model") if agent else None,
+        )
     text = source_text if text is None else text
     status, _level, code, reason = screen_outbound_text(text)
     agent = escalation_agent(config)
@@ -490,10 +513,16 @@ def draft_relay_escalation(workspace_id: str, thread_id: str, interaction_id: st
 
 def escalate_with_relay(workspace_id: str, thread_id: str, interaction_id: str,
                         payload: RelayEscalationApproval) -> RelayRunRead:
+    source_text = _source_turn_text(workspace_id, thread_id, interaction_id)
+    _source_status, _source_level, source_code, _source_reason = screen_outbound_text(source_text)
+    if source_code == "secret_detected":
+        raise RelayGatewayError("secret_detected")
     if payload.text_digest != text_digest(payload.text):
         raise RelayGatewayError("text_digest_mismatch")
     config = load_config()
-    _source_turn_text(workspace_id, thread_id, interaction_id)
+    existing = _find_escalation_replay(workspace_id, thread_id, interaction_id, payload.text)
+    if existing is not None:
+        return existing
     status, _level, code, _reason = screen_outbound_text(payload.text)
     if status != "ready":
         raise RelayGatewayError(code or "text_not_cloud_safe")
@@ -505,9 +534,27 @@ def escalate_with_relay(workspace_id: str, thread_id: str, interaction_id: str,
     admission = admit_prompt(payload.text, attested=True, workspace_id=workspace_id)
     if not admission.allowed:
         raise RelayGatewayError(admission.reason_code or "relay_admission_refused")
-    admission = Admission(True, None, admission.prompt_source, _ESCALATION_FRAME + payload.text)
+    admission = Admission(True, None, admission.prompt_source, payload.text)
     return _submit_run(config, workspace_id, thread_id, agent, payload.text, admission,
                        source_interaction_id=interaction_id, max_turns=1)
+
+
+def _find_escalation_replay(workspace_id: str, thread_id: str, interaction_id: str,
+                            text: str) -> RelayRunRead | None:
+    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    with open_sqlite_connection() as connection:
+        row = connection.execute(
+            """SELECT id, prompt_digest FROM relay_runs
+               WHERE workspace_id = ? AND thread_id = ? AND source_interaction_id = ?
+                 AND state IN ('queued', 'running', 'completed')
+               ORDER BY created_at, id LIMIT 1""",
+            (workspace_id, thread_id, interaction_id),
+        ).fetchone()
+    if row is None:
+        return None
+    if row["prompt_digest"] != digest:
+        raise RelayGatewayError("relay_escalation_digest_conflict")
+    return get_relay_run(workspace_id, thread_id, row["id"])
 
 
 def list_relay_runs(workspace_id: str, thread_id: str) -> list[RelayRunRead]:
@@ -541,7 +588,8 @@ def _recent(timestamp: str) -> bool:
 
 
 def _start_run(config: dict[str, Any], workspace_id: str, thread_id: str, run_id: str, agent: str,
-               mode: AccessMode, level: str, prompt: str, max_turns: int | None = None) -> None:
+               mode: AccessMode, level: str, prompt: str, max_turns: int | None = None,
+               advisory_only: bool = False) -> None:
     runtime = _runtime()
     relay_workspace = _ensure_relay_workspace(runtime, config, workspace_id, thread_id, agent, mode)
     releases = effective_releases(workspace_id, thread_id)
@@ -551,15 +599,15 @@ def _start_run(config: dict[str, Any], workspace_id: str, thread_id: str, run_id
     _write_shims(runtime, config)
     run_dir = runtime.root / "runs" / run_id
     run_dir.mkdir(parents=True, mode=0o700)
-    # Relay may link each --continue to a new session id; always continue from the newest one.
-    continued_from = relay_workspace["relay_session_id"]
+    # Escalations are isolated advisory turns; only explicit Relay coding tasks continue sessions.
+    continued_from = None if advisory_only else relay_workspace["relay_session_id"]
     argv = [runtime.relay_binary, "--json", "run", agent, "--yes", "--repo", relay_workspace["path"],
             "--max-turns", str(max_turns or int(config.get("max_turns", 10)))]
     if continued_from:
         argv += ["--continue", continued_from]
     if config["agents"][agent].get("model"):
         argv += ["--model", config["agents"][agent]["model"]]
-    argv += ["--task", _framed_prompt(prompt, relay_workspace["path"], mode)]
+    argv += ["--task", _framed_prompt(prompt, relay_workspace["path"], mode, advisory_only=advisory_only)]
     env = {
         "PATH": f"{runtime.root / 'bin'}:/usr/local/bin:/usr/bin:/bin",
         "HOME": str(Path.home()),
@@ -595,15 +643,18 @@ def _start_run(config: dict[str, Any], workspace_id: str, thread_id: str, run_id
                                                  run_dir / "relay.json", start_commit), daemon=True).start()
 
 
-def _framed_prompt(prompt: str, workspace: str, mode: AccessMode) -> str:
+def _framed_prompt(prompt: str, workspace: str, mode: AccessMode, *, advisory_only: bool = False) -> str:
     access = ("the real JarvisOS repository (cloud-safe)" if mode == "repository"
               else "a derivative workspace without source code")
-    return (
+    frame = (
         f"[Jarvis Relay gateway] Your workspace is {workspace}: {access}. Approved read-only context is in "
         f"{sandbox.SANDBOX_CONTEXT} (see MANIFEST.json there). Nothing else from Jarvis is reachable. "
-        "Commit finished work locally on the current branch; publishing is done by Jarvis.\n\nTask:\n"
-        f"{prompt}"
     )
+    if advisory_only:
+        return (f"{frame}Advisory question for the operator. Answer directly and concisely. "
+                f"Do not modify files, run builds or commit. Read files only when they help answer.\n\n"
+                f"Question:\n{prompt}")
+    return f"{frame}Commit finished work locally on the current branch; publishing is done by Jarvis.\n\nTask:\n{prompt}"
 
 
 def _wait_for_run(config: dict[str, Any], run_id: str, relay_workspace_id: str,
@@ -639,7 +690,9 @@ def _record_result(config: dict[str, Any], run_id: str, relay_workspace_id: str,
     last = turns[-1] if turns else {}
     exit_code = last.get("exit_code", returncode)
     text = str(last.get("text") or last.get("summary") or "")[: int(config.get("result_max_chars", 20000))]
-    if session_id:
+    with open_sqlite_connection() as connection:
+        run = connection.execute("SELECT source_interaction_id FROM relay_runs WHERE id = ?", (run_id,)).fetchone()
+    if session_id and run is not None and run["source_interaction_id"] is None:
         with open_sqlite_connection() as connection:
             connection.execute(
                 "UPDATE relay_workspaces SET relay_session_id = ?, updated_at = ? WHERE id = ?",

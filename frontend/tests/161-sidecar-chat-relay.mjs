@@ -49,6 +49,7 @@ assert.match(sidecar, /Nothing was sent to a paid API\./);
 assert.match(sidecar, /subscription, no API charge/);
 assert.match(api, /relay-escalation-draft/);
 assert.match(api, /relay-escalate/);
+assert.match(sidecar, /relayEscalationInFlight\.current/);
 
 // Closing a shell region leaves an on-screen reopen affordance.
 assert.match(layout, /shell-reopen--sidecar/);
