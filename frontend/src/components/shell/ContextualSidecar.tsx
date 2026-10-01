@@ -50,7 +50,12 @@ function ContextualSidecar({ open, selection, onClose, content, propertiesConten
   const panelRef = useRef<HTMLElement | null>(null);
   const [propertiesOpen, setPropertiesOpen] = useState(false);
   useEffect(() => { if (open) panelRef.current?.querySelector<HTMLElement>("[data-sidecar-focus]")?.focus(); }, [open]);
-  const onPanelKeyDown = (event: KeyboardEvent<HTMLElement>) => { if (event.key === "Escape" && !event.defaultPrevented) { event.stopPropagation(); onClose(); } };
+  const onPanelKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (event.key !== "Escape" || event.defaultPrevented) return;
+    if (event.target instanceof HTMLElement && event.target.closest('[role="menu"]')) return;
+    event.stopPropagation();
+    onClose();
+  };
   const chrome = useMemo<SidecarChromeValue>(() => ({
     close: onClose,
     propertiesOpen,
