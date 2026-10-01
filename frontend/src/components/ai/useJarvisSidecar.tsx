@@ -184,6 +184,15 @@ function SidecarChromeActions() {
   </>;
 }
 
+function ResponderMenu({ items, children, disabled }: Readonly<{ items: ContextMenuItem[]; children: ReactNode; disabled: boolean }>) {
+  const chrome = useContext(SidecarChrome);
+  const menuItems = [
+    ...items,
+    ...(chrome ? [{ id: "show-properties", label: "Show properties", onSelect: chrome.toggleProperties }] : [])
+  ];
+  return <MenuButton label="Responder and send target" items={menuItems} className="jarvis-chip" disabled={disabled}>{children}</MenuButton>;
+}
+
 function accessModeLabel(accessMode: "repository" | "derivative"): string {
   return accessMode === "repository" ? "real repository (read-write clone)" : "derivative workspace, no source";
 }
@@ -682,7 +691,6 @@ export function useJarvisSidecar(
     ? "jarvis-sidecar__stage-context jarvis-sidecar__stage-context--visible"
     : "jarvis-sidecar__stage-context";
   const state = readiness(activeRoute, routes, optionsError, routesLoaded);
-  const shellChrome = useContext(SidecarChrome);
   const usableRoutes = routes.filter(routeUsable);
   const unavailableRoutes = routes.filter((route) => !routeUsable(route));
   const serverHasInFlight = Boolean(inFlight?.requestId && detail?.interactions.some((interaction) => interaction.request_id === inFlight.requestId));
@@ -826,7 +834,6 @@ export function useJarvisSidecar(
     ...responderItems,
     ...unavailableRoutes.map(route => ({ id: `off-${route.route_class}`, label: `${responderLabel(route)} — unavailable`, hint: route.availability.message, disabled: true, onSelect: () => undefined })),
     { id: "target-jarvis", label: `${composerTarget === "jarvis" ? "✓ " : ""}Send to Jarvis`, onSelect: () => setComposerTarget("jarvis") },
-    ...(shellChrome ? [{ id: "show-properties", label: "Show properties", onSelect: shellChrome.toggleProperties }] : []),
     ...(relayStatus?.enabled ? relayStatus.agents.map(agent => ({ id: `relay-${agent}`, label: `${composerTarget === "relay" && relayAgent === agent ? "✓ " : ""}Send task to Relay · ${modelDisplayName(null, agent)}`, onSelect: () => { setRelayAgent(agent); setComposerTarget("relay"); } })) : [])
   ];
   const activeResponderName = composerTarget === "relay" ? `Relay · ${modelDisplayName(null, relayAgent)}` : activeRoute ? responderLabel(activeRoute) : "No responder";
@@ -875,7 +882,7 @@ export function useJarvisSidecar(
         <button type="submit" disabled={!workspaceId || !prompt.trim() || loadingThreads || (composerTarget === "jarvis" ? (!activeRoute || !activeRouteAvailable || submitting || !contextReady) : (!relayAgent || !relayAttested || relayWorking || Boolean(relayStatus?.blocked_reason)))} className="jarvis-send" aria-label={composerTarget === "relay" ? "Send to Relay agent" : composerLabel} title={composerTarget === "relay" ? "Send to Relay agent" : composerLabel}>{submitting || relayWorking ? <span className="jarvis-working__dots" aria-hidden="true"><i /><i /><i /></span> : <ArrowUp size={16} weight="bold" aria-hidden="true" />}</button>
       </div>
       <div className="jarvis-sidecar__composer-bar">
-        <MenuButton label="Responder and send target" items={optionItems} className="jarvis-chip" disabled={submitting || relayWorking}>{activeResponderName} ▾</MenuButton>
+        <ResponderMenu items={optionItems} disabled={submitting || relayWorking}>{activeResponderName} ▾</ResponderMenu>
         <details className="jarvis-sidecar__context" aria-label="Project context controls"><summary className="jarvis-chip">{contextSummary}</summary>
           <div className="jarvis-sidecar__context-body">
             {contextualContent ? <section className={stageContextClassName} aria-label="Current stage context">{contextualContent}</section> : null}
