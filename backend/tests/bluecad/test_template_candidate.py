@@ -165,6 +165,12 @@ def test_generation_availability_reports_safe_default_block_without_ai(client: T
     assert _count("ai_jobs") == ai_jobs_before
 
 
+def test_generation_availability_rejects_unknown_workspace(client: TestClient) -> None:
+    response = client.get("/workspaces/missing-workspace/bluecad/generation-availability")
+
+    assert response.status_code == 404
+
+
 def test_loop_build_registers_stl_and_step_exports(client: TestClient) -> None:
     from app.modules.bluecad.loop import _build_and_register
     from app.modules.bluecad.template import TubeTemplateCreate, template_geometry_spec

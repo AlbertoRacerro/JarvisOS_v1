@@ -112,6 +112,10 @@ def create_template_candidate_endpoint(workspace_id: str, payload: BluecadTempla
 @router.get("/generation-availability")
 def generation_availability_endpoint(workspace_id: str) -> dict[str, object]:
     """Report whether the AI loop's first external tier may run; makes no AI call."""
+    with open_sqlite_connection() as connection:
+        workspace_exists = connection.execute("SELECT 1 FROM workspaces WHERE id = ?", (workspace_id,)).fetchone()
+    if workspace_exists is None:
+        raise HTTPException(status_code=404, detail={"error": "Workspace not found."})
     blocked_reason = _external_blocked_reason()
     return {
         "route_class": "external:cheap",
