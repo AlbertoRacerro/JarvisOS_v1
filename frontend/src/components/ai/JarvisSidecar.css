@@ -59,6 +59,18 @@
 .jarvis-icon-button:focus-visible,
 .jarvis-icon-button[aria-pressed="true"] { border-color: #ddd5c8; background: #fffefb; color: #1f2720; }
 .jarvis-icon-button:disabled { opacity: .45; cursor: default; }
+.jarvis-sidecar .jarvis-sidecar__header button.jarvis-icon-button {
+  padding: 3px 7px;
+  border-color: transparent;
+  background: transparent;
+  color: #4a554b;
+}
+.jarvis-sidecar .jarvis-sidecar__header button.jarvis-icon-button svg { flex: 0 0 auto; }
+.jarvis-sidecar .jarvis-sidecar__header button.jarvis-icon-button:is(:hover, :focus-visible, [aria-pressed="true"]) {
+  border-color: #ddd5c8;
+  background: #fffefb;
+  color: #1f2720;
+}
 
 /* Transcript */
 .jarvis-sidecar__transcript {
@@ -300,6 +312,6 @@
 /* Header priority: the status stays readable; "New conversation" gives way to
    its icon (name and tooltip kept) before the status is ever truncated. */
 @container jarvis-header (max-width: 372px) {
-  .jarvis-icon-button--new-conversation { width: 30px; justify-content: center; padding-inline: 4px; }
+  .jarvis-sidecar .jarvis-sidecar__header button.jarvis-icon-button--new-conversation { width: 30px; justify-content: center; padding-inline: 4px; }
   .jarvis-icon-button--new-conversation span { display: none; }
 }
