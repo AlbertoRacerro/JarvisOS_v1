@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import math
 from datetime import datetime
-from typing import Annotated, Final, Literal
+from typing import Annotated, Any, Final, Literal
 
 from pydantic import Field, JsonValue, StringConstraints, field_validator, model_validator
 
@@ -243,6 +243,7 @@ class InferenceEnvelope(_Deadline):
     route_class: RouteClass | None = None
     model_candidate: str | None = Field(default=None, min_length=1, max_length=256)
     max_output_tokens: int | None = Field(default=None, ge=1)
+    response_schema: dict[str, Any] | None = None
     flow_id: ContractId | None = None
     context_bundle_id: ContractId | None = None
     context_bundle_digest: ContentDigest | None = None
@@ -284,6 +285,7 @@ def run_ai_task_kwargs(
         "max_output_tokens": envelope.max_output_tokens,
         "workspace_id": envelope.workspace_id,
         "existing_flow_id": envelope.flow_id,
+        "structured_output_schema": envelope.response_schema,
     }
 
 

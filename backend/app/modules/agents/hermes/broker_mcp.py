@@ -54,32 +54,77 @@ _PROCESS_READ_TOOL = {
     "inputSchema": {
         "type": "object", "properties": {
             "grant_id": {"type": "string", "minLength": 1, "maxLength": 128},
-            "draft_id": {"type": "string", "maxLength": 64},
-        }, "required": ["grant_id"], "additionalProperties": False,
+            "surface_ref": {"type": "object"},
+        }, "required": ["grant_id", "surface_ref"], "additionalProperties": False,
     },
 }
-_PROCESS_PROPOSE_TOOL = {
-    "name": "jarvis_process_propose",
-    "description": "Propose typed changes to the process draft for operator approval. Call this whenever the "
-                   "operator asks to change, set, raise, lower or fix a flowsheet value; describing a change in "
-                   "text does not propose it. Nothing changes until the operator approves. Each change names a "
-                   "target tag, a property and the proposed value with its unit.",
-    "inputSchema": {
-        "type": "object", "properties": {
-            "grant_id": {"type": "string", "minLength": 1, "maxLength": 128},
-            "draft_id": {"type": "string", "maxLength": 64},
-            "base_revision": {"type": "string", "maxLength": 40},
-            "changes": {"type": "array", "minItems": 1, "maxItems": 12, "items": {
-                "type": "object", "properties": {
-                    "target": {"type": "string"}, "property": {"type": "string"},
-                    "proposed": {"anyOf": [_QUANTITY, {"type": "string"},
-                                           {"type": "object", "additionalProperties": {"type": "number"}}]},
-                }, "required": ["target", "property", "proposed"], "additionalProperties": False}},
-            "rationale": {"type": "string", "maxLength": 600},
-        }, "required": ["grant_id", "base_revision", "changes"], "additionalProperties": False,
-    },
+_PROCESS_ACT_TOOL = {
+    "name": "jarvis_process_act",
+    "description": "Request supported typed Process changes. Use exact tags and base revision from jarvis_process_read; unsupported reactions/thermo stay in the editor.",
+    "inputSchema": {"type": "object", "properties": {
+        "grant_id": {"type": "string", "maxLength": 128},
+        "base_revision": {"type": "string", "maxLength": 64},
+        "actions": {"type": "array", "minItems": 1, "maxItems": 8, "items": {"oneOf": [
+            {"type": "object", "properties": {"op": {"const": "set_value"}, "target": {"type": "string"},
+             "property": {"type": "string"}, "value": {"oneOf": [_QUANTITY, {"type": "string"},
+             {"type": "object", "additionalProperties": {"type": "number"}}]}},
+             "required": ["op", "target", "property", "value"], "additionalProperties": False},
+            {"type": "object", "properties": {"op": {"const": "add_unit"}, "type": {"type": "string"},
+             "tag": {"type": "string"}, "near": {"type": "string"}}, "required": ["op", "type"],
+             "additionalProperties": False},
+            {"type": "object", "properties": {"op": {"const": "insert_unit_after"}, "type": {"type": "string"},
+             "after": {"type": "string"}, "tag": {"type": "string"}}, "required": ["op", "type", "after"],
+             "additionalProperties": False},
+            {"type": "object", "properties": {"op": {"const": "connect"}, "from": {"type": "string"},
+             "from_port": {"type": "string"}, "to": {"type": "string"}, "to_port": {"type": "string"}},
+             "required": ["op", "from", "to"], "additionalProperties": False},
+            {"type": "object", "properties": {"op": {"const": "disconnect"}, "stream": {"type": "string"}},
+             "required": ["op", "stream"], "additionalProperties": False},
+            {"type": "object", "properties": {"op": {"const": "mirror"}, "target": {"type": "string"},
+             "axis": {"enum": ["horizontal", "vertical"]}}, "required": ["op", "target", "axis"],
+             "additionalProperties": False},
+            {"type": "object", "properties": {"op": {"const": "move"}, "target": {"type": "string"},
+             "dx": {"type": "number"}, "dy": {"type": "number"}}, "required": ["op", "target", "dx", "dy"],
+             "additionalProperties": False},
+            {"type": "object", "properties": {"op": {"const": "rename"}, "target": {"type": "string"},
+             "new_tag": {"type": "string"}}, "required": ["op", "target", "new_tag"], "additionalProperties": False},
+            {"type": "object", "properties": {"op": {"const": "delete"}, "target": {"type": "string"}},
+             "required": ["op", "target"], "additionalProperties": False}
+        ]}},
+        "rationale": {"type": "string", "maxLength": 600}},
+        "required": ["grant_id", "base_revision", "actions"], "additionalProperties": False},
 }
-_TOOLS = [_TOOL, _RETRIEVAL_TOOL, _DECISION_TOOL, _PROCESS_READ_TOOL, _PROCESS_PROPOSE_TOOL]
+_BLUECAD_READ_TOOL = {
+    "name": "jarvis_bluecad_read", "description": "Read the current BLUECAD candidate and selected parts.",
+    "inputSchema": {"type": "object", "properties": {"grant_id": {"type": "string", "maxLength": 128},
+                     "surface_ref": {"type": "object"}},
+                     "required": ["grant_id", "surface_ref"], "additionalProperties": False},
+}
+_BLUECAD_ACT_TOOL = {
+    "name": "jarvis_bluecad_act",
+    "description": "Request a typed BLUECAD candidate change such as duplicate_part, set_part_param, move_part or delete_part.",
+    "inputSchema": {"type": "object", "properties": {
+        "grant_id": {"type": "string", "maxLength": 128},
+        "base_revision": {"type": "string", "maxLength": 64},
+        "actions": {"type": "array", "minItems": 1, "maxItems": 8, "items": {"oneOf": [
+            {"type": "object", "properties": {"op": {"const": "duplicate_part"}, "part": {"type": "string"},
+             "placement": {"enum": ["beside", "above", "along"]}, "gap_mm": {"type": "number"}},
+             "required": ["op", "part"], "additionalProperties": False},
+            {"type": "object", "properties": {"op": {"const": "set_part_param"}, "part": {"type": "string"},
+             "param": {"type": "string"}, "value": {"type": "number"},
+             "unit": {"enum": ["mm", "m", "cm", "deg"]}},
+             "required": ["op", "part", "param", "value", "unit"], "additionalProperties": False},
+            {"type": "object", "properties": {"op": {"const": "move_part"}, "part": {"type": "string"},
+             "dx": {"type": "number"}, "dy": {"type": "number"}, "dz": {"type": "number"},
+             "unit": {"enum": ["mm", "m", "cm"]}}, "required": ["op", "part"], "additionalProperties": False},
+            {"type": "object", "properties": {"op": {"const": "delete_part"}, "part": {"type": "string"}},
+             "required": ["op", "part"], "additionalProperties": False}
+        ]}},
+        "rationale": {"type": "string", "maxLength": 600}},
+        "required": ["grant_id", "base_revision", "actions"], "additionalProperties": False},
+}
+_TOOLS = [_TOOL, _RETRIEVAL_TOOL, _DECISION_TOOL, _PROCESS_READ_TOOL, _PROCESS_ACT_TOOL,
+          _BLUECAD_READ_TOOL, _BLUECAD_ACT_TOOL]
 _NAMED = {tool["name"] for tool in _TOOLS if tool is not _TOOL}
 
 

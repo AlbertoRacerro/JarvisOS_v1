@@ -160,7 +160,7 @@ def test_mcp_protocol_discloses_only_broker_tool() -> None:
     assert initialized is not None and initialized["result"]["serverInfo"]["name"] == "jarvis"
     assert listed is not None and [tool["name"] for tool in listed["result"]["tools"]] == [
         "jarvis_context_preview", "jarvis_retrieval_query", "jarvis_decide",
-        "jarvis_process_read", "jarvis_process_propose"]
+        "jarvis_process_read", "jarvis_process_act", "jarvis_bluecad_read", "jarvis_bluecad_act"]
 
 
 def test_text_tool_proposal_requires_the_registered_broker() -> None:
@@ -175,10 +175,26 @@ def test_text_tool_proposal_requires_the_registered_broker() -> None:
                               tools)["content"] is not None
     envelope = infer_envelope(_frame() | {"tools": tools})
     assert "mcp__jarvis__jarvis_context_preview" in envelope.prompt
+    assert envelope.response_schema is not None
     assert envelope.prompt.endswith(RELAY_TOOL_PROTOCOL)
     assert RELAY_TOOL_PROTOCOL not in infer_envelope(_frame()).prompt
     with pytest.raises(ValueError):
         infer_envelope(_frame() | {"tools": [{"function": {"name": "terminal"}}]})
+
+
+def test_per_turn_tool_filter_and_schema_only_admit_surface_tools() -> None:
+    general = {"function": {"name": "mcp__jarvis__jarvis_retrieval_query"}}
+    process = {"function": {"name": "mcp__jarvis__jarvis_process_act"}}
+    bluecad = {"function": {"name": "mcp__jarvis__jarvis_bluecad_act"}}
+    envelope = infer_envelope(_frame() | {"tools": [general, process, bluecad],
+                                          "allowed_tools": [general["function"]["name"],
+                                                            process["function"]["name"]]})
+    assert 'jarvis_bluecad_act' not in envelope.prompt
+    assert envelope.response_schema is not None
+    enum = envelope.response_schema["oneOf"][1]["properties"]["tool_calls"]["items"]["properties"]["name"]["enum"]
+    assert enum == sorted([general["function"]["name"], process["function"]["name"]])
+    with pytest.raises(ValueError):
+        infer_envelope(_frame() | {"allowed_tools": ["terminal"]})
 
 
 @pytest.mark.parametrize(("text", "arguments"), [
@@ -207,11 +223,25 @@ def test_malformed_tool_proposals_are_repaired_under_the_same_admission(text: st
     '{"tool_calls":[{"name":"mcp__jarvis__jarvis_retrieval_query","arguments":"not json"}]}',
     '{"tool_calls":[{"name":"mcp__jarvis__jarvis_retrieval_query","arguments":[1]}]}',
     json.dumps({"tool_calls": [{"name": "mcp__jarvis__jarvis_retrieval_query", "arguments": {}}] * 5}),
-    '{"answer": "42"}',
 ])
 def test_unrepairable_or_inadmissible_text_stays_an_answer(text: str) -> None:
     tools = [{"function": {"name": "mcp__jarvis__jarvis_retrieval_query"}}]
     assert completion_message(text, tools) == {"role": "assistant", "content": text}
+
+
+def test_completion_maps_constrained_answer_and_normalizes_only_admitted_name() -> None:
+    tools = [{"function": {"name": "mcp__jarvis__jarvis_process_act"}}]
+    assert completion_message('{"answer":"done"}', tools) == {"role": "assistant", "content": "done"}
+    promoted = completion_message(json.dumps({"tool_calls": [{"name": "jarvis_process_act",
+                                                                 "arguments": {"grant_id": "g"}}]}), tools)
+    assert promoted["tool_calls"][0]["function"]["name"] == "mcp__jarvis__jarvis_process_act"
+    rejected = completion_message(json.dumps({"tool_calls": [{"name": "jarvis_bluecad_act",
+                                                                "arguments": {}}]}), tools)
+    assert rejected == {"role": "assistant", "content": json.dumps({"tool_calls": [
+        {"name": "jarvis_bluecad_act", "arguments": {}}]})}
+    assert completion_message(json.dumps({"tool_calls": [{"name": "mcp__jarvis__memory",
+                                                            "arguments": {}}]}),
+                              [{"function": {"name": "memory"}}])["content"] is not None
 
 
 def test_turn_without_a_model_answer_is_reported_failed() -> None:
@@ -248,6 +278,16 @@ def test_governed_inference_maps_result_and_cancellation() -> None:
     assert run_governed_inference(envelope, runner=fake_runner,
                                   cancelled=lambda _id: True) == {"status": "cancelled"}
     assert len(calls) == 1
+
+
+def test_governed_inference_returns_filtered_admission_for_worker_promotion() -> None:
+    tool = {"function": {"name": "mcp__jarvis__jarvis_bluecad_act"}}
+    envelope = infer_envelope(_frame() | {"tools": [tool], "allowed_tools": [tool["function"]["name"]]})
+    outcome = run_governed_inference(
+        envelope,
+        runner=lambda **_kwargs: SimpleNamespace(status="success", response=SimpleNamespace(text='{"answer":"ok"}')),
+    )
+    assert outcome["admitted_tools"] == [tool["function"]["name"]]
 
 
 def test_relay_defaults_to_explicit_llamacpp_and_accepts_only_explicit_local_fallback(
@@ -794,7 +834,8 @@ def test_real_worker_turn_interrupt_relay(tmp_path: Path) -> None:
         assert set(bound["tools"]) <= {
             "mcp__jarvis__jarvis_context_preview", "mcp__jarvis__jarvis_retrieval_query",
             "mcp__jarvis__jarvis_decide", "mcp__jarvis__jarvis_process_read",
-            "mcp__jarvis__jarvis_process_propose", "memory", "session_search",
+            "mcp__jarvis__jarvis_process_act", "mcp__jarvis__jarvis_bluecad_read",
+            "mcp__jarvis__jarvis_bluecad_act", "memory", "session_search",
         }
         process.stdin.write(json.dumps({"type": "turn", "id": "turn-1", "prompt": "Say hello"}) + "\n")
         process.stdin.flush()

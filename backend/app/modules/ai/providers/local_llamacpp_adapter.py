@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
 from typing import Any
 from urllib.parse import urlparse
@@ -76,6 +77,11 @@ class LocalLlamaCppAdapter:
             "max_tokens": request.max_output_tokens or 2048,
             "stream": False,
         }
+        if request.structured_output_schema is not None and os.getenv("JARVIS_LLAMA_JSON_SCHEMA", "false").lower() == "true":
+            payload["response_format"] = {"type": "json_schema", "json_schema": {
+                "name": "jarvis_agent_response", "strict": True,
+                "schema": request.structured_output_schema,
+            }}
         config = llama_cpp_runtime_config()
         if config.thinking in {"on", "off"}:
             payload["chat_template_kwargs"] = {"enable_thinking": config.thinking == "on"}

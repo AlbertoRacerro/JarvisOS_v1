@@ -100,6 +100,8 @@ def completion_message(text: str, tools: Any) -> dict[str, Any]:
         proposal = json.loads(text)
     except (ValueError, TypeError):
         proposal = None
+    if isinstance(proposal, dict) and set(proposal) == {"answer"} and isinstance(proposal["answer"], str):
+        return {"role": "assistant", "content": proposal["answer"]}
     calls = proposal.get("tool_calls") if isinstance(proposal, dict) else None
     if not isinstance(calls, list) or any(isinstance(call, dict) and isinstance(call.get("arguments"), str)
                                           for call in calls):
@@ -112,10 +114,20 @@ def completion_message(text: str, tools: Any) -> dict[str, Any]:
     permitted = {tool.get("function", {}).get("name") for tool in tools if isinstance(tool, dict)}
     promoted = []
     for call in calls:
-        if not isinstance(call, dict) or call.get("name") not in permitted or not isinstance(call.get("arguments"), dict):
+        if not isinstance(call, dict) or not isinstance(call.get("name"), str) or not isinstance(call.get("arguments"), dict):
+            return {"role": "assistant", "content": text}
+        name = call["name"]
+        admitted = name if name in permitted else None
+        if admitted is None and name.startswith("mcp__jarvis__"):
+            bare = name.removeprefix("mcp__jarvis__")
+            if f"mcp__jarvis__{bare}" in permitted:
+                admitted = f"mcp__jarvis__{bare}"
+        elif admitted is None and f"mcp__jarvis__{name}" in permitted:
+            admitted = f"mcp__jarvis__{name}"
+        if admitted is None:
             return {"role": "assistant", "content": text}
         promoted.append({"id": uuid.uuid4().hex, "type": "function", "function": {
-            "name": call["name"], "arguments": json.dumps(call["arguments"], separators=(",", ":"))}})
+            "name": admitted, "arguments": json.dumps(call["arguments"], separators=(",", ":"))}})
     return {"role": "assistant", "content": None, "tool_calls": promoted}
 
 
@@ -145,7 +157,8 @@ WITHHELD_TOOLS = frozenset({"skill_manage"})
 # Tool names Jarvis admits in a relayed request; mirrors supervisor.HERMES_TOOL_ALLOWLIST.
 ADMITTED_TOOLS = frozenset({"mcp__jarvis__jarvis_context_preview",
                             "mcp__jarvis__jarvis_retrieval_query", "mcp__jarvis__jarvis_decide",
-                            "mcp__jarvis__jarvis_process_read", "mcp__jarvis__jarvis_process_propose",
+                            "mcp__jarvis__jarvis_process_read", "mcp__jarvis__jarvis_process_act",
+                            "mcp__jarvis__jarvis_bluecad_read", "mcp__jarvis__jarvis_bluecad_act",
                             "memory", "session_search"})
 
 
@@ -174,7 +187,8 @@ def pinned_config(base_url: str, token: str, python: str | None = None) -> dict[
             "env": {"JARVIS_HERMES_BROKER_URL": base_url + "/jarvis/tool",
                     "JARVIS_HERMES_BROKER_TOKEN": token},
             "tools": {"include": ["jarvis_context_preview", "jarvis_retrieval_query", "jarvis_decide",
-                                  "jarvis_process_read", "jarvis_process_propose"]},
+                                  "jarvis_process_read", "jarvis_process_act",
+                                  "jarvis_bluecad_read", "jarvis_bluecad_act"]},
         }},
         "model_catalog": {"enabled": False}, "updates": {"check": False},
         "telemetry": {"enabled": False, "send": False},
@@ -208,6 +222,7 @@ class Worker:
         self.agent: Any = None
         self.session_db: Any = None
         self.tool_names: list[str] = []
+        self.active_turn_tools: list[str] | None = None
         self.history: list[dict[str, Any]] = []
         self.session: dict[str, Any] | None = None
         self.sequence = 0
@@ -299,6 +314,7 @@ class Worker:
                                  "task_kind": task_kind,
                                  "messages": body.get("messages"), "model_candidate": body.get("model"),
                                  "tools": body.get("tools"),
+                                 "allowed_tools": worker.active_turn_tools,
                                  "max_output_tokens": body.get("max_completion_tokens", body.get("max_tokens"))})
                     try:
                         result = answer.get(timeout=180)
@@ -308,7 +324,13 @@ class Worker:
                     if result.get("status") != "success":
                         self.send_error(502, "Jarvis inference refused")
                         return
-                    message = completion_message(result["text"], body.get("tools"))
+                    tools = body.get("tools")
+                    admitted = result.get("admitted_tools")
+                    if isinstance(admitted, list):
+                        permitted = set(admitted)
+                        tools = [tool for tool in tools or [] if isinstance(tool, dict)
+                                 and tool.get("function", {}).get("name") in permitted]
+                    message = completion_message(result["text"], tools)
                     if body.get("stream") is True:
                         delta = dict(message)
                         if "tool_calls" in delta:
@@ -372,12 +394,13 @@ class Worker:
         self.tool_names = withhold_tools(agent)
         return agent
 
-    def run_turn(self, request_id: str, prompt: str) -> None:
+    def run_turn(self, request_id: str, prompt: str, allowed_tools: list[str] | None = None) -> None:
         if not self.turn_lock.acquire(blocking=False):
             self.send({"type": "turn_result", "id": request_id, "status": "failed", "error": "turn_busy"})
             return
         self.event("turn.started", request_id)
         try:
+            self.active_turn_tools = allowed_tools
             if self.agent is None:
                 self.agent = self._build_agent()
             result = self.agent.run_conversation(
@@ -406,6 +429,7 @@ class Worker:
             self.send({"type": "turn_result", "id": request_id, "status": "failed",
                        "error": type(exc).__name__})
         finally:
+            self.active_turn_tools = None
             self.turn_lock.release()
 
     def run(self) -> None:
@@ -458,7 +482,12 @@ class Worker:
                         self.send({"type": "ack", "id": frame["id"], "tools": self.tool_names,
                                    "history_messages": len(self.history)})
                 elif kind == "turn":
-                    threading.Thread(target=self.run_turn, args=(frame["id"], frame["prompt"]), daemon=True).start()
+                    allowed_tools = frame.get("allowed_tools")
+                    if allowed_tools is not None and (not isinstance(allowed_tools, list)
+                            or any(name not in ADMITTED_TOOLS for name in allowed_tools)):
+                        raise ValueError("invalid per-turn tools")
+                    threading.Thread(target=self.run_turn,
+                                     args=(frame["id"], frame["prompt"], allowed_tools), daemon=True).start()
                 elif kind == "interrupt":
                     if self.agent is not None:
                         self.agent.interrupt(hard_cancel=True)
