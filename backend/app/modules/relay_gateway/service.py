@@ -498,7 +498,8 @@ def draft_relay_escalation(workspace_id: str, thread_id: str, interaction_id: st
             agent=agent, model=config["agents"][agent].get("model") if agent else None,
         )
     text = source_text if text is None else text
-    status, _level, code, reason = screen_outbound_text(text)
+    screened, _level, code, reason = screen_outbound_text(text)
+    status: Literal["ready", "edit_required", "refused", "unavailable"] = screened
     agent = escalation_agent(config)
     unavailable = _escalation_unavailable(config, agent)
     if status == "ready" and unavailable is not None:
