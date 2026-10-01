@@ -101,16 +101,20 @@ def _minimal_git_environment() -> dict[str, str]:
     return env
 
 
-def _drain_pipe(stream: BinaryIO, capture: _PipeCapture) -> None:
+def _drain_pipe(
+    stream: BinaryIO,
+    capture: _PipeCapture,
+    limit: int = MAX_PROBE_OUTPUT_BYTES,
+) -> None:
     try:
         while True:
             chunk = stream.read(8192)
             if not chunk:
                 return
-            room = MAX_PROBE_OUTPUT_BYTES + 1 - len(capture.data)
+            room = limit + 1 - len(capture.data)
             if room > 0:
                 capture.data.extend(chunk[:room])
-            if len(capture.data) > MAX_PROBE_OUTPUT_BYTES or len(chunk) > room:
+            if len(capture.data) > limit or len(chunk) > room:
                 capture.oversized = True
     finally:
         stream.close()
@@ -120,6 +124,7 @@ def _run_git_probe(
     root: Path,
     args: tuple[str, ...],
     timeout: float,
+    max_output_bytes: int = MAX_PROBE_OUTPUT_BYTES,
 ) -> ProbeResult:
     if timeout <= 0:
         raise TimeoutError("runtime truth snapshot deadline exhausted")
@@ -144,12 +149,12 @@ def _run_git_probe(
     stderr_capture = _PipeCapture(bytearray())
     stdout_thread = threading.Thread(
         target=_drain_pipe,
-        args=(process.stdout, stdout_capture),
+        args=(process.stdout, stdout_capture, max_output_bytes),
         daemon=True,
     )
     stderr_thread = threading.Thread(
         target=_drain_pipe,
-        args=(process.stderr, stderr_capture),
+        args=(process.stderr, stderr_capture, max_output_bytes),
         daemon=True,
     )
     stdout_thread.start()

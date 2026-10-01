@@ -26,6 +26,53 @@ export type RuntimeTruth = Readonly<{
   remote_status: string;
 }>;
 
+export type ControlRoomSpecRef = Readonly<{
+  spec_id: string;
+  name: string | null;
+  title: string | null;
+  status: string | null;
+}>;
+
+export type ControlRoomRecentItem = Readonly<{
+  sha: string;
+  merged_at: string;
+  subject: string;
+  pr_number: number | null;
+  branch: string | null;
+  kind: string;
+  spec_ids: string[];
+  maintenance: boolean;
+  specs: ControlRoomSpecRef[];
+}>;
+
+export type ControlRoomUpcomingItem = Readonly<{
+  spec_id: string;
+  status: string;
+  name: string;
+  title: string;
+  description: string;
+  dependencies: Readonly<{ spec_id: string; status: string | null }>[];
+  dependencies_merged: boolean;
+  implementation_prs: number[];
+}>;
+
+export type ControlRoom = Readonly<{
+  repository: string;
+  target_ref: string;
+  observed_at: string;
+  runtime: RuntimeTruth | null;
+  source: Readonly<{ git_ref: string; sha: string | null; status_path: string }>;
+  recent_work: Readonly<{ status: "available" | "unavailable"; limit: number; items: ControlRoomRecentItem[] }>;
+  upcoming: Readonly<{
+    status: "available" | "unavailable";
+    authorized: ControlRoomUpcomingItem[];
+    planned_ready: ControlRoomUpcomingItem[];
+    planned_waiting: ControlRoomUpcomingItem[];
+    blocked: ControlRoomUpcomingItem[];
+  }>;
+  warnings: string[];
+}>;
+
 export type CodingActionResult = Readonly<{
   state: string;
   reason?: string;
@@ -106,6 +153,10 @@ export function readReviews(repository: string, prNumber: number, expectedHeadSh
 
 export function readRuntimeTruth(repository = CODING_REPOSITORY, targetRef = CODING_TARGET_REF): Promise<RuntimeTruth> {
   return requestJson(`/api/coding/runtime-truth?${query({ repository, target_ref: targetRef })}`);
+}
+
+export function readControlRoom(repository = CODING_REPOSITORY, targetRef = CODING_TARGET_REF): Promise<ControlRoom> {
+  return requestJson(`/api/coding/control-room?${query({ repository, target_ref: targetRef })}`);
 }
 
 export function readPipelineState(repository: string, prNumber: number, specId: string): Promise<Record<string, unknown>> {

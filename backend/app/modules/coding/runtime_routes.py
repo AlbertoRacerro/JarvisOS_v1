@@ -24,6 +24,7 @@ from app.modules.coding.actions import (
     CodingInspectRequest,
     CodingSuggestModificationRequest,
 )
+from app.modules.coding.control_room import ControlRoomProjection, valid_target_ref
 from app.modules.coding.pipeline_state import (
     DevelopmentPipelineStateService,
     PipelineStateInputError,
@@ -283,6 +284,51 @@ def runtime_truth(
 
     service = RuntimeTruthService(_repository_service())
     return service.inspect(repository=repository, target_ref=target_ref, startup=startup)
+
+
+def _control_room_projection() -> ControlRoomProjection:
+    return ControlRoomProjection()
+
+
+@router.get("/control-room")
+def control_room(
+    request: Request,
+    repository: str,
+    target_ref: str,
+) -> dict[str, object]:
+    """Read-only maintainer projection: runtime truth, recent merges, upcoming registry rows."""
+    settings = get_settings()
+    if repository != CANONICAL_RUNTIME_REPOSITORY or repository not in settings.coding_repositories:
+        raise HTTPException(status_code=400, detail={"code": "repository_mismatch"})
+    if not valid_target_ref(target_ref):
+        raise HTTPException(status_code=400, detail={"code": "target_ref_invalid"})
+
+    projection = _control_room_projection().project(target_ref)
+    warnings = projection["warnings"]
+    assert isinstance(warnings, list)
+    runtime: dict[str, object] | None = None
+    startup = getattr(request.app.state, "runtime_startup_snapshot", None)
+    if isinstance(startup, RuntimeSnapshot):
+        runtime = RuntimeTruthService(_repository_service()).inspect(
+            repository=repository,
+            target_ref=target_ref,
+            startup=startup,
+        )
+        remote = runtime.get("remote")
+        remote_sha = remote.get("resolved_sha") if isinstance(remote, dict) else None
+        source = projection["source"]
+        local_sha = source.get("sha") if isinstance(source, dict) else None
+        if isinstance(remote_sha, str) and isinstance(local_sha, str) and remote_sha != local_sha:
+            # The projection reads the local remote-tracking ref; it never fetches.
+            warnings.append("local_target_ref_differs_from_remote")
+    else:
+        warnings.append("startup_snapshot_unavailable")
+    return {
+        "repository": repository,
+        "target_ref": target_ref,
+        "runtime": runtime,
+        **projection,
+    }
 
 
 @router.get("/pipeline-state")
