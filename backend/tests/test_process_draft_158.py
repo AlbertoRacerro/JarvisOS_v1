@@ -689,6 +689,8 @@ def test_hermes_view_deduplicates_solver_feedback_and_groups_uncalculated_object
     ]
     assert "DWSIM did not calculate: Distillate, Condenser, Bottoms" in view["warnings"]
     assert view["findings"].count("Bottoms: DWSIM did not calculate it: no error text") == 1
+    assert view["warning_count"] == len(view["warnings"])
+    assert view["blocker_count"] == len(view["blockers"])
 
 
 def test_only_input_properties_are_proposable(workspace_draft: Any) -> None:

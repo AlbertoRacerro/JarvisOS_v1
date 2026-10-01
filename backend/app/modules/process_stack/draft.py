@@ -1154,6 +1154,7 @@ def agent_view(workspace_id: str, draft_id: str | None) -> dict[str, Any]:
             "guidance": ("blockers stop Run; warnings mean DWSIM can run but the result may lack physical "
                          "meaning; dwsim lists what DWSIM itself reported on the last attempt"),
             "blockers": blockers[:20], "warnings": warnings[:20],
+            "blocker_count": len(blockers), "warning_count": len(warnings),
             "findings": [f"{item['object']}: {item['message']}" for item in deduped_findings][:20],
             "dwsim": view["dwsim"],
             "results": view["results"],

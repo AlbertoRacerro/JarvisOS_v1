@@ -342,6 +342,11 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
   const contextUnit = contextUnitId ? byId.get(contextUnitId) : undefined;
   const unitSpec = (type: string): RegistryUnit | undefined => registry?.units.find((item) => item.type === type);
   const blockers = (draft?.findings ?? []).filter((item) => item.severity === "blocker");
+  // Shown counts equal the visible guidance rows (deduplicated, collapsed groups count once).
+  const shownFindings = useMemo(() => visibleFindings(draft?.findings ?? []), [draft]);
+  const shownBlockerCount = shownFindings.filter((item) => item.severity === "blocker").length;
+  const shownWarningCount = shownFindings.length - shownBlockerCount;
+  const countLabel = `${shownBlockerCount ? `${shownBlockerCount} blocker${shownBlockerCount === 1 ? "" : "s"}` : "no blockers"}, ${shownWarningCount} warning${shownWarningCount === 1 ? "" : "s"}`;
   const pending = (draft?.proposals ?? []).filter((item) => item.state === "pending");
   const proposalTargets = useMemo(() => {
     const map = new Map<string, Proposal["changes"]>();
@@ -1054,7 +1059,7 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
           {busy === "run" ? "Running…" : "Run (DWSIM)"}
         </button>
         <span className={`draft-readiness ${blockers.length ? "has-blockers" : "is-ready"}`} data-testid="readiness-chip" role="status">
-          {blockers.length ? `${blockers.length} blocker${blockers.length === 1 ? "" : "s"}` : "Ready to run"} · {draft.findings.length - blockers.length} warning{draft.findings.length - blockers.length === 1 ? "" : "s"}
+          {blockers.length ? `${shownBlockerCount} blocker${shownBlockerCount === 1 ? "" : "s"}` : "Ready to run"} · {shownWarningCount} warning{shownWarningCount === 1 ? "" : "s"}
         </span>
         <span className={`draft-state draft-state--${results.state}`} data-testid="results-state">
           {results.state === "none" ? "No results" : results.state === "current" ? "Results current" : `Results stale (${results.edits_since} edits)`}
@@ -1119,10 +1124,10 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
           </svg>
           <ContextMenu label="Unit orientation" items={orientationItems} at={unitMenu.at} onClose={unitMenu.close} />
           <section className="draft-findings-panel" aria-label="Draft findings">
-            <h3>Readiness guidance: {blockers.length ? `${blockers.length} blocker${blockers.length === 1 ? "" : "s"}` : "no blockers"}, {draft.findings.length - blockers.length} warning{draft.findings.length - blockers.length === 1 ? "" : "s"}</h3>
+            <h3>Readiness guidance: {countLabel}</h3>
             <p className="draft-hint">Blockers stop Run. Warnings allow a solve but may make its result physically meaningless.</p>
             <ul className="draft-findings">
-              {visibleFindings(draft.findings).map((finding, index) => (
+              {shownFindings.map((finding, index) => (
                 <li key={index} data-severity={finding.severity}>
                   <button type="button" onClick={() => setSelectedId(objects.find((item) => item.tag === finding.object)?.id ?? null)}>
                     <strong>{finding.object || "Draft"}</strong> {finding.message}
