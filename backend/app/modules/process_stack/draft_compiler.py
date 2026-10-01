@@ -496,12 +496,12 @@ def read_back(client: DwsimMcpClient, flow: str, case_path: Path, exp: dict[str,
         result = client.call("dwsim_stream_get_results", {"flowsheet_id": flow, "name": tag}, 30)
         phases = {phase.get("name"): phase for phase in result.get("phases", []) if isinstance(phase, dict)}
         mixture = sorted((phases.get("Mixture", {}).get("compounds") or {}).items())
-        node = sim_nodes.get(native_by_tag[tag])
+        sim_node = sim_nodes.get(native_by_tag[tag])
         held: dict[str, Any] = {
             **{arg: result.get(arg) for _key, (_kind, arg, _label) in STREAM_SPECS.items() if arg != "vapor_fraction"},
             "vapor_fraction": phases.get("Vapor", {}).get("fraction"),
-            "spec_type": node.findtext("SpecType") if node is not None else None,
-            "defined_flow": node.findtext("DefinedFlow") if node is not None else None,
+            "spec_type": sim_node.findtext("SpecType") if sim_node is not None else None,
+            "defined_flow": sim_node.findtext("DefinedFlow") if sim_node is not None else None,
             "composition": {name: value.get("mass_fraction") for name, value in mixture},
             "mole_composition": {name: value.get("mole_fraction") for name, value in mixture},
         }
