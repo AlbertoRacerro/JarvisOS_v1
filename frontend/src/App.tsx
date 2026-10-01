@@ -40,6 +40,8 @@ const DevLocalChat = import.meta.env.DEV ? lazy(() => import("./pages/DevLocalCh
 type ShellRegionRequest = Readonly<{ region: ShellRegion; nonce: number }>;
 const PROJECT_BASIS_RECORD_KINDS = new Set(["requirement", "parameter", "assumption", "decision"]);
 const KNOWLEDGE_ROUTES = new Set(["memory-project-basis", "memory-models", "memory-literature"]);
+// 161: these routes render the Jarvis conversation in-page; the shell Sidecar must not offer a second copy.
+const IN_PAGE_JARVIS_ROUTES = new Set(["memory-project-basis", "memory-models", "memory-literature", "development-roadmap-timeline", "development-roadmap-calendar", "development-brainstorm"]);
 const WORKSPACE_OPTIONAL_ROUTES = new Set(["settings-appearance", "settings-ai", "settings-system", "coding-runtime", "legacy-domain-foundation", "legacy-ai-draft", "legacy-system-status", "legacy-dev-local-chat"]);
 type WorkspaceLoadState = "loading" | "ready" | "empty" | "error";
 
@@ -227,7 +229,7 @@ function App() {
   const propertiesContent = <EngineeringPropertiesPanel controller={engineeringProperties} stageContext={stageSidecar} navigate={navigate} />;
   const effectiveShellRegions: ShellRegionContributions = {
     ...shellRegions,
-    sidecar: route.primaryNav === "settings" || route.primaryNav === "coding" || workspaceLoadState !== "ready" || !workspaceId ? undefined : jarvisSidecar,
+    sidecar: route.primaryNav === "settings" || route.primaryNav === "coding" || IN_PAGE_JARVIS_ROUTES.has(route.id) || workspaceLoadState !== "ready" || !workspaceId ? undefined : jarvisSidecar,
     ...(route.id === "runs" || route.id === "engineering-data" || route.id === "design-process" ? { dock: <AnalyticsDockContent workspaceId={workspaceId} /> } : {})
   };
 

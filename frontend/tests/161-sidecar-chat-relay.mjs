@@ -85,3 +85,8 @@ assert.match(layout, /shell-reopen--sidecar/);
 assert.match(layout, /shell-reopen--navigator/);
 assert.match(shellCss, /--jarvis-width: clamp\(300px, 24vw, 420px\)/);
 console.log("161 Sidecar chat and Relay escalation checks passed");
+
+// Routes that render Jarvis in-page must not also offer a shell Sidecar (and reopen tab).
+const appSrc = read("src/App.tsx");
+assert.match(appSrc, /IN_PAGE_JARVIS_ROUTES = new Set\(\[[^\]]*"memory-models"[^\]]*"development-roadmap-timeline"[^\]]*\]\)/);
+assert.match(appSrc, /IN_PAGE_JARVIS_ROUTES\.has\(route\.id\)[^;]*\? undefined : jarvisSidecar/);

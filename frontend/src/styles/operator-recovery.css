@@ -11,7 +11,7 @@
   --fusion-muted: #747b71;
 }
 .application-shell--final .shell-main > .final-fusion__workspace-head { flex: 0 0 auto; }
-.application-shell--final .shell-main:focus { outline: none; }
+.application-shell--final .shell-main:focus { outline: none; box-shadow: none; }
 .application-shell--final .shell-sidecar__properties .ui-inline-notice,
 .application-shell--final .shell-sidecar__properties :is(p, summary, dt, dd) { font-size: 11px; line-height: 1.45; }
 .application-shell--final .shell-panel__header h2 { font-size: 13px; }
