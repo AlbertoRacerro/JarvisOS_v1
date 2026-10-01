@@ -73,6 +73,7 @@ function selectionIdentity(selection: StageSelection | null): string {
 function routeUsable(route: ConversationRoute | undefined): boolean {
   if (!route) return false;
   if (route.execution_class === "synthetic") return true;
+  if (route.availability.reason_code === "LLAMACPP_AUTH_REQUIRED") return false;
   return Boolean(route.availability.runtime_reachable && (route.execution_class === "agent" || route.availability.model_installed));
 }
 
