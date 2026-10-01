@@ -11,18 +11,21 @@ import {
   inspectCodingTarget,
   previewCodingContext,
   readChecks,
+  readControlRoom,
   readPipelineState,
   readPullRequest,
   readRepositoryFile,
   readRepositoryRef,
   readRepositoryTree,
   readReviews,
-  readRuntimeTruth,
   readSafeGithubUrl,
   searchRepository,
   suggestCodingModification,
   type CodingActionResult,
   type CodingContextPreview,
+  type ControlRoom,
+  type ControlRoomRecentItem,
+  type ControlRoomUpcomingItem,
   type RepositoryTruthResult,
   type RuntimeTruth
 } from "../api/coding";
@@ -597,8 +600,75 @@ function RepositorySurface({ workspaceId, jarvis }: Readonly<{ workspaceId: stri
   </div>;
 }
 
+const WARNING_TEXT: Record<string, string> = {
+  local_target_ref_differs_from_remote: "Recent work and Up next read the local copy of the target branch, which differs from the remote commit shown above. Fetch the repository to refresh it; this page never fetches.",
+  startup_snapshot_unavailable: "The process startup snapshot is unavailable, so runtime identity cannot be shown.",
+  target_ref_invalid: "The target branch name is not a safe git ref."
+};
+
+function controlRoomWarning(code: string): string {
+  if (WARNING_TEXT[code]) return WARNING_TEXT[code];
+  const [kind, detail] = code.split(":");
+  if (kind === "target_ref_unavailable") return `The local copy of the target branch could not be read (${humanize(detail)}). Recent work and Up next are unavailable.`;
+  if (kind === "status_unavailable") return `STATUS.md could not be read at the target commit (${humanize(detail)}). Registry names and states are unavailable.`;
+  if (kind === "recent_work_unavailable") return `Merge history could not be read (${humanize(detail)}).`;
+  if (kind === "dependency_absent") return `Spec ${detail} names a dependency that is not in the registry; its readiness is not claimed.`;
+  if (kind.startsWith("status_")) return `A STATUS.md registry row was skipped because it is not exact (${humanize(code.replace(":", " "))}).`;
+  return humanize(code);
+}
+
+const KIND_LABEL: Record<string, string> = { implementation: "Implementation", plan: "Plan", reconcile: "Reconcile", docs: "Docs", repair: "Repair", other: "Other" };
+
+function shortDate(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+function specLabel(ids: readonly string[]): string {
+  if (ids.length > 2 && ids.every((id, index) => index === 0 || Number(id) === Number(ids[index - 1]) + 1)) return `${ids[0]}–${ids[ids.length - 1]}`;
+  return ids.join(", ");
+}
+
+function StateBadge({ status }: Readonly<{ status: string | null }>) {
+  return <span className="coding-state" data-state={status ?? "unknown"}>{status ? humanize(status) : "Not in registry"}</span>;
+}
+
+function RecentWorkRow({ item }: Readonly<{ item: ControlRoomRecentItem }>) {
+  const first = item.specs[0];
+  const title = item.maintenance ? (item.branch ? item.branch.split("/").slice(1).join("/") || item.branch : item.subject) : first?.title ?? "Spec not in registry";
+  return <li><details className="coding-work-row">
+    <summary><span className="coding-work-id">{item.maintenance ? "maintenance" : specLabel(item.spec_ids)}</span><span className="coding-work-title">{title}{item.specs.length > 1 ? <small> +{item.specs.length - 1} more</small> : null}</span><span className="coding-kind">{KIND_LABEL[item.kind] ?? humanize(item.kind)}</span>{item.maintenance ? <span className="coding-state" data-state="maintenance">Maintenance</span> : <StateBadge status={first?.status ?? null} />}<time dateTime={item.merged_at}>{shortDate(item.merged_at)}</time></summary>
+    <dl className="coding-work-facts">
+      {item.specs.map((spec) => <Fragment key={spec.spec_id}><dt>Spec {spec.spec_id}</dt><dd>{spec.title ?? "Not in registry"} · {spec.status ? humanize(spec.status) : "no registry state"}{spec.name && spec.name !== spec.title ? <small> · {spec.name}</small> : null}</dd></Fragment>)}
+      <dt>Pull request</dt><dd>{item.pr_number ? `#${item.pr_number}` : "Not derivable"}</dd>
+      <dt>Branch</dt><dd>{item.branch ?? "Not derivable"}</dd>
+      <dt>Merge commit</dt><dd><code>{item.sha}</code></dd>
+      <dt>Merged at</dt><dd>{item.merged_at}</dd>
+    </dl>
+  </details></li>;
+}
+
+function UpcomingRow({ item }: Readonly<{ item: ControlRoomUpcomingItem }>) {
+  const waiting = item.dependencies.filter((dep) => dep.status !== "merged");
+  const readiness = !item.dependencies.length ? "No dependencies" : item.dependencies_merged ? "Dependencies merged" : `Waiting on ${waiting.map((dep) => `${dep.spec_id} (${dep.status ? humanize(dep.status) : "not in registry"})`).join(", ")}`;
+  return <li><details className="coding-work-row">
+    <summary><span className="coding-work-id">{item.spec_id}</span><span className="coding-work-title">{item.title}</span><StateBadge status={item.status} /><span className={item.dependencies_merged ? "coding-deps is-ready" : "coding-deps"}>{readiness}</span></summary>
+    <dl className="coding-work-facts">
+      <dt>Registry name</dt><dd>{item.name}</dd>
+      <dt>Description</dt><dd>{item.description || "No description"}</dd>
+      <dt>Depends on</dt><dd>{item.dependencies.length ? item.dependencies.map((dep) => `${dep.spec_id} · ${dep.status ? humanize(dep.status) : "not in registry"}`).join("; ") : "None"}</dd>
+      {item.implementation_prs.length ? <><dt>Implementation PR</dt><dd>{item.implementation_prs.map((pr) => `#${pr}`).join(", ")}</dd></> : null}
+    </dl>
+  </details></li>;
+}
+
+function UpcomingGroup({ label, note, items }: Readonly<{ label: string; note: string; items: readonly ControlRoomUpcomingItem[] }>) {
+  if (!items.length) return null;
+  return <details className="coding-upcoming-group"><summary>{label} · {items.length}</summary><p className="coding-control-note">{note}</p><ol className="coding-work-list">{items.map((item) => <UpcomingRow key={item.spec_id} item={item} />)}</ol></details>;
+}
+
 function RuntimeSurface({ jarvis }: Readonly<{ jarvis?: ReactNode }>) {
-  const [runtime, setRuntime] = useState<RuntimeTruth | null>(null);
+  const [room, setRoom] = useState<ControlRoom | null>(null);
   const [prInput, setPrInput] = useState("");
   const [specId, setSpecId] = useState("");
   const [pipeline, setPipeline] = useState<Record<string, unknown> | null>(null);
@@ -608,8 +678,8 @@ function RuntimeSurface({ jarvis }: Readonly<{ jarvis?: ReactNode }>) {
   const pipelineRequestGeneration = useRef(0);
 
   const refresh = async () => {
-    setLoading(true); setRuntimeError(null); setRuntime(null);
-    try { setRuntime(await readRuntimeTruth()); } catch (cause) { setRuntimeError(errorText(cause)); } finally { setLoading(false); }
+    setLoading(true); setRuntimeError(null); setRoom(null);
+    try { setRoom(await readControlRoom()); } catch (cause) { setRuntimeError(errorText(cause)); } finally { setLoading(false); }
   };
   useEffect(() => { void refresh(); }, []);
 
@@ -633,26 +703,51 @@ function RuntimeSurface({ jarvis }: Readonly<{ jarvis?: ReactNode }>) {
     setPipelineError(null);
   };
 
+  const runtime: RuntimeTruth | null = room?.runtime ?? null;
   const startup: Record<string, unknown> = runtime?.startup ?? {};
   const live: Record<string, unknown> = runtime?.live ?? {};
   const remote: Record<string, unknown> = runtime?.remote ?? {};
   const localSha = exactSha(live.git_sha);
   const remoteSha = exactSha(remote.resolved_sha);
+  const startupSha = exactSha(startup.git_sha);
   const delta: Record<string, unknown> = runtime?.semantic_delta ?? {};
   const relation = runtime?.alignment ?? "unknown";
   const semanticDelta = runtimeDeltaSummary(delta, relation, typeof runtime?.reason === "string" ? runtime.reason : null);
+  const sourceSha = room?.source.sha ?? null;
+  const upcoming = room?.upcoming;
+  const recent = room?.recent_work;
+  const short = (sha: string) => sha === "Unknown" ? "unknown" : sha.slice(0, 12);
 
   return <div className="final-fusion__workbench final-fusion__workbench--coding" data-testid="coding-runtime-surface">
-    <Panel title="Runtime" status={loading ? "Loading" : runtimeError ? "Read error" : runtime?.observer_status ?? "Unknown"}>
-      <div className="final-fusion__repo-status"><div><strong>JarvisOS runtime identity</strong><span>{CODING_REPOSITORY} · target {CODING_TARGET_REF}</span></div><span className={semanticDelta.relation === "unknown" ? "final-fusion__unknown" : ""}>{semanticDelta.relationship}</span></div>
-      <section className="final-fusion__compare"><div className="final-fusion__version-card"><small>Running workspace</small><strong>{typeof live.branch === "string" ? live.branch : humanize(live.head_state, "Local runtime")}</strong><p>Process started at <code>{exactSha(startup.git_sha) === "Unknown" ? "unknown commit" : exactSha(startup.git_sha).slice(0, 12)}</code></p><p>Workspace now at <code>{localSha === "Unknown" ? "unknown commit" : localSha.slice(0, 12)}</code></p>{runtime?.worktree_changed_since_start ? <p className="coding-runtime-warning">Workspace changed since startup. The current files do not prove what the running process loaded.</p> : null}<p>Working tree · {humanize(live.dirty_state)}</p></div><div className="final-fusion__delta" aria-hidden="true">→</div><div className="final-fusion__version-card is-remote"><small>Tracked target</small><strong>{humanize(remote.requested_ref ?? CODING_TARGET_REF)}</strong><p>Remote commit · <code>{remoteSha === "Unknown" ? "Unknown" : remoteSha.slice(0, 12)}</code></p><p>{humanize(runtime?.remote_status, "Remote status unknown")}</p></div></section>
-      <div className="final-fusion__summary-strip"><span>Remote ahead · {semanticDelta.aheadBy ?? "Unknown"}</span><span>Remote behind · {semanticDelta.behindBy ?? "Unknown"}</span><span>{semanticDelta.partial ? "Changed files shown" : "Changed files"} · {semanticDelta.status === "unavailable" || semanticDelta.status === "unknown" ? "Unknown" : semanticDelta.files.length}</span><span>Evidence · {semanticDelta.partial ? "Partial — file list is truncated" : humanize(semanticDelta.status)}</span></div>
-      {semanticDelta.explanation ? <div className="final-fusion__context-note" role="status">{semanticDelta.explanation}</div> : null}
-      {semanticDelta.files.length ? <div className="final-fusion__source-list">{semanticDelta.files.map((file) => <div className="final-fusion__source-empty" key={file.name}><strong>{file.name}</strong><span>{humanize(file.status, "Changed")}</span></div>)}</div> : null}
-      <details className="coding-runtime-method"><summary>How this comparison is determined</summary><div className="final-fusion__context-note">Primary relationship comes from the canonical server-owned runtime alignment. Remote-ahead/remote-behind counts and changed files come from the server-owned semantic delta. The browser performs no SHA ancestry or cleanliness inference.</div></details>
-      {runtime ? <TechnicalDetails><p>Runtime alignment code · {relation}</p><p>Local commit · {localSha}</p><p>Remote commit · {remoteSha}</p><p>Process startup identity · {exactSha(startup.git_sha)}</p><p>Root identity · {String(live.root_identity ?? startup.root_identity ?? "unknown")}</p><p>Observed at · {String(live.observed_at ?? "unknown")}</p><p>Remote observed at · {String(remote.observed_at ?? "unknown")}</p><p>Startup observed at · {String(startup.observed_at ?? "unknown")}</p><p>Provenance · {String(live.provenance ?? startup.provenance ?? "unknown")}</p><p>Dirty state · {String(live.dirty_state ?? "unknown")}</p><p>Reason · {String(runtime.reason ?? "none")}</p><p>Failure identity · {String(live.failure_code ?? startup.failure_code ?? "none")}</p><RawJson value={delta} /></TechnicalDetails> : null}
-      {runtimeError ? <div className="final-fusion__source-empty" role="status"><strong>Runtime truth unavailable</strong><span>{readableReason(runtimeError)}</span></div> : null}
-      <button type="button" onClick={() => void refresh()} disabled={loading}>Refresh runtime truth</button>
+    <Panel title="Runtime" status={loading ? "Loading" : runtimeError ? "Read error" : runtime?.observer_status ?? "Runtime unavailable"}>
+      <div className="coding-control-room">
+      <section className="coding-control-runtime" aria-label="Runtime truth">
+        <div className="coding-control-runtime__head"><div className="final-fusion__delta coding-alignment" data-alignment={semanticDelta.relation}><span>{semanticDelta.relationship}</span></div><span className="coding-control-meta">{CODING_REPOSITORY} · target {CODING_TARGET_REF}</span><button type="button" onClick={() => void refresh()} disabled={loading}>Refresh</button></div>
+        <div className="coding-control-cards">
+          <div className="coding-control-card"><small>Running here</small><strong>{typeof live.branch === "string" ? live.branch : humanize(live.head_state, "Local runtime")} · <code>{short(localSha)}</code></strong><span>Working tree {humanize(live.dirty_state).toLowerCase()} · started at <code>{short(startupSha)}</code>{typeof startup.observed_at === "string" ? ` · ${shortDate(startup.observed_at)}` : ""}</span>{runtime?.worktree_changed_since_start ? <span className="coding-runtime-warning">Changed since startup. The current files do not prove what the running process loaded.</span> : runtime ? <span>Unchanged since startup</span> : null}</div>
+          <div className="coding-control-card is-remote"><small>Remote target</small><strong>{String(remote.requested_ref ?? CODING_TARGET_REF)} · <code>{short(remoteSha)}</code></strong><span>{runtime?.remote_status === "ok" ? "Resolved from GitHub" : humanize(runtime?.remote_status, "Remote status unknown")}</span></div>
+        </div>
+        <div className="final-fusion__summary-strip"><span>Remote ahead · {semanticDelta.aheadBy ?? "Unknown"}</span><span>Remote behind · {semanticDelta.behindBy ?? "Unknown"}</span><span>{semanticDelta.partial ? "Changed files shown" : "Changed files"} · {semanticDelta.status === "unavailable" || semanticDelta.status === "unknown" ? "Unknown" : semanticDelta.files.length}</span><span>Evidence · {semanticDelta.partial ? "Partial — file list is truncated" : humanize(semanticDelta.status)}</span></div>
+        {semanticDelta.explanation ? <div className="final-fusion__context-note" role="status">{semanticDelta.explanation}</div> : null}
+        {runtime ? <TechnicalDetails><p>Runtime alignment code · {relation}</p><p>Local commit · {localSha}</p><p>Remote commit · {remoteSha}</p><p>Process startup identity · {startupSha}</p><p>Root identity · {String(live.root_identity ?? startup.root_identity ?? "unknown")}</p><p>Observed at · {String(live.observed_at ?? "unknown")}</p><p>Remote observed at · {String(remote.observed_at ?? "unknown")}</p><p>Startup observed at · {String(startup.observed_at ?? "unknown")}</p><p>Provenance · {String(live.provenance ?? startup.provenance ?? "unknown")}</p><p>Dirty state · {String(live.dirty_state ?? "unknown")}</p><p>Reason · {String(runtime.reason ?? "none")}</p><p>Failure identity · {String(live.failure_code ?? startup.failure_code ?? "none")}</p><RawJson value={delta} /><p className="coding-control-note">Primary relationship comes from the canonical server-owned runtime alignment. Remote-ahead/remote-behind counts and changed files come from the server-owned semantic delta. The browser performs no SHA ancestry or cleanliness inference.</p></TechnicalDetails> : null}
+        {semanticDelta.files.length ? <details className="coding-changed-files"><summary>Show changed file names ({semanticDelta.files.length})</summary><ul>{semanticDelta.files.map((file) => <li key={file.name}><code>{file.name}</code> · {humanize(file.status, "Changed")}</li>)}</ul></details> : null}
+        {runtimeError ? <div className="final-fusion__source-empty" role="status"><strong>Control room unavailable</strong><span>{readableReason(runtimeError)}</span></div> : null}
+      </section>
+      {room?.warnings.length ? <div className="final-fusion__context-note coding-control-warnings" role="status"><strong>Some evidence is incomplete</strong><ul>{room.warnings.map((code) => <li key={code}>{controlRoomWarning(code)}</li>)}</ul></div> : null}
+      <section className="coding-control-section" aria-label="Recent work">
+        <header><h3>Recent work</h3><span>Newest first · merged pull requests on {CODING_TARGET_REF}{sourceSha ? <> at <code>{sourceSha.slice(0, 12)}</code></> : null}</span></header>
+        {recent?.status === "available" ? recent.items.length ? <ol className="coding-work-list">{recent.items.map((item) => <RecentWorkRow key={item.sha} item={item} />)}</ol> : <p className="coding-control-note">No merged pull requests are recorded on the target branch.</p> : <p className="coding-control-note">{loading ? "Reading merge history…" : "Merge history is unavailable."}</p>}
+      </section>
+      <section className="coding-control-section" aria-label="Up next">
+        <header><h3>Up next</h3><span>From STATUS.md at the same commit · authority first, then dependency readiness</span></header>
+        {upcoming?.status === "available" ? <>
+          {upcoming.authorized.length ? <ol className="coding-work-list">{upcoming.authorized.map((item) => <UpcomingRow key={item.spec_id} item={item} />)}</ol> : <p className="coding-control-empty" role="status">No spec is authorized right now: STATUS.md has no ready, in-progress or in-review row. Planned rows below need a maintainer decision before work starts.</p>}
+          <UpcomingGroup label="Planned · dependencies merged" note="Not yet authorized. Many planned rows are deferred, definition-only or trigger-gated; read the description before treating one as next." items={upcoming.planned_ready} />
+          <UpcomingGroup label="Planned · waiting on dependencies" note="Not yet authorized, and at least one dependency is not merged." items={upcoming.planned_waiting} />
+          <UpcomingGroup label="Blocked" note="Blocked rows stay blocked until STATUS.md changes." items={upcoming.blocked} />
+        </> : <p className="coding-control-note">{loading ? "Reading the registry…" : "The spec registry is unavailable."}</p>}
+      </section>
+      </div>
     </Panel>
     <Panel title="Development pipeline" status={pipelineError ? "Projection error" : pipeline ? "Reported evidence" : "Unselected"}>
       {jarvis ? <div className="coding-jarvis-chat">{jarvis}</div> : null}
