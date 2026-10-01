@@ -5,7 +5,11 @@
  * the normative composition. Compatibility/diagnostic routes keep the old shell.
  */
 .application-shell--final {
-  grid-template-columns: 170px minmax(0, 1fr);
+  /* 161: one shared Jarvis width for the shell Sidecar and in-page Jarvis
+   * columns (~345 px at 1440 CSS px), and a narrower rail. */
+  --shell-rail-width: 140px;
+  --jarvis-width: clamp(300px, 24vw, 420px);
+  grid-template-columns: var(--shell-rail-width) minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr) auto;
   grid-template-areas:
     "rail workspace"
@@ -40,8 +44,7 @@
 }
 
 .application-shell--final .shell-rail__identity span {
-  font-size: 8px;
-  color: #7d847d;
+  display: none;
 }
 
 .application-shell--final .shell-rail__links {
@@ -49,8 +52,8 @@
 }
 
 .application-shell--final .shell-nav-link {
-  min-height: 38px;
-  padding: 9px 12px;
+  min-height: 36px;
+  padding: 9px 10px;
   border-radius: 4px;
   color: #596159;
   font-size: 12px;
@@ -101,6 +104,31 @@
   overflow: auto;
 }
 
+/* 161: closing a shell region leaves a slim, labelled, keyboard-reachable tab
+ * on the current screen instead of requiring navigation to reopen it. */
+.application-shell--final .shell-reopen {
+  align-self: start;
+  margin: 12px 0 0;
+  padding: 10px 6px;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #ddd5c8;
+  background: #fffdfa;
+  color: #3e4a3f;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(60, 58, 41, .06);
+}
+.application-shell--final .shell-reopen span { writing-mode: vertical-rl; letter-spacing: .02em; }
+.application-shell--final .shell-reopen:hover,
+.application-shell--final .shell-reopen:focus-visible { border-color: rgba(70, 126, 42, .65); color: #1f2720; }
+.application-shell--final .shell-reopen--navigator { grid-column: 1; border-inline-start: 0; border-radius: 0 6px 6px 0; }
+.application-shell--final .shell-reopen--sidecar { grid-column: 3; border-inline-end: 0; border-radius: 6px 0 0 6px; }
+
 /* Process/BLUECAD approved 1365×768 references use a slightly tighter main
  * inset while retaining the same 170 px rail. */
 @media (max-width: 1400px) {
@@ -132,6 +160,16 @@
     display: flex;
     flex-wrap: wrap;
   }
+
+  .application-shell--final .shell-reopen {
+    grid-column: 1;
+    flex-direction: row;
+    justify-content: center;
+    margin: 8px 12px 0;
+    border-radius: 6px;
+    border: 1px solid #ddd5c8;
+  }
+  .application-shell--final .shell-reopen span { writing-mode: horizontal-tb; }
 
   .application-shell--final .shell-workspace,
   .application-shell--final .shell-main {

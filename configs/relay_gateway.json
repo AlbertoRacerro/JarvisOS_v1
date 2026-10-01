@@ -10,9 +10,11 @@
     "sandbox_isolation_accepted": false,
     "note": "Pre-IP gate. Before any strategic/private domain data is populated into JarvisOS, Relay sandbox hardening and isolation acceptance must be completed and made mandatory. While enabled is false the sandbox is used but its hardening is not a release blocker. enabled=true without sandbox_isolation_accepted=true makes the gateway refuse every run."
   },
+  "escalation_agent": "claude",
   "agents": {
     "claude": {
       "command": "claude",
+      "model": "claude-opus-5-5",
       "credentials": [".claude/.credentials.json"],
       "egress": ["api.anthropic.com", "mcp-proxy.anthropic.com", "platform.claude.com", "claude.ai"],
       "environment": {"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1", "DISABLE_AUTOUPDATER": "1"},

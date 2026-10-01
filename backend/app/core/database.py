@@ -55,6 +55,7 @@ from app.core.project_knowledge_schema import (
 from app.core.relay_gateway_schema import (
     RELAY_GATEWAY_INDEX_STATEMENTS,
     RELAY_GATEWAY_MIGRATION_RECORD,
+    RELAY_GATEWAY_MIGRATION_STATEMENTS,
     RELAY_GATEWAY_SCHEMA_STATEMENTS,
 )
 from app.core.schema import (
@@ -182,6 +183,7 @@ def initialize_database() -> DatabaseInfo:
             *TOKEN_FLOW_SCHEMA_MIGRATION_STATEMENTS,
             *RUNNER_CREATE_REQUEST_MIGRATION_STATEMENTS,
             *PROJECT_KNOWLEDGE_MIGRATION_STATEMENTS,
+            *RELAY_GATEWAY_MIGRATION_STATEMENTS,
         ]:
             try:
                 connection.execute(statement)

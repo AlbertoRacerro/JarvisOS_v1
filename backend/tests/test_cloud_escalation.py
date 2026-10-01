@@ -241,6 +241,7 @@ def test_approved_derivative_zero_budget_fails_without_network_and_is_idempotent
     assert first.state == "failed"
     assert first.accounted_cost_usd == "0"
     assert first.response_text is None
+    assert first.created_at
     with open_sqlite_connection() as connection:
         assert connection.execute("SELECT COUNT(*) FROM egress_attempts WHERE network_attempt = 1").fetchone()[0] == 0
         assert connection.execute("SELECT COUNT(*) FROM cloud_escalations").fetchone()[0] == 1
