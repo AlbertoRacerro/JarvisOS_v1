@@ -26,7 +26,6 @@ ALLOWED = {
     "frontend/src/App.tsx",
     "frontend/src/stages/registry.ts",
     "frontend/src/stages/ModelStage.tsx",
-    "frontend/src/pages/BlueCAD.tsx",
     "frontend/src/components/Layout.tsx",
     "frontend/src/components/BluecadGlbViewer.tsx",
     "frontend/src/components/shell/ContextualNavigator.tsx",

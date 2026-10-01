@@ -567,6 +567,8 @@ export type BluecadReadDiagnostic = {
 export type BluecadCandidateAggregateRead = {
   candidate: BluecadCandidate;
   artifacts: BluecadArtifactRefRead[];
+  /** STL (mm) and STEP exports built with the candidate's current GLB; roles export.stl / export.step. */
+  exports: BluecadArtifactRefRead[];
   evidence: BluecadEvidenceRefRead[];
   runs: BluecadRunRefRead[];
   freshness: "fresh" | "stale" | "unknown" | "mixed";
@@ -590,6 +592,27 @@ export function listBluecadCandidates(workspaceId: string): Promise<BluecadCandi
 
 export function createBluecadCandidate(workspaceId: string, briefText: string): Promise<BluecadCandidate> {
   return postJson<BluecadCandidate>(`/workspaces/${workspaceId}/bluecad/candidates`, { brief_text: briefText });
+}
+
+export type BluecadTemplateCreate =
+  | { template: "tube"; params: { outer_d_mm: number; wall_t_mm: number; length_mm: number } }
+  | {
+      template: "manifold";
+      params: { outer_d_mm: number; wall_t_mm: number; length_mm: number; branch_count: number; branch_outer_d_mm: number };
+    };
+
+export function createBluecadTemplateCandidate(workspaceId: string, payload: BluecadTemplateCreate): Promise<BluecadCandidate> {
+  return postJson<BluecadCandidate>(`/workspaces/${workspaceId}/bluecad/candidates/from-template`, payload);
+}
+
+export type BluecadGenerationAvailability = {
+  route_class: string;
+  external_calls_allowed: boolean;
+  blocking_reason?: string | null;
+};
+
+export function getBluecadGenerationAvailability(workspaceId: string): Promise<BluecadGenerationAvailability> {
+  return getJson<BluecadGenerationAvailability>(`/workspaces/${encodeURIComponent(workspaceId)}/bluecad/generation-availability`);
 }
 
 export function archiveBluecadCandidate(workspaceId: string, candidateId: string): Promise<BluecadCandidate> {

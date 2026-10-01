@@ -309,59 +309,6 @@
   line-height: 1.35;
 }
 
-/* BLUECAD final stage: icon-first compact toolstrip and dominant viewport.
- * Foundation button defaults are deliberately neutralized here; green remains
- * an accent, never the toolbar fill. */
-.bluecad-final-stage {
-  height: 100%;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.bluecad-final-stage__header { flex: 0 0 auto; min-height: 58px; padding: 2px 2px 0; }
-.bluecad-final-stage__header h1 { margin: 3px 0; font-size: 22px; line-height: 1.08; font-weight: 500; letter-spacing: -.025em; }
-.bluecad-final-stage__header .panel-subtitle { margin: 0; max-width: 720px; font-size: 9px; line-height: 1.35; }
-.bluecad-final-stage__toolbar {
-  flex: 0 0 80px;
-  min-height: 80px;
-  display: flex;
-  flex-wrap: nowrap;
-  align-items: stretch;
-  gap: 2px;
-  padding: 7px 10px;
-  overflow: hidden;
-  border: 1px solid #ddd5c8;
-  border-radius: 5px;
-  background: #fffefc;
-}
-.bluecad-final-stage__toolbar button,
-.bluecad-final-stage__toolbar button:disabled {
-  flex: 1 1 0;
-  min-width: 40px;
-  min-height: 66px;
-  padding: 4px 2px !important;
-  display: inline-flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  border: 1px solid transparent !important;
-  border-radius: 4px !important;
-  background: transparent !important;
-  color: #57614e !important;
-  opacity: .72;
-}
-.bluecad-final-stage__toolbar button svg { color: #4b6f3b; }
-.bluecad-final-stage__toolbar button span { font-size: 8px; line-height: 1; white-space: nowrap; }
-.bluecad-final-stage__body { flex: 1 1 auto; min-height: 0; overflow: hidden; }
-.bluecad-final-stage__body .bluecad-page,
-.bluecad-final-stage__body .bluecad-grid,
-.bluecad-final-stage__body .bluecad-workbench,
-.bluecad-final-stage__body .bluecad-workbench__viewport { min-height: 0; }
-.bluecad-final-stage__body .bluecad-page { height: 100%; padding: 0; }
-.bluecad-final-stage__body .bluecad-workbench { height: 100%; }
-
 @media (max-width: 980px) {
   .process-stage__workbench { grid-template-columns: 180px minmax(0,1fr); }
   .application-shell--final .shell-navigator { width: 190px; }

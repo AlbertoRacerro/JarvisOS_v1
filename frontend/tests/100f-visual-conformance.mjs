@@ -10,6 +10,11 @@ const workspaceHeader = read("src/components/fusion/FinalWorkspaceHeader.tsx");
 const workspaceHeaderCss = read("src/styles/final-workspace-header.css");
 const settingsCss = read("src/styles/final-settings.css");
 const designCss = read("src/styles/final-fusion-canonical-overrides.css");
+const bluecadCss = read("src/styles/bluecad-final.css");
+const modelStage = read("src/stages/ModelStage.tsx");
+const bluecadWorkbench = read("src/components/bluecad/BluecadWorkbench.tsx");
+const bluecadViewer = read("src/components/BluecadGlbViewer.tsx");
+const apiClient = read("src/api/client.ts");
 const failures = [];
 const check = (condition, message) => { if (!condition) failures.push(message); };
 const includesAll = (text, fragments, message) => { for (const fragment of fragments) check(text.includes(fragment), `${message}: missing ${fragment}`); };
@@ -53,20 +58,36 @@ includesAll(settingsCss, [
   ".final-settings--ai .settings-grid > .settings-card:nth-child(3)",
   ".final-settings--ai .settings-grid > .settings-card:nth-child(4)",
   ".final-settings--ai .settings-grid > .settings-card:nth-child(5)",
-  ".final-settings--system .settings-grid > .settings-card:nth-child(6)",
-  ".application-shell--final .bluecad-workbench__viewport",
-  ".application-shell--final .bluecad-workbench__empty-viewer"
-], "Settings section filtering or BLUECAD empty viewport composition missing");
+  ".final-settings--system .settings-grid > .settings-card:nth-child(6)"
+], "Settings section filtering drifted");
 includesAll(designCss, [
   ".process-stage__palette-grid",
   "grid-template-columns: repeat(2, minmax(0, 1fr))",
   ".application-shell--final .shell-navigator",
   ".application-shell--final .shell-sidecar",
   "width: 240px",
-  "width: var(--jarvis-width, 300px)",
-  ".bluecad-final-stage__toolbar button",
-  "background: transparent !important"
+  "width: var(--jarvis-width, 300px)"
 ], "Canonical Process/BLUECAD workstation composition missing");
+includesAll(bluecadCss, [
+  ".application-shell--final .bluecad-workbench__viewport",
+  ".application-shell--final .bluecad-workbench__empty-viewer",
+  ".bluecad-viewer__views button",
+  "background: transparent !important",
+  ".bluecad-export__menu--flipped",
+  "left: 0;"
+], "BLUECAD-owned final composition or export-menu alignment missing");
+includesAll(modelStage, ["<BluecadWorkbench"], "BLUECAD stage is disconnected from its workbench");
+check(!modelStage.includes("bluecad-final-stage__toolbar"), "BLUECAD retains the disabled future-authoring toolbar");
+includesAll(bluecadWorkbench, [
+  'Create geometry', 'No geometry yet', 'Template part · no AI', 'AI brief',
+  'Write a brief', 'export.stl', 'export.step', 'Export ▾',
+  'Paid AI is off'
+], "BLUECAD creation and print-handoff routes drifted");
+includesAll(bluecadViewer, [
+  'new OrbitControls', 'controls.enableDamping = true', 'VIEW_BUTTONS', '"fit"', '"front"', '"top"', '"side"'
+], "BLUECAD viewer lost camera interaction or standard views");
+includesAll(apiClient, ["createBluecadTemplateCandidate", "getBluecadGenerationAvailability", "from-template"], "BLUECAD API routes are missing");
+check(!settingsCss.includes("linear-gradient(rgba(75, 91, 78") && !settingsCss.includes("background-size: 32px 32px"), "BLUECAD empty state retains the fake graph-paper viewport");
 check(!settings.includes("fetch(") && !settings.includes("localStorage") && !settings.includes("sessionStorage"), "Settings wrapper gained data/authority state");
 check(!workspaceHeader.includes("fetch(") && !workspaceHeader.includes("localStorage") && !workspaceHeader.includes("sessionStorage"), "Workspace header gained data/authority state");
 
