@@ -227,17 +227,22 @@
 }
 .draft-findings li button {
   width: 100%;
+  min-height: 0;
+  padding: 4px 6px;
   text-align: left;
   border: none;
   background: transparent;
+  color: inherit;
 }
 .draft-findings li[data-severity="blocker"] {
-  border-left: 3px solid #b3402f;
-  padding-left: 6px;
+  border-left: 3px solid var(--color-status-danger-text, #b3402f);
+  background: var(--color-status-danger-bg, #fbe4e1);
+  color: var(--color-status-danger-text, #7c1f16);
 }
 .draft-findings li[data-severity="warning"] {
-  border-left: 3px solid #c89a2a;
-  padding-left: 6px;
+  border-left: 3px solid var(--color-status-warning-text, #c89a2a);
+  background: var(--color-status-warning-bg, #fff4d6);
+  color: var(--color-status-warning-text, #805414);
 }
 .draft-run,
 .draft-results,

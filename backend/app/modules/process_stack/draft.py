@@ -840,9 +840,11 @@ def dwsim_feedback(run: dict[str, Any] | None) -> dict[str, Any] | None:
         "draft_revision": run.get("draft_revision"),
         "check_findings": [{key: item.get(key) for key in ("severity", "code", "object", "message", "fix")}
                            for item in (run.get("dwsim_check") or {}).get("findings", [])][:20],
-        "solve_errors": [plain_text(item) for item in solve.get("errors", [])][:20],
-        "failed_objects": [{"tag": item.get("tag"), "error": plain_text(item.get("error") or "not calculated")}
-                           for item in solve.get("failed_objects", [])][:20],
+        "solve_errors": list(dict.fromkeys(plain_text(item) for item in solve.get("errors", [])))[:20],
+        "failed_objects": list({(item.get("tag"), plain_text(item.get("error") or "not calculated")):
+                                 {"tag": item.get("tag"),
+                                  "error": plain_text(item.get("error") or "not calculated")}
+                                 for item in solve.get("failed_objects", [])}.values())[:20],
         "error": plain_text(run["error"]) if run.get("error") else None,
         "error_step": detail.get("step"),
         "dwsim_message": plain_text(detail["dwsim_message"]) if detail.get("dwsim_message") else None,
@@ -1128,13 +1130,31 @@ def agent_view(workspace_id: str, draft_id: str | None) -> dict[str, Any]:
         return f"{item['code']} {item['object'] or 'flowsheet'}: {item['message']}"
 
     blockers = [line(item) for item in view["findings"] if item["severity"] == "blocker"]
-    warnings = [line(item) for item in view["findings"] if item["severity"] != "blocker"]
+    findings = view["findings"]
+    # Exact duplicate findings can arrive through separate DWSIM result paths. Keep
+    # distinct messages for an object, but don't make Hermes repeat the same fact.
+    deduped_findings: list[dict[str, Any]] = []
+    seen_findings: set[tuple[Any, ...]] = set()
+    for item in findings:
+        key = (item["severity"], item["code"], item["object"], item["message"], item.get("fix"))
+        if key not in seen_findings:
+            seen_findings.add(key)
+            deduped_findings.append(item)
+
+    warning_items = [item for item in deduped_findings if item["severity"] != "blocker"]
+    no_text_failures = [item for item in warning_items
+                        if item["code"] == "DWSIM_OBJECT_FAILED"
+                        and item["message"] == "DWSIM did not calculate it: no error text"]
+    warnings = [line(item) for item in warning_items if item not in no_text_failures]
+    if no_text_failures:
+        tags = ", ".join(dict.fromkeys(item["object"] for item in no_text_failures if item["object"]))
+        warnings.append(f"DWSIM did not calculate: {tags or 'one or more objects'}")
     return {"draft_id": view["draft_id"], "revision": view["revision"], "compounds": view["compounds"],
             "property_package": view["property_package"], "objects": objects,
             "guidance": ("blockers stop Run; warnings mean DWSIM can run but the result may lack physical "
                          "meaning; dwsim lists what DWSIM itself reported on the last attempt"),
             "blockers": blockers[:20], "warnings": warnings[:20],
-            "findings": [f"{item['object']}: {item['message']}" for item in view["findings"]][:12],
+            "findings": [f"{item['object']}: {item['message']}" for item in deduped_findings][:20],
             "dwsim": view["dwsim"],
             "results": view["results"],
             "current_results": _key_results(_solved_run(workspace_id, view), view["results"]),

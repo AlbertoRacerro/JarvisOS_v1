@@ -30,6 +30,7 @@ import {
   type DraftRegistry,
   type DraftRun,
   type DraftSummary,
+  type Finding,
   type OptionValue,
   type Proposal,
   type RegistryOption,
@@ -61,6 +62,56 @@ type Notice = { tone: "info" | "danger" | "success"; text: string } | null;
 const UNIT_W = 76;
 const UNIT_H = 44;
 const STREAM_R = 7;
+
+function distinctFindings(findings: Finding[]) {
+  const seen = new Set<string>();
+  return findings.filter((finding) => {
+    const key = JSON.stringify([finding.severity, finding.code, finding.object, finding.message, finding.fix]);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function visibleFindings(findings: Finding[]) {
+  const unique = distinctFindings(findings);
+  const noTextFailures = unique.filter((finding) => finding.severity === "warning"
+    && finding.code === "DWSIM_OBJECT_FAILED"
+    && finding.message === "DWSIM did not calculate it: no error text");
+  if (noTextFailures.length < 2) return unique;
+  const failedIds = new Set(noTextFailures);
+  const names = [...new Set(noTextFailures.map((finding) => finding.object).filter(Boolean))];
+  return [...unique.filter((finding) => !failedIds.has(finding)), {
+    severity: "warning",
+    code: "DWSIM_OBJECT_FAILED",
+    object: "",
+    field: "",
+    message: `DWSIM did not calculate: ${names.join(", ")}`,
+    source: "dwsim",
+  } satisfies Finding];
+}
+
+function solveFailureMessages(run: DraftRun) {
+  const solve = run.solve;
+  if (!solve) return [];
+  const messages = [...new Set(solve.errors.map((item) => String(item).trim()).filter(Boolean))];
+  const objectsWithErrors = solve.failed_objects.filter((item) => String(item.error ?? "").trim());
+  for (const item of objectsWithErrors) {
+    const error = String(item.error).trim();
+    const formatted = `${item.tag}: ${error}`;
+    if (!messages.includes(formatted) && !messages.some((message) => message === error)) messages.push(formatted);
+  }
+  const uncalculated = [...new Set(solve.failed_objects
+    .filter((item) => !String(item.error ?? "").trim())
+    .map((item) => item.tag)
+    .filter(Boolean))];
+  if (uncalculated.length) {
+    const failedUnits = [...new Set(objectsWithErrors.map((item) => item.tag).filter(Boolean))];
+    const cause = failedUnits.length ? `${failedUnits.join(", ")} failed: ` : "DWSIM did not calculate: ";
+    messages.push(`Not calculated because ${cause}${uncalculated.join(", ")}`);
+  }
+  return messages;
+}
 
 const errorText = (cause: unknown) =>
   cause instanceof DraftApiError
@@ -955,7 +1006,7 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
       {run.status === "validated" && <p>DWSIM reproduced the draft exactly and its check found nothing blocking.</p>}
       {run.solve && run.status !== "completed" && <div className="draft-dwsim-error" role="alert">
         <strong>Solve failed</strong>
-        {[...run.solve.errors.map((item) => String(item)), ...run.solve.failed_objects.map((item) => `${item.tag}: ${item.error}`)].map((message, index) => <p key={index}>{message}</p>)}
+        {solveFailureMessages(run).map((message, index) => <p key={`${message}-${index}`}>{message}</p>)}
       </div>}
     </section>
   );
@@ -1071,7 +1122,7 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
             <h3>Readiness guidance: {blockers.length ? `${blockers.length} blocker${blockers.length === 1 ? "" : "s"}` : "no blockers"}, {draft.findings.length - blockers.length} warning{draft.findings.length - blockers.length === 1 ? "" : "s"}</h3>
             <p className="draft-hint">Blockers stop Run. Warnings allow a solve but may make its result physically meaningless.</p>
             <ul className="draft-findings">
-              {draft.findings.map((finding, index) => (
+              {visibleFindings(draft.findings).map((finding, index) => (
                 <li key={index} data-severity={finding.severity}>
                   <button type="button" onClick={() => setSelectedId(objects.find((item) => item.tag === finding.object)?.id ?? null)}>
                     <strong>{finding.object || "Draft"}</strong> {finding.message}

@@ -661,6 +661,36 @@ def test_real_dwsim_solver_failure_text_reaches_hermes_view(workspace_draft: Any
     assert view["dwsim"]["failed_objects"][0] == {"tag": "COL", "error": message}
 
 
+def test_hermes_view_deduplicates_solver_feedback_and_groups_uncalculated_objects(workspace_draft: Any) -> None:
+    _client, workspace_id, state = workspace_draft
+    state = _patched(workspace_id, state, *_reactive_train_ops())
+    directory = draft.draft_dir(workspace_id, state["draft_id"])
+    run = {"run_id": "deduplicated-failure", "action": "run", "status": "failed",
+           "draft_revision": state["revision"], "started_at": "2026-01-05T00:00:00+00:00",
+           "solve": {"errors": ["COL: convergence failed", "COL: convergence failed"],
+                     "failed_objects": [
+                         {"tag": "COL", "error": "convergence failed"},
+                         {"tag": "COL", "error": "convergence failed"},
+                         {"tag": "Distillate", "error": ""},
+                         {"tag": "Condenser", "error": ""},
+                         {"tag": "Bottoms", "error": ""},
+                         {"tag": "Bottoms", "error": ""},
+                     ]}}
+    draft.record_run(directory, run)
+
+    view = draft.agent_view(workspace_id, state["draft_id"])
+
+    assert view["dwsim"]["solve_errors"] == ["COL: convergence failed"]
+    assert view["dwsim"]["failed_objects"] == [
+        {"tag": "COL", "error": "convergence failed"},
+        {"tag": "Distillate", "error": "not calculated"},
+        {"tag": "Condenser", "error": "not calculated"},
+        {"tag": "Bottoms", "error": "not calculated"},
+    ]
+    assert "DWSIM did not calculate: Distillate, Condenser, Bottoms" in view["warnings"]
+    assert view["findings"].count("Bottoms: DWSIM did not calculate it: no error text") == 1
+
+
 def test_only_input_properties_are_proposable(workspace_draft: Any) -> None:
     client, workspace_id, state = workspace_draft
     state = _patched(workspace_id, state, *_reactive_train_ops())
