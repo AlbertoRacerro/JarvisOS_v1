@@ -28,6 +28,7 @@ from app.modules.ai.token_flow_service import (
     validate_existing_flow_for_execution,
 )
 from app.modules.events.service import utc_now
+from app.modules.workspace_actions.models import SurfaceBrief, SurfaceRef
 
 
 def _bootstrap_workspace(workspace_id: str) -> None:
@@ -325,9 +326,9 @@ def test_post_execution_snapshot_failure_never_redispatches(
     def flaky_thread_connection():
         nonlocal open_count
         open_count += 1
-        # 091 adds an idempotency lookup before reservation. The fourth open is
+        # The stored surface brief adds one open after reservation; the fifth is
         # still the semantic target: post-execution assistant snapshot capture.
-        if open_count == 4:
+        if open_count == 5:
             raise sqlite3.OperationalError("forced post-execution thread snapshot failure")
         with original_open() as connection:
             yield connection
@@ -384,9 +385,39 @@ def test_thread_submit_never_serializes_prior_history_as_context(
     )
 
     assert captured["user_prompt"] == "current turn only"
-    assert [block["source"] for block in captured["context_blocks"]] == ["jarvis:system-envelope"]
-    assert "historical turn" not in captured["context_blocks"][0]["content"]
+    assert [block["source"] for block in captured["context_blocks"]] == [
+        "jarvis:surface-brief", "jarvis:system-envelope"]
+    assert all("historical turn" not in block["content"] for block in captured["context_blocks"])
     assert "historical turn" not in str(captured)
+
+
+def test_submit_persists_owner_derived_surface_and_exposes_thread_contract(monkeypatch) -> None:
+    workspace_id = "workspace-surface"
+    _bootstrap_workspace(workspace_id)
+    thread = create_thread(AIThreadCreate(workspace_id=workspace_id))
+    brief = SurfaceBrief(surface="bluecad", route_id="bluecad", workspace_id=workspace_id,
+                         base_revision="candidate-1", candidate_id="candidate-1",
+                         selected=[{"kind": "part", "id": "part-1", "tag": "tube"}],
+                         summary="BLUECAD · candidate-1 · tube", text="BLUECAD brief for tube.",
+                         actions=["duplicate_part"], digest="sha256:" + "a" * 64)
+    monkeypatch.setattr("app.modules.workspace_actions.service.surface_brief", lambda _ws, _ref: brief)
+    monkeypatch.setattr("app.modules.workspace_actions.service.list_for", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(thread_service, "run_ai_task",
+                        lambda **_kwargs: SimpleNamespace(response=SimpleNamespace(text="ready")))
+    interaction = submit_interaction(
+        workspace_id=workspace_id, thread_id=thread.id,
+        payload=AIThreadSubmit(request_id="surface-brief", prompt="Duplicate the selected part.",
+                               surface_context=SurfaceRef(route_id="bluecad", candidate_id="candidate-1",
+                                                         bluecad_part_ids=["part-1"])),
+    ).interaction
+    assert interaction.surface_summary == brief.summary
+    assert interaction.surface_digest == brief.digest
+    assert interaction.actions == []
+    assert interaction.technical_details is None
+    with open_sqlite_connection() as connection:
+        row = connection.execute("SELECT brief_json FROM ai_thread_surface_context WHERE interaction_id = ?",
+                                 (interaction.id,)).fetchone()
+    assert json.loads(row["brief_json"])["surface"] == "bluecad"
 
 
 def test_schema_initialization_is_idempotent_and_thread_bounds_are_enforced() -> None:
@@ -400,7 +431,7 @@ def test_schema_initialization_is_idempotent_and_thread_bounds_are_enforced() ->
                 "SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'ai_thread%'"
             ).fetchall()
         }
-    assert names == {"ai_threads", "ai_thread_interactions"}
+    assert names == {"ai_threads", "ai_thread_interactions", "ai_thread_surface_context"}
 
     create_thread(AIThreadCreate(workspace_id=workspace_id, title="x" * 120))
     with pytest.raises(ValidationError):
@@ -579,6 +610,7 @@ def test_thread_schema_rollback_does_not_delete_canonical_flow_or_job() -> None:
         job_count_before = connection.execute(
             "SELECT COUNT(*) AS n FROM ai_jobs WHERE flow_id = ?", (interaction.flow_id,)
         ).fetchone()["n"]
+        connection.execute("DROP TABLE ai_thread_surface_context")
         connection.execute("DROP TABLE ai_thread_interactions")
         connection.execute("DROP TABLE ai_threads")
         flow_count_after = connection.execute(
@@ -719,7 +751,8 @@ def test_no_context_legacy_path_does_not_build_context(
         thread_id=thread.id,
         payload=AIThreadSubmit(request_id="legacy-no-context", prompt="legacy"),
     ).interaction
-    assert captured["context_blocks"][0]["source"] == "jarvis:system-envelope"
+    assert [block["source"] for block in captured["context_blocks"]] == [
+        "jarvis:surface-brief", "jarvis:system-envelope"]
     assert interaction.user_text == "legacy"
     assert interaction.assistant_text == "legacy"
 

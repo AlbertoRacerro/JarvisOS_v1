@@ -42,6 +42,16 @@ AI_THREAD_SCHEMA_STATEMENTS = [
         UNIQUE(flow_id)
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS ai_thread_surface_context (
+        interaction_id TEXT PRIMARY KEY,
+        summary TEXT NOT NULL,
+        digest TEXT NOT NULL,
+        brief_json TEXT NOT NULL,
+        technical_details TEXT,
+        FOREIGN KEY (interaction_id) REFERENCES ai_thread_interactions(id)
+    )
+    """,
 ]
 
 AI_THREAD_SCHEMA_INDEX_STATEMENTS = [
