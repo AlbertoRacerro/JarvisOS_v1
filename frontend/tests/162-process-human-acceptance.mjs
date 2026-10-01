@@ -43,5 +43,6 @@ assert.match(editor, /visibleFindings\(draft\.findings\)/);
 assert.match(editorCss, /--color-status-warning-bg/);
 assert.match(editorCss, /--color-status-warning-text/);
 assert.match(editorCss, /--color-status-danger-bg/);
+assert.match(editorCss, /\.draft-findings li button:not\(\.nav-button\):not\(\.bluecad-candidate\)/);
 
 console.log("162 process human acceptance source contract: PASS");

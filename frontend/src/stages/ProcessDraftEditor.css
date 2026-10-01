@@ -225,7 +225,8 @@
   display: grid;
   gap: 3px;
 }
-.draft-findings li button {
+.draft-findings li button:not(.nav-button):not(.bluecad-candidate),
+.draft-findings li button:not(.nav-button):not(.bluecad-candidate):hover:not(:disabled) {
   width: 100%;
   min-height: 0;
   padding: 4px 6px;
