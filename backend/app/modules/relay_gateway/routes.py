@@ -1,11 +1,11 @@
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
 
 from app.modules.relay_gateway.service import (
     ContextReleaseCreate,
     ContextReleaseRead,
     RelayEscalationApproval,
     RelayEscalationDraftRead,
+    RelayEscalationDraftRequest,
     RelayGatewayError,
     RelayRunRead,
     RelayRunRequest,
@@ -22,10 +22,6 @@ from app.modules.relay_gateway.service import (
 )
 
 router = APIRouter(prefix="/ai", tags=["relay-gateway"])
-
-
-class RelayEscalationDraftRequest(BaseModel):
-    text: str | None = Field(default=None, max_length=20000)
 
 
 @router.get("/relay/status", response_model=RelayStatusRead)
@@ -82,7 +78,8 @@ def draft_thread_relay_escalation(thread_id: str, interaction_id: str, workspace
     """Side-effect free: the exact text, screening result, Relay agent and model."""
     try:
         return draft_relay_escalation(workspace_id, thread_id, interaction_id,
-                                      payload.text if payload is not None else None)
+                                      payload.text if payload is not None else None,
+                                      payload.surface_context if payload is not None else None)
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except RelayGatewayError as exc:
