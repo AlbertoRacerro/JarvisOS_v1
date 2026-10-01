@@ -9,6 +9,7 @@ const shellSidecar = read("src/components/shell/ContextualSidecar.tsx");
 const layout = read("src/components/Layout.tsx");
 const api = read("src/api/threads.ts");
 const shellCss = read("src/styles/final-fusion-shell-overrides.css");
+const contextMenu = read("src/components/ui/ContextMenu.tsx");
 
 // Human model names: concise, derived from the recorded id, never invented.
 for (const [id, name] of [
@@ -37,6 +38,7 @@ assert.match(sidecar, /reason_code === "LLAMACPP_AUTH_REQUIRED"/, "a protected l
 assert.match(sidecar, /id: "show-properties", label: "Show properties"/);
 assert.doesNotMatch(sidecar, /aria-pressed=\{chrome\.propertiesOpen\}/, "Properties stays in the compact secondary controls, outside the required header row");
 assert.match(shellSidecar, /closest\('\[role="menu"\]'\)/, "Escape in a menu must not close the whole Sidecar");
+assert.match(contextMenu, /if \(!position\) return;[\s\S]*querySelector<HTMLButtonElement>\("button:not\(:disabled\)"\)[\s\S]*\}, \[position\]\)/, "menus move keyboard focus after their final position is measured");
 assert.match(shellSidecar, /Back to Jarvis/);
 
 // Relay is the default escalation; the API path stays an explicit choice; no silent fallback.

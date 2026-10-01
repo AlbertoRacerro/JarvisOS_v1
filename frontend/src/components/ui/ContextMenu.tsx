@@ -35,8 +35,12 @@ export function ContextMenu({ label, items, at, onClose }: ContextMenuProps) {
       x: Math.max(4, Math.min(at.x, window.innerWidth - width - 4)),
       y: Math.max(4, Math.min(at.y, window.innerHeight - height - 4)),
     });
-    menuRef.current.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
   }, [at]);
+
+  useLayoutEffect(() => {
+    if (!position) return;
+    menuRef.current?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
+  }, [position]);
 
   useEffect(() => {
     if (!at) return;
