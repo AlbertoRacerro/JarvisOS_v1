@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { modelDisplayName } from "../src/components/ai/modelDisplayName.ts";
+import { cloudFailureMessage, formatMoney, sortCreatedChronologically } from "../src/components/ai/sidecarPresentation.ts";
 
 const read = (path) => fs.readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 const sidecar = read("src/components/ai/useJarvisSidecar.tsx");
@@ -24,6 +25,20 @@ for (const [id, name] of [
 ]) assert.equal(modelDisplayName(id), name, id);
 assert.equal(modelDisplayName(null, "codex"), "Codex");
 assert.equal(modelDisplayName(null), "Unknown model");
+
+// API cost metadata uses the record's USD/EUR currencies and human-readable precision.
+assert.equal(formatMoney("0.00065225160000000001", "USD"), "less than $0.01");
+assert.equal(formatMoney("0E+4", "EUR"), "€0.00");
+assert.equal(formatMoney("1.234567", "USD"), "$1.235");
+assert.equal(formatMoney(null, "USD"), "unknown");
+assert.equal(cloudFailureMessage("provider_gate_blocked"), "Not sent — paid cloud AI is off or over budget. Nothing left your computer.");
+assert.doesNotMatch(cloudFailureMessage("provider_gate_blocked"), /provider_gate_blocked/);
+
+const createdOrder = sortCreatedChronologically([
+  { id: "api", kind: "cloud", created_at: "2026-10-01T10:02:00Z" },
+  { id: "relay", kind: "relay", created_at: "2026-10-01T10:01:00Z" }
+]);
+assert.deepEqual(createdOrder.map(({ kind }) => kind), ["relay", "cloud"]);
 
 // Chat-first hierarchy: no duplicate headings or legacy form labels.
 assert.doesNotMatch(shellSidecar, /Jarvis &amp; Properties|role="tablist"/);
@@ -50,6 +65,13 @@ assert.match(sidecar, /subscription, no API charge/);
 assert.match(api, /relay-escalation-draft/);
 assert.match(api, /relay-escalate/);
 assert.match(sidecar, /relayEscalationInFlight\.current/);
+assert.match(sidecar, /relay_gateway_disabled:[\s\S]*relay_agent_login_missing:[\s\S]*relay_run_failed:/, "Relay availability and run failures use readable messages");
+assert.match(sidecar, /cloudFailureMessage\(item\.reason_code\)/, "blocked API turns map reason codes to plain language");
+assert.match(sidecar, /item\.reason_code \? ` · \$\{item\.reason_code\}`/, "raw API failure code is kept in Info");
+assert.match(sidecar, /formatMoney\(item\.projected_cost_usd, "USD"\)[\s\S]*formatMoney\(item\.accounted_cost_eur, "EUR"\)/, "projected and actual amounts keep their source currencies");
+assert.match(sidecar, /sortCreatedChronologically\(\[[\s\S]*cloudResults[\s\S]*relayRuns[\s\S]*\]\)/, "Relay and API turns share one chronological ordering");
+assert.match(sidecar, /<textarea id="jarvis-prompt" aria-label=\{/, "composer keeps an accessible label without a visible Message label");
+assert.doesNotMatch(sidecar, /<label htmlFor="jarvis-prompt"/, "composer does not render the redundant Message label");
 
 // Closing a shell region leaves an on-screen reopen affordance.
 assert.match(layout, /shell-reopen--sidecar/);

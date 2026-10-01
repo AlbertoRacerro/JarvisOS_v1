@@ -36,6 +36,7 @@ import { SidecarChrome } from "../shell/ContextualSidecar";
 import { ContextMenu, MenuButton, useContextMenu, type ContextMenuItem } from "../ui/ContextMenu";
 import JarvisMessageText from "./JarvisMessageText";
 import { modelDisplayName } from "./modelDisplayName";
+import { cloudFailureMessage, formatMoney, sortCreatedChronologically } from "./sidecarPresentation";
 import "./JarvisSidecar.css";
 
 const DEFAULT_SELECTION: ContextSelection = {};
@@ -148,6 +149,11 @@ function relayRunTone(state: RelayRunRead["state"]): Readiness["tone"] {
 
 // Plain-language Relay outcomes; the raw code stays in the run information.
 const RELAY_FAILURES: Record<string, string> = {
+  relay_gateway_disabled: "Relay is turned off on this machine, so nothing was sent",
+  relay_agent_login_missing: "the Relay agent is not signed in on this machine",
+  relay_agent_binary_missing: "the Relay agent program is not installed on this machine",
+  relay_agent_not_allowed: "this Relay agent is not allowed on this machine",
+  relay_run_failed: "the Relay run failed",
   relay_run_timeout: "the agent took too long and was stopped",
   relay_run_interrupted: "the run was interrupted (JarvisOS restarted while it was working)",
   relay_run_launch_failed: "the agent could not be started",
@@ -736,14 +742,14 @@ export function useJarvisSidecar(
   };
 
   const renderCloudTurn = (item: CloudEscalation) => <li key={`cloud-${item.id}`} className="jarvis-turn jarvis-turn--followup">
-    <div className={`jarvis-bubble jarvis-bubble--jarvis${item.response_text ? "" : " is-working"}`}>
+    <div className={`jarvis-bubble jarvis-bubble--jarvis${item.state === "failed" ? " is-failed" : item.response_text ? "" : " is-working"}`}>
       <div className="jarvis-bubble__meta"><span className="jarvis-bubble__author">{modelDisplayName(item.model_id)}</span><span>cloud API · {item.state}</span></div>
-      {item.response_text ? <JarvisMessageText text={item.response_text} /> : <p>{item.reason_code ?? "Waiting for cloud model…"}</p>}
+      {item.response_text && item.state !== "failed" ? <JarvisMessageText text={item.response_text} /> : item.state === "failed" || item.reason_code ? <p className="jarvis-bubble__notice" role="status">{cloudFailureMessage(item.reason_code)}</p> : <p>Waiting for cloud model…</p>}
       <p className="jarvis-bubble__advisory">Advisory only · no local action was applied.</p>
       <div className="jarvis-bubble__actions">
         {item.state === "confirmation_required" ? <button type="button" disabled={cloudWorking} onClick={() => void confirmCloud(item.id)}>Approve packet</button> : null}
-        <p className="jarvis-bubble__metadata">{modelDisplayName(item.model_id)} · API · maximum ${item.projected_cost_usd} · actual €{item.accounted_cost_eur}</p>
-        <details className="jarvis-bubble__details"><summary aria-label="Show cloud provenance"><Info size={13} aria-hidden="true" /> Info</summary><p>{item.provider_id}/{item.model_id} · {item.task_family} · tier {item.quality_tier}</p><p>Tokens: {item.actual_input_tokens ?? "unknown"} in · {item.actual_output_tokens ?? "unknown"} out · derivative {item.derivative_digest} · packet {item.egress_packet_digest ?? "none"}</p></details>
+        <p className="jarvis-bubble__metadata">{modelDisplayName(item.model_id)} · API · maximum {formatMoney(item.projected_cost_usd, "USD")} · actual {formatMoney(item.accounted_cost_eur, "EUR")}</p>
+        <details className="jarvis-bubble__details"><summary aria-label="Show cloud provenance"><Info size={13} aria-hidden="true" /> Info</summary><p>{item.provider_id}/{item.model_id} · {item.task_family} · tier {item.quality_tier}</p><p>State: {item.state}{item.reason_code ? ` · ${item.reason_code}` : ""}</p><p>Tokens: {item.actual_input_tokens ?? "unknown"} in · {item.actual_output_tokens ?? "unknown"} out · derivative {item.derivative_digest} · packet {item.egress_packet_digest ?? "none"}</p></details>
       </div>
     </div>
   </li>;
@@ -796,10 +802,10 @@ export function useJarvisSidecar(
     const modelName = interaction.model_id ? modelDisplayName(interaction.model_id) : null;
     const metadata = [modelName ?? "Model unknown", viaAgent ? "Jarvis agent" : null, providerKind, elapsed != null ? `${(elapsed / 1000).toFixed(1)}s` : null, interaction.cost_estimate_usd ? `$${interaction.cost_estimate_usd.toFixed(4)}` : null].filter(Boolean).join(" · ");
     const escalatable = !running && Boolean(interaction.assistant_text) && (interaction.execution_class === "local_compute" || viaAgent);
-    const followups = [
-      ...cloudResults.filter(item => item.source_interaction_id === interaction.id).map(renderCloudTurn),
-      ...relayRuns.filter(run => run.source_interaction_id === interaction.id || (!run.source_interaction_id && interaction.id === lastInteractionId)).map(renderRelayTurn)
-    ];
+    const followups = sortCreatedChronologically([
+      ...cloudResults.filter(item => item.source_interaction_id === interaction.id),
+      ...relayRuns.filter(run => run.source_interaction_id === interaction.id || (!run.source_interaction_id && interaction.id === lastInteractionId))
+    ]).map(item => "response_text" in item ? renderCloudTurn(item) : renderRelayTurn(item));
     return [
       <li key={`${interaction.id}-user`} className="jarvis-turn jarvis-turn--user">
         <div className="jarvis-bubble jarvis-bubble--user"><p>{interaction.user_text}</p></div>
@@ -879,9 +885,8 @@ export function useJarvisSidecar(
         <p className="jarvis-sidecar__hint">Task for {modelDisplayName(null, relayAgent)} via Relay · {accessModeLabel(relayStatus.access_mode)} access at level {relayStatus.repository_level}. {relayStatus.blocked_reason ?? "Only submit a task that contains no strategic or domain IP."}</p>
         <label className="jarvis-sidecar__toggle"><input type="checkbox" checked={relayAttested} disabled={relayWorking} onChange={event => setRelayAttested(event.target.checked)} />This task contains no strategic/domain IP (cloud-safe)</label>
       </div> : null}
-      <label htmlFor="jarvis-prompt" className="visually-hidden">{composerTarget === "relay" ? "Task for the Relay agent" : "Message"}</label>
       <div className="jarvis-sidecar__input">
-        <textarea id="jarvis-prompt" value={prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} maxLength={12000} rows={Math.min(8, Math.max(2, prompt.split("\n").length))} disabled={!workspaceId} placeholder={composerTarget === "relay" ? "Task for the Relay agent…" : "Ask Jarvis…"} />
+        <textarea id="jarvis-prompt" aria-label={composerTarget === "relay" ? "Task for the Relay agent" : "Message"} value={prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} maxLength={12000} rows={Math.min(8, Math.max(2, prompt.split("\n").length))} disabled={!workspaceId} placeholder={composerTarget === "relay" ? "Task for the Relay agent…" : "Ask Jarvis…"} />
         <button type="submit" disabled={!workspaceId || !prompt.trim() || loadingThreads || (composerTarget === "jarvis" ? (!activeRoute || !activeRouteAvailable || submitting || !contextReady) : (!relayAgent || !relayAttested || relayWorking || Boolean(relayStatus?.blocked_reason)))} className="jarvis-send" aria-label={composerTarget === "relay" ? "Send to Relay agent" : composerLabel} title={composerTarget === "relay" ? "Send to Relay agent" : composerLabel}>{submitting || relayWorking ? <span className="jarvis-working__dots" aria-hidden="true"><i /><i /><i /></span> : <ArrowUp size={16} weight="bold" aria-hidden="true" />}</button>
       </div>
       <div className="jarvis-sidecar__composer-bar">

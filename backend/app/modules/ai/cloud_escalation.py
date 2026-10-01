@@ -79,6 +79,7 @@ class CloudEscalationRead(BaseModel):
     egress_packet_digest: str | None
     reason_code: str | None
     response_text: str | None
+    created_at: str
 
 
 def create_cloud_escalation(*, workspace_id: str, thread_id: str, payload: CloudEscalationRequest) -> CloudEscalationRead:
@@ -301,7 +302,7 @@ def _read(row: sqlite3.Row) -> CloudEscalationRead:
         eur_usd_rate=row["eur_usd_rate"], fx_source=row["fx_source"],
         flow_id=row["flow_id"], ai_job_id=row["ai_job_id"], ticket_id=row["ticket_id"],
         egress_packet_digest=row["egress_packet_digest"], reason_code=row["reason_code"],
-        response_text=row["response_text"],
+        response_text=row["response_text"], created_at=row["created_at"],
     )
 
 

@@ -97,6 +97,7 @@ export type CloudEscalation = {
   egress_packet_digest: string | null;
   reason_code: string | null;
   response_text: string | null;
+  created_at: string;
 };
 
 export type CloudDerivative = {
