@@ -190,7 +190,8 @@ def test_edits_are_instant_revisions_without_dwsim(api: Any, monkeypatch: pytest
     first = state["revision"]
     _built(client, base, state)
     assert state["revision"] != first and state["seq"] == 2
-    assert [item["code"] for item in state["findings"]] == []
+    assert [(item["code"], item["severity"]) for item in state["findings"]] == [
+        ("OPTIONAL_PORT_UNCONNECTED", "warning")]
     feed = next(item for item in state["objects"] if item["tag"] == "Feed")
     assert feed["spec"]["temperature"] == {"si": 298.15, "value": 25, "unit": "degC"}
     assert feed["spec"]["pressure"]["si"] == 500000.0 and feed["spec"]["mass_flow"]["si"] == 1.0
@@ -287,7 +288,10 @@ def test_run_binds_revision_goes_stale_and_refuses_mismatch(api: Any, monkeypatc
     assert "dwsim_solve_run" not in refused["run"].get("calls", []) and refused["run"].get("streams") is None
     assert refused["draft"]["results"]["state"] == "current"
 
+    # Spec 162: a move is layout-only and keeps results current; a process edit makes them stale.
     _patch(client, base, state, {"op": "move", "id": "h1", "x": 150, "y": 120})
+    assert state["results"]["state"] == "current"
+    _patch(client, base, state, {"op": "set_unit_params", "unit": "h1", "values": {"outlet_temperature": Q(90, "degC")}})
     assert state["results"]["state"] == "stale" and state["results"]["edits_since"] == 1
     assert state["results"]["draft_revision"] == solved
 

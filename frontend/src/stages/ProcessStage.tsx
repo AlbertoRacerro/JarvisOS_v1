@@ -174,7 +174,7 @@ function ProcessStage(props: PrimaryStageProps) {
             BLUECAD
           </button>
         </nav>
-        {tabs}
+        <details className="process-advanced"><summary>Advanced · Native DWSIM cases</summary>{tabs}</details>
       </header>
       {workspaceId ? <ProcessDraftEditor workspaceId={workspaceId} /> : <p>Select a workspace to edit its process draft.</p>}
     </section>

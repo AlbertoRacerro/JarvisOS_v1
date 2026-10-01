@@ -14,7 +14,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-COMPILER_VERSION = "158.1"
+COMPILER_VERSION = "162.1"
 MAX_OBJECTS = 60
 ID_PATTERN = r"^[a-z][a-z0-9_-]{0,39}$"
 TAG_PATTERN = r"^[A-Za-z][A-Za-z0-9_-]{0,31}$"
@@ -45,7 +45,7 @@ QUANTITY_UNITS: dict[str, tuple[str, tuple[str, ...]]] = {
     "volume": ("m3", ("m3",)),
     "area": ("m2", ("m2",)),
     "heat_transfer_coefficient": ("W/[m2.K]", ("W/[m2.K]",)),
-    "molar_flow": ("mol/s", ("mol/s",)),
+    "molar_flow": ("mol/s", ("mol/s", "kmol/h")),
     "specific_heat": ("J/kg.K", ("J/kg.K",)),
     "volume_flow": ("m3/s", ("m3/s",)),
 }
@@ -214,12 +214,21 @@ UNSUPPORTED_TYPES: dict[str, str] = {
     "Reactor": "Only the kinetically defined PFR subset is supported.",
 }
 
-# Feed-stream specification keys: SI storage and DWSIM MCP argument names.
+# Feed-stream specification keys: SI storage and DWSIM MCP argument / read-back names.
 STREAM_SPECS: dict[str, tuple[QuantityKind, str, str]] = {
     "temperature": ("temperature", "temperature_K", "Temperature"),
     "pressure": ("pressure", "pressure_Pa", "Pressure"),
     "mass_flow": ("mass_flow", "mass_flow_kg_s", "Mass flow"),
+    "molar_flow": ("molar_flow", "molar_flow_mol_s", "Molar flow"),
+    "vapor_fraction": ("flow_ratio", "vapor_fraction", "Vapor fraction"),
 }
+# Mutually exclusive feed alternatives proven on the pinned DWSIM 10.2.9 MCP (spec 162 probe,
+# evidence/162/feed_specs.json): a feed needs pressure plus exactly one key of each group.
+FEED_ALTERNATIVES: dict[str, tuple[str, ...]] = {
+    "flow": ("mass_flow", "molar_flow"),
+    "state": ("temperature", "vapor_fraction"),
+}
+COMPOSITION_BASES: tuple[str, ...] = ("mass", "mole")
 
 
 class DraftQuantity(BaseModel):
@@ -291,6 +300,15 @@ class RoutePoint(BaseModel):
     y: int = Field(ge=-5000, le=5000)
 
 
+class SetOrientation(_Op):
+    """Layout-only mirroring of a unit's port sides; never changes process meaning."""
+
+    op: Literal["set_orientation"]
+    id: str = Field(pattern=ID_PATTERN)
+    flip_x: bool | None = None
+    flip_y: bool | None = None
+
+
 class SetRoute(_Op):
     op: Literal["set_route"]
     stream: str = Field(pattern=ID_PATTERN)
@@ -303,15 +321,19 @@ class SetStreamSpec(_Op):
     temperature: DraftQuantity | None = None
     pressure: DraftQuantity | None = None
     mass_flow: DraftQuantity | None = None
+    molar_flow: DraftQuantity | None = None
+    vapor_fraction: DraftQuantity | None = None
     duty: DraftQuantity | None = None
     composition: dict[str, float] | None = None
-    clear: list[Literal["temperature", "pressure", "mass_flow", "composition", "duty"]] = Field(default_factory=list)
+    composition_basis: Literal["mass", "mole"] | None = None
+    clear: list[Literal["temperature", "pressure", "mass_flow", "molar_flow", "vapor_fraction", "composition",
+                        "duty"]] = Field(default_factory=list)
 
     @field_validator("composition")
     @classmethod
     def _fractions(cls, value: dict[str, float] | None) -> dict[str, float] | None:
         if value is not None and any(not 0.0 <= item <= 1.0 for item in value.values()):
-            raise ValueError("composition mass fractions must be between 0 and 1")
+            raise ValueError("composition fractions must be between 0 and 1")
         return value
 
 
@@ -369,7 +391,7 @@ class SetThermo(_Op):
 
 
 DraftOp = Annotated[
-    AddUnit | AddStream | Delete | Move | Rename | Connect | Disconnect | SetRoute | SetStreamSpec | SetUnitParams | SetReactions | SetThermo,
+    AddUnit | AddStream | Delete | Move | Rename | Connect | Disconnect | SetRoute | SetOrientation | SetStreamSpec | SetUnitParams | SetReactions | SetThermo,
     Field(discriminator="op"),
 ]
 

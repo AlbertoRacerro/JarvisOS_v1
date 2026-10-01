@@ -27,6 +27,7 @@ from app.modules.process_stack._common import EvaluationRefusal, magnitude
 from app.modules.process_stack.draft_models import (
     COMPILER_VERSION,
     COMPOUNDS,
+    FEED_ALTERNATIVES,
     MAX_OBJECTS,
     PROPERTY_PACKAGES,
     QUANTITY_UNITS,
@@ -43,6 +44,7 @@ from app.modules.process_stack.draft_models import (
     ParamSpec,
     ProposalRequest,
     Rename,
+    SetOrientation,
     SetReactions,
     SetRoute,
     SetStreamSpec,
@@ -266,32 +268,63 @@ def apply_op(document: dict[str, Any], op: Any) -> None:
         ):
             raise DraftError("route_invalid", "Route points must form nonzero axis-parallel segments", field="points")
         stream["route"] = points
+    elif isinstance(op, SetOrientation):
+        unit = _object(document, op.id, "unit")
+        for key in ("flip_x", "flip_y"):
+            value = getattr(op, key)
+            if value is True:
+                unit[key] = True
+            elif value is False:
+                unit.pop(key, None)
     elif isinstance(op, SetStreamSpec):
         stream = _object(document, op.stream, "stream")
+        material_input = any(getattr(op, key) is not None for key in STREAM_SPECS) or (
+            op.composition is not None or op.composition_basis is not None)
         if stream["type"] == "EnergyStream":
-            if any((op.temperature, op.pressure, op.mass_flow, op.composition is not None)):
+            if material_input:
                 raise DraftError("spec_on_energy_stream", "Energy streams accept only duty", field="spec")
             if "duty" in op.clear:
                 stream["spec"].pop("duty", None)
             if op.duty is not None:
                 stream["spec"]["duty"] = _si(op.duty, "power", "Energy flow")
             return
-        if stream.get("source") is not None and (
-            op.temperature or op.pressure or op.mass_flow or op.composition is not None
-        ):
+        if stream.get("source") is not None and material_input:
             raise DraftError("spec_on_product", f"{stream['tag']} is computed by its upstream unit; only feed "
                              "streams (no source) take specifications", field="spec")
         for cleared in op.clear:
             stream["spec"].pop(cleared, None)
         if op.duty is not None:
             raise DraftError("spec_unsupported", "Material streams do not accept a duty", field="duty")
+        for keys in FEED_ALTERNATIVES.values():
+            if sum(getattr(op, key) is not None for key in keys) > 1:
+                labels = " and ".join(STREAM_SPECS[key][2].lower() for key in keys)
+                raise DraftError("spec_alternatives_conflict", f"Specify {labels} as alternatives, not both",
+                                 field=keys[0])
         for spec_key, (kind, _arg, label) in STREAM_SPECS.items():
             value = getattr(op, spec_key)
-            if value is not None:
-                converted = _si(value, kind, label)
-                if converted["si"] <= 0:
-                    raise DraftError("quantity_invalid", f"{label} must be positive", field=spec_key)
-                stream["spec"][spec_key] = converted
+            if value is None:
+                continue
+            converted = _si(value, kind, label)
+            if spec_key == "vapor_fraction":
+                if not 0.0 <= converted["si"] <= 1.0:
+                    raise DraftError("quantity_out_of_range", "Vapor fraction must be between 0 and 1", field=spec_key)
+            elif spec_key in FEED_ALTERNATIVES["flow"]:
+                if converted["si"] < 0:
+                    raise DraftError("quantity_invalid", f"{label} cannot be negative", field=spec_key)
+            elif converted["si"] <= 0:
+                raise DraftError("quantity_invalid", f"{label} must be positive", field=spec_key)
+            stream["spec"][spec_key] = converted
+            # Choosing one alternative replaces the other: DWSIM holds exactly one basis per group.
+            for keys in FEED_ALTERNATIVES.values():
+                if spec_key in keys:
+                    for other in keys:
+                        if other != spec_key:
+                            stream["spec"].pop(other, None)
+        if op.composition_basis is not None:
+            if op.composition_basis == "mole":
+                stream["spec"]["composition_basis"] = "mole"
+            else:
+                stream["spec"].pop("composition_basis", None)
         if op.composition is not None:
             unknown = sorted(set(op.composition) - set(document["compounds"]))
             if unknown:
@@ -408,6 +441,10 @@ def validate_document(document: dict[str, Any]) -> list[dict[str, Any]]:
             add("blocker", "UNIT_INLET_MISSING",
                 f"{spec.label} needs {spec.required_inlets} connected inlet(s); {len(inlets)} connected.", unit["tag"],
                 "inlets")
+        for port, name in enumerate(spec.inlets):
+            if port >= spec.required_inlets and not _occupant(document, unit["id"], "target", port):
+                add("warning", "OPTIONAL_PORT_UNCONNECTED", f"Optional {name} inlet is not connected.",
+                    unit["tag"], f"inlets[{port}]")
         for param in spec.params_for(unit["mode"]):
             if param.key not in unit["params"]:
                 add("blocker", "UNIT_PARAM_MISSING", f"Set {param.label}.", unit["tag"], param.key)
@@ -421,15 +458,28 @@ def validate_document(document: dict[str, Any]) -> list[dict[str, Any]]:
                                     for port in range(len(spec.energy_inlets))):
             add("blocker", "UNIT_ENERGY_INLET_MISSING", f"Connect an energy stream to {spec.label}.", unit["tag"],
                 "energy_inlets")
+        elif not needs_energy:
+            for port, name in enumerate(spec.energy_inlets):
+                if not _occupant(document, unit["id"], "target", port, energy=True):
+                    add("warning", "OPTIONAL_PORT_UNCONNECTED", f"Optional {name} energy inlet is not connected.",
+                        unit["tag"], f"energy_inlets[{port}]")
         if unit["type"] == "DistillationColumn" and not any(
             _occupant(document, unit["id"], "source", port, energy=True) for port in range(len(spec.energy_outlets))
         ):
             add("blocker", "UNIT_ENERGY_OUTLET_MISSING", "Connect the condenser duty energy stream.", unit["tag"],
                 "energy_outlets")
+        elif unit["type"] != "DistillationColumn":
+            for port, name in enumerate(spec.energy_outlets):
+                if not _occupant(document, unit["id"], "source", port, energy=True):
+                    add("warning", "OPTIONAL_PORT_UNCONNECTED", f"Optional {name} energy outlet is not connected.",
+                        unit["tag"], f"energy_outlets[{port}]")
         outlet_count = sum(bool(_occupant(document, unit["id"], "source", port))
                            for port in range(len(spec.outlets)))
         for port, name in enumerate(spec.outlets):
             if unit["type"] == "Splitter" and port == 2:
+                if not _occupant(document, unit["id"], "source", port):
+                    add("warning", "OPTIONAL_PORT_UNCONNECTED", f"Optional {name} outlet is not connected.",
+                        unit["tag"], name)
                 continue
             if not _occupant(document, unit["id"], "source", port):
                 add("blocker", "UNIT_OUTLET_MISSING", f"Connect a stream to the {name} outlet.", unit["tag"], name)
@@ -453,16 +503,20 @@ def validate_document(document: dict[str, Any]) -> list[dict[str, Any]]:
                     add("blocker", "ENERGY_DUTY_MODE_MISMATCH", "A specified energy duty requires a connected unit in EnergyStream mode.", stream["tag"], "duty")
             continue
         if stream["source"] is None:
-            for key, (_kind, _arg, label) in STREAM_SPECS.items():
-                if key not in stream["spec"]:
-                    add("blocker", "FEED_SPEC_MISSING", f"Feed needs {label.lower()}.", stream["tag"], key)
+            if "pressure" not in stream["spec"]:
+                add("blocker", "FEED_SPEC_MISSING", "Feed needs pressure.", stream["tag"], "pressure")
+            for keys in FEED_ALTERNATIVES.values():
+                if not any(key in stream["spec"] for key in keys):
+                    labels = " or ".join(STREAM_SPECS[key][2].lower() for key in keys)
+                    add("blocker", "FEED_SPEC_MISSING", f"Feed needs {labels}.", stream["tag"], keys[0])
             composition = stream["spec"].get("composition")
+            basis = "Mole" if stream["spec"].get("composition_basis") == "mole" else "Mass"
             if not composition:
                 add("blocker", "FEED_COMPOSITION_MISSING", "Feed needs a composition.", stream["tag"], "composition")
             else:
                 total = sum(composition.values())
                 if abs(total - 1.0) > _COMPOSITION_TOL:
-                    add("blocker", "COMPOSITION_SUM", f"Mass fractions sum to {total:.6g}, not 1.", stream["tag"],
+                    add("blocker", "COMPOSITION_SUM", f"{basis} fractions sum to {total:.6g}, not 1.", stream["tag"],
                         "composition")
                 undeclared = sorted(set(composition) - set(document["compounds"]))
                 if undeclared:
@@ -497,7 +551,120 @@ def validate_document(document: dict[str, Any]) -> list[dict[str, Any]]:
 
     for unit_id in graph:
         visit(unit_id)
+    _advice(document, add, _cycle_members(graph))
     return findings
+
+
+def _cycle_members(graph: dict[str, list[str]]) -> set[str]:
+    """Units that lie on at least one directed loop of the material graph."""
+    members: set[str] = set()
+    for start in graph:
+        stack, seen = list(graph.get(start, [])), set()
+        while stack:
+            node = stack.pop()
+            if node == start:
+                members.add(start)
+                break
+            if node not in seen:
+                seen.add(node)
+                stack.extend(graph.get(node, []))
+    return members
+
+
+def _si_of(item: dict[str, Any], key: str, section: str = "params") -> float | None:
+    value = (item.get(section) or {}).get(key)
+    return float(value["si"]) if isinstance(value, dict) and "si" in value else None
+
+
+def _advice(document: dict[str, Any], add: Any, in_loop: set[str]) -> None:
+    """Non-blocking warnings: DWSIM can run the draft, but the result may mean little.
+
+    Simple deterministic sanity checks on declared inputs only; DWSIM stays the simulator.
+    """
+    objects = document["objects"]
+    streams = [item for item in objects.values() if item["kind"] == "stream" and item["type"] != "EnergyStream"]
+    feeds = [item for item in streams if item["source"] is None and item["target"] is not None]
+    for stream in sorted(feeds, key=lambda item: item["tag"]):
+        for key in FEED_ALTERNATIVES["flow"]:
+            if _si_of(stream, key, "spec") == 0.0:
+                add("warning", "FEED_FLOW_ZERO", "Feed flow is zero: DWSIM can solve it, but every downstream "
+                    "stream and duty will be empty.", stream["tag"], key)
+    used = {name for stream in feeds for name, value in (stream["spec"].get("composition") or {}).items() if value > 0}
+    used |= {name for reaction in document.get("reactions", {}).values() for name in reaction["stoichiometry"]}
+    if any(stream["spec"].get("composition") for stream in feeds):
+        for name in document["compounds"]:
+            if name not in used:
+                add("warning", "COMPOUND_UNUSED", f"{name} is declared in Thermo but no feed or reaction contains it.",
+                    "", "compounds")
+
+    def inlet_feed(unit: dict[str, Any]) -> dict[str, Any] | None:
+        stream = _occupant(document, unit["id"], "target", 0)
+        return stream if stream is not None and stream["source"] is None else None
+
+    for unit in sorted((item for item in objects.values() if item["kind"] == "unit"), key=lambda item: item["tag"]):
+        spec, mode, tag = _unit_spec(unit), unit["mode"], unit["tag"]
+        feed = inlet_feed(unit)
+        no_effect = None
+        if unit["type"] in {"Heater", "Cooler"}:
+            if mode in {"heat_added", "heat_removed", "heat_added_removed"} and _si_of(unit, "heat_duty") == 0.0:
+                no_effect = "heat duty is zero"
+            elif mode == "temperature_change" and _si_of(unit, "temperature_change") == 0.0:
+                no_effect = "temperature change is zero"
+            elif mode == "outlet_temperature" and feed is not None and (
+                _si_of(unit, "outlet_temperature") is not None
+                and _si_of(unit, "outlet_temperature") == _si_of(feed, "temperature", "spec")
+            ):
+                no_effect = "outlet temperature equals the feed temperature"
+        elif unit["type"] == "Pump":
+            if mode == "pressure_increase" and _si_of(unit, "pressure_increase") == 0.0:
+                no_effect = "pressure increase is zero"
+            elif mode == "outlet_pressure" and feed is not None and _si_of(unit, "outlet_pressure") is not None and (
+                _si_of(feed, "pressure", "spec") is not None
+                and _si_of(unit, "outlet_pressure") <= _si_of(feed, "pressure", "spec")  # type: ignore[operator]
+            ):
+                add("warning", "PUMP_OUTLET_NOT_ABOVE_INLET", "Pump outlet pressure is not above the feed pressure.",
+                    tag, "outlet_pressure")
+        elif unit["type"] == "Valve":
+            if mode == "pressure_drop" and _si_of(unit, "pressure_drop") == 0.0:
+                no_effect = "pressure drop is zero"
+            elif mode == "outlet_pressure" and feed is not None and _si_of(unit, "outlet_pressure") is not None and (
+                _si_of(feed, "pressure", "spec") is not None
+                and _si_of(unit, "outlet_pressure") >= _si_of(feed, "pressure", "spec")  # type: ignore[operator]
+            ):
+                add("warning", "VALVE_OUTLET_NOT_BELOW_INLET", "Valve outlet pressure is not below the feed pressure.",
+                    tag, "outlet_pressure")
+        elif unit["type"] == "HeatExchanger":
+            if _si_of(unit, "area") == 0.0 or _si_of(unit, "overall_coefficient") == 0.0:
+                no_effect = "area or overall heat transfer coefficient is zero"
+        elif unit["type"] == "PFR":
+            if _si_of(unit, "volume") == 0.0 or _si_of(unit, "length") == 0.0:
+                add("warning", "REACTOR_VOLUME_ZERO", "Reactor volume or length is zero: nothing can react.", tag,
+                    "volume")
+        elif unit["type"] == "DistillationColumn":
+            stages, feed_stage = _si_of(unit, "number_of_stages"), _si_of(unit, "feed_stage")
+            if stages is not None and feed_stage is not None and not 0 < feed_stage < stages - 1:
+                add("warning", "COLUMN_FEED_STAGE_EDGE", "The feed stage is the condenser, the reboiler or beyond "
+                    "the column; feed an intermediate stage.", tag, "feed_stage")
+            top, bottom = _si_of(unit, "top_pressure"), _si_of(unit, "bottom_pressure")
+            if top is not None and bottom is not None and bottom < top:
+                add("warning", "COLUMN_PRESSURE_INVERTED", "Bottom pressure is below top pressure.", tag,
+                    "bottom_pressure")
+            if _si_of(unit, "condenser_spec") == 0.0:
+                add("warning", "COLUMN_ZERO_REFLUX", "Reflux ratio is zero: the column cannot separate.", tag,
+                    "condenser_spec")
+            if _si_of(unit, "reboiler_spec") == 0.0:
+                add("warning", "COLUMN_ZERO_BOTTOMS", "Bottoms molar flow is zero.", tag, "reboiler_spec")
+        elif unit["type"] == "Recycle" and unit["id"] not in in_loop:
+            add("warning", "RECYCLE_NOT_IN_LOOP", "This Recycle block is not on a process loop, so it tears nothing.",
+                tag, "connections")
+        if no_effect:
+            add("warning", "UNIT_NO_EFFECT", f"{spec.label}: {no_effect}, so it does nothing.", tag, mode or "")
+        uses_energy = (unit["type"] == "DistillationColumn" or unit["type"] == "PFR" and mode == "heat_exchange"
+                       or unit["type"] in {"Heater", "Cooler"} and mode == "energy_stream")
+        if not uses_energy and any(_occupant(document, unit["id"], "target", port, energy=True)
+                                   for port in range(len(spec.energy_inlets))):
+            add("warning", "ENERGY_STREAM_IGNORED", f"The connected energy stream is ignored in {spec.label} mode "
+                f"{mode!r}.", tag, "energy_inlets")
 
 
 # ---------------------------------------------------------------- revisions
@@ -624,9 +791,21 @@ def results_state(head: dict[str, Any], runs: list[dict[str, Any]], document: di
     seq = int(solved["draft_revision"].split(":", 1)[0])
     current = solved["draft_revision"] == head["revision"]
     if not current and document is not None:
-        from app.modules.process_stack.draft_compiler import expected, fingerprint
-        current = fingerprint(expected(document), dwsim_version=solved["dwsim_version"],
-                             mcp_sha256=solved["mcp_sha256"]) == solved["materialization_fingerprint"]
+        from app.modules.process_stack.draft_compiler import expected, fingerprint, process_view
+        if solved.get("process_fingerprint"):
+            # Layout (positions, orientation, routes) never decides staleness; process meaning does.
+            try:
+                process = process_view(expected(document))
+            except (DraftError, KeyError, TypeError, ValueError):
+                # Incomplete newly-added equipment is a normal editable draft state after a run.
+                # It cannot be materialized yet, so prior results are stale rather than a 500 projection.
+                current = False
+            else:
+                current = fingerprint(process, dwsim_version=solved["dwsim_version"],
+                                      mcp_sha256=solved["mcp_sha256"]) == solved["process_fingerprint"]
+        else:  # runs recorded before spec 162 carry only the full materialization fingerprint
+            current = fingerprint(expected(document), dwsim_version=solved["dwsim_version"],
+                                  mcp_sha256=solved["mcp_sha256"]) == solved["materialization_fingerprint"]
     return {"state": "current" if current else "stale", "run_id": solved["run_id"],
             "draft_revision": solved["draft_revision"],
             "edits_since": 0 if current else edits_since if edits_since is not None else head["seq"] - seq,
@@ -637,6 +816,62 @@ def _attempt(run: dict[str, Any] | None) -> dict[str, Any] | None:
     if run is None:
         return None
     return {key: run.get(key) for key in ("run_id", "action", "status", "draft_revision", "started_at")}
+
+
+LAYOUT_OPS = frozenset({"move", "set_route", "set_orientation"})
+_PATH_TEXT = re.compile(r"(?<![\w.])(?:[A-Za-z]:\\|/)[^\s'\"]*[/\\][^\s'\"]*")
+
+
+def plain_text(value: Any, limit: int = 300) -> str:
+    """Bounded, path-free plain text of a DWSIM/runtime message for the UI and the agent view."""
+    text = value if isinstance(value, str) else json.dumps(value, sort_keys=True, default=str)
+    text = " ".join(_PATH_TEXT.sub("<path>", text).split())
+    return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
+def dwsim_feedback(run: dict[str, Any] | None) -> dict[str, Any] | None:
+    """What DWSIM itself said on the last attempt: check findings, solver errors, failed objects."""
+    if run is None:
+        return None
+    detail = run.get("error_detail") or {}
+    solve = run.get("solve") or {}
+    return {
+        "run_id": run.get("run_id"), "action": run.get("action"), "status": run.get("status"),
+        "draft_revision": run.get("draft_revision"),
+        "check_findings": [{key: item.get(key) for key in ("severity", "code", "object", "message", "fix")}
+                           for item in (run.get("dwsim_check") or {}).get("findings", [])][:20],
+        "solve_errors": list(dict.fromkeys(plain_text(item) for item in solve.get("errors", [])))[:20],
+        "failed_objects": list({(item.get("tag"), plain_text(item.get("error") or "not calculated")):
+                                 {"tag": item.get("tag"),
+                                  "error": plain_text(item.get("error") or "not calculated")}
+                                 for item in solve.get("failed_objects", [])}.values())[:20],
+        "error": plain_text(run["error"]) if run.get("error") else None,
+        "error_step": detail.get("step"),
+        "dwsim_message": plain_text(detail["dwsim_message"]) if detail.get("dwsim_message") else None,
+        "materialization_diffs": len(run.get("materialization_diffs") or []),
+    }
+
+
+def result_findings(document: dict[str, Any], solved: dict[str, Any] | None,
+                    last: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """Post-run advice from DWSIM's own results: degenerate products and failed objects."""
+    findings: list[dict[str, Any]] = []
+    tags = {item["tag"]: item for item in document["objects"].values()}
+    if solved is not None:
+        for tag, result in sorted((solved.get("streams") or {}).items()):
+            item = tags.get(tag)
+            flow = result.get("mass_flow_kg_s")
+            if item is not None and item.get("source") is not None and isinstance(flow, (int, float)) and abs(flow) < 1e-12:
+                findings.append({"severity": "warning", "code": "PRODUCT_FLOW_ZERO", "object": tag, "field": "mass_flow",
+                                 "message": f"DWSIM computed zero flow for this product (run on revision "
+                                            f"{solved['draft_revision'].split(':', 1)[0]}).", "source": "dwsim_result"})
+    if last is not None and last.get("status") == "failed":
+        for item in (last.get("solve") or {}).get("failed_objects", [])[:20]:
+            findings.append({"severity": "warning", "code": "DWSIM_OBJECT_FAILED", "object": item.get("tag") or "",
+                             "field": "", "message": f"DWSIM did not calculate it: "
+                                                    f"{plain_text(item.get('error') or 'no error text')}",
+                             "source": "dwsim_result"})
+    return findings
 
 
 # ---------------------------------------------------------------- projection
@@ -686,7 +921,7 @@ def projection(workspace_id: str, draft_id: str) -> dict[str, Any]:
         edits_since = 0
         for seq in range(solved_seq + 1, head["seq"] + 1):
             revision = _read_json(directory / "revisions" / f"{seq}.json", "revision_not_found", "Draft revision was not found")
-            edits_since += sum(1 for op in revision.get("ops", []) if op.get("op") != "set_route")
+            edits_since += sum(1 for op in revision.get("ops", []) if op.get("op") not in LAYOUT_OPS)
     return {
         "workspace_id": workspace_id,
         "draft_id": draft_id,
@@ -697,8 +932,9 @@ def projection(workspace_id: str, draft_id: str) -> dict[str, Any]:
         "property_package": document["property_package"],
         "objects": _display(document),
         "reactions": copy.deepcopy(document.get("reactions", {})),
-        "findings": validate_document(document),
+        "findings": validate_document(document) + result_findings(document, solved, runs[0] if runs else None),
         "results": results_state(head, runs, document, edits_since),
+        "dwsim": dwsim_feedback(runs[0] if runs else None),
         "proposals": [proposal for proposal in list_proposals(workspace_id, draft_id) if proposal["state"] == "pending"
                       or proposal["state"] == "stale"],
     }
@@ -882,23 +1118,76 @@ def agent_view(workspace_id: str, draft_id: str | None) -> dict[str, Any]:
         if item["kind"] == "stream":
             row["from"] = _endpoint_tag(view, item["source"])
             row["to"] = _endpoint_tag(view, item["target"])
-            row["spec"] = {key: ({"value": value["value"], "unit": value["unit"]} if key != "composition" else value)
+            row["spec"] = {key: ({"value": value["value"], "unit": value["unit"]}
+                                  if isinstance(value, dict) and {"value", "unit"} <= value.keys() else value)
                            for key, value in item["spec"].items()}
         else:
             row["mode"] = item["mode"]
             row["params"] = {key: {"value": value["value"], "unit": value["unit"]}
                              for key, value in item["params"].items()}
         objects.append(row)
+    def line(item: dict[str, Any]) -> str:
+        return f"{item['code']} {item['object'] or 'flowsheet'}: {item['message']}"
+
+    blockers = [line(item) for item in view["findings"] if item["severity"] == "blocker"]
+    findings = view["findings"]
+    # Exact duplicate findings can arrive through separate DWSIM result paths. Keep
+    # distinct messages for an object, but don't make Hermes repeat the same fact.
+    deduped_findings: list[dict[str, Any]] = []
+    seen_findings: set[tuple[Any, ...]] = set()
+    for item in findings:
+        key = (item["severity"], item["code"], item["object"], item["message"], item.get("fix"))
+        if key not in seen_findings:
+            seen_findings.add(key)
+            deduped_findings.append(item)
+
+    warning_items = [item for item in deduped_findings if item["severity"] != "blocker"]
+    no_text_failures = [item for item in warning_items
+                        if item["code"] == "DWSIM_OBJECT_FAILED"
+                        and item["message"] == "DWSIM did not calculate it: no error text"]
+    warnings = [line(item) for item in warning_items if item not in no_text_failures]
+    if no_text_failures:
+        tags = ", ".join(dict.fromkeys(item["object"] for item in no_text_failures if item["object"]))
+        warnings.append(f"DWSIM did not calculate: {tags or 'one or more objects'}")
     return {"draft_id": view["draft_id"], "revision": view["revision"], "compounds": view["compounds"],
             "property_package": view["property_package"], "objects": objects,
-            "findings": [f"{item['object']}: {item['message']}" for item in view["findings"]][:12],
+            "guidance": ("blockers stop Run; warnings mean DWSIM can run but the result may lack physical "
+                         "meaning; dwsim lists what DWSIM itself reported on the last attempt"),
+            "blockers": blockers[:20], "warnings": warnings[:20],
+            "blocker_count": len(blockers), "warning_count": len(warnings),
+            "findings": [f"{item['object']}: {item['message']}" for item in deduped_findings][:20],
+            "dwsim": view["dwsim"],
             "results": view["results"],
+            "current_results": _key_results(_solved_run(workspace_id, view), view["results"]),
             "to_change_values": (f"call jarvis_process_propose with base_revision '{view['revision']}' and changes "
                                  "[{target: <tag>, property: <name from proposable>, proposed: {value, unit}}]; "
                                  "the operator approves before anything changes"),
             "proposable": {"stream": [*STREAM_SPECS, "composition"],
                            **{spec.type: ["mode", *[param.key for param in spec.params]]
                               for spec in UNIT_REGISTRY.values() if spec.params}}}
+
+
+def _solved_run(workspace_id: str, view: dict[str, Any]) -> dict[str, Any] | None:
+    """The solved run the projection's results state refers to, if any."""
+    run_id = view["results"].get("run_id")
+    return get_run(workspace_id, view["draft_id"], run_id) if run_id else None
+
+
+def _key_results(run: dict[str, Any] | None, results: dict[str, Any]) -> dict[str, Any] | None:
+    """Bounded DWSIM result summary for Hermes, labelled with its revision and current/stale state."""
+    if run is None:
+        return None
+    streams = {tag: {key: f"{value['value']} {value['unit']}" for key, value in (result.get("display") or {}).items()}
+               | ({"vapor_fraction": round(result["vapor_fraction"], 4)}
+                  if isinstance(result.get("vapor_fraction"), (int, float)) else {})
+               for tag, result in sorted((run.get("streams") or {}).items())[:24]}
+    units = {tag: {"calculated": result.get("calculated"),
+                   **({"error": plain_text(result["error"], 160)} if result.get("error") else {})}
+             for tag, result in sorted((run.get("units") or {}).items())[:24]}
+    balance = run.get("mass_balance") or {}
+    return {"state": results["state"], "run_id": run["run_id"], "draft_revision": run["draft_revision"],
+            "streams": streams, "units": units,
+            "mass_balance_residual_kg_s": balance.get("residual_kg_s") if balance.get("status") == "calculated" else None}
 
 
 def _endpoint_tag(view: dict[str, Any], endpoint: dict[str, Any] | None) -> str | None:
@@ -943,7 +1232,8 @@ def execute(workspace_id: str, draft_id: str, revision: str, action: str) -> dic
     except draft_compiler.MaterializationError as exc:
         run.update(status=exc.code, error=str(exc), error_detail=exc.detail)
     except Exception as exc:  # noqa: BLE001 - DWSIM process failures become a recorded, truthful attempt
-        run.update(status="runtime_failed", error=type(exc).__name__)
+        run.update(status="runtime_failed", error=type(exc).__name__,
+                   error_detail={"dwsim_message": plain_text(str(exc))} if str(exc) else {})
     run["finished_at"] = _now()
     for result in (run.get("streams") or {}).values():
         result["display"] = _stream_display(result)
@@ -957,10 +1247,15 @@ def _stream_display(result: dict[str, Any]) -> dict[str, Any]:
     display: dict[str, Any] = {}
     for key, si_key, kind, unit in (("temperature", "temperature_K", "temperature", "degC"),
                                     ("pressure", "pressure_Pa", "pressure", "bar"),
-                                    ("mass_flow", "mass_flow_kg_s", "mass_flow", "kg/h")):
+                                    ("mass_flow", "mass_flow_kg_s", "mass_flow", "kg/h"),
+                                    ("molar_flow", "molar_flow_mol_s", "molar_flow", "kmol/h")):
         value = result.get(si_key)
         if isinstance(value, (int, float)) and math.isfinite(value):
             display[key] = {"value": float(f"{convert_si(float(value), kind, unit):.6g}"), "unit": unit}
+    # Volumetric flow is shown exactly as DWSIM reported it (value and unit), never derived here.
+    volumetric = next((row for row in result.get("properties") or [] if row.get("name") == "Volumetric Flow"), None)
+    if volumetric and isinstance(volumetric.get("value"), (int, float)) and math.isfinite(volumetric["value"]):
+        display["volumetric_flow"] = {"value": float(f"{float(volumetric['value']):.6g}"), "unit": volumetric["unit"]}
     return display
 
 

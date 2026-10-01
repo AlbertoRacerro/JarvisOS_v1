@@ -65,6 +65,62 @@ def _composition(document: dict[str, Any], stream: dict[str, Any]) -> dict[str, 
     return {name: float(given.get(name, 0.0)) for name in document["compounds"]}
 
 
+def _mole_basis(stream: dict[str, Any]) -> bool:
+    return stream["spec"].get("composition_basis") == "mole"
+
+
+def _feed_expected(document: dict[str, Any], stream: dict[str, Any]) -> dict[str, Any]:
+    """Normalized feed as DWSIM must hold it: the chosen alternative of each group, never both.
+
+    Pressure plus temperature or vapor fraction, mass or molar flow, mass or mole fractions. A
+    vapor-fraction feed also expects DWSIM's ``Pressure_and_VaporFraction`` stream spec and a
+    molar-flow feed the ``Mole`` defined flow, both read back from the saved native case.
+    """
+    spec = stream["spec"]
+    feed: dict[str, Any] = {}
+    for key, (_kind, arg, _label) in STREAM_SPECS.items():
+        if key in spec:
+            feed[arg] = float(spec[key]["si"])
+    if "vapor_fraction" in spec:
+        feed["spec_type"] = "Pressure_and_VaporFraction"
+    if "molar_flow" in spec:
+        feed["defined_flow"] = "Mole"
+    feed["mole_composition" if _mole_basis(stream) else "composition"] = _composition(document, stream)
+    return feed
+
+
+def _feed_calls(document: dict[str, Any], stream: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
+    """MCP calls that materialize one feed, in the order the spec 162 probe proved on DWSIM 10.2.9.
+
+    ``dwsim_stream_add_material`` ignores its flow and vapor-fraction arguments, so flows go through
+    ``dwsim_stream_set_conditions`` (a zero flow through the stream's ``PROP_MS_2``/``PROP_MS_3``,
+    which set_conditions skips), mole fractions through ``PROP_MS_102/<compound>``, and a vapor
+    fraction through ``SpecType`` + ``PROP_MS_27`` after the flow (set_conditions resets it).
+    """
+    spec, tag = stream["spec"], stream["tag"]
+    add: dict[str, Any] = {"name": tag, "pressure_Pa": float(spec["pressure"]["si"])}
+    if "temperature" in spec:
+        add["temperature_K"] = float(spec["temperature"]["si"])
+    composition = _composition(document, stream)
+    if not _mole_basis(stream):
+        add["composition"] = composition
+    calls: list[tuple[str, dict[str, Any]]] = [("dwsim_stream_add_material", add)]
+    if _mole_basis(stream):
+        calls.append(("dwsim_unitop_set", {"name": tag, "properties": {
+            f"PROP_MS_102/{name}": value for name, value in composition.items()}}))
+    flow_key = "molar_flow" if "molar_flow" in spec else "mass_flow"
+    flow = float(spec[flow_key]["si"])
+    if flow == 0.0:
+        calls.append(("dwsim_unitop_set", {"name": tag, "properties": {
+            "PROP_MS_3" if flow_key == "molar_flow" else "PROP_MS_2": 0.0}}))
+    else:
+        calls.append(("dwsim_stream_set_conditions", {"name": tag, STREAM_SPECS[flow_key][1]: flow}))
+    if "vapor_fraction" in spec:
+        calls.append(("dwsim_unitop_set", {"name": tag, "properties": {
+            "SpecType": "Pressure_and_VaporFraction", "PROP_MS_27": float(spec["vapor_fraction"]["si"])}}))
+    return calls
+
+
 def _unit_properties(unit: dict[str, Any]) -> dict[str, Any]:
     spec = UNIT_REGISTRY[unit["type"]]
     if not spec.modes:
@@ -290,13 +346,8 @@ def expected(document: dict[str, Any]) -> dict[str, Any]:
         "objects": {item["tag"]: {"type": item["type"], "x": item["x"], "y": item["y"]}
                     for item in document["objects"].values()},
         "connections": sorted(connections),
-        "feeds": {
-            stream["tag"]: {
-                **{arg: float(stream["spec"][key]["si"]) for key, (_kind, arg, _label) in STREAM_SPECS.items()},
-                "composition": _composition(document, stream),
-            }
-            for stream in _material_streams(document) if stream["source"] is None
-        },
+        "feeds": {stream["tag"]: _feed_expected(document, stream)
+                  for stream in _material_streams(document) if stream["source"] is None},
         "energy_streams": {stream["tag"]: ({"EnergyFlow": float(stream["spec"]["duty"]["si"])}
                                            if "duty" in stream["spec"] else {})
                            for stream in _energy_streams(document)},
@@ -327,12 +378,10 @@ def plan(document: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
         args: dict[str, Any] = {"name": stream["tag"]}
         if stream["type"] == "EnergyStream":
             calls.append(("dwsim_stream_add_energy", args))
-            continue
-        if stream["source"] is None:
-            for key, (_kind, arg, _label) in STREAM_SPECS.items():
-                args[arg] = float(stream["spec"][key]["si"])
-            args["composition"] = _composition(document, stream)
-        calls.append(("dwsim_stream_add_material", args))
+        elif stream["source"] is None:
+            calls.extend(_feed_calls(document, stream))
+        else:
+            calls.append(("dwsim_stream_add_material", args))
     for unit in _units(document):
         calls.append(("dwsim_unitop_add", {"type": UNIT_REGISTRY[unit["type"]].dwsim_type, "name": unit["tag"]}))
     for item in sorted(document["objects"].values(), key=lambda value: value["tag"]):
@@ -440,17 +489,24 @@ def read_back(client: DwsimMcpClient, flow: str, case_path: Path, exp: dict[str,
     package = None if package_node is None else (package_node.findtext("ComponentName") or package_node.findtext("Tag"))
     compounds = sorted(name.text for name in root.findall("./Compounds/Compound/Name") if name.text)
     feeds: dict[str, Any] = {}
-    for tag in exp["feeds"]:
+    native_by_tag = {tag: native_id for native_id, tag in tags.items()}
+    for tag, wanted in exp["feeds"].items():
         if tag not in objects:
             continue
         result = client.call("dwsim_stream_get_results", {"flowsheet_id": flow, "name": tag}, 30)
-        mixture: dict[str, Any] = next(
-            (phase for phase in result.get("phases", []) if phase.get("name") == "Mixture"), {})
-        feeds[tag] = {
-            **{arg: result.get(arg) for _key, (_kind, arg, _label) in STREAM_SPECS.items()},
-            "composition": {name: value.get("mass_fraction")
-                            for name, value in sorted((mixture.get("compounds") or {}).items())},
+        phases = {phase.get("name"): phase for phase in result.get("phases", []) if isinstance(phase, dict)}
+        mixture = sorted((phases.get("Mixture", {}).get("compounds") or {}).items())
+        sim_node = sim_nodes.get(native_by_tag[tag])
+        held: dict[str, Any] = {
+            **{arg: result.get(arg) for _key, (_kind, arg, _label) in STREAM_SPECS.items() if arg != "vapor_fraction"},
+            "vapor_fraction": phases.get("Vapor", {}).get("fraction"),
+            "spec_type": sim_node.findtext("SpecType") if sim_node is not None else None,
+            "defined_flow": sim_node.findtext("DefinedFlow") if sim_node is not None else None,
+            "composition": {name: value.get("mass_fraction") for name, value in mixture},
+            "mole_composition": {name: value.get("mole_fraction") for name, value in mixture},
         }
+        # Only the chosen alternatives are compared; the others are DWSIM-calculated, not inputs.
+        feeds[tag] = {key: held[key] for key in wanted}
     units: dict[str, Any] = {}
     for native_id, tag in tags.items():
         if objects[tag]["type"] in UNIT_REGISTRY:
@@ -569,6 +625,13 @@ def _stable(value: Any) -> Any:
     return value
 
 
+def process_view(normalized: dict[str, Any]) -> dict[str, Any]:
+    """The materialization without layout: object positions never change process meaning."""
+    view = copy.deepcopy(normalized)
+    view["objects"] = {tag: {"type": item["type"]} for tag, item in normalized["objects"].items()}
+    return view
+
+
 def fingerprint(normalized: dict[str, Any], *, dwsim_version: str, mcp_sha256: str) -> str:
     payload = {"compiler_version": COMPILER_VERSION, "dwsim_version": dwsim_version, "mcp_sha256": mcp_sha256,
                "materialization": _stable(normalized)}
@@ -662,11 +725,17 @@ def materialize(document: dict[str, Any], *, action: str, client: DwsimMcpClient
             actual = read_back(client, flow, case, exp)
         except DwsimMcpError as exc:
             raise MaterializationError("materialization_failed", f"DWSIM refused {step}",
-                                       step=step, dwsim_code=getattr(exc, "code", None)) from exc
+                                       step=step, dwsim_code=getattr(exc, "code", None),
+                                       dwsim_message=str(exc)[:600]) from exc
         diffs = compare(exp, actual)
         outcome.update(materialization_fingerprint=fingerprint(actual, dwsim_version=dwsim_version,
                                                                 mcp_sha256=mcp_sha256),
                        materialization_diffs=diffs, materialized_object_count=len(actual["objects"]))
+        if not diffs:
+            # The read-back equals ``exp`` field by field, so the layout-free fingerprint of ``exp`` is
+            # the verified process meaning that later layout-only revisions are compared against.
+            outcome["process_fingerprint"] = fingerprint(process_view(exp), dwsim_version=dwsim_version,
+                                                         mcp_sha256=mcp_sha256)
         if diffs:
             outcome.update(status="materialization_mismatch", compile_seconds=round(time.perf_counter() - started, 3))
             return outcome
