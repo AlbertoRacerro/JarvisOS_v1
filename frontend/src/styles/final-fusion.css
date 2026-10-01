@@ -41,11 +41,11 @@
   display: grid;
   gap: 10px;
 }
-.final-fusion__workbench--memory { grid-template-columns: 255px minmax(0, 1fr) 315px; }
-.final-fusion__workbench--models { grid-template-columns: 230px minmax(0, 1fr) 310px; }
+.final-fusion__workbench--memory { grid-template-columns: 255px minmax(0, 1fr) var(--jarvis-width, 315px); }
+.final-fusion__workbench--models { grid-template-columns: 230px minmax(0, 1fr) var(--jarvis-width, 310px); }
 .final-fusion__workbench--development,
-.final-fusion__workbench--coding { grid-template-columns: minmax(0, 1fr) 350px; }
-.final-fusion__workbench--brainstorm { grid-template-columns: minmax(0, 1fr) 360px; }
+.final-fusion__workbench--coding { grid-template-columns: minmax(0, 1fr) var(--jarvis-width, 350px); }
+.final-fusion__workbench--brainstorm { grid-template-columns: minmax(0, 1fr) var(--jarvis-width, 360px); }
 
 .final-fusion__panel {
   min-width: 0;

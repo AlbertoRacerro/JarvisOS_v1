@@ -117,7 +117,7 @@ includesAll(layout, [
 ], "canonical final routes must use rail-only shared shell and persistent BLUECAD navigator");
 check(main.includes('final-fusion-shell-overrides.css'), "final shared-shell canonical overlay is not loaded");
 includesAll(shellOverlay, [
-  "grid-template-columns: 170px minmax(0, 1fr)",
+  "grid-template-columns: var(--shell-rail-width) minmax(0, 1fr)", "--jarvis-width: clamp(300px, 24vw, 420px)",
   ".application-shell--final .shell-topbar",
   "display: none",
   'font-family: "Inter Display", "Inter"',
@@ -158,10 +158,10 @@ check(!/fetch\(|axios|localStorage|sessionStorage/i.test(fusion), "truthless fus
 check(!/healthy|working tree clean|remote current|PASS|Aligned|cd951bae|86cdedde/i.test(fusion), "canonical HTML fixture success/identity leaked into production staged surfaces");
 
 includesAll(fusionCss, [
-  "final-fusion__workbench--memory", "grid-template-columns: 255px minmax(0, 1fr) 315px",
-  "final-fusion__workbench--models", "grid-template-columns: 230px minmax(0, 1fr) 310px",
-  "final-fusion__workbench--development", "grid-template-columns: minmax(0, 1fr) 350px",
-  "final-fusion__workbench--brainstorm", "grid-template-columns: minmax(0, 1fr) 360px",
+  "final-fusion__workbench--memory", "grid-template-columns: 255px minmax(0, 1fr) var(--jarvis-width, 315px)",
+  "final-fusion__workbench--models", "grid-template-columns: 230px minmax(0, 1fr) var(--jarvis-width, 310px)",
+  "final-fusion__workbench--development", "grid-template-columns: minmax(0, 1fr) var(--jarvis-width, 350px)",
+  "final-fusion__workbench--brainstorm", "grid-template-columns: minmax(0, 1fr) var(--jarvis-width, 360px)",
   "final-fusion__preview-skeleton", "grid-template-columns: minmax(0,1fr) 218px",
   "final-fusion__execution-grid", "final-fusion__week-head", "final-fusion__repo-inspector-body", "final-fusion__compare"
 ], "canonical reference panel geometry missing");

@@ -266,7 +266,7 @@
 }
 .application-shell--final .shell-navigator { width: 240px; }
 .application-shell--final .shell-sidecar {
-  width: 300px;
+  width: var(--jarvis-width, 300px);
   height: calc(100vh - 28px);
   max-height: calc(100vh - 28px);
 }
@@ -290,30 +290,21 @@
   font-size: 7px;
   white-space: nowrap;
 }
-.application-shell--final .shell-sidecar__workbench {
-  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 0;
-}
-.application-shell--final .shell-sidecar__pane {
-  padding: 9px 3px;
-  font-size: 8px;
-}
-.application-shell--final .shell-sidecar__pane--jarvis {
-  padding-top: 2px;
-  padding-block-end: 10px;
-}
+.application-shell--final .shell-sidecar__view { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.application-shell--final .shell-sidecar__view[hidden] { display: none; }
+.application-shell--final .shell-sidecar__properties { flex: 1 1 auto; min-height: 0; overflow: auto; font-size: 12px; }
 .application-shell--final .shell-properties__header h3 {
   margin: 2px 0 6px;
   font-size: 11px;
   font-weight: 500;
 }
 .application-shell--final .shell-properties__header .eyebrow,
-.application-shell--final .shell-sidecar .eyebrow { font-size: 6.5px; }
-.application-shell--final .shell-sidecar .ui-inline-notice,
-.application-shell--final .shell-sidecar p,
-.application-shell--final .shell-sidecar summary,
-.application-shell--final .shell-sidecar dt,
-.application-shell--final .shell-sidecar dd {
+.application-shell--final .shell-sidecar__properties .eyebrow { font-size: 10px; }
+.application-shell--final .shell-sidecar__properties .ui-inline-notice,
+.application-shell--final .shell-sidecar__properties p,
+.application-shell--final .shell-sidecar__properties summary,
+.application-shell--final .shell-sidecar__properties dt,
+.application-shell--final .shell-sidecar__properties dd {
   font-size: 7.5px;
   line-height: 1.35;
 }
@@ -373,6 +364,6 @@
 
 @media (max-width: 980px) {
   .process-stage__workbench { grid-template-columns: 180px minmax(0,1fr); }
-  .application-shell--final .shell-navigator,
-  .application-shell--final .shell-sidecar { width: 190px; }
+  .application-shell--final .shell-navigator { width: 190px; }
+  .application-shell--final .shell-sidecar { width: 280px; }
 }

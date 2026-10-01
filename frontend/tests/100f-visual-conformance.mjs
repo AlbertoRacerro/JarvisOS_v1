@@ -63,7 +63,7 @@ includesAll(designCss, [
   ".application-shell--final .shell-navigator",
   ".application-shell--final .shell-sidecar",
   "width: 240px",
-  "width: 300px",
+  "width: var(--jarvis-width, 300px)",
   ".bluecad-final-stage__toolbar button",
   "background: transparent !important"
 ], "Canonical Process/BLUECAD workstation composition missing");

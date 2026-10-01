@@ -310,6 +310,8 @@ export type RelayRunState = "queued" | "running" | "completed" | "failed" | "den
 export type RelayRunRead = {
   id: string;
   thread_id: string;
+  source_interaction_id: string | null;
+  model: string | null;
   relay_workspace_id: string | null;
   agent: string;
   state: RelayRunState;
@@ -351,5 +353,32 @@ export function submitRelayRun(
 ): Promise<RelayRunRead> {
   return requestJson(`/ai/threads/${encodeURIComponent(threadId)}/relay-runs?workspace_id=${encodeURIComponent(workspaceId)}`, {
     method: "POST", body: JSON.stringify(request)
+  });
+}
+
+// Spec 161: Relay is the default, subscription-backed escalation of a finished turn.
+// The server screens the source text, names the agent/model, and binds approval to the
+// exact text digest; a Relay failure never falls back to a metered provider.
+export type RelayEscalationDraft = {
+  status: "ready" | "edit_required" | "refused" | "unavailable";
+  reason_code: string | null;
+  reason: string | null;
+  source_interaction_id: string;
+  text: string;
+  text_digest: string | null;
+  agent: string | null;
+  model: string | null;
+  billing: "subscription";
+};
+
+export function draftRelayEscalation(workspaceId: string, threadId: string, interactionId: string, text?: string): Promise<RelayEscalationDraft> {
+  return requestJson(`/ai/threads/${encodeURIComponent(threadId)}/interactions/${encodeURIComponent(interactionId)}/relay-escalation-draft?workspace_id=${encodeURIComponent(workspaceId)}`, {
+    method: "POST", body: JSON.stringify({ text: text ?? null })
+  });
+}
+
+export function escalateWithRelay(workspaceId: string, threadId: string, interactionId: string, text: string, textDigest: string): Promise<RelayRunRead> {
+  return requestJson(`/ai/threads/${encodeURIComponent(threadId)}/interactions/${encodeURIComponent(interactionId)}/relay-escalate?workspace_id=${encodeURIComponent(workspaceId)}`, {
+    method: "POST", body: JSON.stringify({ text, text_digest: textDigest })
   });
 }
