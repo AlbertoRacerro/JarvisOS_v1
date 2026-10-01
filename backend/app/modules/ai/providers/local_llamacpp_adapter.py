@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
 from typing import Any
 from urllib.parse import urlparse
@@ -76,15 +77,33 @@ class LocalLlamaCppAdapter:
             "max_tokens": request.max_output_tokens or 2048,
             "stream": False,
         }
+        schema_enabled = os.getenv("JARVIS_LLAMA_JSON_SCHEMA", "true").lower() not in {"0", "false", "no", "off"}
+        if request.structured_output_schema is not None and schema_enabled:
+            payload["response_format"] = {"type": "json_schema", "json_schema": {
+                "name": "jarvis_agent_response", "strict": True,
+                "schema": request.structured_output_schema,
+            }}
         config = llama_cpp_runtime_config()
         if config.thinking in {"on", "off"}:
             payload["chat_template_kwargs"] = {"enable_thinking": config.thinking == "on"}
         client = self._client_factory()
+        schema_fallback = False
         try:
-            response = client.post(f"{base_url}/chat/completions", json=payload,
-                                    headers=get_llama_cpp_runtime_owner().auth_headers(),
-                                    timeout=llama_cpp_runtime_config().request_timeout_s)
-            response.raise_for_status()
+            request_url = f"{base_url}/chat/completions"
+            headers = get_llama_cpp_runtime_owner().auth_headers()
+            timeout = llama_cpp_runtime_config().request_timeout_s
+            response = client.post(request_url, json=payload, headers=headers, timeout=timeout)
+            try:
+                response.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                if not _is_schema_rejection(exc):
+                    raise
+                logger.warning("llama-server rejected JSON schema; retrying once without response_format")
+                retry_payload = dict(payload)
+                retry_payload.pop("response_format", None)
+                response = client.post(request_url, json=retry_payload, headers=headers, timeout=timeout)
+                response.raise_for_status()
+                schema_fallback = True
             body_raw = response.json()
             if not isinstance(body_raw, dict):
                 raise ValueError("llama-server response must be an object")
@@ -150,7 +169,8 @@ class LocalLlamaCppAdapter:
             finish_reason=finish, safety_status="allowed",
             raw_provider_metadata={"reasoning_char_count": len(reasoning or think),
                                    "reasoning_tokens": reasoning_tokens,
-                                   "timings": timings},
+                                   "timings": timings,
+                                   "json_schema_fallback": schema_fallback},
             error=AIProviderError(code=AIProviderErrorCode.provider_response_invalid,
                                   message="llama-server reported an inference error.", retryable=False)
             if finish == "error" else None,
@@ -162,3 +182,14 @@ class LocalLlamaCppAdapter:
 
 def _positive_int(value: object) -> int:
     return value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else 0
+
+
+def _is_schema_rejection(exc: httpx.HTTPStatusError) -> bool:
+    response = exc.response
+    if response.status_code not in {400, 500}:
+        return False
+    try:
+        body = response.text.lower()
+    except Exception:
+        return False
+    return "response_format" in body or "grammar" in body or "schema" in body

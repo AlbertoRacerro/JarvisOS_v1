@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from app.modules.ai.jarvis_context_models import JarvisContextRequest
 from app.modules.ai.models import ContextPackSelectionRequest
+from app.modules.workspace_actions.models import ActionOutcome, SurfaceRef
 
 PersistenceState = Literal["reserved", "dispatching", "captured", "capture_failed"]
 
@@ -48,6 +49,7 @@ class AIThreadSubmit(BaseModel):
     expected_jarvis_context_digest: str | None = Field(
         default=None, pattern=r"^sha256:[0-9a-f]{64}$"
     )
+    surface_context: SurfaceRef | None = None
 
     @model_validator(mode="after")
     def validate_context_binding(self) -> "AIThreadSubmit":
@@ -99,6 +101,10 @@ class AIThreadInteractionRead(BaseModel):
     elapsed_ms: int | None = None
     # Concise status of a running turn, derived from recorded tool events.
     activity: str | None = None
+    surface_summary: str | None = None
+    surface_digest: str | None = None
+    actions: list[ActionOutcome] = Field(default_factory=list)
+    technical_details: str | None = None
     created_at: str
     updated_at: str
 
