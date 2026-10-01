@@ -41,6 +41,7 @@ from app.modules.bluecad.ledger import (
     mark_candidate_valid,
     park_candidate,
     register_artifact,
+    register_export_artifacts,
     start_attempt,
     update_candidate_artifacts,
 )
@@ -1025,6 +1026,7 @@ def _build_and_register(
             role="bluecad_glb",
             source_ref=source_ref,
         )
+        register_export_artifacts(workspace_id, out_dir, source_ref=source_ref)
     return {
         "result": result,
         "report": result.report,

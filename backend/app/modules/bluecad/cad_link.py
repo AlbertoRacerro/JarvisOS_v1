@@ -24,6 +24,7 @@ from app.modules.bluecad.ledger import (
     mark_candidate_valid,
     park_candidate,
     register_artifact,
+    register_export_artifacts,
     update_candidate_artifacts,
 )
 from app.modules.bluecad.loop import _run_simulation_stage
@@ -256,6 +257,9 @@ def execute_cad_link_047(workspace_id: str, payload: CadLinkExecuteRequest) -> C
                 role="bluecad_glb",
                 source_ref=source_ref,
                 producer_notes=ARTIFACT_PRODUCER,
+            )
+            register_export_artifacts(
+                workspace_id, out_dir, source_ref=source_ref, producer_notes=ARTIFACT_PRODUCER
             )
 
         verdict = "pass" if result.report.get("verdict") == "pass" else "fail"

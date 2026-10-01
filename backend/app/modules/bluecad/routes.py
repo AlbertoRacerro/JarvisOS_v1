@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import sqlite3
 from pathlib import Path
 
@@ -25,20 +26,24 @@ from app.modules.bluecad.cad_link_topology import (
 )
 from app.modules.bluecad.cad_link_topology_execute import execute_cad_link_072
 from app.modules.bluecad.ledger import archive_candidate, get_candidate, list_candidates, mark_promoted
-from app.modules.bluecad.loop import create_bluecad_candidate
+from app.modules.bluecad.loop import _external_blocked_reason, create_bluecad_candidate
 from app.modules.bluecad.models import BluecadCandidateCreate, BluecadCandidateRead
 from app.modules.bluecad.read_model import BluecadCandidateAggregateRead, get_bluecad_candidate_aggregate
+from app.modules.bluecad.template import BluecadTemplateCreate, TemplateError, create_template_candidate
 from app.modules.modeling.models import DecisionCreate
 from app.modules.modeling.service import create_decision
 
 router = APIRouter(prefix="/workspaces/{workspace_id}/bluecad", tags=["bluecad"])
 
+_EXPORT_MEDIA_TYPES = {"bluecad_stl": ("model/stl", ".stl"), "bluecad_step": ("model/step", ".step")}
+_CANDIDATE_SOURCE_REF = re.compile(r"^bluecad_candidate:([0-9a-f-]{36}):attempt:(\d+)$")
 
-def _bluecad_artifact_path(workspace_id: str, artifact_id: str) -> tuple[Path, str]:
+
+def _bluecad_artifact_path(workspace_id: str, artifact_id: str) -> tuple[Path, str, str]:
     with open_sqlite_connection() as connection:
         row = connection.execute(
             """
-            SELECT stored_path, artifact_type, mime_type
+            SELECT stored_path, artifact_type, mime_type, source_ref
             FROM artifacts
             WHERE id = ? AND workspace_id = ?
             """,
@@ -62,9 +67,15 @@ def _bluecad_artifact_path(workspace_id: str, artifact_id: str) -> tuple[Path, s
         raise HTTPException(status_code=404, detail={"error": "BLUECAD artifact not found."})
 
     media_type = str(row["mime_type"] or "application/octet-stream")
+    download_name = stored_path.name
     if artifact_type == "bluecad_glb":
         media_type = "model/gltf-binary"
-    return stored_path, media_type
+    elif artifact_type in _EXPORT_MEDIA_TYPES:
+        media_type, suffix = _EXPORT_MEDIA_TYPES[artifact_type]
+        match = _CANDIDATE_SOURCE_REF.match(str(row["source_ref"] or ""))
+        if match:
+            download_name = f"bluecad-{match.group(1)[:8]}-attempt{match.group(2)}{suffix}"
+    return stored_path, media_type, download_name
 
 
 def _cad_link_error(exc: CadLinkError) -> HTTPException:
@@ -88,6 +99,25 @@ def create_candidate_endpoint(workspace_id: str, payload: BluecadCandidateCreate
         return create_bluecad_candidate(workspace_id, payload)
     except (ValueError, sqlite3.IntegrityError) as exc:
         raise _domain_error(exc) from exc
+
+
+@router.post("/candidates/from-template", response_model=BluecadCandidateRead, status_code=201)
+def create_template_candidate_endpoint(workspace_id: str, payload: BluecadTemplateCreate) -> BluecadCandidateRead:
+    try:
+        return create_template_candidate(workspace_id, payload)
+    except TemplateError as exc:
+        raise HTTPException(status_code=exc.status_code, detail={"code": exc.code, "message": exc.message}) from exc
+
+
+@router.get("/generation-availability")
+def generation_availability_endpoint(workspace_id: str) -> dict[str, object]:
+    """Report whether the AI loop's first external tier may run; makes no AI call."""
+    blocked_reason = _external_blocked_reason()
+    return {
+        "route_class": "external:cheap",
+        "external_calls_allowed": blocked_reason is None,
+        "blocking_reason": blocked_reason,
+    }
 
 
 @router.post("/cad-link/047/preview")
@@ -192,5 +222,5 @@ def archive_candidate_endpoint(workspace_id: str, candidate_id: str) -> BluecadC
 
 @router.get("/artifacts/{artifact_id}/content")
 def get_bluecad_artifact_content(workspace_id: str, artifact_id: str) -> FileResponse:
-    stored_path, media_type = _bluecad_artifact_path(workspace_id, artifact_id)
-    return FileResponse(stored_path, media_type=media_type, filename=stored_path.name)
+    stored_path, media_type, download_name = _bluecad_artifact_path(workspace_id, artifact_id)
+    return FileResponse(stored_path, media_type=media_type, filename=download_name)

@@ -95,6 +95,7 @@ class BluecadSemanticSourceRead(BaseModel):
 class BluecadCandidateAggregateRead(BaseModel):
     candidate: BluecadCandidateRead
     artifacts: list[BluecadArtifactRefRead] = Field(default_factory=list)
+    exports: list[BluecadArtifactRefRead] = Field(default_factory=list)
     evidence: list[BluecadEvidenceRefRead] = Field(default_factory=list)
     runs: list[BluecadRunRefRead] = Field(default_factory=list)
     semantic_source: BluecadSemanticSourceRead | None = None
@@ -161,6 +162,7 @@ def _aggregate_from_connection(
     artifact_roles = _collect_artifact_roles(candidate)
     artifact_ids = set(artifact_roles)
     artifacts = _load_artifacts(connection, workspace_id, artifact_roles, diagnostics)
+    exports = _load_exports(connection, workspace_id, candidate, diagnostics)
     evidence_records = select_candidate_evidence_records(
         connection,
         workspace_id=workspace_id,
@@ -193,6 +195,7 @@ def _aggregate_from_connection(
     return BluecadCandidateAggregateRead(
         candidate=candidate,
         artifacts=artifacts,
+        exports=exports,
         evidence=evidence,
         runs=runs,
         semantic_source=semantic_source,
@@ -451,6 +454,37 @@ def _artifact_content_is_accessible(stored_path_value: object) -> bool:
     except (OSError, RuntimeError, ValueError):
         return False
     return stored_path.exists() and stored_path.is_file()
+
+
+_EXPORT_ROLES = {"bluecad_stl": "export.stl", "bluecad_step": "export.step"}
+
+
+def _load_exports(
+    connection: sqlite3.Connection,
+    workspace_id: str,
+    candidate: BluecadCandidateRead,
+    diagnostics: list[BluecadReadDiagnostic],
+) -> list[BluecadArtifactRefRead]:
+    """Return STL/STEP exports built in the same attempt as the candidate's current GLB."""
+    if not candidate.glb_artifact_id:
+        return []
+    glb = connection.execute(
+        "SELECT source_ref FROM artifacts WHERE id = ? AND workspace_id = ? AND artifact_type = 'bluecad_glb'",
+        (candidate.glb_artifact_id, workspace_id),
+    ).fetchone()
+    source_ref = None if glb is None else glb["source_ref"]
+    if not source_ref or not str(source_ref).startswith(f"bluecad_candidate:{candidate.id}:attempt:"):
+        return []
+    rows = connection.execute(
+        """
+        SELECT id, artifact_type FROM artifacts
+        WHERE workspace_id = ? AND source_ref = ? AND artifact_type IN ('bluecad_stl', 'bluecad_step')
+        ORDER BY created_at, id
+        """,
+        (workspace_id, str(source_ref)),
+    ).fetchall()
+    roles: dict[str, set[str]] = {str(row["id"]): {_EXPORT_ROLES[str(row["artifact_type"])]} for row in rows}
+    return _load_artifacts(connection, workspace_id, roles, diagnostics)
 
 
 def _load_artifacts(
