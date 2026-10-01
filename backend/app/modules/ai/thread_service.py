@@ -511,17 +511,14 @@ def _install_surface_grants(worker: HermesSupervisor, workspace_id: str, thread_
     prefix = "process" if brief.surface == "process" else "bluecad"
     capability_ids = (f"jarvis.{prefix}_read", f"jarvis.{prefix}_act")
     grant_ids: dict[str, str] = {}
+    constraints = _surface_grant_constraints(surface_ref, brief)
     for capability in capability_ids:
         grant_id = str(uuid4())
         grant_ids[capability] = grant_id
         worker.live_grants[grant_id] = CapabilityGrantRef(
             grant_id=grant_id, capability_id=capability, issuer="jarvis_policy",
             scope=CapabilityScope(workspace_id=workspace_id, jarvis_thread_id=thread_id),
-            constraints={key: value for key, value in {
-                "surface": brief.surface, "route_id": brief.route_id,
-                "base_revision": brief.base_revision, "draft_id": brief.draft_id,
-                "candidate_id": brief.candidate_id,
-            }.items() if isinstance(value, str)},
+            constraints=constraints,
             issued_at=now, expires_at=now + timedelta(minutes=10),
         )
     read_name = f"mcp__jarvis__jarvis_{prefix}_read"
@@ -532,12 +529,51 @@ def _install_surface_grants(worker: HermesSupervisor, workspace_id: str, thread_
     lines = [f"Current surface: {brief.summary}",
              f"{read_name} grant_id={grant_ids[capability_ids[0]]};",
              f"{act_name} grant_id={grant_ids[capability_ids[1]]}.",
-             "Read context ref (data): " + json.dumps(surface_ref.model_dump(mode="json") if surface_ref else {},
-                                                       separators=(",", ":")),
+             f"Read with {read_name} using only {{\"grant_id\":\"{grant_ids[capability_ids[0]]}\"}}; "
+             "the grant already contains this turn's surface and selection.",
+             _surface_action_example(brief.surface, act_name, grant_ids[capability_ids[1]], brief.base_revision),
              f"For supported {prefix.upper()} changes call {act_name}; unsupported requests must be stated plainly. "
              + unsupported +
              "Never claim a change unless the tool returns state applied; proposed means approval is still required."]
     return "\n".join(lines)[:7000]
+
+
+def _surface_grant_constraints(surface_ref: Any, brief: Any) -> dict[str, str | int]:
+    constraints: dict[str, str | int] = {
+        "surface": brief.surface, "route_id": brief.route_id,
+        "base_revision": brief.base_revision or "",
+    }
+    for key in ("draft_id", "candidate_id"):
+        value = getattr(brief, key, None)
+        if isinstance(value, str):
+            constraints[key] = value
+    ref = surface_ref.model_dump(mode="json") if surface_ref is not None else {}
+    selections = ref.get("process_selection", [])
+    if isinstance(selections, list) and len(selections) <= 8:
+        constraints["process_selection_count"] = len(selections)
+        for index, item in enumerate(selections):
+            if isinstance(item, dict):
+                for field in ("kind", "id", "tag"):
+                    value = item.get(field)
+                    if isinstance(value, str):
+                        constraints[f"process_selection_{index}_{field}"] = value
+    part_ids = ref.get("bluecad_part_ids", [])
+    if isinstance(part_ids, list) and len(part_ids) <= 8 and all(isinstance(value, str) for value in part_ids):
+        constraints["bluecad_part_count"] = len(part_ids)
+        for index, part_id in enumerate(part_ids):
+            constraints[f"bluecad_part_{index}"] = part_id
+    return constraints
+
+
+def _surface_action_example(surface: str, tool_name: str, grant_id: str, base_revision: str | None) -> str:
+    if surface == "process":
+        action = {"op": "set_value", "target": "S1", "property": "pressure",
+                  "value": {"value": 2, "unit": "bar"}}
+    else:
+        action = {"op": "duplicate_part", "part": "tube", "placement": "beside"}
+    call = {"name": tool_name, "arguments": {
+        "grant_id": grant_id, "base_revision": base_revision or "<revision from read>", "actions": [action]}}
+    return "Example action call: " + json.dumps(call, separators=(",", ":"))
 
 
 def _turn_tools(surface: str) -> list[str]:

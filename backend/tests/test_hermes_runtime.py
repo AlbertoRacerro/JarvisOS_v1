@@ -18,7 +18,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import app.modules.agents.hermes.supervisor as hermes_supervisor_module
-from app.modules.agents.hermes.broker_mcp import _reply
+from app.modules.agents.hermes.broker_mcp import _TOOLS, _reply
 from app.modules.agents.hermes.session_pool import HermesSessionPool
 from app.modules.agents.hermes.supervisor import (
     RELAY_TOOL_PROTOCOL,
@@ -161,6 +161,10 @@ def test_mcp_protocol_discloses_only_broker_tool() -> None:
     assert listed is not None and [tool["name"] for tool in listed["result"]["tools"]] == [
         "jarvis_context_preview", "jarvis_retrieval_query", "jarvis_decide",
         "jarvis_process_read", "jarvis_process_act", "jarvis_bluecad_read", "jarvis_bluecad_act"]
+    for name in ("jarvis_process_read", "jarvis_bluecad_read"):
+        schema = next(tool["inputSchema"] for tool in _TOOLS if tool["name"] == name)
+        assert schema["required"] == ["grant_id"]
+        assert set(schema["properties"]) == {"grant_id"}
 
 
 def test_text_tool_proposal_requires_the_registered_broker() -> None:
@@ -183,16 +187,33 @@ def test_text_tool_proposal_requires_the_registered_broker() -> None:
 
 
 def test_per_turn_tool_filter_and_schema_only_admit_surface_tools() -> None:
-    general = {"function": {"name": "mcp__jarvis__jarvis_retrieval_query"}}
-    process = {"function": {"name": "mcp__jarvis__jarvis_process_act"}}
-    bluecad = {"function": {"name": "mcp__jarvis__jarvis_bluecad_act"}}
+    general = {"function": {"name": "mcp__jarvis__jarvis_retrieval_query", "parameters": {
+        "type": "object", "properties": {"grant_id": {"type": "string"}},
+        "required": ["grant_id"], "additionalProperties": False}}}
+    process = {"function": {"name": "mcp__jarvis__jarvis_process_act", "parameters": {
+        "type": "object", "properties": {"grant_id": {"type": "string"},
+        "actions": {"type": "array", "items": {"type": "object", "properties": {
+            "op": {"const": "set_value"}, "target": {"type": "string"},
+            "property": {"type": "string"}, "value": {"type": "object", "properties": {
+                "value": {"type": "number"}, "unit": {"type": "string"}},
+                "required": ["value", "unit"], "additionalProperties": False}},
+            "required": ["op", "target", "property", "value"], "additionalProperties": False}}},
+        "required": ["grant_id", "actions"], "additionalProperties": False}}}
+    bluecad = {"function": {"name": "mcp__jarvis__jarvis_bluecad_act", "parameters": {
+        "type": "object", "properties": {"grant_id": {"type": "string"}},
+        "required": ["grant_id"], "additionalProperties": False}}}
     envelope = infer_envelope(_frame() | {"tools": [general, process, bluecad],
                                           "allowed_tools": [general["function"]["name"],
                                                             process["function"]["name"]]})
     assert 'jarvis_bluecad_act' not in envelope.prompt
     assert envelope.response_schema is not None
-    enum = envelope.response_schema["oneOf"][1]["properties"]["tool_calls"]["items"]["properties"]["name"]["enum"]
-    assert enum == sorted([general["function"]["name"], process["function"]["name"]])
+    branches = envelope.response_schema["oneOf"][1]["properties"]["tool_calls"]["items"]["anyOf"]
+    assert [branch["properties"]["name"]["const"] for branch in branches] == [
+        general["function"]["name"], process["function"]["name"]]
+    process_arguments = branches[1]["properties"]["arguments"]
+    set_value = process_arguments["properties"]["actions"]["items"]["properties"]["value"]
+    assert set_value["properties"] == {"value": {"type": "number"}, "unit": {"type": "string"}}
+    assert process_arguments["additionalProperties"] is False
     with pytest.raises(ValueError):
         infer_envelope(_frame() | {"allowed_tools": ["terminal"]})
 

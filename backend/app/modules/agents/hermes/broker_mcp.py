@@ -54,8 +54,7 @@ _PROCESS_READ_TOOL = {
     "inputSchema": {
         "type": "object", "properties": {
             "grant_id": {"type": "string", "minLength": 1, "maxLength": 128},
-            "surface_ref": {"type": "object"},
-        }, "required": ["grant_id", "surface_ref"], "additionalProperties": False,
+        }, "required": ["grant_id"], "additionalProperties": False,
     },
 }
 _PROCESS_ACT_TOOL = {
@@ -97,8 +96,8 @@ _PROCESS_ACT_TOOL = {
 _BLUECAD_READ_TOOL = {
     "name": "jarvis_bluecad_read", "description": "Read the current BLUECAD candidate and selected parts.",
     "inputSchema": {"type": "object", "properties": {"grant_id": {"type": "string", "maxLength": 128},
-                     "surface_ref": {"type": "object"}},
-                     "required": ["grant_id", "surface_ref"], "additionalProperties": False},
+                     },
+                     "required": ["grant_id"], "additionalProperties": False},
 }
 _BLUECAD_ACT_TOOL = {
     "name": "jarvis_bluecad_act",

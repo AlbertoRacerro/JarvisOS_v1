@@ -3,6 +3,8 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
+import httpx
+
 from app.modules.agents.hermes.supervisor import dispatch_tool
 from app.modules.ai.agent_contracts import (
     AgentSessionRef,
@@ -63,6 +65,25 @@ def test_surface_grants_and_instructions_are_scoped_to_brief() -> None:
     assert "mcp__jarvis__jarvis_process_act" not in text
     assert "Monod" not in text
     assert all(grant.constraints["base_revision"] == "candidate-1" for grant in worker.live_grants.values())
+    read_grant = next(grant for grant in worker.live_grants.values()
+                      if grant.capability_id == "jarvis.bluecad_read")
+    assert read_grant.constraints["candidate_id"] == "candidate-1"
+    assert '"name":"mcp__jarvis__jarvis_bluecad_act"' in text
+    assert '"op":"duplicate_part","part":"tube","placement":"beside"' in text
+    assert '"surface_ref"' not in text
+
+
+def test_process_turn_instructions_show_prefixed_read_and_typed_value_example() -> None:
+    worker = SimpleNamespace(live_grants={})
+    brief = SurfaceBrief(surface="process", route_id="process", workspace_id="workspace-166",
+                         base_revision="rev-7", draft_id="draft-1", summary="Process · PFR-1",
+                         text="draft draft-1 revision rev-7 selected stream S1", digest="sha256:" + "d" * 64)
+    text = _install_surface_grants(worker, "workspace-166", "thread-166",
+                                   SurfaceRef(route_id="process", draft_id="draft-1"), brief)
+    assert 'mcp__jarvis__jarvis_process_read using only {"grant_id":"' in text
+    assert '"name":"mcp__jarvis__jarvis_process_act"' in text
+    assert '"op":"set_value","target":"S1","property":"pressure","value":{"value":2,"unit":"bar"}' in text
+    assert '"surface_ref"' not in text
 
 
 def test_guard_hides_tool_protocol_and_bounds_raw_details() -> None:
@@ -89,6 +110,7 @@ def test_dispatch_submits_typed_action_to_workspace_executor(monkeypatch) -> Non
     grant = CapabilityGrantRef(
         grant_id="process-act-grant", capability_id="jarvis.process_act", issuer="jarvis_policy",
         scope=CapabilityScope(workspace_id=SESSION.workspace_id, jarvis_thread_id=SESSION.jarvis_thread_id),
+        constraints={"surface": "process", "route_id": "process", "base_revision": "rev-1"},
         issued_at=now, expires_at=now + timedelta(minutes=2),
     )
     call = StructuredToolCall(
@@ -104,6 +126,39 @@ def test_dispatch_submits_typed_action_to_workspace_executor(monkeypatch) -> Non
     assert captured["workspace_id"] == SESSION.workspace_id
     assert captured["request"].surface == "process"
     assert captured["origin"].interaction_id == "interaction-166"
+
+
+def test_read_tool_derives_surface_ref_from_live_grant(monkeypatch) -> None:
+    from app.modules.workspace_actions import service
+
+    captured = {}
+    brief = SurfaceBrief(surface="bluecad", route_id="bluecad", workspace_id=SESSION.workspace_id,
+                         base_revision="candidate-1", candidate_id="candidate-1", summary="BLUECAD · tube",
+                         text="candidate candidate-1 selected tube", digest="sha256:" + "c" * 64)
+
+    def surface_brief(workspace_id, ref):
+        captured.update(workspace_id=workspace_id, ref=ref)
+        return brief
+
+    monkeypatch.setattr(service, "surface_brief", surface_brief)
+    now = datetime.now(UTC)
+    grant = CapabilityGrantRef(
+        grant_id="bluecad-read-grant", capability_id="jarvis.bluecad_read", issuer="jarvis_policy",
+        scope=CapabilityScope(workspace_id=SESSION.workspace_id, jarvis_thread_id=SESSION.jarvis_thread_id),
+        constraints={"surface": "bluecad", "route_id": "bluecad", "candidate_id": "candidate-1",
+                     "base_revision": "candidate-1", "bluecad_part_count": 1, "bluecad_part_0": "part-1"},
+        issued_at=now, expires_at=now + timedelta(minutes=2),
+    )
+    call = StructuredToolCall(
+        call_id="read-166", capability_id="jarvis.bluecad_read", grant_id=grant.grant_id,
+        correlation_id="read-166", session_ref=SESSION, arguments={}, requested_at=now,
+        deadline_at=now + timedelta(minutes=1),
+    )
+    result = dispatch_tool(call, live_grants={grant.grant_id: grant})
+    assert result.status == "succeeded"
+    assert captured["workspace_id"] == SESSION.workspace_id
+    assert captured["ref"] == SurfaceRef(route_id="bluecad", candidate_id="candidate-1",
+                                         bluecad_part_ids=["part-1"])
 
 
 def test_off_turn_or_wrong_capability_grants_cannot_dispatch(monkeypatch) -> None:
@@ -123,8 +178,8 @@ def test_off_turn_or_wrong_capability_grants_cannot_dispatch(monkeypatch) -> Non
     assert result.status == "refused"
 
 
-def test_llama_schema_is_explicit_opt_in_and_uses_response_format(monkeypatch) -> None:
-    captured = {}
+def test_llama_schema_defaults_on_and_switch_can_disable(monkeypatch) -> None:
+    captured = []
 
     class Response:
         is_success = True
@@ -138,7 +193,7 @@ def test_llama_schema_is_explicit_opt_in_and_uses_response_format(monkeypatch) -
 
     class Client:
         def post(self, _url, *, json, **_kwargs):
-            captured.update(json)
+            captured.append(json)
             return Response()
 
         @staticmethod
@@ -154,8 +209,73 @@ def test_llama_schema_is_explicit_opt_in_and_uses_response_format(monkeypatch) -
                         lambda: SimpleNamespace(auth_headers=lambda: {}))
     monkeypatch.delenv("JARVIS_LLAMA_JSON_SCHEMA", raising=False)
     LocalLlamaCppAdapter(client_factory=Client).complete(request)
-    assert "response_format" not in captured
-    monkeypatch.setenv("JARVIS_LLAMA_JSON_SCHEMA", "true")
-    LocalLlamaCppAdapter(client_factory=Client).complete(request)
-    assert captured["response_format"] == {"type": "json_schema", "json_schema": {
+    assert captured[-1]["response_format"] == {"type": "json_schema", "json_schema": {
         "name": "jarvis_agent_response", "strict": True, "schema": schema}}
+    monkeypatch.setenv("JARVIS_LLAMA_JSON_SCHEMA", "false")
+    LocalLlamaCppAdapter(client_factory=Client).complete(request)
+    assert "response_format" not in captured[-1]
+
+
+def test_llama_schema_rejection_retries_once_without_schema_and_records_fallback(monkeypatch, caplog) -> None:
+    requests = []
+
+    class Response:
+        def __init__(self, reject=False):
+            self.reject = reject
+
+        def raise_for_status(self):
+            if self.reject:
+                response = httpx.Response(400, text="unsupported json schema grammar",
+                                          request=httpx.Request("POST", "http://localhost"))
+                raise httpx.HTTPStatusError("bad request", request=response.request, response=response)
+
+        @staticmethod
+        def json():
+            return {"choices": [{"message": {"content": '{"answer":"ok"}'}, "finish_reason": "stop"}]}
+
+    class Client:
+        def post(self, _url, *, json, **_kwargs):
+            requests.append(dict(json))
+            return Response(reject=len(requests) == 1)
+
+        @staticmethod
+        def close():
+            return None
+
+    monkeypatch.setattr(local_llamacpp_adapter, "llama_cpp_runtime_config",
+                        lambda: SimpleNamespace(base_url="http://127.0.0.1:18081/v1", model_id="local", thinking="off",
+                                                request_timeout_s=5))
+    monkeypatch.setattr(local_llamacpp_adapter, "get_llama_cpp_runtime_owner",
+                        lambda: SimpleNamespace(auth_headers=lambda: {}))
+    monkeypatch.delenv("JARVIS_LLAMA_JSON_SCHEMA", raising=False)
+    response = LocalLlamaCppAdapter(client_factory=Client).complete(
+        AIRequest(task_type="synthesis", structured_output_schema={"type": "object"}))
+    assert len(requests) == 2
+    assert "response_format" in requests[0] and "response_format" not in requests[1]
+    assert response.raw_provider_metadata["json_schema_fallback"] is True
+    assert "retrying once without response_format" in caplog.text
+
+
+def test_llama_schema_fallback_does_not_retry_non_schema_http_error(monkeypatch) -> None:
+    requests = []
+
+    class Client:
+        def post(self, _url, *, json, **_kwargs):
+            requests.append(dict(json))
+            response = httpx.Response(400, text="invalid model id",
+                                      request=httpx.Request("POST", "http://localhost"))
+            raise httpx.HTTPStatusError("bad request", request=response.request, response=response)
+
+        @staticmethod
+        def close():
+            return None
+
+    monkeypatch.setattr(local_llamacpp_adapter, "llama_cpp_runtime_config",
+                        lambda: SimpleNamespace(base_url="http://127.0.0.1:18081/v1", model_id="local", thinking="off",
+                                                request_timeout_s=5))
+    monkeypatch.setattr(local_llamacpp_adapter, "get_llama_cpp_runtime_owner",
+                        lambda: SimpleNamespace(auth_headers=lambda: {}))
+    monkeypatch.delenv("JARVIS_LLAMA_JSON_SCHEMA", raising=False)
+    LocalLlamaCppAdapter(client_factory=Client).complete(
+        AIRequest(task_type="synthesis", structured_output_schema={"type": "object"}))
+    assert len(requests) == 1

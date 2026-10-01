@@ -273,8 +273,8 @@ def run_governed_inference(
     result: dict[str, Any] = {"status": "success", "text": outcome.response.text}
     if envelope.response_schema is not None:
         try:
-            names = envelope.response_schema["oneOf"][1]["properties"]["tool_calls"]["items"]["properties"]["name"]["enum"]
-            result["admitted_tools"] = list(names)
+            branches = envelope.response_schema["oneOf"][1]["properties"]["tool_calls"]["items"]["anyOf"]
+            result["admitted_tools"] = [branch["properties"]["name"]["const"] for branch in branches]
         except (KeyError, IndexError, TypeError):
             result["admitted_tools"] = []
     return result
@@ -378,14 +378,20 @@ def dispatch_tool(
 
 
 def tool_response_schema(tools: list[dict[str, Any]]) -> dict[str, Any]:
-    names = sorted(tool["function"]["name"] for tool in tools)
+    admitted_calls = []
+    for tool in tools:
+        function = tool["function"]
+        parameters = function.get("parameters") or function.get("inputSchema")
+        if not isinstance(parameters, dict):
+            parameters = {"type": "object", "properties": {}, "additionalProperties": False}
+        admitted_calls.append({"type": "object", "properties": {
+            "name": {"const": function["name"]}, "arguments": parameters,
+        }, "required": ["name", "arguments"], "additionalProperties": False})
     return {"type": "object", "oneOf": [
         {"type": "object", "properties": {"answer": {"type": "string"}},
          "required": ["answer"], "additionalProperties": False},
         {"type": "object", "properties": {"tool_calls": {"type": "array", "minItems": 1, "maxItems": 4,
-         "items": {"type": "object", "properties": {
-             "name": {"type": "string", "enum": names}, "arguments": {"type": "object"}},
-             "required": ["name", "arguments"], "additionalProperties": False}}},
+         "items": {"anyOf": admitted_calls}}},
          "required": ["tool_calls"], "additionalProperties": False},
     ]}
 
@@ -394,19 +400,22 @@ def _workspace_action_tool(call: StructuredToolCall, workspace_id: str, error: s
                            interaction_id: str | None = None,
                            constraints: dict[str, Any] | None = None) -> tuple[dict[str, Any] | None, str]:
     from app.modules.workspace_actions import service
-    from app.modules.workspace_actions.models import ActionOrigin, ActionRequest, SurfaceRef
+    from app.modules.workspace_actions.models import ActionOrigin, ActionRequest
 
     try:
+        expected_surface = "process" if call.capability_id.startswith("jarvis.process_") else "bluecad"
+        if ((constraints or {}).get("surface") != expected_surface
+                or (constraints or {}).get("route_id") != expected_surface):
+            return None, "surface_scope_denied"
         if call.capability_id in {"jarvis.process_read", "jarvis.bluecad_read"}:
-            brief = service.surface_brief(workspace_id, SurfaceRef.model_validate(call.arguments["surface_ref"]))
-            expected_surface = "process" if call.capability_id == "jarvis.process_read" else "bluecad"
+            brief = service.surface_brief(workspace_id, _surface_ref_from_constraints(constraints or {}))
             if brief.surface != expected_surface or any(
                 brief.model_dump(mode="json").get(key) != expected
                 for key, expected in (constraints or {}).items() if key in {"surface", "route_id", "draft_id", "candidate_id"}
             ):
                 return None, "surface_scope_denied"
             return brief.model_dump(mode="json"), error
-        surface = "process" if call.capability_id == "jarvis.process_act" else "bluecad"
+        surface = str((constraints or {})["surface"])
         request = ActionRequest.model_validate({**call.arguments, "surface": surface})
         expected_revision = (constraints or {}).get("base_revision")
         if expected_revision is not None and request.base_revision != expected_revision:
@@ -421,6 +430,32 @@ def _workspace_action_tool(call: StructuredToolCall, workspace_id: str, error: s
                 "child_candidate_id": outcome.child_candidate_id}, error
     except (KeyError, TypeError, ValueError, service.ActionError, NotImplementedError):
         return None, "invalid_or_unavailable_action"
+
+
+def _surface_ref_from_constraints(constraints: dict[str, Any]) -> Any:
+    from app.modules.workspace_actions.models import ProcessSelection, SurfaceRef
+
+    route_id = constraints.get("route_id")
+    if not isinstance(route_id, str):
+        raise ValueError("surface route missing from grant")
+    selection = []
+    count = constraints.get("process_selection_count", 0)
+    if not isinstance(count, int) or not 0 <= count <= 8:
+        raise ValueError("invalid Process selection in grant")
+    for index in range(count):
+        item = {field: constraints[f"process_selection_{index}_{field}"]
+                for field in ("kind", "id", "tag")
+                if isinstance(constraints.get(f"process_selection_{index}_{field}"), str)}
+        selection.append(ProcessSelection.model_validate(item))
+    bluecad_count = constraints.get("bluecad_part_count", 0)
+    if not isinstance(bluecad_count, int) or not 0 <= bluecad_count <= 8:
+        raise ValueError("invalid BLUECAD selection in grant")
+    part_ids = [constraints[f"bluecad_part_{index}"] for index in range(bluecad_count)]
+    if any(not isinstance(part_id, str) for part_id in part_ids):
+        raise ValueError("invalid BLUECAD selection in grant")
+    return SurfaceRef(route_id=route_id, draft_id=constraints.get("draft_id") or None,
+                      candidate_id=constraints.get("candidate_id") or None, process_selection=selection,
+                      bluecad_part_ids=part_ids)
 
 
 def _decision_evidence(result: dict[str, Any] | None, supervisor: HermesSupervisor,
