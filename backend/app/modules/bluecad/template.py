@@ -8,30 +8,21 @@ validation, evidence and export path as the AI loop. No AI call is made.
 from __future__ import annotations
 
 import json
-import shutil
-from pathlib import Path
 from typing import Annotated, Any, Literal
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.core.database import open_sqlite_connection
-from app.modules.bluecad.evidence import record_validation_evidence
+from app.modules.bluecad.candidate_build import build_geometry_candidate
 from app.modules.bluecad.ledger import (
     _require_workspace,
     brief_digest,
-    candidate_work_dir,
-    finish_attempt,
     get_candidate,
-    mark_candidate_valid,
     park_candidate,
-    register_artifact,
-    register_export_artifacts,
-    update_candidate_artifacts,
 )
 from app.modules.bluecad.models import BluecadCandidateRead
-from app.modules.bluecad.service import build_geometry_spec
-from app.modules.bluecad.spec import SpecValidationError, canonical_json, canonicalize_geometry_spec
+from app.modules.bluecad.spec import SpecValidationError, canonicalize_geometry_spec
 from app.modules.events.service import utc_now
 
 TEMPLATE_VERSION = "bluecad_template_v0_1"
@@ -139,7 +130,9 @@ def template_geometry_spec(payload: TubeTemplateCreate | ManifoldTemplateCreate)
     try:
         return canonicalize_geometry_spec(raw_spec)
     except SpecValidationError as exc:
-        raise TemplateError("template_geometry_invalid", "Template parameters do not form a valid GeometrySpec.", status_code=422) from exc
+        raise TemplateError(
+            "template_geometry_invalid", "Template parameters do not form a valid GeometrySpec.", status_code=422
+        ) from exc
 
 
 def _brief(payload: TubeTemplateCreate | ManifoldTemplateCreate) -> str:
@@ -203,85 +196,24 @@ def create_template_candidate(
                 candidate_id,
                 route_class,
                 now,
-                json.dumps({"template_version": TEMPLATE_VERSION, "params": payload.params.model_dump()}, sort_keys=True),
+                json.dumps(
+                    {"template_version": TEMPLATE_VERSION, "params": payload.params.model_dump()}, sort_keys=True
+                ),
             ),
         )
         connection.commit()
 
-    out_dir = candidate_work_dir(workspace_id, candidate_id, 1)
-    registered: list[str] = []
-    attempt_finished = False
     try:
-        out_dir.mkdir(parents=True, exist_ok=False)
-        spec_path = out_dir / "geometry_spec.json"
-        spec_path.write_text(canonical_json(spec) + "\n", encoding="utf-8")
-        result = build_geometry_spec(spec, out_dir)
-        source_ref = f"bluecad_candidate:{candidate_id}:attempt:1"
-
-        def register(path: Path, role: str) -> str:
-            artifact_id = register_artifact(
-                workspace_id, path, role=role, source_ref=source_ref, producer_notes=ARTIFACT_PRODUCER
-            )
-            registered.append(artifact_id)
-            return artifact_id
-
-        spec_artifact_id = register(spec_path, "bluecad_spec")
-        report_path = result.report_path or out_dir / "validation_report.json"
-        if not report_path.exists():
-            raise RuntimeError("expected deterministic BLUECAD validation report is missing")
-        report_artifact_id = register(report_path, "bluecad_report")
-        manifest_artifact_id = None
-        if result.manifest_path is not None and result.manifest_path.exists():
-            manifest_artifact_id = register(result.manifest_path, "bluecad_manifest")
-        glb_artifact_id = None
-        glb_path = out_dir / "model.glb"
-        if glb_path.exists():
-            glb_artifact_id = register(glb_path, "bluecad_glb")
-            registered.extend(
-                register_export_artifacts(
-                    workspace_id, out_dir, source_ref=source_ref, producer_notes=ARTIFACT_PRODUCER
-                ).values()
-            )
-
-        verdict = "pass" if result.report.get("verdict") == "pass" else "fail"
-        finish_attempt(
-            attempt_id,
-            proposal_outcome="not_applicable",
-            build_outcome="ok" if result.verdict != "error" else _build_error_code(result.errors),
-            validation_verdict=verdict,
-            spec_artifact_id=spec_artifact_id,
-            report_artifact_id=report_artifact_id,
-            manifest_artifact_id=manifest_artifact_id,
-        )
-        attempt_finished = True
-        update_candidate_artifacts(
+        build_geometry_candidate(
+            workspace_id,
             candidate_id,
-            spec_artifact_id=spec_artifact_id,
-            glb_artifact_id=glb_artifact_id,
-            report_artifact_id=report_artifact_id,
+            attempt_id,
+            spec,
+            producer_notes=ARTIFACT_PRODUCER,
+            failure_reason="template_build_failed",
         )
-        record_validation_evidence(
-            workspace_id, candidate_id, attempt_id, result.report, report_artifact_id=report_artifact_id
-        )
-        if verdict == "pass":
-            mark_candidate_valid(candidate_id)
-        else:
-            park_candidate(candidate_id, "template_build_failed", notes="Deterministic template validation failed.")
     except Exception as exc:
-        if not attempt_finished:
-            try:
-                finish_attempt(
-                    attempt_id,
-                    proposal_outcome="not_applicable",
-                    build_outcome="template_execution_error",
-                    validation_verdict="fail",
-                    error_detail={"error_type": type(exc).__name__},
-                )
-            except Exception:
-                pass
         park_candidate(candidate_id, "template_build_failed", notes=f"template_execution_error={type(exc).__name__}")
-        if not registered and out_dir.exists():
-            shutil.rmtree(out_dir, ignore_errors=True)
         raise TemplateError(
             "template_build_failed",
             "The deterministic template build did not complete coherently.",
@@ -292,10 +224,3 @@ def create_template_candidate(
     if candidate is None:  # pragma: no cover - defensive persistence guard
         raise TemplateError("template_persistence_inconsistent", "Template candidate is missing.", status_code=500)
     return candidate
-
-
-def _build_error_code(errors: list[dict[str, Any]]) -> str:
-    if not errors:
-        return "error"
-    code = errors[0].get("code")
-    return str(code).lower() if code else "error"
