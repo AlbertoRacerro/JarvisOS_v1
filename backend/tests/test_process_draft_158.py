@@ -524,6 +524,120 @@ def test_route_only_revisions_do_not_count_as_edits_since_a_run(workspace_draft:
     assert state["results"]["edits_since"] == 1  # the route and move revisions are not counted
 
 
+def test_orientation_round_trips_as_revisioned_layout_without_staling_results(workspace_draft: Any) -> None:
+    _client, workspace_id, state = workspace_draft
+    state = _patched(workspace_id, state, *_reactive_train_ops())
+    directory = draft.draft_dir(workspace_id, state["draft_id"])
+    document = draft.load_revision(directory, state["revision"])["document"]
+    expected = draft_compiler.expected(document)
+    process_fp = draft_compiler.fingerprint(draft_compiler.process_view(expected), dwsim_version="10.2.9",
+                                             mcp_sha256="a" * 64)
+    draft.record_run(directory, {"run_id": "orientation-run", "action": "run", "status": "completed",
+        "draft_revision": state["revision"], "started_at": "2026-01-01T00:00:00+00:00",
+        "dwsim_version": "10.2.9", "mcp_sha256": "a" * 64,
+        "materialization_fingerprint": draft_compiler.fingerprint(expected, dwsim_version="10.2.9",
+                                                                    mcp_sha256="a" * 64),
+        "process_fingerprint": process_fp})
+    next_state = _patched(workspace_id, state, {"op": "set_orientation", "id": "pfr", "flip_x": True,
+                                                "flip_y": True})
+    assert next_state["seq"] == state["seq"] + 1
+    unit = next(item for item in next_state["objects"] if item["id"] == "pfr")
+    assert unit["flip_x"] is True and unit["flip_y"] is True
+    rotated = draft.load_revision(directory, next_state["revision"])["document"]
+    assert draft_compiler.expected(rotated) == expected
+    assert draft_compiler.plan(rotated) == draft_compiler.plan(document)
+    assert next_state["results"]["state"] == "current"
+    assert next_state["results"]["edits_since"] == 0
+
+
+def test_incomplete_equipment_after_run_projects_stale_results_instead_of_failing(workspace_draft: Any) -> None:
+    _client, workspace_id, state = workspace_draft
+    state = _patched(workspace_id, state, *_reactive_train_ops())
+    directory = draft.draft_dir(workspace_id, state["draft_id"])
+    document = draft.load_revision(directory, state["revision"])["document"]
+    expected = draft_compiler.expected(document)
+    draft.record_run(directory, {"run_id": "incomplete-edit-run", "action": "run", "status": "completed",
+        "draft_revision": state["revision"], "started_at": "2026-01-01T00:00:00+00:00",
+        "dwsim_version": "10.2.9", "mcp_sha256": "a" * 64,
+        "materialization_fingerprint": draft_compiler.fingerprint(expected, dwsim_version="10.2.9",
+                                                                    mcp_sha256="a" * 64),
+        "process_fingerprint": draft_compiler.fingerprint(draft_compiler.process_view(expected),
+            dwsim_version="10.2.9", mcp_sha256="a" * 64)})
+    edited = _patched(workspace_id, state, {"op": "add_unit", "id": "newpfr", "type": "PFR", "tag": "PFR2",
+                                            "x": 300, "y": 300})
+    assert edited["results"]["state"] == "stale"
+    assert "UNIT_PARAM_MISSING" in {item["code"] for item in edited["findings"]}
+
+
+def test_feed_alternatives_compile_only_probe_proven_mcp_inputs() -> None:
+    document = _doc(_THERMO, _unit("h1", "Heater"),
+                    {"op": "set_unit_params", "unit": "h1", "values": {"outlet_temperature": Q(80, "degC")}},
+                    *_link("feed", None, "h1"),
+                    {"op": "set_stream_spec", "stream": "feed", "pressure": Q(1.01325, "bar"),
+                     "vapor_fraction": Q(0.3, "dimensionless"), "molar_flow": Q(40, "mol/s"),
+                     "composition_basis": "mole", "composition": {"Water": 0.5, "Ethylene oxide": 0.5}},
+                    *_link("out", "h1", None))
+    calls = draft_compiler.plan(document)
+    assert ("dwsim_stream_add_material", {"name": "FEED", "pressure_Pa": 101325.0}) in calls
+    assert ("dwsim_stream_set_conditions", {"name": "FEED", "molar_flow_mol_s": 40.0}) in calls
+    mole_call = next(args for name, args in calls if name == "dwsim_unitop_set" and args.get("name") == "FEED"
+                     and "PROP_MS_102/Water" in args["properties"])
+    assert mole_call["properties"] == {"PROP_MS_102/Water": 0.5, "PROP_MS_102/Ethylene oxide": 0.5,
+                                       "PROP_MS_102/Ethylene glycol": 0.0}
+    assert ("dwsim_unitop_set", {"name": "FEED", "properties": {
+        "SpecType": "Pressure_and_VaporFraction", "PROP_MS_27": 0.3}}) in calls
+    assert not any(item["severity"] == "blocker" for item in draft.validate_document(document))
+    with pytest.raises(DraftError, match="alternatives"):
+        _doc(_THERMO, _unit("h1", "Heater"), *_link("feed", None, "h1"), _FEED_SPEC,
+             {"op": "set_stream_spec", "stream": "feed", "mass_flow": Q(1, "kg/s"),
+              "molar_flow": Q(1, "mol/s")})
+    zero = _doc(_THERMO, _unit("h1", "Heater"), *_link("feed", None, "h1"),
+                {"op": "set_stream_spec", "stream": "feed", "pressure": Q(1.01325, "bar"),
+                 "temperature": Q(25, "degC"), "mass_flow": Q(0, "kg/s"),
+                 "composition": {"Water": 1.0}}, *_link("out", "h1", None))
+    findings = validate_document(zero)
+    assert any(item["code"] == "FEED_FLOW_ZERO" and item["severity"] == "warning" for item in findings)
+    missing = _doc(_THERMO, _unit("h1", "Heater"), *_link("feed", None, "h1"), *_link("out", "h1", None))
+    assert any(item["code"] == "FEED_SPEC_MISSING" and item["severity"] == "blocker" for item in validate_document(missing))
+
+
+def test_process_read_view_contains_guidance_results_and_dwsim_errors(workspace_draft: Any) -> None:
+    _client, workspace_id, state = workspace_draft
+    state = _patched(workspace_id, state, *_reactive_train_ops())
+    directory = draft.draft_dir(workspace_id, state["draft_id"])
+    run = {"run_id": "failed-run", "action": "run", "status": "runtime_failed", "draft_revision": state["revision"],
+           "started_at": "2026-01-01T00:00:00+00:00", "error": "RuntimeError",
+           "error_detail": {"step": "dwsim_solve_run", "dwsim_message": "DWSIM could not solve fixture"},
+           "dwsim_check": {"findings": [{"severity": "warning", "code": "W", "object": "H1",
+                                          "message": "DWSIM warning", "fix": "Inspect inputs"}]},
+           "solve": {"errors": ["solver convergence failed"], "failed_objects": [{"tag": "H1", "error": "not calculated"}]}}
+    feedback = draft.dwsim_feedback(run)
+    assert feedback["solve_errors"] == ["solver convergence failed"]
+    assert feedback["dwsim_message"] == "DWSIM could not solve fixture"
+    assert feedback["check_findings"][0]["message"] == "DWSIM warning"
+    document = draft.load_revision(directory, state["revision"])["document"]
+    expected = draft_compiler.expected(document)
+    draft.record_run(directory, {"run_id": "c" * 32, "action": "run", "status": "completed",
+        "draft_revision": state["revision"], "started_at": "2026-01-02T00:00:00+00:00",
+        "dwsim_version": "10.2.9", "mcp_sha256": "a" * 64,
+        "materialization_fingerprint": draft_compiler.fingerprint(expected, dwsim_version="10.2.9",
+                                                                    mcp_sha256="a" * 64),
+        "process_fingerprint": draft_compiler.fingerprint(draft_compiler.process_view(expected),
+            dwsim_version="10.2.9", mcp_sha256="a" * 64),
+        "streams": {"Feed": {"display": {"molar_flow": {"value": 40, "unit": "kmol/h"}},
+                              "vapor_fraction": 0.25},
+                    "S1": {"display": {"mass_flow": {"value": 3600, "unit": "kg/h"}}},
+                    "S2": {"display": {}}, "Q": {"display": {}}, "Product": {"display": {}}},
+        "units": {"PFR": {"calculated": True, "reported": {}}}})
+    run["started_at"] = "2026-01-03T00:00:00+00:00"
+    draft.record_run(directory, run)
+    view = draft.agent_view(workspace_id, state["draft_id"])
+    assert view["guidance"] and isinstance(view["blockers"], list) and isinstance(view["warnings"], list)
+    assert view["dwsim"]["solve_errors"] and view["dwsim"]["error"] == "RuntimeError"
+    assert view["current_results"]["state"] == "current"
+    assert view["current_results"]["streams"]["Feed"]["molar_flow"] == "40 kmol/h"
+
+
 def test_only_input_properties_are_proposable(workspace_draft: Any) -> None:
     client, workspace_id, state = workspace_draft
     state = _patched(workspace_id, state, *_reactive_train_ops())

@@ -190,7 +190,8 @@ def test_edits_are_instant_revisions_without_dwsim(api: Any, monkeypatch: pytest
     first = state["revision"]
     _built(client, base, state)
     assert state["revision"] != first and state["seq"] == 2
-    assert [item["code"] for item in state["findings"]] == []
+    assert [(item["code"], item["severity"]) for item in state["findings"]] == [
+        ("OPTIONAL_PORT_UNCONNECTED", "warning")]
     feed = next(item for item in state["objects"] if item["tag"] == "Feed")
     assert feed["spec"]["temperature"] == {"si": 298.15, "value": 25, "unit": "degC"}
     assert feed["spec"]["pressure"]["si"] == 500000.0 and feed["spec"]["mass_flow"]["si"] == 1.0

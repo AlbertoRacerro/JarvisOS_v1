@@ -441,6 +441,10 @@ def validate_document(document: dict[str, Any]) -> list[dict[str, Any]]:
             add("blocker", "UNIT_INLET_MISSING",
                 f"{spec.label} needs {spec.required_inlets} connected inlet(s); {len(inlets)} connected.", unit["tag"],
                 "inlets")
+        for port, name in enumerate(spec.inlets):
+            if port >= spec.required_inlets and not _occupant(document, unit["id"], "target", port):
+                add("warning", "OPTIONAL_PORT_UNCONNECTED", f"Optional {name} inlet is not connected.",
+                    unit["tag"], f"inlets[{port}]")
         for param in spec.params_for(unit["mode"]):
             if param.key not in unit["params"]:
                 add("blocker", "UNIT_PARAM_MISSING", f"Set {param.label}.", unit["tag"], param.key)
@@ -454,15 +458,28 @@ def validate_document(document: dict[str, Any]) -> list[dict[str, Any]]:
                                     for port in range(len(spec.energy_inlets))):
             add("blocker", "UNIT_ENERGY_INLET_MISSING", f"Connect an energy stream to {spec.label}.", unit["tag"],
                 "energy_inlets")
+        elif not needs_energy:
+            for port, name in enumerate(spec.energy_inlets):
+                if not _occupant(document, unit["id"], "target", port, energy=True):
+                    add("warning", "OPTIONAL_PORT_UNCONNECTED", f"Optional {name} energy inlet is not connected.",
+                        unit["tag"], f"energy_inlets[{port}]")
         if unit["type"] == "DistillationColumn" and not any(
             _occupant(document, unit["id"], "source", port, energy=True) for port in range(len(spec.energy_outlets))
         ):
             add("blocker", "UNIT_ENERGY_OUTLET_MISSING", "Connect the condenser duty energy stream.", unit["tag"],
                 "energy_outlets")
+        elif unit["type"] != "DistillationColumn":
+            for port, name in enumerate(spec.energy_outlets):
+                if not _occupant(document, unit["id"], "source", port, energy=True):
+                    add("warning", "OPTIONAL_PORT_UNCONNECTED", f"Optional {name} energy outlet is not connected.",
+                        unit["tag"], f"energy_outlets[{port}]")
         outlet_count = sum(bool(_occupant(document, unit["id"], "source", port))
                            for port in range(len(spec.outlets)))
         for port, name in enumerate(spec.outlets):
             if unit["type"] == "Splitter" and port == 2:
+                if not _occupant(document, unit["id"], "source", port):
+                    add("warning", "OPTIONAL_PORT_UNCONNECTED", f"Optional {name} outlet is not connected.",
+                        unit["tag"], name)
                 continue
             if not _occupant(document, unit["id"], "source", port):
                 add("blocker", "UNIT_OUTLET_MISSING", f"Connect a stream to the {name} outlet.", unit["tag"], name)
@@ -777,8 +794,15 @@ def results_state(head: dict[str, Any], runs: list[dict[str, Any]], document: di
         from app.modules.process_stack.draft_compiler import expected, fingerprint, process_view
         if solved.get("process_fingerprint"):
             # Layout (positions, orientation, routes) never decides staleness; process meaning does.
-            current = fingerprint(process_view(expected(document)), dwsim_version=solved["dwsim_version"],
-                                  mcp_sha256=solved["mcp_sha256"]) == solved["process_fingerprint"]
+            try:
+                process = process_view(expected(document))
+            except (DraftError, KeyError, TypeError, ValueError):
+                # Incomplete newly-added equipment is a normal editable draft state after a run.
+                # It cannot be materialized yet, so prior results are stale rather than a 500 projection.
+                current = False
+            else:
+                current = fingerprint(process, dwsim_version=solved["dwsim_version"],
+                                      mcp_sha256=solved["mcp_sha256"]) == solved["process_fingerprint"]
         else:  # runs recorded before spec 162 carry only the full materialization fingerprint
             current = fingerprint(expected(document), dwsim_version=solved["dwsim_version"],
                                   mcp_sha256=solved["mcp_sha256"]) == solved["materialization_fingerprint"]
