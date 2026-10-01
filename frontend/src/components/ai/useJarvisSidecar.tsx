@@ -851,10 +851,10 @@ export function useJarvisSidecar(
     <header className="jarvis-sidecar__header">
       <div className="jarvis-sidecar__title">
         <h2 id="jarvis-sidecar-title" tabIndex={-1} data-sidecar-focus>Jarvis</h2>
-        <span className={`jarvis-status jarvis-status--${state.tone}`} role="status" title={state.detail}><i aria-hidden="true" />{state.label}</span>
+        <span className={`jarvis-status jarvis-status--${state.tone}`} role="status" title={state.detail} aria-label={state.label} aria-description={state.detail}><i aria-hidden="true" /><span>{state.label}</span></span>
       </div>
       <div className="jarvis-sidecar__header-actions">
-        <button type="button" className="jarvis-icon-button" onClick={() => selectThread(null)} disabled={!workspaceId || submitting || selectedThreadId === null} title="Start a new conversation"><ChatCircleDots size={15} aria-hidden="true" />New conversation</button>
+        <button type="button" className="jarvis-icon-button jarvis-icon-button--new-conversation" onClick={() => selectThread(null)} disabled={!workspaceId || submitting || selectedThreadId === null} title="Start a new conversation" aria-label="New conversation"><ChatCircleDots size={15} aria-hidden="true" /><span>New conversation</span></button>
         <SidecarChromeActions />
       </div>
     </header>

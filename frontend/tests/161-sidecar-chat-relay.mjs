@@ -51,6 +51,13 @@ assert.ok(sidecar.indexOf("jarvis-sidecar__composer") < sidecar.indexOf("jarvis-
 assert.match(sidecar, /SidecarChromeActions/);
 assert.match(sidecar, /reason_code === "LLAMACPP_AUTH_REQUIRED"/, "a protected llama-server is not presented as a usable responder");
 assert.match(sidecar, /function ResponderMenu[\s\S]*useContext\(SidecarChrome\)[\s\S]*id: "show-properties", label: "Show properties"/);
+assert.match(sidecar, /jarvis-status[^>]*title=\{state\.detail\} aria-label=\{state\.label\} aria-description=\{state\.detail\}/, "full readiness detail remains available when its visible label truncates");
+assert.match(sidecar, /<button[^>]*jarvis-icon-button--new-conversation[^>]*>[\s\S]*aria-label="New conversation"[\s\S]*<span>New conversation<\/span>/, "New conversation keeps an accessible label when its text collapses");
+const sidecarCss = read("src/components/ai/JarvisSidecar.css");
+assert.match(sidecarCss, /\.jarvis-sidecar__header\s*\{[^}]*min-width:\s*0;[^}]*\}/);
+assert.match(sidecarCss, /\.jarvis-status\s*>\s*span\s*\{[^}]*text-overflow:\s*ellipsis;[^}]*\}/);
+assert.match(sidecarCss, /@media \(max-width: 1150px\)[\s\S]*?\.jarvis-icon-button--new-conversation span\s*\{\s*display:\s*none;/);
+assert.doesNotMatch(sidecarCss, /\.jarvis-sidecar__header\s*\{[^}]*flex-wrap:\s*wrap/);
 assert.doesNotMatch(sidecar, /aria-pressed=\{chrome\.propertiesOpen\}/, "Properties stays in the compact secondary controls, outside the required header row");
 assert.match(shellSidecar, /closest\('\[role="menu"\]'\)/, "Escape in a menu must not close the whole Sidecar");
 assert.match(contextMenu, /if \(!position\) return;[\s\S]*querySelector<HTMLButtonElement>\("button:not\(:disabled\)"\)[\s\S]*\}, \[position\]\)/, "menus move keyboard focus after their final position is measured");
