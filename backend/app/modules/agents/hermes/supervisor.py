@@ -428,7 +428,14 @@ def _workspace_action_tool(call: StructuredToolCall, workspace_id: str, error: s
         outcome = service.submit(workspace_id, request, ActionOrigin(
             kind="local", thread_id=ref.jarvis_thread_id if ref else "unknown",
             interaction_id=interaction_id, model="local-agent"))
-        return {"state": outcome.state, "summary": outcome.summary, "reason": outcome.reason,
+        applied = outcome.state == "applied"
+        if outcome.state == "proposed":
+            summary = f"Proposed (NOT applied yet): {outcome.summary}. The operator must click Apply on the card."
+        elif applied:
+            summary = f"Applied: {outcome.summary}."
+        else:
+            summary = f"Not applied: {outcome.summary}"
+        return {"state": outcome.state, "applied": applied, "summary": summary, "reason": outcome.reason,
                 "changes": [item.model_dump(mode="json") for item in outcome.changes],
                 "result_revision": outcome.result_revision,
                 "child_candidate_id": outcome.child_candidate_id}, error

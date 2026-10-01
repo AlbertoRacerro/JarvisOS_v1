@@ -164,6 +164,22 @@ def apply_bluecad_request(
 ) -> ActionOutcome:
     spec = _base_spec(workspace_id, request.base_revision)
     transformed, lines = _transform(spec, request)
+    summaries = []
+    for action in request.actions:
+        if action.op == "duplicate_part":
+            line = next((item for item in lines if item.label.startswith(action.part + "_")
+                         and " — new " in item.label), None)
+            new_part = line.label.split(" — new ", 1)[0] if line else "child part"
+            description = f"Duplicate {action.part} {action.placement} it (new {new_part}"
+            if action.gap_mm is not None:
+                description += f", {action.gap_mm:g} mm gap"
+            summaries.append(description + ")")
+        elif action.op == "set_part_param":
+            summaries.append(f"Set {action.part} {action.param} to {action.value:g} {action.unit}")
+        elif action.op == "move_part":
+            summaries.append(f"Move {action.part} by ({action.dx:g}, {action.dy:g}, {action.dz:g}) {action.unit}")
+        elif action.op == "delete_part":
+            summaries.append(f"Delete {action.part}")
     tier = "confirm" if origin.kind == "relay" else "immediate"
     now = utc_now()
     outcome = ActionOutcome(
@@ -172,9 +188,7 @@ def apply_bluecad_request(
         surface="bluecad",
         state="proposed" if tier == "confirm" else "applied",
         tier=tier,
-        summary="BLUECAD child candidate is ready for approval."
-        if tier == "confirm"
-        else "Created a validated BLUECAD child candidate.",
+        summary="; ".join(summaries)[:400] or "BLUECAD action",
         changes=lines,
         base_revision=request.base_revision,
         candidate_id=request.base_revision,

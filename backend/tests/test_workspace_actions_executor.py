@@ -51,6 +51,7 @@ def test_process_propose_apply_undo_and_refuse() -> None:
         )
         proposal = submit(workspace_id, request, origin)
         assert proposal.state == "proposed", proposal.reason
+        assert proposal.summary == "Set S1 pressure to 2 bar"
         from app.modules.workspace_actions.service import apply, undo
 
         applied = apply(workspace_id, proposal.action_id)
@@ -100,6 +101,10 @@ def test_brief_and_http_actions_routes() -> None:
         assert payload["surface"] == "process"
         assert payload["selected"][0]["id"] == "s1"
         assert "Arrhenius" in payload["text"]
+        assert '"target":"S1"' in payload["text"]
+        assert '"target":"P1"' in payload["text"]
+        assert '"after":"P1"' in payload["text"]
+        assert '"target":"tube"' not in payload["text"]
         off_surface = client.post(f"/workspaces/{workspace_id}/actions/brief", json={"route_id": "home"})
         assert off_surface.json()["surface"] == "none"
         request = ActionRequest.model_validate(
@@ -241,6 +246,7 @@ def test_process_insert_connect_and_delete_validation() -> None:
         )
         proposal = submit(workspace_id, insert, origin)
         assert proposal.state == "proposed", proposal.reason
+        assert proposal.summary == "Add Valve V1 after P1"
         from app.modules.workspace_actions.service import apply
 
         applied = apply(workspace_id, proposal.action_id)
@@ -284,11 +290,18 @@ def test_bluecad_duplicate_builds_valid_child_candidate() -> None:
         )
         assert template.status_code == 201, template.text
         base = template.json()
+        from app.modules.workspace_actions.models import SurfaceRef
+        from app.modules.workspace_actions.service import surface_brief
+
+        brief = surface_brief(workspace_id, SurfaceRef(route_id="design-bluecad", candidate_id=base["id"]))
+        assert '"part":"template_tube"' in brief.text
+        assert '"part":"tube"' not in brief.text
         request = ActionRequest.model_validate(
             {
                 "surface": "bluecad",
                 "base_revision": base["id"],
-                "actions": [{"op": "duplicate_part", "part": "template_tube", "placement": "beside"}],
+                "actions": [{"op": "duplicate_part", "part": "template_tube", "placement": "beside",
+                             "gap_mm": 25}],
             }
         )
         result = submit(
@@ -297,6 +310,7 @@ def test_bluecad_duplicate_builds_valid_child_candidate() -> None:
             ActionOrigin(kind="local", thread_id="thread-bluecad", interaction_id="interaction-bluecad"),
         )
         assert result.state == "applied", result.reason
+        assert result.summary == "Duplicate template_tube beside it (new template_tube_2, 25 mm gap)"
         assert result.child_candidate_id
         child = get_candidate(workspace_id, result.child_candidate_id)
         assert child is not None and child.status == "valid" and child.origin == "agent_action"
@@ -334,6 +348,7 @@ def test_bluecad_duplicate_builds_valid_child_candidate() -> None:
             ActionOrigin(kind="local", thread_id="thread-length", interaction_id="interaction-length"),
         )
         assert length_result.state == "applied", length_result.reason
+        assert length_result.summary == "Set template_tube length to 2 m"
         length_child = get_candidate(workspace_id, length_result.child_candidate_id)
         length_spec = _load_candidate_spec(length_child.spec_artifact_id, workspace_id)
         assert length_spec["parts"][0]["params"]["length"] == 2000

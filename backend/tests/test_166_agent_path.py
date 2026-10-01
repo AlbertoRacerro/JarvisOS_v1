@@ -56,6 +56,7 @@ def test_surface_grants_and_instructions_are_scoped_to_brief() -> None:
     worker = SimpleNamespace(live_grants={})
     brief = SurfaceBrief(surface="bluecad", route_id="design-bluecad", workspace_id="workspace-166",
                          base_revision="candidate-1", candidate_id="candidate-1", summary="BLUECAD · tube",
+                         selected=[{"part_id": "template_tube", "kind": "tube_run"}],
                          text="candidate candidate-1 selected tube", digest="sha256:" + "b" * 64)
     text = _install_surface_grants(worker, "workspace-166", "thread-166",
                                    SurfaceRef(route_id="design-bluecad", candidate_id="candidate-1"), brief)
@@ -69,7 +70,7 @@ def test_surface_grants_and_instructions_are_scoped_to_brief() -> None:
                       if grant.capability_id == "jarvis.bluecad_read")
     assert read_grant.constraints["candidate_id"] == "candidate-1"
     assert '"name":"mcp__jarvis__jarvis_bluecad_act"' in text
-    assert '"op":"duplicate_part","part":"tube","placement":"beside"' in text
+    assert '"op":"duplicate_part","part":"template_tube","placement":"beside"' in text
     assert '"surface_ref"' not in text
 
 
@@ -77,12 +78,15 @@ def test_process_turn_instructions_show_prefixed_read_and_typed_value_example() 
     worker = SimpleNamespace(live_grants={})
     brief = SurfaceBrief(surface="process", route_id="design-process", workspace_id="workspace-166",
                          base_revision="rev-7", draft_id="draft-1", summary="Process · PFR-1",
+                         selected=[{"kind": "stream", "tag": "S1"}],
                          text="draft draft-1 revision rev-7 selected stream S1", digest="sha256:" + "d" * 64)
     text = _install_surface_grants(worker, "workspace-166", "thread-166",
                                    SurfaceRef(route_id="design-process", draft_id="draft-1"), brief)
     assert 'mcp__jarvis__jarvis_process_read using only {"grant_id":"' in text
     assert '"name":"mcp__jarvis__jarvis_process_act"' in text
     assert '"op":"set_value","target":"S1","property":"pressure","value":{"value":2,"unit":"bar"}' in text
+    assert "For state proposed" in text and "NOT been applied" in text
+    assert "only when state is applied and applied is true" in text
     assert '"surface_ref"' not in text
 
 
@@ -100,10 +104,12 @@ def test_dispatch_submits_typed_action_to_workspace_executor(monkeypatch) -> Non
 
     captured = {}
 
+    outcome = SimpleNamespace(state="proposed", summary="Move PFR", reason=None, changes=[],
+                              result_revision=None, child_candidate_id=None)
+
     def submit(workspace_id, request, origin):
         captured.update(workspace_id=workspace_id, request=request, origin=origin)
-        return SimpleNamespace(state="proposed", summary="Move PFR", reason=None, changes=[],
-                               result_revision=None, child_candidate_id=None)
+        return outcome
 
     monkeypatch.setattr(service, "submit", submit)
     now = datetime.now(UTC)
@@ -121,11 +127,24 @@ def test_dispatch_submits_typed_action_to_workspace_executor(monkeypatch) -> Non
     )
     result = dispatch_tool(call, live_grants={grant.grant_id: grant}, interaction_id="interaction-166")
     assert result.status == "succeeded"
-    assert result.result == {"state": "proposed", "summary": "Move PFR", "reason": None,
+    assert result.result == {"state": "proposed", "applied": False,
+                             "summary": "Proposed (NOT applied yet): Move PFR. The operator must click Apply on the card.",
+                             "reason": None,
                              "changes": [], "result_revision": None, "child_candidate_id": None}
     assert captured["workspace_id"] == SESSION.workspace_id
     assert captured["request"].surface == "process"
     assert captured["origin"].interaction_id == "interaction-166"
+
+    outcome.state = "applied"
+    applied = dispatch_tool(call, live_grants={grant.grant_id: grant}, interaction_id="interaction-166")
+    assert applied.result["applied"] is True
+    assert applied.result["summary"] == "Applied: Move PFR."
+
+    outcome.state, outcome.reason = "stale", "The draft revision changed."
+    stale = dispatch_tool(call, live_grants={grant.grant_id: grant}, interaction_id="interaction-166")
+    assert stale.result["applied"] is False
+    assert stale.result["reason"] == "The draft revision changed."
+    assert stale.result["summary"].startswith("Not applied:")
 
 
 def test_read_tool_derives_surface_ref_from_live_grant(monkeypatch) -> None:

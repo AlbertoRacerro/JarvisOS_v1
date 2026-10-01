@@ -531,10 +531,12 @@ def _install_surface_grants(worker: HermesSupervisor, workspace_id: str, thread_
              f"{act_name} grant_id={grant_ids[capability_ids[1]]}.",
              f"Read with {read_name} using only {{\"grant_id\":\"{grant_ids[capability_ids[0]]}\"}}; "
              "the grant already contains this turn's surface and selection.",
-             _surface_action_example(brief.surface, act_name, grant_ids[capability_ids[1]], brief.base_revision),
+             _surface_action_example(brief.surface, act_name, grant_ids[capability_ids[1]], brief.base_revision,
+                                     brief),
              f"For supported {prefix.upper()} changes call {act_name}; unsupported requests must be stated plainly. "
              + unsupported +
-             "Never claim a change unless the tool returns state applied; proposed means approval is still required."]
+             "Treat the tool result as authoritative. For state proposed, say the change is prepared for approval and has NOT been applied; do not say it was changed or updated. "
+             "Say a change was made only when state is applied and applied is true. Refused or stale means nothing was changed; state the returned reason."]
     return "\n".join(lines)[:7000]
 
 
@@ -565,15 +567,53 @@ def _surface_grant_constraints(surface_ref: Any, brief: Any) -> dict[str, str | 
     return constraints
 
 
-def _surface_action_example(surface: str, tool_name: str, grant_id: str, base_revision: str | None) -> str:
+def _surface_action_example(surface: str, tool_name: str, grant_id: str, base_revision: str | None,
+                            brief: Any) -> str:
     if surface == "process":
-        action = {"op": "set_value", "target": "S1", "property": "pressure",
+        selected = next((item for item in brief.selected if item.get("kind") == "stream"), None)
+        target = selected.get("tag") if selected else _first_brief_process_tag(brief.text, stream=True)
+        target = target or "<stream tag from read>"
+        action = {"op": "set_value", "target": target, "property": "pressure",
                   "value": {"value": 2, "unit": "bar"}}
     else:
-        action = {"op": "duplicate_part", "part": "tube", "placement": "beside"}
+        selected = brief.selected[0] if brief.selected else None
+        target = selected.get("part_id") if selected else _first_brief_bluecad_part(brief.text)
+        target = target or "<part id from read>"
+        action = {"op": "duplicate_part", "part": target, "placement": "beside"}
     call = {"name": tool_name, "arguments": {
         "grant_id": grant_id, "base_revision": base_revision or "<revision from read>", "actions": [action]}}
     return "Example action call: " + json.dumps(call, separators=(",", ":"))
+
+
+def _first_brief_process_tag(text: str, *, stream: bool) -> str | None:
+    import re
+
+    match = re.search(r"Objects \(\d+\): (.*)\nSelected:", text)
+    if not match:
+        return None
+    for item in match.group(1).split(", "):
+        head = item.split(" ", 1)[0]
+        if ":" not in head:
+            continue
+        tag, object_type = head.split(":", 1)
+        if object_type.endswith("Stream") == stream:
+            return tag
+    return None
+
+
+def _first_brief_bluecad_part(text: str) -> str | None:
+    import json
+
+    marker = "parts: "
+    start = text.find(marker)
+    end = text.find("; selected:", start)
+    if start < 0 or end < 0:
+        return None
+    try:
+        parts = json.loads(text[start + len(marker):end]).get("items", [])
+    except (AttributeError, json.JSONDecodeError):
+        return None
+    return parts[0].get("part_id") if parts and isinstance(parts[0].get("part_id"), str) else None
 
 
 def _turn_tools(surface: str) -> list[str]:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -120,20 +121,29 @@ def surface_brief(workspace_id: str, ref: SurfaceRef | None) -> SurfaceBrief:
         if ignored:
             summary += "; unknown or foreign selection ignored"
         selected_names = ", ".join(f"{item['type']} `{item['tag']}`" for item in selected)
+        selected_stream = next((item for item in selected if item["kind"] == "stream"), None)
+        selected_unit = next((item for item in selected if item["kind"] == "unit"), None)
+        first_stream = next((item for item in objects if item["kind"] == "stream"), None)
+        first_unit = next((item for item in objects if item["kind"] == "unit"), None)
+        stream_tag = (selected_stream or first_stream or {"tag": "<stream tag from read>"})["tag"]
+        unit_tag = (selected_unit or first_unit or {"tag": "<unit tag from read>"})["tag"]
+        unit_tags = [item["tag"] for item in objects if item["kind"] == "unit"]
+        next_unit_tag = next((f"P{index}" for index in range(1, len(unit_tags) + 2)
+                              if f"P{index}" not in unit_tags), "<new tag>")
         text = (
             f"Process workspace {workspace_id}; draft {draft_id}; head revision {record['revision']}\n"
             f"Results: {projection['results']['state']}\nObjects ({len(objects)}): "
             f"{_compact_objects(objects, document)}\nSelected: {selected_names or 'none'}\n"
             "Action JSON examples (submit one or more objects in actions): "
-            '{"op":"set_value","target":"S1","property":"pressure","value":{"value":2,"unit":"bar"}}; '
-            '{"op":"add_unit","type":"Pump","tag":"P2","near":"P1"}; '
-            '{"op":"insert_unit_after","type":"Pump","after":"P1","tag":"P2"}; '
-            '{"op":"connect","from":"P1","from_port":"outlet","to":"P2","to_port":"inlet"}; '
-            '{"op":"disconnect","stream":"S1"}; '
-            '{"op":"mirror","target":"P1","axis":"horizontal"}; '
-            '{"op":"move","target":"P1","dx":20,"dy":0}; '
-            '{"op":"rename","target":"P1","new_tag":"P2"}; '
-            '{"op":"delete","target":"P1"}.\n'
+            f'{{"op":"set_value","target":"{stream_tag}","property":"pressure","value":{{"value":2,"unit":"bar"}}}}; '
+            f'{{"op":"add_unit","type":"Pump","tag":"{next_unit_tag}","near":"{unit_tag}"}}; '
+            f'{{"op":"insert_unit_after","type":"Pump","after":"{unit_tag}","tag":"{next_unit_tag}"}}; '
+            f'{{"op":"connect","from":"{unit_tag}","from_port":"outlet","to":"{next_unit_tag}","to_port":"inlet"}}; '
+            f'{{"op":"disconnect","stream":"{stream_tag}"}}; '
+            f'{{"op":"mirror","target":"{unit_tag}","axis":"horizontal"}}; '
+            f'{{"op":"move","target":"{unit_tag}","dx":20,"dy":0}}; '
+            f'{{"op":"rename","target":"{unit_tag}","new_tag":"{next_unit_tag}"}}; '
+            f'{{"op":"delete","target":"{unit_tag}"}}.\n'
             "Limits: reactions are Arrhenius power-law only; Monod/custom rate laws unsupported. "
             "Reactions and thermo are edited in the operator editor. DWSIM runs only from the operator Run button."
         )
@@ -191,14 +201,15 @@ def surface_brief(workspace_id: str, ref: SurfaceRef | None) -> SurfaceBrief:
     if ignored:
         summary += "; unknown or foreign part selection ignored"
     display_parts = [_bluecad_part_brief(item) for item in spec["parts"][:20]]
+    example_part = (selected[0] if selected else _bluecad_part_brief(spec["parts"][0]))["part_id"]
     text = (
         f"BLUECAD workspace {workspace_id}; candidate {candidate.id}; parts: "
         f"{json.dumps({'count': len(spec['parts']), 'items': display_parts}, separators=(',', ':'))}; selected: "
         f"{json.dumps(selected, separators=(',', ':'))}\nAction JSON examples: "
-        '{"op":"duplicate_part","part":"tube","placement":"beside","gap_mm":25}; '
-        '{"op":"set_part_param","part":"tube","param":"length","value":2,"unit":"m"}; '
-        '{"op":"move_part","part":"tube","dx":10,"dy":0,"dz":0,"unit":"mm"}; '
-        '{"op":"delete_part","part":"tube"}.\n'
+        f'{{"op":"duplicate_part","part":{json.dumps(example_part)},"placement":"beside","gap_mm":25}}; '
+        f'{{"op":"set_part_param","part":{json.dumps(example_part)},"param":"length","value":2,"unit":"m"}}; '
+        f'{{"op":"move_part","part":{json.dumps(example_part)},"dx":10,"dy":0,"dz":0,"unit":"mm"}}; '
+        f'{{"op":"delete_part","part":{json.dumps(example_part)}}}.\n'
         f"Limits: supported part kinds {sorted(SUPPORTED_PART_KINDS)}; per-part supported parameters are listed above; "
         "base candidate is never modified; "
         "each action creates a child candidate."
@@ -389,6 +400,39 @@ def _outcome(
     )
 
 
+def _action_summary(request: ActionRequest, changes: list[ChangeLine]) -> str:
+    """Turn validated requests and their resolved changes into concise card text."""
+    summaries = []
+    for action in request.actions:
+        if action.op == "set_value":
+            line = next((item for item in changes if item.label == f"{action.target} {action.property}"), None)
+            value = re.sub(r"(?<=\d)\.0(?=\s|$)", "", line.after) if line and line.after else None
+            summaries.append(f"Set {action.target} {action.property} to {value}" if value else
+                             f"Set {action.target} {action.property}")
+        elif action.op == "add_unit":
+            tag = action.tag or next((item.label.split(" — ", 1)[0] for item in changes
+                                      if item.label.endswith(f"— new {action.type}")), action.type)
+            summaries.append(f"Add {action.type} {tag}" + (f" near {action.near}" if action.near else ""))
+        elif action.op == "insert_unit_after":
+            tag = action.tag or next((item.label.split(" — ", 1)[0] for item in changes
+                                      if item.label.endswith(f"— new {action.type}")), action.type)
+            summaries.append(f"Add {action.type} {tag} after {action.after}")
+        elif action.op == "mirror":
+            summaries.append(f"Mirror {action.target} {action.axis}ly" if action.axis == "horizontal"
+                             else f"Mirror {action.target} vertically")
+        elif action.op == "move":
+            summaries.append(f"Move {action.target} by ({action.dx:g}, {action.dy:g})")
+        elif action.op == "connect":
+            summaries.append(f"Connect {action.source} to {action.to}")
+        elif action.op == "disconnect":
+            summaries.append(f"Disconnect {action.stream}")
+        elif action.op == "rename":
+            summaries.append(f"Rename {action.target} to {action.new_tag}")
+        elif action.op == "delete":
+            summaries.append(f"Delete {action.target}")
+    return "; ".join(summaries)[:400] or "Workspace action"
+
+
 def submit(workspace_id: str, request: ActionRequest, origin: ActionOrigin) -> ActionOutcome:
     digest = _digest(request.model_dump(mode="json"))
     if origin.kind == "relay" and not origin.relay_run_id:
@@ -517,7 +561,7 @@ def submit(workspace_id: str, request: ActionRequest, origin: ActionOrigin) -> A
         origin,
         "proposed" if tier == "confirm" else "applied",
         tier,
-        "Changes are ready for operator approval." if tier == "confirm" else "Layout updated.",
+        _action_summary(request, changes),
         changes=changes,
         draft_id=draft_id,
     )
