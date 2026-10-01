@@ -53,8 +53,23 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
     headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) }
   });
-  if (!response.ok) throw new Error(`Workspace action request failed (${response.status})`);
+  if (!response.ok) {
+    let message = `Workspace action request failed (${response.status})`;
+    try {
+      const body = await response.json() as { detail?: unknown };
+      if (typeof body.detail === "string") message = body.detail;
+      else if (body.detail && typeof body.detail === "object" && "message" in body.detail && typeof body.detail.message === "string") message = body.detail.message;
+    } catch { /* Use the status message when the server has no structured detail. */ }
+    throw new WorkspaceActionRequestError(response.status, message);
+  }
   return response.json() as Promise<T>;
+}
+
+export class WorkspaceActionRequestError extends Error {
+  constructor(readonly status: number, message: string) {
+    super(message);
+    this.name = "WorkspaceActionRequestError";
+  }
 }
 
 const basePath = (workspaceId: string) => `/workspaces/${encodeURIComponent(workspaceId)}/actions`;

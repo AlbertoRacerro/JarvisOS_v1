@@ -44,6 +44,7 @@ assert.match(sidecar, /getSurfaceBrief\(workspaceId, surfaceContext\)/);
 assert.match(sidecar, /<WorkspaceActionCards actions=\{interaction\.actions \?\? \[\]\}/);
 assert.match(sidecar, /surfaceBrief\?\.summary/);
 assert.match(sidecar, /technicalDetails=\{interaction\.technical_details\}/);
+assert.match(sidecar, /caught\.status === 409[\s\S]*getWorkspaceAction\(workspaceId, actionId\)/);
 assert.match(actionApi, /`\$\{basePath\(workspaceId\)\}\/brief`/);
 assert.match(actionApi, /\/\$\{encodeURIComponent\(actionId\)\}\/apply/);
 

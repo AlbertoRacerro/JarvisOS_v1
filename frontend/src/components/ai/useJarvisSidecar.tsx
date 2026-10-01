@@ -2,7 +2,7 @@ import { useCallback, useContext, useEffect, useMemo, useRef, useState, type For
 import { ArrowUp, ChatCircleDots, Info, X } from "@phosphor-icons/react";
 
 import type { KnowledgeContextPreview } from "../../api/knowledgeActions";
-import { applyWorkspaceAction, dismissWorkspaceAction, getSurfaceBrief, undoWorkspaceAction, type ActionOutcome, type SurfaceRef } from "../../api/workspaceActions";
+import { applyWorkspaceAction, dismissWorkspaceAction, getSurfaceBrief, getWorkspaceAction, undoWorkspaceAction, WorkspaceActionRequestError, type ActionOutcome, type SurfaceRef } from "../../api/workspaceActions";
 import { currentProcessSurface, listenForProcessSurface, publishWorkspaceAction } from "../../app/workspaceActionSurface";
 import type { StageSelection } from "../../app/selection";
 import {
@@ -327,9 +327,20 @@ export function useJarvisSidecar(
     if (action.state === "applied" || action.state === "undone") publishActionRefresh(action, action.state);
   };
 
-  const applyAction = async (actionId: string) => { if (!workspaceId) return; updateAction(await applyWorkspaceAction(workspaceId, actionId)); };
-  const dismissAction = async (actionId: string) => { if (!workspaceId) return; updateAction(await dismissWorkspaceAction(workspaceId, actionId)); };
-  const undoAction = async (actionId: string) => { if (!workspaceId) return; updateAction(await undoWorkspaceAction(workspaceId, actionId)); };
+  const runActionRequest = async (actionId: string, request: (workspaceId: string, actionId: string) => Promise<ActionOutcome>) => {
+    if (!workspaceId) return;
+    try { updateAction(await request(workspaceId, actionId)); }
+    catch (caught) {
+      if (caught instanceof WorkspaceActionRequestError && caught.status === 409) {
+        try { updateAction(await getWorkspaceAction(workspaceId, actionId)); return; }
+        catch { /* Show the original conflict below when the canonical record is unavailable. */ }
+      }
+      setError(caught instanceof Error ? caught.message : "Workspace action could not be updated.");
+    }
+  };
+  const applyAction = async (actionId: string) => runActionRequest(actionId, applyWorkspaceAction);
+  const dismissAction = async (actionId: string) => runActionRequest(actionId, dismissWorkspaceAction);
+  const undoAction = async (actionId: string) => runActionRequest(actionId, undoWorkspaceAction);
 
   useEffect(() => {
     const actions = [...(detail?.interactions.flatMap(item => item.actions ?? []) ?? []), ...relayRuns.flatMap(run => run.actions ?? [])];
