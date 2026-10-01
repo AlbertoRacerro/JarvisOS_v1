@@ -1,33 +1,7 @@
-import {
-  ArrowsOut,
-  ArrowClockwise,
-  ArrowCounterClockwise,
-  Circle,
-  Cube,
-  Ruler,
-  Selection,
-  SketchLogo,
-  SquaresFour
-} from "@phosphor-icons/react";
-
 import BluecadWorkbench from "../components/bluecad/BluecadWorkbench";
 import type { PrimaryStageProps } from "./registry";
 
-const bluecadPresentationTools = [
-  ["Measure", Ruler],
-  ["Sketch", SketchLogo],
-  ["Circle", Circle],
-  ["Extrude", Cube],
-  ["Pattern", SquaresFour],
-  ["Fit view", ArrowsOut],
-  ["Undo", ArrowCounterClockwise],
-  ["Redo", ArrowClockwise],
-  ["Section", Selection],
-] as const;
-
 function ModelStage({ onSelectionChange, onShellRegionsChange, requestShellRegionOpen, navigate }: PrimaryStageProps) {
-  const futureReason = "Future BLUECAD authoring control — current accepted authority is inspect/select existing server-owned geometry only.";
-
   return (
     <section className="bluecad-final-stage design-stage" aria-labelledby="bluecad-final-title">
       <header className="design-stage__header bluecad-final-stage__header">
@@ -35,7 +9,7 @@ function ModelStage({ onSelectionChange, onShellRegionsChange, requestShellRegio
           <div>
             <p className="eyebrow">Design</p>
             <h1 id="bluecad-final-title">BLUECAD workspace</h1>
-            <p className="panel-subtitle">Deterministic geometry inspection and existing CAD evidence share one engineering workspace; unsupported authoring stays unavailable.</p>
+            <p className="panel-subtitle">Inspect server-built geometry, create deterministic template parts and hand off STL or STEP files for printing.</p>
           </div>
           <span className="design-stage__truth-state">Geometry · Server-owned</span>
         </div>
@@ -44,16 +18,6 @@ function ModelStage({ onSelectionChange, onShellRegionsChange, requestShellRegio
           <button type="button" className="is-active" aria-current="page">BLUECAD</button>
         </nav>
       </header>
-
-      <p className="panel-subtitle">When geometry is available: click to select a mesh, drag to orbit, right-drag to pan and scroll to zoom. Open the candidate inspector for mesh details, validation and existing artifact downloads.</p>
-      <div className="bluecad-final-stage__toolbar" aria-label="BLUECAD tools">
-        {bluecadPresentationTools.map(([label, Icon]) => (
-          <button key={label} type="button" disabled title={futureReason} aria-label={`${label} unavailable: ${futureReason}`}>
-            <Icon size={17} aria-hidden="true" />
-            <span>{label}</span>
-          </button>
-        ))}
-      </div>
 
       <div className="bluecad-final-stage__body">
         <BluecadWorkbench

@@ -6,13 +6,18 @@ import {
   archiveBluecadCandidate,
   bluecadArtifactContentUrl,
   createBluecadCandidate,
+  createBluecadTemplateCandidate,
   getBluecadArtifactJson,
   getBluecadCandidateAggregate,
+  getBluecadGenerationAvailability,
   listBluecadCandidates,
   listWorkspaces,
   promoteBluecadCandidate,
   type BluecadCandidate,
+  type BluecadArtifactRefRead,
   type BluecadCandidateAggregateRead,
+  type BluecadGenerationAvailability,
+  type BluecadTemplateCreate,
   type BluecadValidationCheck,
   type Workspace
 } from "../../api/client";
@@ -73,6 +78,9 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
   const [inspection, setInspection] = useState<GeometryInspectionSnapshot>(EMPTY_INSPECTION);
   const [inspectionCommand, setInspectionCommand] = useState<GeometryInspectionCommand | null>(null);
   const [sceneBindingPresentation, setSceneBindingPresentation] = useState<SceneBindingPresentation>("idle");
+  const [showCreate, setShowCreate] = useState(false);
+  const [availability, setAvailability] = useState<BluecadGenerationAvailability | null>(null);
+  const [availabilityState, setAvailabilityState] = useState<LoadState>("idle");
 
   const listGeneration = useRef(0);
   const detailGeneration = useRef(0);
@@ -390,6 +398,25 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
   }, [chooseCandidate, loadCandidates, workspaceId]);
 
   useEffect(() => {
+    setShowCreate(false);
+    setAvailability(null);
+    if (!workspaceId) {
+      setAvailabilityState("idle");
+      return undefined;
+    }
+    let active = true;
+    setAvailabilityState("loading");
+    getBluecadGenerationAvailability(workspaceId).then((next) => {
+      if (!active) return;
+      setAvailability(next);
+      setAvailabilityState("ready");
+    }).catch(() => {
+      if (active) setAvailabilityState("error");
+    });
+    return () => { active = false; };
+  }, [workspaceId]);
+
+  useEffect(() => {
     if (!workspaceId || !selectedId) {
       clearVisibleDetail("idle");
       return;
@@ -470,6 +497,42 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
     }
     if (workspaceRef.current === mutation.workspaceId) setMessage(failureMessage);
   }, [loadAggregate, loadCandidates, publishSelection]);
+
+  const onCreateTemplate = async (payload: BluecadTemplateCreate): Promise<boolean> => {
+    if (!workspaceId || candidateState === "loading" || mutationConflicts(pendingAction, "create")) return false;
+    const mutation: MutationContext = {
+      generation: ++mutationGeneration.current,
+      workspaceId: workspaceRef.current,
+      candidateId: selectedRef.current,
+      kind: "create"
+    };
+    setPendingAction("create");
+    setMessage(null);
+    try {
+      const created = await createBluecadTemplateCandidate(mutation.workspaceId, payload);
+      if (!acceptsMutation({ generation: mutationGeneration.current, workspaceId: workspaceRef.current, candidateId: selectedRef.current }, mutation)) return false;
+      filterTextRef.current = "";
+      setFilterText("");
+      suppressNextDetailEffect.current = created.id;
+      const items = await loadCandidates(mutation.workspaceId, created.id);
+      if (!items || !items.some((item) => item.id === created.id)) {
+        suppressNextDetailEffect.current = null;
+        return false;
+      }
+      setShowCreate(false);
+      const detail = await loadAggregate(mutation.workspaceId, created.id);
+      if (!detail || workspaceRef.current !== mutation.workspaceId || selectedRef.current !== created.id) return true;
+      setMessage(`Template candidate saved · ${detail.candidate.status}${detail.candidate.parked_reason ? ` — ${detail.candidate.parked_reason}` : ""}.`);
+      return true;
+    } catch (error) {
+      suppressNextDetailEffect.current = null;
+      const refused = error instanceof Error && error.message === "Request failed with 422";
+      await reconcileAfterMutationError(mutation, refused ? "The server refused these template parameters." : error instanceof Error ? error.message : "Template creation failed.");
+      return false;
+    } finally {
+      setPendingAction(null);
+    }
+  };
 
   const onCreate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -561,6 +624,25 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
     requestShellRegionOpen("navigator");
   };
 
+  const openBriefComposer = () => {
+    requestShellRegionOpen("navigator");
+    const briefNode = briefRef.current;
+    if (briefNode) {
+      briefNode.scrollIntoView({ block: "nearest" });
+      briefNode.focus();
+      return;
+    }
+    focusBriefOnMount.current = true;
+  };
+
+  const aiBriefState = availabilityState === "loading" || availabilityState === "idle"
+    ? "Checking provider and budget state…"
+    : availabilityState === "error" || !availability
+      ? "Provider state is unavailable. The server still enforces provider permission and budget; a blocked brief is saved as a parked candidate."
+      : availability.external_calls_allowed
+        ? "Paid AI is enabled for the external tier. A brief starts server-side generation and may spend budget."
+        : `Paid AI is off (${availability.blocking_reason ?? "external calls blocked"}). A brief is saved but parks as budget_blocked until paid AI and budget are enabled in Settings.`;
+
   const navigator = useMemo<ReactNode>(() => (
     <div className="bluecad-workbench__navigator">
       <label>Workspace<select value={workspaceId} onChange={(event) => {
@@ -581,7 +663,7 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
       <label>Filter candidates<input ref={filterRef} value={filterText} onChange={(event) => { filterTextRef.current = event.target.value; setFilterText(event.target.value); }} disabled={candidateState === "loading" || pendingAction !== null} /></label>
       <label className="checkbox-line"><input type="checkbox" checked={showArchived} onChange={(event) => setShowArchived(event.target.checked)} disabled={candidateState === "loading" || pendingAction !== null} />Show archived</label>
       <button type="button" className="secondary-button" onClick={() => void refresh()} disabled={!workspaceId || candidateState === "loading" || pendingAction !== null}>Refresh</button>
-      <p className="panel-subtitle">New candidate saves your brief and requests generation. The server enforces provider permission and budget; blocked requests remain saved as parked candidates.</p>
+      <p className="panel-subtitle">New candidate saves your brief and requests AI generation. {aiBriefState}</p>
       <form className="bluecad-new-form" onSubmit={onCreate}><label>New candidate brief<textarea ref={handleBriefRef} value={briefText} onChange={(event) => setBriefText(event.target.value)} required /></label><button type="submit" disabled={!workspaceId || !briefText.trim() || candidateState === "loading" || pendingAction !== null}>{pendingAction === "create" ? "Creating…" : "New candidate"}</button></form>
       {workspaceState === "loading" && <p>Loading workspaces…</p>}
       {workspaceState === "error" && <p className="error-banner">Workspace discovery failed.</p>}
@@ -592,7 +674,7 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
       {candidateState === "ready" && candidates.length === 0 && <p ref={emptyCandidatesRef} tabIndex={-1}>No BLUECAD candidates exist in this workspace.</p>}
       {candidateState === "ready" && candidates.length > 0 && visibleCandidates.length === 0 && <p ref={emptyCandidatesRef} tabIndex={-1}>No candidates match the current filter. Archived candidates may be hidden.</p>}
     </div>
-  ), [briefText, candidateState, candidates.length, clearVisibleDetail, filterText, handleBriefRef, pendingAction, publishSelection, refresh, selectedId, showArchived, visibleCandidates, workspaceId, workspaceState, workspaces]);
+  ), [aiBriefState, briefText, candidateState, candidates.length, clearVisibleDetail, filterText, handleBriefRef, pendingAction, publishSelection, refresh, selectedId, showArchived, visibleCandidates, workspaceId, workspaceState, workspaces]);
 
   const sceneBindingNotice = sceneBindingPresentation === "resolving"
     ? "Resolving engineering binding…"
@@ -640,9 +722,145 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
 
   const candidate = aggregate?.candidate.id === selectedId ? aggregate.candidate : null;
   const canPromote = candidate?.status === "valid" && !candidate.promoted_decision_id;
-  const viewportFallback = selectedId && aggregateState === "error" ? "Candidate detail unavailable. Use Refresh to retry." : aggregateState === "loading" ? "Loading candidate geometry…" : "Select a candidate from the navigator.";
+  const exports = aggregate?.candidate.id === selectedId ? aggregate.exports ?? [] : [];
+  const busy = candidateState === "loading" || pendingAction !== null;
+  const noCandidates = candidateState === "ready" && candidates.length === 0;
+  const createPanel = <CreateGeometryPanel
+    heading={noCandidates ? "No geometry yet" : "Create geometry"}
+    intro={noCandidates ? "This workspace has no BLUECAD candidates, so there is nothing to show in 3D. Create geometry in one of two ways:" : "Add a candidate to this workspace in one of two ways:"}
+    aiBriefState={aiBriefState}
+    disabled={!workspaceId || busy}
+    pending={pendingAction === "create"}
+    onCreateTemplate={onCreateTemplate}
+    onOpenBrief={openBriefComposer}
+    onCancel={noCandidates ? null : () => setShowCreate(false)}
+  />;
+  const viewportContent = workspaceState === "loading"
+    ? <div className="bluecad-workbench__empty-viewer"><p>Loading workspaces…</p></div>
+    : workspaceState === "ready" && workspaces.length === 0
+      ? <div className="bluecad-workbench__empty-viewer"><p>No workspaces are available.</p></div>
+      : showCreate || noCandidates
+        ? <div className="bluecad-workbench__empty-viewer">{createPanel}</div>
+        : candidate?.glb_artifact_id
+          ? <BluecadGlbViewer artifactUrl={bluecadArtifactContentUrl(candidate.workspace_id, candidate.glb_artifact_id)} inspectionCommand={inspectionCommand} onInspectionChange={handleInspectionChange} />
+          : candidate
+            ? <div className="bluecad-workbench__empty-viewer"><h2>Geometry unavailable</h2><p>{candidate.parked_reason ? `Generation was parked: ${candidate.parked_reason}` : "No GLB artifact is available for this candidate yet."}</p><p><button type="button" className="secondary-button" onClick={() => setShowCreate(true)}>Create geometry</button></p></div>
+            : <div className="bluecad-workbench__empty-viewer"><p>{selectedId && aggregateState === "error" ? "Candidate detail unavailable. Use Refresh to retry." : aggregateState === "loading" || candidateState === "loading" ? "Loading candidate geometry…" : "Select a candidate from the navigator."}</p>{candidateState === "ready" && aggregateState !== "loading" && <p className="button-row"><button type="button" className="secondary-button" onClick={() => requestShellRegionOpen("navigator")}>Open candidate list</button><button type="button" className="secondary-button" onClick={() => setShowCreate(true)}>Create geometry</button></p>}</div>;
 
-  return <section className="bluecad-workbench" aria-labelledby="bluecad-workbench-title"><header className="bluecad-workbench__chrome"><div><p className="eyebrow">BLUECAD</p><h1 id="bluecad-workbench-title" ref={workbenchTitleRef} tabIndex={-1}>Model workbench</h1>{candidate && <div style={{ minWidth: 0, overflowWrap: "anywhere" }}><p className="panel-subtitle">{candidate.brief_text.slice(0, 180)}{candidate.brief_text.length > 180 ? "…" : ""}</p><details><summary>Candidate details</summary><dl><dt>Candidate ID</dt><dd>{candidate.id}</dd></dl><p style={{ maxHeight: "10rem", overflow: "auto", whiteSpace: "pre-wrap" }}>{candidate.brief_text}</p></details></div>}</div>{candidate && <div className="button-row"><span className={`status-pill status-${candidate.status}`}>{candidate.status}</span><button type="button" className="secondary-button" onClick={() => requestShellRegionOpen("sidecar")}>Inspect candidate</button><button type="button" className="secondary-button" onClick={duplicateSelectedBrief}>Duplicate brief</button>{candidate.status !== "archived" && <button type="button" className="secondary-button" onClick={() => void onArchive()} disabled={candidateState === "loading" || pendingAction !== null}>Archive</button>}{canPromote && <button type="button" onClick={() => void onPromote()} disabled={candidateState === "loading" || pendingAction !== null}>Promote to Decision</button>}</div>}</header>{message && <div className="panel-subtitle" role="status">{message}</div>}{sceneBindingNotice && <div className={sceneBindingPresentation === "resolving" ? "panel-subtitle" : "warning-banner"} role="status">{sceneBindingNotice}</div>}<div className="bluecad-workbench__viewport" style={{ minHeight: "min(26rem, 55vh)" }}>{candidate?.glb_artifact_id ? <BluecadGlbViewer artifactUrl={bluecadArtifactContentUrl(candidate.workspace_id, candidate.glb_artifact_id)} inspectionCommand={inspectionCommand} onInspectionChange={handleInspectionChange} /> : candidate ? <div className="bluecad-workbench__empty-viewer"><h2>Geometry unavailable</h2><p>{candidate.parked_reason ? `Generation was parked: ${candidate.parked_reason}` : "No GLB artifact is available for this candidate yet."}</p></div> : <div className="bluecad-workbench__empty-viewer"><p>{viewportFallback}</p></div>}</div></section>;
+  return <section className="bluecad-workbench" aria-labelledby="bluecad-workbench-title"><header className="bluecad-workbench__chrome"><div style={{ minWidth: 0, flex: "1 1 18rem" }}><p className="eyebrow">BLUECAD</p><h1 id="bluecad-workbench-title" ref={workbenchTitleRef} tabIndex={-1}>Model workbench</h1>{candidate && !showCreate && <div style={{ minWidth: 0, overflowWrap: "anywhere" }}><p className="panel-subtitle">{candidate.brief_text.slice(0, 180)}{candidate.brief_text.length > 180 ? "…" : ""}</p><details><summary>Candidate details</summary><dl><dt>Candidate ID</dt><dd>{candidate.id}</dd></dl><p style={{ maxHeight: "10rem", overflow: "auto", whiteSpace: "pre-wrap" }}>{candidate.brief_text}</p></details></div>}</div><div className="button-row">{candidate && !showCreate && <><span className={`status-pill status-${candidate.status}`}>{candidate.status}</span>{exports.length > 0 && <ExportMenu exports={exports} />}<button type="button" className="secondary-button" onClick={() => requestShellRegionOpen("sidecar")}>Inspect candidate</button><button type="button" className="secondary-button" onClick={duplicateSelectedBrief}>Duplicate brief</button>{candidate.status !== "archived" && <button type="button" className="secondary-button" onClick={() => void onArchive()} disabled={busy}>Archive</button>}{canPromote && <button type="button" onClick={() => void onPromote()} disabled={busy}>Promote to Decision</button>}</>}{workspaceId && !noCandidates && !showCreate && <button type="button" className="secondary-button" onClick={() => setShowCreate(true)} disabled={busy}>New geometry</button>}</div></header>{message && <div className="panel-subtitle" role="status">{message}</div>}{sceneBindingNotice && <div className={sceneBindingPresentation === "resolving" ? "panel-subtitle" : "warning-banner"} role="status">{sceneBindingNotice}</div>}<div className="bluecad-workbench__viewport">{viewportContent}</div></section>;
+}
+
+const EXPORT_LABELS: Record<string, [string, string]> = {
+  "export.stl": ["STL mesh", "Millimetres · for slicers such as Bambu Studio"],
+  "export.step": ["STEP solid", "Exact B-rep · for CAD exchange"]
+};
+
+function ExportMenu({ exports }: { exports: BluecadArtifactRefRead[] }) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const onPointerDown = (event: PointerEvent) => {
+      if (rootRef.current && !rootRef.current.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [open]);
+  const items = exports.filter((item) => EXPORT_LABELS[item.roles[0] ?? ""]);
+  return <div className="bluecad-export" ref={rootRef} onKeyDown={(event) => {
+    if (event.key === "Escape" && open) {
+      event.stopPropagation();
+      setOpen(false);
+      buttonRef.current?.focus();
+    }
+  }}><button ref={buttonRef} type="button" className="secondary-button" aria-expanded={open} aria-controls="bluecad-export-menu" onClick={() => setOpen((value) => !value)}>Export ▾</button>{open && <div id="bluecad-export-menu" className="bluecad-export__menu" aria-label="Download exports">{items.map((item) => {
+    const [label, detail] = EXPORT_LABELS[item.roles[0]];
+    return <a key={item.id} href={`${API_BASE_URL}${item.content_url}`} download onClick={() => setOpen(false)}><strong>{label}</strong><small>{detail}</small></a>;
+  })}</div>}</div>;
+}
+
+type TemplateKind = BluecadTemplateCreate["template"];
+type FieldSpec = Readonly<{ key: string; label: string; min: number; max: number; step: number; integer?: boolean; initial: string }>;
+
+// Bounds mirror the server template contract; the server remains the authority.
+const TEMPLATE_FIELDS: Record<TemplateKind, readonly FieldSpec[]> = {
+  tube: [
+    { key: "outer_d_mm", label: "Outer Ø (mm)", min: 2, max: 1000, step: 0.1, initial: "40" },
+    { key: "wall_t_mm", label: "Wall (mm)", min: 0.5, max: 100, step: 0.1, initial: "3" },
+    { key: "length_mm", label: "Length (mm)", min: 1, max: 5000, step: 1, initial: "120" }
+  ],
+  manifold: [
+    { key: "outer_d_mm", label: "Header Ø (mm)", min: 2, max: 1000, step: 0.1, initial: "50" },
+    { key: "wall_t_mm", label: "Wall (mm)", min: 0.5, max: 100, step: 0.1, initial: "3" },
+    { key: "length_mm", label: "Length (mm)", min: 1, max: 5000, step: 1, initial: "240" },
+    { key: "branch_count", label: "Branches", min: 1, max: 12, step: 1, integer: true, initial: "3" },
+    { key: "branch_outer_d_mm", label: "Branch Ø (mm)", min: 2, max: 1000, step: 0.1, initial: "20" }
+  ]
+};
+
+function templateProblem(kind: TemplateKind, values: Record<string, number>): string | null {
+  for (const field of TEMPLATE_FIELDS[kind]) {
+    const value = values[field.key];
+    if (!Number.isFinite(value) || value < field.min || value > field.max || (field.integer && !Number.isInteger(value))) {
+      return `${field.label} must be ${field.integer ? "a whole number " : ""}between ${field.min} and ${field.max}.`;
+    }
+  }
+  if (values.wall_t_mm * 2 >= values.outer_d_mm) return "Wall must be less than half of the outer diameter.";
+  if (kind === "manifold") {
+    if (values.wall_t_mm * 2 >= values.branch_outer_d_mm) return "Wall must be less than half of the branch diameter.";
+    if (values.branch_outer_d_mm >= values.outer_d_mm) return "Branch Ø must be smaller than the header Ø.";
+    if (values.branch_outer_d_mm >= values.length_mm / (values.branch_count + 1)) return "Branches do not fit: make the header longer or the branches fewer or thinner.";
+  }
+  return null;
+}
+
+function CreateGeometryPanel({ heading, intro, aiBriefState, disabled, pending, onCreateTemplate, onOpenBrief, onCancel }: {
+  heading: string;
+  intro: string;
+  aiBriefState: string;
+  disabled: boolean;
+  pending: boolean;
+  onCreateTemplate(payload: BluecadTemplateCreate): Promise<boolean>;
+  onOpenBrief(): void;
+  onCancel: (() => void) | null;
+}) {
+  const [kind, setKind] = useState<TemplateKind>("tube");
+  const [raw, setRaw] = useState<Record<TemplateKind, Record<string, string>>>(() => ({
+    tube: Object.fromEntries(TEMPLATE_FIELDS.tube.map((field) => [field.key, field.initial])),
+    manifold: Object.fromEntries(TEMPLATE_FIELDS.manifold.map((field) => [field.key, field.initial]))
+  }));
+  const [problem, setProblem] = useState<string | null>(null);
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const values = Object.fromEntries(TEMPLATE_FIELDS[kind].map((field) => [field.key, Number(raw[kind][field.key])]));
+    const nextProblem = templateProblem(kind, values);
+    setProblem(nextProblem);
+    if (nextProblem) return;
+    const payload = kind === "tube"
+      ? { template: "tube" as const, params: { outer_d_mm: values.outer_d_mm, wall_t_mm: values.wall_t_mm, length_mm: values.length_mm } }
+      : { template: "manifold" as const, params: { outer_d_mm: values.outer_d_mm, wall_t_mm: values.wall_t_mm, length_mm: values.length_mm, branch_count: values.branch_count, branch_outer_d_mm: values.branch_outer_d_mm } };
+    void onCreateTemplate(payload);
+  };
+  return <div className="bluecad-create">
+    <div className="bluecad-create__intro"><h2>{heading}</h2><p>{intro}</p></div>
+    <form className="bluecad-create__route" onSubmit={submit} aria-labelledby="bluecad-template-title" noValidate>
+      <h3 id="bluecad-template-title">Template part · no AI</h3>
+      <p>Built deterministically on the server from your dimensions, validated, and exported as GLB, STL and STEP.</p>
+      <div className="bluecad-create__fields">
+        <label>Template<select value={kind} onChange={(event) => { setKind(event.target.value as TemplateKind); setProblem(null); }} disabled={disabled}><option value="tube">Tube</option><option value="manifold">Manifold</option></select></label>
+        {TEMPLATE_FIELDS[kind].map((field) => <label key={`${kind}-${field.key}`}>{field.label}<input type="number" inputMode="decimal" min={field.min} max={field.max} step={field.step} value={raw[kind][field.key]} onChange={(event) => setRaw((current) => ({ ...current, [kind]: { ...current[kind], [field.key]: event.target.value } }))} disabled={disabled} required /></label>)}
+      </div>
+      {problem && <p className="error-banner" role="alert">{problem}</p>}
+      <div className="button-row"><button type="submit" disabled={disabled}>{pending ? "Building…" : `Create ${kind}`}</button>{onCancel && <button type="button" className="secondary-button" onClick={onCancel}>Cancel</button>}</div>
+    </form>
+    <section className="bluecad-create__route" aria-labelledby="bluecad-ai-title">
+      <h3 id="bluecad-ai-title">AI brief</h3>
+      <p>Describe the part in words; the generation loop proposes a GeometrySpec through an external AI tier.</p>
+      <p role="status">{aiBriefState}</p>
+      <div className="button-row"><button type="button" className="secondary-button" onClick={onOpenBrief}>Write a brief</button></div>
+    </section>
+  </div>;
 }
 
 function GeometryInspectionPanel({ snapshot, onSelect }: { snapshot: GeometryInspectionSnapshot; onSelect(meshKey: string | null): void }) {

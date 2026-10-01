@@ -39,6 +39,24 @@ type BluecadGlbViewerProps = {
 
 type SessionSelection = (meshKey: string | null) => void;
 
+export type ViewerViewName = "fit" | "iso" | "front" | "top" | "side";
+
+// glTF is Y-up; build123d converts the CAD Z-up frame on export, so CAD "top" is +Y.
+const VIEW_DIRECTIONS: Record<Exclude<ViewerViewName, "fit">, readonly [number, number, number]> = {
+  iso: [1, 0.8, 1],
+  front: [0, 0, 1],
+  top: [0, 1, 0.0001],
+  side: [1, 0, 0]
+};
+
+const VIEW_BUTTONS: ReadonlyArray<readonly [ViewerViewName, string, string]> = [
+  ["fit", "Fit", "Fit and reset the view to the whole model"],
+  ["iso", "Iso", "Reset to the default isometric view"],
+  ["front", "Front", "Front view"],
+  ["top", "Top", "Top view"],
+  ["side", "Side", "Right side view"]
+];
+
 function disposeMaterial(material: THREE.Material) {
   for (const value of Object.values(material)) {
     if (value instanceof THREE.Texture) value.dispose();
@@ -103,6 +121,8 @@ function BluecadGlbViewer({ artifactUrl, inspectionCommand = null, onInspectionC
   const inspectionChangeRef = useRef(onInspectionChange);
   const selectCurrentMeshRef = useRef<SessionSelection | null>(null);
   const sessionKeyRef = useRef<string | null>(null);
+  const setViewRef = useRef<((view: ViewerViewName) => void) | null>(null);
+  const [viewReady, setViewReady] = useState(false);
   inspectionChangeRef.current = onInspectionChange;
 
   useEffect(() => {
@@ -125,6 +145,8 @@ function BluecadGlbViewer({ artifactUrl, inspectionCommand = null, onInspectionC
     };
 
     setMessage("Loading GLB artifact…");
+    setViewReady(false);
+    setViewRef.current = null;
     clearInspection("loading");
 
     let renderer: THREE.WebGLRenderer;
@@ -216,14 +238,31 @@ function BluecadGlbViewer({ artifactUrl, inspectionCommand = null, onInspectionC
         const box = new THREE.Box3().setFromObject(gltf.scene);
         const center = box.getCenter(new THREE.Vector3());
         const size = box.getSize(new THREE.Vector3());
-        const maxDim = Math.max(size.x, size.y, size.z, 1);
-        controls.target.copy(center);
-        camera.position.copy(center).add(new THREE.Vector3(maxDim * 1.5, maxDim, maxDim * 1.5));
-        camera.near = Math.max(maxDim / 1000, 0.01);
+        const maxDim = Math.max(size.x, size.y, size.z, Number.EPSILON);
+        // Scale the floor grid to the model and rest it just under the geometry.
+        grid.scale.setScalar((maxDim * 3) / 220);
+        grid.position.set(center.x, box.min.y - maxDim * 0.02, center.z);
+        camera.near = maxDim / 1000;
         camera.far = maxDim * 100;
-        camera.updateProjectionMatrix();
-        controls.update();
-        setMessage("Orbit, pan, zoom, or click a mesh to inspect visible geometry.");
+        const radius = size.length() / 2 || maxDim;
+        const setView = (view: ViewerViewName) => {
+          if (disposed) return;
+          const offset = view === "fit"
+            ? camera.position.clone().sub(controls.target)
+            : new THREE.Vector3(...VIEW_DIRECTIONS[view]);
+          if (offset.lengthSq() === 0) offset.set(...VIEW_DIRECTIONS.iso);
+          const fov = THREE.MathUtils.degToRad(camera.fov);
+          const fitFov = camera.aspect < 1 ? 2 * Math.atan(Math.tan(fov / 2) * camera.aspect) : fov;
+          const distance = (radius / Math.sin(fitFov / 2)) * 1.1;
+          controls.target.copy(center);
+          camera.position.copy(center).add(offset.normalize().multiplyScalar(distance));
+          camera.updateProjectionMatrix();
+          controls.update();
+        };
+        setView("iso");
+        setViewRef.current = setView;
+        setViewReady(true);
+        setMessage("Drag to orbit · right-drag to pan · scroll to zoom · click a mesh to inspect it.");
         emitReady();
       },
       undefined,
@@ -286,6 +325,7 @@ function BluecadGlbViewer({ artifactUrl, inspectionCommand = null, onInspectionC
     return () => {
       disposed = true;
       if (generationRef.current === generation) {
+        setViewRef.current = null;
         sessionKeyRef.current = null;
         selectCurrentMeshRef.current = null;
         inspectionChangeRef.current?.({ sessionKey: null, status: "idle", meshes: [], selected: null });
@@ -318,8 +358,15 @@ function BluecadGlbViewer({ artifactUrl, inspectionCommand = null, onInspectionC
 
   return (
     <div className="bluecad-viewer-shell">
-      <div ref={mountRef} className="bluecad-viewer" />
-      <p className="panel-subtitle" aria-live="polite">{message}</p>
+      <div className="bluecad-viewer-frame">
+        <div ref={mountRef} className="bluecad-viewer" />
+        <div className="bluecad-viewer__views" role="toolbar" aria-label="Viewer camera">
+          {VIEW_BUTTONS.map(([view, label, title]) => (
+            <button key={view} type="button" title={title} aria-label={title} disabled={!viewReady} onClick={() => setViewRef.current?.(view)}>{label}</button>
+          ))}
+        </div>
+      </div>
+      <p className="panel-subtitle bluecad-viewer__hint" aria-live="polite">{message}</p>
     </div>
   );
 }
