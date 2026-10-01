@@ -33,6 +33,8 @@ assert.match(sidecar, /jarvis-turn--user/);
 assert.match(sidecar, /jarvis-sidecar__history/);
 assert.ok(sidecar.indexOf("jarvis-sidecar__composer") < sidecar.indexOf("jarvis-sidecar__history"), "history must sit below the composer");
 assert.match(sidecar, /SidecarChromeActions/);
+assert.match(sidecar, /id: "show-properties", label: "Show properties"/);
+assert.doesNotMatch(sidecar, /aria-pressed=\{chrome\.propertiesOpen\}/, "Properties stays in the compact secondary controls, outside the required header row");
 assert.match(shellSidecar, /Back to Jarvis/);
 
 // Relay is the default escalation; the API path stays an explicit choice; no silent fallback.

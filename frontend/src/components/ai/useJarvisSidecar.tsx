@@ -179,7 +179,6 @@ function SidecarChromeActions() {
   const chrome = useContext(SidecarChrome);
   if (!chrome) return null;
   return <>
-    <button type="button" className="jarvis-icon-button" aria-pressed={chrome.propertiesOpen} onClick={chrome.toggleProperties} title="Show engineering properties for the current selection">Properties</button>
     <button type="button" className="jarvis-icon-button" onClick={chrome.close} aria-label="Close Jarvis" title="Close Jarvis"><X size={15} aria-hidden="true" /></button>
   </>;
 }
@@ -682,6 +681,7 @@ export function useJarvisSidecar(
     ? "jarvis-sidecar__stage-context jarvis-sidecar__stage-context--visible"
     : "jarvis-sidecar__stage-context";
   const state = readiness(activeRoute, routes, optionsError, routesLoaded);
+  const shellChrome = useContext(SidecarChrome);
   const usableRoutes = routes.filter(routeUsable);
   const unavailableRoutes = routes.filter((route) => !routeUsable(route));
   const serverHasInFlight = Boolean(inFlight?.requestId && detail?.interactions.some((interaction) => interaction.request_id === inFlight.requestId));
@@ -825,6 +825,7 @@ export function useJarvisSidecar(
     ...responderItems,
     ...unavailableRoutes.map(route => ({ id: `off-${route.route_class}`, label: `${responderLabel(route)} — unavailable`, hint: route.availability.message, disabled: true, onSelect: () => undefined })),
     { id: "target-jarvis", label: `${composerTarget === "jarvis" ? "✓ " : ""}Send to Jarvis`, onSelect: () => setComposerTarget("jarvis") },
+    ...(shellChrome ? [{ id: "show-properties", label: "Show properties", onSelect: shellChrome.toggleProperties }] : []),
     ...(relayStatus?.enabled ? relayStatus.agents.map(agent => ({ id: `relay-${agent}`, label: `${composerTarget === "relay" && relayAgent === agent ? "✓ " : ""}Send task to Relay · ${modelDisplayName(null, agent)}`, onSelect: () => { setRelayAgent(agent); setComposerTarget("relay"); } })) : [])
   ];
   const activeResponderName = composerTarget === "relay" ? `Relay · ${modelDisplayName(null, relayAgent)}` : activeRoute ? responderLabel(activeRoute) : "No responder";
