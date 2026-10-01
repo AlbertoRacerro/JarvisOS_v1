@@ -76,6 +76,10 @@ from app.core.token_flow_schema import (
     TOKEN_FLOW_SCHEMA_MIGRATION_STATEMENTS,
     TOKEN_FLOW_SCHEMA_STATEMENTS,
 )
+from app.core.workspace_actions_schema import (
+    WORKSPACE_ACTIONS_MIGRATION_RECORD,
+    WORKSPACE_ACTIONS_SCHEMA_STATEMENTS,
+)
 from app.modules.events.service import utc_now
 
 RETRIEVAL_INDEX_MAX_PAGE_COUNT = 262_144  # 1 GiB at SQLite's default 4 KiB page size.
@@ -176,6 +180,8 @@ def initialize_database() -> DatabaseInfo:
         for statement in DEVELOPMENT_SCHEMA_STATEMENTS:
             connection.execute(statement)
         for statement in BRAINSTORM_SCHEMA_STATEMENTS:
+            connection.execute(statement)
+        for statement in WORKSPACE_ACTIONS_SCHEMA_STATEMENTS:
             connection.execute(statement)
         for statement in [
             *SCHEMA_MIGRATION_STATEMENTS,
@@ -291,6 +297,7 @@ def is_database_initialized() -> bool:
         "brainstorm_discussions",
         "brainstorm_promotions",
         "brainstorm_idempotency",
+        "workspace_actions",
     }
     with open_sqlite_connection() as connection:
         rows = connection.execute(
@@ -375,6 +382,7 @@ def _record_schema_migrations(connection: sqlite3.Connection) -> None:
         BRAINSTORM_SCHEMA_MIGRATION_RECORD,
         CLOUD_ESCALATION_MIGRATION_RECORD,
         RELAY_GATEWAY_MIGRATION_RECORD,
+        WORKSPACE_ACTIONS_MIGRATION_RECORD,
     ]
     for record in records:
         connection.execute(

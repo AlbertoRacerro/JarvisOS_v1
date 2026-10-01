@@ -4,6 +4,7 @@ Models only *propose* these requests. ``workspace_actions.service`` validates th
 against the canonical owner (Process draft, BLUECAD candidate ledger) at an explicit
 base revision, classifies the policy tier and applies or records them.
 """
+
 from __future__ import annotations
 
 from typing import Annotated, Literal
@@ -25,6 +26,7 @@ class ProcessSelection(BaseModel):
 
 class SurfaceRef(BaseModel):
     """What the frontend says is on screen. Never trusted: the brief re-derives it from owners."""
+
     model_config = _STRICT
     route_id: str = Field(min_length=1, max_length=64)
     draft_id: str | None = Field(default=None, max_length=64)
@@ -35,19 +37,20 @@ class SurfaceRef(BaseModel):
 
 class SurfaceBrief(BaseModel):
     """Bounded, owner-derived context for one turn. ``text`` is what a model sees."""
+
     model_config = _STRICT
     surface: Literal["process", "bluecad", "none"]
     route_id: str
     workspace_id: str
-    base_revision: str | None = None          # draft revision, or candidate id for BLUECAD
+    base_revision: str | None = None  # draft revision, or candidate id for BLUECAD
     draft_id: str | None = None
     candidate_id: str | None = None
     selected: list[dict[str, object]] = Field(default_factory=list)
-    summary: str                               # one line for the context chip
-    text: str = Field(max_length=6000)         # model-facing brief incl. vocabulary and limits
+    summary: str  # one line for the context chip
+    text: str = Field(max_length=6000)  # model-facing brief incl. vocabulary and limits
     actions: list[str] = Field(default_factory=list)
     limits: list[str] = Field(default_factory=list)
-    digest: str                                # sha256:<hex> of canonical brief
+    digest: str  # sha256:<hex> of canonical brief
 
 
 # ---------------------------------------------------------------- Process actions
@@ -145,7 +148,7 @@ class SetPartParam(BaseModel):
     part: str = Field(min_length=1, max_length=64)
     param: str = Field(min_length=1, max_length=32)
     value: float
-    unit: Literal["mm", "m", "cm", "deg"] = "mm"
+    unit: Literal["mm", "m", "cm", "deg", "unitless"] = "mm"
 
 
 class MovePart(BaseModel):
@@ -170,9 +173,11 @@ BluecadAction = Annotated[DuplicatePart | SetPartParam | MovePart | DeletePart, 
 # ---------------------------------------------------------------- requests and outcomes
 class ActionRequest(BaseModel):
     """One atomic request: all actions apply together at ``base_revision`` or none do."""
+
     model_config = _STRICT
     surface: Surface
-    base_revision: str = Field(min_length=1, max_length=64)   # draft revision or candidate id
+    base_revision: str = Field(min_length=1, max_length=64)  # draft revision or candidate id
+    draft_id: str | None = Field(default=None, max_length=64)  # disambiguates identical revision hashes
     actions: list[ProcessAction | BluecadAction] = Field(min_length=1, max_length=8)
     rationale: str | None = Field(default=None, max_length=600)
 
@@ -183,12 +188,12 @@ class ActionOrigin(BaseModel):
     thread_id: str
     interaction_id: str | None = None
     relay_run_id: str | None = None
-    model: str | None = None                 # human model name for provenance display
+    model: str | None = None  # human model name for provenance display
 
 
 class ChangeLine(BaseModel):
     model_config = _STRICT
-    label: str                               # e.g. "S1 pressure", "tube_2 (new tube_run)"
+    label: str  # e.g. "S1 pressure", "tube_2 (new tube_run)"
     before: str | None = None
     after: str | None = None
 
@@ -203,18 +208,18 @@ class ActionOutcome(BaseModel):
     surface: Surface
     state: ActionState
     tier: Literal["immediate", "confirm", "none"]
-    summary: str                              # operator sentence, no JSON
+    summary: str  # operator sentence, no JSON
     changes: list[ChangeLine] = Field(default_factory=list)
     base_revision: str
-    result_revision: str | None = None        # Process draft revision after apply
+    result_revision: str | None = None  # Process draft revision after apply
     draft_id: str | None = None
-    candidate_id: str | None = None           # BLUECAD base candidate
-    child_candidate_id: str | None = None     # BLUECAD candidate created by apply
+    candidate_id: str | None = None  # BLUECAD base candidate
+    child_candidate_id: str | None = None  # BLUECAD candidate created by apply
     reason_code: str | None = None
-    reason: str | None = None                 # plain text for refused/stale
+    reason: str | None = None  # plain text for refused/stale
     origin: ActionOrigin
     request_digest: str
-    request: dict[str, object]                # canonical request, shown only under Technical details
+    request: dict[str, object]  # canonical request, shown only under Technical details
     undo_available: bool = False
     created_at: str
     updated_at: str
