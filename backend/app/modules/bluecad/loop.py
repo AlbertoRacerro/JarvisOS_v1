@@ -62,6 +62,7 @@ from app.modules.bluecad.structural_ledger import (
 from app.modules.events.service import utc_now
 
 _EXTERNAL_ROUTES = {"external:cheap", "external:reasoning"}
+_MAX_PROPOSAL_TEXT_CHARS = 262_144
 
 
 @dataclass(frozen=True)
@@ -895,9 +896,15 @@ def _fem_error_result(exc: Exception) -> dict[str, Any]:
 
 
 def parse_geometry_spec_response(text: str) -> dict[str, Any]:
+    if len(text) > _MAX_PROPOSAL_TEXT_CHARS:
+        raise SpecValidationError({"message": "LLM response exceeds the proposal text limit."})
     payload = _extract_single_json_object(text)
     try:
         loaded = json.loads(payload)
+    except RecursionError as exc:
+        raise SpecValidationError(
+            {"message": "LLM response exceeded the JSON nesting limit."}
+        ) from exc
     except json.JSONDecodeError as exc:
         raise SpecValidationError(
             {
