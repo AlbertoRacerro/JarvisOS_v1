@@ -24,11 +24,16 @@ export type DraftObject = {
     temperature?: StoredQuantity;
     pressure?: StoredQuantity;
     mass_flow?: StoredQuantity;
+    molar_flow?: StoredQuantity;
+    vapor_fraction?: StoredQuantity;
     composition?: Record<string, number>;
+    composition_basis?: "mass" | "mole";
     duty?: StoredQuantity;
   };
   // Layout-only orthogonal route waypoints; never materialized, never stale results.
   route?: RoutePoint[];
+  flip_x?: boolean;
+  flip_y?: boolean;
 };
 /** Spec 158 typed kinetic reaction over declared compounds. */
 export type DraftReaction = {
@@ -93,6 +98,17 @@ export type DraftProjection = {
   findings: Finding[];
   results: ResultsState;
   proposals: Proposal[];
+  dwsim?: {
+    run_id?: string;
+    action?: string;
+    status?: string;
+    check_findings?: Finding[];
+    solve_errors?: string[];
+    failed_objects?: { tag?: string; error: string }[];
+    error?: string | null;
+    error_step?: string | null;
+    dwsim_message?: string | null;
+  } | null;
 };
 export type RegistryOption = string | { value: string | boolean; label: string };
 export type RegistryParam = {
@@ -152,6 +168,7 @@ export type StreamResult = {
   temperature_K: number | null;
   pressure_Pa: number | null;
   mass_flow_kg_s: number | null;
+  molar_flow_mol_s?: number | null;
   vapor_fraction: number | null;
   mass_fractions: Record<string, number>;
   display?: Record<string, DraftQuantity>;

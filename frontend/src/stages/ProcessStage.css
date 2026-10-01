@@ -438,3 +438,6 @@
     min-height: 280px;
   }
 }
+.process-advanced { margin-top: 6px; }
+.process-advanced > summary { cursor: pointer; color: var(--color-text-muted, #687068); font-size: 12px; }
+.process-advanced[open] > .process-mode-tabs { margin-top: 6px; }

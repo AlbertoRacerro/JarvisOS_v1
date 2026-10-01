@@ -62,6 +62,18 @@
   border-color: var(--color-accent-primary, #3b6b3a) !important;
   font-weight: 600;
 }
+.draft-readiness {
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-weight: 700;
+  background: #e3f1df;
+  color: #24562a;
+}
+.draft-readiness.has-blockers { background: #fbe4e1; color: #7c1f16; }
+.draft-secondary { position: relative; }
+.draft-secondary summary { cursor: pointer; padding: 4px 8px; border: 1px solid var(--color-border-default, #d8d1c5); border-radius: 4px; }
+.draft-secondary[open] { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.draft-secondary[open] summary { flex-basis: 100%; }
 .draft-revision {
   color: var(--color-text-muted, #687068);
 }
@@ -152,6 +164,11 @@
 .draft-node {
   cursor: grab;
 }
+.draft-node:focus-visible rect { stroke: #1d5fa8; stroke-width: 3; }
+.draft-port { fill: #56695a; stroke: #fffefa; stroke-width: 1; }
+.draft-inspector__title { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.draft-inspector__title h3 { min-width: 0; overflow-wrap: anywhere; }
+.draft-dwsim-error { padding: 6px 8px; border-left: 3px solid #b3402f; background: #fbe4e1; color: #7c1f16; overflow-wrap: anywhere; }
 .draft-node rect,
 .draft-node circle {
   fill: #fffefa;

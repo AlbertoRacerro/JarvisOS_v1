@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import ProcessProposals from "../components/process/ProcessProposals";
 import ResultProperties from "../components/process/ResultProperties";
+import { ContextMenu, MenuButton, useContextMenu } from "../components/ui/ContextMenu";
+import type { ContextMenuItem } from "../components/ui/ContextMenu";
 import {
   createDraft,
   DRAFT_CHANGED_EVENT,
@@ -166,6 +168,11 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
   const [reactionPick, setReactionPick] = useState<string[] | null>(null);
   const [composition, setComposition] = useState<Record<string, string>>({});
   const [mode, setMode] = useState<string>("");
+  const [flowBasis, setFlowBasis] = useState<"mass_flow" | "molar_flow">("mass_flow");
+  const [stateBasis, setStateBasis] = useState<"temperature" | "vapor_fraction">("temperature");
+  const [compositionBasis, setCompositionBasis] = useState<"mass" | "mole">("mass");
+  const [contextUnitId, setContextUnitId] = useState<string | null>(null);
+  const unitMenu = useContextMenu();
   const [rename, setRename] = useState("");
   const revisionRef = useRef<string>("");
   const queue = useRef<Promise<unknown>>(Promise.resolve());
@@ -281,6 +288,7 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
   const byId = useMemo(() => new Map(objects.map((item) => [item.id, item])), [objects]);
   const units = objects.filter((item) => item.kind === "unit");
   const selected = selectedId ? byId.get(selectedId) ?? null : null;
+  const contextUnit = contextUnitId ? byId.get(contextUnitId) : undefined;
   const unitSpec = (type: string): RegistryUnit | undefined => registry?.units.find((item) => item.type === type);
   const blockers = (draft?.findings ?? []).filter((item) => item.severity === "blocker");
   const pending = (draft?.proposals ?? []).filter((item) => item.state === "pending");
@@ -297,10 +305,20 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
     setReactionPick(null);
     setRename(selected?.tag ?? "");
     setMode(selected?.mode ?? "");
+    if (selected?.kind === "stream") {
+      setFlowBasis(selected.spec?.molar_flow ? "molar_flow" : "mass_flow");
+      setStateBasis(selected.spec?.vapor_fraction ? "vapor_fraction" : "temperature");
+      setCompositionBasis(selected.spec?.composition_basis ?? "mass");
+    }
     setComposition(
       Object.fromEntries((draft?.compounds ?? []).map((name) => [name, String(selected?.spec?.composition?.[name] ?? "")])),
     );
   }, [selected?.id, draft?.revision]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const orientationItems: ContextMenuItem[] = contextUnit ? [
+    { id: "mirror-lr", label: contextUnit.flip_x ? "Unmirror left ↔ right" : "Mirror left ↔ right", onSelect: () => void apply([{ op: "set_orientation", id: contextUnit.id, flip_x: !contextUnit.flip_x }]) },
+    { id: "mirror-tb", label: contextUnit.flip_y ? "Unmirror top ↕ bottom" : "Mirror top ↕ bottom", onSelect: () => void apply([{ op: "set_orientation", id: contextUnit.id, flip_y: !contextUnit.flip_y }]) },
+  ] : [];
 
   const position = (item: DraftObject): Point => overrides[item.id] ?? { x: item.x, y: item.y };
   const toSvg = (event: { clientX: number; clientY: number }): Point => {
@@ -311,7 +329,8 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
     return { x: point.x, y: point.y };
   };
 
-  // Port geometry: material inlets left, outlets right; energy ports along the bottom edge.
+  const unitWidth = (unit: DraftObject) => Math.max(UNIT_W, (unitSpec(unit.type)?.label.length ?? 8) * 6.2 + 20);
+  // Port geometry follows the saved layout orientation; endpoint identity and port order stay authoritative.
   const portAnchor = (unit: DraftObject, end: "source" | "target", port: number, energy: boolean): Anchor => {
     const spec = unitSpec(unit.type);
     const u = position(unit);
@@ -319,12 +338,14 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
       const inlets = spec?.energy_inlets ?? [];
       const all = inlets.length + (spec?.energy_outlets ?? []).length || 1;
       const index = end === "target" ? port : inlets.length + port;
-      return { at: { x: u.x + energyPortX(all, index), y: u.y + UNIT_H / 2 }, side: "bottom" };
+      const x = u.x + energyPortX(all, index) * (unit.flip_x ? -1 : 1);
+      return { at: { x, y: u.y + UNIT_H / 2 * (unit.flip_y ? -1 : 1) }, side: unit.flip_y ? "top" : "bottom" };
     }
     const count = end === "source" ? spec?.outlets.length ?? 1 : spec?.inlets.length ?? 1;
-    return end === "source"
-      ? { at: { x: u.x + UNIT_W / 2, y: u.y + portY(count, port) }, side: "right" }
-      : { at: { x: u.x - UNIT_W / 2, y: u.y + portY(count, port) }, side: "left" };
+    const source = end === "source";
+    const side = source !== Boolean(unit.flip_x) ? "right" : "left";
+    const y = u.y + portY(count, port) * (unit.flip_y ? -1 : 1);
+    return { at: { x: u.x + (side === "right" ? 1 : -1) * unitWidth(unit) / 2, y }, side };
   };
   // Orthogonal polyline from the source port (or feed marker) to the target port (or product marker).
   const streamRoute = (stream: DraftObject): Point[] | null => {
@@ -546,13 +567,22 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
     if (item.kind === "unit") {
       const point = position(item);
       const spec = unitSpec(item.type);
+      const width = unitWidth(item);
+      const inlets = spec?.inlets ?? [];
+      const outlets = spec?.outlets ?? [];
       return (
-        <g key={item.id} className={classes} onPointerDown={(event) => onPointerDown(event, item)} data-testid={`node-${item.tag}`}>
-          <rect x={point.x - UNIT_W / 2} y={point.y - UNIT_H / 2} width={UNIT_W} height={UNIT_H} rx={6} />
+        <g key={item.id} className={classes} onPointerDown={(event) => onPointerDown(event, item)} data-testid={`node-${item.tag}`}
+          role="button" tabIndex={0} aria-label={`${spec?.label ?? item.type} ${item.tag}`}
+          onContextMenu={(event) => { setContextUnitId(item.id); setSelectedId(item.id); unitMenu.targetProps.onContextMenu(event); }}
+          onKeyDown={(event) => { setContextUnitId(item.id); setSelectedId(item.id); unitMenu.targetProps.onKeyDown(event); }}
+          onFocus={() => { setSelectedId(item.id); setContextUnitId(item.id); }}>
+          <rect x={point.x - width / 2} y={point.y - UNIT_H / 2} width={width} height={UNIT_H} rx={6} />
           <text x={point.x} y={point.y - 3} textAnchor="middle" className="draft-node__tag">{item.tag}</text>
           <text x={point.x} y={point.y + 12} textAnchor="middle" className="draft-node__type">{spec?.label ?? item.type}</text>
+          {inlets.map((name, port) => { const anchor = portAnchor(item, "target", port, false); return <rect key={`in-${port}`} className="draft-port" x={anchor.at.x - 2} y={anchor.at.y - 3} width={4} height={6}><title>{name}</title></rect>; })}
+          {outlets.map((name, port) => { const anchor = portAnchor(item, "source", port, false); return <rect key={`out-${port}`} className="draft-port" x={anchor.at.x - 2} y={anchor.at.y - 3} width={4} height={6}><title>{name}</title></rect>; })}
           {[...(spec?.energy_inlets ?? []), ...(spec?.energy_outlets ?? [])].map((name, index, all) => (
-            <rect key={`energy-${index}`} className="draft-port--energy" x={point.x + energyPortX(all.length, index) - 3} y={point.y + UNIT_H / 2 - 3} width={6} height={6}>
+            <rect key={`energy-${index}`} className="draft-port--energy" x={point.x + energyPortX(all.length, index) * (item.flip_x ? -1 : 1) - 3} y={point.y + (item.flip_y ? -1 : 1) * (UNIT_H / 2 - 3)} width={6} height={6}>
               <title>{name} (energy)</title>
             </rect>
           ))}
@@ -678,12 +708,18 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
         ) : feed ? (
           <fieldset className="draft-fieldset draft-inputs" aria-label="Inputs">
             <legend>Inputs · feed specification</legend>
-            {registry.stream_specs.map((spec) => (
+            <label className="draft-field"><span>Thermal state</span><select aria-label="Feed thermal state basis" value={stateBasis} onChange={(event) => setStateBasis(event.target.value as typeof stateBasis)}>
+              <option value="temperature">Temperature</option><option value="vapor_fraction">Vapor fraction</option>
+            </select></label>
+            <label className="draft-field"><span>Flow basis</span><select aria-label="Feed flow basis" value={flowBasis} onChange={(event) => setFlowBasis(event.target.value as typeof flowBasis)}>
+              <option value="mass_flow">Mass flow</option><option value="molar_flow">Molar flow</option>
+            </select></label>
+            {registry.stream_specs.filter((spec) => spec.key === "pressure" || spec.key === stateBasis || spec.key === flowBasis).map((spec) => (
               <QuantityInput
                 key={spec.key}
                 label={spec.label}
                 kind={spec.kind}
-                stored={stream.spec?.[spec.key as "temperature"]}
+                stored={stream.spec?.[spec.key as "temperature" | "pressure" | "mass_flow" | "molar_flow" | "vapor_fraction"]}
                 units={units_[spec.kind].display}
                 value={form[spec.key]}
                 onChange={(next) => setForm((current) => ({ ...current, [spec.key]: next }))}
@@ -695,13 +731,18 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
               onClick={() => {
                 const values = quantitiesFrom(form);
                 if (!values) return setNotice({ tone: "danger", text: "Enter numbers only." });
+                delete values[stateBasis === "temperature" ? "vapor_fraction" : "temperature"];
+                delete values[flowBasis === "mass_flow" ? "molar_flow" : "mass_flow"];
                 void apply([{ op: "set_stream_spec", stream: stream.id, ...values }]);
               }}
             >
               Apply conditions
             </button>
-            <table className="draft-composition" aria-label="Composition (mass fractions)">
-              <thead><tr><th>Compound</th><th>Mass fraction</th></tr></thead>
+            <label className="draft-field"><span>Composition basis</span><select aria-label="Composition basis" value={compositionBasis} onChange={(event) => setCompositionBasis(event.target.value as typeof compositionBasis)}>
+              <option value="mass">Mass fractions</option><option value="mole">Mole fractions</option>
+            </select></label>
+            <table className="draft-composition" aria-label={`Composition (${compositionBasis} fractions)`}>
+              <thead><tr><th>Compound</th><th>{compositionBasis === "mass" ? "Mass fraction" : "Mole fraction"}</th></tr></thead>
               <tbody>
                 {draft.compounds.map((name) => (
                   <tr key={name}>
@@ -709,7 +750,7 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
                     <td>
                       <input
                         inputMode="decimal"
-                        aria-label={`${name} mass fraction`}
+                        aria-label={`${name} ${compositionBasis} fraction`}
                         value={composition[name] ?? ""}
                         onChange={(event) => setComposition((current) => ({ ...current, [name]: event.target.value }))}
                       />
@@ -726,11 +767,12 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
               onClick={() => {
                 const entries = Object.entries(composition).filter(([, text]) => text.trim() !== "");
                 if (entries.some(([, text]) => !Number.isFinite(Number(text))))
-                  return setNotice({ tone: "danger", text: "Mass fractions must be numbers." });
-                void apply([{ op: "set_stream_spec", stream: stream.id, composition: Object.fromEntries(entries.map(([name, text]) => [name, Number(text)])) }]);
+                  return setNotice({ tone: "danger", text: "Composition fractions must be numbers." });
+                void apply([{ op: "set_stream_spec", stream: stream.id, composition_basis: compositionBasis,
+                  composition: Object.fromEntries(entries.map(([name, text]) => [name, Number(text)])) }]);
               }}
             >
-              Apply composition
+              Apply {compositionBasis} composition
             </button>
           </fieldset>
         ) : (
@@ -901,6 +943,8 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
         <p>DWSIM refused step {String(run.error_detail?.step ?? "?")}. {run.error}{" "}
           <button type="button" disabled={busy !== null} onClick={() => void act(run.action, run.draft_revision)}>Retry</button></p>
       )}
+      {run.error_detail?.dwsim_message != null && <p className="draft-dwsim-error" role="alert">DWSIM: {String(run.error_detail.dwsim_message)}</p>}
+      {run.error && run.status !== "materialization_failed" && <p className="draft-dwsim-error" role="alert">{run.error}</p>}
       {run.dwsim_check && run.dwsim_check.findings.length > 0 && (
         <ul className="draft-findings">
           {run.dwsim_check.findings.map((finding, index) => (
@@ -909,7 +953,10 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
         </ul>
       )}
       {run.status === "validated" && <p>DWSIM reproduced the draft exactly and its check found nothing blocking.</p>}
-      {run.solve && run.status !== "completed" && <p>Solve failed: {run.solve.failed_objects.map((item) => `${item.tag} ${item.error}`).join("; ") || "DWSIM reported errors."}</p>}
+      {run.solve && run.status !== "completed" && <div className="draft-dwsim-error" role="alert">
+        <strong>Solve failed</strong>
+        {[...run.solve.errors.map((item) => String(item)), ...run.solve.failed_objects.map((item) => `${item.tag}: ${item.error}`)].map((message, index) => <p key={index}>{message}</p>)}
+      </div>}
     </section>
   );
 
@@ -923,7 +970,7 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
             : `Stale · ${results.edits_since} edit(s) since run ${solvedRun.run_id.slice(0, 8)} on revision ${solvedRun.draft_revision.split(":")[0]}. Values below describe that revision, not the current draft.`}
         </div>
         <table>
-          <thead><tr><th>Stream</th><th>T</th><th>P</th><th>Mass flow</th><th>Vapor frac.</th></tr></thead>
+          <thead><tr><th>Stream</th><th>T</th><th>P</th><th>Mass flow</th><th>Molar flow</th><th>Volumetric flow</th><th>Vapor frac.</th></tr></thead>
           <tbody>
             {Object.entries(solvedRun.streams ?? {}).map(([tag, value]) => (
               <tr key={tag}>
@@ -931,6 +978,8 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
                 <td>{formatQuantity(value.display?.temperature)}</td>
                 <td>{formatQuantity(value.display?.pressure)}</td>
                 <td>{formatQuantity(value.display?.mass_flow)}</td>
+                <td>{formatQuantity(value.display?.molar_flow)}</td>
+                <td>{formatQuantity(value.display?.volumetric_flow)}</td>
                 <td>{value.vapor_fraction == null ? "—" : value.vapor_fraction.toPrecision(4)}</td>
               </tr>
             ))}
@@ -949,29 +998,24 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
   return (
     <div className="draft-editor">
       <div className="draft-toolbar">
-        <label className="draft-field draft-field--inline">
-          <span>Draft</span>
-          <select
-            aria-label="Process draft"
-            value={draft.draft_id}
-            onChange={(event) => void loadDraft(event.target.value)}
-          >
-            {drafts.map((row) => (<option key={row.draft_id} value={row.draft_id}>{row.name}</option>))}
-          </select>
-        </label>
         <span className="draft-revision">revision {draft.seq}</span>
-        <button type="button" disabled={busy !== null || blockers.length > 0} title={blockers.length ? "Resolve the findings first" : "Compile this revision into DWSIM, verify it, and run DWSIM's check"} onClick={() => void act("validate")}>
-          {busy === "validate" ? "Validating…" : "Validate (DWSIM)"}
-        </button>
         <button type="button" className="draft-run-button" disabled={busy !== null || blockers.length > 0} onClick={() => void act("run")}>
           {busy === "run" ? "Running…" : "Run (DWSIM)"}
         </button>
+        <span className={`draft-readiness ${blockers.length ? "has-blockers" : "is-ready"}`} data-testid="readiness-chip" role="status">
+          {blockers.length ? `${blockers.length} blocker${blockers.length === 1 ? "" : "s"}` : "Ready to run"} · {draft.findings.length - blockers.length} warning{draft.findings.length - blockers.length === 1 ? "" : "s"}
+        </span>
         <span className={`draft-state draft-state--${results.state}`} data-testid="results-state">
           {results.state === "none" ? "No results" : results.state === "current" ? "Results current" : `Results stale (${results.edits_since} edits)`}
         </span>
-        <button type="button" className="draft-history-toggle" onClick={() => void (revisions ? setRevisions(null) : listDraftRevisions(workspaceId, draft.draft_id).then(setRevisions))}>
-          {revisions ? "Hide history" : "History"}
-        </button>
+        <details className="draft-secondary"><summary>More controls</summary>
+          <label className="draft-field draft-field--inline"><span>Draft</span><select aria-label="Process draft" value={draft.draft_id} onChange={(event) => void loadDraft(event.target.value)}>
+            {drafts.map((row) => (<option key={row.draft_id} value={row.draft_id}>{row.name}</option>))}
+          </select></label>
+          <button type="button" onClick={() => void createDraft(workspaceId, `Process draft ${drafts.length + 1}`).then((created) => { accept(created); setDrafts((rows) => [{ draft_id: created.draft_id, name: created.name, revision: created.revision, updated_at: "" }, ...rows]); })}>New draft</button>
+          <button type="button" disabled={busy !== null || blockers.length > 0} title={blockers.length ? "Resolve the findings first" : "Compile this revision into DWSIM and run its check"} onClick={() => void act("validate")}>{busy === "validate" ? "Validating…" : "Validate (DWSIM)"}</button>
+          <button type="button" className="draft-history-toggle" onClick={() => void (revisions ? setRevisions(null) : listDraftRevisions(workspaceId, draft.draft_id).then(setRevisions))}>{revisions ? "Hide history" : "History"}</button>
+        </details>
       </div>
       {notice && <p className={`draft-notice draft-notice--${notice.tone}`} role="alert">{notice.text}</p>}
       <div className="draft-body">
@@ -1022,8 +1066,10 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
             {renderEdges()}
             {objects.map(renderObject)}
           </svg>
+          <ContextMenu label="Unit orientation" items={orientationItems} at={unitMenu.at} onClose={unitMenu.close} />
           <section className="draft-findings-panel" aria-label="Draft findings">
-            <h3>Before DWSIM: {blockers.length ? `${blockers.length} to resolve` : "draft complete"}</h3>
+            <h3>Readiness guidance: {blockers.length ? `${blockers.length} blocker${blockers.length === 1 ? "" : "s"}` : "no blockers"}, {draft.findings.length - blockers.length} warning{draft.findings.length - blockers.length === 1 ? "" : "s"}</h3>
+            <p className="draft-hint">Blockers stop Run. Warnings allow a solve but may make its result physically meaningless.</p>
             <ul className="draft-findings">
               {draft.findings.map((finding, index) => (
                 <li key={index} data-severity={finding.severity}>
@@ -1057,7 +1103,12 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
           <ProcessProposals workspaceId={workspaceId} draftId={draft.draft_id} proposals={draft.proposals} onDecided={() => void loadDraft(draft.draft_id)} />
           {selected ? (
             <>
-              <h3>{selected.kind === "unit" ? unitSpec(selected.type)?.label : "Material stream"} {selected.tag}</h3>
+              <div className="draft-inspector__title"><h3>{selected.kind === "unit" ? unitSpec(selected.type)?.label : "Material stream"} {selected.tag}</h3>
+                {selected.kind === "unit" && <MenuButton label={`Orientation for ${selected.tag}`} items={[
+                  { id: "mirror-lr", label: selected.flip_x ? "Unmirror left ↔ right" : "Mirror left ↔ right", onSelect: () => void apply([{ op: "set_orientation", id: selected.id, flip_x: !selected.flip_x }]) },
+                  { id: "mirror-tb", label: selected.flip_y ? "Unmirror top ↕ bottom" : "Mirror top ↕ bottom", onSelect: () => void apply([{ op: "set_orientation", id: selected.id, flip_y: !selected.flip_y }]) },
+                ]}>Orientation ▾</MenuButton>}
+              </div>
               <div className="draft-rename">
                 <input aria-label="Tag" value={rename} onChange={(event) => setRename(event.target.value)} />
                 <button type="button" disabled={!rename || rename === selected.tag} onClick={() => void apply([{ op: "rename", id: selected.id, tag: rename }])}>Rename</button>
