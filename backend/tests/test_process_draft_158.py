@@ -2,6 +2,7 @@
 
 import copy
 import importlib.util
+import json
 from pathlib import Path
 from typing import Any
 
@@ -636,6 +637,28 @@ def test_process_read_view_contains_guidance_results_and_dwsim_errors(workspace_
     assert view["dwsim"]["solve_errors"] and view["dwsim"]["error"] == "RuntimeError"
     assert view["current_results"]["state"] == "current"
     assert view["current_results"]["streams"]["Feed"]["molar_flow"] == "40 kmol/h"
+
+
+def test_real_dwsim_solver_failure_text_reaches_hermes_view(workspace_draft: Any) -> None:
+    _client, workspace_id, state = workspace_draft
+    state = _patched(workspace_id, state, *_reactive_train_ops())
+    fixture_path = _ROOT / "backend" / "app" / "modules" / "process_stack" / "evidence" / "162" / "real_dwsim_failure_fixture.json"
+    fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
+    message = "Could not converge to a valid solution. Please check the column specs"
+    raw_solve = fixture["raw_dwsim"]["dwsim_solve_run"]
+    assert fixture["dwsim_version"] == "10.2.9"
+    assert raw_solve["ok"] is False
+    assert message in raw_solve["errors"][0]
+
+    run = copy.deepcopy(fixture["process_run"])
+    run.update(action="run", run_id="real-dwsim-failure", draft_revision=state["revision"],
+               started_at="2026-01-04T00:00:00+00:00")
+    directory = draft.draft_dir(workspace_id, state["draft_id"])
+    draft.record_run(directory, run)
+
+    view = draft.agent_view(workspace_id, state["draft_id"])
+    assert message in view["dwsim"]["solve_errors"][0]
+    assert view["dwsim"]["failed_objects"][0] == {"tag": "COL", "error": message}
 
 
 def test_only_input_properties_are_proposable(workspace_draft: Any) -> None:

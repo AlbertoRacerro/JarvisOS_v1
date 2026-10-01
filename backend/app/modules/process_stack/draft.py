@@ -1116,7 +1116,8 @@ def agent_view(workspace_id: str, draft_id: str | None) -> dict[str, Any]:
         if item["kind"] == "stream":
             row["from"] = _endpoint_tag(view, item["source"])
             row["to"] = _endpoint_tag(view, item["target"])
-            row["spec"] = {key: ({"value": value["value"], "unit": value["unit"]} if key != "composition" else value)
+            row["spec"] = {key: ({"value": value["value"], "unit": value["unit"]}
+                                  if isinstance(value, dict) and {"value", "unit"} <= value.keys() else value)
                            for key, value in item["spec"].items()}
         else:
             row["mode"] = item["mode"]
