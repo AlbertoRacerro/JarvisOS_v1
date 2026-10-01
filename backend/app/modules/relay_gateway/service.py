@@ -30,6 +30,7 @@ from pydantic import BaseModel, Field
 from app.core.database import open_sqlite_connection
 from app.core.paths import relay_root
 from app.modules.ai import sensitivity
+from app.modules.ai.cloud_escalation import screen_outbound_text, text_digest
 from app.modules.ai.egress_sanitizer import resolve_approved_prompt_derivative
 from app.modules.ai.sensitivity import revalidate_sanitized_derivative
 from app.modules.events.service import utc_now
@@ -67,6 +68,8 @@ class RelayRunRequest(BaseModel):
 class RelayRunRead(BaseModel):
     id: str
     thread_id: str
+    source_interaction_id: str | None = None
+    model: str | None = None
     relay_workspace_id: str | None
     agent: str
     state: RunState
@@ -97,6 +100,25 @@ class RelayStatusRead(BaseModel):
     agents: list[str]
     private_domain_data_enabled: bool
     blocked_reason: str | None
+
+
+class RelayEscalationDraftRead(BaseModel):
+    """What a Relay escalation would send, to which agent and model. Nothing is written."""
+
+    status: Literal["ready", "edit_required", "refused", "unavailable"]
+    reason_code: str | None
+    reason: str | None
+    source_interaction_id: str
+    text: str
+    text_digest: str | None
+    agent: str | None
+    model: str | None
+    billing: Literal["subscription"] = "subscription"
+
+
+class RelayEscalationApproval(BaseModel):
+    text: str = Field(min_length=1, max_length=20000)
+    text_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
 
 
 class ContextReleaseCreate(BaseModel):
@@ -332,17 +354,28 @@ def _runtime() -> RelayRuntime:
 
 def submit_relay_run(workspace_id: str, thread_id: str, payload: RelayRunRequest) -> RelayRunRead:
     config = load_config()
+    _require_runnable(config, payload.agent)
+    with open_sqlite_connection() as connection:
+        _require_thread(connection, workspace_id, thread_id)
+    admission = admit_prompt(payload.prompt, attested=payload.cloud_safe_attested, workspace_id=workspace_id)
+    return _submit_run(config, workspace_id, thread_id, payload.agent, payload.prompt, admission)
+
+
+def _require_runnable(config: dict[str, Any], agent: str) -> None:
     if not gateway_enabled(config):
         raise RelayGatewayError("relay_gateway_disabled")
     if (blocked := private_data_gate(config)) is not None:
         raise RelayGatewayError(blocked)
-    if payload.agent not in config.get("agents", {}):
+    if agent not in config.get("agents", {}):
         raise RelayGatewayError("relay_agent_not_allowed")
+
+
+def _submit_run(config: dict[str, Any], workspace_id: str, thread_id: str, agent: str, raw_prompt: str,
+                admission: Admission, *, source_interaction_id: str | None = None,
+                max_turns: int | None = None) -> RelayRunRead:
     level = config["repository"]["level"]
     mode = access_mode_for(level)
-    with open_sqlite_connection() as connection:
-        _require_thread(connection, workspace_id, thread_id)
-    admission = admit_prompt(payload.prompt, attested=payload.cloud_safe_attested, workspace_id=workspace_id)
+    model = config["agents"][agent].get("model")
     run_id = str(uuid4())
     now = utc_now()
     state = "queued" if admission.allowed else "denied"
@@ -352,12 +385,14 @@ def submit_relay_run(workspace_id: str, thread_id: str, payload: RelayRunRequest
                 """
                 INSERT INTO relay_runs (
                     id, workspace_id, thread_id, agent, state, reason_code, prompt_digest, prompt_source,
-                    prompt_derivative_id, repository_level, access_mode, created_at, finished_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    prompt_derivative_id, repository_level, access_mode, created_at, finished_at,
+                    source_interaction_id, model
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (run_id, workspace_id, thread_id, payload.agent, state, admission.reason_code,
-                 hashlib.sha256(payload.prompt.encode("utf-8")).hexdigest(), admission.prompt_source,
-                 admission.prompt_derivative_id, level, mode, now, None if admission.allowed else now),
+                (run_id, workspace_id, thread_id, agent, state, admission.reason_code,
+                 hashlib.sha256(raw_prompt.encode("utf-8")).hexdigest(), admission.prompt_source,
+                 admission.prompt_derivative_id, level, mode, now, None if admission.allowed else now,
+                 source_interaction_id, model),
             )
         except sqlite3.IntegrityError as exc:
             raise RelayGatewayError("relay_run_in_progress") from exc
@@ -365,11 +400,114 @@ def submit_relay_run(workspace_id: str, thread_id: str, payload: RelayRunRequest
     if admission.allowed:
         assert admission.effective_prompt is not None
         try:
-            _start_run(config, workspace_id, thread_id, run_id, payload.agent, mode, level,
-                       admission.effective_prompt)
+            _start_run(config, workspace_id, thread_id, run_id, agent, mode, level,
+                       admission.effective_prompt, max_turns)
         except (OSError, subprocess.SubprocessError, RelayGatewayError) as exc:
             _finish(run_id, "failed", reason_code="relay_run_launch_failed", result_text=str(exc)[:500])
     return get_relay_run(workspace_id, thread_id, run_id)
+
+
+# ---- escalation (spec 161) ----------------------------------------------------------
+# Relay is the default, subscription-backed escalation path. The operator's own source-turn
+# text is screened by the same deterministic floor as the 156/159 path; one approval of the
+# exact text is the cloud-safe attestation. Nothing here touches provider, budget or
+# derivative state, and a Relay failure never falls back to a metered provider.
+
+_ESCALATION_FRAME = (
+    "Advisory question escalated from a JarvisOS conversation. Answer it directly and concisely for "
+    "the operator; your answer is advice, not an action. Do not modify files, run builds or commit. "
+    "Read repository files only when they help answer.\n\nQuestion:\n"
+)
+_UNAVAILABLE_REASONS = {
+    "relay_gateway_disabled": "Relay is turned off on this machine, so nothing can be escalated through it.",
+    "private_domain_data_sandbox_not_accepted": (
+        "Relay is blocked: private domain data is enabled but the Relay sandbox has not been accepted."),
+    "relay_agent_not_allowed": "No Relay agent is configured for escalation.",
+    "relay_agent_binary_missing": "The Relay agent program is not installed on this machine.",
+    "relay_agent_login_missing": "The Relay agent is not signed in on this machine.",
+}
+
+
+def escalation_agent(config: dict[str, Any]) -> str | None:
+    agents = config.get("agents", {})
+    preferred = config.get("escalation_agent")
+    if preferred in agents:
+        return str(preferred)
+    return "claude" if "claude" in agents else next(iter(sorted(agents)), None)
+
+
+def _escalation_unavailable(config: dict[str, Any], agent: str | None) -> str | None:
+    if agent is None:
+        return "relay_agent_not_allowed"
+    try:
+        _require_runnable(config, agent)
+    except RelayGatewayError as exc:
+        return str(exc)
+    spec = config["agents"][agent]
+    if _runtime().resolve_agent(spec["command"]) is None:
+        return "relay_agent_binary_missing"
+    for relative in spec.get("credentials", []):
+        source = Path.home() / relative
+        if not source.is_file() or source.is_symlink():
+            return "relay_agent_login_missing"
+    return None
+
+
+def _source_turn_text(workspace_id: str, thread_id: str, interaction_id: str) -> str:
+    """The operator's text of a finished turn in this thread; foreign or running turns are refused."""
+    with open_sqlite_connection() as connection:
+        row = connection.execute(
+            """SELECT interaction.user_text, flow.state FROM ai_thread_interactions AS interaction
+               JOIN ai_threads AS thread ON thread.id = interaction.thread_id
+               JOIN ai_flows AS flow ON flow.id = interaction.flow_id
+               WHERE interaction.id = ? AND interaction.thread_id = ? AND thread.workspace_id = ?""",
+            (interaction_id, thread_id, workspace_id),
+        ).fetchone()
+    if row is None:
+        raise LookupError("interaction not found in this conversation")
+    if row["state"] not in {"complete", "partial_terminal", "failed_terminal"}:
+        raise RelayGatewayError("source_turn_not_finished")
+    return str(row["user_text"])
+
+
+def draft_relay_escalation(workspace_id: str, thread_id: str, interaction_id: str,
+                           text: str | None = None) -> RelayEscalationDraftRead:
+    config = load_config()
+    source_text = _source_turn_text(workspace_id, thread_id, interaction_id)
+    text = source_text if text is None else text
+    status, _level, code, reason = screen_outbound_text(text)
+    agent = escalation_agent(config)
+    unavailable = _escalation_unavailable(config, agent)
+    if status == "ready" and unavailable is not None:
+        status, code, reason = "unavailable", unavailable, _UNAVAILABLE_REASONS.get(unavailable, unavailable)
+    secret = code == "secret_detected"
+    return RelayEscalationDraftRead(
+        status=status, reason_code=code, reason=reason, source_interaction_id=interaction_id,
+        text="" if secret else text, text_digest=None if secret else text_digest(text),
+        agent=agent, model=config["agents"][agent].get("model") if agent else None,
+    )
+
+
+def escalate_with_relay(workspace_id: str, thread_id: str, interaction_id: str,
+                        payload: RelayEscalationApproval) -> RelayRunRead:
+    if payload.text_digest != text_digest(payload.text):
+        raise RelayGatewayError("text_digest_mismatch")
+    config = load_config()
+    _source_turn_text(workspace_id, thread_id, interaction_id)
+    status, _level, code, _reason = screen_outbound_text(payload.text)
+    if status != "ready":
+        raise RelayGatewayError(code or "text_not_cloud_safe")
+    agent = escalation_agent(config)
+    if (unavailable := _escalation_unavailable(config, agent)) is not None:
+        raise RelayGatewayError(unavailable)
+    assert agent is not None
+    # The approval of this exact screened text is the operator's cloud-safe attestation.
+    admission = admit_prompt(payload.text, attested=True, workspace_id=workspace_id)
+    if not admission.allowed:
+        raise RelayGatewayError(admission.reason_code or "relay_admission_refused")
+    admission = Admission(True, None, admission.prompt_source, _ESCALATION_FRAME + payload.text)
+    return _submit_run(config, workspace_id, thread_id, agent, payload.text, admission,
+                       source_interaction_id=interaction_id, max_turns=1)
 
 
 def list_relay_runs(workspace_id: str, thread_id: str) -> list[RelayRunRead]:
@@ -403,7 +541,7 @@ def _recent(timestamp: str) -> bool:
 
 
 def _start_run(config: dict[str, Any], workspace_id: str, thread_id: str, run_id: str, agent: str,
-               mode: AccessMode, level: str, prompt: str) -> None:
+               mode: AccessMode, level: str, prompt: str, max_turns: int | None = None) -> None:
     runtime = _runtime()
     relay_workspace = _ensure_relay_workspace(runtime, config, workspace_id, thread_id, agent, mode)
     releases = effective_releases(workspace_id, thread_id)
@@ -416,7 +554,7 @@ def _start_run(config: dict[str, Any], workspace_id: str, thread_id: str, run_id
     # Relay may link each --continue to a new session id; always continue from the newest one.
     continued_from = relay_workspace["relay_session_id"]
     argv = [runtime.relay_binary, "--json", "run", agent, "--yes", "--repo", relay_workspace["path"],
-            "--max-turns", str(int(config.get("max_turns", 10)))]
+            "--max-turns", str(max_turns or int(config.get("max_turns", 10)))]
     if continued_from:
         argv += ["--continue", continued_from]
     if config["agents"][agent].get("model"):
@@ -799,6 +937,8 @@ def _run_read(row: sqlite3.Row) -> RelayRunRead:
     return RelayRunRead(
         id=row["id"],
         thread_id=row["thread_id"],
+        source_interaction_id=row["source_interaction_id"],
+        model=row["model"],
         relay_workspace_id=row["relay_workspace_id"],
         agent=row["agent"],
         state=row["state"],

@@ -77,6 +77,12 @@ RELAY_GATEWAY_SCHEMA_STATEMENTS = [
     """,
 ]
 
+# Spec 161: a Relay escalation is linked to its source turn and records the explicit model.
+RELAY_GATEWAY_MIGRATION_STATEMENTS = [
+    "ALTER TABLE relay_runs ADD COLUMN source_interaction_id TEXT",
+    "ALTER TABLE relay_runs ADD COLUMN model TEXT",
+]
+
 RELAY_GATEWAY_INDEX_STATEMENTS = [
     "CREATE INDEX IF NOT EXISTS idx_relay_runs_thread ON relay_runs(thread_id, created_at)",
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_relay_runs_one_active ON relay_runs(thread_id) WHERE state IN ('queued', 'running')",
