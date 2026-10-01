@@ -405,7 +405,7 @@ def _workspace_action_tool(call: StructuredToolCall, workspace_id: str, error: s
     try:
         expected_surface = "process" if call.capability_id.startswith("jarvis.process_") else "bluecad"
         if ((constraints or {}).get("surface") != expected_surface
-                or (constraints or {}).get("route_id") != expected_surface):
+                or (constraints or {}).get("route_id") != f"design-{expected_surface}"):
             return None, "surface_scope_denied"
         if call.capability_id in {"jarvis.process_read", "jarvis.bluecad_read"}:
             brief = service.surface_brief(workspace_id, _surface_ref_from_constraints(constraints or {}))
@@ -416,7 +416,11 @@ def _workspace_action_tool(call: StructuredToolCall, workspace_id: str, error: s
                 return None, "surface_scope_denied"
             return brief.model_dump(mode="json"), error
         surface = str((constraints or {})["surface"])
-        request = ActionRequest.model_validate({**call.arguments, "surface": surface})
+        # The grant, not the model, names the surface and (for Process) the draft.
+        scoped = {**call.arguments, "surface": surface}
+        if surface == "process" and (constraints or {}).get("draft_id"):
+            scoped["draft_id"] = constraints["draft_id"]
+        request = ActionRequest.model_validate(scoped)
         expected_revision = (constraints or {}).get("base_revision")
         if expected_revision is not None and request.base_revision != expected_revision:
             return None, "surface_revision_denied"

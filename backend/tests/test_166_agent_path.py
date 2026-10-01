@@ -47,18 +47,18 @@ def test_surface_brief_falls_back_to_none_with_reason(monkeypatch) -> None:
         raise NotImplementedError("executor lane is not merged")
 
     monkeypatch.setattr(service, "surface_brief", unavailable)
-    brief = _derive_surface_brief("workspace-166", SurfaceRef(route_id="process"))
+    brief = _derive_surface_brief("workspace-166", SurfaceRef(route_id="design-process"))
     assert brief.surface == "none"
     assert "executor lane is not merged" in brief.text
 
 
 def test_surface_grants_and_instructions_are_scoped_to_brief() -> None:
     worker = SimpleNamespace(live_grants={})
-    brief = SurfaceBrief(surface="bluecad", route_id="bluecad", workspace_id="workspace-166",
+    brief = SurfaceBrief(surface="bluecad", route_id="design-bluecad", workspace_id="workspace-166",
                          base_revision="candidate-1", candidate_id="candidate-1", summary="BLUECAD · tube",
                          text="candidate candidate-1 selected tube", digest="sha256:" + "b" * 64)
     text = _install_surface_grants(worker, "workspace-166", "thread-166",
-                                   SurfaceRef(route_id="bluecad", candidate_id="candidate-1"), brief)
+                                   SurfaceRef(route_id="design-bluecad", candidate_id="candidate-1"), brief)
     assert {grant.capability_id for grant in worker.live_grants.values()} == {
         "jarvis.bluecad_read", "jarvis.bluecad_act"}
     assert "mcp__jarvis__jarvis_bluecad_act" in text
@@ -75,11 +75,11 @@ def test_surface_grants_and_instructions_are_scoped_to_brief() -> None:
 
 def test_process_turn_instructions_show_prefixed_read_and_typed_value_example() -> None:
     worker = SimpleNamespace(live_grants={})
-    brief = SurfaceBrief(surface="process", route_id="process", workspace_id="workspace-166",
+    brief = SurfaceBrief(surface="process", route_id="design-process", workspace_id="workspace-166",
                          base_revision="rev-7", draft_id="draft-1", summary="Process · PFR-1",
                          text="draft draft-1 revision rev-7 selected stream S1", digest="sha256:" + "d" * 64)
     text = _install_surface_grants(worker, "workspace-166", "thread-166",
-                                   SurfaceRef(route_id="process", draft_id="draft-1"), brief)
+                                   SurfaceRef(route_id="design-process", draft_id="draft-1"), brief)
     assert 'mcp__jarvis__jarvis_process_read using only {"grant_id":"' in text
     assert '"name":"mcp__jarvis__jarvis_process_act"' in text
     assert '"op":"set_value","target":"S1","property":"pressure","value":{"value":2,"unit":"bar"}' in text
@@ -110,7 +110,7 @@ def test_dispatch_submits_typed_action_to_workspace_executor(monkeypatch) -> Non
     grant = CapabilityGrantRef(
         grant_id="process-act-grant", capability_id="jarvis.process_act", issuer="jarvis_policy",
         scope=CapabilityScope(workspace_id=SESSION.workspace_id, jarvis_thread_id=SESSION.jarvis_thread_id),
-        constraints={"surface": "process", "route_id": "process", "base_revision": "rev-1"},
+        constraints={"surface": "process", "route_id": "design-process", "base_revision": "rev-1"},
         issued_at=now, expires_at=now + timedelta(minutes=2),
     )
     call = StructuredToolCall(
@@ -132,7 +132,7 @@ def test_read_tool_derives_surface_ref_from_live_grant(monkeypatch) -> None:
     from app.modules.workspace_actions import service
 
     captured = {}
-    brief = SurfaceBrief(surface="bluecad", route_id="bluecad", workspace_id=SESSION.workspace_id,
+    brief = SurfaceBrief(surface="bluecad", route_id="design-bluecad", workspace_id=SESSION.workspace_id,
                          base_revision="candidate-1", candidate_id="candidate-1", summary="BLUECAD · tube",
                          text="candidate candidate-1 selected tube", digest="sha256:" + "c" * 64)
 
@@ -145,7 +145,7 @@ def test_read_tool_derives_surface_ref_from_live_grant(monkeypatch) -> None:
     grant = CapabilityGrantRef(
         grant_id="bluecad-read-grant", capability_id="jarvis.bluecad_read", issuer="jarvis_policy",
         scope=CapabilityScope(workspace_id=SESSION.workspace_id, jarvis_thread_id=SESSION.jarvis_thread_id),
-        constraints={"surface": "bluecad", "route_id": "bluecad", "candidate_id": "candidate-1",
+        constraints={"surface": "bluecad", "route_id": "design-bluecad", "candidate_id": "candidate-1",
                      "base_revision": "candidate-1", "bluecad_part_count": 1, "bluecad_part_0": "part-1"},
         issued_at=now, expires_at=now + timedelta(minutes=2),
     )
@@ -157,7 +157,7 @@ def test_read_tool_derives_surface_ref_from_live_grant(monkeypatch) -> None:
     result = dispatch_tool(call, live_grants={grant.grant_id: grant})
     assert result.status == "succeeded"
     assert captured["workspace_id"] == SESSION.workspace_id
-    assert captured["ref"] == SurfaceRef(route_id="bluecad", candidate_id="candidate-1",
+    assert captured["ref"] == SurfaceRef(route_id="design-bluecad", candidate_id="candidate-1",
                                          bluecad_part_ids=["part-1"])
 
 
