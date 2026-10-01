@@ -171,14 +171,25 @@ function relayFailure(run: RelayRunRead): string {
 
 function EscalateControl({ disabled, onRelay, onApi }: Readonly<{ disabled: boolean; onRelay(): void; onApi(): void }>) {
   const menu = useContextMenu();
+  const moreRef = useRef<HTMLButtonElement | null>(null);
   const items: ContextMenuItem[] = [
     { id: "relay", label: "Escalate with Relay", hint: "Subscription-backed cloud agent · no API charge", onSelect: onRelay },
     { id: "api", label: "Escalate with API key…", hint: "Metered provider path with budget and approval gates", onSelect: onApi }
   ];
   return <span className="jarvis-escalate">
     <button type="button" className="jarvis-link-button" disabled={disabled} onClick={onRelay} title="Ask a cloud model through Relay (right-click for more options)" {...menu.targetProps}>Escalate</button>
-    <MenuButton label="Escalation options" items={items} disabled={disabled} className="jarvis-escalate__more"><span aria-hidden="true">▾</span></MenuButton>
-    <ContextMenu label="Escalation options" items={items} at={menu.at} onClose={menu.close} />
+    <button
+      ref={moreRef}
+      type="button"
+      className="ui-menu-button jarvis-escalate__more"
+      aria-label="Escalation options"
+      title="Escalation options"
+      aria-haspopup="menu"
+      aria-expanded={menu.at !== null}
+      disabled={disabled}
+      onClick={(event) => (menu.at ? menu.close() : menu.openFrom(event.currentTarget))}
+    ><span aria-hidden="true">▾</span></button>
+    <ContextMenu label="Escalation options" items={items} at={menu.at} onClose={menu.close} triggerRef={moreRef} />
   </span>;
 }
 

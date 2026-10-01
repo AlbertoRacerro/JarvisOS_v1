@@ -56,7 +56,7 @@ assert.match(sidecar, /<button[^>]*jarvis-icon-button--new-conversation[^>]*>[\s
 const sidecarCss = read("src/components/ai/JarvisSidecar.css");
 assert.match(sidecarCss, /\.jarvis-sidecar__header\s*\{[^}]*min-width:\s*0;[^}]*\}/);
 assert.match(sidecarCss, /\.jarvis-status\s*>\s*span\s*\{[^}]*text-overflow:\s*ellipsis;[^}]*\}/);
-assert.match(sidecarCss, /@media \(max-width: 1150px\)[\s\S]*?\.jarvis-icon-button--new-conversation span\s*\{\s*display:\s*none;/);
+assert.match(sidecarCss, /@container jarvis-header \(max-width: \d+px\)[\s\S]*?\.jarvis-icon-button--new-conversation span\s*\{\s*display:\s*none;/);
 assert.doesNotMatch(sidecarCss, /\.jarvis-sidecar__header\s*\{[^}]*flex-wrap:\s*wrap/);
 assert.doesNotMatch(sidecar, /aria-pressed=\{chrome\.propertiesOpen\}/, "Properties stays in the compact secondary controls, outside the required header row");
 assert.match(shellSidecar, /closest\('\[role="menu"\]'\)/, "Escape in a menu must not close the whole Sidecar");

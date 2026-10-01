@@ -22,9 +22,11 @@ type ContextMenuProps = Readonly<{
   items: readonly ContextMenuItem[];
   at: Point | null;
   onClose(): void;
+  /** Opening control; pressing it while open is a toggle, not an outside click. */
+  triggerRef?: { readonly current: HTMLElement | null };
 }>;
 
-export function ContextMenu({ label, items, at, onClose }: ContextMenuProps) {
+export function ContextMenu({ label, items, at, onClose, triggerRef }: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [position, setPosition] = useState<Point | null>(null);
 
@@ -46,6 +48,7 @@ export function ContextMenu({ label, items, at, onClose }: ContextMenuProps) {
     if (!at) return;
     const close = (event: Event) => {
       if (menuRef.current && event.target instanceof Node && menuRef.current.contains(event.target)) return;
+      if (triggerRef?.current && event.target instanceof Node && triggerRef.current.contains(event.target)) return;
       onClose();
     };
     window.addEventListener("pointerdown", close, true);
@@ -56,7 +59,7 @@ export function ContextMenu({ label, items, at, onClose }: ContextMenuProps) {
       window.removeEventListener("resize", onClose);
       window.removeEventListener("blur", onClose);
     };
-  }, [at, onClose]);
+  }, [at, onClose, triggerRef]);
 
   if (!at) return null;
 
@@ -151,8 +154,10 @@ type MenuButtonProps = Readonly<{
 /** Explicit, always-visible route to a menu (the accessible equivalent of right-click). */
 export function MenuButton({ label, items, className, children, disabled }: MenuButtonProps) {
   const menu = useContextMenu();
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
   return <>
     <button
+      ref={triggerRef}
       type="button"
       className={["ui-menu-button", className].filter(Boolean).join(" ")}
       aria-label={label}
@@ -164,6 +169,6 @@ export function MenuButton({ label, items, className, children, disabled }: Menu
     >
       {children ?? <span aria-hidden="true">⋯</span>}
     </button>
-    <ContextMenu label={label} items={items} at={menu.at} onClose={menu.close} />
+    <ContextMenu label={label} items={items} at={menu.at} onClose={menu.close} triggerRef={triggerRef} />
   </>;
 }

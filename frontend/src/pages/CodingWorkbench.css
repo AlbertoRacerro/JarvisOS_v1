@@ -31,7 +31,7 @@
   max-width: 100%; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere;
 }
 .final-fusion__workbench[data-testid="coding-repository-surface"] {
-  grid-template-columns: 210px minmax(0, 1fr) 315px;
+  grid-template-columns: 210px minmax(0, 1fr) var(--jarvis-width, 315px);
 }
 .final-fusion__workbench[data-testid="coding-repository-surface"] > section:nth-child(2) { overflow: hidden; }
 .final-fusion__workbench[data-testid="coding-repository-surface"] > section:nth-child(3) { gap: 10px; }
@@ -65,7 +65,7 @@
 .final-fusion__workbench[data-testid="coding-runtime-surface"] .final-fusion__toolbar-line { flex-wrap: wrap; gap: 8px; padding: 12px; }
 .final-fusion__workbench[data-testid="coding-runtime-surface"] .final-fusion__compare { flex-shrink: 0; }
 @media (max-width: 1350px) {
-  .final-fusion__workbench[data-testid="coding-repository-surface"] { grid-template-columns: 175px minmax(0, 1fr) 280px; }
+  .final-fusion__workbench[data-testid="coding-repository-surface"] { grid-template-columns: 175px minmax(0, 1fr) var(--jarvis-width, 280px); }
   .final-fusion__workbench[data-testid="coding-repository-surface"] .markdown-preview { padding: 16px; }
 }
 @media (max-width: 1050px) {
@@ -76,7 +76,7 @@
 }
 
 .final-fusion__workbench[data-testid="coding-repository-surface"] {
-  grid-template-columns: minmax(0, 1fr) 315px;
+  grid-template-columns: minmax(0, 1fr) var(--jarvis-width, 315px);
 }
 .final-fusion__workbench[data-testid="coding-repository-surface"] > section:first-child { min-height: 0; overflow: hidden; }
 .final-fusion__workbench[data-testid="coding-repository-surface"] > section:nth-child(2) { min-width: 0; overflow: auto; }

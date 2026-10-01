@@ -1,6 +1,6 @@
 /* Expandable source library and supporting model version list. */
 .literature-recovery .literature-library { padding: 16px; }
-.literature-recovery.literature-recovery--with-search { grid-template-columns: 240px minmax(0, 1fr) 315px; }
+.literature-recovery.literature-recovery--with-search { grid-template-columns: 240px minmax(0, 1fr) var(--jarvis-width, 315px); }
 .literature-recovery .literature-search { padding: 14px; }
 .literature-recovery .final-fusion__panel-heading { display: flex; align-items: start; justify-content: space-between; gap: 14px; padding: 0; }
 .literature-recovery .final-fusion__panel-heading p { margin: 4px 0 12px; }
@@ -36,7 +36,7 @@
 .models-recovery .model-definition-empty { padding: 24px; }.models-recovery .model-revision-history { margin: 12px; border-top: 1px solid var(--fusion-line); padding-top: 12px; }
 .models-recovery .model-revision-history > summary { cursor: pointer; }.models-recovery .model-revision-history > .final-fusion__basis { padding: 8px; }
 @media (max-width: 1350px) {
-  .literature-recovery.literature-recovery--with-search { grid-template-columns: 210px minmax(0, 1fr) 285px; }
+  .literature-recovery.literature-recovery--with-search { grid-template-columns: 210px minmax(0, 1fr) var(--jarvis-width, 285px); }
   .literature-source-content { grid-template-columns: minmax(0, 1fr); }.literature-preview { min-height: 70px; }
 }
 @media (max-width: 1050px) {

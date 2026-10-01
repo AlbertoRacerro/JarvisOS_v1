@@ -8,7 +8,7 @@
 .application-shell--final .roadmap-workspace.operator-page button { cursor:pointer; border:1px solid #ddd5c8; border-radius:4px; background:#fffefc; color:#4c5945; box-shadow:none; padding:7px 10px; }
 .application-shell--final .roadmap-workspace button:disabled { cursor:default; }
 .application-shell--final .roadmap-workspace button[aria-pressed="true"] { border-color:#6e955a; background:#edf7e7; color:#28581a; }
-.application-shell--final .roadmap-workspace .roadmap-workbench { display:grid; grid-template-columns:minmax(0,1fr) 315px; gap:10px; flex:1; min-height:0; }
+.application-shell--final .roadmap-workspace .roadmap-workbench { display:grid; grid-template-columns:minmax(0,1fr) var(--jarvis-width, 315px); gap:10px; flex:1; min-height:0; }
 .application-shell--final .roadmap-workspace .roadmap-workbench:not(:has(.roadmap-jarvis)) { grid-template-columns:minmax(0,1fr); }
 .application-shell--final .roadmap-workspace .roadmap-primary { display:flex; flex-direction:column; overflow:auto; min-width:0; min-height:0; background:#fffefc; border:1px solid #ddd5c8; border-radius:5px; }
 .application-shell--final .roadmap-workspace .roadmap-toolbar { padding:11px 13px; border-bottom:1px solid #ddd5c8; }
@@ -65,5 +65,5 @@
 .application-shell--final .roadmap-workspace .calendar-month-day .calendar-event { margin-top:4px; }
 .application-shell--final .roadmap-workspace .calendar-agenda-row { display:grid; grid-template-columns:110px minmax(0,1fr); padding:10px; gap:10px; border-bottom:1px solid #eee7db; }
 .application-shell--final .roadmap-workspace .roadmap-empty { padding:20px; color:#727a6a; }
-@media(max-width:1350px) { .roadmap-workbench { grid-template-columns:minmax(0,1fr) 285px; } .roadmap-toolbar input { width:150px; } }
+@media(max-width:1350px) { .roadmap-workbench { grid-template-columns:minmax(0,1fr) var(--jarvis-width, 285px); } .roadmap-toolbar input { width:150px; } }
 @media(max-width:1100px) { .roadmap-workbench { grid-template-columns:minmax(0,1fr); overflow:auto; } .roadmap-primary { min-height:550px; } .roadmap-jarvis { min-height:350px; } }
