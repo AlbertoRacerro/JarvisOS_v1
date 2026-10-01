@@ -507,15 +507,21 @@ def test_route_only_revisions_do_not_count_as_edits_since_a_run(workspace_draft:
         "run_id": "run-158", "action": "run", "status": "completed", "draft_revision": state["revision"],
         "started_at": "2026-01-01T00:00:00+00:00", "dwsim_version": "10.2.9", "mcp_sha256": "a" * 64,
         "materialization_fingerprint": draft_compiler.fingerprint(
-            draft_compiler.expected(document), dwsim_version="10.2.9", mcp_sha256="a" * 64)})
+            draft_compiler.expected(document), dwsim_version="10.2.9", mcp_sha256="a" * 64),
+        "process_fingerprint": draft_compiler.fingerprint(
+            draft_compiler.process_view(draft_compiler.expected(document)), dwsim_version="10.2.9",
+            mcp_sha256="a" * 64)})
     assert draft.projection(workspace_id, state["draft_id"])["results"]["state"] == "current"
     route = {"op": "set_route", "stream": "out", "points": [{"x": 0, "y": 0}, {"x": 0, "y": 50}]}
     state = _patched(workspace_id, state, route)
     state = _patched(workspace_id, state, {**route, "points": [{"x": 0, "y": 0}, {"x": 60, "y": 0}]})
     assert state["results"]["state"] == "current" and state["results"]["edits_since"] == 0
+    # Spec 162: moving a unit is layout too, so it keeps results current.
     state = _patched(workspace_id, state, {"op": "move", "id": "pfr", "x": 5, "y": 5})
+    assert state["results"]["state"] == "current"
+    state = _patched(workspace_id, state, {"op": "set_unit_params", "unit": "pfr", "values": {"volume": Q(3, "m3")}})
     assert state["results"]["state"] == "stale"
-    assert state["results"]["edits_since"] == 1  # the two route revisions are not counted
+    assert state["results"]["edits_since"] == 1  # the route and move revisions are not counted
 
 
 def test_only_input_properties_are_proposable(workspace_draft: Any) -> None:
@@ -525,7 +531,8 @@ def test_only_input_properties_are_proposable(workspace_draft: Any) -> None:
     registry = {item["type"]: item for item in registry_projection()["units"]}
     for unit_type, allowed in view["proposable"].items():
         if unit_type == "stream":
-            assert set(allowed) == {"temperature", "pressure", "mass_flow", "composition"}
+            assert set(allowed) == {"temperature", "pressure", "mass_flow", "molar_flow", "vapor_fraction",
+                                    "composition"}
             continue
         inputs = {param["key"] for param in registry[unit_type]["params"] if param["classification"] == "input"}
         assert set(allowed) == {"mode"} | inputs, unit_type

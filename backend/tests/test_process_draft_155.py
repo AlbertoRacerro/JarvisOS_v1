@@ -287,7 +287,10 @@ def test_run_binds_revision_goes_stale_and_refuses_mismatch(api: Any, monkeypatc
     assert "dwsim_solve_run" not in refused["run"].get("calls", []) and refused["run"].get("streams") is None
     assert refused["draft"]["results"]["state"] == "current"
 
+    # Spec 162: a move is layout-only and keeps results current; a process edit makes them stale.
     _patch(client, base, state, {"op": "move", "id": "h1", "x": 150, "y": 120})
+    assert state["results"]["state"] == "current"
+    _patch(client, base, state, {"op": "set_unit_params", "unit": "h1", "values": {"outlet_temperature": Q(90, "degC")}})
     assert state["results"]["state"] == "stale" and state["results"]["edits_since"] == 1
     assert state["results"]["draft_revision"] == solved
 
