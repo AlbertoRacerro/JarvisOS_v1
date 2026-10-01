@@ -1,4 +1,5 @@
 import BluecadWorkbench from "../components/bluecad/BluecadWorkbench";
+import "../styles/bluecad-final.css";
 import type { PrimaryStageProps } from "./registry";
 
 function ModelStage({ onSelectionChange, onShellRegionsChange, requestShellRegionOpen, navigate }: PrimaryStageProps) {

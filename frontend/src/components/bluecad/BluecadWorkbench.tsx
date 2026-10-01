@@ -1,4 +1,4 @@
-import { type FormEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type FormEvent, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import type { StageSelection } from "../../app/selection";
 import {
@@ -757,8 +757,10 @@ const EXPORT_LABELS: Record<string, [string, string]> = {
 
 function ExportMenu({ exports }: { exports: BluecadArtifactRefRead[] }) {
   const [open, setOpen] = useState(false);
+  const [flipped, setFlipped] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     if (!open) return undefined;
     const onPointerDown = (event: PointerEvent) => {
@@ -768,13 +770,27 @@ function ExportMenu({ exports }: { exports: BluecadArtifactRefRead[] }) {
     return () => document.removeEventListener("pointerdown", onPointerDown);
   }, [open]);
   const items = exports.filter((item) => EXPORT_LABELS[item.roles[0] ?? ""]);
+  useLayoutEffect(() => {
+    if (!open) {
+      setFlipped(false);
+      return undefined;
+    }
+    const fitMenu = () => {
+      const menu = menuRef.current;
+      if (!menu) return;
+      setFlipped(menu.getBoundingClientRect().right > window.innerWidth - 8);
+    };
+    fitMenu();
+    window.addEventListener("resize", fitMenu);
+    return () => window.removeEventListener("resize", fitMenu);
+  }, [open, items.length]);
   return <div className="bluecad-export" ref={rootRef} onKeyDown={(event) => {
     if (event.key === "Escape" && open) {
       event.stopPropagation();
       setOpen(false);
       buttonRef.current?.focus();
     }
-  }}><button ref={buttonRef} type="button" className="secondary-button" aria-expanded={open} aria-controls="bluecad-export-menu" onClick={() => setOpen((value) => !value)}>Export ▾</button>{open && <div id="bluecad-export-menu" className="bluecad-export__menu" aria-label="Download exports">{items.map((item) => {
+  }}><button ref={buttonRef} type="button" className="secondary-button" aria-expanded={open} aria-controls="bluecad-export-menu" onClick={() => setOpen((value) => !value)}>Export ▾</button>{open && <div ref={menuRef} id="bluecad-export-menu" className={`bluecad-export__menu${flipped ? " bluecad-export__menu--flipped" : ""}`} aria-label="Download exports">{items.map((item) => {
     const [label, detail] = EXPORT_LABELS[item.roles[0]];
     return <a key={item.id} href={`${API_BASE_URL}${item.content_url}`} download onClick={() => setOpen(false)}><strong>{label}</strong><small>{detail}</small></a>;
   })}</div>}</div>;

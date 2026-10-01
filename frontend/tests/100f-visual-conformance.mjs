@@ -10,6 +10,7 @@ const workspaceHeader = read("src/components/fusion/FinalWorkspaceHeader.tsx");
 const workspaceHeaderCss = read("src/styles/final-workspace-header.css");
 const settingsCss = read("src/styles/final-settings.css");
 const designCss = read("src/styles/final-fusion-canonical-overrides.css");
+const bluecadCss = read("src/styles/bluecad-final.css");
 const modelStage = read("src/stages/ModelStage.tsx");
 const bluecadWorkbench = read("src/components/bluecad/BluecadWorkbench.tsx");
 const bluecadViewer = read("src/components/BluecadGlbViewer.tsx");
@@ -57,20 +58,24 @@ includesAll(settingsCss, [
   ".final-settings--ai .settings-grid > .settings-card:nth-child(3)",
   ".final-settings--ai .settings-grid > .settings-card:nth-child(4)",
   ".final-settings--ai .settings-grid > .settings-card:nth-child(5)",
-  ".final-settings--system .settings-grid > .settings-card:nth-child(6)",
-  ".application-shell--final .bluecad-workbench__viewport",
-  ".application-shell--final .bluecad-workbench__empty-viewer"
-], "Settings section filtering or BLUECAD empty viewport composition missing");
+  ".final-settings--system .settings-grid > .settings-card:nth-child(6)"
+], "Settings section filtering drifted");
 includesAll(designCss, [
   ".process-stage__palette-grid",
   "grid-template-columns: repeat(2, minmax(0, 1fr))",
   ".application-shell--final .shell-navigator",
   ".application-shell--final .shell-sidecar",
   "width: 240px",
-  "width: var(--jarvis-width, 300px)",
-  ".bluecad-viewer__views button",
-  "background: transparent !important"
+  "width: var(--jarvis-width, 300px)"
 ], "Canonical Process/BLUECAD workstation composition missing");
+includesAll(bluecadCss, [
+  ".application-shell--final .bluecad-workbench__viewport",
+  ".application-shell--final .bluecad-workbench__empty-viewer",
+  ".bluecad-viewer__views button",
+  "background: transparent !important",
+  ".bluecad-export__menu--flipped",
+  "left: 0;"
+], "BLUECAD-owned final composition or export-menu alignment missing");
 includesAll(modelStage, ["<BluecadWorkbench"], "BLUECAD stage is disconnected from its workbench");
 check(!modelStage.includes("bluecad-final-stage__toolbar"), "BLUECAD retains the disabled future-authoring toolbar");
 includesAll(bluecadWorkbench, [
