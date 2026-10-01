@@ -1,0 +1,42 @@
+import type { ActionOutcome, SurfaceRef } from "../../api/workspaceActions";
+import type { StageSelection } from "../../app/selection";
+
+export type ProcessSurface = { draft_id: string | null; process_selection: SurfaceRef["process_selection"] };
+export function buildSurfaceRef(routeId: string, selection: StageSelection | null, process: ProcessSurface): SurfaceRef {
+  if (routeId === "design-process") {
+    return { route_id: routeId, draft_id: process.draft_id, process_selection: process.process_selection ?? [] };
+  }
+  if (routeId === "design-bluecad") {
+    const validPart = selection?.kind === "bluecad-part" ? selection : null;
+    const candidate = selection?.kind === "bluecad-part" || selection?.kind === "bluecad-binding-status"
+      ? selection.candidateId
+      : selection?.kind === "record" && selection.ref.resource === "bluecad-candidate" ? selection.ref.recordId : null;
+    return { route_id: routeId, candidate_id: candidate, bluecad_part_ids: validPart ? [validPart.partId] : [] };
+  }
+  return { route_id: routeId };
+}
+
+const JSON_SHAPE = /^\s*(?:\{\s*"(?:tool_calls|name|tool|arguments|function)"\s*:|<\s*function(?:=|\s)|<\|(?:tool_call|python_tag|function_call)\|>)/i;
+export function isToolCallShaped(text: string | null | undefined): boolean {
+  if (!text) return false;
+  const normalized = text.trim();
+  return JSON_SHAPE.test(normalized)
+    || /<\|(?:tool_call|python_tag|function_call)\|>/i.test(normalized)
+    || /<\|im_start\|>\s*(?:tool_call|function_call)\b/i.test(normalized)
+    || /^\s*(?:<start_function_call>|assistant\s+to=|mcp__jarvis__|jarvis_(?:process|bluecad)_(?:act|read)\s*[({])/i.test(normalized);
+}
+
+export function actionStatePresentation(state: ActionOutcome["state"]): { label: string; tone: "success" | "pending" | "plain" | "muted" } {
+  switch (state) {
+    case "applied": return { label: "Applied", tone: "success" };
+    case "proposed": return { label: "Proposed", tone: "pending" };
+    case "refused": return { label: "Refused", tone: "plain" };
+    case "stale": return { label: "Stale", tone: "plain" };
+    case "dismissed": return { label: "Dismissed", tone: "muted" };
+    case "undone": return { label: "Undone", tone: "muted" };
+  }
+}
+
+export function actionOriginLabel(origin: ActionOutcome["origin"]): string {
+  return origin.kind === "local" ? "Jarvis local" : `Relay${origin.model ? ` · ${origin.model}` : ""}`;
+}

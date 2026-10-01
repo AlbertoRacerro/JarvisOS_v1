@@ -441,6 +441,17 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
   }, [aggregate?.candidate.glb_artifact_id, publishSelection, selectedId]);
 
   useEffect(() => {
+    const refreshFromAction = (event: Event) => {
+      const detail = (event as CustomEvent<{ workspaceId?: string; surface?: string; state?: string; candidateId?: string | null; childCandidateId?: string | null }>).detail;
+      if (detail?.workspaceId !== workspaceId || detail.surface !== "bluecad" || (detail.state !== "applied" && detail.state !== "undone")) return;
+      const preferred = detail.state === "undone" ? detail.candidateId ?? null : detail.childCandidateId ?? detail.candidateId ?? null;
+      void loadCandidates(workspaceId, preferred);
+    };
+    window.addEventListener("jarvis:workspace-action", refreshFromAction);
+    return () => window.removeEventListener("jarvis:workspace-action", refreshFromAction);
+  }, [loadCandidates, workspaceId]);
+
+  useEffect(() => {
     const nextId = revalidateSelection(visibleCandidates, selectedId, true);
     if (nextId === selectedId) return;
     focusAfterSelectionChange.current = Boolean(selectedId && document.activeElement === candidateRefs.current[selectedId]);

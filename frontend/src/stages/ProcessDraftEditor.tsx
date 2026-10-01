@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import ProcessProposals from "../components/process/ProcessProposals";
+import { publishProcessSurface } from "../app/workspaceActionSurface";
 import ResultProperties from "../components/process/ResultProperties";
 import { ContextMenu, MenuButton, useContextMenu } from "../components/ui/ContextMenu";
 import type { ContextMenuItem } from "../components/ui/ContextMenu";
@@ -236,7 +237,9 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
 
   const loadDraft = useCallback(
     async (draftId: string) => {
-      accept(await getDraft(workspaceId, draftId));
+      const next = await getDraft(workspaceId, draftId);
+      accept(next);
+      return next;
     },
     [accept, workspaceId],
   );
@@ -339,6 +342,21 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
   const byId = useMemo(() => new Map(objects.map((item) => [item.id, item])), [objects]);
   const units = objects.filter((item) => item.kind === "unit");
   const selected = selectedId ? byId.get(selectedId) ?? null : null;
+  useEffect(() => {
+    publishProcessSurface({ draft_id: draft?.draft_id ?? null, process_selection: selected ? [{ kind: selected.kind, id: selected.id, tag: selected.tag }] : [] });
+  }, [draft?.draft_id, selected?.id, selected?.kind, selected?.tag]);
+  useEffect(() => () => publishProcessSurface({ draft_id: null, process_selection: [] }), []);
+
+  useEffect(() => {
+    const refresh = (event: Event) => {
+      const detail = (event as CustomEvent<{ workspaceId?: string; surface?: string; draftId?: string | null }>).detail;
+      if (detail?.workspaceId !== workspaceId || detail.surface !== "process" || !draft || (detail.draftId && detail.draftId !== draft.draft_id)) return;
+      void loadDraft(draft.draft_id).then((next) => setNotice({ tone: "success", text: `Workspace action refreshed draft revision ${next.revision}. Results are stale until rerun.` }))
+        .catch(() => setNotice({ tone: "danger", text: "The workspace action completed, but the Process draft could not be refreshed." }));
+    };
+    window.addEventListener("jarvis:workspace-action", refresh);
+    return () => window.removeEventListener("jarvis:workspace-action", refresh);
+  }, [draft, loadDraft, workspaceId]);
   const contextUnit = contextUnitId ? byId.get(contextUnitId) : undefined;
   const unitSpec = (type: string): RegistryUnit | undefined => registry?.units.find((item) => item.type === type);
   const blockers = (draft?.findings ?? []).filter((item) => item.severity === "blocker");
