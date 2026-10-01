@@ -1,5 +1,6 @@
 import { API_BASE_URL } from "./client";
 import type { KnowledgeContextPreview } from "./knowledgeActions";
+import type { ActionOutcome, SurfaceRef } from "./workspaceActions";
 
 export type ConversationRoute = {
   route_class: string;
@@ -51,6 +52,10 @@ export type ThreadInteraction = {
   completed_at?: string | null;
   elapsed_ms?: number | null;
   activity?: string | null;
+  surface_summary?: string | null;
+  surface_digest?: string | null;
+  actions?: ActionOutcome[];
+  technical_details?: string | null;
   proposal_ids: string[];
   proposal_count: number;
   proposals_truncated: boolean;
@@ -197,7 +202,7 @@ export async function submitThreadInteraction(
   requestId: string,
   prompt: string,
   context?: { selection: ContextSelection; expectedDigest: string },
-  options?: { routeClass: string; knowledgeContext?: KnowledgeContextPreview | null }
+  options?: { routeClass: string; knowledgeContext?: KnowledgeContextPreview | null; surfaceContext?: SurfaceRef }
 ): Promise<ThreadInteraction> {
   const result = await requestJson<{ interaction: ThreadInteraction }>(
     `/ai/threads/${encodeURIComponent(threadId)}/interactions?workspace_id=${encodeURIComponent(workspaceId)}`,
@@ -207,6 +212,7 @@ export async function submitThreadInteraction(
         request_id: requestId,
         prompt,
         ...(options ? { route_class: options.routeClass } : {}),
+        ...(options?.surfaceContext ? { surface_context: options.surfaceContext } : {}),
         ...(options?.knowledgeContext ? {
           jarvis_context: {
             workspace_id: options.knowledgeContext.workspace_id,
@@ -327,6 +333,7 @@ export type RelayRunRead = {
   stop_reason: string | null;
   exit_code: number | null;
   result_text: string | null;
+  actions?: ActionOutcome[];
   workspace_path: string | null;
   base_commit: string | null;
   head_commit: string | null;
@@ -372,9 +379,9 @@ export type RelayEscalationDraft = {
   billing: "subscription";
 };
 
-export function draftRelayEscalation(workspaceId: string, threadId: string, interactionId: string, text?: string): Promise<RelayEscalationDraft> {
+export function draftRelayEscalation(workspaceId: string, threadId: string, interactionId: string, text?: string, surfaceContext?: SurfaceRef): Promise<RelayEscalationDraft> {
   return requestJson(`/ai/threads/${encodeURIComponent(threadId)}/interactions/${encodeURIComponent(interactionId)}/relay-escalation-draft?workspace_id=${encodeURIComponent(workspaceId)}`, {
-    method: "POST", body: JSON.stringify({ text: text ?? null })
+    method: "POST", body: JSON.stringify({ text: text ?? null, ...(surfaceContext ? { surface_context: surfaceContext } : {}) })
   });
 }
 
