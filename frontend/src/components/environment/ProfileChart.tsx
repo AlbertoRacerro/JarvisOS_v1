@@ -23,15 +23,38 @@ function siteTime(value: number, timezone: string): string {
   }).format(new Date(value * 1000));
 }
 
+async function loadUPlot() {
+  const originalNumberFormat = Intl.NumberFormat;
+  if (!navigator.language.includes("@")) return import("uplot");
+
+  // uPlot builds its numeric formatter at module load and reads navigator.language
+  // directly, so its options cannot repair the host's nonstandard "en-US@posix" tag.
+  // Normalize only locale strings containing the host modifier, then restore the global.
+  const LocaleSafeNumberFormat = class extends originalNumberFormat {
+    constructor(locales?: Intl.LocalesArgument, options?: Intl.NumberFormatOptions) {
+      const normalized = typeof locales === "string" ? locales.split("@")[0] : locales;
+      super(normalized, options);
+    }
+  };
+  Intl.NumberFormat = LocaleSafeNumberFormat as unknown as typeof Intl.NumberFormat;
+  try {
+    return await import("uplot");
+  } finally {
+    Intl.NumberFormat = originalNumberFormat;
+  }
+}
+
 export function ProfileChart({ profile, timezone, resolutionUsed, onRange }: Props) {
   const root = useRef<HTMLDivElement>(null);
   const chart = useRef<InstanceType<typeof uPlot> | null>(null);
   const [hidden, setHidden] = useState<Set<string>>(new Set());
+  const [chartError, setChartError] = useState("");
 
   useEffect(() => {
     let active = true;
     let observer: ResizeObserver | undefined;
-    void import("uplot").then(({ default: UPlot }) => {
+    setChartError("");
+    void loadUPlot().then(({ default: UPlot }) => {
       if (!active || !root.current) return;
       const series = Object.entries(profile.channels).filter(([, values]) => values.some((value) => value !== null));
       if (series.length === 0) return;
@@ -79,7 +102,9 @@ export function ProfileChart({ profile, timezone, resolutionUsed, onRange }: Pro
         width: Math.max(320, root.current?.clientWidth ?? 320), height: 260,
       }));
       observer.observe(root.current);
-    }).catch(() => undefined);
+    }).catch((reason: unknown) => {
+      if (active) setChartError(reason instanceof Error ? reason.message : "The chart could not be rendered.");
+    });
     return () => {
       active = false;
       observer?.disconnect();
@@ -97,6 +122,7 @@ export function ProfileChart({ profile, timezone, resolutionUsed, onRange }: Pro
 
   return (
     <section aria-label="Environment chart">
+      {chartError && <p className="environment-error" role="alert">Chart unavailable: {chartError}</p>}
       <div ref={root} className="environment-plot" role="img" aria-label={`Environment profile chart. Time axis uses ${timezone}.`} />
       <p className="environment-help">Chart resolution: {resolutionUsed ? `${resolutionUsed} minutes` : "source timestamps"}.
         Drag across the chart to inspect matching table values.</p>
