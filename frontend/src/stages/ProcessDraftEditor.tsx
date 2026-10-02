@@ -216,6 +216,8 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
   const [routeDrag, setRouteDrag] = useState<RouteDrag | null>(null);
   const [routeOverrides, setRouteOverrides] = useState<Record<string, Point[]>>({});
   const [form, setForm] = useState<FormState>({});
+  const [cultureForm, setCultureForm] = useState<FormState>({});
+  const [cultureEnabled, setCultureEnabled] = useState(false);
   const [optionForm, setOptionForm] = useState<Record<string, OptionValue>>({});
   const [reactionPick, setReactionPick] = useState<string[] | null>(null);
   const [composition, setComposition] = useState<Record<string, string>>({});
@@ -375,6 +377,7 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
   // Inspector drafts reset whenever the selection or its revision changes.
   useEffect(() => {
     setForm({});
+    setCultureForm({});
     setOptionForm({});
     setReactionPick(null);
     setRename(selected?.tag ?? "");
@@ -383,6 +386,9 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
       setFlowBasis(selected.spec?.molar_flow ? "molar_flow" : "mass_flow");
       setStateBasis(selected.spec?.vapor_fraction ? "vapor_fraction" : "temperature");
       setCompositionBasis(selected.spec?.composition_basis ?? "mass");
+      setCultureEnabled(Boolean(selected.spec?.culture));
+      setCultureForm(Object.fromEntries(Object.entries(selected.spec?.culture ?? {}).map(([key, value]) =>
+        [key, { text: String(value.value), unit: value.unit }])));
     }
     setComposition(
       Object.fromEntries((draft?.compounds ?? []).map((name) => [name, String(selected?.spec?.composition?.[name] ?? "")])),
@@ -634,6 +640,7 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
       "draft-node",
       `draft-node--${item.kind}`,
       isEnergy(item) ? "draft-node--energy" : "",
+      item.kind === "stream" && (item.spec?.culture || solvedRun?.culture?.[item.tag]) ? "is-culture-stream" : "",
       selectedId === item.id ? "is-selected" : "",
       findings.length ? "has-findings" : "",
       proposalTargets.has(item.id) ? "is-proposal-target" : "",
@@ -653,6 +660,7 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
           <rect x={point.x - width / 2} y={point.y - UNIT_H / 2} width={width} height={UNIT_H} rx={6} />
           <text x={point.x} y={point.y - 3} textAnchor="middle" className="draft-node__tag">{item.tag}</text>
           <text x={point.x} y={point.y + 12} textAnchor="middle" className="draft-node__type">{spec?.label ?? item.type}</text>
+          <text x={point.x + width / 2 - 5} y={point.y - UNIT_H / 2 + 10} textAnchor="end" className="draft-owner-badge">DWSIM</text>
           {inlets.map((name, port) => { const anchor = portAnchor(item, "target", port, false); return <rect key={`in-${port}`} className="draft-port" x={anchor.at.x - 2} y={anchor.at.y - 3} width={4} height={6}><title>{name}</title></rect>; })}
           {outlets.map((name, port) => { const anchor = portAnchor(item, "source", port, false); return <rect key={`out-${port}`} className="draft-port" x={anchor.at.x - 2} y={anchor.at.y - 3} width={4} height={6}><title>{name}</title></rect>; })}
           {[...(spec?.energy_inlets ?? []), ...(spec?.energy_outlets ?? [])].map((name, index, all) => (
@@ -717,6 +725,7 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
     const feed = !stream.source;
     const sum = Object.values(composition).reduce((acc, text) => acc + (Number(text) || 0), 0);
     const shown = solvedRun?.streams?.[stream.tag];
+    const cultureResult = solvedRun?.culture?.[stream.tag];
     const powerUnits = units_.power?.display ?? [];
     return (
       <>
@@ -780,6 +789,7 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
             <p className="draft-hint">Duty is calculated by DWSIM in the connected unit&apos;s current mode.</p>
           )
         ) : feed ? (
+          <>
           <fieldset className="draft-fieldset draft-inputs" aria-label="Inputs">
             <legend>Inputs · feed specification</legend>
             <label className="draft-field"><span>Thermal state</span><select aria-label="Feed thermal state basis" value={stateBasis} onChange={(event) => setStateBasis(event.target.value as typeof stateBasis)}>
@@ -849,8 +859,62 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
               Apply {compositionBasis} composition
             </button>
           </fieldset>
+          <fieldset className="draft-fieldset draft-inputs" aria-label="Culture medium">
+            <legend>Culture medium</legend>
+            <label className="draft-check">
+              <input type="checkbox" aria-label="This feed carries a culture" checked={cultureEnabled}
+                onChange={(event) => {
+                  setCultureEnabled(event.target.checked);
+                  if (!event.target.checked && stream.spec?.culture)
+                    void apply([{ op: "set_stream_culture", stream: stream.id, culture: null }]);
+                }} />
+              <span>This feed carries a culture</span>
+            </label>
+            {cultureEnabled && <>
+              {([
+                ["biomass", "Biomass X", "mass_concentration"],
+                ["nitrogen", "Dissolved nitrogen (as N)", "mass_concentration"],
+                ["phosphorus", "Dissolved phosphorus (as P)", "mass_concentration"],
+                ["oxygen", "Dissolved O₂", "mass_concentration"],
+                ["dic", "DIC", "molar_concentration"],
+                ["ph", "pH", "ph"],
+                ["salinity", "Salinity", "salinity"],
+              ] as const).map(([key, label, kind]) => (
+                <QuantityInput key={key} label={label} kind={kind}
+                  stored={stream.spec?.culture?.[key]}
+                  units={units_[kind]?.display ?? []}
+                  value={cultureForm[key]}
+                  onChange={(next) => setCultureForm((current) => ({ ...current, [key]: next }))} />
+              ))}
+              <button type="button" onClick={() => {
+                const quantities = quantitiesFrom(cultureForm);
+                if (!quantities) return setNotice({ tone: "danger", text: "Culture values must be numbers." });
+                const culture = Object.fromEntries(Object.entries(quantities).filter(([key]) =>
+                  ["biomass", "nitrogen", "phosphorus", "oxygen", "dic", "ph", "salinity"].includes(key)));
+                if (!culture.biomass || !culture.salinity)
+                  return setNotice({ tone: "danger", text: "A culture feed needs biomass and salinity." });
+                void apply([{ op: "set_stream_culture", stream: stream.id, culture }]);
+              }}>Apply culture</button>
+            </>}
+          </fieldset>
+          </>
         ) : (
           <p className="draft-hint">Computed by DWSIM from its upstream unit. Only feed streams take specifications.</p>
+        )}
+        {!feed && cultureResult && (
+          <fieldset className={`draft-fieldset draft-culture-results${results.state === "stale" ? " is-stale" : ""}`} aria-label="Culture results read-only">
+            <legend>Culture · Jarvis{results.state === "stale" ? " (stale)" : ""}</legend>
+            {cultureResult.status === "failed" ? <p>{cultureResult.message}</p> : <>
+              <dl className="draft-results-inline">
+                {Object.entries(cultureResult.values).map(([key, value]) => (
+                  <div key={key}><dt>{key}</dt><dd>{value.display ? formatQuantity(value.display) : value.reason ?? "unknown"}</dd></div>
+                ))}
+              </dl>
+              {cultureResult.pH_reason && <p className="draft-hint">pH: {cultureResult.pH_reason}</p>}
+              <p className="draft-hint">{cultureResult.fidelity}</p>
+              {cultureResult.caveats?.map((caveat) => <p key={caveat} className="draft-hint">{caveat}</p>)}
+            </>}
+          </fieldset>
         )}
         {renderResultSection(
           shown?.properties,
@@ -909,6 +973,7 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
     const optionsChanged = Object.keys(optionForm).length > 0;
     return (
       <>
+        <p className="draft-owner-line">Owner: {spec.owner} · Culture rule: {spec.culture_rule}</p>
         <dl className="draft-ports">
           {spec.inlets.map((name, port) => (<div key={`in${port}`}><dt>{name}</dt><dd>{connected("target", port, false)}</dd></div>))}
           {spec.outlets.map((name, port) => (<div key={`out${port}`}><dt>{name}</dt><dd>{connected("source", port, false)}</dd></div>))}

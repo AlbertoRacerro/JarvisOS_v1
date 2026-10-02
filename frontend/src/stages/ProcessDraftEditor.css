@@ -178,6 +178,10 @@
 .draft-node circle.is-feed {
   fill: #dcebd8;
 }
+.draft-node--stream.is-culture-stream circle { stroke-dasharray: 2 2; stroke-width: 2.2px; }
+.draft-owner-badge { font-size: 6px; font-weight: 700; fill: var(--color-text-muted, #687068); }
+.draft-owner-line { margin: 2px 0 6px; color: var(--color-text-muted, #687068); font-size: 11px; }
+.draft-culture-results { max-width: 100%; }
 .draft-node.is-selected rect,
 .draft-node.is-selected circle {
   stroke: #1d5fa8;

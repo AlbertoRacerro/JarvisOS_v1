@@ -14,6 +14,8 @@ export type DraftObject = {
   x: number;
   y: number;
   mode?: string | null;
+  owner?: "dwsim" | string;
+  culture_rule?: "pass_through" | "refuse" | string;
   params?: Record<string, StoredQuantity>;
   // Spec 158: enum/bool unit options and the kinetic reactions a reactor uses.
   options?: Record<string, OptionValue>;
@@ -29,6 +31,7 @@ export type DraftObject = {
     composition?: Record<string, number>;
     composition_basis?: "mass" | "mole";
     duty?: StoredQuantity;
+    culture?: Record<string, StoredQuantity>;
   };
   // Layout-only orthogonal route waypoints; never materialized, never stale results.
   route?: RoutePoint[];
@@ -127,6 +130,8 @@ export type RegistryMode = string | { key: string; label: string };
 export type RegistryUnit = {
   type: string;
   label: string;
+  owner: string;
+  culture_rule: string;
   inlets: string[];
   outlets: string[];
   energy_inlets?: string[];
@@ -191,6 +196,8 @@ export type DraftRun = {
   dwsim_check?: { ready: boolean; findings: Finding[] };
   solve?: { ok: boolean; errors: unknown[]; failed_objects: { tag: string; error: string }[] };
   streams?: Record<string, StreamResult>;
+  culture?: Record<string, CultureResult>;
+  culture_findings?: Finding[];
   units?: Record<
     string,
     { calculated: boolean; error: string; reported: Record<string, { value: string; units: string }>; properties?: ResultProperty[] }
@@ -199,6 +206,19 @@ export type DraftRun = {
   compile_seconds?: number;
   error?: string;
   error_detail?: Record<string, unknown>;
+};
+export type CultureResult = {
+  owner: "jarvis";
+  propagation_version: string;
+  status: "completed" | "failed";
+  density_kg_m3?: number;
+  values: Record<string, { mass_specific: number | null; si?: number; display?: DraftQuantity | null; reason?: string }>;
+  unit_balances?: Record<string, { in: number; out: number; residual: number; tolerance: number; unit: "kg/s" | "mol/s"; passed: boolean }>;
+  fidelity: string;
+  pH_reason?: string | null;
+  caveats?: string[];
+  finding?: string;
+  message?: string;
 };
 export type DraftSummary = { draft_id: string; name: string; revision: string; updated_at: string };
 export type RevisionSummary = {
