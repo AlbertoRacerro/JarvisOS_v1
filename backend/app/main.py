@@ -17,6 +17,7 @@ from app.modules.agents.hermes.routes import router as hermes_router
 from app.modules.agents.hermes.session_pool import HermesSessionPool, configured_supervisor
 from app.modules.ai.routes import router as ai_router
 from app.modules.ai.sensitivity_routes import router as sensitivity_router
+from app.modules.bio_models.routes import router as bio_models_router
 from app.modules.bluecad.routes import router as bluecad_router
 from app.modules.coding.runtime_routes import router as coding_runtime_router
 from app.modules.coding.runtime_truth import (
@@ -157,6 +158,7 @@ def create_app() -> FastAPI:
     app.include_router(hermes_router)
     app.include_router(sensitivity_router)
     app.include_router(bluecad_router)
+    app.include_router(bio_models_router)
     app.include_router(secrets_router)
     app.include_router(workspaces_router)
     app.include_router(modeling_router)
