@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type uPlot from "uplot";
 import type { ProfileValues } from "./types";
 import { CHANNEL_LABELS, displayUnit, displayValue } from "./types";
@@ -47,6 +47,10 @@ export function ProfileChart({ profile, timezone, resolutionUsed, onRange }: Pro
   const chart = useRef<InstanceType<typeof uPlot> | null>(null);
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   const [chartError, setChartError] = useState("");
+  const plottedSeries = useMemo(
+    () => Object.entries(profile.channels).filter(([, values]) => values.some((value) => value !== null)),
+    [profile.channels],
+  );
 
   useEffect(() => {
     let active = true;
@@ -54,14 +58,13 @@ export function ProfileChart({ profile, timezone, resolutionUsed, onRange }: Pro
     setChartError("");
     void loadUPlot().then(({ default: UPlot }) => {
       if (!active || !root.current) return;
-      const series = Object.entries(profile.channels).filter(([, values]) => values.some((value) => value !== null));
-      if (series.length === 0) return;
+      if (plottedSeries.length === 0) return;
       const times = profile.timestamps.map((stamp) => new Date(stamp).getTime() / 1000);
       const showTime = times[times.length - 1] - times[0] < 14 * 86400;
-      const units = [...new Set(series.map(([name]) => displayUnit(name, profile.units[name])))];
+      const units = [...new Set(plottedSeries.map(([name]) => displayUnit(name, profile.units[name])))];
       const data = ([
         times,
-        ...series.map(([name, values]) => values.map((value) => displayValue(name, value))),
+        ...plottedSeries.map(([name, values]) => values.map((value) => displayValue(name, value))),
       ] as uPlot.AlignedData);
       const scales = Object.fromEntries(units.map((unit) => [unit, {}]));
       chart.current?.destroy();
@@ -77,7 +80,7 @@ export function ProfileChart({ profile, timezone, resolutionUsed, onRange }: Pro
           const end = new Date(plot.scales.x.max * 1000).toISOString();
           onRange(start, end);
         }] },
-        series: [{}, ...series.map(([name], index) => ({
+        series: [{}, ...plottedSeries.map(([name], index) => ({
           label: CHANNEL_LABELS[name] ?? name,
           scale: displayUnit(name, profile.units[name]),
           show: !hidden.has(name),
@@ -111,23 +114,24 @@ export function ProfileChart({ profile, timezone, resolutionUsed, onRange }: Pro
       chart.current?.destroy();
       chart.current = null;
     };
-  }, [profile.digest, profile.timestamps, profile.channels, profile.units, timezone, resolutionUsed, onRange]);
+  }, [profile.digest, profile.timestamps, profile.units, timezone, resolutionUsed, onRange, plottedSeries]);
 
   useEffect(() => {
     if (!chart.current) return;
-    Object.keys(profile.channels).forEach((channel, index) => {
+    plottedSeries.forEach(([channel], index) => {
       chart.current?.setSeries(index + 1, { show: !hidden.has(channel) });
     });
-  }, [hidden, profile.channels]);
+  }, [hidden, plottedSeries]);
 
   return (
     <section aria-label="Environment chart">
       {chartError && <p className="environment-error" role="alert">Chart unavailable: {chartError}</p>}
+      {plottedSeries.length === 0 && <p className="environment-help">No values are available to plot in this range.</p>}
       <div ref={root} className="environment-plot" role="img" aria-label={`Environment profile chart. Time axis uses ${timezone}.`} />
       <p className="environment-help">Chart resolution: {resolutionUsed ? `${resolutionUsed} minutes` : "source timestamps"}.
         Drag across the chart to inspect matching table values.</p>
       <div className="environment-legend" role="group" aria-label="Chart series">
-        {Object.keys(profile.channels).map((channel, index) => <button
+        {plottedSeries.map(([channel], index) => <button
           type="button"
           key={channel}
           aria-pressed={!hidden.has(channel)}
