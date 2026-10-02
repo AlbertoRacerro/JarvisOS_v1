@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from collections import defaultdict, deque
+from collections import deque
 from typing import Any
 
 from app.modules.process_stack.draft_models import UNIT_REGISTRY
@@ -64,7 +64,13 @@ def culture_findings(document: dict[str, Any]) -> list[dict[str, Any]]:
         return []
     findings: list[dict[str, Any]] = []
     culture_streams = {stream["id"]: stream for stream in feeds}
-    queue = deque(feeds)
+    from app.modules.process_stack import mixed
+
+    consumed = set(mixed.partition(document)["consumed"]) if mixed.has_jarvis_unit(document) else set()
+    tears = [stream for stream in objects.values() if stream["kind"] == "stream"
+             and (stream.get("source") or {}).get("unit") in consumed]
+    culture_streams.update({stream["id"]: stream for stream in tears})
+    queue = deque([*feeds, *tears])
     visited_units: set[str] = set()
     while queue:
         stream = queue.popleft()
@@ -105,10 +111,8 @@ def culture_findings(document: dict[str, Any]) -> list[dict[str, Any]]:
         visited_units.add(unit["id"])
         rule = UNIT_REGISTRY[unit["type"]].culture_rule
         if rule == "refuse":
-            code = "CULTURE_RECYCLE_UNSUPPORTED" if unit["type"] == "Recycle" else "CULTURE_UNIT_UNSUPPORTED"
-            message = (f"Culture on a cycle through {unit['tag']} cannot be propagated until convergence arrives with 168." if unit["type"] == "Recycle" else
-                       f"Culture cannot pass through {unit['type']} {unit['tag']} because DWSIM VLE or reactors do not preserve biology; Jarvis-native units arrive with 168/170.")
-            _add(findings, "blocker", code, unit["tag"], "culture", message)
+            _add(findings, "blocker", "CULTURE_UNIT_UNSUPPORTED", unit["tag"], "culture",
+                 f"Culture cannot pass through {unit['type']} {unit['tag']} because DWSIM VLE or reactors do not preserve biology.")
             continue
         inputs = _stream_inputs(document, unit)
         if unit["type"] == "Mixer" and any(s["id"] in culture_streams for s in inputs) and any(
@@ -120,20 +124,6 @@ def culture_findings(document: dict[str, Any]) -> list[dict[str, Any]]:
             culture_streams[output["id"]] = output
             queue.append(output)
 
-    # Any reached stream on a material graph cycle is unsupported in this pass-through version.
-    graph: dict[str, set[str]] = defaultdict(set)
-    for stream in objects.values():
-        if stream["kind"] == "stream" and stream.get("source") and stream.get("target"):
-            graph[stream["source"]["unit"]].add(stream["target"]["unit"])
-    for stream in culture_streams.values():
-        source = (stream.get("source") or {}).get("unit")
-        target = (stream.get("target") or {}).get("unit")
-        if source is not None and target is not None and _reachable(graph, target, source):
-            unit = objects.get(source) or objects.get(target)
-            if unit:
-                _add(findings, "blocker", "CULTURE_RECYCLE_UNSUPPORTED", unit["tag"], "connections",
-                     "Culture on a cycle cannot be propagated until Jarvis culture recycle convergence arrives with 168.")
-                break
     return findings
 
 
