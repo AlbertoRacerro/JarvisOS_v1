@@ -26,6 +26,7 @@ from app.modules.process_stack.draft_models import (
     Move,
     Rename,
     SetOrientation,
+    SetStreamCulture,
     SetStreamSpec,
     SetUnitParams,
 )
@@ -136,10 +137,22 @@ def surface_brief(workspace_id: str, ref: SurfaceRef | None) -> SurfaceBrief:
         unit_tags = [item["tag"] for item in objects if item["kind"] == "unit"]
         next_unit_tag = next((f"P{index}" for index in range(1, len(unit_tags) + 2)
                               if f"P{index}" not in unit_tags), "<new tag>")
+        selected_info = []
+        if selected_unit:
+            declaration = UNIT_REGISTRY[selected_unit["type"]]
+            selected_info.append(f"Selected unit owner: {declaration.owner}; culture rule: {declaration.culture_rule}.")
+        if selected_stream and selected_stream.get("culture") is not None:
+            fields = "; ".join(
+                f"{name} {value['value']} {value['unit']}"
+                for name, value in sorted(selected_stream["culture"].items())
+            )
+            selected_info.append(f"Selected feed culture values: {fields}.")
+        selected_context = ("\n".join(selected_info) + "\n") if selected_info else ""
         text = (
             f"Process workspace {workspace_id}; draft {draft_id}; head revision {record['revision']}\n"
             f"Results: {projection['results']['state']}\nObjects ({len(objects)}): "
             f"{_compact_objects(objects, document)}\nSelected: {selected_names or 'none'}\n"
+            f"{selected_context}"
             "Action JSON examples (submit one or more objects in actions): "
             f'{{"op":"set_value","target":"{stream_tag}","property":"pressure","value":{{"value":2,"unit":"bar"}}}}; '
             f'{{"op":"add_unit","type":"Pump","tag":"{next_unit_tag}","near":"{unit_tag}"}}; '
@@ -150,6 +163,7 @@ def surface_brief(workspace_id: str, ref: SurfaceRef | None) -> SurfaceBrief:
             f'{{"op":"move","target":"{unit_tag}","dx":20,"dy":0}}; '
             f'{{"op":"rename","target":"{unit_tag}","new_tag":"{next_unit_tag}"}}; '
             f'{{"op":"delete","target":"{unit_tag}"}}.\n'
+            "Culture is editable only on feed streams. Culture cannot pass through Flash, DistillationColumn, PFR or cycles; Jarvis-native units arrive with 168/170. "
             "Limits: reactions are Arrhenius power-law only; Monod/custom rate laws unsupported. "
             "Reactions and thermo are edited in the operator editor. DWSIM runs only from the operator Run button."
         )
@@ -269,23 +283,28 @@ def _process_object_brief(item: dict) -> dict:
                 "unit": item.get("spec", {}).get("composition_basis", "mass"),
                 "value": item.get("spec", {}).get("composition"),
             }
+            properties["culture"] = item.get("spec", {}).get("culture")
         return {
             "kind": item["kind"],
             "type": item["type"],
             "id": item["id"],
             "tag": item["tag"],
             "properties": properties,
+            "culture": item.get("spec", {}).get("culture"),
         }
     unit_spec = UNIT_REGISTRY[item["type"]]
     properties = {
         param.key: _property_brief(item.get("params", {}).get(param.key), param.kind)
         for param in unit_spec.params_for(item.get("mode"))
     }
+    declaration = UNIT_REGISTRY[item["type"]]
     return {
         "kind": item["kind"],
         "type": item["type"],
         "id": item["id"],
         "tag": item["tag"],
+        "owner": declaration.owner,
+        "culture_rule": declaration.culture_rule,
         "mode": item.get("mode"),
         "properties": properties,
     }
@@ -557,6 +576,20 @@ def submit(workspace_id: str, request: ActionRequest, origin: ActionOrigin) -> A
     try:
         ops, changes = _process_ops(record["document"], request)
         after = draft.apply_ops(record["document"], ops)
+        before_culture_blockers = {
+            (item["code"], item["object"], item["field"])
+            for item in draft.validate_document(record["document"])
+            if item["severity"] == "blocker" and item["code"].startswith("CULTURE_")
+        }
+        after_culture_blockers = {
+            (item["code"], item["object"], item["field"])
+            for item in draft.validate_document(after)
+            if item["severity"] == "blocker" and item["code"].startswith("CULTURE_")
+        }
+        if after_culture_blockers - before_culture_blockers:
+            new_codes = sorted(code for code, _tag, _field in after_culture_blockers - before_culture_blockers)
+            raise ValueError("Culture refusal: " + ", ".join(new_codes)
+                             + ". Biology cannot pass through DWSIM VLE or reactors; no change was made.")
         if any(op.op == "delete" for op in ops):
             before_blockers = {
                 (item["code"], item["object"], item["field"])
@@ -692,19 +725,39 @@ def _process_ops(document: dict, request: ActionRequest) -> tuple[list[DraftOp],
     ops: list[DraftOp] = []
     changes: list[ChangeLine] = []
     objects = document["objects"]
+    culture_updates: dict[str, dict[str, DraftQuantity]] = {}
     for action in request.actions:
         if action.op in {"duplicate_part", "set_part_param", "move_part", "delete_part"}:
             raise ValueError("BLUECAD actions cannot execute on the Process surface.")
         if action.op == "set_value":
             target = _target(document, action.target)
             if target["kind"] == "stream":
-                supported = {"temperature", "pressure", "mass_flow", "molar_flow", "vapor_fraction", "composition"}
+                culture_fields = {"biomass", "nitrogen", "phosphorus", "oxygen", "dic", "ph", "salinity"}
+                supported = {"temperature", "pressure", "mass_flow", "molar_flow", "vapor_fraction", "composition"} | culture_fields
                 if action.property not in supported:
                     raise ValueError(
-                        "Streams support temperature, pressure, mass_flow, molar_flow, vapor_fraction, and composition."
+                        "Streams support temperature, pressure, mass_flow, molar_flow, vapor_fraction, composition and feed culture fields."
                     )
                 value = action.value
-                if action.property == "composition":
+                if action.property in culture_fields:
+                    if target["type"] == "EnergyStream" or target.get("source") is not None:
+                        raise ValueError("Culture can only be set on a material feed. Computed streams are read-only.")
+                    stream_id = target["id"]
+                    if stream_id not in culture_updates:
+                        original = target.get("spec", {}).get("culture")
+                        culture_updates[stream_id] = {
+                            key: DraftQuantity(value=quantity["value"], unit=quantity["unit"])
+                            for key, quantity in (original or {}).items()
+                        }
+                    if value is None:
+                        culture_updates[stream_id].pop(action.property, None)
+                    elif isinstance(value, Quantity):
+                        culture_updates[stream_id][action.property] = DraftQuantity(value=value.value, unit=value.unit)
+                    else:
+                        raise ValueError("Culture fields require a numeric value and unit, or null to mark unknown.")
+                    before = target.get("spec", {}).get("culture", {}).get(action.property)
+                    after = value.model_dump() if isinstance(value, Quantity) else None
+                elif action.property == "composition":
                     if not isinstance(value, dict):
                         raise ValueError("Stream composition must be a compound fraction map.")
                     ops.append(SetStreamSpec(op="set_stream_spec", stream=target["id"], composition=value))
@@ -884,6 +937,10 @@ def _process_ops(document: dict, request: ActionRequest) -> tuple[list[DraftOp],
             changes.append(
                 ChangeLine(label=f"{target['tag']} — delete {target['type']}", before="present", after="deleted")
             )
+    for stream_id, culture in culture_updates.items():
+        if "biomass" not in culture or "salinity" not in culture:
+            raise ValueError("Creating or keeping a culture section requires biomass and salinity in the same action request.")
+        ops.append(SetStreamCulture(op="set_stream_culture", stream=stream_id, culture=culture))
     if not ops:
         raise ValueError("No supported Process operations were supplied.")
     return ops, changes
