@@ -44,25 +44,31 @@ Alternatives rejected:
    - salinity: `salinity` — g/kg (absolute salinity).
 
    The new quantity kinds are added to `QUANTITY_UNITS` with explicit SI storage (kg/m³, mol/m³, g/kg, pH) and reviewed conversion factors. Values are stored as `{si, value, unit}`, as for existing quantities. Tier-2/3 fields from the record (intracellular N quota, lipid marker) are out of scope.
+
+   An omitted optional field (N, P, O₂, DIC, pH) means **unknown**, not zero. It propagates as `null` with the reason "not specified on feed <tag>". An explicit 0 is a value.
 3. **Operations.**
    - A new `set_stream_culture` DraftOp (feed tag plus the full culture section or `null` to clear) joins the closed op union. It is a meaning op: it stales results and goes through CAS, revisions, undo and restore like every other op.
-   - Culture is part of the **process-result fingerprint**, but not of the DWSIM materialization (`expected()`). Tests must prove both: a culture-only edit stales results, and the DWSIM materialization fingerprint and read-back are unchanged.
+   - Culture is part of a **culture-inclusive result fingerprint**, which is the fingerprint used for staleness. That fingerprint includes the culture schema and propagation versions. Culture is not part of the DWSIM materialization (`expected()`), its read-back comparison, or its materialization fingerprint. Tests must prove both: a culture-only edit stales results, and the DWSIM materialization fingerprint and read-back are unchanged.
    - Documents and revisions without culture load unchanged.
 4. **Validation findings (162 style, `source: "jarvis"`).**
-   - Blocker `CULTURE_CARRIER_NOT_AQUEOUS`: a culture feed whose declared compounds lack Water, or whose Water fraction is below 0.5 (mass basis).
-   - Warning `CULTURE_CARRIER_IMPURE`: Water mass fraction below 0.95.
-   - Blocker `CULTURE_FIELD_REQUIRED` for missing biomass or salinity, and `CULTURE_VALUE_OUT_OF_RANGE` for negative concentrations, pH outside [0, 14], or salinity above 300 g/kg.
+   - Blocker `CULTURE_CARRIER_NOT_AQUEOUS`: a culture feed whose declared compounds lack Water, or whose Water **mass** fraction is below 0.5. A mole-basis composition is converted to mass fractions for this check.
+   - Warning `CULTURE_CARRIER_IMPURE`: Water mass fraction below 0.95. Both thresholds are screening bounds, not scientific limits.
+   - Blocker `CULTURE_FEED_NOT_LIQUID`: a culture feed specified with a vapor fraction above 0.
+   - Blocker `CULTURE_FIELD_REQUIRED` for missing biomass or salinity, and `CULTURE_VALUE_OUT_OF_RANGE` for negative concentrations, pH outside [0, 14], or salinity above 300 g/kg (a plausibility bound, not an operating range).
    - Blocker `CULTURE_UNIT_UNSUPPORTED`: a culture-carrying stream reaches a unit whose `culture_rule` is `refuse` (Flash, DistillationColumn, PFR). The finding names the unit and explains that biology cannot pass through DWSIM VLE or reactors, and that Jarvis-native units arrive with 168/170.
    - Blocker `CULTURE_RECYCLE_UNSUPPORTED`: a culture-carrying stream lies on a cycle. Converged culture recycles arrive with 168.
    - Warning `CULTURE_MIXED_WITH_UNSPECIFIED`: a Mixer combines culture and non-culture inlets. The non-culture inlet contributes zero biomass, nutrients, O₂ and DIC and zero salinity, and this assumption is stated in the warning.
    - A flowsheet without culture produces no culture findings and behaves exactly as before.
 5. **Propagation (`jarvis_culture_propagation`, version 1).** This runs only after a successful DWSIM solve, in topological order over the acyclic culture-carrying subgraph, using DWSIM-reported mass flows and densities.
+   - Internal basis is per kg of the **total** DWSIM stream: biomass, N, P and O₂ in kg/kg; DIC in mol/kg; salinity in g/kg. pH is a non-conserved scalar. Feed volumetric inputs are converted with the feed's own DWSIM density; computed volumetric display values use each stream's own density.
+   - Density source: the raw DWSIM stream result's `phases[name="Mixture"].density_kg_m3`. It must be finite and positive; otherwise that stream's culture result fails visibly. No fallback density is used, and volumetric values inherit the record's seawater-as-water approximation, which the fidelity label states.
+   - **Liquid-only eligibility.** A culture-carrying stream whose solved vapor fraction is above 1e-6 (for example after a Heater, Cooler or Valve) gets no culture values. Its culture result fails with post-run finding `CULTURE_PHASE_NOT_LIQUID` naming the stream and the upstream unit, and everything downstream of it is marked failed. Suspended biomass and dissolved species are never attributed to a vapor phase.
    - Pass-through (Heater, Cooler, Pump, Valve, and each side of a HeatExchanger independently): mass-specific values are copied unchanged.
    - Splitter: every outlet copies the inlet's mass-specific values.
-   - Mixer: mass-flow-weighted average of mass-specific values for biomass, N, P, O₂, DIC and salinity.
-   - pH: pass-through and Splitter copy it. A Mixer output gets a pH only when all culture inlets agree within 0.01. Otherwise pH is `null` with the reason "requires carbonate speciation (175)". It is never averaged.
+   - Mixer: mass-flow-weighted average of mass-specific values for biomass, N, P, O₂, DIC and salinity. A field that is `null` on any culture inlet is `null` on the outlet. Non-positive total inlet mass flow fails the outlet's culture result.
+   - pH: pass-through and Splitter copy it. A Mixer output copies a pH only when all inlets are culture inlets that agree within 0.01. The result labels it "screening placeholder; mixed pH requires carbonate speciation (175)". Otherwise pH is `null` with that reason. pH is never averaged.
    - Recycle: refused (finding above).
-   - Each culture result records its owner, propagation version, mass-specific values, volumetric display values with the density used, and its fidelity label "screening — pass-through, no reaction or gas transfer". It also records per-unit balance residuals for biomass, N, P and salinity (inlets minus outlets, kg/s). These must be at or below 1e-9 relative, or the result is marked failed rather than shown.
+   - Each culture result records its owner, propagation version, mass-specific values, volumetric display values with the density used, and its fidelity label "screening — pass-through, no reaction or gas transfer". It also records per-unit balance residuals for each conserved field with a value: biomass, N, P, O₂ and salt (inlets minus outlets, kg/s), and DIC (mol/s). A residual passes when |in − out| ≤ 1e-9·max(in, out) + floor, with a floor of 1e-12 kg/s or 1e-12 mol/s. A failing residual marks the result failed rather than showing it.
    - Dissolved O₂ is carried without solubility or degassing changes; the result shows a supersaturation caveat for heated streams. This is the record's explicit assumption until 175.
    - Missing DWSIM density for a culture stream fails that stream's culture result visibly. No fallback density is used.
    - Results are stored with the run outcome under `culture[tag]` and become stale with the run.
@@ -71,7 +77,7 @@ Alternatives rejected:
    - Computed stream inspectors show a read-only `Culture · Jarvis` section after Run, with the fidelity label and the pH reason when null. The canvas marks culture-carrying streams subtly (style, not a new color system).
    - Findings are listed and selectable as in 162.
    - Readable at 1280 and 1440 CSS px without horizontal overflow. No raw JSON in the normal view.
-7. **Agent actions (166 vocabulary).** `set_value` admits culture fields on feed streams (confirm tier, with units validated as above). It maps to `set_stream_culture`, preserving the other culture fields. The Process surface brief lists the selected feed's culture values and the refusal rules. Asked to put culture through a Flash or PFR, the agent explains the refusal and makes no change.
+7. **Agent actions (166 vocabulary).** `set_value` admits single culture fields on feed streams (confirm tier, with units validated as above). The executor reads the current culture section, replaces that one field, and emits a full-section `set_stream_culture`, so the other fields are preserved. Setting an optional field to `null` makes it unknown. Clearing the whole section, or creating one on a feed without culture, requires biomass and salinity in the same action. The Process surface brief lists the selected feed's culture values and the refusal rules. Asked to put culture through a Flash or PFR, the agent explains the refusal and makes no change.
 
 ## Boundaries / non-goals
 
@@ -87,9 +93,10 @@ Alternatives rejected:
   - `set_stream_culture` CAS, undo/restore, staleness, and an unchanged DWSIM materialization fingerprint for culture-only edits;
   - old-revision loading without culture;
   - every validation finding;
-  - every pass-through rule, Splitter copy, Mixer weighting and pH agreement/null;
+  - every pass-through rule, Splitter copy, Mixer weighting and pH agreement/placeholder/null;
+  - mass ↔ mass-specific conversion at different densities, mole-basis Water checks, unknown-field propagation, zero-flow Mixer, missing/zero/non-finite density, and vapor or two-phase refusal;
   - each refusal (Flash, DistillationColumn, PFR, cycle);
-  - balance residuals and missing-density failure;
+  - balance residuals per field in their units (including O₂ and DIC);
   - registry owner exposure;
   - 166 `set_value` on culture fields and the brief contents.
 - Frontend build and node contract tests for the Culture medium section, `Culture · Jarvis` results and owner badges.
