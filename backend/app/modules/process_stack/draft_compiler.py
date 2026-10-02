@@ -638,6 +638,21 @@ def fingerprint(normalized: dict[str, Any], *, dwsim_version: str, mcp_sha256: s
     return "sha256:" + hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
+def result_fingerprint(document: dict[str, Any], *, dwsim_version: str, mcp_sha256: str) -> str:
+    """Jarvis result identity includes culture while DWSIM materialization remains untouched."""
+    from app.modules.process_stack.culture import PROPAGATION_VERSION, RESULT_SCHEMA_VERSION
+
+    dwsim_process = fingerprint(process_view(expected(document)), dwsim_version=dwsim_version,
+                                mcp_sha256=mcp_sha256)
+    culture = {item["tag"]: item.get("spec", {}).get("culture")
+               for item in document["objects"].values()
+               if item["kind"] == "stream" and item.get("spec", {}).get("culture") is not None}
+    payload = {"dwsim_process_fingerprint": dwsim_process, "culture": culture,
+               "culture_schema_version": RESULT_SCHEMA_VERSION,
+               "culture_propagation_version": PROPAGATION_VERSION}
+    return "sha256:" + hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
 def _stream_result(result: dict[str, Any]) -> dict[str, Any]:
     phases = {phase.get("name"): phase for phase in result.get("phases", []) if isinstance(phase, dict)}
     mixture = phases.get("Mixture", {})
