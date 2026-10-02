@@ -55,7 +55,7 @@ def edit_value(workspace_id: str, set_id: str, symbol: str, payload: ValueEdit) 
 @router.post("/sets/{set_id}/values/{symbol}/verify")
 def verify_value(workspace_id: str, set_id: str, symbol: str, payload: ValueAction) -> dict[str, Any]:
     return _call(service.verify_value, workspace_id, set_id, symbol, payload.expected_revision, payload.expected_digest,
-                 locator_confirmed=payload.locator_confirmed)
+                 locator_confirmed=payload.locator_confirmed, locator_confirmation=payload.locator_confirmation)
 
 
 @router.post("/sets/{set_id}/values/{symbol}/review")

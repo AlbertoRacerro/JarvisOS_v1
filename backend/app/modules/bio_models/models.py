@@ -32,6 +32,7 @@ class ValueAction(BioModelRequest):
     expected_revision: str = Field(min_length=1)
     expected_digest: str = Field(min_length=64, max_length=64)
     locator_confirmed: bool = False
+    locator_confirmation: str | None = Field(default=None, max_length=500)
 
 
 class ReviewAction(ValueAction):

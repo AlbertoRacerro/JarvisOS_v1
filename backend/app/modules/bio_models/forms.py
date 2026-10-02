@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import math
+import re
 from typing import Any
 
 FORM_VERSION = "1.0.0"
@@ -171,34 +172,38 @@ def stoich_photoautotrophic(a: float, b: float, c: float, d: float, w_ash: float
         raise FormRefusal("a, b, c, d must be >= 0 and w_ash in [0, 1)")
     if n_source not in {"NH3", "HNO3"}:
         raise FormRefusal("n_source must be NH3 or HNO3")
-    # Coefficients are mol per C-mol biomass. Positive water/O2 are products.
+    # Signed convention: positive coefficients are reactants; negative values
+    # indicate net products. H2O is on the reactant side of the written balance.
     water = (a - (3.0 * c if n_source == "NH3" else c) - 3.0 * d) / 2.0
-    oxygen = ((2.0 + 4.0 * d + (3.0 * c if n_source == "HNO3" else 0.0) - b - water) / 2.0)
+    oxygen = (2.0 + 4.0 * d + (3.0 * c if n_source == "HNO3" else 0.0) + water - b) / 2.0
     # Atomic mass (g/mol): C 12.011 H 1.008 O 15.999 N 14.007 P 30.974.
     biomass_g = 12.011 + 1.008 * a + 15.999 * b + 14.007 * c + 30.974 * d
     total_g = biomass_g / (1.0 - w_ash)
-    coefficients = {"CO2": 1.0, n_source: c, "H3PO4": d, "H2O": water, "O2": oxygen}
+    coefficients = {"CO2": 1.0, n_source: c, "H3PO4": d, "H2O": water, "O2": -oxygen}
     # A signed coefficient retains balances when a selected source is a net product.
-    yields = {"O2_produced_kg_per_kg_total_dry": oxygen * 31.998 / total_g,
+    yields = {"O2_produced_kg_per_kg_total_dry": -coefficients["O2"] * 31.998 / total_g,
               "CO2_consumed_kg_per_kg_total_dry": 44.009 * 1.0 / total_g,
               "N_consumed_kg_per_kg_total_dry": c * 14.007 / total_g,
               "P_consumed_kg_per_kg_total_dry": d * 30.974 / total_g}
-    balances = {"C": 1.0 - 1.0, "N": c - c, "P": d - d,
-                "H": (3.0 * c if n_source == "NH3" else c) + 3.0 * d + 2.0 * water - a,
-                "O": 2.0 + 4.0 * d + (3.0 * c if n_source == "HNO3" else 0.0) - b - water - 2.0 * oxygen}
+    # Independently count atoms from the returned coefficient table. Positive
+    # coefficients are reactants; negative coefficients are products.
+    formulas = {"CO2": "CO2", "NH3": "NH3", "HNO3": "HNO3", "H3PO4": "H3PO4",
+                "H2O": "H2O", "O2": "O2", "biomass": f"CH{a}O{b}N{c}P{d}"}
+    atom_counts = {name: {element: float(amount) for element, amount in
+                          re.findall(r"([A-Z][a-z]?)([0-9.]+)?", formula)
+                          for amount in [amount or "1"]}
+                   for name, formula in formulas.items()}
+    signed = {**coefficients, "biomass": -1.0}
+    elements = ("C", "H", "O", "N", "P")
+    balances = {element: sum(signed.get(name, 0.0) * atom_counts[name].get(element, 0.0)
+                             for name in signed) for element in elements}
     return {"coefficients_mol_per_C_mol": coefficients, "yields": yields, "elemental_residuals_mol": balances}
 
 
 def _symbol(symbol: str, meaning: str, unit: str, valid_range: str) -> dict[str, str]:
-    return {"symbol": symbol, "meaning": meaning, "unit": unit, "valid_range": valid_range}
-
-
-def _mi(tag: str, text: str) -> dict[str, Any]:
-    return {"tag": tag, "text": text}
-
-
-def _math(*children: dict[str, Any]) -> dict[str, Any]:
-    return {"tag": "math", "children": list(children)}
+    keys = {"β": "beta", "I₀": "I0", "Q_min,j": "Q_min", "a,b,c,d": "formula_coefficients"}
+    return {"symbol": symbol, "key": keys.get(symbol, symbol), "meaning": meaning,
+            "unit": "dimensionless" if unit == "1" else unit, "valid_range": valid_range}
 
 
 _cards = [
@@ -221,14 +226,89 @@ _cards = [
 ]
 
 
-def _mathml_tree(equation: str) -> dict[str, Any]:
-    # mtext retains the exact normative expression while keeping it inside a typed MathML tree.
-    return _math({"tag": "mtext", "text": equation})
+def _node(tag: str, *children: dict[str, Any], text: str | None = None) -> dict[str, Any]:
+    result: dict[str, Any] = {"tag": tag}
+    if children:
+        result["children"] = list(children)
+    if text is not None:
+        result["text"] = text
+    return result
+
+
+def _mi(text: str) -> dict[str, Any]: return _node("mi", text=text)
+def _mn(text: str) -> dict[str, Any]: return _node("mn", text=text)
+def _mo(text: str) -> dict[str, Any]: return _node("mo", text=text)
+def _row(*items: dict[str, Any]) -> dict[str, Any]: return _node("mrow", *items)
+
+
+def _symbol_node(name: str) -> dict[str, Any]:
+    if "_" in name:
+        base, subscript = name.split("_", 1)
+        return _node("msub", _mi(base), _mi(subscript))
+    return _mi(name)
+
+
+def _equation_tree(form_id: str, equation: str) -> dict[str, Any]:
+    # Equation bodies use a typed MathML expression tree. The selected forms
+    # below cover all forms with nested fraction, index or exponent structure;
+    # simple forms still use explicit identifiers and operators.
+    if form_id == "light.monod":
+        body = _node("mfrac", _mi("I"), _row(_symbol_node("K_I"), _mo("+"), _mi("I")))
+    elif form_id == "light.haldane":
+        body = _node("mfrac", _mi("I"), _row(_symbol_node("K_I"), _mo("+"), _mi("I"), _mo("+"),
+            _node("mfrac", _node("msup", _mi("I"), _mn("2")), _symbol_node("K_i"))))
+    elif form_id == "light.steele":
+        body = _row(_node("mfrac", _mi("I"), _symbol_node("I_opt")), _mo("·"),
+                    _node("msup", _mi("e"), _row(_mn("1"), _mo("−"), _node("mfrac", _mi("I"), _symbol_node("I_opt")))))
+    elif form_id == "light.eilers_peeters_steady":
+        body = _node("mfrac", _row(_mn("2"), _mo("+"), _mi("β"), _mo("·"), _mi("x")),
+            _row(_node("msup", _mi("x"), _mn("2")), _mo("+"), _mi("β"), _mo("·"), _mi("x"), _mo("+"), _mn("1")))
+    elif form_id == "temperature.arrhenius_ref":
+        body = _node("msup", _mi("e"), _row(_mo("−"), _node("mfrac", _mi("E_a"), _mi("R")), _mo("·"),
+            _row(_node("mfrac", _mn("1"), _mi("T")), _mo("−"), _node("mfrac", _mn("1"), _mi("T_ref")))))
+    elif form_id == "nutrient.monod":
+        body = _node("mfrac", _mi("S_j"), _row(_mi("K_j"), _mo("+"), _mi("S_j")))
+    elif form_id == "nutrient.droop":
+        body = _row(_mi("max"), _mo("("), _mn("0"), _mo(","), _mn("1"), _mo("−"),
+                    _node("mfrac", _mi("Q_min,j"), _mi("Q_j")), _mo(")"))
+    elif form_id == "optics.slab_mean_irradiance":
+        body = _node("mfrac", _row(_mi("I₀"), _mo("·"), _row(_mn("1"), _mo("−"),
+            _node("msup", _mi("e"), _row(_mo("−"), _mi("τ"))))), _mi("τ"))
+    elif form_id == "optics.slab_response_average":
+        body = _row(_node("mfrac", _mi("1"), _mi("L")), _mo("·"),
+            _node("msub", _mo("∫"), _row(_mn("0"), _mo(","), _mi("L"))), _mi("f"), _mo("("),
+            _row(_mi("I₀"), _node("msup", _mi("e"), _row(_mo("−"), _symbol_node("k_X"), _mi("X"), _mi("z")))), _mo(")"), _mi("dz"))
+    elif form_id == "temperature.ctmi":
+        body = _node("mfrac", _row(_row(_mi("T"), _mo("−"), _symbol_node("T_max")), _node("msup", _row(_mi("T"), _mo("−"), _symbol_node("T_min")), _mn("2"))),
+            _row(_symbol_node("T_opt"), _mo("−"), _symbol_node("T_min"), _row(_row(_symbol_node("T_opt"), _mo("−"), _symbol_node("T_min")), _row(_mi("T"), _mo("−"), _symbol_node("T_opt"))),
+                 _mo("−"), _row(_row(_symbol_node("T_opt"), _mo("−"), _symbol_node("T_max")), _row(_symbol_node("T_opt"), _mo("+"), _symbol_node("T_min"), _mo("−"), _mn("2"), _mi("T")))))
+    else:
+        # Tokenize the published expression into identifiers, numbers and
+        # operators rather than placing the equation in a single mtext node.
+        tokens = re.findall(r"[A-Za-zμĪβ⟨⟩₀ₐᵦ][A-Za-z0-9_₀ₐᵦ,]*|\d+(?:\.\d+)?|[^\s]", equation)
+        items = []
+        for token in tokens:
+            if re.fullmatch(r"\d+(?:\.\d+)?", token):
+                items.append(_mn(token))
+            elif re.fullmatch(r"[A-Za-zμĪβ⟨⟩₀ₐᵦ][A-Za-z0-9_₀ₐᵦ,]*", token):
+                items.append(_mi(token))
+            else:
+                items.append(_mo(token))
+        body = _row(*items)
+    lhs = "f" if form_id.startswith(("light.", "temperature.", "nutrient.", "combine.")) else "r" if form_id.startswith("loss.") else "equation"
+    return _node("math", _row(_mi(lhs), _mo("="), body))
 
 
 FORM_CARDS: tuple[dict[str, Any], ...] = tuple(
-    {"id": form_id, "version": FORM_VERSION, "family": family, "equation": _mathml_tree(equation),
-     "equation_text": equation, "symbols": symbols, "required_states": [], "required_inputs": [item["symbol"] for item in symbols],
+    {"id": form_id, "version": FORM_VERSION, "family": family, "equation": _equation_tree(form_id, equation),
+     "equation_text": equation, "symbols": symbols,
+     "parameters": [item for item in symbols if item["key"] in {
+         "K_I", "K_i", "I_opt", "beta", "T_min", "T_opt", "T_max", "T_ref", "E_a", "K_j", "Q_min",
+         "k_d", "I_dark", "m_L", "m_D", "a,b,c,d", "w_ash"}],
+     "inputs": [item for item in symbols if item["key"] not in {
+         "K_I", "K_i", "I_opt", "beta", "T_min", "T_opt", "T_max", "T_ref", "E_a", "K_j", "Q_min",
+         "k_d", "I_dark", "m_L", "m_D", "a,b,c,d", "w_ash"}],
+     "required_states": [], "required_inputs": [item["key"] for item in symbols],
      "applies_to": applies_to, "citations": (["QSDsan PM² reference", "107"] if form_id.startswith("optics.") else ["107"] if form_id in {"light.monod", "light.haldane", "temperature.ctmi", "nutrient.monod"} else [])}
     for form_id, family, equation, symbols, applies_to in _cards
 )
@@ -237,7 +317,7 @@ FORM_CARDS: tuple[dict[str, Any], ...] = tuple(
 def kinetics_explanation() -> str:
     """Deterministic seam for spec 166; derived from the nutrient Monod card metadata."""
     card = next(item for item in FORM_CARDS if item["id"] == "nutrient.monod")
-    return f"Monod is {card['applies_to']} DWSIM reactor rate laws arrive with 180; PBR units arrive with 170. No action is proposed."
+    return f"Monod is a {card['applies_to']} DWSIM reactor rate laws arrive with 180; PBR units arrive with 170. No action is proposed."
 
 
 def form_card(form_id: str) -> dict[str, Any]:
