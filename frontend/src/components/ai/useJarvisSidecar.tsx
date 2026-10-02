@@ -38,7 +38,7 @@ import { SidecarChrome } from "../shell/ContextualSidecar";
 import { ContextMenu, MenuButton, useContextMenu, type ContextMenuItem } from "../ui/ContextMenu";
 import JarvisMessageText from "./JarvisMessageText";
 import WorkspaceActionCards from "./WorkspaceActionCards";
-import { buildSurfaceRef, isToolCallShaped, type ProcessSurface } from "./workspaceActionPresentation";
+import { buildSurfaceRef, isToolCallShaped, relayFailureMessage, type ProcessSurface } from "./workspaceActionPresentation";
 import { modelDisplayName } from "./modelDisplayName";
 import { cloudFailureMessage, formatMoney, sortCreatedChronologically } from "./sidecarPresentation";
 import "./JarvisSidecar.css";
@@ -150,28 +150,6 @@ function relayRunTone(state: RelayRunRead["state"]): Readiness["tone"] {
   if (state === "queued" || state === "running") return "busy";
   if (state === "completed") return "ready";
   return "down";
-}
-
-// Plain-language Relay outcomes; the raw code stays in the run information.
-const RELAY_FAILURES: Record<string, string> = {
-  relay_gateway_disabled: "Relay is turned off on this machine, so nothing was sent",
-  relay_agent_login_missing: "the Relay agent is not signed in on this machine",
-  relay_agent_binary_missing: "the Relay agent program is not installed on this machine",
-  relay_agent_not_allowed: "this Relay agent is not allowed on this machine",
-  relay_run_failed: "the Relay run failed",
-  relay_run_timeout: "the agent took too long and was stopped",
-  relay_run_interrupted: "the run was interrupted (JarvisOS restarted while it was working)",
-  relay_run_launch_failed: "the agent could not be started",
-  relay_agent_error: "the agent reported an error",
-  relay_output_unparseable: "the agent returned an unreadable result",
-  relay_run_result_unreadable: "the result could not be read",
-  prompt_secret_detected: "the text looks like it contains a secret",
-  prompt_sanitization_required: "the text needs a cloud-safe rewrite first",
-  prompt_classification_required: "the text was not confirmed as cloud-safe"
-};
-
-function relayFailure(run: RelayRunRead): string {
-  return RELAY_FAILURES[run.reason_code ?? ""] ?? "the run did not finish";
 }
 
 function EscalateControl({ disabled, onRelay, onApi }: Readonly<{ disabled: boolean; onRelay(): void; onApi(): void }>) {
@@ -811,7 +789,7 @@ export function useJarvisSidecar(
         {pendingRun ? <p className="jarvis-working" role="status"><span className="jarvis-working__dots" aria-hidden="true"><i /><i /><i /></span>Waiting for {name} via Relay… · {elapsedSince(run.started_at ?? run.created_at)}s</p> : null}
         {cleanResult && !failed ? <JarvisMessageText text={cleanResult} /> : null}
         <WorkspaceActionCards actions={run.actions ?? []} onApply={applyAction} onDismiss={dismissAction} onUndo={undoAction} />
-        {failed ? <p className="jarvis-bubble__notice" role="status">Relay could not complete this request: {relayFailure(run)}. Nothing was sent to a paid API.</p> : null}
+        {failed ? <p className="jarvis-bubble__notice" role="status">Relay could not complete this request: {relayFailureMessage(run.reason_code, run.result_text)}. Nothing was sent to a paid API.</p> : null}
         {run.state === "completed" && !(run.actions ?? []).some(action => action.state === "applied") ? <p className="jarvis-bubble__advisory">Advisory answer · no project change was applied.</p> : null}
         <div className="jarvis-bubble__actions">
           {failed && run.source_interaction_id ? <button type="button" className="jarvis-link-button" disabled={cloudWorking} onClick={() => startApiEscalation(run.source_interaction_id!)}>Escalate with API key…</button> : null}

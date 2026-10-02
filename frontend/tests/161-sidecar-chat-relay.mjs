@@ -6,6 +6,7 @@ import { cloudFailureMessage, formatMoney, sortCreatedChronologically } from "..
 
 const read = (path) => fs.readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 const sidecar = read("src/components/ai/useJarvisSidecar.tsx");
+const sidecarPresentation = read("src/components/ai/workspaceActionPresentation.ts");
 const shellSidecar = read("src/components/shell/ContextualSidecar.tsx");
 const layout = read("src/components/Layout.tsx");
 const api = read("src/api/threads.ts");
@@ -72,7 +73,8 @@ assert.match(sidecar, /subscription, no API charge/);
 assert.match(api, /relay-escalation-draft/);
 assert.match(api, /relay-escalate/);
 assert.match(sidecar, /relayEscalationInFlight\.current/);
-assert.match(sidecar, /relay_gateway_disabled:[\s\S]*relay_agent_login_missing:[\s\S]*relay_run_failed:/, "Relay availability and run failures use readable messages");
+assert.match(sidecar, /relayFailureMessage\(run\.reason_code, run\.result_text\)/, "Relay failure notices use the recorded result");
+assert.match(sidecarPresentation, /relay_gateway_disabled:[\s\S]*relay_agent_login_missing:[\s\S]*relay_run_failed:/, "Relay availability and run failures use readable messages");
 assert.match(sidecar, /cloudFailureMessage\(item\.reason_code\)/, "blocked API turns map reason codes to plain language");
 assert.match(sidecar, /item\.reason_code \? ` · \$\{item\.reason_code\}`/, "raw API failure code is kept in Info");
 assert.match(sidecar, /formatMoney\(item\.projected_cost_usd, "USD"\)[\s\S]*formatMoney\(item\.accounted_cost_eur, "EUR"\)/, "projected and actual amounts keep their source currencies");

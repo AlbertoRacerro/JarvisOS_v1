@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { actionStatePresentation, buildSurfaceRef, isToolCallShaped } from "../src/components/ai/workspaceActionPresentation.ts";
+import { actionStatePresentation, buildSurfaceRef, isToolCallShaped, relayFailureMessage } from "../src/components/ai/workspaceActionPresentation.ts";
 
 const process = buildSurfaceRef("design-process", null, {
   draft_id: "draft-1",
@@ -41,11 +41,17 @@ assert.deepEqual(actionStatePresentation("refused"), { label: "Refused", tone: "
 assert.deepEqual(actionStatePresentation("stale"), { label: "Stale", tone: "plain" });
 assert.deepEqual(actionStatePresentation("dismissed"), { label: "Dismissed", tone: "muted" });
 assert.deepEqual(actionStatePresentation("undone"), { label: "Undone", tone: "muted" });
+assert.equal(
+  relayFailureMessage("relay_agent_error", "You've hit your session limit · resets 4:50am (Europe/San_Marino)"),
+  "Relay agent unavailable: session limit reached (resets 4:50am)"
+);
+assert.equal(relayFailureMessage("relay_agent_error", "Error at C:\\private\\secret.log token=abc"), "the agent reported an error");
 
 const sidecar = fs.readFileSync(new URL("../src/components/ai/useJarvisSidecar.tsx", import.meta.url), "utf8");
 const cards = fs.readFileSync(new URL("../src/components/ai/WorkspaceActionCards.tsx", import.meta.url), "utf8");
 const threadApi = fs.readFileSync(new URL("../src/api/threads.ts", import.meta.url), "utf8");
 const actionApi = fs.readFileSync(new URL("../src/api/workspaceActions.ts", import.meta.url), "utf8");
+const bluecadViewer = fs.readFileSync(new URL("../src/components/BluecadGlbViewer.tsx", import.meta.url), "utf8");
 assert.match(threadApi, /surface_context: options\.surfaceContext/);
 assert.match(threadApi, /surface_context: surfaceContext/);
 assert.match(sidecar, /getSurfaceBrief\(workspaceId, surfaceContext\)/);
@@ -56,5 +62,6 @@ assert.match(sidecar, /caught\.status === 409[\s\S]*getWorkspaceAction\(workspac
 assert.match(cards, /change\.before \? `\$\{change\.before\} → ` : ""/);
 assert.match(actionApi, /`\$\{basePath\(workspaceId\)\}\/brief`/);
 assert.match(actionApi, /\/\$\{encodeURIComponent\(actionId\)\}\/apply/);
+assert.match(bluecadViewer, /camera\.updateMatrixWorld\(true\);\s*raycaster\.setFromCamera\(pointer, camera\)/);
 
 console.log("166 surface context and action presentation checks passed");
