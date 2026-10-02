@@ -221,6 +221,7 @@ export function useJarvisSidecar(
   const [routes, setRoutes] = useState<ConversationRoute[]>([]);
   const [processSurface, setProcessSurface] = useState<ProcessSurface>(() => currentProcessSurface());
   const [surfaceBrief, setSurfaceBrief] = useState<Awaited<ReturnType<typeof getSurfaceBrief>> | null>(null);
+  const [surfaceBriefRefresh, setSurfaceBriefRefresh] = useState(0);
   const [routesLoaded, setRoutesLoaded] = useState(false);
   const [routeClass, setRouteClass] = useState("");
   const [optionsError, setOptionsError] = useState(false);
@@ -343,7 +344,19 @@ export function useJarvisSidecar(
       void getSurfaceBrief(workspaceId, surfaceContext).then((brief) => { if (active) setSurfaceBrief(brief); }).catch(() => { if (active) setSurfaceBrief(null); });
     }, 250);
     return () => { active = false; window.clearTimeout(timer); };
-  }, [surfaceContextKey, workspaceId]);
+  }, [surfaceContextKey, workspaceId, surfaceBriefRefresh]);
+
+  useEffect(() => {
+    const refreshBrief = (event: Event) => {
+      const detail = (event as CustomEvent<{ workspaceId?: string; surface?: string; draftId?: string | null }>).detail;
+      const surface = routeId === "design-process" ? "process" : routeId === "design-bluecad" ? "bluecad" : null;
+      if (detail?.workspaceId !== workspaceId || detail.surface !== surface) return;
+      if (detail.draftId && surfaceContext.draft_id && detail.draftId !== surfaceContext.draft_id) return;
+      setSurfaceBriefRefresh(current => current + 1);
+    };
+    window.addEventListener("jarvis:workspace-action", refreshBrief);
+    return () => window.removeEventListener("jarvis:workspace-action", refreshBrief);
+  }, [routeId, surfaceContext.draft_id, workspaceId]);
 
   useEffect(() => {
     workspaceOwner.current += 1;

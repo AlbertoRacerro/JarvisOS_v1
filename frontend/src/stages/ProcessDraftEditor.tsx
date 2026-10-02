@@ -351,7 +351,7 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
     const refresh = (event: Event) => {
       const detail = (event as CustomEvent<{ workspaceId?: string; surface?: string; draftId?: string | null }>).detail;
       if (detail?.workspaceId !== workspaceId || detail.surface !== "process" || !draft || (detail.draftId && detail.draftId !== draft.draft_id)) return;
-      void loadDraft(draft.draft_id).then((next) => setNotice({ tone: "success", text: `Workspace action refreshed draft revision ${next.revision}. Results are stale until rerun.` }))
+      void loadDraft(draft.draft_id).then((next) => setNotice({ tone: "success", text: `Workspace action refreshed draft revision ${next.revision.split(":", 1)[0]}. Results are stale until rerun.` }))
         .catch(() => setNotice({ tone: "danger", text: "The workspace action completed, but the Process draft could not be refreshed." }));
     };
     window.addEventListener("jarvis:workspace-action", refresh);

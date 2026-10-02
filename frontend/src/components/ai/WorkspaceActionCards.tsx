@@ -13,7 +13,7 @@ export default function WorkspaceActionCards({ actions, onApply, onDismiss, onUn
   if (!actions.length && !technicalDetails && !technicalInfo) return null;
   const details = [
     technicalDetails,
-    actions.length ? JSON.stringify(actions.map(({ request, request_digest, origin }) => ({ request, request_digest, origin })), null, 2) : null,
+    actions.length ? JSON.stringify(actions.map(({ request, request_digest, origin, result_revision }) => ({ request, request_digest, origin, result_revision })), null, 2) : null,
     technicalInfo ? JSON.stringify(technicalInfo, null, 2) : null
   ].filter(Boolean).join("\n\n");
   return <div className="jarvis-action-list">
@@ -26,7 +26,7 @@ export default function WorkspaceActionCards({ actions, onApply, onDismiss, onUn
         {(action.state === "refused" || action.state === "stale") && action.reason && <p className="jarvis-action-card__reason">{action.reason}</p>}
         {action.state === "proposed" && <div className="jarvis-action-card__buttons"><button type="button" className="jarvis-primary-button" disabled={busyId === action.action_id} aria-label={`Apply ${action.summary}`} onClick={() => void run(action.action_id, onApply)}>Apply</button><button type="button" className="jarvis-link-button" disabled={busyId === action.action_id} aria-label={`Dismiss ${action.summary}`} onClick={() => void run(action.action_id, onDismiss)}>Dismiss</button></div>}
         {action.state === "applied" && action.undo_available && <button type="button" className="jarvis-link-button" disabled={busyId === action.action_id} aria-label={`Undo ${action.summary}`} onClick={() => void run(action.action_id, onUndo)}>Undo</button>}
-        {action.state === "applied" && action.result_revision && <small>Revision {action.result_revision}</small>}
+        {action.state === "applied" && action.result_revision && <small>Revision {action.result_revision.split(":", 1)[0]}</small>}
       </section>;
     })}
     {Boolean(details) && <details className="jarvis-action-technical"><summary>Technical details</summary><pre>{details}</pre></details>}

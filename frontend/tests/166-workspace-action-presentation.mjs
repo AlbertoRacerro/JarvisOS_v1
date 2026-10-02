@@ -61,11 +61,17 @@ const bluecadViewer = fs.readFileSync(new URL("../src/components/BluecadGlbViewe
 assert.match(threadApi, /surface_context: options\.surfaceContext/);
 assert.match(threadApi, /surface_context: surfaceContext/);
 assert.match(sidecar, /getSurfaceBrief\(workspaceId, surfaceContext\)/);
+assert.match(sidecar, /addEventListener\("jarvis:workspace-action", refreshBrief\)/);
+assert.match(sidecar, /surfaceBriefRefresh/);
 assert.match(sidecar, /<WorkspaceActionCards actions=\{interaction\.actions \?\? \[\]\}/);
 assert.match(sidecar, /surfaceBrief\?\.summary/);
 assert.match(sidecar, /technicalDetails=\{interaction\.technical_details\}/);
 assert.match(sidecar, /caught\.status === 409[\s\S]*getWorkspaceAction\(workspaceId, actionId\)/);
 assert.match(cards, /change\.before \? `\$\{change\.before\} → ` : ""/);
+assert.match(cards, /Revision \{action\.result_revision\.split\(":", 1\)\[0\]\}/);
+assert.match(cards, /result_revision \}\) => \(\{ request, request_digest, origin, result_revision \}\)/);
+const processEditor = fs.readFileSync(new URL("../src/stages/ProcessDraftEditor.tsx", import.meta.url), "utf8");
+assert.match(processEditor, /refreshed draft revision \$\{next\.revision\.split\(":", 1\)\[0\]\}/);
 assert.match(actionApi, /`\$\{basePath\(workspaceId\)\}\/brief`/);
 assert.match(actionApi, /\/\$\{encodeURIComponent\(actionId\)\}\/apply/);
 assert.match(bluecadViewer, /camera\.updateMatrixWorld\(true\);\s*raycaster\.setFromCamera\(pointer, camera\)/);
