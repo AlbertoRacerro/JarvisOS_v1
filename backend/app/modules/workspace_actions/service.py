@@ -120,7 +120,7 @@ def surface_brief(workspace_id: str, ref: SurfaceRef | None) -> SurfaceBrief:
                 continue
             selected.append(_process_object_brief(item))
         projection = draft.projection(workspace_id, draft_id)
-        summary = f"Process: {_safe_surface_label(document.get('name'), 'Process draft')} · revision {record['revision']}"
+        summary = f"Process: {_safe_surface_label(document.get('name'), 'Process draft')} · revision {str(record['revision']).split(':', 1)[0]}"
         if selected:
             selected_object = selected[0]
             summary += f" · selected: {selected_object['kind'].capitalize()} {selected_object['tag']}"
