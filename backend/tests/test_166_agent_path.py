@@ -17,6 +17,8 @@ from app.modules.ai.providers import local_llamacpp_adapter
 from app.modules.ai.providers.local_llamacpp_adapter import LocalLlamaCppAdapter
 from app.modules.ai.thread_service import (
     _derive_surface_brief,
+    _direct_workspace_mode_instruction,
+    _finalize_direct_workspace_answer,
     _guard_tool_shaped_output,
     _install_surface_grants,
     _turn_tools,
@@ -109,6 +111,40 @@ def test_guard_suppresses_fenced_and_embedded_tool_json_and_redacts_grants() -> 
     assert details is None and "grant_id` field" in visible
     redacted, details = _guard_tool_shaped_output('Debug value: {"grant_id":"private-grant"}')
     assert details is None and "private-grant" not in redacted and "[redacted]" in redacted
+
+
+def test_guard_hides_workspace_action_json_but_preserves_ordinary_json_prose() -> None:
+    action = '{"op":"set_value","target":"Feed","property":"pressure","value":{"value":3,"unit":"bar"}}'
+    for text in (action, f"Suggested change: {action}", f"[{action}]", f"```jarvis-actions\n{action}\n```"):
+        visible, details = _guard_tool_shaped_output(text)
+        assert visible.startswith("I couldn't complete that")
+        assert details is not None and '"op"' in details
+    assert _guard_tool_shaped_output('The JSON contains an "operation" field.') == (
+        'The JSON contains an "operation" field.', None
+    )
+    assert _guard_tool_shaped_output('The word op appears in ordinary prose.') == (
+        'The word op appears in ordinary prose.', None
+    )
+
+
+def test_direct_workspace_mode_is_truthful_for_change_requests() -> None:
+    instruction = _direct_workspace_mode_instruction("process")
+    assert "has no workspace-action tools" in instruction
+    assert "do not emit action JSON" in instruction
+    visible, details = _finalize_direct_workspace_answer(
+        "change the Feed stream pressure to 3 bar", "local:llamacpp", "process",
+        "I have prepared a proposal. Action JSON: {\"op\":\"set_value\"}",
+    )
+    assert visible == "This responder can't change the workspace. Switch to Jarvis agent, or use Escalate."
+    assert details is not None and '"op"' in details
+    prose, prose_details = _finalize_direct_workspace_answer(
+        "What is JSON?", "local:llamacpp", "process", "JSON is a data format."
+    )
+    assert prose == "JSON is a data format." and prose_details is None
+    unchanged, _ = _finalize_direct_workspace_answer(
+        "change the Feed stream pressure", "hermes:agent", "process", "A proposal is ready."
+    )
+    assert unchanged == "A proposal is ready."
 
 
 def test_dispatch_submits_typed_action_to_workspace_executor(monkeypatch) -> None:

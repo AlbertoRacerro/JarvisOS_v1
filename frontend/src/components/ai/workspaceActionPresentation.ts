@@ -19,7 +19,49 @@ export function buildSurfaceRef(routeId: string, selection: StageSelection | nul
 export function isToolCallShaped(text: string | null | undefined): boolean {
   if (!text) return false;
   const normalized = text.trim();
-  const candidates = [normalized, ...[...normalized.matchAll(/(?:```|~~~)(?:json|jsonc|javascript)?\s*\n?([\s\S]*?)\n?\s*(?:```|~~~)/gi)].map(match => match[1])];
+  const fences = [...normalized.matchAll(/(```|~~~)([a-z0-9_-]*)\s*\n?([\s\S]*?)\n?\s*\1/gi)];
+  const candidates = [normalized, ...fences.map(match => match[3])];
+  const actionOps = new Set([
+    "set_value", "add_unit", "insert_unit_after", "connect", "disconnect", "mirror", "move",
+    "rename", "delete", "duplicate_part", "set_part_param", "move_part", "delete_part"
+  ]);
+  const containsWorkspaceAction = (value: unknown): boolean => {
+    if (Array.isArray(value)) return value.some(containsWorkspaceAction);
+    if (!value || typeof value !== "object") return false;
+    const record = value as Record<string, unknown>;
+    if (typeof record.op === "string" && actionOps.has(record.op)) return true;
+    return Object.values(record).some(item => item && typeof item === "object" && containsWorkspaceAction(item));
+  };
+  const embeddedValues = (value: string): unknown[] => {
+    const parsed: unknown[] = [];
+    for (let start = 0; start < value.length; start += 1) {
+      if (value[start] !== "{" && value[start] !== "[") continue;
+      const stack: string[] = [];
+      let quoted = false;
+      let escaped = false;
+      for (let end = start; end < value.length; end += 1) {
+        const char = value[end];
+        if (quoted) {
+          if (escaped) escaped = false;
+          else if (char === "\\") escaped = true;
+          else if (char === '"') quoted = false;
+          continue;
+        }
+        if (char === '"') { quoted = true; continue; }
+        if (char === "{" || char === "[") stack.push(char);
+        else if (char === "}" || char === "]") {
+          const opening = stack.pop();
+          if ((opening === "{" && char !== "}") || (opening === "[" && char !== "]")) break;
+          if (stack.length === 0) {
+            try { parsed.push(JSON.parse(value.slice(start, end + 1)) as unknown); } catch { /* Ignore malformed fragments. */ }
+            break;
+          }
+        }
+      }
+    }
+    return parsed;
+  };
+  if (fences.some(match => match[2].toLowerCase() === "jarvis-actions")) return true;
   return candidates.some(candidate => {
     const value = candidate.trim();
     if (/<\|(?:tool_call|python_tag|function_call)\|>|<\|im_start\|>\s*(?:tool_call|function_call)\b|<start_function_call>|<\s*function(?:=|\s)|assistant\s+to=/i.test(value)) return true;
@@ -28,12 +70,14 @@ export function isToolCallShaped(text: string | null | undefined): boolean {
     if (/\{\s*[\s\S]{0,1000}"arguments"\s*:[\s\S]{0,1000}"name"\s*:\s*"[^"]+"/i.test(value)) return true;
     try {
       const parsed: unknown = JSON.parse(value);
+      if (containsWorkspaceAction(parsed)) return true;
       if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
         const record = parsed as Record<string, unknown>;
         if (typeof record.name === "string" && /(?:mcp__jarvis__)?jarvis_(?:process|bluecad)_(?:act|read)$/i.test(record.name)) return true;
         if (Array.isArray(record.tool_calls) && record.tool_calls.some(call => call && typeof call === "object" && "name" in call)) return true;
       }
     } catch { /* Prose and non-JSON answers remain visible. */ }
+    if (embeddedValues(value).some(containsWorkspaceAction)) return true;
     return false;
   });
 }

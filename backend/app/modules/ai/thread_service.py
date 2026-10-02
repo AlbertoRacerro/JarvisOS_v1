@@ -268,6 +268,13 @@ def submit_interaction(
             route_availability=route_availability or [], surface_brief=surface_brief,
         )
 
+    direct_workspace_turn = payload.route_class.startswith("local:") and surface_brief.surface in {"process", "bluecad"}
+    if direct_workspace_turn:
+        context_blocks.append({
+            "source": "jarvis:workspace-action-mode",
+            "content": _direct_workspace_mode_instruction(surface_brief.surface),
+        })
+
     outcome = run_ai_task(
         user_prompt=prompt,
         task_kind=payload.task_kind,
@@ -279,6 +286,11 @@ def submit_interaction(
     )
 
     assistant_text = outcome.response.text if outcome.response is not None else None
+    technical_details = None
+    if assistant_text is not None:
+        assistant_text, technical_details = _finalize_direct_workspace_answer(
+            prompt, payload.route_class, surface_brief.surface, assistant_text
+        )
     bounded_assistant, truncated = _assistant_snapshot(assistant_text)
     try:
         now = utc_now()
@@ -298,6 +310,11 @@ def submit_interaction(
                 )
                 if updated.rowcount != 1:
                     raise AIThreadConflictError("interaction capture state changed concurrently")
+                if technical_details is not None:
+                    connection.execute(
+                        "UPDATE ai_thread_surface_context SET technical_details = ? WHERE interaction_id = ?",
+                        (technical_details, interaction_id),
+                    )
                 connection.execute(
                     "UPDATE ai_threads SET last_activity_at = ? WHERE id = ? AND workspace_id = ?",
                     (now, thread_id, workspace_id),
@@ -655,18 +672,37 @@ def _guard_tool_shaped_output(text: str) -> tuple[str, str | None]:
     grant_value = re.compile(r'(?i)(["\']?grant_id["\']?\s*[:=]\s*["\']?)[^,}\]"\'\s]+')
     safe_text = grant_value.sub(r"\1[redacted]", text)
     stripped = safe_text.strip()
-    candidates = [stripped]
-    candidates.extend(match.group(1).strip() for match in re.finditer(
-        r"(?ms)(?:```|~~~)(?:json|jsonc|javascript)?\s*\n?(.*?)\n?\s*(?:```|~~~)", stripped
+    fences = list(re.finditer(
+        r"(?ims)(```|~~~)([a-z0-9_-]*)\s*\n?(.*?)\n?\s*\1", stripped
     ))
+    candidates = [stripped, *(match.group(3).strip() for match in fences)]
     shaped = False
+    action_ops = {
+        "set_value", "add_unit", "insert_unit_after", "connect", "disconnect", "mirror", "move",
+        "rename", "delete", "duplicate_part", "set_part_param", "move_part", "delete_part",
+    }
+
+    def is_workspace_action(value: object) -> bool:
+        if isinstance(value, dict):
+            op = value.get("op")
+            if isinstance(op, str) and op in action_ops:
+                return True
+            return any(is_workspace_action(item) for item in value.values() if isinstance(item, (dict, list)))
+        if isinstance(value, list):
+            return any(is_workspace_action(item) for item in value)
+        return False
+
     decoder = json.JSONDecoder()
+    if any(match.group(2).casefold() == "jarvis-actions" for match in fences):
+        shaped = True
     for candidate in candidates:
+        if shaped:
+            break
         if repair_proposal(candidate) is not None:
             shaped = True
             break
         for position, char in enumerate(candidate):
-            if char != "{":
+            if char not in "{[":
                 continue
             try:
                 value, _end = decoder.raw_decode(candidate, position)
@@ -676,6 +712,9 @@ def _guard_tool_shaped_output(text: str) -> tuple[str, str | None]:
                 shaped = True
                 break
             if isinstance(value, dict) and isinstance(value.get("tool_calls"), list):
+                shaped = True
+                break
+            if is_workspace_action(value):
                 shaped = True
                 break
         if shaped:
@@ -693,6 +732,31 @@ def _guard_tool_shaped_output(text: str) -> tuple[str, str | None]:
     return ("I couldn't complete that — Jarvis produced an invalid action request, so nothing was changed.",
             re.sub(r'(?i)(["\']?(?:grant_id|api_key|token|password|secret|authorization)["\']?\s*[:=]\s*["\']?)[^,}\]"\'\s]+',
                    r"\1[redacted]", stripped)[:8000])
+
+
+def _direct_workspace_mode_instruction(surface: str) -> str:
+    return (
+        f"The selected responder is a direct local model on the {surface} workspace and has no workspace-action tools. "
+        "Do not claim to prepare, apply, or submit a workspace change, and do not emit action JSON. "
+        "For a requested change, explain that this responder cannot change the workspace and direct the operator to switch to Jarvis agent or use Escalate."
+    )
+
+
+def _workspace_change_requested(prompt: str) -> bool:
+    return bool(re.search(
+        r"\b(?:change|set|update|modify|add|remove|delete|move|duplicate|connect|disconnect|rename|adjust|increase|decrease|lower|raise)\b",
+        prompt,
+        re.IGNORECASE,
+    ))
+
+
+def _finalize_direct_workspace_answer(
+    prompt: str, route_class: str, surface: str, answer: str
+) -> tuple[str, str | None]:
+    visible, details = _guard_tool_shaped_output(answer)
+    if route_class.startswith("local:") and surface in {"process", "bluecad"} and _workspace_change_requested(prompt):
+        visible = "This responder can't change the workspace. Switch to Jarvis agent, or use Escalate."
+    return visible, details
 
 
 def _envelope_value(value: object, limit: int = 100) -> str:

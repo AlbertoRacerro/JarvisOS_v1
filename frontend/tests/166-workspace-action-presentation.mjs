@@ -32,8 +32,14 @@ for (const text of [
   'Embedded generic call: {"name":"other_tool","arguments":{}} received.',
   '~~~\n{"tool_calls":[{"name":"jarvis_process_act"}]}\n~~~',
 ]) assert.equal(isToolCallShaped(text), true, text);
+for (const text of [
+  '{"op":"set_value","target":"Feed","property":"pressure","value":{"value":3,"unit":"bar"}}',
+  'Suggested change: [{"op":"move_part","part":"tube","dx":1}]',
+  '```jarvis-actions\n{"surface":"process","actions":[]}\n```',
+  'Suggested change: {"op":"set_value","target":"Feed"} done.',
+]) assert.equal(isToolCallShaped(text), true, text);
 for (const text of ["The selected stream is feed.", "{\"answer\":\"done\"}", null, ""]) assert.equal(isToolCallShaped(text), false, String(text));
-for (const text of ["The JSON field `grant_id` identifies a grant.", "Use the jarvis_process_act tool to change pressure.", "JSON can describe a tool call."]) assert.equal(isToolCallShaped(text), false, text);
+for (const text of ["The JSON field `grant_id` identifies a grant.", "Use the jarvis_process_act tool to change pressure.", "JSON can describe a tool call.", "The JSON contains an `operation` property.", "The letters op appear in prose."]) assert.equal(isToolCallShaped(text), false, text);
 
 assert.deepEqual(actionStatePresentation("applied"), { label: "Applied", tone: "success" });
 assert.deepEqual(actionStatePresentation("proposed"), { label: "Proposed", tone: "pending" });
