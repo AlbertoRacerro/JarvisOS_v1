@@ -16,14 +16,26 @@ export function buildSurfaceRef(routeId: string, selection: StageSelection | nul
   return { route_id: routeId };
 }
 
-const JSON_SHAPE = /^\s*(?:\{\s*"(?:tool_calls|name|tool|arguments|function)"\s*:|<\s*function(?:=|\s)|<\|(?:tool_call|python_tag|function_call)\|>)/i;
 export function isToolCallShaped(text: string | null | undefined): boolean {
   if (!text) return false;
   const normalized = text.trim();
-  return JSON_SHAPE.test(normalized)
-    || /<\|(?:tool_call|python_tag|function_call)\|>/i.test(normalized)
-    || /<\|im_start\|>\s*(?:tool_call|function_call)\b/i.test(normalized)
-    || /^\s*(?:<start_function_call>|assistant\s+to=|mcp__jarvis__|jarvis_(?:process|bluecad)_(?:act|read)\s*[({])/i.test(normalized);
+  const candidates = [normalized, ...[...normalized.matchAll(/(?:```|~~~)(?:json|jsonc|javascript)?\s*\n?([\s\S]*?)\n?\s*(?:```|~~~)/gi)].map(match => match[1])];
+  return candidates.some(candidate => {
+    const value = candidate.trim();
+    if (/<\|(?:tool_call|python_tag|function_call)\|>|<\|im_start\|>\s*(?:tool_call|function_call)\b|<start_function_call>|<\s*function(?:=|\s)|assistant\s+to=/i.test(value)) return true;
+    if (/(?:mcp__jarvis__)?jarvis_(?:process|bluecad)_(?:act|read)\s*[({]/i.test(value)) return true;
+    if (/\{\s*[\s\S]{0,1000}"name"\s*:\s*"[^"]+"[\s\S]{0,1000}"arguments"\s*:/i.test(value)) return true;
+    if (/\{\s*[\s\S]{0,1000}"arguments"\s*:[\s\S]{0,1000}"name"\s*:\s*"[^"]+"/i.test(value)) return true;
+    try {
+      const parsed: unknown = JSON.parse(value);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        const record = parsed as Record<string, unknown>;
+        if (typeof record.name === "string" && /(?:mcp__jarvis__)?jarvis_(?:process|bluecad)_(?:act|read)$/i.test(record.name)) return true;
+        if (Array.isArray(record.tool_calls) && record.tool_calls.some(call => call && typeof call === "object" && "name" in call)) return true;
+      }
+    } catch { /* Prose and non-JSON answers remain visible. */ }
+    return false;
+  });
 }
 
 export function actionStatePresentation(state: ActionOutcome["state"]): { label: string; tone: "success" | "pending" | "plain" | "muted" } {

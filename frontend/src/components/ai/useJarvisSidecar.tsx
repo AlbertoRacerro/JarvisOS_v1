@@ -321,6 +321,12 @@ export function useJarvisSidecar(
     publishWorkspaceAction({ workspaceId: action.workspace_id, surface: action.surface, state, draftId: action.draft_id, resultRevision: action.result_revision, candidateId: action.candidate_id, childCandidateId: action.child_candidate_id });
   };
 
+  const seedEmittedActionIds = (actions: ActionOutcome[]) => {
+    for (const action of actions) {
+      if (action.state === "applied" || action.state === "undone") emittedActionIds.current.add(action.action_id);
+    }
+  };
+
   const updateAction = (action: ActionOutcome) => {
     setDetail(current => current ? { ...current, interactions: current.interactions.map(interaction => ({ ...interaction, actions: (interaction.actions ?? []).map(item => item.action_id === action.action_id ? action : item) })) } : current);
     setRelayRuns(current => current.map(run => ({ ...run, actions: (run.actions ?? []).map(item => item.action_id === action.action_id ? action : item) })));
@@ -414,6 +420,7 @@ export function useJarvisSidecar(
     void getThread(workspaceId, threadId)
       .then((next) => {
         if (detailOwner.current !== token || workspaceOwner.current !== workspaceToken || selectedThreadRef.current !== threadId) return;
+        seedEmittedActionIds(next.interactions.flatMap(item => item.actions ?? []));
         setDetail(next);
       })
       .catch(() => {
@@ -439,7 +446,10 @@ export function useJarvisSidecar(
     }).catch(() => {});
     // Relay history stays visible even if the gateway was turned off later.
     void listRelayRuns(workspaceId, selectedThreadId).then(result => {
-      if (active) setRelayRuns(result);
+      if (active) {
+        seedEmittedActionIds(result.flatMap(run => run.actions ?? []));
+        setRelayRuns(result);
+      }
     }).catch(() => {});
     return () => { active = false; };
   }, [workspaceId, selectedThreadId, loadDetail]);

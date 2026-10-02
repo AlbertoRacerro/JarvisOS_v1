@@ -22,7 +22,7 @@ export default function WorkspaceActionCards({ actions, onApply, onDismiss, onUn
       return <section className={`jarvis-action-card jarvis-action-card--${presentation.tone}`} key={action.action_id} aria-label={`${presentation.label} workspace action`}>
         <header><strong>{presentation.label}</strong><span>{actionOriginLabel(action.origin)}</span></header>
         <p>{action.summary}</p>
-        {action.changes.length > 0 && <ul>{action.changes.map((change, index) => <li key={`${change.label}-${index}`}><strong>{change.label}</strong>: {change.before ?? "—"} → {change.after ?? "—"}</li>)}</ul>}
+        {action.changes.length > 0 && <ul>{action.changes.map((change, index) => <li key={`${change.label}-${index}`}><strong>{change.label}</strong>: {change.before ? `${change.before} → ` : ""}{change.after ?? "—"}</li>)}</ul>}
         {(action.state === "refused" || action.state === "stale") && action.reason && <p className="jarvis-action-card__reason">{action.reason}</p>}
         {action.state === "proposed" && <div className="jarvis-action-card__buttons"><button type="button" className="jarvis-primary-button" disabled={busyId === action.action_id} aria-label={`Apply ${action.summary}`} onClick={() => void run(action.action_id, onApply)}>Apply</button><button type="button" className="jarvis-link-button" disabled={busyId === action.action_id} aria-label={`Dismiss ${action.summary}`} onClick={() => void run(action.action_id, onDismiss)}>Dismiss</button></div>}
         {action.state === "applied" && action.undo_available && <button type="button" className="jarvis-link-button" disabled={busyId === action.action_id} aria-label={`Undo ${action.summary}`} onClick={() => void run(action.action_id, onUndo)}>Undo</button>}

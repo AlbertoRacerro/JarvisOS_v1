@@ -23,10 +23,17 @@ assert.deepEqual(buildSurfaceRef("design-bluecad", { kind: "geometry-hit", viewe
 });
 assert.deepEqual(buildSurfaceRef("dashboard", null, { draft_id: "draft-1", process_selection: [] }), { route_id: "dashboard" });
 
-for (const text of ['{"tool_calls":[{"name":"jarvis_process_act"}]}', '<function=jarvis_process_act>{}', '<|tool_call|>jarvis_bluecad_act', '<|im_start|>tool_call', '<start_function_call>jarvis_bluecad_act', 'jarvis_process_act({"op":"set_value"})', 'mcp__jarvis__jarvis_process_act']) {
+for (const text of ['{"tool_calls":[{"name":"jarvis_process_act"}]}', '<function=jarvis_process_act>{}', '<|tool_call|>jarvis_bluecad_act', '<|im_start|>tool_call', '<start_function_call>jarvis_bluecad_act', 'jarvis_process_act({"op":"set_value"})', 'mcp__jarvis__jarvis_process_act({})']) {
   assert.equal(isToolCallShaped(text), true, text);
 }
+for (const text of [
+  '```json\n{"name":"mcp__jarvis__jarvis_process_act","arguments":{"grant_id":"hidden"}}\n```',
+  'A tool result: {"name":"jarvis_bluecad_act","arguments":{}} received.',
+  'Embedded generic call: {"name":"other_tool","arguments":{}} received.',
+  '~~~\n{"tool_calls":[{"name":"jarvis_process_act"}]}\n~~~',
+]) assert.equal(isToolCallShaped(text), true, text);
 for (const text of ["The selected stream is feed.", "{\"answer\":\"done\"}", null, ""]) assert.equal(isToolCallShaped(text), false, String(text));
+for (const text of ["The JSON field `grant_id` identifies a grant.", "Use the jarvis_process_act tool to change pressure.", "JSON can describe a tool call."]) assert.equal(isToolCallShaped(text), false, text);
 
 assert.deepEqual(actionStatePresentation("applied"), { label: "Applied", tone: "success" });
 assert.deepEqual(actionStatePresentation("proposed"), { label: "Proposed", tone: "pending" });
@@ -36,6 +43,7 @@ assert.deepEqual(actionStatePresentation("dismissed"), { label: "Dismissed", ton
 assert.deepEqual(actionStatePresentation("undone"), { label: "Undone", tone: "muted" });
 
 const sidecar = fs.readFileSync(new URL("../src/components/ai/useJarvisSidecar.tsx", import.meta.url), "utf8");
+const cards = fs.readFileSync(new URL("../src/components/ai/WorkspaceActionCards.tsx", import.meta.url), "utf8");
 const threadApi = fs.readFileSync(new URL("../src/api/threads.ts", import.meta.url), "utf8");
 const actionApi = fs.readFileSync(new URL("../src/api/workspaceActions.ts", import.meta.url), "utf8");
 assert.match(threadApi, /surface_context: options\.surfaceContext/);
@@ -45,6 +53,7 @@ assert.match(sidecar, /<WorkspaceActionCards actions=\{interaction\.actions \?\?
 assert.match(sidecar, /surfaceBrief\?\.summary/);
 assert.match(sidecar, /technicalDetails=\{interaction\.technical_details\}/);
 assert.match(sidecar, /caught\.status === 409[\s\S]*getWorkspaceAction\(workspaceId, actionId\)/);
+assert.match(cards, /change\.before \? `\$\{change\.before\} → ` : ""/);
 assert.match(actionApi, /`\$\{basePath\(workspaceId\)\}\/brief`/);
 assert.match(actionApi, /\/\$\{encodeURIComponent\(actionId\)\}\/apply/);
 
