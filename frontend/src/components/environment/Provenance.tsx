@@ -30,7 +30,7 @@ export function Provenance({ profile, onChooseParent }: Props) {
       displayUnit(channel, unit),
     ]))],
     ["Selected TMY months and years", provenance.selected_month_year_pairs ?? provenance.source_month_year_pairs],
-    ["TMY label", profile.label],
+    ["Profile label", profile.label],
     ["Year normalization", provenance.year_normalization],
     ["Irradiance time offset", provenance.irradiance_time_offset],
     ["Irradiance semantics", provenance.irradiance_semantics],

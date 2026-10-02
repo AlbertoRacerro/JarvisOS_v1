@@ -200,6 +200,9 @@
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
+  color: #20332b;
+  background: #fff;
+  border: 1px solid #cbd5d1;
 }
 
 .environment-swatch {

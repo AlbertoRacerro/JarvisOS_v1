@@ -12,14 +12,12 @@ type Props = {
   onRange: (start: string, end: string) => void;
 };
 
-function siteTime(value: number, timezone: string): string {
+function siteTime(value: number, timezone: string, showTime: boolean): string {
   return new Intl.DateTimeFormat("en-GB", {
     timeZone: timezone,
     month: "short",
     day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
+    ...(showTime ? { hour: "2-digit", minute: "2-digit", hourCycle: "h23" as const } : {}),
   }).format(new Date(value * 1000));
 }
 
@@ -59,6 +57,7 @@ export function ProfileChart({ profile, timezone, resolutionUsed, onRange }: Pro
       const series = Object.entries(profile.channels).filter(([, values]) => values.some((value) => value !== null));
       if (series.length === 0) return;
       const times = profile.timestamps.map((stamp) => new Date(stamp).getTime() / 1000);
+      const showTime = times[times.length - 1] - times[0] < 14 * 86400;
       const units = [...new Set(series.map(([name]) => displayUnit(name, profile.units[name])))];
       const data = ([
         times,
@@ -88,7 +87,8 @@ export function ProfileChart({ profile, timezone, resolutionUsed, onRange }: Pro
         axes: [
           {
             label: `Site time (${timezone})`,
-            values: (_plot, values) => values.map((value) => siteTime(value, timezone)),
+            space: 130,
+            values: (_plot, values) => values.map((value) => siteTime(value, timezone, showTime)),
           },
           ...units.map((unit, index) => ({
             scale: unit,

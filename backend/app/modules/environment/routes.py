@@ -84,6 +84,31 @@ def _hourly_resolution(stamps: list[str]) -> int | None:
     return 60 if all((b - a).total_seconds() == 3600 for a, b in zip(parsed, parsed[1:], strict=False)) else None
 
 
+def _fill_hourly_gaps(
+    stamps: list[str], channels: dict[str, list[float | None]]
+) -> tuple[list[str], dict[str, list[float | None]], int]:
+    """Make omitted hourly TMY intervals explicit nulls on the representative-year grid."""
+    times = [datetime.fromisoformat(value.replace("Z", "+00:00")) for value in stamps]
+    if len(times) < 2:
+        return stamps, channels, 0
+    seconds = [(right - left).total_seconds() for left, right in zip(times, times[1:], strict=False)]
+    if any(delta <= 0 or delta % 3600 for delta in seconds):
+        return stamps, channels, 0
+    total = int((times[-1] - times[0]).total_seconds() // 3600) + 1
+    if total > svc.MAX_POINTS:
+        raise ValueError(f"PVGIS TMY exceeds the {svc.MAX_POINTS}-point profile limit.")
+    source = {int((time - times[0]).total_seconds() // 3600): index for index, time in enumerate(times)}
+    expanded_times = [times[0] + timedelta(hours=index) for index in range(total)]
+    expanded_stamps = [
+        value.astimezone(UTC).isoformat(timespec="seconds").replace("+00:00", "Z") for value in expanded_times
+    ]
+    expanded_channels = {
+        channel: [values[source[index]] if index in source else None for index in range(total)]
+        for channel, values in channels.items()
+    }
+    return expanded_stamps, expanded_channels, total - len(times)
+
+
 def _cleanup_staging(root: Path) -> None:
     if not root.exists():
         return
@@ -379,6 +404,7 @@ def confirm(workspace_id: str, upload_id: str, filename: str, payload: dict):
                     channels[ch] = [
                         None if pd.isna(v) else float(v) + (273.15 if ch == "air_temperature" else 0) for v in vals
                     ]
+            stamps, channels, missing_hours_filled = _fill_hourly_gaps(stamps, channels)
             result = svc.create_profile(
                 workspace_id,
                 name=str(payload.get("name") or safe),
@@ -395,7 +421,11 @@ def confirm(workspace_id: str, upload_id: str, filename: str, payload: dict):
                     "metadata": meta,
                     "selected_month_year_pairs": meta.get("months_selected"),
                     "irradiance_time_offset": meta.get("inputs", {}).get("irradiance time offset"),
-                    "year_normalization": {"method": "pvlib coerce_year equivalent", "nominal_year": 2001},
+                    "year_normalization": {
+                        "method": "pvlib coerce_year equivalent",
+                        "nominal_year": 2001,
+                        "missing_hourly_intervals_filled_with_null": missing_hours_filled,
+                    },
                     "source_month_year_pairs": meta.get("months_selected"),
                     "irradiance_semantics": "hourly interval average; PVGIS timestamp offset preserved",
                 },

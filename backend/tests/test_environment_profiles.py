@@ -290,6 +290,7 @@ def test_epw_and_pvgis_fixtures_normalize_time_and_preserve_metadata(monkeypatch
     ]
     assert epw["provenance"]["year_normalization"]["leap_day_rows_excluded"] == 1
     assert values["channels"]["air_temperature"][0] == pytest.approx(257.65)
+    assert values["channels"]["wind_speed"][0] == pytest.approx(1.92)
     assert values["channels"]["ghi"][0] is None
     assert values["channels"]["dni"][0] is None
     pvgis_id = "b" * 32
@@ -300,13 +301,17 @@ def test_epw_and_pvgis_fixtures_normalize_time_and_preserve_metadata(monkeypatch
     assert len(tmy["provenance"]["selected_month_year_pairs"]) == 12
     assert tmy["provenance"]["selected_month_year_pairs"][1] == {"month": 2, "year": 2019}
     assert len(profiles.read_profile(wid, tmy["digest"], limit=5)["timestamps"]) == 5
-    assert tmy["resolution_minutes"] is None
+    assert tmy["resolution_minutes"] == 60
     assert tmy["provenance"]["year_normalization"]["nominal_year"] == 2001
-    tmy_values = profiles.read_profile(wid, tmy["digest"])
-    assert len(tmy_values["timestamps"]) == 576
+    assert tmy["provenance"]["year_normalization"]["missing_hourly_intervals_filled_with_null"] == 7488
+    tmy_values = profiles.read_profile(wid, tmy["digest"], limit=5000)
+    tmy_tail = profiles.read_profile(wid, tmy["digest"], offset=5000, limit=5000)
+    assert tmy_values["total"] == 8064
+    assert tmy_values["total"] == tmy_tail["total"]
+    assert sum(value is None for value in tmy_values["channels"]["ghi"] + tmy_tail["channels"]["ghi"]) == 7488
     assert not any(stamp.startswith("2001-02-29") for stamp in tmy_values["timestamps"])
     assert tmy_values["timestamps"][0].startswith("2001-01-")
-    assert tmy_values["timestamps"][-1].startswith("2001-12-")
+    assert tmy_tail["timestamps"][-1].startswith("2001-12-")
     child = profiles.derive_par(wid, tmy["digest"], factor=2.2)
     assert child["label"] == "representative year (TMY)"
     assert child["provenance"]["factor_provenance"] == "operator-entered conversion factor"
