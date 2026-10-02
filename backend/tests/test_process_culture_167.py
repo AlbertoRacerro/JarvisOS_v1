@@ -183,6 +183,9 @@ def test_mixer_weighting_unknown_fields_ph_and_phase_density_failures() -> None:
     assert result["P"]["pH_reason"] == culture.PH_REASON
     assert result["P"]["unit_balances"]["oxygen"]["unit"] == "kg/s"
     assert result["P"]["unit_balances"]["dic"]["unit"] == "mol/s"
+    assert result["P"]["unit_balances"]["salinity"]["unit"] == "kg/s"
+    assert result["P"]["unit_balances"]["salinity"]["in"] == pytest.approx(0.035)
+    assert result["P"]["unit_balances"]["salinity"]["out"] == pytest.approx(0.035)
     assert not findings
     agreeing = {"objects": {
         "a": _stream("a", "A", target="m", port=0, spec={"culture": _culture(
@@ -204,6 +207,10 @@ def test_mixer_weighting_unknown_fields_ph_and_phase_density_failures() -> None:
     vapor, vapor_findings = culture.propagate(document, {**solved, "P": _reported(4, 900, 2e-6)})
     assert vapor["P"]["status"] == "failed"
     assert vapor_findings[-1]["code"] == "CULTURE_PHASE_NOT_LIQUID"
+    vapor_feed, vapor_feed_findings = culture.propagate(document, {**solved, "A": _reported(1, 1000, 2e-6)})
+    assert vapor_feed["A"]["status"] == "failed"
+    assert vapor_feed["P"]["status"] == "failed"
+    assert [item["code"] for item in vapor_feed_findings] == ["CULTURE_PHASE_NOT_LIQUID", "CULTURE_UPSTREAM_FAILED"]
 
 
 def test_heat_exchanger_carries_each_culture_side_independently() -> None:

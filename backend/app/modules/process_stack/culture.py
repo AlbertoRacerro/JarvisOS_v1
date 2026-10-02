@@ -189,6 +189,12 @@ def propagate(document: dict[str, Any], streams: dict[str, Any]) -> tuple[dict[s
         _add(findings, "blocker", code, stream["tag"], "culture", message)
 
     for feed in feeds:
+        solved_feed = streams.get(feed["tag"], {})
+        vapor = solved_feed.get("vapor_fraction")
+        if isinstance(vapor, (int, float)) and math.isfinite(vapor) and vapor > 1e-6:
+            fail(feed, "CULTURE_PHASE_NOT_LIQUID",
+                 f"Culture feed {feed['tag']} is not liquid after solve (vapor fraction {vapor:.6g}).")
+            continue
         density = _density(streams.get(feed["tag"], {}))
         if density is None:
             fail(feed, "CULTURE_DENSITY_UNAVAILABLE", f"Culture result for {feed['tag']} needs a finite positive DWSIM Mixture density.")
@@ -278,7 +284,8 @@ def propagate(document: dict[str, Any], streams: dict[str, Any]) -> tuple[dict[s
                     value = state["mass_specific"].get(name)
                     if value is None:
                         continue
-                    inbound, outbound = float(flow_in) * value, float(flow_out) * value
+                    unit_factor = 0.001 if name == "salinity" else 1.0
+                    inbound, outbound = float(flow_in) * value * unit_factor, float(flow_out) * value * unit_factor
                     residual = inbound - outbound
                     tolerance = 1e-9 * max(abs(inbound), abs(outbound)) + 1e-12
                     balances[name] = {"in": inbound, "out": outbound, "residual": residual,
@@ -357,11 +364,12 @@ def propagate(document: dict[str, Any], streams: dict[str, Any]) -> tuple[dict[s
         for name in CONSERVED:
             if output_state["mass_specific"].get(name) is None:
                 continue
+            unit_factor = 0.001 if name == "salinity" else 1.0
             inbound = sum(float(streams.get(s["tag"], {}).get("mass_flow_kg_s") or 0.0)
-                          * float(source_states[s["id"]]["mass_specific"][name])
+                          * float(source_states[s["id"]]["mass_specific"][name]) * unit_factor
                           for s in cultured_inputs if source_states[s["id"]]["mass_specific"].get(name) is not None)
             outbound = sum(float(streams.get(s["tag"], {}).get("mass_flow_kg_s") or 0.0)
-                           * float(output_state["mass_specific"][name]) for s in outputs)
+                           * float(output_state["mass_specific"][name]) * unit_factor for s in outputs)
             unit_label = "mol/s" if name == "dic" else "kg/s"
             residual = inbound - outbound
             floor = 1e-12
