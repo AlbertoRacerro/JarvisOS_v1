@@ -219,6 +219,23 @@ def infer_envelope(frame: dict[str, Any], *, deadline_seconds: int = 120,
             raise ValueError("direct provider override refused")
     if "base_url" in frame or "provider" in frame:
         raise ValueError("direct provider override refused")
+    tools = _admitted_tools(frame)
+    now = datetime.now(UTC)
+    return InferenceEnvelope(
+        envelope_id=str(uuid4()), correlation_id=str(frame["id"]),
+        task_kind=str(frame.get("task_kind", "general")),
+        workspace_id=ref.workspace_id,
+        prompt=json.dumps({"messages": messages, "tools": tools}, ensure_ascii=False) + RELAY_TOOL_PROTOCOL
+               if tools else json.dumps(messages, ensure_ascii=False),
+        route_class=route_class,
+        model_candidate=str(frame["model_candidate"])[:256] if frame.get("model_candidate") else None,
+        max_output_tokens=frame.get("max_output_tokens"), agent_session=ref,
+        cancellation_id=ref.hermes_session_id, requested_at=now,
+        deadline_at=now + timedelta(seconds=deadline_seconds),
+    )
+
+
+def _admitted_tools(frame: dict[str, Any]) -> list[dict[str, Any]]:
     tools = frame.get("tools")
     allowed_tools = frame.get("allowed_tools")
     if allowed_tools is not None:
@@ -237,25 +254,13 @@ def infer_envelope(frame: dict[str, Any], *, deadline_seconds: int = 120,
             for tool in tools
         ):
             raise ValueError("unapproved tool schema")
-    now = datetime.now(UTC)
-    return InferenceEnvelope(
-        envelope_id=str(uuid4()), correlation_id=str(frame["id"]),
-        task_kind=str(frame.get("task_kind", "general")),
-        workspace_id=ref.workspace_id,
-        prompt=json.dumps({"messages": messages, "tools": tools}, ensure_ascii=False) + RELAY_TOOL_PROTOCOL
-               if tools else json.dumps(messages, ensure_ascii=False),
-        route_class=route_class,
-        model_candidate=str(frame["model_candidate"])[:256] if frame.get("model_candidate") else None,
-        max_output_tokens=frame.get("max_output_tokens"), agent_session=ref,
-        response_schema=tool_response_schema(tools) if tools else None,
-        cancellation_id=ref.hermes_session_id, requested_at=now,
-        deadline_at=now + timedelta(seconds=deadline_seconds),
-    )
+    return tools or []
 
 
 def run_governed_inference(
     envelope: InferenceEnvelope, *,
     runner: Callable[..., AiTaskOutcome] = run_ai_task,
+    structured_output_schema: dict[str, Any] | None = None,
     cancelled: Callable[[str], bool] | None = None,
     on_outcome: Callable[[AiTaskOutcome], None] | None = None,
 ) -> dict[str, Any]:
@@ -263,7 +268,7 @@ def run_governed_inference(
         return {"status": "refused"}
     if envelope.is_expired(datetime.now(UTC)) or (cancelled and envelope.cancellation_id and cancelled(envelope.cancellation_id)):
         return {"status": "cancelled"}
-    outcome = runner(**run_ai_task_kwargs(envelope))
+    outcome = runner(**run_ai_task_kwargs(envelope, structured_output_schema=structured_output_schema))
     if on_outcome is not None:
         on_outcome(outcome)
     if envelope.is_expired(datetime.now(UTC)) or (cancelled and envelope.cancellation_id and cancelled(envelope.cancellation_id)):
@@ -271,9 +276,9 @@ def run_governed_inference(
     if outcome.status != "success" or outcome.response is None or outcome.response.text is None:
         return {"status": "refused"}
     result: dict[str, Any] = {"status": "success", "text": outcome.response.text}
-    if envelope.response_schema is not None:
+    if structured_output_schema is not None:
         try:
-            branches = envelope.response_schema["oneOf"][1]["properties"]["tool_calls"]["items"]["anyOf"]
+            branches = structured_output_schema["oneOf"][1]["properties"]["tool_calls"]["items"]["anyOf"]
             result["admitted_tools"] = [branch["properties"]["name"]["const"] for branch in branches]
         except (KeyError, IndexError, TypeError):
             result["admitted_tools"] = []
@@ -418,8 +423,9 @@ def _workspace_action_tool(call: StructuredToolCall, workspace_id: str, error: s
         surface = str((constraints or {})["surface"])
         # The grant, not the model, names the surface and (for Process) the draft.
         scoped = {**call.arguments, "surface": surface}
-        if surface == "process" and (constraints or {}).get("draft_id"):
-            scoped["draft_id"] = constraints["draft_id"]
+        draft_id = (constraints or {}).get("draft_id")
+        if surface == "process" and draft_id:
+            scoped["draft_id"] = draft_id
         request = ActionRequest.model_validate(scoped)
         expected_revision = (constraints or {}).get("base_revision")
         if expected_revision is not None and request.base_revision != expected_revision:
@@ -632,6 +638,7 @@ class HermesSupervisor:
             selected_route = self.route_for_task(str(frame.get("task_kind", "general")))
             if not selected_route or not selected_route.startswith("local:"):
                 raise ValueError("Hermes relay requires an explicit local Jarvis route")
+            tools = _admitted_tools(frame)
             envelope = infer_envelope(frame, route_class=selected_route)
             if envelope.agent_session != self.session:
                 result = {"status": "refused"}
@@ -643,7 +650,9 @@ class HermesSupervisor:
                             self.last_flow[envelope.agent_session.hermes_session_id] = outcome.flow_id
 
                 result = run_governed_inference(
-                    envelope, runner=self.runner, cancelled=lambda value: value in self.cancelled,
+                    envelope, runner=self.runner,
+                    structured_output_schema=tool_response_schema(tools) if tools else None,
+                    cancelled=lambda value: value in self.cancelled,
                     on_outcome=record_flow,
                 )
         except (ValueError, KeyError):

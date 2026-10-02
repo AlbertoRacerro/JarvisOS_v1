@@ -349,11 +349,17 @@ def _envelope(**overrides: object) -> agent.InferenceEnvelope:
 
 
 def test_inference_envelope_maps_only_onto_run_ai_task() -> None:
-    kwargs = agent.run_ai_task_kwargs(_envelope(flow_id="flow-1"), context_blocks=[{"source": "s", "content": "c"}])
+    schema = {"type": "object", "properties": {"answer": {"type": "string"}}}
+    kwargs = agent.run_ai_task_kwargs(
+        _envelope(flow_id="flow-1"),
+        context_blocks=[{"source": "s", "content": "c"}],
+        structured_output_schema=schema,
+    )
     parameters = inspect.signature(run_ai_task).parameters
     assert set(kwargs) <= set(parameters)
     assert all(parameters[name].kind is inspect.Parameter.KEYWORD_ONLY for name in kwargs)
     assert kwargs["user_prompt"] == "summarize" and kwargs["existing_flow_id"] == "flow-1"
+    assert kwargs["structured_output_schema"] == schema
     assert "model_candidate" not in kwargs, "a model candidate is advisory; bindings are resolved by run_ai_task"
 
 
