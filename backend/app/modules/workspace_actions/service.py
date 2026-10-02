@@ -6,6 +6,7 @@ import hashlib
 import json
 import re
 from datetime import UTC, datetime
+from typing import Literal
 from uuid import uuid4
 
 from app.core.database import open_sqlite_connection
@@ -20,6 +21,7 @@ from app.modules.process_stack.draft_models import (
     AddUnit,
     Delete,
     Disconnect,
+    DraftOp,
     DraftQuantity,
     Move,
     Rename,
@@ -27,14 +29,13 @@ from app.modules.process_stack.draft_models import (
     SetStreamSpec,
     SetUnitParams,
 )
-from app.modules.process_stack.draft_models import (
-    Connect as DraftConnect,
-)
+from app.modules.process_stack.draft_models import Connect as DraftConnect
 from app.modules.workspace_actions.models import (
     ActionOrigin,
     ActionOutcome,
     ActionRequest,
     ChangeLine,
+    Quantity,
     SurfaceBrief,
     SurfaceRef,
 )
@@ -72,7 +73,7 @@ def _find_draft(workspace_id: str, revision: str | None = None, draft_id: str | 
 
 def _brief_none(workspace_id: str, ref: SurfaceRef | None, summary: str) -> SurfaceBrief:
     route = ref.route_id if ref else "unknown"
-    payload = {
+    payload: dict[str, object] = {
         "surface": "none", "route_id": route, "workspace_id": workspace_id,
         "base_revision": None, "draft_id": None, "candidate_id": None, "selected": [],
         "summary": summary, "text": summary, "actions": [], "limits": [],
@@ -370,8 +371,8 @@ def _outcome(
     workspace_id: str,
     request: ActionRequest,
     origin: ActionOrigin,
-    state: str,
-    tier: str,
+    state: Literal["applied", "proposed", "refused", "stale", "dismissed", "undone"],
+    tier: Literal["immediate", "confirm", "none"],
     summary: str,
     *,
     changes: list[ChangeLine] | None = None,
@@ -403,6 +404,7 @@ def _outcome(
 def _action_summary(request: ActionRequest, changes: list[ChangeLine]) -> str:
     """Turn validated requests and their resolved changes into concise card text."""
     summaries = []
+    resolved_unit_tags: set[str] = set()
     for action in request.actions:
         if action.op == "set_value":
             line = next((item for item in changes if item.label == f"{action.target} {action.property}"), None)
@@ -410,12 +412,23 @@ def _action_summary(request: ActionRequest, changes: list[ChangeLine]) -> str:
             summaries.append(f"Set {action.target} {action.property} to {value}" if value else
                              f"Set {action.target} {action.property}")
         elif action.op == "add_unit":
-            tag = action.tag or next((item.label.split(" — ", 1)[0] for item in changes
-                                      if item.label.endswith(f"— new {action.type}")), action.type)
+            tag = action.tag
+            if tag is None:
+                line = next((item for item in changes
+                             if item.label.endswith(f"— new {action.type}")
+                             and item.label.split(" — ", 1)[0] not in resolved_unit_tags), None)
+                tag = line.label.split(" — ", 1)[0] if line else action.type
+            resolved_unit_tags.add(tag)
             summaries.append(f"Add {action.type} {tag}" + (f" near {action.near}" if action.near else ""))
         elif action.op == "insert_unit_after":
-            tag = action.tag or next((item.label.split(" — ", 1)[0] for item in changes
-                                      if item.label.endswith(f"— new {action.type}")), action.type)
+            tag = action.tag
+            if tag is None:
+                line = next((item for item in changes
+                             if (item.label.endswith(f"— new {action.type}")
+                                 or item.label.endswith(f" — inserted after {action.after}"))
+                             and item.label.split(" — ", 1)[0] not in resolved_unit_tags), None)
+                tag = line.label.split(" — ", 1)[0] if line else action.type
+            resolved_unit_tags.add(tag)
             summaries.append(f"Add {action.type} {tag} after {action.after}")
         elif action.op == "mirror":
             summaries.append(f"Mirror {action.target} {action.axis}ly" if action.axis == "horizontal"
@@ -550,7 +563,7 @@ def submit(workspace_id: str, request: ActionRequest, origin: ActionOrigin) -> A
             request,
             origin,
         )
-    tier = (
+    tier: Literal["immediate", "confirm"] = (
         "confirm"
         if origin.kind == "relay" or any(op.op not in {"move", "set_orientation"} for op in ops)
         else "immediate"
@@ -612,18 +625,22 @@ def _next_id(objects: dict, prefix: str, ops: list | None = None) -> str:
     return f"{prefix}{index}"
 
 
-def _next_tag(objects: dict, prefix: str) -> str:
+def _next_tag(objects: dict, prefix: str, ops: list | None = None) -> str:
     used = {item["tag"] for item in objects.values()}
+    used.update(tag for op in ops or [] if (tag := getattr(op, "tag", None)))
     index = 1
     while f"{prefix}{index}" in used:
         index += 1
     return f"{prefix}{index}"
 
 
-def _process_ops(document: dict, request: ActionRequest) -> tuple[list, list[ChangeLine]]:
-    ops, changes = [], []
+def _process_ops(document: dict, request: ActionRequest) -> tuple[list[DraftOp], list[ChangeLine]]:
+    ops: list[DraftOp] = []
+    changes: list[ChangeLine] = []
     objects = document["objects"]
     for action in request.actions:
+        if action.op in {"duplicate_part", "set_part_param", "move_part", "delete_part"}:
+            raise ValueError("BLUECAD actions cannot execute on the Process surface.")
         if action.op == "set_value":
             target = _target(document, action.target)
             if target["kind"] == "stream":
@@ -633,29 +650,35 @@ def _process_ops(document: dict, request: ActionRequest) -> tuple[list, list[Cha
                         "Streams support temperature, pressure, mass_flow, molar_flow, vapor_fraction, and composition."
                     )
                 value = action.value
-                fields = {action.property: value} if action.property != "composition" else {"composition": value}
-                quantities = {
-                    key: DraftQuantity(**item.model_dump())
-                    if hasattr(item, "model_dump")
-                    else DraftQuantity(**item)
-                    if isinstance(item, dict)
-                    else item
-                    for key, item in fields.items()
-                }
-                ops.append(SetStreamSpec(op="set_stream_spec", stream=target["id"], **quantities))
+                if action.property == "composition":
+                    if not isinstance(value, dict):
+                        raise ValueError("Stream composition must be a compound fraction map.")
+                    ops.append(SetStreamSpec(op="set_stream_spec", stream=target["id"], composition=value))
+                elif isinstance(value, Quantity):
+                    quantity = DraftQuantity(value=value.value, unit=value.unit)
+                    if action.property == "temperature":
+                        ops.append(SetStreamSpec(op="set_stream_spec", stream=target["id"], temperature=quantity))
+                    elif action.property == "pressure":
+                        ops.append(SetStreamSpec(op="set_stream_spec", stream=target["id"], pressure=quantity))
+                    elif action.property == "mass_flow":
+                        ops.append(SetStreamSpec(op="set_stream_spec", stream=target["id"], mass_flow=quantity))
+                    elif action.property == "molar_flow":
+                        ops.append(SetStreamSpec(op="set_stream_spec", stream=target["id"], molar_flow=quantity))
+                    elif action.property == "vapor_fraction":
+                        ops.append(SetStreamSpec(op="set_stream_spec", stream=target["id"], vapor_fraction=quantity))
+                else:
+                    raise ValueError("Stream values must include a numeric value and unit.")
                 before = target.get("spec", {}).get(action.property)
-                after = value.model_dump() if hasattr(value, "model_dump") else value
+                after = value.model_dump() if isinstance(value, Quantity) else value
             elif target["kind"] == "unit":
                 supported = {p.key for p in UNIT_REGISTRY[target["type"]].params}
                 if action.property not in supported:
                     raise ValueError(
                         f"{target['type']} supports parameters: {', '.join(sorted(supported)) or 'none'}; kinetics is unsupported."
                     )
-                quantity = (
-                    DraftQuantity(**action.value.model_dump())
-                    if hasattr(action.value, "model_dump")
-                    else DraftQuantity(**action.value)
-                )
+                if not isinstance(action.value, Quantity):
+                    raise ValueError("Unit parameter values must include a numeric value and unit.")
+                quantity = DraftQuantity(value=action.value.value, unit=action.value.unit)
                 ops.append(SetUnitParams(op="set_unit_params", unit=target["id"], values={action.property: quantity}))
                 before = target.get("params", {}).get(action.property)
                 after = quantity.model_dump()
@@ -674,7 +697,7 @@ def _process_ops(document: dict, request: ActionRequest) -> tuple[list, list[Cha
                     f"Unsupported unit type {action.type!r}; supported types: {', '.join(sorted(draft.UNIT_REGISTRY))}."
                 )
             near = _target(document, action.near, "unit") if action.near else None
-            tag = action.tag or f"{action.type}_{len(objects) + 1}"
+            tag = action.tag or _next_tag(objects, f"{action.type}_", ops)
             ops.append(
                 AddUnit(
                     op="add_unit",
@@ -704,9 +727,9 @@ def _process_ops(document: dict, request: ActionRequest) -> tuple[list, list[Cha
                 )
             outlet = outlets[0]
             target_end = outlet.get("target")
-            new_tag = action.tag or f"{action.type}_{len(objects) + 1}"
+            new_tag = action.tag or _next_tag(objects, f"{action.type}_", ops)
             new_unit_id = _next_id(objects, "u", ops)
-            stream_tag = _next_tag(objects, "S_auto")
+            stream_tag = _next_tag(objects, "S_auto", ops)
             stream_id = _next_id(objects, "s", ops)
             near = {"x": upstream["x"], "y": upstream["y"]}
             ops.extend(
@@ -748,7 +771,7 @@ def _process_ops(document: dict, request: ActionRequest) -> tuple[list, list[Cha
             target = _target(document, action.to, "unit")
             source_port = _port_index(source["type"], action.source_port, "outlet")
             target_port = _port_index(target["type"], action.to_port, "inlet")
-            tag = _next_tag(objects, "S_auto")
+            tag = _next_tag(objects, "S_auto", ops)
             stream_id = _next_id(objects, "s", ops)
             ops.extend(
                 [
@@ -831,6 +854,16 @@ def apply(workspace_id: str, action_id: str) -> ActionOutcome:
     outcome = ActionOutcome.model_validate_json(row["outcome_json"])
     if outcome.state != "proposed":
         raise ActionError("action_not_proposed", "Only proposed actions can be applied.", 409)
+    # Claim the proposal before any owner mutation. The outcome JSON remains proposed
+    # during execution; the durable state column prevents another request from racing.
+    with open_sqlite_connection() as connection:
+        claimed = connection.execute(
+            "UPDATE workspace_actions SET state='applying' WHERE id=? AND workspace_id=? AND state='proposed'",
+            (action_id, workspace_id),
+        ).rowcount == 1
+        connection.commit()
+    if not claimed:
+        raise ActionError("action_not_proposed", "Action is not proposed or is already being applied.", 409)
     request = ActionRequest.model_validate_json(row["request_json"])
     origin = ActionOrigin.model_validate_json(row["origin_json"])
     if outcome.surface == "bluecad":
@@ -871,13 +904,22 @@ def apply(workspace_id: str, action_id: str) -> ActionOutcome:
             outcome.undo_available = True
         except draft.DraftError as exc:
             outcome.state, outcome.reason_code, outcome.reason = "stale", exc.code, str(exc)
+        except Exception as exc:
+            outcome.state, outcome.reason_code, outcome.reason = "refused", "apply_failed", str(exc)[:500]
     _save_outcome(outcome)
     return outcome
 
 
 def dismiss(workspace_id: str, action_id: str) -> ActionOutcome:
-    outcome = get(workspace_id, action_id)
-    if outcome.state != "proposed":
+    row = _row(workspace_id, action_id)
+    outcome = ActionOutcome.model_validate_json(row["outcome_json"])
+    with open_sqlite_connection() as connection:
+        claimed = connection.execute(
+            "UPDATE workspace_actions SET state='dismissing' WHERE id=? AND workspace_id=? AND state='proposed'",
+            (action_id, workspace_id),
+        ).rowcount == 1
+        connection.commit()
+    if not claimed or outcome.state != "proposed":
         raise ActionError("action_not_proposed", "Only proposed actions can be dismissed.", 409)
     outcome.state = "dismissed"
     outcome.updated_at = _now()
@@ -886,23 +928,44 @@ def dismiss(workspace_id: str, action_id: str) -> ActionOutcome:
 
 
 def undo(workspace_id: str, action_id: str) -> ActionOutcome:
-    outcome = get(workspace_id, action_id)
+    row = _row(workspace_id, action_id)
+    outcome = ActionOutcome.model_validate_json(row["outcome_json"])
     if outcome.state != "applied" or not outcome.undo_available:
         raise ActionError("undo_unavailable", "This action has no available undo.", 409)
+    with open_sqlite_connection() as connection:
+        claimed = connection.execute(
+            "UPDATE workspace_actions SET state='undoing' WHERE id=? AND workspace_id=? AND state='applied'",
+            (action_id, workspace_id),
+        ).rowcount == 1
+        connection.commit()
+    if not claimed:
+        raise ActionError("undo_unavailable", "This action is already being undone.", 409)
     if outcome.surface == "bluecad":
         from app.modules.bluecad.ledger import archive_candidate
 
         try:
             archive_candidate(workspace_id, outcome.child_candidate_id or "")
         except ValueError as exc:
+            _save_outcome(outcome)
             raise ActionError("undo_conflict", str(exc), 409) from exc
+        except Exception as exc:
+            _save_outcome(outcome)
+            raise ActionError("undo_failed", str(exc)[:500], 409) from exc
     else:
         if not outcome.result_revision or not outcome.draft_id:
+            _save_outcome(outcome)
             raise ActionError("undo_unavailable", "Action revision details are unavailable.", 409)
-        head = draft.projection(workspace_id, outcome.draft_id)["revision"]
-        if head != outcome.result_revision:
-            raise ActionError("stale", "Draft head moved after this action; undo is no longer safe.", 409)
-        draft.restore(workspace_id, outcome.draft_id, head, outcome.base_revision)
+        try:
+            head = draft.projection(workspace_id, outcome.draft_id)["revision"]
+            if head != outcome.result_revision:
+                _save_outcome(outcome)
+                raise ActionError("stale", "Draft head moved after this action; undo is no longer safe.", 409)
+            draft.restore(workspace_id, outcome.draft_id, head, outcome.base_revision)
+        except ActionError:
+            raise
+        except Exception as exc:
+            _save_outcome(outcome)
+            raise ActionError("undo_failed", str(exc)[:500], 409) from exc
     outcome.state, outcome.undo_available = "undone", False
     outcome.updated_at = _now()
     _save_outcome(outcome)
