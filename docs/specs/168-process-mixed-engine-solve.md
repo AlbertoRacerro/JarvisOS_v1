@@ -43,14 +43,15 @@ Code survey: `out/wpbr/a168.report.md`. DWSIM probes: `evidence/pbr/p168/p168.re
   - give every DWSIM unit the level d(u), the maximum number of Jarvis units on any path that reaches u;
   - a **segment** is a weakly connected component of DWSIM units of equal level.
 - **Boundary streams.** An edge between DWSIM units of different levels is cut. It becomes a boundary product of the lower segment and a boundary feed of the higher one.
-- **Energy streams.** Units joined only by an energy stream stay in one segment. Jarvis units have no energy ports, so no energy stream crosses a segment boundary.
+- **How levels are computed.** Levels are computed on the graph after the consumed Recycles are cut, with each native cycle treated as one node.
+- **Energy streams.** Units joined only by an energy stream stay in one segment. Jarvis units have no energy ports, so no energy stream crosses a segment boundary. If that merging would make the segment/Jarvis graph cyclic, the draft gets the blocker `ENERGY_STREAM_CROSSES_JARVIS_LEVEL`.
 - **Evaluation order.** The segment/Jarvis graph is acyclic by construction and is evaluated in topological order. This handles the bypass case (Splitter → {U1 → separator, bypass} → Mixer) without a false loop.
-- **Native Recycles on a Jarvis loop are excluded in 168.** A native Recycle must not sit inside a segment that lies on a consumed tear's cycle. Its residual noise is above the outer tolerances (fresh evidence 6), so the draft is refused with a finding.
+- **Native Recycles on a Jarvis loop are excluded in 168.** A native Recycle must not sit inside a segment that contains a unit on a cycle through a consumed Recycle. Its residual noise is above the outer tolerances (fresh evidence 6), so the draft is refused with a finding.
 
 ### DWSIM calls
 
 - **Fresh flowsheets every iteration.** Each segment is rebuilt as a new flowsheet on every outer iteration, then read back and verified. Handles are closed after use.
-- **Sessions.** Builds run in one long-lived MCP session per Run, **if the session-equivalence probe passes** (Required evidence 1). If it does not, each build uses a new session, and the budget arithmetic changes accordingly. In-place mutation is a later optimization: it must first prove equivalence to fresh builds on the probe 1 harness.
+- **Sessions.** Builds run in one long-lived MCP session per Run, **if the session-equivalence probe passes** (Required evidence 1). In the one-session-per-build fallback, a build costs about 1.5–2.5 s, and the converging acceptance case may not fit in 90 s. If the gate selects the fallback, the implementer stops and reports to the coordinator, who amends the budget in this spec before building on it. In-place mutation is a later optimization: it must first prove equivalence to fresh builds on the probe 1 harness.
 
 ### Unchanged paths
 
@@ -109,7 +110,9 @@ Code survey: `out/wpbr/a168.report.md`. DWSIM probes: `evidence/pbr/p168/p168.re
   - This is the only behavior change for single-owner drafts. Stored runs are not recomputed or invalidated.
 - **New findings.**
   - `SEPARATOR_REQUIRES_CULTURE` (blocker): a SpecifiedSeparator whose inlet is not reached by culture.
-  - `SEPARATOR_CONCENTRATE_IMPLAUSIBLE` (warning): f·x_in is above 0.25 kg/kg, a screening bound evaluated on the feed's culture where it is known.
+  - `SEPARATOR_CONCENTRATE_IMPLAUSIBLE` (warning): f·x_in is above 0.25 kg/kg, a screening bound.
+    - Before a run, x_in comes from the culture feed's volumetric value divided by 1000 kg/m³, ignoring dilution along the loop.
+    - After a run, the converged inlet is used.
   - `NATIVE_RECYCLE_IN_JARVIS_LOOP` (blocker): a native Recycle inside a segment on a consumed tear's cycle.
   - `TEAR_CONSUMED` (info): names each Recycle that Jarvis will converge.
 - **Supersession of 167.**
@@ -155,7 +158,7 @@ pH is carried, not converged.
 
 - x_{k+1} = x_k + ω·(g(x_k) − x_k), with ω₁ = 1.
 - Let R_k = max_i n_i. When R_k > 1.5·min_{j<k} R_j (growth, not noise), set ω ← max(ω/2, 0.125) and restart from the best iterate.
-- After 3 halvings in total, the run ends `unconverged` with reason `damping_exhausted`.
+- A fourth growth event, which comes after ω has reached its 0.125 floor, ends the run `unconverged` with reason `damping_exhausted`.
 - ω is never increased.
 - Damping cannot stabilize a positive loop gain above 1, and the spec makes no such claim.
 
@@ -164,13 +167,17 @@ pH is carried, not converged.
 - At most 25 iterations; at the cap the run ends `unconverged` with reason `max_iterations`.
 - A 90 s wall budget covers the whole Run.
 - Each DWSIM call's timeout is min(its unchanged timeout, remaining budget).
-- If less than 3 s remains before a segment build, the run ends `unconverged` with reason `wall_budget`.
+- **Reserve for the full path.** Before each iteration the controller requires: remaining budget ≥ (builds in this iteration) × t_build + reserve.
+  - t_build is the slowest build seen so far, and 3 s before the first build.
+  - reserve = (segments + final-sweep flashes) × 1.5 × t_build, floored at 3 s per build.
+  - If the requirement fails, the run stops with reason `wall_budget`, and the full path runs on the stored iterate inside the reserve.
+  - If the full path itself cannot finish, the run is `segment_failed` with reason `wall_budget`, and it records the iteration reached.
 - These values are code constants under `MIXED_SOLVE_VERSION`, not document fields. Every run reports them.
 - Longer runs wait for the 172 job path.
 
 **Light and full solve paths.**
 
-- **Intermediate iterations** use a light path: create, plan, save, read-back verify (required), check, solve. Results are read only for boundary products and Recycle inlets.
+- **Intermediate iterations** use a light path: create, plan, save, read-back verify (required), check, solve. Results are read for **every material stream** of the segment, because `propagate_segment` needs every flow, vapor fraction and density. The light path skips only the scenario snapshot/compare, the compressed save, the mass balance and the per-unit result reads.
 - **After the loop stops** (converged or not), every segment is rebuilt once at the stored iterate with the full `materialize()` path. This produces all results, `solved_case_sha256` and per-segment fingerprints.
 - If the light and full paths give different tear values beyond tolerance, the run is `segment_failed`.
 
@@ -192,7 +199,10 @@ pH is carried, not converged.
 
 - It takes boundary culture as mass-specific values, with no density conversion.
 - 167's single-owner `propagate` calls the same code, and 167 tests stay unchanged for culture without Jarvis units.
-- Culture-only native loops are solved by repeated sweeps of this callable on the converged DWSIM flows. The culture tolerance applies, with at most 10,000 sweeps.
+- Culture-only native loops are solved by repeated sweeps of this callable on the converged DWSIM flows.
+  - The Recycle outlet starts from the first culture feed's mass-specific values.
+  - The Recycle's DWSIM outlet flow is the weight.
+  - The culture tolerance applies, with at most 10,000 sweeps.
 
 **Engine-agnostic controller.** Segments and Jarvis units are callables. Unit tests use fake segments.
 
@@ -220,8 +230,9 @@ pH is carried, not converged.
 
 **Balances.** The carrier balance excludes biomass mass.
 
-- **Per unit:** 167 culture residuals for every unit, including the separator, with 167's rule 1e-9·max + 1e-12. Consumed Recycles are excluded; they are tears, not units.
-- **Whole graph:** carrier mass and each conserved culture field close to |Σin − Σout| ≤ Σ_tears tol_i + 1e-9·max + 1e-12.
+- **Per unit:** 167 culture residuals for every unit, including the separator, with 167's rule 1e-9·max + 1e-12. Every Recycle, consumed or native, is excluded: it is a tear, not a unit.
+- **Whole graph:** carrier mass and each conserved culture field close to |Σin − Σout| ≤ Σ_tears tol_i + Σ_native |Mass Flow Error|·value + 1e-9·max + 1e-12.
+  - The second term covers native Recycles: each one's reported mass-flow error (converted from kg/h to kg/s) times the mass-specific value.
 
 A failing balance ends the run `unconverged` with reason `balance`.
 
@@ -243,7 +254,7 @@ It is never computed from per-segment read-back, whose boundary feeds are loop o
 - ω and residual histories;
 - outputs, within 1e-9 relative.
 
-Bitwise identity is reported when observed.
+Bitwise identity is reported when observed. For the injected case, the histories are compared over their common prefix. The reasons must be equal only when the reason is `max_iterations`.
 
 ### 6. Operator UI (Process editor)
 
@@ -307,7 +318,7 @@ Bitwise identity is reported when observed.
 ### 1. Implementation gate probes (real DWSIM 10.2.9, before the loop is built on them; recorded in evidence)
 
 - **(a) Session equivalence.** In one session, build at least 10 fresh segment flowsheets with varying boundary feeds (composition, T, P, flow), closing each handle. Compare every result field bitwise with the same input built in a new session. Any difference selects the one-session-per-build fallback.
-- **(b) Small and zero flows into other units.** Run 1e-6-scale and zero inlet flow into Pump, Heater, Valve, Splitter and HeatExchanger, and Splitter ratios 0 and 1. Record what solves. A unit that fails at small flow gets an explicit finding when it is a tear's first consumer.
+- **(b) Small and zero flows into other units.** Run 1e-6-scale and zero inlet flow into Pump, Heater, Valve, Splitter and HeatExchanger, and Splitter ratios 0 and 1. Record what solves. A unit type that fails at small flow raises `TEAR_CONSUMER_ZERO_FLOW` (info) when it is a tear's first consumer, and the initial guess then uses 1e-3·Σfeeds.
 
 ### 2. Focused backend tests
 
@@ -363,7 +374,7 @@ The frontend build passes. Node contract tests cover the palette group, separato
 - produces no current results;
 - is deterministic when run twice.
 
-**Segment failure.** A separate draft with a native Recycle forced to `NOT_CONVERGED` (probe 4 topology) ends `segment_failed` with the DWSIM message.
+**Segment failure.** The draft is mixed (it contains the separator), and it has a native Recycle forced to `NOT_CONVERGED` (probe 4 topology) off the consumed cycle, for example downstream of the concentrate. It ends `segment_failed` with the DWSIM message.
 
 **Culture-only native loop.** A culture-carrying DWSIM-only loop (Mixer → Heater → Splitter → Recycle) converges its culture through the Jarvis fixed point.
 
