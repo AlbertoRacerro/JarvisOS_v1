@@ -1,60 +1,306 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import type uPlotType from "uplot";
-import { API_BASE_URL } from "../api/client";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { environmentApi, errorMessage } from "../components/environment/api";
+import { GeneratorForm, type GenerateRequest } from "../components/environment/GeneratorForm";
+import { ImportWizard } from "../components/environment/ImportWizard";
+import { ProfileChart } from "../components/environment/ProfileChart";
+import { ProfileList } from "../components/environment/ProfileList";
+import { ProfileTable, type CellChange } from "../components/environment/ProfileTable";
+import { Provenance } from "../components/environment/Provenance";
+import { SiteForm, sitePayload, toSiteDraft, type SiteDraft } from "../components/environment/SiteForm";
+import type { Profile, ProfileValues, Site } from "../components/environment/types";
 import "uplot/dist/uPlot.min.css";
 import "./EnvironmentPanel.css";
 
-async function loadUPlot() {
-  const nativeNumberFormat = Intl.NumberFormat;
+type Props = { workspaceId: string; onClose: () => void };
+
+const TABLE_PAGE_SIZE = 50;
+const ALLOWED_STEPS = [5, 10, 15, 30, 60, 1440];
+
+function validTimezone(value: string): boolean {
   try {
-    new nativeNumberFormat(navigator.language);
+    new Intl.DateTimeFormat("en", { timeZone: value });
+    return true;
   } catch {
-    Object.defineProperty(Intl, "NumberFormat", {
-      configurable: true,
-      writable: true,
-      value: class extends nativeNumberFormat {
-        constructor(locales?: Intl.LocalesArgument, options?: Intl.NumberFormatOptions) {
-          super(locales === navigator.language ? "en-US" : locales, options);
-        }
-      },
-    });
-  }
-  try {
-    return (await import("uplot")).default;
-  } finally {
-    if (Intl.NumberFormat !== nativeNumberFormat) {
-      Object.defineProperty(Intl, "NumberFormat", { configurable: true, writable: true, value: nativeNumberFormat });
-    }
+    return false;
   }
 }
 
-type Profile = { profile_id:string; digest:string; name:string; channels:Record<string,string>; start:string; end:string; resolution_minutes:number|null; provenance:Record<string,unknown>; parent_digest:string|null; label?:string|null };
-type Values = Profile & { timestamps:string[]; channels:Record<string,(number|null)[]>; units:Record<string,string>; total:number };
-const api=(workspaceId:string,path:string,init?:RequestInit)=>fetch(`${API_BASE_URL}/workspaces/${encodeURIComponent(workspaceId)}/environment${path}`,{...init,headers:{"Content-Type":"application/json",...(init?.headers??{})}}).then(async r=>{const body=await r.json();if(!r.ok)throw new Error(body.detail?.error??"Environment request failed");return body});
-const isoNow=()=>new Date().toISOString().slice(0,16);
-const displayUnit=(channel:string,unit:string)=>["air_temperature","sea_temperature"].includes(channel)?"°C":unit;
-const displayValue=(channel:string,value:number|null)=>value===null?null:["air_temperature","sea_temperature"].includes(channel)?value-273.15:value;
-const storageValue=(channel:string,value:number|null)=>value===null?null:["air_temperature","sea_temperature"].includes(channel)?value+273.15:value;
-const formatSiteTime=(value:string|number,timeZone:string)=>new Intl.DateTimeFormat("en-US",{timeZone,month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).format(new Date(typeof value==="number"?value*1000:value));
-export default function EnvironmentPanel({workspaceId,onClose}:{workspaceId:string;onClose:()=>void}) {
- const [site,setSite]=useState<Record<string,any>>({name:"",latitude:0,longitude:0,elevation_m:0,timezone:"UTC",water_body:"",revision:0});
- const [profiles,setProfiles]=useState<Profile[]>([]); const [selected,setSelected]=useState<Values|null>(null); const [error,setError]=useState(""); const [message,setMessage]=useState(""); const [busy,setBusy]=useState(false); const [page,setPage]=useState(0); const [upload,setUpload]=useState<{upload_id:string;filename:string}|null>(null); const [preview,setPreview]=useState<any>(null); const [timeColumn,setTimeColumn]=useState(""); const [mapColumn,setMapColumn]=useState(""); const [mapChannel,setMapChannel]=useState("ghi"); const [mapUnit,setMapUnit]=useState("W m-2");
- const [pageValues,setPageValues]=useState<{timestamps:string[];channels:Record<string,(number|null)[]>}|null>(null);
- const [hiddenChannels,setHiddenChannels]=useState<Set<string>>(new Set());
- const [bulkType,setBulkType]=useState("scale");
- const [bulkValue,setBulkValue]=useState("1");
- const [bulkStart,setBulkStart]=useState("");
- const [bulkEnd,setBulkEnd]=useState("");
- const plotRoot=useRef<HTMLDivElement>(null); const plot=useRef<InstanceType<typeof uPlotType>|null>(null);
- const refresh=async()=>{const [s,p]=await Promise.all([api(workspaceId,"/site"),api(workspaceId,"/profiles")]);if(s)setSite(s);setProfiles(p); if(p.length) await choose(p[0].digest);};
- const choose=async(digest:string)=>{const v=await api(workspaceId,`/profiles/${encodeURIComponent(digest)}?offset=0&limit=1000`);setSelected(v);setPage(0);};
- useEffect(()=>{void refresh().catch(e=>setError(e.message));},[workspaceId]);
- useEffect(()=>{if(!selected)return;void api(workspaceId,`/profiles/${encodeURIComponent(selected.digest)}?offset=${page*50}&limit=50`).then(setPageValues).catch(e=>setError(e.message));},[workspaceId,selected?.digest,page]);
- useEffect(()=>{if(!selected||!plotRoot.current)return;let active=true;let observer:ResizeObserver|undefined;void loadUPlot().then(uPlot=>{if(!active||!selected||!plotRoot.current)return;const series=Object.entries(selected.channels).filter(([,values])=>values.some(v=>v!==null));if(!series.length)return;const times=selected.timestamps.map(t=>new Date(t).getTime()/1000);const units=[...new Set(series.map(([name])=>displayUnit(name,selected.units[name])))];const scales=Object.fromEntries(units.map(unit=>[unit,{}]));const colors=["#286b45","#24729b","#ca702e","#7256a3","#9a4a55","#5e7775"];const data:[number[],...(number|null)[][]]=[times,...series.map(([name,v])=>v.map(value=>displayValue(name,value)))];const width=Math.max(320,plotRoot.current.clientWidth);plot.current?.destroy();plot.current=new uPlot({width,height:240,legend:{show:false},scales:{x:{time:true},...scales},cursor:{drag:{x:true,y:false,setScale:true}},hooks:{setScale:[(u,key)=>{if(key!=="x"||u.scales.x.min==null)return;const index=times.findIndex(t=>t>=u.scales.x.min!);if(index>=0)setPage(Math.floor(index/50));}]},series:[{},...series.map(([name],i)=>({label:name,scale:displayUnit(name,selected.units[name]),show:!hiddenChannels.has(name),stroke:colors[i%colors.length],width:2}))],axes:[{values:(_u:uPlot,vals:number[])=>{const stride=Math.max(1,Math.ceil(vals.length/6));return vals.map((v,i)=>i%stride===0?formatSiteTime(v,site.timezone):"")}},...units.map((unit,i)=>({scale:unit,label:unit,side:i===0?3:1,grid:{show:false},values:(_u:uPlot,vals:number[])=>vals.map(v=>new Intl.NumberFormat("en-US").format(v))}))]},data,plotRoot.current);const resize=()=>plot.current?.setSize({width:Math.max(320,plotRoot.current?.clientWidth??320),height:240});observer=new ResizeObserver(resize);observer.observe(plotRoot.current);}).catch(e=>setError(e instanceof Error?e.message:"Chart unavailable"));return()=>{active=false;observer?.disconnect();plot.current?.destroy();plot.current=null;};},[selected,hiddenChannels,site.timezone]);
- useEffect(()=>{if(!plot.current||!selected||!selected.timestamps.length)return;const first=selected.timestamps[page*50];const last=selected.timestamps[Math.min(selected.timestamps.length-1,(page+1)*50-1)];if(first&&last)plot.current.setScale("x",{min:new Date(first).getTime()/1000,max:new Date(last).getTime()/1000});},[page,selected]);
- const run=async(fn:()=>Promise<any>,success:string)=>{setBusy(true);setError("");setMessage("");try{const r=await fn();setMessage(success);await refresh();if(r?.profile_id)await choose(r.profile_id);}catch(e){setError(e instanceof Error?e.message:"Operation failed");}finally{setBusy(false);}};
- const siteFields=["name","latitude","longitude","elevation_m","timezone","water_body"];
- const tableRows=useMemo(()=>pageValues?.timestamps.map((timestamp,i)=>({timestamp,values:Object.fromEntries(Object.entries(pageValues.channels).map(([k,v])=>[k,v[i]]))}))??[],[pageValues]);
- const beginUpload=async(file:File)=>{setError("");try{const r=await fetch(`${API_BASE_URL}/workspaces/${encodeURIComponent(workspaceId)}/environment/uploads?filename=${encodeURIComponent(file.name)}`,{method:"POST",headers:{"Content-Type":"application/octet-stream"},body:file});const body=await r.json();if(!r.ok)throw new Error(body.detail?.error??"Upload failed");setUpload({upload_id:body.upload_id,filename:file.name});const p=await api(workspaceId,`/uploads/${body.upload_id}/preview?filename=${encodeURIComponent(file.name)}`,{method:"POST"});setPreview(p);setTimeColumn(p.preview?.columns?.[0]??"");setMapColumn(p.preview?.columns?.[1]??"");}catch(e){setError(e instanceof Error?e.message:"Upload failed");}};
- return <div className="environment-overlay" role="dialog" aria-modal="true" aria-labelledby="environment-title"><section className="environment-panel"><header className="environment-toolbar"><div><p className="eyebrow">Workspace inputs</p><h2 id="environment-title">Environment profiles</h2></div><button type="button" onClick={onClose} aria-label="Close Environment">Close</button></header>{error&&<p className="environment-error" role="alert">{error}</p>}{message&&<p className="environment-message" role="status">{message}</p>}<div className="environment-grid"><section className="environment-card"><h3>Site</h3><div className="environment-site-grid">{siteFields.map(key=><label key={key}>{key.replace(/_/g," ")}<input value={site[key]??""} type={key==="latitude"||key==="longitude"||key==="elevation_m"?"number":"text"} onChange={e=>setSite({...site,[key]:key==="latitude"||key==="longitude"||key==="elevation_m"?Number(e.target.value):e.target.value})}/></label>)}</div><button disabled={busy} onClick={()=>void run(()=>api(workspaceId,`/site?expected_revision=${site.revision??0}`,{method:"PUT",body:JSON.stringify(site)}),"Site saved.")}>Save site</button></section><section className="environment-card"><h3>Create profile</h3><label>Name<input id="environment-name" defaultValue="Clear sky · 3 days"/></label><label>Start (UTC)<input id="environment-start" type="text" placeholder="2026-06-21T06:00Z" defaultValue={`${isoNow()}Z`}/></label><div className="environment-form-row"><label>Resolution<select id="environment-step" defaultValue="15"><option>5</option><option>10</option><option>15</option><option>30</option><option>60</option><option value="1440">1440 · daily</option></select></label><label>Days<input id="environment-days" type="number" min="1" max="730" defaultValue="3"/></label></div><label>Generator<select id="environment-kind"><option value="clear_sky">Clear sky</option><option value="synthetic_day">Synthetic day</option></select></label><div className="environment-form-row"><label>Clearness factor<input id="environment-clearness" type="number" min="0" max="1" step="0.05" defaultValue="1"/></label><label>Photoperiod (h)<input id="environment-photoperiod" type="number" min="0.1" max="24" step="0.1" defaultValue="12"/></label><label>Peak PAR<input id="environment-peak-par" type="number" min="0" defaultValue="1500"/></label><label>Mean air temperature (K)<input id="environment-temp-mean" type="number" min="200" max="350" step="0.1" defaultValue="293.15"/></label><label>Temperature amplitude (K)<input id="environment-temp-amplitude" type="number" min="0" defaultValue="5"/></label></div><button disabled={busy} onClick={()=>{const step=Number((document.getElementById("environment-step") as HTMLSelectElement).value);const days=Number((document.getElementById("environment-days") as HTMLInputElement).value);const kind=(document.getElementById("environment-kind") as HTMLSelectElement).value;const startText=(document.getElementById("environment-start") as HTMLInputElement).value;const start=new Date(/[zZ]|[+-]\d{2}:?\d{2}$/.test(startText)?startText:`${startText}Z`).toISOString();const parameters:any={start,count:days*24*60/step,resolution_minutes:step,clearness_factor:Number((document.getElementById("environment-clearness") as HTMLInputElement).value)};if(kind==="synthetic_day")Object.assign(parameters,{photoperiod:Number((document.getElementById("environment-photoperiod") as HTMLInputElement).value),peak_par:Number((document.getElementById("environment-peak-par") as HTMLInputElement).value),temperature_mean:Number((document.getElementById("environment-temp-mean") as HTMLInputElement).value),temperature_amplitude:Number((document.getElementById("environment-temp-amplitude") as HTMLInputElement).value)});void run(()=>api(workspaceId,"/generate",{method:"POST",body:JSON.stringify({name:(document.getElementById("environment-name") as HTMLInputElement).value,kind,parameters})}),"Profile generated.");}}>Generate</button></section><section className="environment-card"><h3>Import local file</h3><input type="file" accept=".csv,.epw" aria-label="Choose CSV or EPW file" onChange={e=>{const f=e.target.files?.[0];if(f)void beginUpload(f);}}/>{preview&&upload&&<div className="environment-import"><p>{preview.format} · {preview.preview?.row_count??preview.row_count} rows · preview ready</p>{preview.format==="csv"&&<><div className="environment-preview-table"><table aria-label="CSV preview"><thead><tr>{preview.preview.columns.map((c:string)=><th key={c}>{c}</th>)}</tr></thead><tbody>{preview.preview.rows.map((row:string[],i:number)=><tr key={i}>{row.map((cell:string,j:number)=><td key={j}>{cell}</td>)}</tr>)}</tbody></table></div><label>Timestamp column<select value={timeColumn} onChange={e=>setTimeColumn(e.target.value)}>{preview.preview.columns.map((c:string)=><option key={c}>{c}</option>)}</select></label><label>Value column<select value={mapColumn} onChange={e=>setMapColumn(e.target.value)}>{preview.preview.columns.map((c:string)=><option key={c}>{c}</option>)}</select></label><label>Channel<select value={mapChannel} onChange={e=>setMapChannel(e.target.value)}>{["ghi","dni","dhi","par","air_temperature","sea_temperature","wind_speed","cloud_cover","wave_height","wave_period"].map(c=><option key={c}>{c}</option>)}</select></label><label>Unit<input value={mapUnit} onChange={e=>setMapUnit(e.target.value)}/></label><label>Resolution (minutes)<select id="environment-import-step" defaultValue="60"><option>5</option><option>10</option><option>15</option><option>30</option><option>60</option></select></label></>}<button disabled={busy} onClick={()=>void run(()=>api(workspaceId,`/uploads/${upload.upload_id}/confirm?filename=${encodeURIComponent(upload.filename)}`,{method:"POST",body:JSON.stringify(preview.format==="csv"?{format:"csv",mapping:{name:upload.filename,timestamp_column:timeColumn,timezone:site.timezone,resolution_minutes:Number((document.getElementById("environment-import-step") as HTMLSelectElement).value),stamp_convention:"end",channels:{[mapChannel]:{column:mapColumn,unit:mapUnit}}}}:{format:preview.format,name:upload.filename,timezone:site.timezone})}),"Import created.")}>Create imported profile</button></div>}</section><section className="environment-card"><h3>Profiles</h3><div className="environment-profile-list">{profiles.map(p=><button key={p.digest} type="button" aria-pressed={selected?.digest===p.digest} onClick={()=>void choose(p.digest)}><strong>{p.name}</strong><span>{Object.keys(p.channels).join(", ")} · {p.resolution_minutes??"—"} min · {String(p.provenance.kind??"source unknown")} · {p.start?.slice(0,10)} → {p.end?.slice(0,10)}</span><small>{p.digest.slice(0,19)}{p.parent_digest?` · parent ${p.parent_digest.slice(0,19)}`:""}</small></button>)}</div></section></div>{selected&&<section className="environment-card environment-editor"><header><div><h3>{selected.name}</h3><p>{selected.label??Object.keys(selected.channels).join(" · ")} · {selected.resolution_minutes??"—"} min</p></div><button disabled={busy||!selected.channels.ghi} onClick={()=>void run(()=>api(workspaceId,`/profiles/${encodeURIComponent(selected.digest)}/derive-par`,{method:"POST",body:JSON.stringify({factor:2.06})}),"Derived PAR profile created.")}>Derive PAR</button></header><div className="environment-bulk-edit"><label>Channel<select id="environment-bulk-channel" defaultValue={Object.keys(selected.channels)[0]}>{Object.keys(selected.channels).map(c=><option key={c}>{c}</option>)}</select></label><label>Operation<select value={bulkType} onChange={e=>setBulkType(e.target.value)}><option value="scale">Scale</option><option value="offset">Offset</option></select></label><label>{bulkType==="scale"?"Factor":"Offset"}<input type="number" value={bulkValue} onChange={e=>setBulkValue(e.target.value)}/></label><label>From UTC<input type="datetime-local" value={bulkStart} onChange={e=>setBulkStart(e.target.value)}/></label><label>To UTC<input type="datetime-local" value={bulkEnd} onChange={e=>setBulkEnd(e.target.value)}/></label><button disabled={busy} onClick={()=>void run(()=>api(workspaceId,`/profiles/${encodeURIComponent(selected.digest)}/edit`,{method:"POST",body:JSON.stringify({operation:{type:bulkType,channel:(document.getElementById("environment-bulk-channel") as HTMLSelectElement).value,value:Number(bulkValue),...(bulkStart?{start:new Date(bulkStart).toISOString()}:{}),...(bulkEnd?{end:new Date(bulkEnd).toISOString()}:{})}})}),"Range edit saved as a new profile.")}>Apply range edit</button></div><div ref={plotRoot} className="environment-plot" aria-label="Environment time series chart"/><div className="environment-legend" role="group" aria-label="Chart series">{Object.keys(selected.channels).map((channel,index)=><button key={channel} type="button" aria-pressed={!hiddenChannels.has(channel)} onClick={()=>setHiddenChannels(current=>{const next=new Set(current);if(next.has(channel))next.delete(channel);else next.add(channel);return next;})}>{channel} · {displayUnit(channel,selected.units[channel])}</button>)}</div><div className="environment-prov"><strong>Provenance</strong><span>{String(selected.provenance.kind??"unknown")} · {selected.provenance.filename?String(selected.provenance.filename):"generated locally"} · {selected.digest}</span></div><div className="environment-table-wrap"><table aria-label="Environment profile values" tabIndex={0}><thead><tr><th scope="col">Site time · {site.timezone}</th>{Object.keys(selected.channels).map(c=><th key={c} scope="col">{c} ({displayUnit(c,selected.units[c])})</th>)}</tr></thead><tbody>{tableRows.map((row,i)=><tr key={row.timestamp}><th scope="row">{formatSiteTime(row.timestamp,site.timezone)}</th>{Object.keys(selected.channels).map(c=><td key={c}><input aria-label={`${c} at ${formatSiteTime(row.timestamp,site.timezone)} ${site.timezone}`} type="number" defaultValue={displayValue(c,row.values[c])??""} onBlur={e=>{const shown=e.target.value===""?null:Number(e.target.value);const v=storageValue(c,shown);if(v!==row.values[c])void run(()=>api(workspaceId,`/profiles/${encodeURIComponent(selected.digest)}/edit`,{method:"POST",body:JSON.stringify({operation:{type:"cell",channel:c,index:page*50+i,value:v}})}),"Edit saved as a new profile.");}}/></td>)}</tr>)}</tbody></table></div><div className="environment-pages"><span>{selected.total} points · page {page+1}</span><button disabled={page===0} onClick={()=>setPage(page-1)}>Previous</button><button disabled={(page+1)*50>=selected.total} onClick={()=>setPage(page+1)}>Next</button></div></section>}</section></div>;
+export default function EnvironmentPanel({ workspaceId, onClose }: Props) {
+  const dialog = useRef<HTMLDivElement>(null);
+  const previouslyFocused = useRef<HTMLElement | null>(null);
+  const [site, setSite] = useState<Site | null>(null);
+  const [siteDraft, setSiteDraft] = useState<SiteDraft>(toSiteDraft(null));
+  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [selected, setSelected] = useState<Profile | null>(null);
+  const [chartValues, setChartValues] = useState<ProfileValues | null>(null);
+  const [tableValues, setTableValues] = useState<ProfileValues | null>(null);
+  const [tablePage, setTablePage] = useState(0);
+  const [tableRange, setTableRange] = useState<[string, string] | null>(null);
+  const [parFactor, setParFactor] = useState("2.06");
+  const [replacePar, setReplacePar] = useState(false);
+  const [bulkChannel, setBulkChannel] = useState("");
+  const [bulkOperation, setBulkOperation] = useState<"scale" | "offset">("scale");
+  const [bulkValue, setBulkValue] = useState("1");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  const [pageCount, setPageCount] = useState(0);
+
+  const refresh = useCallback(async (preferredDigest?: string | null) => {
+    const [savedSite, listed] = await Promise.all([
+      environmentApi<Site | null>(workspaceId, "/site"),
+      environmentApi<Profile[]>(workspaceId, "/profiles"),
+    ]);
+    setSite(savedSite);
+    setSiteDraft(toSiteDraft(savedSite));
+    setProfiles(listed);
+    const target = preferredDigest ?? listed[0]?.digest ?? null;
+    if (target && listed.some((profile) => profile.digest === target)) {
+      setSelected(listed.find((profile) => profile.digest === target) ?? null);
+    } else if (listed.length) {
+      setSelected(listed[0]);
+    } else {
+      setSelected(null);
+    }
+  }, [workspaceId]);
+
+  const choose = useCallback((digest: string) => {
+    const profile = profiles.find((item) => item.digest === digest);
+    if (profile) {
+      setSelected(profile);
+      setTablePage(0);
+      setTableRange(null);
+      setMessage("");
+      setError("");
+    }
+  }, [profiles]);
+
+  const chooseCreated = useCallback(async (profile: { profile_id: string }) => {
+    await refresh(profile.profile_id);
+  }, [refresh]);
+
+  const run = useCallback(async <T,>(operation: () => Promise<T>, success: string) => {
+    setBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      const result = await operation();
+      const digest = typeof result === "object" && result !== null && "profile_id" in result
+        ? String((result as { profile_id: string }).profile_id)
+        : selected?.digest ?? null;
+      setMessage(success);
+      await refresh(digest);
+    } catch (reason) {
+      setError(errorMessage(reason));
+    } finally {
+      setBusy(false);
+    }
+  }, [refresh, selected?.digest]);
+
+  useEffect(() => {
+    void refresh().catch((reason) => setError(errorMessage(reason)));
+  }, [refresh]);
+
+  useEffect(() => {
+    previouslyFocused.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+    const firstButton = dialog.current?.querySelector<HTMLElement>("button, input, select, textarea");
+    firstButton?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+      }
+      if (event.key !== "Tab" || !dialog.current) return;
+      const focusable = [...dialog.current.querySelectorAll<HTMLElement>(
+        "button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex='-1'])",
+      )].filter((node) => node.offsetParent !== null);
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      previouslyFocused.current?.focus();
+    };
+  }, [onClose]);
+
+  useEffect(() => {
+    if (!selected) {
+      setChartValues(null);
+      setTableValues(null);
+      return;
+    }
+    let cancelled = false;
+    const loadChart = async () => {
+      const base = selected.resolution_minutes;
+      const spanHours = (new Date(selected.end).getTime() - new Date(selected.start).getTime()) / 3_600_000;
+      const estimatedPoints = base ? spanHours * 60 / base : 0;
+      const chartResolution = base && estimatedPoints > 2500
+        ? ALLOWED_STEPS.find((step) => step >= base && step % base === 0 && step >= 1440) ?? base
+        : base;
+      const pieces: ProfileValues[] = [];
+      let offset = 0;
+      let total = 0;
+      do {
+        const query = new URLSearchParams({ offset: String(offset), limit: "5000" });
+        if (chartResolution) query.set("resolution_minutes", String(chartResolution));
+        const result = await environmentApi<ProfileValues>(
+          workspaceId,
+          `/profiles/${encodeURIComponent(selected.digest)}?${query.toString()}`,
+        );
+        pieces.push(result);
+        total = result.total;
+        offset += result.timestamps.length;
+        if (result.timestamps.length === 0) break;
+      } while (offset < total);
+      if (cancelled) return;
+      const first = pieces[0];
+      setChartValues({
+        ...first,
+        timestamps: pieces.flatMap((part) => part.timestamps),
+        indices: pieces.flatMap((part) => part.indices),
+        channels: Object.fromEntries(Object.keys(first.channels).map((channel) => [
+          channel, pieces.flatMap((part) => part.channels[channel]),
+        ])),
+        total,
+        resolution_minutes: chartResolution,
+      });
+    };
+    void loadChart().catch((reason) => setError(errorMessage(reason)));
+    return () => { cancelled = true; };
+  }, [workspaceId, selected?.digest, selected?.start, selected?.end, selected?.resolution_minutes]);
+
+  useEffect(() => {
+    if (!selected) return;
+    const query = new URLSearchParams({ offset: String(tablePage * TABLE_PAGE_SIZE), limit: String(TABLE_PAGE_SIZE) });
+    if (tableRange) {
+      query.set("start", tableRange[0]);
+      query.set("end", tableRange[1]);
+    }
+    void environmentApi<ProfileValues>(
+      workspaceId,
+      `/profiles/${encodeURIComponent(selected.digest)}?${query.toString()}`,
+    ).then((values) => {
+      setTableValues(values);
+      setPageCount(values.total);
+    }).catch((reason) => setError(errorMessage(reason)));
+  }, [workspaceId, selected?.digest, tablePage, tableRange]);
+
+  const saveSite = () => {
+    const payload = sitePayload(siteDraft);
+    if (!payload.name.trim() || !siteDraft.latitude.trim() || !siteDraft.longitude.trim()
+      || !siteDraft.elevation_m.trim() || !Number.isFinite(payload.latitude)
+      || !Number.isFinite(payload.longitude) || !Number.isFinite(payload.elevation_m)
+      || !validTimezone(payload.timezone)) {
+      setError("Enter a site name, finite coordinates and elevation, and a valid IANA timezone.");
+      return;
+    }
+    void run(() => environmentApi<Site>(workspaceId, `/site?expected_revision=${siteDraft.revision}`, {
+      method: "PUT", body: JSON.stringify(payload),
+    }), "Site saved.");
+  };
+
+  const generate = (request: GenerateRequest) => {
+    void run(() => environmentApi<Profile>(workspaceId, "/generate", {
+      method: "POST", body: JSON.stringify(request),
+    }), "Profile generated.");
+  };
+
+  const saveCells = async (changes: CellChange[]) => {
+    if (!selected) return;
+    setBusy(true);
+    setError("");
+    try {
+      const result = await environmentApi<Profile>(
+        workspaceId,
+        `/profiles/${encodeURIComponent(selected.digest)}/edit`,
+        {
+          method: "POST",
+          body: JSON.stringify({ operation: { type: "cells", changes } }),
+        },
+      );
+      setMessage(`${changes.length} cell edit${changes.length === 1 ? "" : "s"} saved as a child profile.`);
+      await refresh(result.digest);
+    } catch (reason) {
+      setError(errorMessage(reason));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const timezone = site?.timezone && validTimezone(site.timezone) ? site.timezone : "UTC";
+  const hasPar = Boolean(selected?.channels.par);
+  const updateTableRange = useCallback((start: string, end: string) => {
+    setTableRange([start, end]);
+    setTablePage(0);
+  }, []);
+
+  return (
+    <div className="environment-overlay">
+      <div ref={dialog} className="environment-panel" role="dialog" aria-modal="true" aria-labelledby="environment-title" tabIndex={-1}>
+        <header className="environment-toolbar">
+          <div><p className="eyebrow">Workspace inputs</p><h2 id="environment-title">Environment profiles</h2></div>
+          <button type="button" onClick={onClose} aria-label="Close Environment">Close</button>
+        </header>
+        {error && <p className="environment-error" role="alert">{error}</p>}
+        {message && <p className="environment-message" role="status">{message}</p>}
+        <div className="environment-grid">
+          <SiteForm value={siteDraft} onChange={setSiteDraft} onSave={saveSite} disabled={busy} />
+          <GeneratorForm onGenerate={generate} disabled={busy || !site} />
+          <ImportWizard workspaceId={workspaceId} timezone={timezone} disabled={busy}
+            onCreated={(profile) => void chooseCreated(profile)} onError={setError} />
+          <ProfileList profiles={profiles} selectedDigest={selected?.digest ?? null} onChoose={choose} />
+        </div>
+        {selected && <section className="environment-card environment-editor">
+          <header className="environment-editor-header">
+            <div>
+              <h3>{selected.name}</h3>
+              <p>{selected.label ?? Object.keys(selected.channels).join(" · ")} · {selected.resolution_minutes ?? "Irregular"} min</p>
+            </div>
+            <div className="environment-derive">
+              <label>Conversion factor (µmol/J)<input type="number" min="0.000001" step="0.01" value={parFactor}
+                onChange={(event) => setParFactor(event.target.value)} /></label>
+              <small>0.45 PAR fraction × 4.57 µmol/J (screening)</small>
+              {hasPar && <label className="environment-inline-check"><input type="checkbox" checked={replacePar}
+                onChange={(event) => setReplacePar(event.target.checked)} />Replace existing PAR channel</label>}
+              <button type="button" disabled={busy || !selected.channels.ghi || (hasPar && !replacePar)} onClick={() => void run(
+                () => environmentApi<Profile>(workspaceId, `/profiles/${encodeURIComponent(selected.digest)}/derive-par`, {
+                  method: "POST", body: JSON.stringify({ factor: Number(parFactor), replace: replacePar }),
+                }), "Derived PAR profile created.",
+              )}>Derive PAR</button>
+            </div>
+          </header>
+          <div className="environment-bulk-edit">
+            <label>Channel<select value={bulkChannel || Object.keys(selected.channels)[0]}
+              onChange={(event) => setBulkChannel(event.target.value)}>
+              {Object.keys(selected.channels).map((channel) => <option key={channel}>{channel}</option>)}
+            </select></label>
+            <label>Operation<select value={bulkOperation} onChange={(event) => setBulkOperation(event.target.value as "scale" | "offset")}>
+              <option value="scale">Scale</option><option value="offset">Offset</option>
+            </select></label>
+            <label>{bulkOperation === "scale" ? "Factor" : "Offset"}<input type="number" value={bulkValue}
+              onChange={(event) => setBulkValue(event.target.value)} /></label>
+            <button type="button" disabled={busy} onClick={() => void run(() => environmentApi<Profile>(
+              workspaceId,
+              `/profiles/${encodeURIComponent(selected.digest)}/edit`,
+              { method: "POST", body: JSON.stringify({ operation: {
+                type: bulkOperation, channel: bulkChannel || Object.keys(selected.channels)[0], value: Number(bulkValue),
+              } }) },
+            ), "Range edit saved as a new profile.")}>Apply to channel</button>
+          </div>
+          {chartValues && <ProfileChart profile={chartValues} timezone={timezone}
+            resolutionUsed={chartValues.resolution_minutes} onRange={updateTableRange} />}
+          {tableValues && <ProfileTable profile={tableValues} page={tablePage} timezone={timezone} disabled={busy}
+            onPage={(page) => { setTableRange(null); setTablePage(page); }} onSave={(changes) => void saveCells(changes)} />}
+          <p className="environment-help">{pageCount} points in the selected table range.</p>
+          <Provenance profile={selected} onChooseParent={choose} />
+        </section>}
+      </div>
+    </div>
+  );
 }
