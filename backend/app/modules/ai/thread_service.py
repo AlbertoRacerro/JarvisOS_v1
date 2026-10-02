@@ -952,7 +952,7 @@ LEFT JOIN ai_thread_surface_context AS surface ON surface.interaction_id = inter
 _TERMINAL_FLOW_STATES = frozenset({"complete", "partial_terminal", "failed_terminal", "cancelled_terminal"})
 # Spec 159: the one table mapping recorded agent tool use to an operator-facing status.
 _TOOL_ACTIVITY = {
-    "jarvis_process_read": "Using process draft…",
+    "jarvis_process_read": "Reading flowsheet…",
     "jarvis_process_act": "Applying change…",
     "jarvis_bluecad_read": "Reading model…",
     "jarvis_bluecad_act": "Preparing proposal…",
