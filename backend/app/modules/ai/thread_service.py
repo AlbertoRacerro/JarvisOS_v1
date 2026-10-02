@@ -545,9 +545,12 @@ def _install_surface_grants(worker: HermesSupervisor, workspace_id: str, thread_
         )
     read_name = f"mcp__jarvis__jarvis_{prefix}_read"
     act_name = f"mcp__jarvis__jarvis_{prefix}_act"
-    unsupported = ("Reactions and thermo stay in the editor; Monod and custom rate laws are unsupported. "
-                   "Never substitute an approximation unless the operator explicitly asks. ") \
-        if brief.surface == "process" else "State unsupported geometry requests plainly. "
+    if brief.surface == "process":
+        from app.modules.bio_models.forms import kinetics_explanation
+        unsupported = (f"{kinetics_explanation()} Reactions and thermo stay in the editor; DWSIM reactions use Arrhenius power-law only. "
+                       "Never substitute an approximation unless the operator explicitly asks. ")
+    else:
+        unsupported = "State unsupported geometry requests plainly. "
     lines = [f"Current surface: {brief.summary}",
              f"{read_name} grant_id={grant_ids[capability_ids[0]]};",
              f"{act_name} grant_id={grant_ids[capability_ids[1]]}.",

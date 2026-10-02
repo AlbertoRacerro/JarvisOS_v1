@@ -95,6 +95,7 @@ def surface_brief(workspace_id: str, ref: SurfaceRef | None) -> SurfaceBrief:
     if ref is None or ref.route_id not in {"design-process", "design-bluecad"}:
         return _brief_none(workspace_id, ref, "No Process or BLUECAD surface is active.")
     if ref.route_id == "design-process":
+        from app.modules.bio_models.forms import kinetics_explanation
         found = _find_draft(workspace_id, draft_id=ref.draft_id) if ref.draft_id else None
         if ref.draft_id and not found:
             return _brief_none(
@@ -164,12 +165,12 @@ def surface_brief(workspace_id: str, ref: SurfaceRef | None) -> SurfaceBrief:
             f'{{"op":"rename","target":"{unit_tag}","new_tag":"{next_unit_tag}"}}; '
             f'{{"op":"delete","target":"{unit_tag}"}}.\n'
             "Culture is editable only on feed streams. Culture cannot pass through Flash, DistillationColumn, PFR or cycles; Jarvis-native units arrive with 168/170. "
-            "Limits: reactions are Arrhenius power-law only; Monod/custom rate laws unsupported. "
+            f"Limits: Arrhenius power-law only for DWSIM reactions. {kinetics_explanation()} "
             "Reactions and thermo are edited in the operator editor. DWSIM runs only from the operator Run button."
         )
         bounded_text = text[:6000]
         actions = ["set_value", "add_unit", "insert_unit_after", "connect", "disconnect", "mirror", "move", "rename", "delete"]
-        limits = ["Arrhenius power-law only; no Monod/custom laws", "DWSIM Run is operator-only"]
+        limits = [f"Arrhenius power-law only; {kinetics_explanation()}", "DWSIM Run is operator-only"]
         payload = {
             "surface": "process",
             "route_id": ref.route_id,

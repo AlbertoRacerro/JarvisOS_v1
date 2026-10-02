@@ -42,6 +42,30 @@ def test_turn_tools_are_scoped_to_owner_derived_surface() -> None:
     assert all("jarvis_process" not in name and "jarvis_bluecad" not in name for name in none)
 
 
+def test_process_brief_uses_biological_kinetics_explanation(tmp_path, monkeypatch) -> None:
+    from fastapi.testclient import TestClient
+
+    from app.core.config import get_settings
+    from app.core.database import initialize_database
+    from app.main import app
+    from app.modules.bio_models.forms import kinetics_explanation
+    from app.modules.process_stack import draft
+    from app.modules.workspace_actions.service import surface_brief
+
+    monkeypatch.setenv("JARVISOS_DATA_ROOT", str(tmp_path / "jarvis"))
+    get_settings.cache_clear()
+    initialize_database()
+    with TestClient(app) as client:
+        response = client.post("/workspaces", json={"name": "Process brief", "slug": "process-brief-169"})
+        assert response.status_code == 201
+        workspace_id = response.json()["id"]
+    created = draft.create_draft(workspace_id, "Process brief draft")
+    brief = surface_brief(workspace_id, SurfaceRef(route_id="design-process", draft_id=created["draft_id"]))
+    assert kinetics_explanation() in brief.text
+    assert any(kinetics_explanation() in item for item in brief.limits)
+    assert "Monod and custom rate laws unsupported" not in brief.text
+
+
 def test_surface_brief_falls_back_to_none_with_reason(monkeypatch) -> None:
     from app.modules.workspace_actions import service
 
@@ -88,6 +112,9 @@ def test_process_turn_instructions_show_prefixed_read_and_typed_value_example() 
     assert '"name":"mcp__jarvis__jarvis_process_act"' in text
     assert '"op":"set_value","target":"S1","property":"pressure","value":{"value":2,"unit":"bar"}' in text
     assert "For state proposed" in text and "NOT been applied" in text
+    assert "Monod is a nutrient-limitation factor of a bioreactor growth model" in text
+    assert "DWSIM reactor rate laws arrive with 180" in text and "PBR units arrive with 170" in text
+    assert "No action is proposed" in text
     assert "only when state is applied and applied is true" in text
     assert '"surface_ref"' not in text
 

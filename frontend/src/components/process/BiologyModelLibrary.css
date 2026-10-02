@@ -1,28 +1,23 @@
-.bio-library { position: relative; z-index: 5; max-height: min(78vh, 820px); overflow: auto; margin: 10px 12px; padding: 16px; border: 1px solid #bdc9b4; border-radius: 10px; background: #fffefa; box-shadow: 0 8px 28px #26321d22; color: #26321d; }
+.bio-library__backdrop { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 14px; background: #17201688; }
+.bio-library { width: min(1500px, 100%); max-height: calc(100vh - 28px); overflow: auto; padding: 16px; border: 1px solid #bdc9b4; border-radius: 10px; background: #fffefa; box-shadow: 0 8px 28px #26321d44; color: #26321d; }
 .bio-library__header, .bio-library__actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.bio-library h2 { margin: 0 0 12px; font-size: 20px; }
-.bio-library h3 { margin: 6px 0 10px; font-size: 16px; }
-.bio-library h4 { margin: 0 0 8px; }
-.bio-library__layout { display: grid; grid-template-columns: minmax(280px, 1fr) minmax(340px, 1.2fr); gap: 14px; align-items: start; }
+.bio-library h2 { margin: 0 0 12px; font-size: 20px; } .bio-library h3 { margin: 6px 0 10px; font-size: 16px; } .bio-library h4 { margin: 0 0 8px; }
+.bio-library__layout { display: grid; grid-template-columns: minmax(300px, .9fr) minmax(540px, 1.4fr); gap: 14px; align-items: start; }
 .bio-library__layout > section { min-width: 0; padding: 12px; border: 1px solid #e1e4dc; border-radius: 8px; background: #fff; }
-.bio-library__builder { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(180px, 1fr)); gap: 9px; align-items: end; }
-.bio-library__builder h3, .bio-library__builder p, .bio-library__builder ul, .bio-library__builder table { grid-column: 1 / -1; }
+.bio-library__builder { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, minmax(180px, 1fr)); gap: 9px; align-items: end; }
+.bio-library__builder h3, .bio-library__builder p, .bio-library__builder ul, .bio-library__builder table, .bio-library__builder fieldset { grid-column: 1 / -1; }
 .bio-library label { display: grid; gap: 4px; margin: 7px 0; font-size: 12px; }
-.bio-library input, .bio-library select { min-width: 0; padding: 7px; border: 1px solid #bac4b2; border-radius: 5px; background: white; color: inherit; }
-.bio-library button { min-height: 32px; padding: 5px 9px; border: 1px solid #9eae94; border-radius: 5px; background: #f3f6ef; color: #26321d; cursor: pointer; }
-.bio-library button:hover { background: #e8efe1; }
-.bio-library button:focus-visible, .bio-library input:focus-visible, .bio-library select:focus-visible, .bio-library summary:focus-visible { outline: 3px solid #467637; outline-offset: 2px; }
-.bio-form-card { padding-top: 8px; }
-.bio-equation { overflow-wrap: anywhere; padding: 12px; border-radius: 6px; background: #f6f7f2; }
-.bio-library table { width: 100%; border-collapse: collapse; font-size: 12px; }
-.bio-library caption { text-align: left; font-weight: 700; padding: 5px 0; }
+.bio-library input, .bio-library select, .bio-library textarea { min-width: 0; padding: 7px; border: 1px solid #bac4b2; border-radius: 5px; background: white; color: inherit; }
+.bio-library button { min-height: 32px; margin: 2px; padding: 5px 9px; border: 1px solid #9eae94; border-radius: 5px; background: #f3f6ef; color: #26321d; cursor: pointer; }
+.bio-library button:hover { background: #e8efe1; } .bio-library button:focus-visible, .bio-library input:focus-visible, .bio-library select:focus-visible, .bio-library summary:focus-visible { outline: 3px solid #467637; outline-offset: 2px; }
+.bio-form-card { padding-top: 8px; } .bio-equation { overflow-x: auto; padding: 12px; border-radius: 6px; background: #f6f7f2; font-size: 19px; }
+.bio-library table { width: 100%; border-collapse: collapse; font-size: 12px; } .bio-library caption { text-align: left; font-weight: 700; padding: 5px 0; }
 .bio-library th, .bio-library td { padding: 6px; border-bottom: 1px solid #e4e8e0; text-align: left; vertical-align: top; }
-.bio-parameter-table button { margin: 2px; }
-.bio-parameter-editor { display: grid; grid-template-columns: repeat(2, minmax(120px, 1fr)); gap: 8px; margin-top: 12px; border: 1px solid #dce2d7; border-radius: 6px; }
-.bio-parameter-editor legend { font-weight: 700; }
-.bio-parameter-editor button { align-self: end; }
-.bio-library__metadata { color: #5f6c58; font-size: 12px; }
-.bio-library__notice { padding: 8px; background: #eff5e9; border-left: 3px solid #668653; }
-@media (max-width: 1350px) { .bio-library__layout { grid-template-columns: 1fr; } }
-@media (max-width: 900px) { .bio-library__layout { grid-template-columns: 1fr; } .bio-library__builder { grid-column: auto; grid-template-columns: 1fr 1fr; } }
-@media (max-width: 620px) { .bio-library { max-height: 70vh; margin: 6px; padding: 10px; } .bio-library__builder, .bio-parameter-editor { grid-template-columns: 1fr; } }
+.bio-parameter-table { table-layout: auto; } .bio-parameter-table small { display: block; color: #5f6c58; } .bio-parameter-table button { margin: 2px; white-space: nowrap; }
+.bio-parameter-editor, .bio-inline-action, .bio-operating-point { display: grid; grid-template-columns: repeat(3, minmax(140px, 1fr)); gap: 8px; margin-top: 12px; border: 1px solid #dce2d7; border-radius: 6px; }
+.bio-parameter-editor legend, .bio-inline-action legend, .bio-operating-point legend { font-weight: 700; } .bio-parameter-editor button, .bio-inline-action button { align-self: end; }
+.bio-inline-action { grid-template-columns: repeat(2, minmax(160px, 1fr)); } .bio-inline-action p { grid-column: 1 / -1; } .bio-inline-action label { grid-column: 1 / -1; }
+.bio-operating-point { grid-template-columns: repeat(4, minmax(160px, 1fr)); } .bio-operating-point label span { display: grid; gap: 4px; } .bio-operating-point small { color: #5f6c58; }
+.bio-library__metadata { color: #5f6c58; font-size: 12px; } .bio-library__notice { padding: 8px; background: #eff5e9; border-left: 3px solid #668653; }
+@media (max-width: 1120px) { .bio-library__layout { grid-template-columns: 1fr; } .bio-library__builder { grid-template-columns: repeat(2, minmax(160px, 1fr)); } .bio-operating-point { grid-template-columns: repeat(2, minmax(140px, 1fr)); } }
+@media (max-width: 620px) { .bio-library { padding: 10px; } .bio-library__builder, .bio-parameter-editor, .bio-inline-action, .bio-operating-point { grid-template-columns: 1fr; } }
