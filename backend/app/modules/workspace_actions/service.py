@@ -497,6 +497,12 @@ def submit(workspace_id: str, request: ActionRequest, origin: ActionOrigin) -> A
             request,
             origin,
         )
+    if origin.kind == "local":
+        previous = find_local_duplicate(workspace_id, str(origin.interaction_id), request)
+        if previous is not None:
+            # One local turn may repeat an identical tool call; it must not
+            # create a second card or a second BLUECAD child.
+            return previous
     if request.surface == "bluecad":
         base_candidate = get_candidate(workspace_id, request.base_revision)
         if base_candidate is None or base_candidate.status != "valid":
@@ -613,6 +619,19 @@ def submit(workspace_id: str, request: ActionRequest, origin: ActionOrigin) -> A
         except draft.DraftError as exc:
             result.state, result.reason_code, result.reason = "stale", exc.code, str(exc)
     return _store(result, request, origin)
+
+
+def find_local_duplicate(workspace_id: str, interaction_id: str, request: ActionRequest) -> ActionOutcome | None:
+    """Return the outcome of an identical request already submitted by the same local interaction."""
+    request = request.model_copy(update={"actions": _unique_actions(request)})
+    digest = _digest(request.model_dump(mode="json"))
+    with open_sqlite_connection() as connection:
+        row = connection.execute(
+            "SELECT outcome_json FROM workspace_actions WHERE workspace_id=? AND interaction_id=? AND request_digest=? "
+            "AND json_extract(origin_json, '$.kind')='local' ORDER BY created_at LIMIT 1",
+            (workspace_id, interaction_id, digest),
+        ).fetchone()
+    return ActionOutcome.model_validate_json(row["outcome_json"]) if row else None
 
 
 def _unique_actions(request: ActionRequest) -> list[ProcessAction | BluecadAction]:
