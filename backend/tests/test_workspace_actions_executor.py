@@ -89,6 +89,34 @@ def test_process_propose_apply_undo_and_refuse() -> None:
         assert "kinetics is unsupported" in (refused.reason or "")
 
 
+def test_identical_local_request_in_one_turn_is_idempotent() -> None:
+    initialize_database()
+    with TestClient(app) as client:
+        workspace_id = _workspace(client)
+        state = _draft(workspace_id)
+        request = ActionRequest.model_validate(
+            {
+                "surface": "process",
+                "base_revision": state["revision"],
+                "draft_id": state["draft_id"],
+                "actions": [{"op": "set_value", "target": "S1", "property": "pressure", "value": {"value": 3, "unit": "bar"}}],
+            }
+        )
+        turn = ActionOrigin(kind="local", thread_id="thread-dup", interaction_id="interaction-dup")
+        first = submit(workspace_id, request, turn)
+        repeated = submit(workspace_id, request, turn)
+        assert first.state == "proposed" and repeated.action_id == first.action_id
+        from app.modules.workspace_actions.service import apply, find_local_duplicate, list_for
+
+        assert [item.action_id for item in list_for(workspace_id, thread_id="thread-dup")] == [first.action_id]
+        applied = apply(workspace_id, first.action_id)
+        again = find_local_duplicate(workspace_id, "interaction-dup", request)
+        assert again is not None and again.state == applied.state == "applied"
+        next_turn = ActionOrigin(kind="local", thread_id="thread-dup", interaction_id="interaction-dup-2")
+        later = submit(workspace_id, request, next_turn)
+        assert later.action_id != first.action_id
+
+
 def test_brief_and_http_actions_routes() -> None:
     initialize_database()
     with TestClient(app) as client:

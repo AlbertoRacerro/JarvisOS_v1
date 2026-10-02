@@ -431,6 +431,14 @@ def _workspace_action_tool(call: StructuredToolCall, workspace_id: str, error: s
         if expected_revision is not None and request.base_revision != expected_revision:
             return None, "surface_revision_denied"
         ref = call.session_ref
+        if interaction_id:
+            previous = service.find_local_duplicate(workspace_id, interaction_id, request)
+            if previous is not None:
+                return {"state": previous.state, "applied": previous.state == "applied", "duplicate": True,
+                        "summary": f"Already submitted in this turn ({previous.state}): {previous.summary}. "
+                                   "Do not submit it again; answer the operator now.",
+                        "reason": previous.reason, "changes": [], "result_revision": previous.result_revision,
+                        "child_candidate_id": previous.child_candidate_id}, error
         outcome = service.submit(workspace_id, request, ActionOrigin(
             kind="local", thread_id=ref.jarvis_thread_id if ref else "unknown",
             interaction_id=interaction_id, model="local-agent"))

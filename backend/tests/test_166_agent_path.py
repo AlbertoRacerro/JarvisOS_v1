@@ -160,6 +160,9 @@ def test_dispatch_submits_typed_action_to_workspace_executor(monkeypatch) -> Non
         return outcome
 
     monkeypatch.setattr(service, "submit", submit)
+    duplicates: dict[str, object] = {}
+    monkeypatch.setattr(service, "find_local_duplicate",
+                        lambda workspace_id, interaction_id, request: duplicates.get(interaction_id))
     now = datetime.now(UTC)
     grant = CapabilityGrantRef(
         grant_id="process-act-grant", capability_id="jarvis.process_act", issuer="jarvis_policy",
@@ -193,6 +196,14 @@ def test_dispatch_submits_typed_action_to_workspace_executor(monkeypatch) -> Non
     assert stale.result["applied"] is False
     assert stale.result["reason"] == "The draft revision changed."
     assert stale.result["summary"].startswith("Not applied:")
+
+    duplicates["interaction-166"] = SimpleNamespace(state="proposed", summary="Move PFR", reason=None,
+                                                    result_revision=None, child_candidate_id=None)
+    captured.clear()
+    repeated = dispatch_tool(call, live_grants={grant.grant_id: grant}, interaction_id="interaction-166")
+    assert captured == {}
+    assert repeated.result["duplicate"] is True and repeated.result["changes"] == []
+    assert "Do not submit it again" in repeated.result["summary"]
 
 
 def test_read_tool_derives_surface_ref_from_live_grant(monkeypatch) -> None:
