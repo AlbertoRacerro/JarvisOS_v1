@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -360,41 +361,48 @@ def test_stale_and_invalid_proposals_are_refused(api: Any) -> None:
     assert old_base.status_code == 409
 
 
-def test_hermes_process_tools_read_and_propose_only_within_grant(api: Any) -> None:
+def test_hermes_process_tools_read_and_act_only_within_surface_grant(api: Any) -> None:
+    """166 supersedes 155's unscoped read/propose: grants carry the turn's Process surface."""
     from app.modules.agents.hermes.supervisor import dispatch_tool
+    from app.modules.workspace_actions import service
 
     client, base, state, workspace_id = api
     _built(client, base, state)
     now = datetime.now(UTC)
     session = AgentSessionRef(jarvis_thread_id="thread-1", hermes_session_id="hermes-1", profile_id="default",
                               workspace_id=workspace_id, generation=1, upstream_revision="r" * 40)
+    surface = {"surface": "process", "route_id": "design-process", "draft_id": state["draft_id"],
+               "base_revision": state["revision"], "process_selection_count": 1,
+               "process_selection_0_kind": "unit", "process_selection_0_tag": "V1"}
 
-    def call(capability: str, arguments: dict[str, Any], grant_workspace: str = workspace_id) -> Any:
+    def call(capability: str, arguments: dict[str, Any], grant_workspace: str = workspace_id,
+             constraints: dict[str, Any] | None = None) -> Any:
         grant = CapabilityGrantRef(grant_id="g", capability_id=capability, issuer="jarvis_policy",
                                    scope=CapabilityScope(workspace_id=grant_workspace, jarvis_thread_id="thread-1"),
+                                   constraints=surface if constraints is None else constraints,
                                    issued_at=now - timedelta(seconds=1), expires_at=now + timedelta(minutes=5))
         tool_call = StructuredToolCall(call_id="c", capability_id=capability, grant_id="g", correlation_id="c",
                                        session_ref=session, arguments=arguments, requested_at=now,
                                        deadline_at=now + timedelta(minutes=1))
-        return dispatch_tool(tool_call, live_grants={"g": grant})
+        return dispatch_tool(tool_call, live_grants={"g": grant}, interaction_id="interaction-1")
 
     read = call("jarvis.process_read", {})
     assert read.status == "succeeded" and read.result is not None
-    assert read.result["revision"] == state["revision"]
-    valve = next(item for item in read.result["objects"] if item["tag"] == "V1")
-    assert valve["params"]["outlet_pressure"] == {"value": 1.2, "unit": "bar"}
+    assert read.result["surface"] == "process" and read.result["base_revision"] == state["revision"]
+    valve = next(item for item in read.result["selected"] if item["tag"] == "V1")
+    assert "outlet_pressure" in json.dumps(valve)
     assert call("jarvis.process_read", {}, grant_workspace="other").status == "refused"
-    proposed = call("jarvis.process_propose", {"base_revision": state["revision"], "rationale": "test", "changes": [
-        {"target": "V1", "property": "outlet_pressure", "proposed": {"value": 2, "unit": "bar"}}]})
-    assert proposed.status == "succeeded" and proposed.result is not None
+    assert call("jarvis.process_read", {}, constraints={}).status == "refused"
+    proposed = call("jarvis.process_act", {"base_revision": state["revision"], "rationale": "test", "actions": [
+        {"op": "set_value", "target": "V1", "property": "outlet_pressure", "value": {"value": 2, "unit": "bar"}}]})
+    assert proposed.status == "succeeded" and proposed.result["state"] == "proposed", proposed.result
     assert client.get(f"{base}/{state['draft_id']}").json()["revision"] == state["revision"]
-    stored = client.get(f"{base}/{state['draft_id']}/proposals").json()[0]
-    assert stored["source"] == "hermes:thread-1" and stored["state"] == "pending"
-    refused = call("jarvis.process_propose", {"base_revision": state["revision"], "changes": [
-        {"target": "V1", "property": "Kv", "proposed": {"value": 2, "unit": "bar"}}]})
-    assert refused.status == "refused" and refused.error_code == "proposal_property_unsupported"
-    wrong_grant = call("jarvis.process_read", {}, grant_workspace="other")
-    assert wrong_grant.error_code == "capability_denied"
+    stored = service.list_for(workspace_id, thread_id="thread-1")
+    assert [item.state for item in stored] == ["proposed"] and stored[0].origin.kind == "local"
+    refused = call("jarvis.process_act", {"base_revision": state["revision"], "actions": [
+        {"op": "set_value", "target": "V1", "property": "kinetics", "value": "monod"}]})
+    assert refused.status == "succeeded" and refused.result["state"] == "refused"
+    assert client.get(f"{base}/{state['draft_id']}").json()["revision"] == state["revision"]
 
 
 def test_workspace_isolation(api: Any) -> None:
@@ -407,6 +415,7 @@ def test_workspace_isolation(api: Any) -> None:
 
 def test_confused_process_grant_is_refused_with_a_correcting_code(api: Any) -> None:
     from app.modules.agents.hermes.supervisor import dispatch_tool
+    from app.modules.workspace_actions import service
 
     client, base, state, workspace_id = api
     _built(client, base, state)
@@ -415,11 +424,14 @@ def test_confused_process_grant_is_refused_with_a_correcting_code(api: Any) -> N
                               workspace_id=workspace_id, generation=1, upstream_revision="r" * 40)
     read_grant = CapabilityGrantRef(grant_id="read", capability_id="jarvis.process_read", issuer="jarvis_policy",
                                     scope=CapabilityScope(workspace_id=workspace_id, jarvis_thread_id="thread-1"),
+                                    constraints={"surface": "process", "route_id": "design-process",
+                                                 "draft_id": state["draft_id"]},
                                     issued_at=now - timedelta(seconds=1), expires_at=now + timedelta(minutes=5))
-    call = StructuredToolCall(call_id="c", capability_id="jarvis.process_propose", grant_id="read", correlation_id="c",
+    call = StructuredToolCall(call_id="c", capability_id="jarvis.process_act", grant_id="read", correlation_id="c",
                               session_ref=session, requested_at=now, deadline_at=now + timedelta(minutes=1),
-                              arguments={"base_revision": state["revision"], "changes": [
-                                  {"target": "V1", "property": "outlet_pressure", "proposed": {"value": 2, "unit": "bar"}}]})
+                              arguments={"base_revision": state["revision"], "actions": [
+                                  {"op": "set_value", "target": "V1", "property": "outlet_pressure",
+                                   "value": {"value": 2, "unit": "bar"}}]})
     result = dispatch_tool(call, live_grants={"read": read_grant})
-    assert result.status == "refused" and result.error_code == "use_process_propose_grant_id"
-    assert client.get(f"{base}/{state['draft_id']}/proposals").json() == []
+    assert result.status == "refused" and result.error_code == "use_process_act_grant_id"
+    assert service.list_for(workspace_id, thread_id="thread-1") == []

@@ -2,6 +2,8 @@ import { useCallback, useContext, useEffect, useMemo, useRef, useState, type For
 import { ArrowUp, ChatCircleDots, Info, X } from "@phosphor-icons/react";
 
 import type { KnowledgeContextPreview } from "../../api/knowledgeActions";
+import { applyWorkspaceAction, dismissWorkspaceAction, getSurfaceBrief, getWorkspaceAction, undoWorkspaceAction, WorkspaceActionRequestError, type ActionOutcome, type SurfaceRef } from "../../api/workspaceActions";
+import { currentProcessSurface, listenForProcessSurface, publishWorkspaceAction } from "../../app/workspaceActionSurface";
 import type { StageSelection } from "../../app/selection";
 import {
   ThreadsRequestError,
@@ -35,6 +37,8 @@ import {
 import { SidecarChrome } from "../shell/ContextualSidecar";
 import { ContextMenu, MenuButton, useContextMenu, type ContextMenuItem } from "../ui/ContextMenu";
 import JarvisMessageText from "./JarvisMessageText";
+import WorkspaceActionCards from "./WorkspaceActionCards";
+import { buildSurfaceRef, isToolCallShaped, relayFailureMessage, type ProcessSurface } from "./workspaceActionPresentation";
 import { modelDisplayName } from "./modelDisplayName";
 import { cloudFailureMessage, formatMoney, sortCreatedChronologically } from "./sidecarPresentation";
 import "./JarvisSidecar.css";
@@ -59,6 +63,7 @@ type PendingSubmit = Readonly<{
   expectedDigest: string | null;
   routeClass: string;
   knowledgeContext: KnowledgeContextPreview | null;
+  surfaceContext: SurfaceRef;
 }>;
 
 type InFlight = Readonly<{ workspaceId: string; threadId: string | null; requestId: string | null; prompt: string; routeClass: string; startedAt: number }>;
@@ -147,28 +152,6 @@ function relayRunTone(state: RelayRunRead["state"]): Readiness["tone"] {
   return "down";
 }
 
-// Plain-language Relay outcomes; the raw code stays in the run information.
-const RELAY_FAILURES: Record<string, string> = {
-  relay_gateway_disabled: "Relay is turned off on this machine, so nothing was sent",
-  relay_agent_login_missing: "the Relay agent is not signed in on this machine",
-  relay_agent_binary_missing: "the Relay agent program is not installed on this machine",
-  relay_agent_not_allowed: "this Relay agent is not allowed on this machine",
-  relay_run_failed: "the Relay run failed",
-  relay_run_timeout: "the agent took too long and was stopped",
-  relay_run_interrupted: "the run was interrupted (JarvisOS restarted while it was working)",
-  relay_run_launch_failed: "the agent could not be started",
-  relay_agent_error: "the agent reported an error",
-  relay_output_unparseable: "the agent returned an unreadable result",
-  relay_run_result_unreadable: "the result could not be read",
-  prompt_secret_detected: "the text looks like it contains a secret",
-  prompt_sanitization_required: "the text needs a cloud-safe rewrite first",
-  prompt_classification_required: "the text was not confirmed as cloud-safe"
-};
-
-function relayFailure(run: RelayRunRead): string {
-  return RELAY_FAILURES[run.reason_code ?? ""] ?? "the run did not finish";
-}
-
 function EscalateControl({ disabled, onRelay, onApi }: Readonly<{ disabled: boolean; onRelay(): void; onApi(): void }>) {
   const menu = useContextMenu();
   const moreRef = useRef<HTMLButtonElement | null>(null);
@@ -236,6 +219,9 @@ export function useJarvisSidecar(
   const [preview, setPreview] = useState<ContextPackPreview | null>(null);
   const [projectPackEnabled, setContextEnabled] = useState(false);
   const [routes, setRoutes] = useState<ConversationRoute[]>([]);
+  const [processSurface, setProcessSurface] = useState<ProcessSurface>(() => currentProcessSurface());
+  const [surfaceBrief, setSurfaceBrief] = useState<Awaited<ReturnType<typeof getSurfaceBrief>> | null>(null);
+  const [surfaceBriefRefresh, setSurfaceBriefRefresh] = useState(0);
   const [routesLoaded, setRoutesLoaded] = useState(false);
   const [routeClass, setRouteClass] = useState("");
   const [optionsError, setOptionsError] = useState(false);
@@ -302,9 +288,75 @@ export function useJarvisSidecar(
   const submitOwner = useRef(0);
   const relayEscalationInFlight = useRef(false);
   const selectedThreadRef = useRef<string | null>(null);
+  const emittedActionIds = useRef(new Set<string>());
   const transcriptRef = useRef<HTMLOListElement | null>(null);
   const selectionKey = useMemo(() => selectionIdentity(selection), [selection]);
+  const surfaceContext: SurfaceRef = useMemo(() => buildSurfaceRef(routeId, selection, processSurface), [routeId, selection, processSurface]);
+  const surfaceContextKey = JSON.stringify(surfaceContext);
   selectedThreadRef.current = selectedThreadId;
+
+  const publishActionRefresh = (action: ActionOutcome, state: "applied" | "undone") => {
+    emittedActionIds.current.add(action.action_id);
+    publishWorkspaceAction({ workspaceId: action.workspace_id, surface: action.surface, state, draftId: action.draft_id, resultRevision: action.result_revision, candidateId: action.candidate_id, childCandidateId: action.child_candidate_id });
+  };
+
+  const seedEmittedActionIds = (actions: ActionOutcome[]) => {
+    for (const action of actions) {
+      if (action.state === "applied" || action.state === "undone") emittedActionIds.current.add(action.action_id);
+    }
+  };
+
+  const updateAction = (action: ActionOutcome) => {
+    setDetail(current => current ? { ...current, interactions: current.interactions.map(interaction => ({ ...interaction, actions: (interaction.actions ?? []).map(item => item.action_id === action.action_id ? action : item) })) } : current);
+    setRelayRuns(current => current.map(run => ({ ...run, actions: (run.actions ?? []).map(item => item.action_id === action.action_id ? action : item) })));
+    if (action.state === "applied" || action.state === "undone") publishActionRefresh(action, action.state);
+  };
+
+  const runActionRequest = async (actionId: string, request: (workspaceId: string, actionId: string) => Promise<ActionOutcome>) => {
+    if (!workspaceId) return;
+    try { updateAction(await request(workspaceId, actionId)); }
+    catch (caught) {
+      if (caught instanceof WorkspaceActionRequestError && caught.status === 409) {
+        try { updateAction(await getWorkspaceAction(workspaceId, actionId)); return; }
+        catch { /* Show the original conflict below when the canonical record is unavailable. */ }
+      }
+      setError(caught instanceof Error ? caught.message : "Workspace action could not be updated.");
+    }
+  };
+  const applyAction = async (actionId: string) => runActionRequest(actionId, applyWorkspaceAction);
+  const dismissAction = async (actionId: string) => runActionRequest(actionId, dismissWorkspaceAction);
+  const undoAction = async (actionId: string) => runActionRequest(actionId, undoWorkspaceAction);
+
+  useEffect(() => {
+    const actions = [...(detail?.interactions.flatMap(item => item.actions ?? []) ?? []), ...relayRuns.flatMap(run => run.actions ?? [])];
+    for (const action of actions) {
+      if (action.state === "applied" && !emittedActionIds.current.has(action.action_id)) publishActionRefresh(action, "applied");
+    }
+  }, [detail, relayRuns]);
+
+  useEffect(() => listenForProcessSurface(setProcessSurface), []);
+
+  useEffect(() => {
+    let active = true;
+    setSurfaceBrief(null);
+    if (!workspaceId) return;
+    const timer = window.setTimeout(() => {
+      void getSurfaceBrief(workspaceId, surfaceContext).then((brief) => { if (active) setSurfaceBrief(brief); }).catch(() => { if (active) setSurfaceBrief(null); });
+    }, 250);
+    return () => { active = false; window.clearTimeout(timer); };
+  }, [surfaceContextKey, workspaceId, surfaceBriefRefresh]);
+
+  useEffect(() => {
+    const refreshBrief = (event: Event) => {
+      const detail = (event as CustomEvent<{ workspaceId?: string; surface?: string; draftId?: string | null }>).detail;
+      const surface = routeId === "design-process" ? "process" : routeId === "design-bluecad" ? "bluecad" : null;
+      if (detail?.workspaceId !== workspaceId || detail.surface !== surface) return;
+      if (detail.draftId && surfaceContext.draft_id && detail.draftId !== surfaceContext.draft_id) return;
+      setSurfaceBriefRefresh(current => current + 1);
+    };
+    window.addEventListener("jarvis:workspace-action", refreshBrief);
+    return () => window.removeEventListener("jarvis:workspace-action", refreshBrief);
+  }, [routeId, surfaceContext.draft_id, workspaceId]);
 
   useEffect(() => {
     workspaceOwner.current += 1;
@@ -359,6 +411,7 @@ export function useJarvisSidecar(
     void getThread(workspaceId, threadId)
       .then((next) => {
         if (detailOwner.current !== token || workspaceOwner.current !== workspaceToken || selectedThreadRef.current !== threadId) return;
+        seedEmittedActionIds(next.interactions.flatMap(item => item.actions ?? []));
         setDetail(next);
       })
       .catch(() => {
@@ -384,7 +437,10 @@ export function useJarvisSidecar(
     }).catch(() => {});
     // Relay history stays visible even if the gateway was turned off later.
     void listRelayRuns(workspaceId, selectedThreadId).then(result => {
-      if (active) setRelayRuns(result);
+      if (active) {
+        seedEmittedActionIds(result.flatMap(run => run.actions ?? []));
+        setRelayRuns(result);
+      }
     }).catch(() => {});
     return () => { active = false; };
   }, [workspaceId, selectedThreadId, loadDetail]);
@@ -465,7 +521,7 @@ export function useJarvisSidecar(
     setRelayEscalating(true);
     setError(null);
     try {
-      const draft = await draftRelayEscalation(workspaceId, selectedThreadId, sourceInteraction, editedText);
+      const draft = await draftRelayEscalation(workspaceId, selectedThreadId, sourceInteraction, editedText, surfaceContext);
       setRelayDraft(draft);
       setRelayEditText(draft.text);
     } catch (caught) {
@@ -632,6 +688,7 @@ export function useJarvisSidecar(
       && pending.prompt === text
       && pending.contextEnabled === contextEnabled
       && pending.routeClass === routeClass
+      && JSON.stringify(pending.surfaceContext) === surfaceContextKey
       && pending.knowledgeContext?.context_digest === activeKnowledge?.context_digest;
     const currentDigest = contextEnabled
       ? reusable
@@ -654,7 +711,8 @@ export function useJarvisSidecar(
           contextEnabled,
           expectedDigest: currentDigest,
           routeClass,
-          knowledgeContext: activeKnowledge
+          knowledgeContext: activeKnowledge,
+          surfaceContext
         };
     setPending(captured);
     setInFlight({ workspaceId, threadId, requestId: captured.requestId, prompt: text, routeClass, startedAt: Date.now() });
@@ -668,7 +726,7 @@ export function useJarvisSidecar(
         captured.contextEnabled && captured.expectedDigest
           ? { selection: DEFAULT_SELECTION, expectedDigest: captured.expectedDigest }
           : undefined,
-        { routeClass: captured.routeClass, knowledgeContext: captured.knowledgeContext }
+        { routeClass: captured.routeClass, knowledgeContext: captured.knowledgeContext, surfaceContext: captured.surfaceContext }
       );
       if (workspaceOwner.current !== workspaceToken) return;
       setPending(null);
@@ -702,6 +760,7 @@ export function useJarvisSidecar(
       && pending.prompt === prompt.trim()
       && pending.contextEnabled === contextEnabled
       && pending.routeClass === routeClass
+      && JSON.stringify(pending.surfaceContext) === surfaceContextKey
       && pending.knowledgeContext?.context_digest === activeKnowledge?.context_digest
       && (!contextEnabled || pending.expectedDigest)
   );
@@ -736,13 +795,15 @@ export function useJarvisSidecar(
     const name = modelDisplayName(run.model, run.agent);
     const pendingRun = run.state === "queued" || run.state === "running";
     const failed = run.state === "failed" || run.state === "denied";
+    const cleanResult = (run.result_text ?? "").replace(/```jarvis-actions\s*[\s\S]*?```/gi, "").trim();
     return <li key={`relay-${run.id}`} className="jarvis-turn jarvis-turn--followup">
       <div className={`jarvis-bubble jarvis-bubble--jarvis${pendingRun ? " is-working" : ""}${failed ? " is-failed" : ""}`}>
         <div className="jarvis-bubble__meta"><span className="jarvis-bubble__author">{name}</span><span>via Relay · subscription</span></div>
         {pendingRun ? <p className="jarvis-working" role="status"><span className="jarvis-working__dots" aria-hidden="true"><i /><i /><i /></span>Waiting for {name} via Relay… · {elapsedSince(run.started_at ?? run.created_at)}s</p> : null}
-        {run.result_text && !failed ? <JarvisMessageText text={run.result_text} /> : null}
-        {failed ? <p className="jarvis-bubble__notice" role="status">Relay could not complete this request: {relayFailure(run)}. Nothing was sent to a paid API.</p> : null}
-        {run.state === "completed" ? <p className="jarvis-bubble__advisory">Advisory answer · no project change was applied.</p> : null}
+        {cleanResult && !failed ? <JarvisMessageText text={cleanResult} /> : null}
+        <WorkspaceActionCards actions={run.actions ?? []} onApply={applyAction} onDismiss={dismissAction} onUndo={undoAction} />
+        {failed ? <p className="jarvis-bubble__notice" role="status">Relay could not complete this request: {relayFailureMessage(run.reason_code, run.result_text)}. Nothing was sent to a paid API.</p> : null}
+        {run.state === "completed" && !(run.actions ?? []).some(action => action.state === "applied") ? <p className="jarvis-bubble__advisory">Advisory answer · no project change was applied.</p> : null}
         <div className="jarvis-bubble__actions">
           {failed && run.source_interaction_id ? <button type="button" className="jarvis-link-button" disabled={cloudWorking} onClick={() => startApiEscalation(run.source_interaction_id!)}>Escalate with API key…</button> : null}
           {!pendingRun ? <p className="jarvis-bubble__metadata">{name} · Relay ({run.agent}) · subscription, no API charge{run.finished_at && run.started_at ? ` · ${((Date.parse(run.finished_at) - Date.parse(run.started_at)) / 1000).toFixed(0)}s` : ""}</p> : null}
@@ -811,6 +872,7 @@ export function useJarvisSidecar(
     const elapsed = interaction.elapsed_ms ?? interaction.latency_ms;
     const providerKind = interaction.execution_class === "external_provider" ? "cloud" : interaction.execution_class === "synthetic" ? "synthetic" : "local";
     const modelName = interaction.model_id ? modelDisplayName(interaction.model_id) : null;
+    const unsafeAssistantText = isToolCallShaped(interaction.assistant_text);
     const metadata = [modelName ?? "Model unknown", viaAgent ? "Jarvis agent" : null, providerKind, elapsed != null ? `${(elapsed / 1000).toFixed(1)}s` : null, interaction.cost_estimate_usd ? `$${interaction.cost_estimate_usd.toFixed(4)}` : null].filter(Boolean).join(" · ");
     const escalatable = !running && Boolean(interaction.assistant_text) && (interaction.execution_class === "local_compute" || viaAgent);
     const followups = sortCreatedChronologically([
@@ -826,7 +888,11 @@ export function useJarvisSidecar(
           <div className="jarvis-bubble__meta"><span className="jarvis-bubble__author">{synthetic ? "Test responder" : "Jarvis"}</span>{running ? <span>working…</span> : null}</div>
           {running
             ? <p className="jarvis-working"><span className="jarvis-working__dots" aria-hidden="true"><i /><i /><i /></span>{interaction.activity ?? "Thinking…"} · {Math.max(0, Math.floor((now - Date.parse(interaction.created_at)) / 1000))}s</p>
-            : interaction.assistant_text ? <JarvisMessageText text={interaction.assistant_text} /> : null}
+            : interaction.assistant_text ? unsafeAssistantText ? <p role="status">Jarvis produced an invalid action; nothing was changed.</p> : <JarvisMessageText text={interaction.assistant_text} /> : null}
+          {interaction.surface_summary ? <p className="jarvis-surface-summary">{interaction.surface_summary}</p> : null}
+          <WorkspaceActionCards actions={interaction.actions ?? []} onApply={applyAction} onDismiss={dismissAction} onUndo={undoAction}
+            technicalDetails={interaction.technical_details}
+            technicalInfo={unsafeAssistantText ? interaction.assistant_text : undefined} />
           {notice ? <p className="jarvis-bubble__notice" role="status">{notice}</p> : null}
           {interaction.assistant_text_truncated ? <p className="jarvis-bubble__notice">This saved answer was shortened for storage.</p> : null}
           {interaction.proposal_count ? <p className="jarvis-bubble__proposals">{interaction.proposal_count}{interaction.proposals_truncated ? "+" : ""} proposal{interaction.proposal_count === 1 ? "" : "s"} recorded for your review — nothing was applied.</p> : null}
@@ -892,6 +958,10 @@ export function useJarvisSidecar(
     {basisDiscussionBlocked && <p className="jarvis-sidecar__error" role="status">Project Basis discussion is unavailable under the current sensitivity controls. Prepare a written proposal above, or clear selected context to ask a general question.</p>}
 
     <form onSubmit={(event) => void submit(event)} className="jarvis-sidecar__composer">
+      <div className="jarvis-surface-chip" aria-live="polite">
+        <span>{surfaceBrief?.summary ?? (routeId === "design-process" || routeId === "design-bluecad" ? "Reading workspace context…" : "No workspace context on this page")}</span>
+        {surfaceBrief?.text ? <details><summary>Workspace context</summary><p>{surfaceBrief.text}</p></details> : null}
+      </div>
       {composerTarget === "relay" && relayStatus?.enabled ? <div className="jarvis-sidecar__relay-target">
         <p className="jarvis-sidecar__hint">Task for {modelDisplayName(null, relayAgent)} via Relay · {accessModeLabel(relayStatus.access_mode)} access at level {relayStatus.repository_level}. {relayStatus.blocked_reason ?? "Only submit a task that contains no strategic or domain IP."}</p>
         <label className="jarvis-sidecar__toggle"><input type="checkbox" checked={relayAttested} disabled={relayWorking} onChange={event => setRelayAttested(event.target.checked)} />This task contains no strategic/domain IP (cloud-safe)</label>

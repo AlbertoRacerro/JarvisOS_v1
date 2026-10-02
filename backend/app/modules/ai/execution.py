@@ -927,6 +927,7 @@ def run_ai_task(
     route_class: str | None = None,
     context_blocks: list[dict[str, object]] | None = None,
     max_output_tokens: int | None = None,
+    structured_output_schema: dict[str, object] | None = None,
     adapters: dict[str, AIProviderAdapter] | None = None,
     bindings: dict[str, ProviderBinding] | None = None,
     external_blocked_reason: str | None = None,
@@ -1300,6 +1301,7 @@ def run_ai_task(
             prompt=_prompt_for_task(task_kind, blocks, user_prompt),
             model_preference=attempt_binding.model_id,
             max_output_tokens=attempt_max,
+            structured_output_schema=structured_output_schema,
             metadata={"context_digest": context_digest, "selected_route_class": selected_route_class},
         )
         try:

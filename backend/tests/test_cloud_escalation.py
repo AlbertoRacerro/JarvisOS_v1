@@ -187,7 +187,7 @@ def test_interaction_read_exposes_recorded_usage_and_tool_activity() -> None:
         )
         connection.commit()
     running = get_thread(workspace_id=workspace_id, thread_id=thread_id).interactions[0]
-    assert running.activity == "Using process draft…"
+    assert running.activity == "Reading flowsheet…"
     assert running.elapsed_ms is None
 
 

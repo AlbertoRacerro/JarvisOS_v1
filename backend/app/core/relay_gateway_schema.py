@@ -67,6 +67,9 @@ RELAY_GATEWAY_SCHEMA_STATEMENTS = [
         stop_reason TEXT,
         exit_code INTEGER,
         result_text TEXT,
+        technical_details TEXT,
+        action_context_json TEXT,
+        actions_ingested INTEGER NOT NULL DEFAULT 0,
         head_commit TEXT,
         change_summary TEXT,
         created_at TEXT NOT NULL,
@@ -84,6 +87,9 @@ RELAY_GATEWAY_MIGRATION_STATEMENTS = [
     # Keep these for databases created before the columns were added to fresh installs.
     "ALTER TABLE relay_runs ADD COLUMN source_interaction_id TEXT",
     "ALTER TABLE relay_runs ADD COLUMN model TEXT",
+    "ALTER TABLE relay_runs ADD COLUMN technical_details TEXT",
+    "ALTER TABLE relay_runs ADD COLUMN action_context_json TEXT",
+    "ALTER TABLE relay_runs ADD COLUMN actions_ingested INTEGER NOT NULL DEFAULT 0",
 ]
 
 RELAY_GATEWAY_INDEX_STATEMENTS = [

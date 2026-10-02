@@ -675,13 +675,15 @@ def _digest(document: dict[str, Any]) -> str:
 
 
 def _write_revision(directory: Path, document: dict[str, Any], *, parent: str | None, actor: str,
-                    ops: list[dict[str, Any]]) -> dict[str, Any]:
+                    ops: list[dict[str, Any]], provenance: dict[str, Any] | None = None) -> dict[str, Any]:
     head = _read_json(directory / "head.json", "draft_not_found", "missing") if (directory / "head.json").exists() \
         else None
     seq = head["seq"] + 1 if head else 1
     digest = _digest(document)
     record = {"seq": seq, "revision": f"{seq}:{digest[:16]}", "document_sha256": digest, "parent_revision": parent,
               "actor": actor, "ops": ops, "created_at": _now(), "document": document}
+    if provenance:
+        record["provenance"] = provenance
     _write_json(directory / "revisions" / f"{seq}.json", record)
     _write_json(directory / "head.json", {key: value for key, value in record.items() if key != "document"}
                 | {"name": document["name"]})
@@ -723,7 +725,7 @@ def list_drafts(workspace_id: str) -> list[dict[str, Any]]:
 
 
 def patch(workspace_id: str, draft_id: str, expected_revision: str, ops: list[Any], *,
-          actor: str = "operator") -> dict[str, Any]:
+          actor: str = "operator", provenance: dict[str, Any] | None = None) -> dict[str, Any]:
     directory = draft_dir(workspace_id, draft_id)
     with _lock(directory):
         head = _head(directory)
@@ -732,7 +734,8 @@ def patch(workspace_id: str, draft_id: str, expected_revision: str, ops: list[An
         current = load_revision(directory, head["revision"])
         document = apply_ops(current["document"], ops)
         _write_revision(directory, document, parent=head["revision"], actor=actor,
-                        ops=[op.model_dump(mode="json") if isinstance(op, BaseModel) else op for op in ops])
+                        ops=[op.model_dump(mode="json") if isinstance(op, BaseModel) else op for op in ops],
+                        provenance=provenance)
     return projection(workspace_id, draft_id)
 
 

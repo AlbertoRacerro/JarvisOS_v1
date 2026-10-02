@@ -291,6 +291,7 @@ function BluecadGlbViewer({ artifactUrl, inspectionCommand = null, onInspectionC
       if (rect.width <= 0 || rect.height <= 0) return;
       pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
       pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+      camera.updateMatrixWorld(true);
       raycaster.setFromCamera(pointer, camera);
       const hit = raycaster.intersectObjects(Array.from(meshByKey.values()), false)[0]?.object;
       if (!(hit instanceof THREE.Mesh)) {

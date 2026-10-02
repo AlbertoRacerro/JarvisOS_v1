@@ -45,6 +45,7 @@ from app.modules.runner.recovery import (
 )
 from app.modules.runner.routes import router as runner_router
 from app.modules.secrets.routes import router as secrets_router
+from app.modules.workspace_actions.routes import router as workspace_actions_router
 from app.modules.workspaces.routes import router as workspaces_router
 
 RUNNER_RECOVERY_RECHECK_SECONDS = 0.25
@@ -167,6 +168,7 @@ def create_app() -> FastAPI:
     app.include_router(engineering_operator_router)
     app.include_router(dwsim_editor_router)
     app.include_router(process_draft_router)
+    app.include_router(workspace_actions_router)
     app.include_router(project_knowledge_router)
     app.include_router(coding_runtime_router)
     app.include_router(local_ai_runtime_router)
