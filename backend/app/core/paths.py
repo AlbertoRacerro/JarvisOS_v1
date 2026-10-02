@@ -13,6 +13,18 @@ class JarvisPaths:
     artifacts_dir: Path
     logs_dir: Path
 
+    def environment_workspace_dir(self, workspace_id: str) -> Path:
+        return self.data_root / "workspaces" / workspace_id / "environment"
+
+    def environment_site_file(self, workspace_id: str) -> Path:
+        return self.environment_workspace_dir(workspace_id) / "site.json"
+
+    def environment_profiles_dir(self, workspace_id: str) -> Path:
+        return self.environment_workspace_dir(workspace_id) / "profiles"
+
+    def environment_staging_dir(self, workspace_id: str) -> Path:
+        return self.environment_workspace_dir(workspace_id) / "staging"
+
     @property
     def retrieval_index_file(self) -> Path:
         return self.data_root / "retrieval-index.sqlite3"

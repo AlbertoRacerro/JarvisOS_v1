@@ -27,6 +27,7 @@ from app.modules.coding.runtime_truth import (
 from app.modules.development.brainstorm_routes import router as brainstorm_router
 from app.modules.development.routes import router as development_router
 from app.modules.engineering.operator_routes import router as engineering_operator_router
+from app.modules.environment.routes import router as environment_router
 from app.modules.flowsheet.routes import router as flowsheet_router
 from app.modules.local_ai.runtime.lifecycle import create_local_ai_runtime_lifecycle_from_env
 from app.modules.local_ai.runtime.llama_cpp import get_llama_cpp_runtime_owner, llama_cpp_runtime_config
@@ -161,6 +162,7 @@ def create_app() -> FastAPI:
     app.include_router(bio_models_router)
     app.include_router(secrets_router)
     app.include_router(workspaces_router)
+    app.include_router(environment_router)
     app.include_router(modeling_router)
     app.include_router(memory_router)
     app.include_router(literature_router)

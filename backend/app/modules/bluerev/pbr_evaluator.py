@@ -145,15 +145,27 @@ def _cardinal_temperature(t: float, t_min: float, t_opt: float, t_max: float) ->
 class PbrDayNightEvaluator:
     def descriptor(self) -> EvaluatorDescriptor:
         return EvaluatorDescriptor(
-            evaluator_id=EVALUATOR_ID, backend_kind="dynamic_simulator", backend_name="scikit-sundae",
+            evaluator_id=EVALUATOR_ID,
+            backend_kind="dynamic_simulator",
+            backend_name="scikit-sundae",
             backend_version=f"{MODEL_VERSION}+sksundae-{descriptor_version('sksundae')}",
             fidelity="reduced_order",
-            capabilities=("day_night_light", "self_shading", "photoinhibition", "cardinal_temperature",
-                          "nitrogen_limitation", "oxygen_degassing", "semi_continuous_harvest", "loop_hydraulics"),
+            capabilities=(
+                "day_night_light",
+                "self_shading",
+                "photoinhibition",
+                "cardinal_temperature",
+                "nitrogen_limitation",
+                "oxygen_degassing",
+                "semi_continuous_harvest",
+                "loop_hydraulics",
+            ),
             qualification_record_ref=SourceRef(
-                authority_owner="repository", object_type="scientific_qualification_record",
+                authority_owner="repository",
+                object_type="scientific_qualification_record",
                 object_id="scripts/qualification/107/pbr_day_night.v2.ledger.json",
-                workspace_id="bluerev", revision=MODEL_VERSION,
+                workspace_id="bluerev",
+                revision=MODEL_VERSION,
             ),
         )
 
@@ -174,13 +186,20 @@ class PbrDayNightEvaluator:
 def _validity(request: EvaluationRequest) -> ValidityEnvelopeRef:
     """Structural domain of this model version; always ``unqualified`` (availability is not qualification)."""
     envelope = ValidityEnvelopeRef(
-        authority_owner="bluerev", object_id=f"{EVALUATOR_ID}.{MODEL_VERSION}",
-        workspace_id=request.request_ref.workspace_id, revision=MODEL_VERSION, qualification_status="unqualified",
+        authority_owner="bluerev",
+        object_id=f"{EVALUATOR_ID}.{MODEL_VERSION}",
+        workspace_id=request.request_ref.workspace_id,
+        revision=MODEL_VERSION,
+        qualification_status="unqualified",
         domain=(
-            DomainBound(variable="duration", lower=Quantity(value=0.0, unit="d"),
-                        upper=Quantity(value=float(MAX_DAYS), unit="d")),
-            DomainBound(variable="photoperiod", lower=Quantity(value=0.0, unit="h"),
-                        upper=Quantity(value=24.0, unit="h")),
+            DomainBound(
+                variable="duration",
+                lower=Quantity(value=0.0, unit="d"),
+                upper=Quantity(value=float(MAX_DAYS), unit="d"),
+            ),
+            DomainBound(
+                variable="photoperiod", lower=Quantity(value=0.0, unit="h"), upper=Quantity(value=24.0, unit="h")
+            ),
         ),
     )
     return envelope.model_copy(update={"content_digest": validity_content_digest(envelope)})
@@ -192,8 +211,9 @@ def _modes(request: EvaluationRequest) -> dict[str, str]:
         raise EvaluationRefusal("unsupported_request", "option_unsupported", f"unsupported options {unknown}")
     modes = {}
     for name, allowed in OPTIONS.items():
-        only = request.model_copy(update={"backend_options": {
-            key: value for key, value in request.backend_options.items() if key == name}})
+        only = request.model_copy(
+            update={"backend_options": {key: value for key, value in request.backend_options.items() if key == name}}
+        )
         modes[name] = option(only, name, allowed, allowed[0])
     return modes
 
@@ -212,31 +232,64 @@ def _inputs(request: EvaluationRequest) -> tuple[dict[str, float], dict[str, str
         raise EvaluationRefusal("invalid_input", "input_names_invalid", f"missing={missing} unknown={unknown}")
     unsourced = sorted(name for name in sourced if given[name].basis_ref is None)
     if unsourced:
-        raise EvaluationRefusal("invalid_input", "parameter_provenance_missing",
-                                f"coefficients without basis_ref: {unsourced}")
+        raise EvaluationRefusal(
+            "invalid_input", "parameter_provenance_missing", f"coefficients without basis_ref: {unsourced}"
+        )
     x = {name: magnitude(given[name], unit) for name, unit in expected.items()}
     non_negative = [name for name in expected if name != "temperature_amplitude"]
     if any(x[name] < 0.0 for name in non_negative):
-        raise EvaluationRefusal("invalid_input", "input_negative",
-                                f"negative: {sorted(name for name in non_negative if x[name] < 0.0)}")
-    positive = [name for name in ("max_specific_growth_rate", "light_saturation_constant", "light_inhibition_constant",
-                                  "specific_light_extinction", "nitrogen_half_saturation", "oxygen_kla",
-                                  "oxygen_saturation", "tube_inner_diameter", "loop_length", "liquid_velocity",
-                                  "pump_efficiency", "duration", "initial_biomass") if name in x]
+        raise EvaluationRefusal(
+            "invalid_input", "input_negative", f"negative: {sorted(name for name in non_negative if x[name] < 0.0)}"
+        )
+    positive = [
+        name
+        for name in (
+            "max_specific_growth_rate",
+            "light_saturation_constant",
+            "light_inhibition_constant",
+            "specific_light_extinction",
+            "nitrogen_half_saturation",
+            "oxygen_kla",
+            "oxygen_saturation",
+            "tube_inner_diameter",
+            "loop_length",
+            "liquid_velocity",
+            "pump_efficiency",
+            "duration",
+            "initial_biomass",
+        )
+        if name in x
+    ]
     if any(x[name] <= 0.0 for name in positive):
-        raise EvaluationRefusal("invalid_input", "input_non_positive",
-                                f"must be positive: {sorted(name for name in positive if x[name] <= 0.0)}")
+        raise EvaluationRefusal(
+            "invalid_input",
+            "input_non_positive",
+            f"must be positive: {sorted(name for name in positive if x[name] <= 0.0)}",
+        )
     if modes["temperature_response"] == "cardinal":
         if not x["temperature_min"] < x["temperature_opt"] < x["temperature_max"]:
             raise EvaluationRefusal("invalid_input", "temperature_cardinals_invalid", "need T_min < T_opt < T_max")
-    elif (abs(x["temperature_mean"] - x["kinetics_reference_temperature"]) + abs(x["temperature_amplitude"])
-          > ISOTHERMAL_TOLERANCE_K):
-        raise EvaluationRefusal("outside_validity_domain", "temperature_outside_kinetics_reference",
-                                f"isothermal kinetics hold only within {ISOTHERMAL_TOLERANCE_K} K of their reference")
-    if not (0.0 < x["photoperiod"] <= 24.0 and 0.0 <= x["harvest_hour"] < 24.0 and x["harvest_fraction"] < 1.0
-            and x["pump_efficiency"] <= 1.0 and x["biomass_nitrogen_fraction"] < 1.0):
-        raise EvaluationRefusal("invalid_input", "input_range_invalid",
-                                "photoperiod in (0, 24] h, harvest_hour in [0, 24) h, fractions/efficiency < 1")
+    elif (
+        abs(x["temperature_mean"] - x["kinetics_reference_temperature"]) + abs(x["temperature_amplitude"])
+        > ISOTHERMAL_TOLERANCE_K
+    ):
+        raise EvaluationRefusal(
+            "outside_validity_domain",
+            "temperature_outside_kinetics_reference",
+            f"isothermal kinetics hold only within {ISOTHERMAL_TOLERANCE_K} K of their reference",
+        )
+    if not (
+        0.0 < x["photoperiod"] <= 24.0
+        and 0.0 <= x["harvest_hour"] < 24.0
+        and x["harvest_fraction"] < 1.0
+        and x["pump_efficiency"] <= 1.0
+        and x["biomass_nitrogen_fraction"] < 1.0
+    ):
+        raise EvaluationRefusal(
+            "invalid_input",
+            "input_range_invalid",
+            "photoperiod in (0, 24] h, harvest_hour in [0, 24) h, fractions/efficiency < 1",
+        )
     if x["duration"] > MAX_DAYS:
         raise EvaluationRefusal("unsupported_request", "duration_too_long", f"at most {MAX_DAYS} days")
     return x, modes
@@ -258,16 +311,20 @@ def _rhs(x: Mapping[str, float], modes: Mapping[str, str]) -> Callable[[float, t
         day_hour = hour % 24.0
         if not sunrise < day_hour < sunrise + x["photoperiod"]:
             return 0.0
-        surface = x["peak_par"] * math.sin(math.pi * (day_hour - sunrise) / x["photoperiod"])
+        surface, _ = synthetic_day_inputs(
+            day_hour, x["photoperiod"], x["peak_par"], x["temperature_mean"], x["temperature_amplitude"]
+        )
         optical_depth = x["specific_light_extinction"] * max(biomass, 0.0) * x["tube_inner_diameter"]
         light = surface * np.exp(-optical_depth * depths)
         local = light / (x["light_saturation_constant"] + light + light**2 * inhibition)
         thermal = 1.0
         if cardinal:
-            temperature = x["temperature_mean"] + x["temperature_amplitude"] * math.sin(
-                2.0 * math.pi * (day_hour - 9.0) / 24.0)
-            thermal = _cardinal_temperature(temperature, x["temperature_min"], x["temperature_opt"],
-                                            x["temperature_max"])
+            _, temperature = synthetic_day_inputs(
+                day_hour, x["photoperiod"], x["peak_par"], x["temperature_mean"], x["temperature_amplitude"]
+            )
+            thermal = _cardinal_temperature(
+                temperature, x["temperature_min"], x["temperature_opt"], x["temperature_max"]
+            )
         return float(x["max_specific_growth_rate"] * thermal * np.dot(half_weights, local))
 
     def rhs(hour: float, y: tuple[float, ...]) -> list[float]:
@@ -278,10 +335,29 @@ def _rhs(x: Mapping[str, float], modes: Mapping[str, str]) -> Callable[[float, t
             gross *= available / (x["nitrogen_half_saturation"] + available)
         d_biomass = (gross - x["biomass_loss_rate"]) * biomass
         degassing = x["oxygen_kla"] * (oxygen - x["oxygen_saturation"])
-        return [d_biomass, -x["biomass_nitrogen_fraction"] * d_biomass, x["oxygen_yield"] * d_biomass - degassing,
-                degassing]
+        return [
+            d_biomass,
+            -x["biomass_nitrogen_fraction"] * d_biomass,
+            x["oxygen_yield"] * d_biomass - degassing,
+            degassing,
+        ]
 
     return rhs
+
+
+def synthetic_day_inputs(
+    hour: float, photoperiod: float, peak_par: float, temperature_mean: float, temperature_amplitude: float
+) -> tuple[float, float]:
+    """Return the 107 day-profile PAR and temperature at one evaluator hour."""
+    day_hour = hour % 24.0
+    sunrise = 12.0 - photoperiod / 2.0
+    par = (
+        peak_par * math.sin(math.pi * (day_hour - sunrise) / photoperiod)
+        if sunrise < day_hour < sunrise + photoperiod
+        else 0.0
+    )
+    temperature = temperature_mean + temperature_amplitude * math.sin(2.0 * math.pi * (day_hour - 9.0) / 24.0)
+    return par, temperature
 
 
 def _hydraulics(request: EvaluationRequest, x: Mapping[str, float]) -> dict[str, float]:
@@ -291,12 +367,22 @@ def _hydraulics(request: EvaluationRequest, x: Mapping[str, float]) -> dict[str,
 
     def sub_request(evaluator_id: str, suffix: str, inputs: Mapping[str, tuple[float, str]]) -> EvaluationRequest:
         return EvaluationRequest(
-            request_ref=EvaluationRequestRef(authority_owner=ref.authority_owner, object_id=f"{ref.object_id}/{suffix}",
-                                             workspace_id=ref.workspace_id, revision=ref.revision),
+            request_ref=EvaluationRequestRef(
+                authority_owner=ref.authority_owner,
+                object_id=f"{ref.object_id}/{suffix}",
+                workspace_id=ref.workspace_id,
+                revision=ref.revision,
+            ),
             evaluator_id=evaluator_id,
-            subject_ref=MaterialStateRef(authority_owner="bluerev", object_id=f"{ref.object_id}/culture",
-                                         workspace_id=ref.workspace_id, revision=ref.revision),
-            inputs=quantities(inputs), requested_at=now, deadline_at=request.deadline_at,
+            subject_ref=MaterialStateRef(
+                authority_owner="bluerev",
+                object_id=f"{ref.object_id}/culture",
+                workspace_id=ref.workspace_id,
+                revision=ref.revision,
+            ),
+            inputs=quantities(inputs),
+            requested_at=now,
+            deadline_at=request.deadline_at,
         )
 
     def outputs(result: EvaluationResult) -> dict[str, float]:
@@ -309,15 +395,37 @@ def _hydraulics(request: EvaluationRequest, x: Mapping[str, float]) -> dict[str,
             )
         return {item.name: item.value.value for item in result.outputs}
 
-    water = outputs(CoolPropPropertyEvaluator().evaluate(sub_request(PROPERTY_EVALUATOR_ID, "water", {
-        "temperature": (x["temperature_mean"], "K"), "pressure": (101325.0, "Pa")})))
-    pipe = outputs(PipePressureDropEvaluator().evaluate(sub_request(PIPE_EVALUATOR_ID, "loop", {
-        "density": (water["density"], "kg/m3"), "dynamic_viscosity": (water["dynamic_viscosity"], "Pa*s"),
-        "velocity": (x["liquid_velocity"], "m/s"), "diameter": (x["tube_inner_diameter"], "m"),
-        "length": (x["loop_length"], "m"), "roughness": (0.0, "m")})))
+    water = outputs(
+        CoolPropPropertyEvaluator().evaluate(
+            sub_request(
+                PROPERTY_EVALUATOR_ID,
+                "water",
+                {"temperature": (x["temperature_mean"], "K"), "pressure": (101325.0, "Pa")},
+            )
+        )
+    )
+    pipe = outputs(
+        PipePressureDropEvaluator().evaluate(
+            sub_request(
+                PIPE_EVALUATOR_ID,
+                "loop",
+                {
+                    "density": (water["density"], "kg/m3"),
+                    "dynamic_viscosity": (water["dynamic_viscosity"], "Pa*s"),
+                    "velocity": (x["liquid_velocity"], "m/s"),
+                    "diameter": (x["tube_inner_diameter"], "m"),
+                    "length": (x["loop_length"], "m"),
+                    "roughness": (0.0, "m"),
+                },
+            )
+        )
+    )
     flow = x["liquid_velocity"] * math.pi * x["tube_inner_diameter"] ** 2 / 4.0
-    return {"reynolds_number": pipe["reynolds_number"], "pressure_drop": pipe["pressure_drop"],
-            "pumping_power": pipe["pressure_drop"] * flow / x["pump_efficiency"]}
+    return {
+        "reynolds_number": pipe["reynolds_number"],
+        "pressure_drop": pipe["pressure_drop"],
+        "pumping_power": pipe["pressure_drop"] * flow / x["pump_efficiency"],
+    }
 
 
 def _segments(x: Mapping[str, float]) -> list[float]:
@@ -363,18 +471,26 @@ def _simulate(request: EvaluationRequest) -> tuple[tuple[NamedQuantity, ...], Nu
             harvested = [total + fraction * value for total, value in zip(harvested, state[:3], strict=True)]
             fed_nitrogen += fraction * x["medium_nitrogen"]
             fed_oxygen += fraction * x["oxygen_saturation"]
-            state = (state[0] * (1.0 - fraction),
-                     state[1] * (1.0 - fraction) + fraction * x["medium_nitrogen"],
-                     state[2] * (1.0 - fraction) + fraction * x["oxygen_saturation"],
-                     state[3])
+            state = (
+                state[0] * (1.0 - fraction),
+                state[1] * (1.0 - fraction) + fraction * x["medium_nitrogen"],
+                state[2] * (1.0 - fraction) + fraction * x["oxygen_saturation"],
+                state[3],
+            )
     if modes["nitrogen_response"] == "replete" and minimum[1] <= _NEGATIVE_TOLERANCE:
-        raise EvaluationRefusal("outside_validity_domain", "nitrogen_exhausted",
-                                "dissolved nitrogen was exhausted; the nitrogen-replete assumption does not hold")
+        raise EvaluationRefusal(
+            "outside_validity_domain",
+            "nitrogen_exhausted",
+            "dissolved nitrogen was exhausted; the nitrogen-replete assumption does not hold",
+        )
     if minimum[0] < -_NEGATIVE_TOLERANCE or minimum[1] < -_NEGATIVE_TOLERANCE:
         raise EvaluationRefusal("numerical_error", "negative_state", "integrated biomass or nitrogen became negative")
     if minimum[2] < -_NEGATIVE_TOLERANCE:
-        raise EvaluationRefusal("outside_validity_domain", "oxygen_depleted",
-                                "dissolved O2 reached zero; biomass loss is not O2-limited in this model")
+        raise EvaluationRefusal(
+            "outside_validity_domain",
+            "oxygen_depleted",
+            "dissolved O2 reached zero; biomass loss is not O2-limited in this model",
+        )
 
     biomass, nitrogen, oxygen, degassed = state
     quota = x["biomass_nitrogen_fraction"]
@@ -385,20 +501,22 @@ def _simulate(request: EvaluationRequest) -> tuple[tuple[NamedQuantity, ...], Nu
     oxygen_out = oxygen + harvested[2] + degassed
     days = x["duration"]
     nitrogen_error, oxygen_error = abs(nitrogen_in - nitrogen_out), abs(oxygen_in - oxygen_out)
-    return quantities({
-        "final_biomass": (biomass, "kg/m3"),
-        "mean_biomass": (biomass_time_integral / end, "kg/m3"),
-        "harvested_biomass": (harvested[0], "kg/m3"),
-        "volumetric_productivity": (produced / days, "kg/(m**3*d)"),
-        "final_nitrogen": (nitrogen, "kg/m3"),
-        "min_nitrogen": (minimum[1], "kg/m3"),
-        "nitrogen_balance_error": (nitrogen_error, "kg/m3"),
-        "final_dissolved_oxygen": (oxygen, "kg/m3"),
-        "max_dissolved_oxygen": (maximum_oxygen, "kg/m3"),
-        "max_oxygen_saturation_ratio": (maximum_oxygen / x["oxygen_saturation"], "1"),
-        "degassed_oxygen": (degassed, "kg/m3"),
-        "oxygen_balance_error": (oxygen_error, "kg/m3"),
-        "reynolds_number": (hydraulics["reynolds_number"], "1"),
-        "pressure_drop": (hydraulics["pressure_drop"], "Pa"),
-        "pumping_power": (hydraulics["pumping_power"], "W"),
-    }), NumericalDiagnostics(converged=True, iterations=evaluations, final_residual=max(nitrogen_error, oxygen_error))
+    return quantities(
+        {
+            "final_biomass": (biomass, "kg/m3"),
+            "mean_biomass": (biomass_time_integral / end, "kg/m3"),
+            "harvested_biomass": (harvested[0], "kg/m3"),
+            "volumetric_productivity": (produced / days, "kg/(m**3*d)"),
+            "final_nitrogen": (nitrogen, "kg/m3"),
+            "min_nitrogen": (minimum[1], "kg/m3"),
+            "nitrogen_balance_error": (nitrogen_error, "kg/m3"),
+            "final_dissolved_oxygen": (oxygen, "kg/m3"),
+            "max_dissolved_oxygen": (maximum_oxygen, "kg/m3"),
+            "max_oxygen_saturation_ratio": (maximum_oxygen / x["oxygen_saturation"], "1"),
+            "degassed_oxygen": (degassed, "kg/m3"),
+            "oxygen_balance_error": (oxygen_error, "kg/m3"),
+            "reynolds_number": (hydraulics["reynolds_number"], "1"),
+            "pressure_drop": (hydraulics["pressure_drop"], "Pa"),
+            "pumping_power": (hydraulics["pumping_power"], "W"),
+        }
+    ), NumericalDiagnostics(converged=True, iterations=evaluations, final_residual=max(nitrogen_error, oxygen_error))
