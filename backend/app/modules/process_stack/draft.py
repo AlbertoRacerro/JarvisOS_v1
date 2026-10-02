@@ -23,6 +23,7 @@ from pydantic import BaseModel
 
 from app.core.paths import build_paths
 from app.modules.engineering.refs import Quantity
+from app.modules.process_stack import culture as culture_engine
 from app.modules.process_stack._common import EvaluationRefusal, magnitude
 from app.modules.process_stack.draft_models import (
     COMPILER_VERSION,
@@ -47,6 +48,7 @@ from app.modules.process_stack.draft_models import (
     SetOrientation,
     SetReactions,
     SetRoute,
+    SetStreamCulture,
     SetStreamSpec,
     SetThermo,
     SetUnitParams,
@@ -125,7 +127,11 @@ def _si(quantity: DraftQuantity, kind: str, field: str) -> dict[str, Any]:
     if quantity.unit not in allowed:
         raise DraftError("unit_unsupported", f"{field}: unit {quantity.unit!r} is not offered; use one of {list(allowed)}",
                          field=field)
-    if kind == "percent" or quantity.unit == si_unit:
+    if kind == "mass_concentration":
+        value = quantity.value * {"kg/m3": 1.0, "g/L": 1.0, "mg/L": 0.001}[quantity.unit]
+    elif kind == "molar_concentration":
+        value = quantity.value
+    elif kind in {"salinity", "ph", "percent"} or quantity.unit == si_unit:
         value = quantity.value
     else:
         try:
@@ -140,7 +146,11 @@ def _si(quantity: DraftQuantity, kind: str, field: str) -> dict[str, Any]:
 def convert_si(value_si: float, kind: str, unit: str) -> float:
     """Server-side presentation conversion from SI storage into a display unit."""
     si_unit, _allowed = QUANTITY_UNITS[kind]
-    if kind == "percent" or unit == si_unit:
+    if kind == "mass_concentration":
+        return value_si / {"kg/m3": 1.0, "g/L": 1.0, "mg/L": 0.001}[unit]
+    if kind == "molar_concentration":
+        return value_si
+    if kind in {"salinity", "ph", "percent"} or unit == si_unit:
         return value_si
     return magnitude(Quantity(value=value_si, unit=si_unit), unit)
 
@@ -332,6 +342,30 @@ def apply_op(document: dict[str, Any], op: Any) -> None:
                                  field="composition")
             stream["spec"]["composition"] = {name: float(value) for name, value in sorted(op.composition.items())
                                              if value > 0}
+    elif isinstance(op, SetStreamCulture):
+        stream = _object(document, op.stream, "stream")
+        if stream["type"] == "EnergyStream" or stream.get("source") is not None:
+            raise DraftError("culture_on_non_feed", "Culture can only be specified on material feed streams.", field="culture")
+        if op.culture is None:
+            stream["spec"].pop("culture", None)
+        else:
+            kinds = {"biomass": "mass_concentration", "nitrogen": "mass_concentration",
+                     "phosphorus": "mass_concentration", "oxygen": "mass_concentration",
+                     "dic": "molar_concentration", "ph": "ph", "salinity": "salinity"}
+            unknown = sorted(set(op.culture) - set(kinds))
+            if unknown:
+                raise DraftError("culture_field_unsupported", f"Unsupported culture fields: {unknown}", field="culture")
+            stored: dict[str, Any] = {}
+            for name, quantity in op.culture.items():
+                item = _si(quantity, kinds[name], name)
+                if name == "ph" and not 0.0 <= item["si"] <= 14.0:
+                    raise DraftError("quantity_out_of_range", "pH must be between 0 and 14.", field=name)
+                if name == "salinity" and item["si"] > 300.0:
+                    raise DraftError("quantity_out_of_range", "Salinity must be at most 300 g/kg.", field=name)
+                if name != "ph" and item["si"] < 0.0:
+                    raise DraftError("quantity_out_of_range", f"{name} concentration cannot be negative.", field=name)
+                stored[name] = item
+            stream["spec"]["culture"] = stored
     elif isinstance(op, SetUnitParams):
         unit = _object(document, op.unit, "unit")
         spec = _unit_spec(unit)
@@ -552,6 +586,7 @@ def validate_document(document: dict[str, Any]) -> list[dict[str, Any]]:
     for unit_id in graph:
         visit(unit_id)
     _advice(document, add, _cycle_members(graph))
+    findings.extend(culture_engine.culture_findings(document))
     return findings
 
 
@@ -794,8 +829,14 @@ def results_state(head: dict[str, Any], runs: list[dict[str, Any]], document: di
     seq = int(solved["draft_revision"].split(":", 1)[0])
     current = solved["draft_revision"] == head["revision"]
     if not current and document is not None:
-        from app.modules.process_stack.draft_compiler import expected, fingerprint, process_view
-        if solved.get("process_fingerprint"):
+        from app.modules.process_stack.draft_compiler import expected, fingerprint, process_view, result_fingerprint
+        if solved.get("result_fingerprint"):
+            try:
+                current = result_fingerprint(document, dwsim_version=solved["dwsim_version"],
+                                             mcp_sha256=solved["mcp_sha256"]) == solved["result_fingerprint"]
+            except (DraftError, KeyError, TypeError, ValueError):
+                current = False
+        elif solved.get("process_fingerprint"):
             # Layout (positions, orientation, routes) never decides staleness; process meaning does.
             try:
                 process = process_view(expected(document))
@@ -861,6 +902,7 @@ def result_findings(document: dict[str, Any], solved: dict[str, Any] | None,
     findings: list[dict[str, Any]] = []
     tags = {item["tag"]: item for item in document["objects"].values()}
     if solved is not None:
+        findings.extend(solved.get("culture_findings") or [])
         for tag, result in sorted((solved.get("streams") or {}).items()):
             item = tags.get(tag)
             flow = result.get("mass_flow_kg_s")
@@ -889,7 +931,8 @@ def registry_projection() -> dict[str, Any]:
         "quantity_units": {kind: {"si": si, "display": list(display)} for kind, (si, display) in QUANTITY_UNITS.items()},
         "stream_specs": [{"key": key, "label": label, "kind": kind} for key, (kind, _arg, label) in STREAM_SPECS.items()],
         "units": [
-            {"type": spec.type, "label": spec.label, "inlets": list(spec.inlets), "outlets": list(spec.outlets),
+            {"type": spec.type, "label": spec.label, "owner": spec.owner, "culture_rule": spec.culture_rule,
+             "inlets": list(spec.inlets), "outlets": list(spec.outlets),
              "energy_inlets": list(spec.energy_inlets), "energy_outlets": list(spec.energy_outlets),
              "energy_spec_modes": [], "required_inlets": spec.required_inlets, "modes": list(spec.modes),
              "params": [{"key": item.key, "label": item.label, "kind": item.kind, "modes": list(item.modes),
@@ -1232,6 +1275,12 @@ def execute(workspace_id: str, draft_id: str, revision: str, action: str) -> dic
                 mcp_sha256=mcp_sha256, label=f"jarvis-draft-{draft_id[:8]}-{revision}",
                 keep_case=runs_dir(directory) / run_id / "solved.dwxmz" if action == "run" else None)
         run.update(outcome)
+        if action == "run" and outcome.get("status") == "completed":
+            culture_results, culture_findings = culture_engine.propagate(record["document"], outcome.get("streams", {}))
+            run["culture"] = culture_results
+            run["culture_findings"] = culture_findings
+            run["result_fingerprint"] = draft_compiler.result_fingerprint(
+                record["document"], dwsim_version=dwsim_version, mcp_sha256=mcp_sha256)
     except draft_compiler.MaterializationError as exc:
         run.update(status=exc.code, error=str(exc), error_detail=exc.detail)
     except Exception as exc:  # noqa: BLE001 - DWSIM process failures become a recorded, truthful attempt

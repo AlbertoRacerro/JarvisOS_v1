@@ -29,7 +29,7 @@ PROPERTY_PACKAGES: tuple[str, ...] = (
     "Steam Tables (IAPWS-IF97)",
 )
 
-QuantityKind = Literal["temperature", "pressure", "pressure_difference", "mass_flow", "percent", "power", "flow_ratio", "dimensionless", "length", "volume", "area", "heat_transfer_coefficient", "molar_flow", "specific_heat", "volume_flow"]
+QuantityKind = Literal["temperature", "pressure", "pressure_difference", "mass_flow", "percent", "power", "flow_ratio", "dimensionless", "length", "volume", "area", "heat_transfer_coefficient", "molar_flow", "specific_heat", "volume_flow", "mass_concentration", "molar_concentration", "salinity", "ph"]
 
 # SI storage unit and the display units offered by inspectors, per quantity kind.
 QUANTITY_UNITS: dict[str, tuple[str, tuple[str, ...]]] = {
@@ -48,6 +48,10 @@ QUANTITY_UNITS: dict[str, tuple[str, tuple[str, ...]]] = {
     "molar_flow": ("mol/s", ("mol/s", "kmol/h")),
     "specific_heat": ("J/kg.K", ("J/kg.K",)),
     "volume_flow": ("m3/s", ("m3/s",)),
+    "mass_concentration": ("kg/m3", ("kg/m3", "g/L", "mg/L")),
+    "molar_concentration": ("mol/m3", ("mol/m3", "mmol/L")),
+    "salinity": ("g/kg", ("g/kg",)),
+    "ph": ("pH", ("pH",)),
 }
 
 
@@ -77,6 +81,8 @@ class UnitSpec:
     energy_outlets: tuple[str, ...] = ()
     modes: dict[str, str] = field(default_factory=dict)
     params: tuple[ParamSpec, ...] = ()
+    owner: str = "dwsim"
+    culture_rule: str = "pass_through"
 
     @property
     def default_mode(self) -> str | None:
@@ -148,15 +154,15 @@ UNIT_REGISTRY: dict[str, UnitSpec] = {
     ),
     "Mixer": UnitSpec(
         type="Mixer", label="Mixer", dwsim_type="Mixer", native_types=("Mixer", "NodeIn"),
-        inlets=("inlet 1", "inlet 2", "inlet 3"), outlets=("outlet",), required_inlets=2,
+        inlets=("inlet 1", "inlet 2", "inlet 3"), outlets=("outlet",), required_inlets=2, culture_rule="mixer",
     ),
     "Flash": UnitSpec(
         type="Flash", label="Flash vessel", dwsim_type="Vessel", native_types=("Vessel",),
-        inlets=("feed",), outlets=("vapor", "liquid"), required_inlets=1,
+        inlets=("feed",), outlets=("vapor", "liquid"), required_inlets=1, culture_rule="refuse",
     ),
     "Splitter": UnitSpec(
         type="Splitter", label="Splitter", dwsim_type="Splitter", native_types=("Splitter", "NodeOut"),
-        inlets=("inlet",), outlets=("outlet 1", "outlet 2", "outlet 3"), required_inlets=1,
+        inlets=("inlet",), outlets=("outlet 1", "outlet 2", "outlet 3"), required_inlets=1, culture_rule="splitter",
         modes={"split_ratios": "SplitRatios", "mass_flow_spec": "StreamMassFlowSpec",
                "mole_flow_spec": "StreamMoleFlowSpec", "volumetric_flow_spec": "StreamVolumetricFlowSpec"},
         params=(ParamSpec("split_ratio_1", "Outlet 1 split ratio", "flow_ratio", "SR1", ("split_ratios",), default=0.5, minimum_si=0.0, maximum_si=1.0),
@@ -180,11 +186,11 @@ UNIT_REGISTRY: dict[str, UnitSpec] = {
     ),
     "Recycle": UnitSpec(
         type="Recycle", label="Recycle", dwsim_type="Recycle", native_types=("Recycle",),
-        inlets=("inlet",), outlets=("outlet",), required_inlets=1,
+        inlets=("inlet",), outlets=("outlet",), required_inlets=1, culture_rule="refuse",
     ),
     "PFR": UnitSpec(
         type="PFR", label="Plug flow reactor", dwsim_type="PFR", native_types=("PFR", "Reactor_PFR"),
-        inlets=("inlet",), outlets=("outlet",), required_inlets=1, energy_inlets=("energy feed",),
+        inlets=("inlet",), outlets=("outlet",), required_inlets=1, energy_inlets=("energy feed",), culture_rule="refuse",
         modes={"adiabatic": "Adiabatic", "isothermic": "Isothermic", "outlet_temperature": "OutletTemperature",
                "nonisothermal_nonadiabatic": "NonIsothermalNonAdiabatic", "heat_exchange": "HeatExchange"},
         params=(ParamSpec("volume", "Volume", "volume", "Volume", tuple(("adiabatic", "isothermic", "outlet_temperature", "nonisothermal_nonadiabatic", "heat_exchange")), minimum_si=0.0),
@@ -199,7 +205,7 @@ UNIT_REGISTRY: dict[str, UnitSpec] = {
     "DistillationColumn": UnitSpec(
         type="DistillationColumn", label="Distillation column", dwsim_type="DistillationColumn",
         native_types=("DistillationColumn",), inlets=("feed",), outlets=("distillate", "bottoms"),
-        required_inlets=1, energy_inlets=("reboiler duty",), energy_outlets=("condenser duty",),
+        required_inlets=1, energy_inlets=("reboiler duty",), energy_outlets=("condenser duty",), culture_rule="refuse",
         params=(ParamSpec("number_of_stages", "Number of stages", "dimensionless", "NumberOfStages", ("column",), default=15, minimum_si=3, maximum_si=200),
                 ParamSpec("feed_stage", "Feed stage", "dimensionless", "__FeedStage", ("column",), default=7, minimum_si=0, maximum_si=199),
                 ParamSpec("top_pressure", "Top pressure", "pressure", "__TopPressure", ("column",), default=101325.0, minimum_si=1),
@@ -346,6 +352,12 @@ class SetUnitParams(_Op):
     reactions: list[str] | None = None
 
 
+class SetStreamCulture(_Op):
+    op: Literal["set_stream_culture"]
+    stream: str = Field(pattern=ID_PATTERN)
+    culture: dict[str, DraftQuantity] | None
+
+
 class KineticReaction(BaseModel):
     model_config = {"extra": "forbid"}
     name: str = Field(min_length=1, max_length=80)
@@ -391,7 +403,7 @@ class SetThermo(_Op):
 
 
 DraftOp = Annotated[
-    AddUnit | AddStream | Delete | Move | Rename | Connect | Disconnect | SetRoute | SetOrientation | SetStreamSpec | SetUnitParams | SetReactions | SetThermo,
+    AddUnit | AddStream | Delete | Move | Rename | Connect | Disconnect | SetRoute | SetOrientation | SetStreamSpec | SetStreamCulture | SetUnitParams | SetReactions | SetThermo,
     Field(discriminator="op"),
 ]
 

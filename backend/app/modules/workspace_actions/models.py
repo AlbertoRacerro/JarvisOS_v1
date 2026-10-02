@@ -65,7 +65,7 @@ class SetValue(BaseModel):
     op: Literal["set_value"]
     target: Tag
     property: str = Field(min_length=1, max_length=64)
-    value: Quantity | str | dict[str, float]
+    value: Quantity | str | dict[str, float] | None
 
 
 class AddUnit(BaseModel):
