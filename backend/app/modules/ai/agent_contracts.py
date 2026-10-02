@@ -243,7 +243,6 @@ class InferenceEnvelope(_Deadline):
     route_class: RouteClass | None = None
     model_candidate: str | None = Field(default=None, min_length=1, max_length=256)
     max_output_tokens: int | None = Field(default=None, ge=1)
-    response_schema: dict[str, Any] | None = None
     flow_id: ContractId | None = None
     context_bundle_id: ContractId | None = None
     context_bundle_digest: ContentDigest | None = None
@@ -266,6 +265,7 @@ def run_ai_task_kwargs(
     envelope: InferenceEnvelope,
     *,
     context_blocks: list[dict[str, object]] | None = None,
+    structured_output_schema: dict[str, Any] | None = None,
 ) -> dict[str, object]:
     """The only mapping of an envelope into Jarvis execution: ``run_ai_task(**kwargs)``.
 
@@ -285,7 +285,7 @@ def run_ai_task_kwargs(
         "max_output_tokens": envelope.max_output_tokens,
         "workspace_id": envelope.workspace_id,
         "existing_flow_id": envelope.flow_id,
-        "structured_output_schema": envelope.response_schema,
+        "structured_output_schema": structured_output_schema,
     }
 
 

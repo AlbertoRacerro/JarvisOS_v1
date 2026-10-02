@@ -20,8 +20,8 @@ SCHEMA_MODEL_INPUT_CONTRACT_MIGRATION_ID = "0012_model_input_contract"
 SCHEMA_MODEL_INPUT_CONTRACT_MIGRATION_NAME = "Model-version input contracts and scenario DOF metadata"
 SCHEMA_FRESHNESS_INVALIDATION_MIGRATION_ID = "0013_freshness_invalidation"
 SCHEMA_FRESHNESS_INVALIDATION_MIGRATION_NAME = "Parameter replacement and freshness invalidation overlay"
-CURRENT_SCHEMA_MIGRATION_ID = "0022_relay_safe_workspace"
-CURRENT_SCHEMA_MIGRATION_NAME = "Relay safe workspace, context releases and Sidecar relay runs"
+CURRENT_SCHEMA_MIGRATION_ID = "0023_workspace_actions"
+CURRENT_SCHEMA_MIGRATION_NAME = "Governed workspace action outcomes"
 
 SCHEMA_MIGRATION_RECORDS = [
     {

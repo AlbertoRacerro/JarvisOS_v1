@@ -1,5 +1,5 @@
 WORKSPACE_ACTIONS_MIGRATION_RECORD = {
-    "migration_id": "0166_workspace_actions",
+    "migration_id": "0023_workspace_actions",
     "name": "Governed workspace action outcomes",
     "checksum": None,
 }

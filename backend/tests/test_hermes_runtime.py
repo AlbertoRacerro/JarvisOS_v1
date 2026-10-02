@@ -179,7 +179,7 @@ def test_text_tool_proposal_requires_the_registered_broker() -> None:
                               tools)["content"] is not None
     envelope = infer_envelope(_frame() | {"tools": tools})
     assert "mcp__jarvis__jarvis_context_preview" in envelope.prompt
-    assert envelope.response_schema is not None
+    assert "response_schema" not in InferenceEnvelope.model_fields
     assert envelope.prompt.endswith(RELAY_TOOL_PROTOCOL)
     assert RELAY_TOOL_PROTOCOL not in infer_envelope(_frame()).prompt
     with pytest.raises(ValueError):
@@ -206,8 +206,8 @@ def test_per_turn_tool_filter_and_schema_only_admit_surface_tools() -> None:
                                           "allowed_tools": [general["function"]["name"],
                                                             process["function"]["name"]]})
     assert 'jarvis_bluecad_act' not in envelope.prompt
-    assert envelope.response_schema is not None
-    branches = envelope.response_schema["oneOf"][1]["properties"]["tool_calls"]["items"]["anyOf"]
+    schema = hermes_supervisor_module.tool_response_schema([general, process])
+    branches = schema["oneOf"][1]["properties"]["tool_calls"]["items"]["anyOf"]
     assert [branch["properties"]["name"]["const"] for branch in branches] == [
         general["function"]["name"], process["function"]["name"]]
     process_arguments = branches[1]["properties"]["arguments"]
@@ -303,12 +303,22 @@ def test_governed_inference_maps_result_and_cancellation() -> None:
 
 def test_governed_inference_returns_filtered_admission_for_worker_promotion() -> None:
     tool = {"function": {"name": "mcp__jarvis__jarvis_bluecad_act"}}
-    envelope = infer_envelope(_frame() | {"tools": [tool], "allowed_tools": [tool["function"]["name"]]})
+    frame = _frame() | {"tools": [tool], "allowed_tools": [tool["function"]["name"]]}
+    envelope = infer_envelope(frame)
+    schema = hermes_supervisor_module.tool_response_schema([tool])
+    calls: list[dict[str, object]] = []
+
+    def fake_runner(**kwargs: object) -> Any:
+        calls.append(kwargs)
+        return SimpleNamespace(status="success", response=SimpleNamespace(text='{"answer":"ok"}'))
+
     outcome = run_governed_inference(
         envelope,
-        runner=lambda **_kwargs: SimpleNamespace(status="success", response=SimpleNamespace(text='{"answer":"ok"}')),
+        runner=fake_runner,
+        structured_output_schema=schema,
     )
     assert outcome["admitted_tools"] == [tool["function"]["name"]]
+    assert calls[0]["structured_output_schema"] == schema
 
 
 def test_relay_defaults_to_explicit_llamacpp_and_accepts_only_explicit_local_fallback(
