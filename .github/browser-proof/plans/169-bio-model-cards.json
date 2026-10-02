@@ -6,6 +6,7 @@
   "forbidMutatingRequests": false,
   "steps": [
     { "op": "navigate", "name": "169:process-stage", "route": "/design/process" },
+    { "op": "click", "name": "169:create-process-draft", "locator": { "kind": "role", "role": "button", "name": "Create process draft", "exact": true } },
     { "op": "click", "name": "169:open-biology-library", "locator": { "kind": "role", "role": "button", "name": "Biology models…", "exact": true } },
     { "op": "assert-visible", "name": "169:library-panel", "locator": { "kind": "testid", "testid": "biology-model-library" } },
     { "op": "assert-visible", "name": "169:haldane-form", "locator": { "kind": "text", "text": "light.haldane", "exact": true } },
