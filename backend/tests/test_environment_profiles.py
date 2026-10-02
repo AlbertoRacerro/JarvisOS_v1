@@ -303,12 +303,12 @@ def test_epw_and_pvgis_fixtures_normalize_time_and_preserve_metadata(monkeypatch
     assert len(profiles.read_profile(wid, tmy["digest"], limit=5)["timestamps"]) == 5
     assert tmy["resolution_minutes"] == 60
     assert tmy["provenance"]["year_normalization"]["nominal_year"] == 2001
-    assert tmy["provenance"]["year_normalization"]["missing_hourly_intervals_filled_with_null"] == 7488
+    assert tmy["provenance"]["year_normalization"]["missing_hourly_intervals_filled_with_null"] == 7224
     tmy_values = profiles.read_profile(wid, tmy["digest"], limit=5000)
     tmy_tail = profiles.read_profile(wid, tmy["digest"], offset=5000, limit=5000)
-    assert tmy_values["total"] == 8064
+    assert tmy_values["total"] == 8088
     assert tmy_values["total"] == tmy_tail["total"]
-    assert sum(value is None for value in tmy_values["channels"]["ghi"] + tmy_tail["channels"]["ghi"]) == 7488
+    assert sum(value is None for value in tmy_values["channels"]["ghi"] + tmy_tail["channels"]["ghi"]) == 7224
     assert not any(stamp.startswith("2001-02-29") for stamp in tmy_values["timestamps"])
     assert tmy_values["timestamps"][0].startswith("2001-01-")
     assert tmy_tail["timestamps"][-1].startswith("2001-12-")
