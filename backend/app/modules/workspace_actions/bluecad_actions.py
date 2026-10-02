@@ -170,19 +170,19 @@ def apply_bluecad_request(
     summaries = []
     for action in request.actions:
         if action.op == "duplicate_part":
-            line = next((item for item in lines if item.label.startswith(action.part + "_")
-                         and " — new " in item.label), None)
-            new_part = line.label.split(" — new ", 1)[0] if line else "child part"
-            description = f"Duplicate {action.part} {action.placement} it (new {new_part}"
+            part_kind = _part(spec, action.part)["kind"]
+            description = f"Duplicate {part_kind} {action.placement} itself (new {part_kind} part"
             if action.gap_mm is not None:
                 description += f", {action.gap_mm:g} mm gap"
             summaries.append(description + ")")
         elif action.op == "set_part_param":
-            summaries.append(f"Set {action.part} {action.param} to {action.value:g} {action.unit}")
+            part_kind = _part(spec, action.part)["kind"]
+            summaries.append(f"Set {part_kind} {action.param} to {action.value:g} {action.unit}")
         elif action.op == "move_part":
-            summaries.append(f"Move {action.part} by ({action.dx:g}, {action.dy:g}, {action.dz:g}) {action.unit}")
+            part_kind = _part(spec, action.part)["kind"]
+            summaries.append(f"Move {part_kind} by ({action.dx:g}, {action.dy:g}, {action.dz:g}) {action.unit}")
         elif action.op == "delete_part":
-            summaries.append(f"Delete {action.part}")
+            summaries.append(f"Delete {_part(spec, action.part)['kind']} part")
     tier: Literal["immediate", "confirm"] = "confirm" if origin.kind == "relay" else "immediate"
     now = utc_now()
     outcome = ActionOutcome(

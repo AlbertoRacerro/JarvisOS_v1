@@ -34,7 +34,9 @@ from app.modules.workspace_actions.models import (
     ActionOrigin,
     ActionOutcome,
     ActionRequest,
+    BluecadAction,
     ChangeLine,
+    ProcessAction,
     Quantity,
     SurfaceBrief,
     SurfaceRef,
@@ -118,7 +120,10 @@ def surface_brief(workspace_id: str, ref: SurfaceRef | None) -> SurfaceBrief:
                 continue
             selected.append(_process_object_brief(item))
         projection = draft.projection(workspace_id, draft_id)
-        summary = f"Process draft {draft_id[:8]} at revision {record['revision']}"
+        summary = f"Process: {_safe_surface_label(document.get('name'), 'Process draft')} · revision {record['revision']}"
+        if selected:
+            selected_object = selected[0]
+            summary += f" · selected: {selected_object['kind'].capitalize()} {selected_object['tag']}"
         if ignored:
             summary += "; unknown or foreign selection ignored"
         selected_names = ", ".join(f"{item['type']} `{item['tag']}`" for item in selected)
@@ -198,7 +203,10 @@ def surface_brief(workspace_id: str, ref: SurfaceRef | None) -> SurfaceBrief:
     part_by_id = {item["part_id"]: item for item in spec["parts"]}
     selected = [_bluecad_part_brief(part_by_id[item]) for item in ref.bluecad_part_ids if item in part_by_id]
     ignored = len(selected) != len(ref.bluecad_part_ids)
-    summary = f"BLUECAD candidate {candidate.id[:8]} with {len(spec['parts'])} part(s)"
+    summary = f"BLUECAD: {_safe_surface_label(candidate.brief_text, 'candidate')} · {len(spec['parts'])} part(s)"
+    if selected:
+        part = selected[0]
+        summary += f" · selected: {part['part_id']} ({part['kind']})"
     if ignored:
         summary += "; unknown or foreign part selection ignored"
     display_parts = [_bluecad_part_brief(item) for item in spec["parts"][:20]]
@@ -307,6 +315,16 @@ def _bluecad_part_brief(part: dict) -> dict:
         },
         "frame": part.get("frame", {"origin": [0.0, 0.0, 0.0], "direction": [1.0, 0.0, 0.0]}),
     }
+
+
+def _safe_surface_label(value: object, fallback: str) -> str:
+    """Keep owner labels readable without echoing paths or credential-like text."""
+    if not isinstance(value, str):
+        return fallback
+    label = re.sub(r"(?:[A-Za-z]:\\|/)[^\s,;]+", "[path]", value)
+    label = re.sub(r"(?i)\b(api[_ -]?key|token|password|secret)\s*[:=]\s*\S+", r"\1=[redacted]", label)
+    label = " ".join(label.split())[:80].strip(" .,:;-")
+    return label or fallback
 
 
 def _compact_objects(objects: list[dict], document: dict) -> str:
@@ -447,6 +465,7 @@ def _action_summary(request: ActionRequest, changes: list[ChangeLine]) -> str:
 
 
 def submit(workspace_id: str, request: ActionRequest, origin: ActionOrigin) -> ActionOutcome:
+    request = request.model_copy(update={"actions": _unique_actions(request)})
     digest = _digest(request.model_dump(mode="json"))
     if origin.kind == "relay" and not origin.relay_run_id:
         return _store(
@@ -511,6 +530,7 @@ def submit(workspace_id: str, request: ActionRequest, origin: ActionOrigin) -> A
                 reason_code="invalid_action",
             )
         return _store(outcome, request, origin)
+
     found = _find_draft(workspace_id, revision=request.base_revision, draft_id=request.draft_id)
     if not found:
         return _store(
@@ -593,6 +613,21 @@ def submit(workspace_id: str, request: ActionRequest, origin: ActionOrigin) -> A
         except draft.DraftError as exc:
             result.state, result.reason_code, result.reason = "stale", exc.code, str(exc)
     return _store(result, request, origin)
+
+
+def _unique_actions(request: ActionRequest) -> list[ProcessAction | BluecadAction]:
+    """Drop repeated idempotent assignments, preserving repeated additive actions."""
+    actions: list[ProcessAction | BluecadAction] = []
+    seen: set[str] = set()
+    for action in request.actions:
+        if action.op not in {"set_value", "set_part_param"}:
+            actions.append(action)
+            continue
+        encoded = _canonical(action.model_dump(mode="json", by_alias=False))
+        if encoded not in seen:
+            seen.add(encoded)
+            actions.append(action)
+    return actions
 
 
 def _target(document: dict, tag: str, kind: str | None = None) -> dict:

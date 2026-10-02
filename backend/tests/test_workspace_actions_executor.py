@@ -48,13 +48,16 @@ def test_process_propose_apply_undo_and_refuse() -> None:
                 "base_revision": state["revision"],
                 "draft_id": state["draft_id"],
                 "actions": [
-                    {"op": "set_value", "target": "S1", "property": "pressure", "value": {"value": 2, "unit": "bar"}}
+                    {"op": "set_value", "target": "S1", "property": "pressure", "value": {"value": 2, "unit": "bar"}},
+                    {"op": "set_value", "target": "S1", "property": "pressure", "value": {"value": 2, "unit": "bar"}},
                 ],
             }
         )
         proposal = submit(workspace_id, request, origin)
         assert proposal.state == "proposed", proposal.reason
         assert proposal.summary == "Set S1 pressure to 2 bar"
+        assert len(proposal.changes) == 1
+        assert len(proposal.request["actions"]) == 1
         from app.modules.workspace_actions.service import apply, undo
 
         applied = apply(workspace_id, proposal.action_id)
@@ -103,6 +106,9 @@ def test_brief_and_http_actions_routes() -> None:
         payload = brief.json()
         assert payload["surface"] == "process"
         assert payload["selected"][0]["id"] == "s1"
+        assert payload["summary"].startswith("Process: Action test · revision ")
+        assert "selected: Stream S1" in payload["summary"]
+        assert state["draft_id"] not in payload["summary"]
         assert "Arrhenius" in payload["text"]
         assert '"target":"S1"' in payload["text"]
         assert '"target":"P1"' in payload["text"]
@@ -423,9 +429,15 @@ def test_bluecad_duplicate_builds_valid_child_candidate() -> None:
         from app.modules.workspace_actions.models import SurfaceRef
         from app.modules.workspace_actions.service import surface_brief
 
-        brief = surface_brief(workspace_id, SurfaceRef(route_id="design-bluecad", candidate_id=base["id"]))
+        brief = surface_brief(
+            workspace_id,
+            SurfaceRef(route_id="design-bluecad", candidate_id=base["id"], bluecad_part_ids=["template_tube"]),
+        )
         assert '"part":"template_tube"' in brief.text
         assert '"part":"tube"' not in brief.text
+        assert brief.summary.startswith("BLUECAD: Template tube:")
+        assert "selected: template_tube (tube_run)" in brief.summary
+        assert base["id"] not in brief.summary
         request = ActionRequest.model_validate(
             {
                 "surface": "bluecad",
@@ -440,7 +452,9 @@ def test_bluecad_duplicate_builds_valid_child_candidate() -> None:
             ActionOrigin(kind="local", thread_id="thread-bluecad", interaction_id="interaction-bluecad"),
         )
         assert result.state == "applied", result.reason
-        assert result.summary == "Duplicate template_tube beside it (new template_tube_2, 25 mm gap)"
+        assert result.summary == "Duplicate tube_run beside itself (new tube_run part, 25 mm gap)"
+        assert len(result.changes) == 1
+        assert len(result.request["actions"]) == 1
         assert result.child_candidate_id
         child = get_candidate(workspace_id, result.child_candidate_id)
         assert child is not None and child.status == "valid" and child.origin == "agent_action"
@@ -478,7 +492,7 @@ def test_bluecad_duplicate_builds_valid_child_candidate() -> None:
             ActionOrigin(kind="local", thread_id="thread-length", interaction_id="interaction-length"),
         )
         assert length_result.state == "applied", length_result.reason
-        assert length_result.summary == "Set template_tube length to 2 m"
+        assert length_result.summary == "Set tube_run length to 2 m"
         length_child = get_candidate(workspace_id, length_result.child_candidate_id)
         length_spec = _load_candidate_spec(length_child.spec_artifact_id, workspace_id)
         assert length_spec["parts"][0]["params"]["length"] == 2000
