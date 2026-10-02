@@ -762,7 +762,8 @@ def _record_result(config: dict[str, Any], run_id: str, relay_workspace_id: str,
             ).rowcount == 1
             connection.commit()
     technical_details = None
-    if is_escalation and should_ingest:
+    succeeded = returncode == 0 and exit_code == 0
+    if is_escalation and should_ingest and succeeded:
         context = json.loads(run["action_context_json"]) if run["action_context_json"] else None
         text, technical_details = _ingest_relay_actions(
             text, workspace_id=run["workspace_id"], thread_id=run["thread_id"], run_id=run_id,
@@ -778,7 +779,6 @@ def _record_result(config: dict[str, Any], run_id: str, relay_workspace_id: str,
                 (session_id, utc_now(), relay_workspace_id),
             )
             connection.commit()
-    succeeded = returncode == 0 and exit_code == 0
     _finish(run_id, "completed" if succeeded else "failed",
             reason_code=None if succeeded else "relay_agent_error", exit_code=exit_code,
             stop_reason=result.get("stop_reason"), result_text=text, session_id=session_id,

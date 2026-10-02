@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import math
 from pathlib import Path
+from typing import Literal
 from uuid import uuid4
 
 from app.core.database import open_sqlite_connection
@@ -86,6 +87,8 @@ def _transform(spec: dict, request: ActionRequest) -> tuple[dict, list[ChangeLin
     result = json.loads(canonical_json(spec))
     lines: list[ChangeLine] = []
     for action in request.actions:
+        if action.op not in {"duplicate_part", "set_part_param", "move_part", "delete_part"}:
+            raise ValueError("Process actions cannot execute on the BLUECAD surface.")
         part = _part(result, action.part)
         params = part["params"]
         if action.op == "duplicate_part":
@@ -180,7 +183,7 @@ def apply_bluecad_request(
             summaries.append(f"Move {action.part} by ({action.dx:g}, {action.dy:g}, {action.dz:g}) {action.unit}")
         elif action.op == "delete_part":
             summaries.append(f"Delete {action.part}")
-    tier = "confirm" if origin.kind == "relay" else "immediate"
+    tier: Literal["immediate", "confirm"] = "confirm" if origin.kind == "relay" else "immediate"
     now = utc_now()
     outcome = ActionOutcome(
         action_id=str(uuid4()),

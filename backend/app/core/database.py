@@ -298,6 +298,7 @@ def is_database_initialized() -> bool:
         "brainstorm_promotions",
         "brainstorm_idempotency",
         "workspace_actions",
+        "ai_thread_surface_context",
     }
     with open_sqlite_connection() as connection:
         rows = connection.execute(

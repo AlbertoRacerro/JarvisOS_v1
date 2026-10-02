@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 _STRICT = ConfigDict(extra="forbid", allow_inf_nan=False)
 Tag = Annotated[str, Field(min_length=1, max_length=64)]
@@ -180,6 +180,14 @@ class ActionRequest(BaseModel):
     draft_id: str | None = Field(default=None, max_length=64)  # disambiguates identical revision hashes
     actions: list[ProcessAction | BluecadAction] = Field(min_length=1, max_length=8)
     rationale: str | None = Field(default=None, max_length=600)
+
+    @model_validator(mode="after")
+    def actions_match_surface(self) -> ActionRequest:
+        bluecad_ops = {"duplicate_part", "set_part_param", "move_part", "delete_part"}
+        expected_bluecad = self.surface == "bluecad"
+        if any((action.op in bluecad_ops) != expected_bluecad for action in self.actions):
+            raise ValueError(f"All actions must match the {self.surface} surface.")
+        return self
 
 
 class ActionOrigin(BaseModel):

@@ -4,7 +4,7 @@ import json
 import re
 import sqlite3
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 from uuid import uuid4
 
 from app.core.database import open_sqlite_connection
@@ -27,6 +27,7 @@ from app.modules.ai.thread_models import (
     AIThreadSubmit,
     AIThreadSubmitRead,
     AIThreadSummary,
+    PersistenceState,
 )
 from app.modules.ai.token_flow_service import create_flow_in_transaction
 from app.modules.engineering.operator_service import capability_reads, evaluator_registry
@@ -335,7 +336,7 @@ def _submit_hermes_interaction(
         with lock:
             _ensure_hermes_thread_session(worker, thread_id=thread_id, workspace_id=workspace_id)
             agent_blocks = list(context_blocks or [])
-            grant_text = _install_hermes_retrieval_grant(worker, payload, workspace_id, thread_id)
+            grant_text = _install_hermes_retrieval_grant(worker, payload, workspace_id, thread_id) or ""
             grant_text += _install_surface_grants(worker, workspace_id, thread_id,
                                                   payload.surface_context, surface_brief)
             if grant_text:
@@ -511,7 +512,7 @@ def _install_surface_grants(worker: HermesSupervisor, workspace_id: str, thread_
     prefix = "process" if brief.surface == "process" else "bluecad"
     capability_ids = (f"jarvis.{prefix}_read", f"jarvis.{prefix}_act")
     grant_ids: dict[str, str] = {}
-    constraints = _surface_grant_constraints(surface_ref, brief)
+    constraints: dict[str, str | int | float | bool] = _surface_grant_constraints(surface_ref, brief)
     for capability in capability_ids:
         grant_id = str(uuid4())
         grant_ids[capability] = grant_id
@@ -540,8 +541,8 @@ def _install_surface_grants(worker: HermesSupervisor, workspace_id: str, thread_
     return "\n".join(lines)[:7000]
 
 
-def _surface_grant_constraints(surface_ref: Any, brief: Any) -> dict[str, str | int]:
-    constraints: dict[str, str | int] = {
+def _surface_grant_constraints(surface_ref: Any, brief: Any) -> dict[str, str | int | float | bool]:
+    constraints: dict[str, str | int | float | bool] = {
         "surface": brief.surface, "route_id": brief.route_id,
         "base_revision": brief.base_revision or "",
     }
@@ -651,16 +652,44 @@ def _save_surface_brief(interaction_id: str, brief: Any) -> None:
 def _guard_tool_shaped_output(text: str) -> tuple[str, str | None]:
     from app.modules.agents.hermes.worker_shim import repair_proposal
 
-    stripped = text.strip()
-    shaped = repair_proposal(stripped) is not None
+    grant_value = re.compile(r'(?i)(["\']?grant_id["\']?\s*[:=]\s*["\']?)[^,}\]"\'\s]+')
+    safe_text = grant_value.sub(r"\1[redacted]", text)
+    stripped = safe_text.strip()
+    candidates = [stripped]
+    candidates.extend(match.group(1).strip() for match in re.finditer(
+        r"(?ms)(?:```|~~~)(?:json|jsonc|javascript)?\s*\n?(.*?)\n?\s*(?:```|~~~)", stripped
+    ))
+    shaped = False
+    decoder = json.JSONDecoder()
+    for candidate in candidates:
+        if repair_proposal(candidate) is not None:
+            shaped = True
+            break
+        for position, char in enumerate(candidate):
+            if char != "{":
+                continue
+            try:
+                value, _end = decoder.raw_decode(candidate, position)
+            except ValueError:
+                continue
+            if isinstance(value, dict) and "arguments" in value and "name" in value:
+                shaped = True
+                break
+            if isinstance(value, dict) and isinstance(value.get("tool_calls"), list):
+                shaped = True
+                break
+        if shaped:
+            break
+        if ("<|tool_call>call:" in candidate and "<tool_call|>" in candidate) or re.search(
+            r"<\s*function(?:=|\s)|<\|im_start\|>\s*(?:tool_call|function_call)\b|"
+            r"<start_function_call>|assistant\s+to=|(?:mcp__jarvis__)?jarvis_(?:process|bluecad)_(?:act|read)\s*[({]",
+            candidate,
+            re.IGNORECASE,
+        ):
+            shaped = True
+            break
     if not shaped:
-        try:
-            value = json.loads(stripped)
-            shaped = isinstance(value, dict) and "arguments" in value and "name" in value
-        except ValueError:
-            shaped = "<|tool_call>call:" in stripped and "<tool_call|>" in stripped
-    if not shaped:
-        return text, None
+        return safe_text, None
     return ("I couldn't complete that — Jarvis produced an invalid action request, so nothing was changed.",
             re.sub(r'(?i)(["\']?(?:grant_id|api_key|token|password|secret|authorization)["\']?\s*[:=]\s*["\']?)[^,}\]"\'\s]+',
                    r"\1[redacted]", stripped)[:8000])
@@ -923,7 +952,7 @@ LEFT JOIN ai_thread_surface_context AS surface ON surface.interaction_id = inter
 _TERMINAL_FLOW_STATES = frozenset({"complete", "partial_terminal", "failed_terminal", "cancelled_terminal"})
 # Spec 159: the one table mapping recorded agent tool use to an operator-facing status.
 _TOOL_ACTIVITY = {
-    "jarvis_process_read": "Reading flowsheet…",
+    "jarvis_process_read": "Using process draft…",
     "jarvis_process_act": "Applying change…",
     "jarvis_bluecad_read": "Reading model…",
     "jarvis_bluecad_act": "Preparing proposal…",
@@ -1044,7 +1073,7 @@ def _interaction_from_row(
         assistant_text=row["assistant_text"],
         assistant_text_truncated=bool(row["assistant_text_truncated"]),
         flow_id=str(row["flow_id"]),
-        persistence_state=str(row["persistence_state"]),
+        persistence_state=cast(PersistenceState, str(row["persistence_state"])),
         persistence_error=row["persistence_error"],
         flow_state=str(row["flow_state"]),
         terminal_reason=row["terminal_reason"],

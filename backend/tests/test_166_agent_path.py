@@ -99,6 +99,18 @@ def test_guard_hides_tool_protocol_and_bounds_raw_details() -> None:
     assert _guard_tool_shaped_output("No Monod kinetics are supported.") == ("No Monod kinetics are supported.", None)
 
 
+def test_guard_suppresses_fenced_and_embedded_tool_json_and_redacts_grants() -> None:
+    tool_json = '{"name":"mcp__jarvis__jarvis_process_act","arguments":{"grant_id":"private-grant","actions":[]}}'
+    for text in (f"```json\n{tool_json}\n```", f"Here is the result: {tool_json} done.", f"~~~\n{tool_json}\n~~~"):
+        visible, details = _guard_tool_shaped_output(text)
+        assert visible == "I couldn't complete that — Jarvis produced an invalid action request, so nothing was changed."
+        assert details is not None and "private-grant" not in details
+    visible, details = _guard_tool_shaped_output('The `grant_id` field is used by the protocol, but no call was made.')
+    assert details is None and "grant_id` field" in visible
+    redacted, details = _guard_tool_shaped_output('Debug value: {"grant_id":"private-grant"}')
+    assert details is None and "private-grant" not in redacted and "[redacted]" in redacted
+
+
 def test_dispatch_submits_typed_action_to_workspace_executor(monkeypatch) -> None:
     from app.modules.workspace_actions import service
 
