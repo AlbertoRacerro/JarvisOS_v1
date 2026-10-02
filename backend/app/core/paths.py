@@ -21,6 +21,10 @@ class JarvisPaths:
     def secrets_dir(self) -> Path:
         return self.data_root / "secrets"
 
+    def bio_models_workspace_dir(self, workspace_id: str) -> Path:
+        """Workspace-scoped biological model sets and cards (spec 169)."""
+        return self.workspaces_dir / workspace_id / "bio_models"
+
     @property
     def scaleway_secret_file(self) -> Path:
         return self.secrets_dir / "scaleway-api-key.v1.json"

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import ProcessProposals from "../components/process/ProcessProposals";
 import { publishProcessSurface } from "../app/workspaceActionSurface";
+import BiologyModelLibrary from "../components/process/BiologyModelLibrary";
 import ResultProperties from "../components/process/ResultProperties";
 import { ContextMenu, MenuButton, useContextMenu } from "../components/ui/ContextMenu";
 import type { ContextMenuItem } from "../components/ui/ContextMenu";
@@ -207,6 +208,7 @@ function quantitiesFrom(form: FormState): Record<string, DraftQuantity> | null {
 }
 
 export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspaceId: string }>) {
+  const [biologyOpen, setBiologyOpen] = useState(false);
   const [registry, setRegistry] = useState<DraftRegistry | null>(null);
   const [drafts, setDrafts] = useState<DraftSummary[]>([]);
   const [draft, setDraft] = useState<DraftProjection | null>(null);
@@ -1143,6 +1145,7 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
     <div className="draft-editor">
       <div className="draft-toolbar">
         <span className="draft-revision">revision {draft.seq}</span>
+        <button type="button" onClick={() => setBiologyOpen((open) => !open)}>Biology models…</button>
         <button type="button" className="draft-run-button" disabled={busy !== null || blockers.length > 0} onClick={() => void act("run")}>
           {busy === "run" ? "Running…" : "Run (DWSIM)"}
         </button>
@@ -1161,6 +1164,7 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
           <button type="button" className="draft-history-toggle" onClick={() => void (revisions ? setRevisions(null) : listDraftRevisions(workspaceId, draft.draft_id).then(setRevisions))}>{revisions ? "Hide history" : "History"}</button>
         </details>
       </div>
+      {biologyOpen && <BiologyModelLibrary workspaceId={workspaceId} onClose={() => setBiologyOpen(false)} />}
       {notice && <p className={`draft-notice draft-notice--${notice.tone}`} role="alert">{notice.text}</p>}
       <div className="draft-body">
         <aside className="draft-palette" aria-label="Palette">
