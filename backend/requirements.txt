@@ -9,3 +9,5 @@ CoolProp==8.0.0
 fluids==1.3.1
 ht==1.2.0
 scikit-sundae==1.1.3
+pvlib==0.16.1
+pandas==3.0.6
