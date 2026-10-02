@@ -1,4 +1,5 @@
 import type { Profile } from "./types";
+import { CHANNEL_LABELS, displayUnit } from "./types";
 
 function printable(value: unknown): string {
   if (value === null || value === undefined || value === "") return "—";
@@ -24,9 +25,13 @@ export function Provenance({ profile, onChooseParent }: Props) {
     ["Parser", provenance.parser],
     ["Parser or generator version", provenance.pvlib_version ?? provenance.parser],
     ["Column mapping", provenance.column_mapping],
-    ["Units", profile.channels],
+    ["Units", Object.fromEntries(Object.entries(profile.channels).map(([channel, unit]) => [
+      CHANNEL_LABELS[channel] ?? channel,
+      displayUnit(channel, unit),
+    ]))],
     ["Selected TMY months and years", provenance.selected_month_year_pairs ?? provenance.source_month_year_pairs],
     ["TMY label", profile.label],
+    ["Year normalization", provenance.year_normalization],
     ["Irradiance time offset", provenance.irradiance_time_offset],
     ["Irradiance semantics", provenance.irradiance_semantics],
     ["Operation", provenance.label ?? provenance.summary],
