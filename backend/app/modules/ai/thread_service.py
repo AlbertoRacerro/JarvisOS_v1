@@ -268,7 +268,11 @@ def submit_interaction(
             route_availability=route_availability or [], surface_brief=surface_brief,
         )
 
-    direct_workspace_turn = payload.route_class.startswith("local:") and surface_brief.surface in {"process", "bluecad"}
+    direct_workspace_turn = (
+        isinstance(payload.route_class, str)
+        and payload.route_class.startswith("local:")
+        and surface_brief.surface in {"process", "bluecad"}
+    )
     if direct_workspace_turn:
         context_blocks.append({
             "source": "jarvis:workspace-action-mode",
@@ -751,10 +755,11 @@ def _workspace_change_requested(prompt: str) -> bool:
 
 
 def _finalize_direct_workspace_answer(
-    prompt: str, route_class: str, surface: str, answer: str
+    prompt: str, route_class: str | None, surface: str, answer: str
 ) -> tuple[str, str | None]:
     visible, details = _guard_tool_shaped_output(answer)
-    if route_class.startswith("local:") and surface in {"process", "bluecad"} and _workspace_change_requested(prompt):
+    if (isinstance(route_class, str) and route_class.startswith("local:")
+            and surface in {"process", "bluecad"} and _workspace_change_requested(prompt)):
         visible = "This responder can't change the workspace. Switch to Jarvis agent, or use Escalate."
     return visible, details
 
