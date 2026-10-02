@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import type {
   EditorCommand,
@@ -127,6 +127,7 @@ function readProjectKnowledgeHandoff() {
 }
 
 type ProcessMode = "draft" | "native";
+const EnvironmentPanel = lazy(() => import("./EnvironmentPanel"));
 
 function ProcessModeTabs({ mode, onChange }: { mode: ProcessMode; onChange(next: ProcessMode): void }) {
   return (
@@ -148,6 +149,7 @@ function ProcessModeTabs({ mode, onChange }: { mode: ProcessMode; onChange(next:
 function ProcessStage(props: PrimaryStageProps) {
   const { workspaceId, navigate, onShellRegionsChange } = props;
   const [mode, setMode] = useState<ProcessMode>("draft");
+  const [environmentOpen, setEnvironmentOpen] = useState(false);
   useEffect(() => {
     if (mode === "draft") onShellRegionsChange({});
   }, [mode, onShellRegionsChange]);
@@ -175,8 +177,10 @@ function ProcessStage(props: PrimaryStageProps) {
           </button>
         </nav>
         <details className="process-advanced"><summary>Advanced · Native DWSIM cases</summary>{tabs}</details>
+        <div className="process-environment-toolbar"><button type="button" onClick={() => setEnvironmentOpen(true)}>Environment…</button></div>
       </header>
       {workspaceId ? <ProcessDraftEditor workspaceId={workspaceId} /> : <p>Select a workspace to edit its process draft.</p>}
+      {environmentOpen && workspaceId ? <Suspense fallback={<p role="status">Loading environment profiles…</p>}><EnvironmentPanel workspaceId={workspaceId} onClose={() => setEnvironmentOpen(false)} /></Suspense> : null}
     </section>
   );
 }

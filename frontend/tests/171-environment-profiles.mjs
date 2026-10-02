@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+const stage = await readFile(new URL('../src/stages/ProcessStage.tsx', import.meta.url), 'utf8');
+const panel = await readFile(new URL('../src/stages/EnvironmentPanel.tsx', import.meta.url), 'utf8');
+assert.match(stage, /lazy\(\(\) => import\("\.\/EnvironmentPanel"\)\)/);
+assert.match(stage, /Environment…/);
+assert.match(panel, /await import\("uplot"\)/);
+assert.match(panel, /aria-label="Environment profile values" tabIndex=\{0\}/);
+assert.match(panel, /onBlur=/);
+assert.match(panel, /derive-par/);
+assert.match(panel, /\/uploads\/\$\{body\.upload_id\}\/preview/);
+console.log('171 Environment panel, lazy chart, mapping wizard, and keyboard table contracts: PASS');
