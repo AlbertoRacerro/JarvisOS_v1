@@ -22,7 +22,7 @@ Code survey and measurements: `out/wpbr/a171.report.md`.
 
 **A profile is an immutable, content-addressed artifact. Its digest is its identity, and an edit makes a new profile linked to its parent.** Site is a small revisioned workspace document. All computation is local: files are parsed from validated staged local paths, and generators use pvlib's packaged data.
 
-- New backend dependencies: `pvlib==0.16.1` and the `pandas` version it resolves, pinned in `backend/requirements.txt`. The BSD-3 licence and package sizes are recorded in the dependency notes. New frontend dependency: `uplot` (MIT), in a lazily loaded chunk so unrelated routes don't pay for it.
+- New backend dependencies: `pvlib==0.16.1` and an exact `pandas` pin proven on both CI's Python 3.11 and the host's 3.12, in `backend/requirements.txt`. The backend CI install must stay within its existing job timeout. Licences (pvlib BSD-3, pandas BSD-3, uPlot MIT) are added to the record's verified software-licence list (§10.2). New frontend dependency: `uplot` (MIT), in a lazily loaded chunk so unrelated routes don't pay for it.
 - Upload uses a **raw request body** (`application/octet-stream`, filename as a query parameter). This avoids adding a multipart dependency.
 
 Alternatives rejected:
@@ -37,20 +37,33 @@ Alternatives rejected:
    - Fields: name; latitude [−90, 90]°; longitude [−180, 180]°; elevation (m); IANA timezone (validated against tzdata); water-body label.
    - Generators use the current site. Every generated profile embeds the site snapshot it used.
 2. **Profile artifact.**
-   - **Time base.** Timestamps are stored in UTC at a fixed resolution (allowed: 5, 10, 15, 30 or 60 min, and 1 day). The display timezone comes from the site. Gaps are explicit `null`, never silently interpolated.
-   - **Channels.** Each channel is optional and has a fixed SI storage unit and allowed display units: GHI, DNI and DHI (W m⁻²); PAR (µmol m⁻² s⁻¹); air temperature and sea temperature (K, displayed °C); wind speed (m s⁻¹); cloud cover (fraction 0–1); wave height (m); wave period (s). Values outside physical bounds are refused at creation, naming the channel and timestamp (negative irradiance, temperature outside 200–350 K, cloud outside [0, 1]).
-   - **Content.** Canonical JSON with a fixed key order and float formatting. The digest is `sha256:<hex>` of those bytes.
+   - **Time base.** A strictly increasing UTC grid of exact elapsed steps (allowed: 5, 10, 15, 30 or 60 min). Daily resolution means UTC 86 400 s bins.
+     - Each value is stamped at the **end** of its interval. Irradiance and PAR values are interval averages; temperatures, wind, cloud and waves are point values at the stamp.
+     - The display timezone comes from the site, never from the host machine.
+     - Gaps are explicit `null`, never silently interpolated.
+     - Limits: at most 2 years and 250 000 timestamps per profile.
+   - **Channels.** Each channel is optional and has a fixed SI storage unit and allowed display units: GHI, DNI and DHI (W m⁻²); PAR (µmol m⁻² s⁻¹); air temperature and sea temperature (K, displayed °C); wind speed (m s⁻¹); cloud cover (fraction 0–1); wave height (m); wave period (s). All values must be finite or `null`. Irradiance, PAR, wind, wave height and wave period must be ≥ 0; cloud cover in [0, 1]; temperatures in [200, 350] K. Violations are refused at creation, naming the channel and timestamp.
+   - **Content.** Canonical JSON (RFC 8785/JCS): columnar arrays, ISO-8601 `Z` timestamps, no NaN or Infinity, negative zero normalized to 0. The digest is `sha256:<hex>` of those bytes, hashed while streaming to disk.
+   - **Identity.** `profile_id` is the content digest; scenarios (172) reference `(profile_id, digest)` with both equal. The `artifacts` row id is internal bookkeeping only.
+   - **Reads.** Value reads are paged by time range, so the chart and table never load a whole large profile at once.
    - **Storage.** Stored under a `core/paths.py`-owned workspace location. The file name is the digest, and the file is never overwritten. It is registered in `artifacts` with `sha256` and kind `environment_profile`. A read re-verifies the digest and refuses on mismatch.
    - **Metadata.** Name, channels with units, resolution, start/end, `parent_digest` (for edits), and provenance:
-     - import: original filename, original file SHA-256, detected format, column mapping, unit choices and parser (pvlib function and version, or the Jarvis CSV parser version);
+     - import: original filename, original file SHA-256, detected format, column mapping, unit choices and parser (pvlib function and version, or the Jarvis CSV parser version). For PVGIS-TMY, also the selected month/year pairs and the irradiance time offset; the profile is labelled "representative year (TMY)", never presented as one contiguous observed year;
      - generator: kind, parameters, site snapshot, pvlib version.
 3. **Import (bounded, local only).**
-   - Upload: a raw body of at most 20 MB, with filename extension `.csv` or `.epw`. The file is staged under the workspace data root with a server-generated name. Path components in the client filename are ignored.
-   - Detection: EPW goes through `pvlib.iotools.read_epw`. PVGIS-TMY CSV goes through `read_pvgis_tmy`. Any other CSV goes through a Jarvis parser with a **preview and mapping step**: the operator sees the detected columns and the first rows, maps a timestamp column (with its timezone or UTC offset) and value columns to channels, and picks units. Only then is the profile created.
+   - Upload: a raw body with a hard cap of **20 MiB** and filename extension `.csv` or `.epw`.
+     - A declared `Content-Length` over the cap is refused early.
+     - The body is consumed with `request.stream()` in counted chunks, written to a server-named staging file under the workspace data root, and aborted with the partial file deleted as soon as the cap is exceeded. `request.body()` is never used.
+     - Path components in the client filename are ignored.
+   - Detection: EPW goes through `pvlib.iotools.read_epw`, with these normalizations:
+     - EPW hour h (1–24) is the interval ending at h:00 local standard time, and hour 24 rolls to the next date.
+     - EPW GHI, DNI and DHI (Wh m⁻² over the hour) become the numerically equal hourly-average W m⁻².
+     - EPW missing sentinels (e.g. 9999) become `null`.
+     - Only `read_*` functions are used, never pvlib `get_*` fetch APIs. PVGIS-TMY CSV goes through `read_pvgis_tmy`. Any other CSV goes through a Jarvis parser with a **preview and mapping step**: the operator sees the detected columns and the first rows, maps a timestamp column and value columns to channels, picks units (including Wh m⁻² per interval for irradiance energy, converted to interval-average W m⁻²), and declares whether stamps are interval-start or interval-end. Timestamps need an explicit offset or an IANA timezone. Ambiguous or nonexistent local times at DST transitions are refused unless the mapping disambiguates them. Only then is the profile created.
    - Parsers receive only the validated staged path, never a URL. Parse failures are reported with line or column. Staged files are deleted after creation or after 24 h.
 4. **Generators.**
    - `clear_sky`: pvlib `Location(site).get_clearsky(times, model="ineichen")` with the packaged Linke turbidity, multiplied by a clearness factor in [0, 1]. Solar position uses `spa_python`. It outputs GHI, DNI and DHI.
-   - `synthetic_day`: the 107 forms. PAR is half-sine with peak, sunrise and photoperiod; temperature is mean + amplitude·sin. It is bit-identical to `pbr_evaluator`'s prescribed inputs at the same parameters (107 continuity).
+   - `synthetic_day`: the 107 forms, exactly as `pbr_evaluator` computes them. With sunrise = 12 − photoperiod/2 (local solar hours), PAR = peak·sin(π(h − sunrise)/photoperiod) for sunrise ≤ h ≤ sunrise + photoperiod and 0 otherwise; temperature = mean + amplitude·sin(2π(h − 9)/24). Samples are bit-identical to the evaluator at matching times (107 continuity).
    - `derived_par`: an explicit operation that creates a PAR channel from GHI with a visible, editable conversion factor (default 2.06 µmol J⁻¹ ≈ 0.45 PAR fraction × 4.57 µmol J⁻¹). It is labelled "screening conversion". Nothing is converted implicitly.
 5. **Edit.** Table edits (cell values, or scaling or offsetting a channel over a range) create a **new** profile with `parent_digest` and an edit summary in its provenance. The original is unchanged.
 6. **Operator UI.**
@@ -86,7 +99,11 @@ Alternatives rejected:
   - EPW and PVGIS-TMY import on checked-in small fixtures, and a CSV mapping round-trip with units and timezone;
   - the upload size and extension limits and path-component stripping;
   - parse error location;
-  - `clear_sky` against a reference: the NREL SPA test case (Reda & Andreas 2004: 2003-10-17 12:30:30 −7 h, 39.742476°N, 105.1786°W, 1830.14 m) gives zenith 50.11162° and azimuth 194.34024° within 1e-4°; GHI is 0 at night and the clearness factor scales it;
+  - solar position against the NREL SPA test case (Reda & Andreas 2004), via `spa_python`. Inputs: `2003-10-17T12:30:30-07:00`, 39.742476°, −105.1786°, 1830.14 m, pressure 82 000 Pa, 11 °C, delta_t 67 s. Expected: **apparent** zenith 50.11162° and azimuth 194.34024° within 1e-4°;
+  - `clear_sky` separately: GHI, DNI and DHI are 0 at night, positive at local noon, and scale with the clearness factor;
+  - EPW hour-ending and hour-24 rollover, Wh m⁻² conversion and sentinel handling, PVGIS metadata preservation, and DST ambiguity refusal;
+  - canonical bytes: NaN refusal, negative zero, and the size and point limits;
+  - streaming upload abort with partial-file cleanup when a missing or false `Content-Length` hides an oversized body;
   - `synthetic_day` bit-identity with 107;
   - `derived_par` labelling;
   - edits create linked profiles;
