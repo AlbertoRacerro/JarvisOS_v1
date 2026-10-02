@@ -28,6 +28,7 @@ for (const form of forms) {
 for (const tag of ["mfrac", "msub", "msup", "mn"]) if (!tagsOf(byId["light.haldane"].equation).has(tag)) fail(`Haldane equation lacks ${tag}`);
 if (byId["light.eilers_peeters_steady"].parameters.find((item) => item.meaning === "curve shape")?.key !== "beta") fail("Eilers–Peeters does not expose canonical beta key");
 if (byId["nutrient.monod"].parameters[0]?.key !== "K_j" || byId["nutrient.monod"].inputs[0]?.key !== "S_j") fail("nutrient parameter/input classification is incorrect");
+if (!panel.includes("activeForm.parameters.map") || panel.includes("activeForm.symbols.map")) fail("reviewed form table must show parameters and omit operating inputs");
 if (!editor.includes("Biology models…")) fail("Biology model library must open from the Process draft toolbar");
 if (!panel.includes("allowedMathTags") || /dangerouslySetInnerHTML|innerHTML\s*=/.test(panel)) fail("MathML must use a typed allowlist without raw HTML insertion");
 if (!api.includes("locator_confirmation") || !panel.includes("sourceState") || !panel.includes("entryState")) fail("provenance action must show source and entry states and submit locator confirmation");

@@ -98,7 +98,7 @@ export default function BiologyModelLibrary({ workspaceId, onClose }: { workspac
     <div className="bio-library__layout">
       <section className="bio-library__forms" aria-label="Biological forms"><h3>Reviewed forms</h3><label>Form<select aria-label="Biological form" value={selectedForm} onChange={(event) => setSelectedForm(event.target.value)}>{forms.map((form) => <option key={form.id} value={form.id}>{humanName(form.id)}</option>)}</select></label>
         {activeForm && <article className="bio-form-card"><h4>{humanName(activeForm.id)} <small>v{activeForm.version}</small></h4><div className="bio-equation" aria-label={`Equation: ${activeForm.equation_text}`}><MathTree node={activeForm.equation} /></div>
-          <table><caption>Symbols and valid ranges</caption><thead><tr><th>Symbol</th><th>Meaning</th><th>Unit · range</th></tr></thead><tbody>{activeForm.symbols.map((symbol) => <tr key={symbol.symbol}><th>{symbol.symbol}</th><td>{symbol.meaning}</td><td>{symbol.unit === "dimensionless" ? "dimensionless" : symbol.unit} · {symbol.valid_range}</td></tr>)}</tbody></table>
+          <table><caption>Parameters and valid ranges</caption><thead><tr><th>Parameter</th><th>Meaning</th><th>Unit · range</th></tr></thead><tbody>{activeForm.parameters.map((symbol) => <tr key={symbol.symbol}><th>{symbol.symbol}</th><td>{symbol.meaning}</td><td>{symbol.unit === "dimensionless" ? "dimensionless" : symbol.unit} · {symbol.valid_range}</td></tr>)}</tbody></table>
           <p>{activeForm.applies_to}</p><p className="bio-library__metadata">Version {activeForm.version}{activeForm.citations.length ? ` · References: ${activeForm.citations.join(", ")}` : ""}</p>
         </article>}
       </section>
