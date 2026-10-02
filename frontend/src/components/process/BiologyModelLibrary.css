@@ -23,5 +23,6 @@
 .bio-parameter-editor button { align-self: end; }
 .bio-library__metadata { color: #5f6c58; font-size: 12px; }
 .bio-library__notice { padding: 8px; background: #eff5e9; border-left: 3px solid #668653; }
+@media (max-width: 1350px) { .bio-library__layout { grid-template-columns: 1fr; } }
 @media (max-width: 900px) { .bio-library__layout { grid-template-columns: 1fr; } .bio-library__builder { grid-column: auto; grid-template-columns: 1fr 1fr; } }
 @media (max-width: 620px) { .bio-library { max-height: 70vh; margin: 6px; padding: 10px; } .bio-library__builder, .bio-parameter-editor { grid-template-columns: 1fr; } }
