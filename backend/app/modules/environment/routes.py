@@ -8,6 +8,7 @@ import inspect
 import json
 import math
 import re
+import tempfile
 import time
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
@@ -55,6 +56,27 @@ def _epw_records_per_hour(path: Path) -> int:
         return int(rows[7][2])
     except (IndexError, ValueError) as error:
         raise ValueError("EPW line 8: invalid DATA PERIODS records-per-hour value.") from error
+
+
+def _read_epw(pvlib, path: Path):
+    """Read a TMY on the explicit non-leap nominal year, dropping source leap-day rows."""
+    with path.open(encoding="utf-8-sig", newline="") as stream:
+        rows = list(csv.reader(stream))
+    leap_rows = [
+        index for index, row in enumerate(rows[8:], 8)
+        if len(row) > 2 and row[0].isdigit() and row[1:3] == ["2", "29"]
+    ]
+    if not leap_rows:
+        return pvlib.iotools.read_epw(path, coerce_year=2001), 0
+    leap_set = set(leap_rows)
+    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", newline="", suffix=".epw", delete=False) as stream:
+        temporary = Path(stream.name)
+        writer = csv.writer(stream, lineterminator="\n")
+        writer.writerows(row for index, row in enumerate(rows) if index not in leap_set)
+    try:
+        return pvlib.iotools.read_epw(temporary, coerce_year=2001), len(leap_rows)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def _hourly_resolution(stamps: list[str]) -> int | None:
@@ -242,7 +264,7 @@ def preview(workspace_id: str, upload_id: str, filename: str):
                     "metadata": meta,
                 }
             return {"format": "csv", "preview": svc.preview_csv(path)}
-        data, meta = pvlib.iotools.read_epw(path, coerce_year=2001)
+        (data, meta), _ = _read_epw(pvlib, path)
         return {
             "format": "epw",
             "columns": list(data.columns),
@@ -268,7 +290,7 @@ def confirm(workspace_id: str, upload_id: str, filename: str, payload: dict):
         elif safe.lower().endswith(".epw"):
             if _epw_records_per_hour(path) != 1:
                 raise ValueError("EPW import supports one record per hour.")
-            data, meta = pvlib.iotools.read_epw(path, coerce_year=2001)
+            (data, meta), leap_day_rows = _read_epw(pvlib, path)
             index = data.index
             # EPW hour h labels the interval ending at h:00 local standard time; hour 24 rolls over.
             stamps = []
@@ -322,6 +344,7 @@ def confirm(workspace_id: str, upload_id: str, filename: str, payload: dict):
                         "method": "pvlib read_epw coerce_year",
                         "nominal_year": 2001,
                         "source_month_years": _epw_month_years(path),
+                        "leap_day_rows_excluded": leap_day_rows,
                     },
                     "hour_ending_shift": "EPW hour h maps to interval end h:00 local standard time; hour 24 rolls over",
                 },

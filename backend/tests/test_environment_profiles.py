@@ -288,7 +288,8 @@ def test_epw_and_pvgis_fixtures_normalize_time_and_preserve_metadata(monkeypatch
         {"month": 1, "year": 2005},
         {"month": 2, "year": 2000},
     ]
-    assert values["channels"]["air_temperature"][0] == pytest.approx(285.15)
+    assert epw["provenance"]["year_normalization"]["leap_day_rows_excluded"] == 1
+    assert values["channels"]["air_temperature"][0] == pytest.approx(257.65)
     assert values["channels"]["ghi"][0] is None
     assert values["channels"]["dni"][0] is None
     pvgis_id = "b" * 32
@@ -297,12 +298,12 @@ def test_epw_and_pvgis_fixtures_normalize_time_and_preserve_metadata(monkeypatch
     assert tmy["label"] == "representative year (TMY)"
     assert tmy["provenance"]["irradiance_time_offset"] == 0.5
     assert len(tmy["provenance"]["selected_month_year_pairs"]) == 12
-    assert tmy["provenance"]["selected_month_year_pairs"][1] == {"month": 2, "year": 2020}
+    assert tmy["provenance"]["selected_month_year_pairs"][1] == {"month": 2, "year": 2019}
     assert len(profiles.read_profile(wid, tmy["digest"], limit=5)["timestamps"]) == 5
     assert tmy["resolution_minutes"] is None
     assert tmy["provenance"]["year_normalization"]["nominal_year"] == 2001
     tmy_values = profiles.read_profile(wid, tmy["digest"])
-    assert len(tmy_values["timestamps"]) == 288
+    assert len(tmy_values["timestamps"]) == 576
     assert not any(stamp.startswith("2001-02-29") for stamp in tmy_values["timestamps"])
     assert tmy_values["timestamps"][0].startswith("2001-01-")
     assert tmy_values["timestamps"][-1].startswith("2001-12-")
