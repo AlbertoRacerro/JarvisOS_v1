@@ -222,7 +222,7 @@ _cards = [
     ("combine.liebig", "combination", "f_S = minⱼ f_j", [_symbol("f_j", "per-nutrient factor", "1", "[0, 1]")], "combines nutrient limitation by Liebig minimum."),
     ("loss.first_order", "loss", "r = k_d", [_symbol("k_d", "specific biomass-loss rate", "h⁻¹", "≥ 0")], "specific biomass-loss rate subtracted from μ; not substrate maintenance demand."),
     ("loss.light_dark", "loss", "r = m_L if I₀ > I_dark else m_D", [_symbol("I₀", "surface irradiance", "µmol m⁻² s⁻¹", "≥ 0"), _symbol("I_dark", "dark threshold", "µmol m⁻² s⁻¹", "≥ 0"), _symbol("m_L", "light loss rate", "h⁻¹", "≥ 0"), _symbol("m_D", "dark loss rate", "h⁻¹", "≥ 0")], "specific biomass-loss rate, not substrate maintenance demand."),
-    ("stoich.photoautotrophic", "stoichiometry", "CHₐOᵦN_cP_d + CO₂ + N-source + H₃PO₄ → biomass + H₂O + O₂", [_symbol("a,b,c,d", "ash-free biomass empirical formula per C-mol", "mol atom C-mol⁻¹", "≥ 0"), _symbol("w_ash", "ash fraction of total dry biomass", "1", "[0, 1)"), _symbol("N-source", "neutral nitrogen source", "NH₃ or HNO₃", "one of NH3, HNO3")], "photoautotrophic elemental balance with CO₂, selectable NH₃/HNO₃, H₃PO₄, H₂O and O₂."),
+    ("stoich.photoautotrophic", "stoichiometry", "CO₂ + c N-source + d H₃PO₄ + h H₂O → CHₐOᵦN꜀P𝒹 + o O₂", [_symbol("a,b,c,d", "ash-free biomass empirical formula per C-mol", "mol atom C-mol⁻¹", "≥ 0"), _symbol("w_ash", "ash fraction of total dry biomass", "1", "[0, 1)"), _symbol("N-source", "neutral nitrogen source", "NH₃ or HNO₃", "one of NH3, HNO3")], "Photoautotrophic elemental balance; h and o are signed coefficients, so a negative value reverses that species' side."),
 ]
 
 
