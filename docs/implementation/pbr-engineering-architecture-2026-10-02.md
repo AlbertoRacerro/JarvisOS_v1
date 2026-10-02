@@ -1,6 +1,6 @@
 # Nannochloropsis floating-PBR engineering architecture (2026-10-02)
 
-Status: **design record** under the maintainer directive of 2026-10-02 (Mission B: "PBR engineering architecture, design first"). This record carries no implementation authority. It defines the target architecture, fidelity tiers, capability matrix and the planned specs 167–180 in `STATUS.md`. It was revised after the independent architecture review `out/w166/gBrev.report.md` (findings F01–F12 incorporated). Each of those specs becomes implementable only after its own accepted contract and readiness.
+Status: **design record** under the maintainer directive of 2026-10-02 (Mission B: "PBR engineering architecture, design first"). This record carries no implementation authority. It defines the target architecture, fidelity tiers, capability matrix and the planned specs 167–180 in `STATUS.md`. It was revised after the independent architecture review `out/w166/gBrev.report.md` (findings F01–F12 incorporated), and reconciled with the ranked engineering inventory on 2026-10-02 (§4.4). Each of those specs becomes implementable only after its own accepted contract and readiness.
 
 Provenance labels used below:
 
@@ -75,7 +75,7 @@ The candidate comparison is in `gBeng.report.md` and the probe evidence in `pDWS
 
 ### 4.2 Coupling (decision)
 
-**Loose, Jarvis-mastered coupling.** No tight coupling, no FMI, and no biology inside DWSIM.
+**Loose, Jarvis-mastered coupling.** No tight coupling, no FMI co-simulation in the solve loop (FMU exchange stays a later adapter option, §4.4), and no biology inside DWSIM.
 
 - **Steady state (mixed-owner flowsheet).** The draft compiler partitions the flowsheet into DWSIM-owned segments and Jarvis-native units. Jarvis runs a sequential-modular outer loop:
   1. solve upstream DWSIM segments;
@@ -88,16 +88,37 @@ The candidate comparison is in `gBeng.report.md` and the probe evidence in `pDWS
 - **Why not the alternatives.**
   - *DWSIM CustomUO bridge:* IronPython only, no numpy, cannot be created through MCP, invoked several times per dynamic step, and would place science in GPL-hosted scripts.
   - *DWSIM native dynamics for biology:* no custom kinetics, and the caps are designed for vessel holdups.
-  - *FMI/Modelica:* no DWSIM FMI support, and a heavy toolchain for no gain.
+  - *Modelica authoring / FMU co-simulation runtime:* no Modelica toolchain or FMU co-simulation is required in this slice; DWSIM has no native FMI support, and Jarvis CVODE remains the only scenario clock. This narrows, and does not reject, the inventory's FMI/FMU + FMPy slot (§4.4): FMU import/export stays a later typed adapter option for 172/179.
   - *Pyomo.DAE:* collocation over months explodes.
   - *CasADi:* LGPL. Keep it as an optional later tool for estimation/NMPC behind a process boundary.
   - *BioSTEAM as the main simulator:* steady-state TEA focus, and no PBR physics.
+  - *QSDsan as the dynamic core:* it brings a separate BioSTEAM/ThermoSTEAM dynamic stack (≈950 MB installed with dependencies, 16 s cold import) aimed at sanitation and wastewater systems, and its dynamic units do not accept exogenous time-varying inputs. It does ship phototrophic model forms (PM², PM²-ASM2d, PM²-ABACO2: depth-averaged Beer–Lambert light, irradiance saturation/inhibition, photoadaptation, Monod uptake, Droop quota). Those forms and their cited parameter sources are **reference candidates for 169**; no QSDsan value is adopted without the per-value evidence 169 requires.
 
 ### 4.3 Recommended stack and alternatives
 
 - **Chosen:** DWSIM 10.2.9 (conventional process); a Jarvis bioprocess engine on scikit-sundae CVODE, numpy and scipy; pvlib for the sun; CoolProp, `fluids` and `ht` for properties and correlations; BLUECAD/OpenFOAM offline for Tier-3/4 correlations; uPlot (MIT) as the single frontend time-series chart library (INFERENCE: small, fast, time-series native; final choice confirmed in spec 171).
 - **Optional later:** a BioSTEAM worker (TEA, downstream sizing and cost), CasADi (parameter estimation, NMPC), pvtrace (offline wall-transmission and shading look-up tables).
-- **Rejected for now:** QSDsan as the dynamic core (wastewater-oriented); Modelica/FMU; SU2; Mitsuba.
+- **Rejected for now:** QSDsan as the dynamic core (it stays a 169 model-form reference); a Modelica authoring toolchain and FMU co-simulation as the runtime (FMU exchange stays open, §4.4); SU2; Mitsuba.
+
+### 4.4 Reconciliation with the ranked engineering inventory
+
+The repository's ranked engineering-backend inventory is joint authority for this roadmap: [`ENGINEERING_SOFTWARE_ECOSYSTEM_AUDIT_2026-08-19.md`](../audits/ENGINEERING_SOFTWARE_ECOSYSTEM_AUDIT_2026-08-19.md) (S/S-/A+/A/B grades, executive candidate map), its two continuations, the candidate register in [`IDEA_INTAKE_AND_CANDIDATE_INTEGRATIONS.md`](../IDEA_INTAKE_AND_CANDIDATE_INTEGRATIONS.md) (REF-038–048), and [`FUTURE_INTEGRATIONS_SYNTHESIS_2026-09-15.md`](../audits/FUTURE_INTEGRATIONS_SYNTHESIS_2026-09-15.md), which names the PBR/BlueRev stack as the first capability bake-off over the existing S/A families. This record selects from that pool; it does not replace it. The candidate-by-candidate reconciliation (evidence: `out/wpbr/rinv.report.md`, 2026-10-02) is:
+
+| Inventory candidate (grade) | Slot in this roadmap |
+|---|---|
+| DWSIM (S) | Chosen: conventional steady-state units and quasi-steady downstream (167/168/172). |
+| SUNDIALS (S-) | Chosen through scikit-sundae CVODE as the single dynamic state owner (170/172). |
+| CoolProp (S), ChEDL `fluids`/`ht` (S) | Chosen for properties and correlations (170/175); `thermo`/`chemicals` stay available for later property needs. |
+| OpenFOAM (S ref / A+ integration) | Chosen for offline Tier-3/4 correlations (179). Gmsh (A+), meshio (A+) and VTK (S) are the expected meshing, mesh-interchange and field-artifact candidates when 179 is specified. |
+| BioSTEAM (S), ThermoSTEAM (S-) | Deferred to the optional out-of-process TEA/sizing worker (178). |
+| QSDsan (S-), Bioindustrial-Park (A+) | Model-form and parameter-source references for 169 (§4.2), not runtime authorities. |
+| FMI/FMU + FMPy (S), OpenModelica (A+) | Not in the current runtime; 167–172 keep typed owner, state and unit boundaries format-neutral so an FMU import/export adapter can be added later (172 export of reviewed models, 179 surrogate exchange). |
+| IDAES + Pyomo (S) | Not chosen for 168/172: the problem is a small-state, event-segmented, months-long simulation, where collocation scales poorly and an equation-oriented flowsheet would duplicate DWSIM ownership. Remains the candidate for later design optimization over converged steady states. |
+| NeqSim (S) | Not chosen: DWSIM already owns the conventional process role and is proven on this host (155/158/162); a second conventional engine would add a second authority with no PBR capability gain. |
+| CasADi (A+), do-mpc (A+) | Later estimation, MHE and NMPC behind a process boundary (after 172/175); 172 controllers are on/off, PI and turbidostat only. |
+| Reaktoro (A+) | Candidate cross-check for the carbonate/pH algebra of 175 (seawater speciation); 175 keeps an algebraic carbonate system as the in-loop form. |
+| Cantera (S-), TESPy (A+) | Outside this slice; 180 compiles typed rate laws to DWSIM and 175 uses a lumped thermal balance. |
+| CAPE-OPEN (S), DWSIM Thermodynamics Library (A+), WaterTAP (A+), open62541 (A+), pycalphad (A+), OpenMDAO (A+), SU2 (A+), FEniCSx (A+), PETSc (S-), ParaView (A+), PyVista (S-), LEAP71 PicoGK/ShapeKernel/LatticeLibrary/HelixHeatX, CadQuery (S-), OCCT (S), Sketch2Simulation (A+) | Outside this roadmap. Geometry stays with BLUECAD (163/176); none of these slots is required by 167–180 as specified. |
 
 ## 5. Data and authority architecture
 
