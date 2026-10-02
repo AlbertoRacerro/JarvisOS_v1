@@ -95,7 +95,7 @@ Alternatives rejected:
 - Q = ṁ_in/ρ_in in m³/s, D_s = Q/V in s⁻¹, D_h = 3600 D_s in h⁻¹ for the hourly ODE, and HRT = 1/D_s in seconds (displayed in days);
 - Reynolds number;
 - pressure drop: the 104 stack's straight smooth pipe × `baffle_friction_multiplier`;
-- circulation pumping power = ΔP·u·(π/4)·D²·n/η.
+- circulation pumping power = ΔP·u·(π/4)·D²·n/η, with η = stored `pump_efficiency` percent/100 (the existing `percent` quantity kind stores 50 for 50 %, not 0.5).
 
 The baffle multiplier is an unqualified screening factor. It scales only ΔP and power.
 
@@ -103,7 +103,7 @@ The baffle multiplier is an unqualified screening factor. It scales only ΔP and
 
 ### 2. Model card resolution (169 consumer)
 
-`bio_models.resolve_growth_model(workspace_id, card_id, revision, digest)` returns resolved callables and SI values. It refuses (typed `PBR_MODEL_CARD_*` findings) when:
+`bio_models.resolve_growth_model(workspace_id, card_id, revision, digest)` returns resolved callables and values in the units pinned by 169. The PBR evaluator converts them at its hourly ODE boundary. It refuses (typed `PBR_MODEL_CARD_*` findings) when:
 
 - the pin's digest or revision does not match the stored card, or the card's set revision or digest does not match;
 - the card's `form_versions` differ from the current forms;
@@ -167,9 +167,9 @@ All tables are deterministic constants. κ·s is clamped before `exp`, and nothi
 
 ### 4. Periodic steady state (`jarvis.pbr_unit_t1`)
 
-**State and environment.** The state is y = (X, N, O₂) in kg m⁻³ inside the well-mixed loop. Time t is in hours.
+**State and environment.** The state is y = (X, N, O₂) in kg m⁻³ inside the well-mixed loop. Time t is in hours. Registry `time` values are stored in seconds, so P_h = photoperiod_s/3600; registry `specific_rate` values are stored in s⁻¹, so kLa_h = 3600·oxygen_kla_s. The 169 μ_max and loss values are pinned in h⁻¹.
 
-- **Surface PAR:** I₀(t) = peak_par·sin(π(t − t_rise)/P) during daylight, otherwise 0. Here t_rise = 12 − P/2 and P = photoperiod. This is the 107 half-sine.
+- **Surface PAR:** I₀(t) = peak_par·sin(π(t − t_rise)/P_h) during daylight, otherwise 0. Here t_rise = 12 − P_h/2. This is the 107 half-sine.
 - **Temperature:** T(t) = T_mean + ΔT·sin(2π(t − 9)/24).
   - It applies at all hours. 107 applied it only in daylight, and this difference is documented.
   - The temperature factor matters only where growth is nonzero.
@@ -180,7 +180,7 @@ All tables are deterministic constants. κ·s is clamped before `exp`, and nothi
 - r_X = (μ_g − k_d(t))·X, with k_d from the card's loss form (`light_dark` uses the light state of I₀(t));
 - dX/dt = r_X + D_h·(X_in − X);
 - dN/dt = −q·r_X + D_h·(N_in − N);
-- dO₂/dt = Y_O2·r_X − kLa·(O₂ − O₂sat) + D_h·(O₂_in − O₂).
+- dO₂/dt = Y_O2·r_X − kLa_h·(O₂ − O₂sat) + D_h·(O₂_in − O₂).
 
 N and O₂ are clipped at 0 inside the rates exactly as 107 does.
 
@@ -217,11 +217,11 @@ The inlet volumetric values are the inlet's 167 mass-specific values × ρ_in. B
 
 The carrier excludes biomass mass, as in 167/168.
 
-**Declared generation** (168 interface (c)), in kg/s over the daily mean. Rates r̄_X and kLa·mean(O₂ − O₂sat) are kg m⁻³ h⁻¹, so conversion to seconds is explicit:
+**Declared generation** (168 interface (c)), in kg/s over the daily mean. Rates r̄_X and kLa_h·mean(O₂ − O₂sat) are kg m⁻³ h⁻¹, so conversion to seconds is explicit:
 
 - biomass: V·r̄_X/3600;
 - dissolved N: −q·V·r̄_X/3600;
-- dissolved O₂: V·[Y_O2·r̄_X − kLa·mean(O₂ − O₂sat)]/3600. The degassed O₂ is reported separately.
+- dissolved O₂: V·[Y_O2·r̄_X − kLa_h·mean(O₂ − O₂sat)]/3600. The degassed O₂ is reported separately.
 
 The per-unit residual closes as in − out + generation to 167's rule. A whole-graph balance includes the generation terms.
 
@@ -324,7 +324,7 @@ Editing a PBR parameter or re-pinning the card stales results. Layout edits do n
   - the map residual is within tolerance;
   - the washout rule on the 107 fixture with X_in = 0 at HRT 2, 3, 5 and 8 d: washout at or below the 2.73 d critical HRT, the productive branch above it, and never the trivial state on the productive side;
   - X_in > 0 gives a unique positive state;
-  - D_s ↔ D_h, hourly generation ↔ kg/s, and hourly productivity ↔ kg/day conversions close against an independent steady mass-balance calculation;
+  - D_s ↔ D_h, kLa_s ↔ kLa_h, photoperiod seconds ↔ hours, hourly generation ↔ kg/s, and hourly productivity ↔ kg/day conversions close against an independent steady mass-balance calculation;
   - with X_in > 0, net productivity is based on X̄ − X_in while outlet biomass throughput remains a distinct quantity;
   - D → 0 with a long run approaches the 107 time average within a stated band;
   - determinism over two runs and cold/warm processes;
