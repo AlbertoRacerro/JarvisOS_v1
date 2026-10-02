@@ -10,7 +10,7 @@
     { "op": "click", "name": "169:open-biology-library", "locator": { "kind": "role", "role": "button", "name": "Biology models…", "exact": true } },
     { "op": "assert-visible", "name": "169:library-panel", "locator": { "kind": "testid", "testid": "biology-model-library" } },
     { "op": "assert-visible", "name": "169:haldane-form", "locator": { "kind": "text", "text": "light.haldane", "exact": true } },
-    { "op": "assert-visible", "name": "169:haldane-equation", "locator": { "kind": "css", "selector": ".bio-equation__text" } },
+    { "op": "assert-visible", "name": "169:haldane-equation", "locator": { "kind": "css", "selector": ".bio-equation math" } },
     { "op": "assert-visible", "name": "169:haldane-symbol-table", "locator": { "kind": "text", "text": "inhibition irradiance", "exact": true } },
     { "op": "assert-body-absent", "name": "169:no-raw-json", "forbidden": ["schema_version", "parameter_set_id", "snapshot_digest", "{\""], "caseInsensitive": false },
     { "op": "screenshot", "name": "169:biology-library", "file": "biology-library" }

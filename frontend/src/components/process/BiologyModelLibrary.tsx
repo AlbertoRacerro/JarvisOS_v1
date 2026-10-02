@@ -62,15 +62,29 @@ export default function BiologyModelLibrary({ workspaceId, onClose }: { workspac
   const activeForm = forms.find((item) => item.id === selectedForm) ?? null;
   const symbols = useMemo(() => {
     const map = new Map<string, DisplaySymbol>();
-    for (const form of forms) for (const symbol of form.symbols) {
+    const selectedIds = new Set([
+      cardLight, "optics.slab_response_average", cardTemperature, cardNutrient,
+      cardCombination, cardLoss, "stoich.photoautotrophic",
+    ]);
+    const selectedSymbols = new Set<string>(["mu_max", "k_X", "a", "b", "c", "d", "w_ash"]);
+    for (const form of forms) if (selectedIds.has(form.id)) for (const symbol of form.symbols) {
       if (symbol.symbol === "N-source") continue;
       if (symbol.symbol === "a,b,c,d") {
-        for (const name of ["a", "b", "c", "d"]) map.set(name, { unit: "1", validRange: "≥ 0" });
-      } else map.set(symbol.symbol, { unit: symbol.unit, validRange: symbol.valid_range });
+        for (const name of ["a", "b", "c", "d"]) {
+          selectedSymbols.add(name);
+          map.set(name, { unit: "1", validRange: "≥ 0" });
+        }
+      } else {
+        selectedSymbols.add(symbol.symbol);
+        map.set(symbol.symbol, { unit: symbol.unit, validRange: symbol.valid_range });
+      }
     }
     map.set("mu_max", { unit: "h⁻¹", validRange: "> 0" });
-    return [...map];
-  }, [forms]);
+    return [...selectedSymbols].flatMap((name) => {
+      const definition = map.get(name);
+      return definition ? [[name, definition] as const] : [];
+    });
+  }, [forms, cardLight, cardTemperature, cardNutrient, cardCombination, cardLoss]);
 
   const reload = async () => {
     const [nextForms, nextSets, nextCards] = await Promise.all([listBioForms(workspaceId), listBioSets(workspaceId), listBioCards(workspaceId)]);
@@ -142,7 +156,7 @@ export default function BiologyModelLibrary({ workspaceId, onClose }: { workspac
     <div className="bio-library__layout">
       <section className="bio-library__forms" aria-label="Biological forms"><h3>Forms</h3>
         <label>Form<select aria-label="Biological form" value={selectedForm} onChange={(event) => setSelectedForm(event.target.value)}>{forms.map((form) => <option key={form.id} value={form.id}>{form.id}</option>)}</select></label>
-        {activeForm && <article className="bio-form-card"><h4>{activeForm.id} <small>v{activeForm.version}</small></h4><div className="bio-equation" aria-label={`Equation: ${activeForm.equation_text}`}><MathTree node={activeForm.equation} /><span className="bio-equation__text">{activeForm.equation_text}</span></div>
+        {activeForm && <article className="bio-form-card"><h4>{activeForm.id} <small>v{activeForm.version}</small></h4><div className="bio-equation" aria-label={`Equation: ${activeForm.equation_text}`}><MathTree node={activeForm.equation} /></div>
           <table><caption>Symbols and valid ranges</caption><thead><tr><th>Symbol</th><th>Meaning</th><th>Unit · range</th></tr></thead><tbody>{activeForm.symbols.map((symbol) => <tr key={symbol.symbol}><th>{symbol.symbol}</th><td>{symbol.meaning}</td><td>{symbol.unit} · {symbol.valid_range}</td></tr>)}</tbody></table>
           <p>{activeForm.applies_to}</p><p className="bio-library__metadata">Version {activeForm.version}{activeForm.citations.length ? ` · References: ${activeForm.citations.join(", ")}` : ""}</p>
         </article>}

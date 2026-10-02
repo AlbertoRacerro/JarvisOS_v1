@@ -14,7 +14,6 @@
 .bio-library button:focus-visible, .bio-library input:focus-visible, .bio-library select:focus-visible, .bio-library summary:focus-visible { outline: 3px solid #467637; outline-offset: 2px; }
 .bio-form-card { padding-top: 8px; }
 .bio-equation { overflow-wrap: anywhere; padding: 12px; border-radius: 6px; background: #f6f7f2; }
-.bio-equation__text { display: block; margin-top: 5px; font-family: Georgia, serif; }
 .bio-library table { width: 100%; border-collapse: collapse; font-size: 12px; }
 .bio-library caption { text-align: left; font-weight: 700; padding: 5px 0; }
 .bio-library th, .bio-library td { padding: 6px; border-bottom: 1px solid #e4e8e0; text-align: left; vertical-align: top; }
