@@ -64,6 +64,11 @@ const UNIT_W = 76;
 const UNIT_H = 44;
 const STREAM_R = 7;
 
+const formatCultureValue = (value: { display?: DraftQuantity | null; reason?: string }) =>
+  value.display
+    ? `${new Intl.NumberFormat("en-US", { maximumSignificantDigits: 5 }).format(value.display.value)} ${unitLabel(value.display.unit)}`
+    : value.reason ?? "unknown";
+
 function distinctFindings(findings: Finding[]) {
   const seen = new Set<string>();
   return findings.filter((finding) => {
@@ -907,7 +912,7 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
             {cultureResult.status === "failed" ? <p>{cultureResult.message}</p> : <>
               <dl className="draft-results-inline">
                 {Object.entries(cultureResult.values).map(([key, value]) => (
-                  <div key={key}><dt>{key}</dt><dd>{value.display ? formatQuantity(value.display) : value.reason ?? "unknown"}</dd></div>
+                  <div key={key}><dt>{key}</dt><dd>{formatCultureValue(value)}</dd></div>
                 ))}
               </dl>
               {cultureResult.pH_reason && <p className="draft-hint">pH: {cultureResult.pH_reason}</p>}

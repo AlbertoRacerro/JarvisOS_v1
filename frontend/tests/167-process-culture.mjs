@@ -18,6 +18,7 @@ assert.match(contract, /culture\?: Record<string, CultureResult>/);
 assert.match(editor, /aria-label="Culture results read-only"/);
 assert.match(editor, /aria-label="This feed carries a culture"/);
 assert.match(editor, /aria-label="Draft findings"/);
+assert.match(editor, /maximumSignificantDigits: 5/);
 assert.match(css, /is-culture-stream/);
 assert.match(css, /draft-owner-badge/);
 assert.doesNotMatch(editor, /JSON\.stringify\(cultureResult/);
