@@ -92,7 +92,7 @@ Alternatives rejected:
 **Derived quantities:**
 
 - liquid volume V = n·(π/4)·D²·L;
-- Q, D and HRT = 1/D;
+- Q = ṁ_in/ρ_in in m³/s, D_s = Q/V in s⁻¹, D_h = 3600 D_s in h⁻¹ for the hourly ODE, and HRT = 1/D_s in seconds (displayed in days);
 - Reynolds number;
 - pressure drop: the 104 stack's straight smooth pipe × `baffle_friction_multiplier`;
 - circulation pumping power = ΔP·u·(π/4)·D²·n/η.
@@ -174,17 +174,17 @@ All tables are deterministic constants. κ·s is clamped before `exp`, and nothi
   - It applies at all hours. 107 applied it only in daylight, and this difference is documented.
   - The temperature factor matters only where growth is nonzero.
 
-**Rates.** These are 107's equations with continuous dilution D:
+**Rates.** These are 107's equations with continuous dilution D_h (h⁻¹):
 
 - μ_g = μ_max · ⟨f_I⟩(I₀(t), X) · f_T(T(t)) · C_N(f_N(N)). The 169 combination rule applies to nutrient factors only. T1 has one nitrogen factor, so `combine.multiplicative` and `combine.liebig` have the same value;
 - r_X = (μ_g − k_d(t))·X, with k_d from the card's loss form (`light_dark` uses the light state of I₀(t));
-- dX/dt = r_X + D·(X_in − X);
-- dN/dt = −q·r_X + D·(N_in − N);
-- dO₂/dt = Y_O2·r_X − kLa·(O₂ − O₂sat) + D·(O₂_in − O₂).
+- dX/dt = r_X + D_h·(X_in − X);
+- dN/dt = −q·r_X + D_h·(N_in − N);
+- dO₂/dt = Y_O2·r_X − kLa·(O₂ − O₂sat) + D_h·(O₂_in − O₂).
 
 N and O₂ are clipped at 0 inside the rates exactly as 107 does.
 
-The inlet volumetric values are the inlet's 167 mass-specific values × ρ_in. P, DIC and salinity are not consumed in T1. They pass through, with the caveat "carbon and phosphorus assumed non-limiting".
+The inlet volumetric values are the inlet's 167 mass-specific values × ρ_in. Biomass, dissolved N and dissolved O₂ must each be specified and finite on the PBR inlet; 167 permits N and O₂ to be unknown, but T1 refuses an unknown value instead of assuming zero. An explicit zero remains valid. P, DIC and salinity are not consumed in T1. They pass through, with the caveat "carbon and phosphorus assumed non-limiting".
 
 **Map.** Φ₂₄(y₀) integrates 24 h with `integrate_ode` (CVODE BDF). Tolerances are rtol 1e-10 and atol 1e-12. Augmented integral states give the daily means and the degassed O₂.
 
@@ -198,14 +198,14 @@ The inlet volumetric values are the inlet's 167 mass-specific values × ρ_in. P
 **Branch rule.** This rule applies to the supported monotone Monod light response. It must not be used for photoinhibitory forms.
 
 - Λ = (1/24)∫₀²⁴ [μ_g(t; thin limit ⟨f_I⟩ = f_I(I₀(t)), N = N_in) − k_d(t)] dt.
-- **If X_in = 0 and Λ ≤ D:** the result is the washout state. X = 0, and N and O₂ come from the map with X ≡ 0. The status is `washout`, with the warning `PBR_WASHOUT`. This is a valid result, not a failure.
-- **If X_in = 0 and Λ > D:**
-  - Seed from X₀ = 0.05 kg m⁻³ × (Λ − D)/Λ, then integrate 10 days before Newton.
+- **If X_in = 0 and Λ ≤ D_h:** the result is the washout state. X = 0, and N and O₂ come from the map with X ≡ 0. The status is `washout`, with the warning `PBR_WASHOUT`. This is a valid result, not a failure.
+- **If X_in = 0 and Λ > D_h:**
+  - Seed from X₀ = 0.05 kg m⁻³ × (Λ − D_h)/Λ, then integrate 10 days before Newton.
   - A converged state with mean X̄ < 1e-6 kg m⁻³ is rejected, and Newton restarts from a seed 4× larger, at most 3 times.
   - Then the solve fails with `PBR_PERIODIC_STEADY_FAILED` ("productive branch not found").
 - **If X_in > 0:** seed from X_in after a 10-day integration. The positive solution is unique.
 
-Λ, D, HRT and the branch are always reported.
+Λ, D_h, HRT and the branch are always reported with explicit units.
 
 **Initialization and cache.** Each evaluation derives its Newton seed from its current inlet and model pin using the branch rule above. It does not read a previous outer iteration's state. Identical unit and inlet inputs may use 168's per-Run cache; the result therefore does not depend on iteration order.
 
@@ -217,11 +217,11 @@ The inlet volumetric values are the inlet's 167 mass-specific values × ρ_in. P
 
 The carrier excludes biomass mass, as in 167/168.
 
-**Declared generation** (168 interface (c)), in kg/s over the daily mean:
+**Declared generation** (168 interface (c)), in kg/s over the daily mean. Rates r̄_X and kLa·mean(O₂ − O₂sat) are kg m⁻³ h⁻¹, so conversion to seconds is explicit:
 
-- biomass: V·r̄_X;
-- dissolved N: −q·V·r̄_X;
-- dissolved O₂: Y_O2·V·r̄_X − V·kLa·mean(O₂ − O₂sat). The degassed O₂ is reported separately.
+- biomass: V·r̄_X/3600;
+- dissolved N: −q·V·r̄_X/3600;
+- dissolved O₂: V·[Y_O2·r̄_X − kLa·mean(O₂ − O₂sat)]/3600. The degassed O₂ is reported separately.
 
 The per-unit residual closes as in − out + generation to 167's rule. A whole-graph balance includes the generation terms.
 
@@ -238,9 +238,9 @@ The per-unit residual closes as in − out + generation to 167's rule. A whole-g
 
 - branch;
 - Newton iterations and map residual;
-- Λ, D and HRT;
-- X̄ and volumetric productivity D·X̄ (kg m⁻³ d⁻¹);
-- biomass production rate (kg/d);
+- Λ (h⁻¹), D_h (h⁻¹) and HRT (d);
+- X̄ and net volumetric biomass productivity 24·D_h·(X̄ − X_in) (kg m⁻³ d⁻¹); this may be negative when decay exceeds growth;
+- net biomass production rate 24·V·r̄_X (kg/d), equal to 86,400·Q·(X̄ − X_in); outlet biomass throughput is separately labelled if shown;
 - minimum and mean N;
 - maximum and mean O₂, and the maximum O₂ saturation ratio;
 - degassed O₂;
@@ -265,6 +265,8 @@ It also carries the fidelity label "T1 · unqualified · periodic steady state, 
 | Code | Severity | Condition |
 |---|---|---|
 | `PBR_REQUIRES_CULTURE_INLET` | blocker | The inlet is not reached by culture. |
+| `PBR_REQUIRES_NITROGEN` | blocker | Dissolved N is absent or unknown on the PBR inlet. Explicit zero is valid. |
+| `PBR_REQUIRES_OXYGEN` | blocker | Dissolved O₂ is absent or unknown on the PBR inlet. Explicit zero is valid. |
 | `PBR_REQUIRES_MODEL_CARD` | blocker | The unit has no model pin. |
 | `PBR_MODEL_CARD_UNAVAILABLE` | blocker | The pin does not resolve, or its digest or form versions differ. |
 | `PBR_MODEL_CARD_FORM_UNSUPPORTED` | blocker | The card uses a refused form. |
@@ -322,10 +324,13 @@ Editing a PBR parameter or re-pinning the card stales results. Layout edits do n
   - the map residual is within tolerance;
   - the washout rule on the 107 fixture with X_in = 0 at HRT 2, 3, 5 and 8 d: washout at or below the 2.73 d critical HRT, the productive branch above it, and never the trivial state on the productive side;
   - X_in > 0 gives a unique positive state;
+  - D_s ↔ D_h, hourly generation ↔ kg/s, and hourly productivity ↔ kg/day conversions close against an independent steady mass-balance calculation;
+  - with X_in > 0, net productivity is based on X̄ − X_in while outlet biomass throughput remains a distinct quantity;
   - D → 0 with a long run approaches the 107 time average within a stated band;
   - determinism over two runs and cold/warm processes;
   - typed refusals mirror 107's matrix.
 - **Model card resolution:** pins, mismatches, unsupported forms, a missing stoichiometry factor and the nutrient index binding.
+- **Culture input refusal:** missing or unknown dissolved N and O₂ each block before Run, while explicit zero values remain valid inputs.
 - **The new quantity kinds,** including that `temperature_difference` has no offset.
 - **DraftOp `set_unit_model`:** CAS, undo, stale and refusal on other unit types.
 - **Fingerprint** includes and excludes the right items. Earlier drafts keep their golden fingerprints.
