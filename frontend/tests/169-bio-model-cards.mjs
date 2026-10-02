@@ -34,5 +34,5 @@ if (!panel.includes("allowedMathTags") || /dangerouslySetInnerHTML|innerHTML\s*=
 if (!api.includes("locator_confirmation") || !panel.includes("sourceState") || !panel.includes("entryState")) fail("provenance action must show source and entry states and submit locator confirmation");
 if (/window\.(prompt|confirm)/.test(panel)) fail("operator actions must use accessible inline controls");
 if (!panel.includes("Duplicate") || !panel.includes("Evaluate preview") || !panel.includes("S_0") || !panel.includes("Q_0")) fail("model set, indexed nutrient, and evaluation preview controls are incomplete");
-if (!css.includes("position: fixed") || !css.includes("overflow: auto") || !css.includes(":focus-visible")) fail("the operator panel must stay in viewport and support keyboard focus");
+if (!css.includes("position: fixed") || !css.includes("overflow: auto") || !css.includes("position: sticky") || !css.includes(":focus-visible")) fail("the operator panel must stay in viewport, retain its header and feedback while scrolling, and support keyboard focus");
 console.log("169 biology model cards behavioral form and operator contract: PASS");

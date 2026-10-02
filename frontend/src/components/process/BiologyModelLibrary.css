@@ -1,6 +1,7 @@
 .bio-library__backdrop { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 14px; background: #17201688; }
 .bio-library { width: min(1500px, 100%); max-height: calc(100vh - 28px); overflow: auto; padding: 16px; border: 1px solid #bdc9b4; border-radius: 10px; background: #fffefa; box-shadow: 0 8px 28px #26321d44; color: #26321d; }
 .bio-library__header, .bio-library__actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.bio-library__header { position: sticky; top: 0; z-index: 3; padding: 4px 0; background: #fffefa; }
 .bio-library h2 { margin: 0 0 12px; font-size: 20px; } .bio-library h3 { margin: 6px 0 10px; font-size: 16px; } .bio-library h4 { margin: 0 0 8px; }
 .bio-library__layout { display: grid; grid-template-columns: minmax(300px, .9fr) minmax(540px, 1.4fr); gap: 14px; align-items: start; }
 .bio-library__layout > section { min-width: 0; padding: 12px; border: 1px solid #e1e4dc; border-radius: 8px; background: #fff; }
@@ -18,6 +19,6 @@
 .bio-parameter-editor legend, .bio-inline-action legend, .bio-operating-point legend { font-weight: 700; } .bio-parameter-editor button, .bio-inline-action button { align-self: end; }
 .bio-inline-action { grid-template-columns: repeat(2, minmax(160px, 1fr)); } .bio-inline-action p { grid-column: 1 / -1; } .bio-inline-action label { grid-column: 1 / -1; }
 .bio-operating-point { grid-template-columns: repeat(4, minmax(160px, 1fr)); } .bio-operating-point label span { display: grid; gap: 4px; } .bio-operating-point small { color: #5f6c58; }
-.bio-library__metadata { color: #5f6c58; font-size: 12px; } .bio-library__notice { padding: 8px; background: #eff5e9; border-left: 3px solid #668653; }
+.bio-library__metadata { color: #5f6c58; font-size: 12px; } .bio-library__notice { position: sticky; top: 42px; z-index: 2; padding: 8px; background: #eff5e9; border-left: 3px solid #668653; }
 @media (max-width: 1120px) { .bio-library__layout { grid-template-columns: 1fr; } .bio-library__builder { grid-template-columns: repeat(2, minmax(160px, 1fr)); } .bio-operating-point { grid-template-columns: repeat(2, minmax(140px, 1fr)); } }
 @media (max-width: 620px) { .bio-library { padding: 10px; } .bio-library__builder, .bio-parameter-editor, .bio-inline-action, .bio-operating-point { grid-template-columns: 1fr; } }
