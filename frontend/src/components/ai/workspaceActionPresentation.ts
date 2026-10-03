@@ -22,7 +22,7 @@ export function isToolCallShaped(text: string | null | undefined): boolean {
   const fences = [...normalized.matchAll(/(```|~~~)([a-z0-9_-]*)\s*\n?([\s\S]*?)\n?\s*\1/gi)];
   const candidates = [normalized, ...fences.map(match => match[3])];
   const actionOps = new Set([
-    "set_value", "add_unit", "insert_unit_after", "connect", "disconnect", "mirror", "move",
+    "set_value", "set_unit_model", "add_unit", "insert_unit_after", "connect", "disconnect", "mirror", "move",
     "rename", "delete", "duplicate_part", "set_part_param", "move_part", "delete_part"
   ]);
   const containsWorkspaceAction = (value: unknown): boolean => {
@@ -91,6 +91,29 @@ export function actionStatePresentation(state: ActionOutcome["state"]): { label:
     case "dismissed": return { label: "Dismissed", tone: "muted" };
     case "undone": return { label: "Undone", tone: "muted" };
   }
+}
+
+/**
+ * Card text for one validated process action. The backend composes `summary`; this is the frontend's own
+ * wording for requests whose summary is missing, so `set_unit_model` never falls back to raw JSON.
+ */
+export function describeProcessAction(action: Record<string, unknown>): string | null {
+  const text = (value: unknown) => (typeof value === "string" && value ? value : null);
+  if (action.op === "set_unit_model") {
+    const unit = text(action.unit) ?? "the unit";
+    const card = text(action.card);
+    return card ? `Use model card ${card} for ${unit}` : `Clear the model card for ${unit}`;
+  }
+  return null;
+}
+
+export function actionSummaryText(action: Pick<ActionOutcome, "summary" | "request">): string {
+  if (action.summary.trim()) return action.summary;
+  const actions = (action.request as { actions?: unknown }).actions;
+  const lines = Array.isArray(actions)
+    ? actions.map((item) => (item && typeof item === "object" ? describeProcessAction(item as Record<string, unknown>) : null)).filter((line): line is string => Boolean(line))
+    : [];
+  return lines.join("; ") || "Workspace action";
 }
 
 export function actionOriginLabel(origin: ActionOutcome["origin"]): string {

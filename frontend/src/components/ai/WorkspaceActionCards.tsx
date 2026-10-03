@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { ActionOutcome } from "../../api/workspaceActions";
-import { actionOriginLabel, actionStatePresentation } from "./workspaceActionPresentation";
+import { actionOriginLabel, actionStatePresentation, actionSummaryText } from "./workspaceActionPresentation";
 
 type Props = { actions: ActionOutcome[]; onApply(actionId: string): Promise<void>; onDismiss(actionId: string): Promise<void>; onUndo(actionId: string): Promise<void>; technicalDetails?: string | null; technicalInfo?: unknown };
 
@@ -21,11 +21,11 @@ export default function WorkspaceActionCards({ actions, onApply, onDismiss, onUn
       const presentation = actionStatePresentation(action.state);
       return <section className={`jarvis-action-card jarvis-action-card--${presentation.tone}`} key={action.action_id} aria-label={`${presentation.label} workspace action`}>
         <header><strong>{presentation.label}</strong><span>{actionOriginLabel(action.origin)}</span></header>
-        <p>{action.summary}</p>
+        <p>{actionSummaryText(action)}</p>
         {action.changes.length > 0 && <ul>{action.changes.map((change, index) => <li key={`${change.label}-${index}`}><strong>{change.label}</strong>: {change.before ? `${change.before} → ` : ""}{change.after ?? "—"}</li>)}</ul>}
         {(action.state === "refused" || action.state === "stale") && action.reason && <p className="jarvis-action-card__reason">{action.reason}</p>}
-        {action.state === "proposed" && <div className="jarvis-action-card__buttons"><button type="button" className="jarvis-primary-button" disabled={busyId === action.action_id} aria-label={`Apply ${action.summary}`} onClick={() => void run(action.action_id, onApply)}>Apply</button><button type="button" className="jarvis-link-button" disabled={busyId === action.action_id} aria-label={`Dismiss ${action.summary}`} onClick={() => void run(action.action_id, onDismiss)}>Dismiss</button></div>}
-        {action.state === "applied" && action.undo_available && <button type="button" className="jarvis-link-button" disabled={busyId === action.action_id} aria-label={`Undo ${action.summary}`} onClick={() => void run(action.action_id, onUndo)}>Undo</button>}
+        {action.state === "proposed" && <div className="jarvis-action-card__buttons"><button type="button" className="jarvis-primary-button" disabled={busyId === action.action_id} aria-label={`Apply ${actionSummaryText(action)}`} onClick={() => void run(action.action_id, onApply)}>Apply</button><button type="button" className="jarvis-link-button" disabled={busyId === action.action_id} aria-label={`Dismiss ${actionSummaryText(action)}`} onClick={() => void run(action.action_id, onDismiss)}>Dismiss</button></div>}
+        {action.state === "applied" && action.undo_available && <button type="button" className="jarvis-link-button" disabled={busyId === action.action_id} aria-label={`Undo ${actionSummaryText(action)}`} onClick={() => void run(action.action_id, onUndo)}>Undo</button>}
         {action.state === "applied" && action.result_revision && <small>Revision {action.result_revision.split(":", 1)[0]}</small>}
       </section>;
     })}
