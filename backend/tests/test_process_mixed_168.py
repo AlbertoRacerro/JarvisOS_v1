@@ -476,3 +476,17 @@ def test_mixed_fingerprint_ignores_layout_but_includes_culture_and_partition() -
     edited = copy.deepcopy(document)
     edited["objects"]["feed"]["spec"]["culture"]["biomass"]["si"] = 2
     assert mixed.fingerprint(edited, mixed.partition(edited)) != original
+
+
+@pytest.mark.parametrize("unit_result,expected", [
+    ({"reported": {"Mass Flow Error": {"units": "kg/h", "value": "0"}}}, 0.0),
+    ({"reported": {"Mass Flow Error": {"units": "kg/h", "value": "-36"}}}, 0.01),
+    ({"reported": {}, "properties": [{"name": "Mass Flow Error", "unit": "kg/h", "value": 7.2}]}, 0.002),
+    ({"reported": {"Mass Flow Error": {"units": "kg/h", "value": "NaN"}}}, None),
+    ({"reported": {"Mass Flow Error": {"units": "lbm/h", "value": "1"}}}, None),
+    ({}, None),
+])
+def test_native_recycle_mass_flow_error_parses_dwsim_string_values(unit_result: dict,
+                                                                    expected: float | None) -> None:
+    value = mixed_runtime._native_mass_flow_error_kg_s(unit_result)
+    assert value == (pytest.approx(expected) if expected is not None else None)

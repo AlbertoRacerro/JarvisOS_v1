@@ -537,6 +537,33 @@ def _culture_results(document: dict[str, Any], final: dict[str, Any]) -> dict[st
     return results
 
 
+_MASS_FLOW_TO_KG_S = {"kg/h": 1 / 3600.0, "kg/s": 1.0, "kg/min": 1 / 60.0, "g/s": 0.001}
+
+
+def _native_mass_flow_error_kg_s(unit_result: dict[str, Any]) -> float | None:
+    """DWSIM's native Recycle mass-flow error in kg/s, or None when absent or unparseable.
+
+    DWSIM reports the value as a string (e.g. ``"0"``) in ``reported`` and as a number in
+    ``properties``; either form is accepted, always with its stated unit."""
+    candidates: list[tuple[Any, Any]] = []
+    reported = unit_result.get("reported", {}).get("Mass Flow Error")
+    if isinstance(reported, dict):
+        candidates.append((reported.get("value"), reported.get("units")))
+    candidates.extend((row.get("value"), row.get("unit")) for row in unit_result.get("properties", [])
+                      if isinstance(row, dict) and row.get("name") == "Mass Flow Error")
+    for raw, unit in candidates:
+        factor = _MASS_FLOW_TO_KG_S.get(str(unit).strip()) if unit is not None else None
+        if factor is None or isinstance(raw, bool):
+            continue
+        try:
+            value = float(raw)
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(value):
+            return abs(value) * factor
+    return None
+
+
 def _whole_graph_balances(document: dict[str, Any], final: dict[str, Any],
                           tear: dict[str, dict[str, Any]]) -> dict[str, Any]:
     objects = document["objects"]
@@ -552,10 +579,9 @@ def _whole_graph_balances(document: dict[str, Any], final: dict[str, Any],
     native_error_findings: list[str] = []
     for unit in (item for item in objects.values() if item["kind"] == "unit" and item["type"] == "Recycle"
                  and item["id"] not in mixed.partition(document)["consumed"]):
-        result = final["units"].get(unit["tag"], {}).get("reported", {}).get("Mass Flow Error", {})
-        raw = result.get("value") if isinstance(result, dict) else None
-        if isinstance(raw, (int, float)) and math.isfinite(float(raw)):
-            error = abs(float(raw)) / 3600.0
+        error_kg_s = _native_mass_flow_error_kg_s(final["units"].get(unit["tag"], {}))
+        if error_kg_s is not None:
+            error = error_kg_s
         else:
             native_error_findings.append(unit["tag"])
             error = 0.0
