@@ -185,7 +185,7 @@ All constants and refinement rules are deterministic. Exponentials may underflow
 - dN/dt = −q·r_X + D_h·(N_in − N);
 - dO₂/dt = Y_O2·r_X − kLa_h·(O₂ − O₂sat) + D_h·(O₂_in − O₂).
 
-N and O₂ are clipped at 0 only when evaluating rate functions, as in 107. This does not make a negative integrated state physical. Every accepted periodic trajectory must keep X, N and O₂ nonnegative within the numerical integration tolerance; a materially negative value fails with a typed `PBR_NONPHYSICAL_STATE` unit result. In particular, the allowed combination kLa = 0, O₂_in = 0 and dark biomass decay can drive the stated O₂ equation below zero; T1 refuses that trajectory rather than silently truncating oxygen or claiming oxygen-limited biology it does not model.
+N is clipped at 0 only in its growth factor, as in 107; the oxygen transfer term uses the integrated O₂ state. This does not make a negative integrated state physical. Every accepted periodic trajectory must keep X, N and O₂ nonnegative within the numerical integration tolerance; a materially negative value fails with a typed `PBR_NONPHYSICAL_STATE` unit result. In particular, the allowed combination kLa = 0, O₂_in = 0 and dark biomass decay can drive the stated O₂ equation below zero; T1 refuses that trajectory rather than silently truncating oxygen or claiming oxygen-limited biology it does not model.
 
 The inlet volumetric values are the inlet's 167 mass-specific values × ρ_in. Biomass, dissolved N and dissolved O₂ must each be specified and finite on the PBR inlet; 167 permits N and O₂ to be unknown, but T1 refuses an unknown value instead of assuming zero. An explicit zero remains valid. P, DIC and salinity are not consumed in T1. They pass through, with the caveat "carbon and phosphorus assumed externally supplied and non-limiting; elemental C/P balances are not modeled". The 169 stoichiometry card's phosphorus term is disclosed but is not applied as a Tier-1 phosphorus consumption or a claim of full elemental conservation.
 
@@ -330,7 +330,7 @@ Editing a PBR parameter or re-pinning the card stales results. Layout edits do n
   - balances close ≤ 1e-8 relative;
   - the map residual is within tolerance;
   - the washout rule on the 107 fixture with X_in = 0 at HRT 2, 3, 5 and 8 d: washout at or below the 2.73 d critical HRT, the productive branch above it, and never the trivial state on the productive side;
-  - X_in > 0 gives a unique positive state;
+  - X_in > 0 gives a unique positive state when the supported growth feedback admits a finite root; the no-root case is separately refused;
   - D_s ↔ D_h, kLa_s ↔ kLa_h, photoperiod seconds ↔ hours, hourly generation ↔ kg/s, and hourly productivity ↔ kg/day conversions close against an independent steady mass-balance calculation;
   - with X_in > 0, net productivity is based on X̄ − X_in while outlet biomass throughput remains a distinct quantity;
   - D → 0 approaches a comparable 107 time average only in a zero-harvest 107 fixture; ordinary 107 v2 daily harvest is not a zero-dilution reference;
