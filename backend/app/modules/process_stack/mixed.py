@@ -118,7 +118,7 @@ def partition(document: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("partition remains cyclic after consumed tears are cut")
     levels = {uid: level[group_id[uid]] for uid in units}
     dwsim = {uid for uid, unit in units.items() if UNIT_REGISTRY[unit["type"]].owner == "dwsim" and uid not in consumed}
-    neighbors = {uid: set() for uid in dwsim}
+    neighbors: dict[str, set[str]] = {uid: set() for uid in dwsim}
     for a, b, stream in cut:
         if a in dwsim and b in dwsim and levels[a] == levels[b]:
             neighbors[a].add(b)
@@ -152,6 +152,35 @@ def partition(document: dict[str, Any]) -> dict[str, Any]:
 def has_jarvis_unit(document: dict[str, Any]) -> bool:
     return any(item["kind"] == "unit" and UNIT_REGISTRY[item["type"]].owner == "jarvis_bio"
                for item in document["objects"].values())
+
+
+def needs_mixed_solve(document: dict[str, Any]) -> bool:
+    """Keep the legacy byte-identical path unless a Jarvis unit or culture loop needs iteration."""
+    if has_jarvis_unit(document):
+        return True
+    units = _units(document)
+    edges = _edges(document, energy=False)
+    graph: dict[str, set[str]] = defaultdict(set)
+    for source, target, _stream in edges:
+        graph[source].add(target)
+    culture_starts = {stream["target"]["unit"] for stream in document["objects"].values()
+                      if stream["kind"] == "stream" and stream.get("source") is None
+                      and stream.get("target") and stream.get("spec", {}).get("culture") is not None}
+    reachable: set[str] = set()
+    pending = list(culture_starts)
+    while pending:
+        current = pending.pop()
+        if current not in reachable:
+            reachable.add(current)
+            pending.extend(graph.get(current, ()))
+    groups = components(set(units), edges)
+    for group in groups:
+        has_cycle = len(group) > 1 or any(a == b and a in group for a, b, _ in edges)
+        if not has_cycle or not any(units[uid]["type"] == "Recycle" for uid in group):
+            continue
+        if group & reachable:
+            return True
+    return False
 
 
 def validation_findings(document: dict[str, Any]) -> list[dict[str, Any]]:
@@ -219,6 +248,8 @@ def fingerprint(document: dict[str, Any], partition_value: dict[str, Any]) -> st
         for field in ("x", "y", "route", "orientation", "flip_x", "flip_y"):
             item.pop(field, None)
     payload = {"document": meaning, "partition": partition_value, "version": MIXED_SOLVE_VERSION,
+               "culture_schema": "jarvis_culture_result/1",
+               "culture_propagation": "jarvis_culture_propagation/1",
                "evaluators": {"SpecifiedSeparator": 1}}
     raw = json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False)
     return "sha256:" + hashlib.sha256(raw.encode()).hexdigest()
@@ -251,6 +282,91 @@ def residual(guess: dict[str, Any], output: dict[str, Any]) -> tuple[float, str,
     return fields.get(worst, 0.0), worst, fields
 
 
+def residual_values(guess: dict[str, Any], output: dict[str, Any]) -> dict[str, float | None]:
+    """Signed, undamped physical residuals, kept separately from normalized convergence values."""
+    values: dict[str, float | None] = {}
+    for name in sorted(set(guess) | set(output)):
+        before, after = guess.get(name), output.get(name)
+        values[name] = None if before is None or after is None else float(after) - float(before)
+    return values
+
+
+def iterate(initial: dict[str, dict[str, Any]], evaluate: Any, *,
+            before_iteration: Any = None, on_history: Any = None) -> dict[str, Any]:
+    """Engine-neutral, simultaneous damped tear controller; evaluate returns g(x_k)."""
+    guess = copy.deepcopy(initial)
+    best = copy.deepcopy(guess)
+    best_residual = math.inf
+    omega = 1.0
+    growth_events = 0
+    history: list[dict[str, Any]] = []
+    last: Any = None
+    last_input: dict[str, dict[str, Any]] | None = None
+    status, reason = "unconverged", "max_iterations"
+    for iteration in range(1, MAX_ITERATIONS + 1):
+        stop_reason = before_iteration(iteration) if before_iteration is not None else None
+        if stop_reason:
+            reason = stop_reason
+            if last_input is not None:
+                guess = last_input
+            break
+        last_input = copy.deepcopy(guess)
+        last = evaluate(copy.deepcopy(guess), iteration)
+        per_tear = {tag: residual(_flatten_state(guess[tag]), _flatten_state(output))
+                    for tag, output in last.items()}
+        max_residual, worst_tag = max(((item[0], tag) for tag, item in per_tear.items()),
+                                      default=(0.0, ""))
+        worst_field = per_tear[worst_tag][1] if worst_tag else ""
+        row = {"iteration": iteration, "omega": omega,
+               "max_normalized_residual": max_residual, "worst_tear": worst_tag,
+               "worst_field": worst_field,
+               "residuals": {tag: residual_values(_flatten_state(guess[tag]), _flatten_state(output))
+                             for tag, output in last.items()},
+               "normalized_residuals": {tag: item[2] for tag, item in per_tear.items()}}
+        history.append(row)
+        if on_history is not None:
+            on_history(row)
+        if max_residual <= 1:
+            status, reason = "completed", "converged"
+            break
+        if max_residual > 1.5 * best_residual:
+            growth_events += 1
+            if growth_events >= 4:
+                reason = "damping_exhausted"
+                guess = last_input
+                break
+            omega = max(omega / 2, 0.125)
+            guess = copy.deepcopy(best)
+            continue
+        if max_residual < best_residual:
+            best_residual = max_residual
+            best = copy.deepcopy(guess)
+        if iteration == MAX_ITERATIONS:
+            reason = "max_iterations"
+            break
+        updated = copy.deepcopy(guess)
+        for tag, output in last.items():
+            for name in ("temperature_K", "pressure_Pa", "mass_flow_kg_s"):
+                updated[tag][name] += omega * (output[name] - guess[tag][name])
+            for name, value in output["mass_fractions"].items():
+                updated[tag]["mass_fractions"][name] += omega * (value - guess[tag]["mass_fractions"][name])
+            for name in CULTURE_FIELDS:
+                before = guess[tag]["culture"].get(name)
+                after = output.get("culture", {}).get(name)
+                updated[tag]["culture"][name] = before + omega * (after - before) if before is not None and after is not None else after
+            updated[tag]["culture"]["ph"] = output.get("culture", {}).get("ph")
+        guess = updated
+    return {"iterate": guess, "last": last, "last_input": last_input, "status": status, "reason": reason,
+            "history": history, "omega": omega, "growth_events": growth_events}
+
+
+def _flatten_state(state: dict[str, Any]) -> dict[str, Any]:
+    row = {name: state.get(name) for name in ("temperature_K", "pressure_Pa", "mass_flow_kg_s")}
+    row.update({"mass_fraction." + name: value for name, value in state.get("mass_fractions", {}).items()})
+    row.update({name: state.get("culture", {}).get(name) for name in CULTURE_FIELDS})
+    return row
+
+
 def separator(inlet: dict[str, Any], recovery_percent: float, factor: float) -> tuple[dict[str, Any], dict[str, Any]]:
     """Specified performance in carrier mass; culture remains mass-specific."""
     if not 0 < recovery_percent <= 100 or not 1 < factor <= 1000:
@@ -266,6 +382,6 @@ def separator(inlet: dict[str, Any], recovery_percent: float, factor: float) -> 
     culture = inlet.get("culture") or {}
     concentrate = {**common, "mass_flow_kg_s": concentrate_flow, "culture": dict(culture), "owner": "jarvis_bio"}
     clarified = {**common, "mass_flow_kg_s": clarified_flow, "culture": dict(culture), "owner": "jarvis_bio"}
-    concentrate["culture"]["biomass"] = None if x is None else factor * x
+    concentrate["culture"]["biomass"] = None if x is None else x if flow == 0 else factor * x
     clarified["culture"]["biomass"] = None if x is None else ((1 - recovery) * x * flow / clarified_flow if flow else x)
     return concentrate, clarified

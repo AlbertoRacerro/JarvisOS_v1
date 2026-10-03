@@ -841,10 +841,16 @@ def results_state(head: dict[str, Any], runs: list[dict[str, Any]], document: di
         else:  # runs recorded before spec 162 carry only the full materialization fingerprint
             current = fingerprint(expected(document), dwsim_version=solved["dwsim_version"],
                                   mcp_sha256=solved["mcp_sha256"]) == solved["materialization_fingerprint"]
+    if last is not solved and last is not None and last.get("action") == "run" and last.get("status") in {
+        "unconverged", "segment_failed"
+    }:
+        # A failed mixed attempt on the latest revision never promotes an older
+        # completed run as the current answer to this operator request.
+        current = False
     return {"state": "current" if current else "stale", "run_id": solved["run_id"],
             "draft_revision": solved["draft_revision"],
             "edits_since": 0 if current else edits_since if edits_since is not None else head["seq"] - seq,
-            "materialization_fingerprint": solved["materialization_fingerprint"], "last_attempt": _attempt(last)}
+            "materialization_fingerprint": solved.get("materialization_fingerprint"), "last_attempt": _attempt(last)}
 
 
 def _attempt(run: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -894,6 +900,7 @@ def result_findings(document: dict[str, Any], solved: dict[str, Any] | None,
     tags = {item["tag"]: item for item in document["objects"].values()}
     if solved is not None:
         findings.extend(solved.get("culture_findings") or [])
+        findings.extend(solved.get("mixed_findings") or [])
         for tag, result in sorted((solved.get("streams") or {}).items()):
             item = tags.get(tag)
             flow = result.get("mass_flow_kg_s")
@@ -1262,7 +1269,7 @@ def execute(workspace_id: str, draft_id: str, revision: str, action: str) -> dic
                            "mcp_sha256": mcp_sha256, "started_at": started}
     try:
         with client:
-            if mixed.has_jarvis_unit(record["document"]):
+            if mixed.needs_mixed_solve(record["document"]):
                 outcome = mixed_runtime.run(record["document"], action=action, client=client,
                                             dwsim_version=dwsim_version, mcp_sha256=mcp_sha256,
                                             run_dir=runs_dir(directory) / run_id)
@@ -1272,7 +1279,7 @@ def execute(workspace_id: str, draft_id: str, revision: str, action: str) -> dic
                     mcp_sha256=mcp_sha256, label=f"jarvis-draft-{draft_id[:8]}-{revision}",
                     keep_case=runs_dir(directory) / run_id / "solved.dwxmz" if action == "run" else None)
         run.update(outcome)
-        if action == "run" and outcome.get("status") == "completed" and not mixed.has_jarvis_unit(record["document"]):
+        if action == "run" and outcome.get("status") == "completed" and not mixed.needs_mixed_solve(record["document"]):
             culture_results, culture_findings = culture_engine.propagate(record["document"], outcome.get("streams", {}))
             run["culture"] = culture_results
             run["culture_findings"] = culture_findings

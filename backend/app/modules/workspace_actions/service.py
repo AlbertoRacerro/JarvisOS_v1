@@ -140,8 +140,14 @@ def surface_brief(workspace_id: str, ref: SurfaceRef | None) -> SurfaceBrief:
                               if f"P{index}" not in unit_tags), "<new tag>")
         selected_info = []
         if selected_unit:
-            declaration = UNIT_REGISTRY[selected_unit["type"]]
+            canonical_unit = document["objects"][selected_unit["id"]]
+            declaration = UNIT_REGISTRY[canonical_unit["type"]]
             selected_info.append(f"Selected unit owner: {declaration.owner}; culture rule: {declaration.culture_rule}.")
+            if canonical_unit["type"] == "SpecifiedSeparator":
+                recovery = float(canonical_unit.get("params", {}).get("biomass_recovery", {}).get("si", 0))
+                factor = float(canonical_unit.get("params", {}).get("concentration_factor", {}).get("si", 0))
+                selected_info.append(f"SpecifiedSeparator biomass recovery {recovery:g}%; concentration factor {factor:g}; "
+                                     f"derived concentrate carrier split {recovery / factor if factor else 0:g}%.")
         if selected_stream and selected_stream.get("culture") is not None:
             fields = "; ".join(
                 f"{name} {value['value']} {value['unit']}"
@@ -149,10 +155,27 @@ def surface_brief(workspace_id: str, ref: SurfaceRef | None) -> SurfaceBrief:
             )
             selected_info.append(f"Selected feed culture values: {fields}.")
         selected_context = ("\n".join(selected_info) + "\n") if selected_info else ""
+        owner_rows = [f"{item['tag']}={UNIT_REGISTRY[item['type']].owner}" for item in objects
+                      if item["kind"] == "unit"]
+        run_summary = "No mixed solve recorded."
+        last_attempt = projection["results"].get("last_attempt")
+        if last_attempt and last_attempt.get("run_id"):
+            try:
+                last_run = draft.get_run(workspace_id, draft_id, last_attempt["run_id"])
+            except draft.DraftError:
+                last_run = None
+            mixed_solve = (last_run or {}).get("mixed_solve")
+            if mixed_solve:
+                history = mixed_solve.get("history") or []
+                last_row = history[-1] if history else {}
+                run_summary = (f"Last mixed run: {mixed_solve.get('status')}; reason {mixed_solve.get('reason', 'unknown')}; "
+                               f"{len(history)} iterations; worst field {last_row.get('worst_field', 'none')}; "
+                               f"max normalized residual {last_row.get('max_normalized_residual', 'none')}.")
         text = (
             f"Process workspace {workspace_id}; draft {draft_id}; head revision {record['revision']}\n"
             f"Results: {projection['results']['state']}\nObjects ({len(objects)}): "
             f"{_compact_objects(objects, document)}\nSelected: {selected_names or 'none'}\n"
+            f"Unit owners: {'; '.join(owner_rows)}\n{run_summary}\n"
             f"{selected_context}"
             "Action JSON examples (submit one or more objects in actions): "
             f'{{"op":"set_value","target":"{stream_tag}","property":"pressure","value":{{"value":2,"unit":"bar"}}}}; '
@@ -163,10 +186,15 @@ def surface_brief(workspace_id: str, ref: SurfaceRef | None) -> SurfaceBrief:
             f'{{"op":"mirror","target":"{unit_tag}","axis":"horizontal"}}; '
             f'{{"op":"move","target":"{unit_tag}","dx":20,"dy":0}}; '
             f'{{"op":"rename","target":"{unit_tag}","new_tag":"{next_unit_tag}"}}; '
-            f'{{"op":"delete","target":"{unit_tag}"}}.\n'
-            "Culture is editable only on feed streams. Culture cannot pass through Flash, DistillationColumn, PFR or cycles; Jarvis-native units arrive with 168/170. "
+            f'{{"op":"delete","target":"{unit_tag}"}}. '
+            f'Example: {{"op":"set_value","target":"{unit_tag}","property":"concentration_factor",'
+            '"value":{"value":20,"unit":"dimensionless"}}. '
+            "Culture is feed-only and cannot pass through Flash, DistillationColumn or PFR. "
+            "Mixed Recycles may be Jarvis tears; native Recycles inside mixed loops are refused. "
+            "SpecifiedSeparator requires culture. For a non-convergence question, explain the recorded reason, "
+            "iteration count, worst field and residual without proposing a change unless requested. "
             f"Limits: Arrhenius power-law only for DWSIM reactions. {kinetics_explanation()} "
-            "Reactions and thermo are edited in the operator editor. DWSIM runs only from the operator Run button."
+            "DWSIM Run stays operator-only; reactions and thermo are edited in the operator editor."
         )
         bounded_text = text[:6000]
         actions = ["set_value", "add_unit", "insert_unit_after", "connect", "disconnect", "mirror", "move", "rename", "delete"]

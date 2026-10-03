@@ -473,3 +473,32 @@
     grid-template-columns: 1fr;
   }
 }
+.draft-mixed-summary {
+  min-width: 0;
+  margin: 0.5rem 0;
+  padding: 0.65rem;
+  border: 1px solid var(--border, #cbd5e1);
+  border-radius: 6px;
+  background: var(--surface-soft, #f8fafc);
+}
+.draft-mixed-summary > p { margin: 0 0 0.45rem; }
+.draft-convergence-table {
+  max-height: 15rem;
+  max-width: 100%;
+  overflow: auto;
+  margin-top: 0.5rem;
+}
+.draft-convergence-table table { width: 100%; border-collapse: collapse; }
+.draft-convergence-table th,
+.draft-convergence-table td { padding: 0.25rem 0.45rem; border-bottom: 1px solid var(--border, #cbd5e1); text-align: left; }
+.draft-segment-list { max-height: 8rem; overflow: auto; overflow-wrap: anywhere; }
+.draft-segment-list p { margin: 0.35rem 0; }
+.draft-owner-badge-label {
+  display: inline-block;
+  padding: 0.1rem 0.35rem;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #1e293b;
+  font-size: 0.75rem;
+  font-weight: 700;
+}

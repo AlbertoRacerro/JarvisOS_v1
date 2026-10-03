@@ -66,7 +66,11 @@ def culture_findings(document: dict[str, Any]) -> list[dict[str, Any]]:
     culture_streams = {stream["id"]: stream for stream in feeds}
     from app.modules.process_stack import mixed
 
-    consumed = set(mixed.partition(document)["consumed"]) if mixed.has_jarvis_unit(document) else set()
+    try:
+        consumed = set(mixed.partition(document)["consumed"]) if mixed.has_jarvis_unit(document) else set()
+    except ValueError:
+        # The mixed validator owns the partition refusal; findings must remain readable.
+        consumed = set()
     tears = [stream for stream in objects.values() if stream["kind"] == "stream"
              and (stream.get("source") or {}).get("unit") in consumed]
     culture_streams.update({stream["id"]: stream for stream in tears})

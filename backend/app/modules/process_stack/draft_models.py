@@ -227,6 +227,12 @@ UNIT_REGISTRY: dict[str, UnitSpec] = {
     ),
 }
 
+if any((spec.owner == "dwsim") != (spec.dwsim_type is not None and bool(spec.native_types))
+       for spec in UNIT_REGISTRY.values()):
+    raise RuntimeError("Process unit registry owner/native-type contract is inconsistent")
+if any(spec.owner not in {"dwsim", "jarvis_bio"} for spec in UNIT_REGISTRY.values()):
+    raise RuntimeError("Process unit registry contains an unsupported owner")
+
 UNSUPPORTED_TYPES: dict[str, str] = {
     "Reactor": "Only the kinetically defined PFR subset is supported.",
 }

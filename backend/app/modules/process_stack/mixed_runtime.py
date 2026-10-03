@@ -6,10 +6,14 @@ import copy
 import math
 import tempfile
 import time
+from collections.abc import Callable
+from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from app.modules.process_stack import culture, draft_compiler, mixed
+from app.modules.process_stack.draft_models import UNIT_REGISTRY
 from app.modules.process_stack.dwsim_mcp import DwsimMcpClient
 
 
@@ -20,14 +24,100 @@ class SegmentFailure(RuntimeError):
         self.detail = detail
 
 
+@dataclass
+class JarvisUnitContext:
+    """Inputs shared by one Jarvis evaluation; cache lives for one Process Run."""
+
+    inlet_density_kg_m3: float
+    deadline: float
+    cache: dict[str, Any]
+    validation: bool = False
+
+    def remaining_s(self) -> float:
+        return max(0.0, self.deadline - time.monotonic())
+
+
+@dataclass
+class JarvisUnitEvaluation:
+    outlets: dict[str, dict[str, Any]]
+    result: dict[str, Any]
+    # Rates are signed production, in kg/s except DIC in mol/s.
+    culture_generation: dict[str, float] = dataclass_field(default_factory=dict)
+    culture_generation_units: dict[str, str] = dataclass_field(default_factory=dict)
+
+
+JarvisEvaluator = Callable[[dict[str, Any], dict[str, Any], JarvisUnitContext], JarvisUnitEvaluation]
+
+
+def _evaluate_separator(unit: dict[str, Any], inlet: dict[str, Any],
+                        context: JarvisUnitContext) -> JarvisUnitEvaluation:
+    del context
+    recovery = float(unit["params"]["biomass_recovery"]["si"])
+    factor = float(unit["params"]["concentration_factor"]["si"])
+    concentrate, clarified = mixed.separator(inlet, recovery, factor)
+    return JarvisUnitEvaluation(
+        outlets={"concentrate": concentrate, "clarified": clarified},
+        result={"owner": "jarvis_bio", "calculated": True,
+                "evaluator": "jarvis.specified_separator", "version": 1,
+                "fidelity": "screening — specified performance, not a mechanistic separator",
+                "caveats": ["Dissolved species follow the carrier.", "No energy or pressure effect."],
+                "reported": {"concentrate_flow_kg_s": {"value": concentrate["mass_flow_kg_s"], "units": "kg/s"},
+                             "clarified_flow_kg_s": {"value": clarified["mass_flow_kg_s"], "units": "kg/s"}}},
+    )
+
+
+JARVIS_EVALUATORS: dict[str, JarvisEvaluator] = {"SpecifiedSeparator": _evaluate_separator}
+GENERATION_UNITS = {name: "mol/s" if name == "dic" else "kg/s" for name in mixed.CULTURE_FIELDS}
+
+
+def _check_evaluation(unit: dict[str, Any], evaluation: JarvisUnitEvaluation) -> None:
+    if set(evaluation.outlets) != set(UNIT_REGISTRY[unit["type"]].outlets):
+        raise SegmentFailure(unit["tag"], {"code": "JARVIS_OUTLETS_MISMATCH"})
+    if (any(name not in mixed.CULTURE_FIELDS or not isinstance(rate, (int, float))
+            or not math.isfinite(rate) for name, rate in evaluation.culture_generation.items())
+            or evaluation.culture_generation_units != {
+                name: GENERATION_UNITS[name] for name in evaluation.culture_generation
+                if name in GENERATION_UNITS}):
+        raise SegmentFailure(unit["tag"], {"code": "JARVIS_GENERATION_INVALID"})
+
+
+def _call_evaluator(unit: dict[str, Any], inlet: dict[str, Any],
+                    context: JarvisUnitContext) -> JarvisUnitEvaluation:
+    evaluator = JARVIS_EVALUATORS.get(unit["type"])
+    if evaluator is None:
+        raise SegmentFailure(unit["tag"], {"code": "JARVIS_EVALUATOR_MISSING", "type": unit["type"]})
+    try:
+        evaluation = evaluator(unit, inlet, context)
+    except Exception as exc:
+        if isinstance(exc, SegmentFailure):
+            raise
+        code = "JARVIS_UNIT_TIMEOUT" if isinstance(exc, TimeoutError) else str(
+            getattr(exc, "code", "JARVIS_UNIT_FAILED"))
+        detail = getattr(exc, "detail", None)
+        raise SegmentFailure(unit["tag"], {"code": code, "error_type": type(exc).__name__,
+                                            "message": str(exc)[:600], "detail": detail}) from exc
+    if context.remaining_s() <= 0:
+        raise SegmentFailure(unit["tag"], {"code": "JARVIS_UNIT_TIMEOUT"})
+    _check_evaluation(unit, evaluation)
+    return evaluation
+
+
 class _ClosingClient:
     """Keep the unchanged compiler path while closing the mixed path's fresh handle."""
 
-    def __init__(self, client: DwsimMcpClient) -> None:
+    def __init__(self, client: DwsimMcpClient, deadline: float | None = None) -> None:
         self.client = client
+        self.deadline = deadline
         self.flowsheets: list[str] = []
 
     def call(self, name: str, args: dict[str, Any], timeout: float) -> Any:
+        if self.deadline is not None:
+            remaining = self.deadline - time.monotonic()
+            if remaining < 1:
+                raise TimeoutError("mixed-solve wall budget exhausted")
+            timeout = min(timeout, remaining)
+            if name == "dwsim_solve_run" and isinstance(args.get("timeout_s"), (int, float)):
+                args = {**args, "timeout_s": min(float(args["timeout_s"]), remaining)}
         result = self.client.call(name, args, timeout)
         if name == "dwsim_flowsheet_create":
             self.flowsheets.append(result["flowsheet_id"])
@@ -38,7 +128,8 @@ class _ClosingClient:
     def close(self) -> None:
         for flow in self.flowsheets:
             try:
-                self.client.call("dwsim_flowsheet_close", {"flowsheet_id": flow}, 30)
+                timeout = min(30.0, max(1.0, self.deadline - time.monotonic())) if self.deadline else 30.0
+                self.client.call("dwsim_flowsheet_close", {"flowsheet_id": flow}, timeout)
             except Exception:  # noqa: BLE001 - the process closes after the Run
                 pass
 
@@ -46,11 +137,13 @@ class _ClosingClient:
 def _light(document: dict[str, Any], client: DwsimMcpClient, *, label: str,
            remaining_s: float) -> dict[str, Any]:
     """Same verified build as materialize, skipping only full result catalogue work."""
-    wrapper = _ClosingClient(client)
+    deadline = time.monotonic() + max(0.0, remaining_s)
+    wrapper = _ClosingClient(client, deadline)
     exp = draft_compiler.expected(document)
     flow = ""
     started = time.monotonic()
     try:
+        build_started = time.monotonic()
         with tempfile.TemporaryDirectory(prefix="jarvis-mixed-") as temp:
             case = Path(temp) / "segment.dwxml"
             flow = wrapper.call("dwsim_flowsheet_create", {"name": label}, min(30, remaining_s))["flowsheet_id"]
@@ -58,16 +151,19 @@ def _light(document: dict[str, Any], client: DwsimMcpClient, *, label: str,
                 wrapper.call(name, {"flowsheet_id": flow, **args}, min(60, max(0.1, remaining_s - (time.monotonic() - started))))
             wrapper.call("dwsim_flowsheet_save", {"flowsheet_id": flow, "filepath": str(case),
                                                        "compressed": False}, min(60, remaining_s))
-            actual = draft_compiler.read_back(wrapper, flow, case, exp)
+            actual = draft_compiler.read_back(cast(DwsimMcpClient, wrapper), flow, case, exp)
             diffs = draft_compiler.compare(exp, actual)
             if diffs:
                 raise SegmentFailure(label, {"code": "materialization_mismatch", "diffs": diffs})
             check = wrapper.call("dwsim_flowsheet_check", {"flowsheet_id": flow}, min(30, remaining_s))
             if not check.get("ready"):
                 raise SegmentFailure(label, {"code": "check_failed", "findings": check.get("findings", [])})
+            build_seconds = time.monotonic() - build_started
+            solve_started = time.monotonic()
             solve = wrapper.call("dwsim_solve_run", {"flowsheet_id": flow,
                                                       "timeout_s": min(120, max(1, remaining_s))},
                                  min(150, max(1, remaining_s)))
+            solve_seconds = time.monotonic() - solve_started
             if solve.get("ok") is not True or solve.get("errors"):
                 raise SegmentFailure(label, {"code": "solve_failed", "errors": solve.get("errors", [])})
             streams = {stream["tag"]: draft_compiler._stream_result(wrapper.call(
@@ -75,25 +171,47 @@ def _light(document: dict[str, Any], client: DwsimMcpClient, *, label: str,
                 min(30, remaining_s))) for stream in document["objects"].values()
                 if stream["kind"] == "stream" and stream["type"] != "EnergyStream"}
             return {"status": "completed", "streams": streams,
-                    "materialization_fingerprint": draft_compiler.fingerprint(actual, dwsim_version="10.2.9",
-                                                                            mcp_sha256=""),
-                    "elapsed_s": time.monotonic() - started}
+                    "elapsed_s": time.monotonic() - started,
+                    "elapsed_s_by_phase": {"build": build_seconds, "solve": solve_seconds,
+                                            "culture": max(0.0, time.monotonic() - started
+                                                            - build_seconds - solve_seconds)}}
     finally:
         wrapper.close()
 
 
 def _full(document: dict[str, Any], client: DwsimMcpClient, *, label: str, keep_case: Path | None,
-          dwsim_version: str, mcp_sha256: str, action: str = "run") -> dict[str, Any]:
-    wrapper = _ClosingClient(client)
+          dwsim_version: str, mcp_sha256: str, action: str = "run",
+          deadline: float | None = None) -> dict[str, Any]:
+    wrapper = _ClosingClient(client, deadline)
     try:
-        result = draft_compiler.materialize(document, action=action, client=wrapper,
+        result = draft_compiler.materialize(document, action=action, client=cast(DwsimMcpClient, wrapper),
                                             dwsim_version=dwsim_version, mcp_sha256=mcp_sha256,
                                             label=label, keep_case=keep_case)
         if result["status"] not in {"completed", "validated"}:
-            raise SegmentFailure(label, result)
+            failed = next((tag for tag, unit in result.get("units", {}).items()
+                           if unit.get("calculated") is False or unit.get("error")), label)
+            raise SegmentFailure(failed, result)
         return result
     finally:
         wrapper.close()
+
+
+def _flash(state: dict[str, Any], tag: str, client: DwsimMcpClient, *, label: str,
+           dwsim_version: str, mcp_sha256: str, property_package: str,
+           full: bool, remaining_s: float, deadline: float | None = None,
+           keep_case: Path | None = None) -> dict[str, Any]:
+    """Flash one Jarvis-owned outlet through the ordinary verified DWSIM compiler path."""
+    stream = {"id": tag, "kind": "stream", "tag": tag, "type": "MaterialStream",
+              "source": None, "target": None, "spec": _feed_spec(state), "x": 0, "y": 0}
+    document = {"schema_version": 1, "name": label, "compounds": list(state["mass_fractions"]),
+                "property_package": property_package, "objects": {tag: stream},
+                "reactions": {}}
+    outcome = (_full(document, client, label=label, keep_case=keep_case,
+                     dwsim_version=dwsim_version, mcp_sha256=mcp_sha256,
+                     deadline=deadline) if full
+               else _light(document, client, label=label,
+                           remaining_s=max(0.0, (deadline - time.monotonic()) if deadline else remaining_s)))
+    return outcome["streams"][tag]
 
 
 def _feeds(document: dict[str, Any]) -> list[dict[str, Any]]:
@@ -182,6 +300,33 @@ def _seed(document: dict[str, Any], part: dict[str, Any]) -> dict[str, dict[str,
     return result
 
 
+def _validation_states(document: dict[str, Any], part: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Supply deterministic boundary guesses so Validate can build without solving a segment."""
+    feeds = _feeds(document)
+    if not feeds:
+        return {}
+    reference = _state_from_spec(next((feed for feed in feeds if feed.get("spec", {}).get("culture")), feeds[0]))
+    known = {feed["tag"]: _state_from_spec(feed) for feed in feeds}
+    for stream in document["objects"].values():
+        if stream["kind"] == "stream" and (stream.get("source") or {}).get("unit") in part["jarvis_units"]:
+            known.setdefault(stream["tag"], copy.deepcopy(reference))
+    for unit_id in part["jarvis_units"]:
+        unit = document["objects"][unit_id]
+        incoming = next(stream for stream in document["objects"].values() if stream["kind"] == "stream"
+                        and (stream.get("target") or {}).get("unit") == unit_id)
+        inlet = known.get(incoming["tag"], copy.deepcopy(reference))
+        evaluation = _call_evaluator(unit, inlet, JarvisUnitContext(
+            inlet_density_kg_m3=float(inlet.get("density_kg_m3") or 1000.0),
+            deadline=time.monotonic() + mixed.WALL_BUDGET_S, cache={}, validation=True))
+        outgoing = sorted((stream for stream in document["objects"].values() if stream["kind"] == "stream"
+                           and (stream.get("source") or {}).get("unit") == unit_id),
+                          key=lambda stream: stream["source"]["port"])
+        for stream in outgoing:
+            port = UNIT_REGISTRY[unit["type"]].outlets[stream["source"]["port"]]
+            known[stream["tag"]] = evaluation.outlets[port]
+    return known
+
+
 def _flatten(state: dict[str, Any]) -> dict[str, float | None]:
     row = {name: state.get(name) for name in ("temperature_K", "pressure_Pa", "mass_flow_kg_s")}
     row.update({"mass_fraction." + name: value for name, value in state.get("mass_fractions", {}).items()})
@@ -192,7 +337,7 @@ def _flatten(state: dict[str, Any]) -> dict[str, float | None]:
 def _from_stream(result: dict[str, Any], prior: dict[str, Any] | None = None) -> dict[str, Any]:
     return {"temperature_K": result.get("temperature_K"), "pressure_Pa": result.get("pressure_Pa"),
             "mass_flow_kg_s": result.get("mass_flow_kg_s"), "mass_fractions": result.get("mass_fractions", {}),
-            "vapor_fraction": result.get("vapor_fraction"),
+            "vapor_fraction": result.get("vapor_fraction"), "density_kg_m3": culture._density(result),
             "culture": copy.deepcopy((prior or {}).get("culture") or {})}
 
 
@@ -218,6 +363,30 @@ def _propagate_culture(segment: dict[str, Any], result: dict[str, Any],
     for feed in _feeds(segment):
         states[feed["tag"]] = _culture_for_feed(
             feed, streams[feed["tag"]], None if feed.get("_original_feed") else boundary.get(feed["tag"]))
+    # A native DWSIM Recycle closes a culture loop after the carrier solve. Its
+    # outlet needs an initial culture value before the first Mixer sweep.
+    culture_feeds = sorted((feed for feed in _feeds(segment) if states[feed["tag"]]),
+                           key=lambda item: item["tag"])
+    if culture_feeds:
+        first_culture = states[culture_feeds[0]["tag"]]
+        reachable = {(feed.get("target") or {}).get("unit") for feed in culture_feeds
+                     if (feed.get("target") or {}).get("unit") is not None}
+        changed_reach = True
+        while changed_reach:
+            changed_reach = False
+            for stream in segment["objects"].values():
+                if stream["kind"] != "stream" or stream["type"] == "EnergyStream":
+                    continue
+                source = (stream.get("source") or {}).get("unit")
+                target = (stream.get("target") or {}).get("unit")
+                if source in reachable and target is not None and target not in reachable:
+                    reachable.add(target)
+                    changed_reach = True
+        for stream in segment["objects"].values():
+            source = (stream.get("source") or {}).get("unit")
+            if (stream["kind"] == "stream" and source in reachable
+                    and segment["objects"][source]["type"] == "Recycle"):
+                states.setdefault(stream["tag"], copy.deepcopy(first_culture))
     units = sorted((unit for unit in segment["objects"].values() if unit["kind"] == "unit"),
                    key=lambda item: item["tag"])
     for _ in range(10000):
@@ -244,8 +413,9 @@ def _propagate_culture(segment: dict[str, Any], result: dict[str, Any],
                                                    for flow, value in zip(flows, values, strict=True)) / total)
                                   for field in mixed.CULTURE_FIELDS}
                 ph_values = [value.get("ph") for value in values]
-                result_culture["ph"] = (ph_values[0] if all(value is not None for value in ph_values)
-                                        and max(ph_values) - min(ph_values) <= 0.01 else None)
+                ph_numbers = [float(value) for value in ph_values if isinstance(value, (int, float))]
+                result_culture["ph"] = (ph_numbers[0] if len(ph_numbers) == len(ph_values)
+                                        and max(ph_numbers) - min(ph_numbers) <= 0.01 else None)
                 output_values = [result_culture] * len(outgoing)
             elif unit["type"] == "HeatExchanger":
                 output_values = values
@@ -257,7 +427,16 @@ def _propagate_culture(segment: dict[str, Any], result: dict[str, Any],
                 if vapor is None or vapor > 1e-6 or culture._density(streams[tag]) is None:
                     raise SegmentFailure(tag, "CULTURE_PHASE_NOT_LIQUID" if vapor is not None else
                                          "CULTURE_DENSITY_UNAVAILABLE")
-                if tag not in states or states[tag] != value:
+                old = states.get(tag)
+                differs = old is None or any(
+                    (old.get(field) is None) != (value.get(field) is None)
+                    or (old.get(field) is not None and value.get(field) is not None
+                        and abs(float(old[field] or 0.0) - float(value[field] or 0.0)) > min(
+                            mixed.tolerance(field, float(old[field] or 0.0)),
+                            1e-10 * max(abs(float(old[field] or 0.0)), 1e-12)))
+                    for field in mixed.CULTURE_FIELDS
+                ) or (old is not None and old.get("ph") != value.get("ph"))
+                if differs:
                     states[tag] = copy.deepcopy(value)
                     changed = True
         if not changed:
@@ -265,14 +444,206 @@ def _propagate_culture(segment: dict[str, Any], result: dict[str, Any],
     raise SegmentFailure("culture", "culture native recycle did not converge in 10000 sweeps")
 
 
+def _culture_balances(document: dict[str, Any], known: dict[str, dict[str, Any]],
+                      generation: dict[str, dict[str, float]]) -> dict[str, dict[str, Any]]:
+    objects = document["objects"]
+    balances: dict[str, dict[str, Any]] = {}
+    for unit in (item for item in objects.values() if item["kind"] == "unit" and item["type"] != "Recycle"):
+        incoming = sorted((item for item in objects.values() if item["kind"] == "stream"
+                           and (item.get("target") or {}).get("unit") == unit["id"]
+                           and item["type"] != "EnergyStream"), key=lambda item: item["target"]["port"])
+        outgoing = sorted((item for item in objects.values() if item["kind"] == "stream"
+                           and (item.get("source") or {}).get("unit") == unit["id"]
+                           and item["type"] != "EnergyStream"), key=lambda item: item["source"]["port"])
+        rows: dict[str, Any] = {}
+        for field in mixed.CULTURE_FIELDS:
+            values = [known.get(stream["tag"], {}).get("culture", {}) for stream in [*incoming, *outgoing]]
+            if not any(values):
+                continue
+            if any(field in value and value[field] is None for value in values):
+                continue
+            factor = 0.001 if field == "salinity" else 1.0
+            def amount(stream: dict[str, Any], field_name: str = field,
+                       factor_value: float = factor) -> float:
+                state = known.get(stream["tag"], {})
+                value = state.get("culture", {}).get(field_name)
+                if value is None:
+                    return 0.0
+                return float(state["mass_flow_kg_s"]) * float(value) * factor_value
+            inbound = sum(amount(stream) for stream in incoming)
+            outbound = sum(amount(stream) for stream in outgoing)
+            produced = generation.get(unit["tag"], {}).get(field, 0.0)
+            residual_value = inbound + produced - outbound
+            tolerance_value = 1e-9 * max(abs(inbound + produced), abs(outbound)) + 1e-12
+            rows[field] = {"in": inbound, "out": outbound, "residual": residual_value,
+                           "generated": produced,
+                           "tolerance": tolerance_value, "unit": "mol/s" if field == "dic" else "kg/s",
+                           "passed": abs(residual_value) <= tolerance_value}
+        if rows:
+            if any(not row["passed"] for row in rows.values()):
+                raise SegmentFailure(unit["tag"], {"code": "CULTURE_BALANCE_FAILED", "unit_balances": rows})
+            balances[unit["tag"]] = rows
+    return balances
+
+
+def _culture_results(document: dict[str, Any], final: dict[str, Any]) -> dict[str, Any]:
+    feeds = [item for item in document["objects"].values() if item["kind"] == "stream"
+             and item.get("source") is None and item.get("spec", {}).get("culture") is not None]
+    feed_tag = feeds[0]["tag"] if feeds else "a culture feed"
+    results: dict[str, Any] = {}
+    for stream in (item for item in document["objects"].values() if item["kind"] == "stream"
+                   and item["type"] != "EnergyStream"):
+        state = final["known"].get(stream["tag"])
+        mass_specific = (state or {}).get("culture") or {}
+        has_culture = bool(mass_specific) or stream in feeds
+        if not has_culture:
+            continue
+        solved = final["streams"].get(stream["tag"], {})
+        density = culture._density(solved)
+        if density is None:
+            raise SegmentFailure(stream["tag"], "CULTURE_DENSITY_UNAVAILABLE")
+        reasons = {name: f"not specified on feed {feed_tag}" for name in (*mixed.CULTURE_FIELDS, "ph")
+                   if mass_specific.get(name) is None}
+        values = culture._display_values({"mass_specific": mass_specific, "reasons": reasons}, density)
+        source = (stream.get("source") or {}).get("unit")
+        unit_tag = document["objects"].get(source, {}).get("tag") if source else None
+        results[stream["tag"]] = {
+            "owner": "jarvis", "propagation_version": culture.PROPAGATION_VERSION, "status": "completed",
+            "density_kg_m3": density, "values": values,
+            "unit_balances": final["culture_balances"].get(unit_tag, {}) if unit_tag else {},
+            "fidelity": culture.FIDELITY,
+            "caveats": ["DWSIM mixture density uses seawater-as-water approximation.",
+                        "Dissolved O₂ is carried without solubility or degassing changes; heated streams may be supersaturated."],
+            "pH_reason": reasons.get("ph"),
+        }
+    return results
+
+
+def _whole_graph_balances(document: dict[str, Any], final: dict[str, Any],
+                          tear: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    objects = document["objects"]
+    feeds = [item for item in objects.values() if item["kind"] == "stream" and item["type"] != "EnergyStream"
+             and item.get("source") is None]
+    products = [item for item in objects.values() if item["kind"] == "stream" and item["type"] != "EnergyStream"
+                and item.get("target") is None and item.get("source") is not None]
+    def flow(stream: dict[str, Any]) -> float:
+        return float(final["known"][stream["tag"]]["mass_flow_kg_s"])
+    inbound, outbound = sum(flow(item) for item in feeds), sum(flow(item) for item in products)
+    native_error = 0.0
+    native_values: list[tuple[float, dict[str, Any]]] = []
+    native_error_findings: list[str] = []
+    for unit in (item for item in objects.values() if item["kind"] == "unit" and item["type"] == "Recycle"
+                 and item["id"] not in mixed.partition(document)["consumed"]):
+        result = final["units"].get(unit["tag"], {}).get("reported", {}).get("Mass Flow Error", {})
+        raw = result.get("value") if isinstance(result, dict) else None
+        if isinstance(raw, (int, float)) and math.isfinite(float(raw)):
+            error = abs(float(raw)) / 3600.0
+        else:
+            native_error_findings.append(unit["tag"])
+            error = 0.0
+        native_error += error
+        stream = next((item for item in objects.values() if item["kind"] == "stream"
+                       and (item.get("source") or {}).get("unit") == unit["id"]), None)
+        native_values.append((error, final["known"].get(stream["tag"], {}) if stream else {}))
+    tear_tolerance = sum(mixed.tolerance("mass_flow_kg_s", state["mass_flow_kg_s"])
+                         for state in tear.values())
+    carrier_residual = inbound - outbound
+    carrier_tolerance = tear_tolerance + native_error + 1e-9 * max(abs(inbound), abs(outbound)) + 1e-12
+    rows: dict[str, Any] = {"carrier_mass": {"in": inbound, "out": outbound, "residual": carrier_residual,
+                                              "tolerance": carrier_tolerance, "unit": "kg/s",
+                                              "passed": abs(carrier_residual) <= carrier_tolerance}}
+    for field in mixed.CULTURE_FIELDS:
+        def rate(stream: dict[str, Any], field_name: str = field) -> float | None:
+            value = final["known"].get(stream["tag"], {}).get("culture", {}).get(field_name)
+            if value is None:
+                return 0.0 if not final["known"].get(stream["tag"], {}).get("culture") else None
+            return flow(stream) * float(value) * (0.001 if field_name == "salinity" else 1.0)
+        feed_rates = [rate(item) for item in feeds]
+        product_rates = [rate(item) for item in products]
+        if any(value is None for value in [*feed_rates, *product_rates]):
+            continue
+        amount_in = sum(float(value) for value in feed_rates if value is not None)
+        amount_out = sum(float(value) for value in product_rates if value is not None)
+        generated = sum(unit.get(field, 0.0) for unit in final.get("culture_generation", {}).values())
+        native_allowance = sum(error * float(state.get("culture", {}).get(field) or 0.0) *
+                               (0.001 if field == "salinity" else 1.0)
+                               for error, state in native_values)
+        tear_allowance = sum(mixed.tolerance(field, state.get("culture", {}).get(field))
+                             for state in tear.values())
+        tolerance_value = tear_allowance + native_allowance + 1e-9 * max(abs(amount_in), abs(amount_out)) + 1e-12
+        residual_value = amount_in + generated - amount_out
+        rows[field] = {"in": amount_in, "out": amount_out, "residual": residual_value,
+                       "generated": generated,
+                       "tolerance": tolerance_value, "unit": "mol/s" if field == "dic" else "kg/s",
+                       "passed": abs(residual_value) <= tolerance_value}
+    passed = all(row["passed"] for row in rows.values()) and not native_error_findings
+    return {"status": "calculated" if passed else "failed", "balances": rows,
+            "missing_native_recycle_errors": native_error_findings}
+
+
+def _light_full_mismatch(light: dict[str, dict[str, Any]],
+                         full: dict[str, dict[str, Any]]) -> dict[str, Any] | None:
+    if set(light) != set(full):
+        return {"code": "light_full_mismatch", "light_tears": sorted(light), "full_tears": sorted(full)}
+    for tag in sorted(light):
+        normalized, worst, _fields = mixed.residual(_flatten(light[tag]), _flatten(full[tag]))
+        if normalized > 1:
+            return {"code": "light_full_mismatch", "tear": tag,
+                    "max_normalized_residual": normalized, "worst_field": worst}
+    return None
+
+
+def _final_status(status: str, reason: str, mismatch: dict[str, Any] | None,
+                  balances: dict[str, Any]) -> tuple[str, str]:
+    if mismatch is not None:
+        return "segment_failed", "light_full_mismatch"
+    if balances["status"] != "calculated" and status == "completed":
+        return "unconverged", "balance"
+    return status, reason
+
+
+def _pressure_diagnosis(history: list[dict[str, Any]]) -> str | None:
+    if len(history) < 3:
+        return None
+    tail = history[-3:]
+    common = set.intersection(*(set(row.get("residuals", {})) for row in tail))
+    for tag in sorted(common):
+        values = [row["residuals"][tag].get("pressure_Pa") for row in tail]
+        if all(isinstance(value, (int, float)) and value != 0 for value in values):
+            signs = {value > 0 for value in values}
+            if len(signs) == 1 and values[-1] < 0:
+                drop = abs(float(values[-1]))
+                return f"pressure falls by {drop:.6g} Pa per pass around the loop; add a pump"
+    return None
+
+
 def _evaluate(document: dict[str, Any], part: dict[str, Any], tear: dict[str, dict[str, Any]],
               *, client: DwsimMcpClient, full: bool, run_dir: Path, iteration: int,
-              dwsim_version: str, mcp_sha256: str, remaining_s: float) -> dict[str, Any]:
+              dwsim_version: str, mcp_sha256: str, remaining_s: float,
+              run_cache: dict[str, Any] | None = None) -> dict[str, Any]:
     objects = document["objects"]
+    started = time.monotonic()
+    deadline = time.monotonic() + max(0.0, remaining_s)
     known = {**{feed["tag"]: _state_from_spec(feed) for feed in _feeds(document)}, **copy.deepcopy(tear)}
     stream_results: dict[str, Any] = {}
     unit_results: dict[str, Any] = {}
+    culture_generation: dict[str, dict[str, float]] = {}
+    mixed_findings: list[dict[str, Any]] = []
     segment_records: list[dict[str, Any]] = []
+    max_build_seconds = 0.0
+    phase_elapsed = {"build": 0.0, "solve": 0.0, "culture": 0.0}
+    for feed in _feeds(document):
+        target = (feed.get("target") or {}).get("unit")
+        if target not in part["jarvis_units"]:
+            continue
+        feed_flushed = _flash(known[feed["tag"]], feed["tag"], client,
+                              label=f"mixed-feed-{iteration}-{feed['tag']}",
+                              dwsim_version=dwsim_version, mcp_sha256=mcp_sha256,
+                              property_package=document["property_package"], full=full,
+                              remaining_s=max(0.0, deadline - time.monotonic()), deadline=deadline)
+        known[feed["tag"]] = _from_stream(feed_flushed)
+        known[feed["tag"]]["culture"] = _culture_for_feed(feed, feed_flushed, None)
+        stream_results[feed["tag"]] = {**feed_flushed, "owner": "dwsim"}
     segments = part["segments"]
     max_level = max(part["levels"].values(), default=0)
     for level in range(max_level + 1):
@@ -285,14 +656,20 @@ def _evaluate(document: dict[str, Any], part: dict[str, Any], tear: dict[str, di
                 if full:
                     outcome = _full(segment, client, label=label,
                                     keep_case=run_dir / f"segment-{index}.dwxmz",
-                                    dwsim_version=dwsim_version, mcp_sha256=mcp_sha256)
+                                    dwsim_version=dwsim_version, mcp_sha256=mcp_sha256,
+                                    deadline=deadline)
                 else:
-                    outcome = _light(segment, client, label=label, remaining_s=remaining_s)
+                    outcome = _light(segment, client, label=label,
+                                     remaining_s=max(0.0, deadline - time.monotonic()))
             except Exception as exc:
                 if isinstance(exc, SegmentFailure):
                     raise
                 raise SegmentFailure(label, {"code": type(exc).__name__, "message": str(exc)}) from exc
             states = _propagate_culture(segment, outcome, known)
+            phase = outcome.get("elapsed_s_by_phase", {})
+            phase_elapsed["build"] += float(phase.get("build", 0.0))
+            phase_elapsed["solve"] += float(phase.get("solve", 0.0))
+            max_build_seconds = max(max_build_seconds, float(phase.get("build", 0.0)))
             for tag, result in outcome["streams"].items():
                 original = next((item for item in objects.values() if item["kind"] == "stream" and item["tag"] == tag), None)
                 if original is None:
@@ -307,7 +684,8 @@ def _evaluate(document: dict[str, Any], part: dict[str, Any], tear: dict[str, di
                                  for tag, value in outcome.get("units", {}).items()})
             segment_records.append({"id": index, "units": [objects[uid]["tag"] for uid in ids],
                                     "level": level, "materialization_fingerprint": outcome.get("materialization_fingerprint"),
-                                    "solved_case_sha256": outcome.get("solved_case_sha256")})
+                                    "solved_case_sha256": outcome.get("solved_case_sha256"),
+                                    "elapsed_s_by_phase": phase})
         for uid in part["jarvis_units"]:
             if part["levels"][uid] != level:
                 continue
@@ -317,25 +695,53 @@ def _evaluate(document: dict[str, Any], part: dict[str, Any], tear: dict[str, di
             if incoming["tag"] not in known:
                 raise SegmentFailure(unit["tag"], "Jarvis inlet has no DWSIM state")
             inlet = known[incoming["tag"]]
-            if unit["type"] != "SpecifiedSeparator":
-                raise SegmentFailure(unit["tag"], "Unknown Jarvis evaluator")
-            outputs = mixed.separator(inlet,
-                                      float(unit["params"]["biomass_recovery"]["si"]),
-                                      float(unit["params"]["concentration_factor"]["si"]))
+            density = inlet.get("density_kg_m3")
+            if density is None or not math.isfinite(float(density)) or float(density) <= 0:
+                raise SegmentFailure(unit["tag"], "Jarvis inlet has no solved liquid DWSIM density")
+            evaluation = _call_evaluator(unit, inlet, JarvisUnitContext(
+                inlet_density_kg_m3=float(density), deadline=deadline,
+                cache=run_cache if run_cache is not None else {}))
+            culture_generation[unit["tag"]] = evaluation.culture_generation
+            inlet_biomass = (inlet.get("culture") or {}).get("biomass")
+            factor = (float(unit["params"]["concentration_factor"]["si"])
+                      if unit["type"] == "SpecifiedSeparator" else 0.0)
+            if unit["type"] == "SpecifiedSeparator" and inlet_biomass is not None and factor * float(inlet_biomass) > 0.25:
+                mixed_findings.append({"severity": "warning", "code": "SEPARATOR_CONCENTRATE_IMPLAUSIBLE",
+                                       "object": unit["tag"], "field": "concentration_factor",
+                                       "message": "Converged separator concentrate exceeds the 0.25 kg/kg screening bound.",
+                                       "source": "jarvis"})
             streams = sorted((stream for stream in objects.values() if stream["kind"] == "stream"
                               and (stream.get("source") or {}).get("unit") == uid),
                              key=lambda item: item["source"]["port"])
-            for stream, state in zip(streams, outputs, strict=True):
+            for stream in streams:
+                port = UNIT_REGISTRY[unit["type"]].outlets[stream["source"]["port"]]
+                state = copy.deepcopy(evaluation.outlets[port])
+                downstream = (stream.get("target") or {}).get("unit")
+                flashed: dict[str, Any] | None = None
+                if ((full and (downstream is None or downstream in part["consumed"]))
+                        or downstream in part["jarvis_units"]):
+                    flashed = _flash(state, stream["tag"], client,
+                                     label=f"mixed-flash-{iteration}-{stream['tag']}",
+                                     dwsim_version=dwsim_version, mcp_sha256=mcp_sha256,
+                                     property_package=document["property_package"],
+                                     full=full, remaining_s=max(0.0, deadline - time.monotonic()),
+                                     deadline=deadline,
+                                     keep_case=(run_dir / f"flash-{stream['tag']}.dwxmz") if full else None)
+                    state.update({key: value for key, value in flashed.items()
+                                  if key not in {"display"}})
+                    state["mass_fractions"] = flashed.get("mass_fractions", state.get("mass_fractions", {}))
+                    state["mass_flow_kg_s"] = evaluation.outlets[port]["mass_flow_kg_s"]
+                    state["culture"] = evaluation.outlets[port]["culture"]
+                    state["state_source"] = "jarvis_unit → dwsim_flash"
+                state["property_package"] = document.get("property_package")
                 known[stream["tag"]] = state
-                stream_results[stream["tag"]] = {**state, "state_source": "jarvis_unit",
-                                                  "owner": "jarvis_bio"}
-            unit_results[unit["tag"]] = {"owner": "jarvis_bio", "calculated": True,
-                                         "evaluator": "jarvis.specified_separator", "version": 1,
-                                         "fidelity": "screening — specified performance, not a mechanistic separator",
-                                         "caveats": ["Dissolved species follow the carrier.",
-                                                     "No energy or pressure effect."],
-                                         "reported": {"concentrate_flow_kg_s": outputs[0]["mass_flow_kg_s"],
-                                                      "clarified_flow_kg_s": outputs[1]["mass_flow_kg_s"]}}
+                if flashed is not None:
+                    stream_results[stream["tag"]] = {**flashed, "owner": "jarvis_bio",
+                                                       "state_source": "jarvis_unit → dwsim_flash"}
+                else:
+                    stream_results[stream["tag"]] = {**state, "state_source": "jarvis_unit",
+                                                      "owner": "jarvis_bio"}
+            unit_results[unit["tag"]] = evaluation.result
     produced: dict[str, dict[str, Any]] = {}
     for uid in part["consumed"]:
         unit = objects[uid]
@@ -354,102 +760,149 @@ def _evaluate(document: dict[str, Any], part: dict[str, Any], tear: dict[str, di
                                                                        - tear[outlet["tag"]]["temperature_K"],
                                                   "Pressure Error": known[inlet["tag"]]["pressure_Pa"]
                                                                     - tear[outlet["tag"]]["pressure_Pa"]}}
+    culture_balances = _culture_balances(document, known, culture_generation)
+    for tag, balances in culture_balances.items():
+        if unit_results.get(tag, {}).get("owner") == "jarvis_bio":
+            unit_results[tag]["unit_balances"] = balances
+    phase_elapsed["culture"] = max(0.0, time.monotonic() - started
+                                   - phase_elapsed["build"] - phase_elapsed["solve"])
     return {"produced": produced, "streams": stream_results, "units": unit_results,
-            "segments": segment_records, "known": known}
+            "segments": segment_records, "known": known, "culture_balances": culture_balances,
+            "culture_generation": culture_generation,
+            "max_build_seconds": max_build_seconds, "elapsed_s_by_phase": phase_elapsed,
+            "mixed_findings": mixed_findings}
 
 
 def run(document: dict[str, Any], *, action: str, client: DwsimMcpClient,
         dwsim_version: str, mcp_sha256: str, run_dir: Path) -> dict[str, Any]:
     part = mixed.partition(document)
+    run_dir.mkdir(parents=True, exist_ok=True)
     initial = _seed(document, part)
+    run_cache: dict[str, Any] = {}
     started = time.monotonic()
     if action == "validate":
         try:
+            validation_known = _validation_states(document, part) | _seed(document, part)
             for index, ids in enumerate(part["segments"]):
-                segment = _segment_document(document, ids, initial | {feed["tag"]: _state_from_spec(feed)
-                                                                    for feed in _feeds(document)})
+                segment = _segment_document(document, ids, validation_known)
                 _full(segment, client, label=f"mixed-validate-{index}", keep_case=None,
                       dwsim_version=dwsim_version, mcp_sha256=mcp_sha256, action="validate")
         except SegmentFailure as exc:
             return {"status": "segment_failed", "mixed_solve": {"status": "segment_failed",
                     "failed_segment": exc.segment, "errors": exc.detail}}
         return {"status": "validated", "mixed_solve": {"status": "validated", "partition": part}}
-    tear = initial
-    best_tear = copy.deepcopy(tear)
-    best_residual = math.inf
-    omega = 1.0
-    growth_events = 0
-    history: list[dict[str, Any]] = []
-    reason = "max_iterations"
-    status = "unconverged"
-    last: dict[str, Any] | None = None
-    for iteration in range(1, mixed.MAX_ITERATIONS + 1):
+    t_build = 3.0
+    terminal_flashes = sum(1 for stream in document["objects"].values()
+                           if stream["kind"] == "stream" and (stream.get("source") or {}).get("unit") in part["jarvis_units"]
+                           and (((stream.get("target") or {}).get("unit") is None)
+                                or (stream.get("target") or {}).get("unit") in part["jarvis_units"]
+                                or (stream.get("target") or {}).get("unit") in part["consumed"]))
+    in_iteration_flashes = sum(1 for stream in document["objects"].values()
+                               if stream["kind"] == "stream" and (stream.get("source") or {}).get("unit") in part["jarvis_units"]
+                               and (stream.get("target") or {}).get("unit") in part["jarvis_units"])
+    direct_jarvis_feeds = sum(1 for stream in _feeds(document)
+                              if (stream.get("target") or {}).get("unit") in part["jarvis_units"])
+    reserve_builds = len(part["segments"]) + terminal_flashes + direct_jarvis_feeds
+    iteration_builds = len(part["segments"]) + in_iteration_flashes + direct_jarvis_feeds
+    reserve_s = max(3.0, reserve_builds * max(3.0, 1.5 * t_build))
+    def before_iteration(_iteration: int) -> str | None:
+        nonlocal reserve_s
         remaining = mixed.WALL_BUDGET_S - (time.monotonic() - started)
-        reserve = max(3.0, len(part["segments"]) * 4.5)
-        if remaining < len(part["segments"]) * 3 + reserve:
-            reason = "wall_budget"
-            break
+        reserve_s = max(3.0, reserve_builds * max(3.0, 1.5 * t_build))
+        if remaining < iteration_builds * t_build + reserve_s:
+            return "wall_budget"
+        return None
+
+    candidates: dict[int, dict[str, Any]] = {}
+    history_rows: list[dict[str, Any]] = []
+    phase_totals = {"build": 0.0, "solve": 0.0, "culture": 0.0}
+
+    def evaluate(tear_guess: dict[str, dict[str, Any]], iteration: int) -> dict[str, dict[str, Any]]:
+        nonlocal t_build
+        remaining = mixed.WALL_BUDGET_S - (time.monotonic() - started)
         try:
-            candidate = _evaluate(document, part, tear, client=client, full=False, run_dir=run_dir,
+            candidate = _evaluate(document, part, tear_guess, client=client, full=False, run_dir=run_dir,
                                   iteration=iteration, dwsim_version=dwsim_version,
-                                  mcp_sha256=mcp_sha256, remaining_s=remaining)
+                                  mcp_sha256=mcp_sha256, remaining_s=remaining, run_cache=run_cache)
         except SegmentFailure as exc:
-            return {"status": "segment_failed", "mixed_solve": {"status": "segment_failed",
-                    "reason": "segment_failed", "iteration": iteration, "failed_segment": exc.segment,
-                    "errors": exc.detail, "history": history, "partition": part}}
-        last = candidate
-        per_tear = {tag: mixed.residual(_flatten(tear[tag]), _flatten(output))
-                    for tag, output in candidate["produced"].items()}
-        max_residual, worst_tag = max(((item[0], tag) for tag, item in per_tear.items()), default=(0.0, ""))
-        worst_field = per_tear[worst_tag][1] if worst_tag else ""
-        history.append({"iteration": iteration, "omega": omega, "max_normalized_residual": max_residual,
-                        "worst_tear": worst_tag, "worst_field": worst_field,
-                        "residuals": {tag: item[2] for tag, item in per_tear.items()}})
-        if max_residual <= 1:
-            status = "completed"
-            reason = "converged"
-            break
-        if max_residual > 1.5 * best_residual:
-            growth_events += 1
-            if growth_events >= 4:
-                reason = "damping_exhausted"
-                break
-            omega = max(omega / 2, 0.125)
-            tear = copy.deepcopy(best_tear)
-            continue
-        if max_residual < best_residual:
-            best_residual = max_residual
-            best_tear = copy.deepcopy(tear)
-        updated = copy.deepcopy(tear)
-        for tag, output in candidate["produced"].items():
-            for name in ("temperature_K", "pressure_Pa", "mass_flow_kg_s"):
-                updated[tag][name] += omega * (output[name] - tear[tag][name])
-            for name, value in output["mass_fractions"].items():
-                updated[tag]["mass_fractions"][name] += omega * (value - tear[tag]["mass_fractions"][name])
-            for name in mixed.CULTURE_FIELDS:
-                a, b = tear[tag]["culture"].get(name), output.get("culture", {}).get(name)
-                updated[tag]["culture"][name] = (a + omega * (b - a)) if a is not None and b is not None else b
-            updated[tag]["culture"]["ph"] = output.get("culture", {}).get("ph")
-        tear = updated
+            raise SegmentFailure(exc.segment, {"iteration": iteration, "detail": exc.detail}) from exc
+        except Exception as exc:  # noqa: BLE001 - preserve engine failures in the mixed run record
+            raise SegmentFailure("mixed", {"iteration": iteration, "code": type(exc).__name__,
+                                           "message": str(exc)[:600]}) from exc
+        candidates[iteration] = candidate
+        for name in phase_totals:
+            phase_totals[name] += candidate["elapsed_s_by_phase"][name]
+        t_build = max(t_build, candidate["max_build_seconds"])
+        return candidate["produced"]
+
     try:
-        final = _evaluate(document, part, tear, client=client, full=True, run_dir=run_dir,
-                          iteration=len(history), dwsim_version=dwsim_version,
-                          mcp_sha256=mcp_sha256,
-                          remaining_s=mixed.WALL_BUDGET_S - (time.monotonic() - started))
+        controller = mixed.iterate(initial, evaluate, before_iteration=before_iteration,
+                                   on_history=history_rows.append)
     except SegmentFailure as exc:
+        detail = exc.detail if isinstance(exc.detail, dict) else {"message": str(exc.detail)}
         return {"status": "segment_failed", "mixed_solve": {"status": "segment_failed",
-                "reason": "full_path_failed", "iteration": len(history), "failed_segment": exc.segment,
-                "errors": exc.detail, "history": history, "partition": part}}
-    if last is not None:
-        for tag, output in final["produced"].items():
-            if mixed.residual(_flatten(last["produced"][tag]), _flatten(output))[0] > 1:
-                status, reason = "segment_failed", "light_full_mismatch"
-                break
+                "reason": "segment_failed", "iteration": detail.get("iteration"),
+                "failed_segment": exc.segment, "errors": detail.get("detail", detail),
+                "history": history_rows, "partition": part,
+                "limits": {"iterations": mixed.MAX_ITERATIONS, "wall_s": mixed.WALL_BUDGET_S},
+                "tolerances": _tolerance_record(), "elapsed_s": phase_totals}}
+    tear = controller["iterate"]
+    status, reason, history = controller["status"], controller["reason"], controller["history"]
+    last_iteration = history[-1]["iteration"] if history else None
+    last = candidates.get(last_iteration) if last_iteration is not None else None
+    try:
+        reserve_s = max(3.0, reserve_builds * max(3.0, 1.5 * t_build))
+        final = _evaluate(document, part, tear, client=client, full=True, run_dir=run_dir,
+                          iteration=last_iteration or 0, dwsim_version=dwsim_version,
+                          mcp_sha256=mcp_sha256,
+                          remaining_s=mixed.WALL_BUDGET_S - (time.monotonic() - started),
+                          run_cache=run_cache)
+    except SegmentFailure as exc:
+        detail = exc.detail if isinstance(exc.detail, dict) else {"message": str(exc.detail)}
+        reason = ("wall_budget" if "timeout" in str(detail.get("code", "")).lower()
+                  or "budget" in str(detail.get("message", "")).lower() else "full_path_failed")
+        return {"status": "segment_failed", "mixed_solve": {"status": "segment_failed",
+                "reason": reason, "iteration": len(history), "failed_segment": exc.segment,
+                "errors": detail, "history": history, "partition": part,
+                "limits": {"iterations": mixed.MAX_ITERATIONS, "wall_s": mixed.WALL_BUDGET_S},
+                "tolerances": _tolerance_record(), "elapsed_s": phase_totals}}
+    except Exception as exc:  # noqa: BLE001 - preserve unexpected full-path failures in this record
+        return {"status": "segment_failed", "mixed_solve": {"status": "segment_failed",
+                "reason": "wall_budget" if "timeout" in type(exc).__name__.lower() else "full_path_failed",
+                "iteration": len(history), "failed_segment": "mixed",
+                "errors": {"code": type(exc).__name__, "message": str(exc)[:600]},
+                "history": history, "partition": part,
+                "limits": {"iterations": mixed.MAX_ITERATIONS, "wall_s": mixed.WALL_BUDGET_S},
+                "tolerances": _tolerance_record(), "elapsed_s": phase_totals}}
+    for name in phase_totals:
+        phase_totals[name] += final["elapsed_s_by_phase"][name]
+    mismatch = (_light_full_mismatch(last["produced"], final["produced"])
+                if last is not None and controller["last_input"] == tear else None)
+    balances = _whole_graph_balances(document, final, tear)
+    status, reason = _final_status(status, reason, mismatch, balances)
     return {"status": status, "streams": final["streams"], "units": final["units"],
+            "culture": _culture_results(document, final),
+            "culture_findings": [],
+            "mixed_findings": final["mixed_findings"],
             "process_fingerprint": mixed.fingerprint(document, part),
             "mixed_solve": {"status": status, "reason": reason, "version": mixed.MIXED_SOLVE_VERSION,
                             "method": "direct_substitution", "history": history,
-                            "partition": {**part, "segments": final["segments"]},
-                            "limits": {"iterations": mixed.MAX_ITERATIONS, "wall_s": mixed.WALL_BUDGET_S},
-                            "elapsed_s": time.monotonic() - started},
-            "materialization_fingerprint": "mixed-segments"}
+                            "partition": {**part, "consumed": [document["objects"][uid]["tag"] for uid in part["consumed"]],
+                                          "segments": final["segments"]},
+                            "limits": {"iterations": mixed.MAX_ITERATIONS, "wall_s": mixed.WALL_BUDGET_S,
+                                       "reserve_s": reserve_s},
+                            "tolerances": _tolerance_record(),
+                            "budget": {"t_build_s": t_build, "reserve_s": reserve_s,
+                                       "builds_per_iteration": iteration_builds,
+                                       "final_sweep_builds": terminal_flashes},
+                            "elapsed_s": phase_totals, "balances": balances["balances"],
+                            **({"consistency_failure": mismatch} if mismatch else {}),
+                            **({"diagnosis": _pressure_diagnosis(history)}
+                               if status != "completed" and _pressure_diagnosis(history) else {}),
+                            "results_label": "current" if status == "completed" else "Not converged — last iterate"}}
+
+
+def _tolerance_record() -> dict[str, str]:
+    return {"mass_flow_kg_s": "1e-5 * max(abs(x), 1e-6)",
+            "temperature_K": "0.01", "pressure_Pa": "1e-6 * max(abs(x), 1)",
+            "mass_fraction": "1e-7", "culture": "1e-5 * abs(x) + 1e-12"}

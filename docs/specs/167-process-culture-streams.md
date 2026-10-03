@@ -15,6 +15,8 @@ Code survey: `out/wpbr/a167.report.md`.
 7. **Contracts.** `frontend/src/api/processDraft.ts` is hand-maintained; `generate_frontend_contracts.py` does not cover the Process draft. Spec 145 freezes `Quantity` and `MaterialStateRef` but not a process schema, so this is Process-domain state owned by the 155 draft.
 8. **107.** `bluerev.pbr_day_night` carries biomass, dissolved nitrogen and dissolved O₂ in kg/m³. It has no phosphorus, DIC, pH or salinity.
 
+Superseded for mixed-engine culture recycles by [168](168-process-mixed-engine-solve.md): Recycle uses `culture_rule: "tear"`, and `CULTURE_RECYCLE_UNSUPPORTED` is retired for consumed cross-engine tears.
+
 ## Decision
 
 **The culture extension is Process-draft state owned by Jarvis and propagated by Jarvis after the DWSIM solve. DWSIM never sees it.**
