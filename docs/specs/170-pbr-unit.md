@@ -3,7 +3,7 @@
 State: **draft for review**. This spec combines definition and contract under the maintainer directive of 2026-10-02 (continue the planned PBR roadmap in dependency order). Readiness follows resolution of the branch-selection and 168 interface checks. It builds on the merged [PBR engineering architecture record](../implementation/pbr-engineering-architecture-2026-10-02.md) §5, §6, §7 and §9 row 170, and the ranked engineering inventory, which are joint authority.
 
 - **Hard dependencies:** 168 (mixed-engine solve, Jarvis unit callables) and 169 (model cards). 167 culture streams are merged.
-- **168 coordination:** this spec relies on the Jarvis-unit interface fixed by coordinator ruling in the 168 implementation (evaluator registry, stream density, declared generation terms, unit object and run context, per-Run cache, Jarvis time in the wall budget). The 170 implementation starts only after 168 merges with that interface.
+- **168 coordination:** this spec relies on the Jarvis-unit interface of the 168 implementation: `JARVIS_EVALUATORS[type](unit, inlet, context) -> JarvisUnitEvaluation(outlets, result, culture_generation, culture_generation_units)`, with `context = JarvisUnitContext(inlet_density_kg_m3, deadline, cache, validation)`. A typed unit failure is an exception carrying `code` and `detail`; 168 turns it into `segment_failed` with the unit tag and code preserved. Non-failing findings (for example `PBR_WASHOUT`) travel in `result["findings"]` and are rendered with the unit result. 170 adds one additive field, `culture_generation_allowance` (capability 4), which 168's balances add to their tolerance. The 170 implementation starts only after 168 merges; it re-verifies these names on the merged head and records any rename in the implementation PR.
 - **Place in the roadmap:** the fourth slice of the record's order of value (167 → 168 → 169 → 170). It delivers the first operator-visible photobioreactor in the flowsheet.
 
 It adds one Jarvis-owned unit, `PhotobioreactorT1`, that grows culture at a periodic steady state with true cylindrical light, driven by a pinned 169 model card. It runs inside the 168 mixed solve.
@@ -103,11 +103,11 @@ The baffle multiplier is an unqualified screening factor. It scales only ΔP and
 
 ### 2. Model card resolution (169 consumer)
 
-`bio_models.resolve_growth_model(workspace_id, card_id, revision, digest)` returns resolved callables and values in the units pinned by 169. The PBR evaluator converts them at its hourly ODE boundary. It refuses (typed `PBR_MODEL_CARD_*` findings) when:
+A new function, `bio_models.resolve_growth_model(workspace_id, card_id, revision, digest)` (169 ships only `evaluate_card`, which applies slab optics), returns resolved callables and values in the units pinned by 169. The PBR evaluator converts them at its hourly ODE boundary. It refuses (typed `PBR_MODEL_CARD_*` findings) when:
 
 - the pin's digest or revision does not match the stored card, or the card's set revision or digest does not match;
 - the card's `form_versions` differ from the current forms;
-- a required symbol is missing.
+- a required symbol is missing. The extinction coefficient `k_X` (m² kg⁻¹) is required from the card's set even though the card's own optics factor is not used.
 
 **Supported card factors:**
 
@@ -187,16 +187,32 @@ All constants and refinement rules are deterministic. Exponentials may underflow
 
 N is clipped at 0 only in its growth factor, as in 107; the oxygen transfer term uses the integrated O₂ state. This does not make a negative integrated state physical. Every accepted periodic trajectory must keep X, N and O₂ nonnegative within the numerical integration tolerance; a materially negative value fails with a typed `PBR_NONPHYSICAL_STATE` unit result. In particular, the allowed combination kLa = 0, O₂_in = 0 and dark biomass decay can drive the stated O₂ equation below zero; T1 refuses that trajectory rather than silently truncating oxygen or claiming oxygen-limited biology it does not model.
 
-The inlet volumetric values are the inlet's 167 mass-specific values × ρ_in. Biomass, dissolved N and dissolved O₂ must each be specified and finite on the PBR inlet; 167 permits N and O₂ to be unknown, but T1 refuses an unknown value instead of assuming zero. An explicit zero remains valid. P, DIC and salinity are not consumed in T1. They pass through, with the caveat "carbon and phosphorus assumed externally supplied and non-limiting; elemental C/P balances are not modeled". The 169 stoichiometry card's phosphorus term is disclosed but is not applied as a Tier-1 phosphorus consumption or a claim of full elemental conservation.
+The inlet volumetric values are the inlet's 167 mass-specific values × ρ_in. Biomass, dissolved N and dissolved O₂ must each be specified and finite on the PBR inlet; 167 permits N and O₂ to be unknown, but T1 refuses an unknown value instead of assuming zero. An explicit zero remains valid. P, DIC and salinity are not consumed in T1. They pass through, with the caveat "carbon and phosphorus assumed externally supplied and non-limiting; elemental C/P balances are not modeled". pH passes through unchanged with the caveat "pH not modeled; photosynthetic DIC uptake would raise it". Two more equation conventions inherited from 107 are disclosed as caveats: "biomass loss returns its N quota to dissolved N and consumes O₂ at Y_O2" and "O₂ saturation is the declared constant, independent of temperature and salinity". The 169 stoichiometry card's phosphorus term is disclosed but is not applied as a Tier-1 phosphorus consumption or a claim of full elemental conservation.
 
-**Map.** Φ₂₄(y₀) integrates 24 h with `integrate_ode` (CVODE BDF). Initial tolerances are rtol 1e-11 and atol 1e-13, tightened if needed to certify the 168 balance below. Augmented integral states give the daily means and signed net O₂ gas transfer. Positive transfer is degassing; negative transfer is oxygen absorption from the gas phase.
+**Map.** Φ₂₄(y₀) integrates 24 h with `integrate_ode` (CVODE BDF) at rtol 1e-11 and atol 1e-14 kg m⁻³, fixed under `MODEL_VERSION`. Augmented quadrature states give the daily means of X, N, O₂ and r_X, and the signed net O₂ gas transfer. Positive transfer is degassing; negative transfer is oxygen absorption from the gas phase. Integration error, not the root solver, limits attainable periodicity: the survey measured map noise of about rtol relative. Every tolerance below keeps at least a 100× margin over rtol.
 
-**Periodic steady state.** This is y* = Φ₂₄(y*). The accepted trajectory and its daily means are finite and nonnegative. For each state i:
+**Reduced periodic problem (normative).** The T1 equations have exact structure, and the solver uses it instead of a blind three-state Newton iteration:
 
-- residual: |Φ₂₄(y)_i − y_i| ≤ 1e-11·max(|y_i|, 1e-6 kg m⁻³), and the independently integrated daily mean rates must close the 168 **per-unit** generation balance at 168's 1e-9-relative + 1e-12 absolute kg/s tolerance (mol/s for DIC); if either check fails, the root is not accepted. The 168 final Run separately checks whole-graph balance after all segments and tears resolve;
-- Newton with a forward-difference Jacobian, step 1e-4·max(|y_i|, 1e-4);
-- at most 20 Newton steps, with step halving on a residual increase;
-- the solve fails as `PBR_PERIODIC_STEADY_FAILED` when the iterations are exhausted. A small map residual alone does not certify a productive root near washout: the solver must also bracket the nonzero branch and check its sign/stability against the trivial branch.
+- **N is slaved.** Z = N + qX obeys dZ/dt = D_h·(Z_in − Z) with Z_in = N_in + q·X_in. Its only periodic solution is Z ≡ Z_in. On the periodic orbit, N(t) = N_in + q·(X_in − X(t)). Every map evaluation therefore seeds N₀ = N_in + q·(X_in − X₀).
+- **O₂ is linear and has no feedback.** T1 has no oxygen effect on growth. Given X(t), the O₂ equation is linear with decay rate kLa_h + D_h > 0. Its periodic solution is unique, and two integrations give it exactly: O₂(24) = α·O₂(0) + β, so O₂* = β/(1 − α).
+- **X is a scalar periodic root.** Let F(X₀) = Φ₂₄,X(X₀) − X₀, with N slaved.
+
+**Root finding (deterministic, fixed constants).**
+
+- **Brackets.**
+  - X_in > 0: the lower end is X_lo = 0, where F(0) > 0. The upper end is X_hi = X_in + N_in/q when q > 0; there N = 0 on the orbit, so F(X_hi) ≤ 0. When q = 0 and k_X > 0, start at max(2·X_in, 1e-3 kg m⁻³) and double until F < 0. Use at most 40 doublings, and never go beyond τ = 1000 (`PBR_OPTICS_OUT_OF_RANGE`). No sign change gives `PBR_NO_FINITE_PRODUCTIVE_STATE`.
+  - X_in = 0 and Λ > D_h: the lower end is the declared resolution X_res = 1e-6 kg m⁻³. F(X_res) must be > 0; otherwise the result is `PBR_BRANCH_UNRESOLVED`, reporting the bracket and the residual. The upper end is found as above.
+  - An endpoint where |F| meets the stopping rule below is the root.
+- **Solve.** Use Brent's method. Stop when the bracket width is ≤ 1e-10·max(X, 1e-6 kg m⁻³) or |F| ≤ 1e-9·max(X, 1e-6 kg m⁻³). Use at most 80 map evaluations. Exhaustion gives `PBR_PERIODIC_STEADY_FAILED`, with the achieved bracket and residual.
+- **Uniqueness.** Under the supported forms with q > 0 or k_X > 0, the per-capita net rate on the orbit, μ_g − k_d − D_h + D_h·X_in/X, is strictly decreasing in X. The positive periodic solution is therefore unique and stable. The solver also checks that its evaluated points show exactly one sign change. Any other pattern gives `PBR_BRANCH_UNRESOLVED`.
+
+**Certification.** From y* = (X*, N_in + q·(X_in − X*), O₂*), integrate the full three-state system once more. The root is accepted only if all of these hold:
+
+- **Periodicity:** |Φ₂₄(y*)_i − y*_i| ≤ 1e-9·max(|y*_i|, 1e-6 kg m⁻³) for every state;
+- **Z identity:** |N(t) + q·X(t) − Z_in| ≤ 1e-9·max(Z_in, 1e-6 kg m⁻³) at the output samples;
+- **Physical trajectory:** the trajectory is finite, and X, N, O₂ ≥ −1e-12 kg m⁻³. A violation gives `PBR_NONPHYSICAL_STATE`.
+
+**Generation allowance (additive 168 interface).** For each field at the certified orbit, in − out + generation equals V times the daily mean of dy/dt: V·(y_i(24) − y_i(0))/86,400 kg/s. That is residual periodicity, not a modelling error. At long HRT, 168's 1e-9-relative per-unit rule is stricter than any attainable periodicity. The unit therefore declares an allowance with each generation term, in the same units: a_i = V·(|Φ₂₄(y*)_i − y*_i| + 1e-12 kg m⁻³)/86,400 kg/s. 168's per-unit and whole-graph culture balances add declared allowances to their tolerance, exactly as they add tear and native-Recycle allowances. Units that declare none (the separator) are unchanged. Generation always comes from the integrated rate quadratures and never from in − out, so the balance stays an independent check. The result reports each allowance next to its residual.
 
 **Branch rule.** This rule applies to the supported monotone Monod light response. It must not be used for photoinhibitory forms.
 
@@ -207,9 +223,9 @@ The inlet volumetric values are the inlet's 167 mass-specific values × ρ_in. B
 
 At a periodic state, Z = N + qX obeys dZ/dt = D_h·(N_in + qX_in − Z), so N(t) = N_in + q·(X_in − X(t)) on the periodic orbit. Use this identity to bound the search when q > 0 and to check the nutrient balance independently. The model permits q = 0 and k_X = 0; then growth is independent of biomass. With those values, Λ ≥ D_h and X_in > 0 gives no finite periodic root; Λ > D_h and X_in = 0 gives only the washout root, which is unstable and cannot be called productive. Report `PBR_NO_FINITE_PRODUCTIVE_STATE` with the card/parameter cause. At Λ = D_h with X_in = 0, the productive branch is degenerate rather than uniquely selected; report `PBR_BRANCH_UNRESOLVED`. Any other detected multiple positive roots or failure to certify uniqueness under the supported forms also returns `PBR_BRANCH_UNRESOLVED`, with diagnostics, rather than an arbitrary selected result. Both findings are unit failures and make the 168 run `segment_failed`.
 
-Λ, D_h, HRT and the branch are always reported with explicit units.
+Λ is computed by deterministic adaptive quadrature to 1e-10 relative. If |Λ − D_h| ≤ 1e-8·D_h with X_in = 0, the branch is a numerical tie and the result is `PBR_BRANCH_UNRESOLVED`, never washout or productive. Λ, D_h, HRT and the branch are always reported with explicit units.
 
-**Initialization and cache.** Each evaluation derives its Newton seed from its current inlet and model pin using the branch rule above. It does not read a previous outer iteration's state. Identical unit and inlet inputs may use 168's per-Run cache; the result therefore does not depend on iteration order.
+**Initialization and cache.** Each evaluation derives its brackets from its current inlet and model pin using the branch rule above. It does not read a previous outer iteration's state. Identical unit and inlet inputs may use 168's per-Run cache; the result therefore does not depend on iteration order.
 
 **Outlet.** The outlet is the flow-weighted daily mean:
 
@@ -240,7 +256,7 @@ The per-unit residual closes as in − out + generation to 167's rule. A whole-g
 **Unit result** (`reported`), each value with its unit:
 
 - branch;
-- Newton iterations and map residual;
+- map evaluations, final bracket and per-state periodicity residual;
 - Λ (h⁻¹), D_h (h⁻¹) and HRT (d);
 - X̄ and net volumetric biomass productivity 24·D_h·(X̄ − X_in) (kg m⁻³ d⁻¹); this may be negative when decay exceeds growth;
 - net biomass production rate 24·V·r̄_X (kg/d), equal to 86,400·Q·(X̄ − X_in); outlet biomass throughput is separately labelled if shown;
@@ -248,7 +264,7 @@ The per-unit residual closes as in − out + generation to 167's rule. A whole-g
 - maximum and mean O₂, and the maximum O₂ saturation ratio;
 - signed net O₂ gas transfer (degassing or absorption);
 - Re, ΔP and pumping power;
-- the balance residuals.
+- the balance residuals and declared generation allowances.
 
 It also carries the fidelity label "T1 · unqualified · periodic steady state, cylinder light, no energy balance", the caveats, and the card pin.
 
@@ -307,7 +323,7 @@ Editing a PBR parameter or re-pinning the card stales results. Layout edits do n
 - **Overview:** the owner, fidelity, derived V/Q/HRT and the last run status.
 - **Geometry, Operation, Light & environment:** typed QuantityInputs with units and inline domain validation. The amplitude uses °C/K difference units.
 - **Biology:** an embeddable **model card picker** built from `listBioCards` and `listBioSets`. It shows each card's factors with their equations through the existing allowlisted MathML renderer, the set's verification chips, the assumed N source and the pin's revision. Pinning applies `set_unit_model`. A "newer revision available" notice offers to re-pin.
-- **Results:** branch, Λ vs D, HRT, X̄, productivity, N/O₂ means and extremes, hydraulics, balance residuals, and Newton/map residuals. Grouped under `Results · Jarvis`, they carry the fidelity label and the caveats.
+- **Results:** branch, Λ vs D, HRT, X̄, productivity, N/O₂ means and extremes, hydraulics, balance residuals with allowances, and map residuals. Grouped under `Results · Jarvis`, they carry the fidelity label and the caveats.
 - The outlet stream shows `Culture · Jarvis`.
 
 **Layout.** The editor is readable at 1280 and 1440 CSS px with no horizontal overflow and no raw JSON in the normal view.
@@ -327,8 +343,11 @@ Editing a PBR parameter or re-pinning the card stales results. Layout edits do n
 - **Cylinder properties** (capability 3): thin and thick limits, the chord integral, the Ki₂ table, quadrature convergence and the golden Q2 table.
 - **107 parity:** v2 outputs bitwise on all 107 fixtures; `test_bluerev_pbr_107.py` and `test_bio_models_forms.py` unchanged and passing.
 - **Periodic steady state:**
-  - balances close ≤ 1e-8 relative;
+  - per-unit and whole-graph balances close under the 168 rule plus the declared allowance, and each allowance is itself bounded by the certified periodicity;
   - the map residual is within tolerance;
+  - the Z identity holds on the orbit; the closed-form O₂* equals a brute-force full-map fixed point; the Brent and bracket constants give bit-identical results across two runs;
+  - bracket refusals: q = 0 with k_X = 0, the doubling cap, τ beyond 1000, and a positive root below X_res;
+  - long-HRT (100 d) and short-HRT (0.1 d) cases certify without relaxing any tolerance;
   - the washout rule on the 107 fixture with X_in = 0 at HRT 2, 3, 5 and 8 d: washout at or below the 2.73 d critical HRT, the productive branch above it, and never the trivial state on the productive side;
   - X_in > 0 gives a unique positive state when the supported growth feedback admits a finite root; the no-root case is separately refused;
   - D_s ↔ D_h, kLa_s ↔ kLa_h, photoperiod seconds ↔ hours, hourly generation ↔ kg/s, and hourly productivity ↔ kg/day conversions close against an independent steady mass-balance calculation;
@@ -381,7 +400,7 @@ Editing a PBR parameter or re-pinning the card stales results. Layout edits do n
 - **Unchanged:**
   - `bluerev.pbr_day_night` v2 and its evidence;
   - the frozen 145 contracts;
-  - 168's numerics and limits;
+  - 168's numerics and limits, apart from the additive `culture_generation_allowance` (capability 4);
   - 169's `FORM_VERSION`;
   - the Heater `temperature_change` storage.
 - **Never done:**
