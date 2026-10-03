@@ -118,6 +118,11 @@ def culture_findings(document: dict[str, Any]) -> list[dict[str, Any]]:
             _add(findings, "blocker", "CULTURE_UNIT_UNSUPPORTED", unit["tag"], "culture",
                  f"Culture cannot pass through {unit['type']} {unit['tag']} because DWSIM VLE or reactors do not preserve biology.")
             continue
+        if unit["type"] == "Recycle" and not _on_material_cycle(document, unit["id"]):
+            # 168 lets culture ride a Recycle only as a loop's tear; off any loop it is still refused.
+            _add(findings, "blocker", "CULTURE_UNIT_UNSUPPORTED", unit["tag"], "culture",
+                 f"Culture cannot pass through {unit['type']} {unit['tag']} because it does not close a loop.")
+            continue
         inputs = _stream_inputs(document, unit)
         if unit["type"] == "Mixer" and any(s["id"] in culture_streams for s in inputs) and any(
             s["id"] not in culture_streams for s in inputs
@@ -129,6 +134,14 @@ def culture_findings(document: dict[str, Any]) -> list[dict[str, Any]]:
             queue.append(output)
 
     return findings
+
+
+def _on_material_cycle(document: dict[str, Any], unit_id: str) -> bool:
+    from app.modules.process_stack import mixed
+
+    edges = mixed._edges(document, energy=False)
+    group = next(group for group in mixed.components(set(mixed._units(document)), edges) if unit_id in group)
+    return len(group) > 1 or any(a == b == unit_id for a, b, _ in edges)
 
 
 def _reachable(graph: dict[str, set[str]], start: str, goal: str) -> bool:
@@ -161,6 +174,40 @@ def _display_values(state: dict[str, Any], density: float) -> dict[str, Any]:
             unit = "kg/m3" if name in {"biomass", "nitrogen", "phosphorus", "oxygen"} else "mol/m3" if name == "dic" else "g/kg" if name == "salinity" else "pH"
             values[name] = {"mass_specific": value, "si": si, "display": {"value": si, "unit": unit}}
     return values
+
+
+def mix_mass_specific(cultured: list[tuple[float, dict[str, Any]]], total_flow: float,
+                      input_count: int, unit_tag: str) -> tuple[dict[str, float | None], dict[str, str]]:
+    """Mixer weighting shared by the single-owner and mixed-engine paths (spec 167 rules).
+
+    ``cultured`` holds (mass flow, {"mass_specific", "reasons"}) of the culture-carrying inlets only.
+    ``total_flow`` is the flow of *all* inlets, so inlets without culture dilute as zero culture;
+    a field unknown on any culture inlet is unknown on the outlet. The pH placeholder survives only
+    when every inlet carries culture with pH within 0.01.
+    """
+    mixed: dict[str, float | None] = {}
+    reasons: dict[str, str] = {}
+    states = [state for _flow, state in cultured]
+    for name in CONSERVED:
+        if any(name not in state["mass_specific"] or state["mass_specific"][name] is None for state in states):
+            mixed[name] = None
+            missing = next((state["reasons"].get(name) for state in states
+                            if state["mass_specific"].get(name) is None), None)
+            reasons[name] = missing or f"unknown on a culture inlet to Mixer {unit_tag}"
+        else:
+            amount = sum(flow * float(state["mass_specific"][name]) for flow, state in cultured)
+            mixed[name] = amount / total_flow
+    pHs: list[float | None] = [state["mass_specific"].get("ph") for state in states]
+    placeholder = bool(len(cultured) == input_count and pHs and all(value is not None for value in pHs)
+                       and max(value for value in pHs if value is not None)
+                       - min(value for value in pHs if value is not None) <= 0.01)
+    if placeholder:
+        assert pHs[0] is not None
+        mixed["ph"] = pHs[0]
+    else:
+        mixed["ph"] = None
+    reasons["ph"] = PH_REASON
+    return mixed, reasons
 
 
 def propagate(document: dict[str, Any], streams: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
@@ -325,32 +372,9 @@ def propagate(document: dict[str, Any], streams: dict[str, Any]) -> tuple[dict[s
                 for output in outputs:
                     fail(output, "CULTURE_MIXER_FLOW_INVALID", f"Mixer {unit['tag']} has non-positive total inlet mass flow.")
                 continue
-            mixed: dict[str, float | None] = {}
-            mix_reasons: dict[str, str] = {}
-            for name in CONSERVED:
-                if any(name not in state["mass_specific"] or state["mass_specific"][name] is None
-                       for state in source_states.values()):
-                    mixed[name] = None
-                    missing = next((state["reasons"].get(name) for state in source_states.values()
-                                    if state["mass_specific"].get(name) is None), None)
-                    mix_reasons[name] = missing or f"unknown on a culture inlet to Mixer {unit['tag']}"
-                else:
-                    amount = sum(float(streams.get(s["tag"], {}).get("mass_flow_kg_s", 0.0))
-                                 * float(source_states[s["id"]]["mass_specific"][name])
-                                 for s in cultured_inputs)
-                    mixed[name] = amount / total_flow
-            pHs: list[float | None] = [state["mass_specific"].get("ph") for state in source_states.values()]
-            pH_placeholder = bool(len(cultured_inputs) == len(inputs) and pHs
-                                  and all(value is not None for value in pHs)
-                                  and max(value for value in pHs if value is not None)
-                                  - min(value for value in pHs if value is not None) <= 0.01)
-            if pH_placeholder:
-                assert pHs[0] is not None
-                mixed["ph"] = pHs[0]
-                mix_reasons["ph"] = PH_REASON
-            else:
-                mixed["ph"] = None
-                mix_reasons["ph"] = PH_REASON
+            mixed, mix_reasons = mix_mass_specific(
+                [(float(streams.get(s["tag"], {}).get("mass_flow_kg_s", 0.0)), source_states[s["id"]])
+                 for s in cultured_inputs], total_flow, len(inputs), unit["tag"])
             output_state: dict[str, Any] = {"mass_specific": mixed, "reasons": mix_reasons}
         else:
             output_state = source_states[cultured_inputs[0]["id"]]
