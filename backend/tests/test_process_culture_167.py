@@ -107,8 +107,10 @@ def test_culture_operation_is_cas_reversible_and_outside_dwsim_materialization()
 
 def test_registry_owners_and_rules_cover_all_existing_units() -> None:
     projection = draft.registry_projection()
-    assert len(projection["units"]) == 11
-    assert all(item["owner"] == "dwsim" for item in projection["units"])
+    dwsim_units = [item for item in projection["units"] if item["owner"] == "dwsim"]
+    assert len(dwsim_units) == 11
+    assert len(projection["units"]) == 12
+    assert {item["owner"] for item in projection["units"]} == {"dwsim", "jarvis_bio"}
     assert {item["type"]: item["culture_rule"] for item in projection["units"]}["Mixer"] == "mixer"
     assert {item["type"]: item["culture_rule"] for item in projection["units"]}["Splitter"] == "splitter"
     assert {item["type"]: item["culture_rule"] for item in projection["units"]}["Flash"] == "refuse"
@@ -141,7 +143,8 @@ def test_unit_refusals_and_culture_free_behavior() -> None:
         "h": _unit("h", "H1", "Heater"), "mid": _stream("mid", "Mid", source="h", target="r"),
         "r": _unit("r", "R1", "Recycle"), "back": _stream("back", "Back", source="r", target="h"),
     }}
-    assert "CULTURE_RECYCLE_UNSUPPORTED" in {item["code"] for item in culture.culture_findings(recycle)}
+    assert "CULTURE_RECYCLE_UNSUPPORTED" not in {item["code"] for item in culture.culture_findings(recycle)}
+    assert "CULTURE_UNIT_UNSUPPORTED" not in {item["code"] for item in culture.culture_findings(recycle)}
     no_culture = {"objects": {"f": _stream("f", "Feed")}}
     assert culture.culture_findings(no_culture) == []
 
@@ -286,3 +289,41 @@ def test_workspace_action_sets_single_culture_field_confirm_tier_and_brief_refus
             "draft_id": state["draft_id"], "actions": [{"op": "insert_unit_after", "type": "Flash", "after": "Pump"}]}), origin)
         assert refusal.state == "refused"
         assert "CULTURE_UNIT_UNSUPPORTED" in (refusal.reason or "")
+
+
+def test_workspace_action_configures_separator_and_brief_explains_168_contract() -> None:
+    initialize_database()
+    with TestClient(app) as client:
+        workspace = client.post("/workspaces", json={"name": "Mixed action", "slug": f"mixed-action-{uuid4().hex[:8]}"}).json()
+        wsid = workspace["id"]
+        created = draft.create_draft(wsid, "Mixed action")
+        state = draft.patch(wsid, created["draft_id"], created["revision"], [
+            AddStream(op="add_stream", id="feed", tag="CultureFeed", x=0, y=0),
+            AddUnit(op="add_unit", id="separator", type="SpecifiedSeparator", tag="Separator", x=100, y=0),
+            AddStream(op="add_stream", id="conc", tag="Concentrate", x=200, y=-20),
+            AddStream(op="add_stream", id="clar", tag="Clarified", x=200, y=20),
+            Connect(op="connect", stream="feed", end="target", unit="separator", port=0),
+            Connect(op="connect", stream="conc", end="source", unit="separator", port=0),
+            Connect(op="connect", stream="clar", end="source", unit="separator", port=1),
+            SetStreamCulture(op="set_stream_culture", stream="feed", culture={
+                "biomass": draft.DraftQuantity(value=1, unit="g/L"),
+                "salinity": draft.DraftQuantity(value=35, unit="g/kg"),
+            }),
+        ])
+        origin = ActionOrigin(kind="local", thread_id="mixed", interaction_id="168")
+        request = ActionRequest.model_validate({"surface": "process", "base_revision": state["revision"],
+            "draft_id": state["draft_id"], "actions": [{"op": "set_value", "target": "Separator",
+            "property": "concentration_factor", "value": {"value": 20, "unit": "dimensionless"}}]})
+        proposal = submit(wsid, request, origin)
+        assert proposal.state == "proposed" and proposal.tier == "confirm", proposal.reason
+        applied = apply_action(wsid, proposal.action_id)
+        assert applied.state == "applied"
+        assert applied.result_revision != state["revision"]
+        brief = surface_brief(wsid, SurfaceRef(route_id="design-process", draft_id=state["draft_id"],
+            process_selection=[{"kind": "unit", "tag": "Separator"}]))
+        assert len(brief.text) <= 6000
+        assert "Separator=jarvis_bio" in brief.text
+        assert "biomass recovery 90%" in brief.text
+        assert "concentration factor 20" in brief.text
+        assert "derived concentrate carrier split 4.5%" in brief.text
+        assert "native Recycles inside mixed loops are refused" in brief.text

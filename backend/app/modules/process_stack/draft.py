@@ -391,6 +391,10 @@ def apply_op(document: dict[str, Any], op: Any) -> None:
                 param.maximum_si is not None and converted["si"] > param.maximum_si
             ):
                 raise DraftError("quantity_out_of_range", f"{param.label} is outside its supported range", field=key)
+            if unit["type"] == "SpecifiedSeparator" and key in {"biomass_recovery", "concentration_factor"}:
+                floor = 0.0 if key == "biomass_recovery" else 1.0
+                if converted["si"] <= floor:
+                    raise DraftError("quantity_out_of_range", f"{param.label} must be greater than {floor:g}", field=key)
             unit["params"][key] = converted
         if op.options:
             raise DraftError("option_unsupported", f"{spec.label} does not expose verified enum/boolean inputs", field="options")
@@ -556,35 +560,16 @@ def validate_document(document: dict[str, Any]) -> list[dict[str, Any]]:
                 if undeclared:
                     add("blocker", "COMPOUND_UNDECLARED", f"{undeclared} are not declared in Thermo.", stream["tag"],
                         "composition")
+    from app.modules.process_stack import mixed
+
     graph: dict[str, list[str]] = {}
     for stream in objects.values():
         if stream["kind"] == "stream" and stream.get("source") and stream.get("target"):
             graph.setdefault(stream["source"]["unit"], []).append(stream["target"]["unit"])
-    visiting: list[str] = []
-    visited: set[str] = set()
-    reported_cycles: set[frozenset[str]] = set()
-
-    def visit(unit_id: str) -> None:
-        if unit_id in visiting:
-            cycle = visiting[visiting.index(unit_id):]
-            if not any(objects.get(item, {}).get("type") == "Recycle" for item in cycle):
-                cycle_key = frozenset(cycle)
-                if cycle_key not in reported_cycles:
-                    reported_cycles.add(cycle_key)
-                    tags = [objects[item]["tag"] for item in cycle]
-                    add("blocker", "RECYCLE_REQUIRED", f"Process loop {tags} requires a Recycle block.", tags[0],
-                        "connections")
-            return
-        if unit_id in visited:
-            return
-        visiting.append(unit_id)
-        for next_id in graph.get(unit_id, []):
-            visit(next_id)
-        visiting.pop()
-        visited.add(unit_id)
-
-    for unit_id in graph:
-        visit(unit_id)
+    for tags in mixed.recycle_free_cycles(document):
+        add("blocker", "RECYCLE_REQUIRED", f"Process loop {tags} requires a Recycle block.", tags[0],
+            "connections")
+    findings.extend(mixed.validation_findings(document))
     _advice(document, add, _cycle_members(graph))
     findings.extend(culture_engine.culture_findings(document))
     return findings
@@ -829,8 +814,14 @@ def results_state(head: dict[str, Any], runs: list[dict[str, Any]], document: di
     seq = int(solved["draft_revision"].split(":", 1)[0])
     current = solved["draft_revision"] == head["revision"]
     if not current and document is not None:
+        from app.modules.process_stack import mixed
         from app.modules.process_stack.draft_compiler import expected, fingerprint, process_view, result_fingerprint
-        if solved.get("result_fingerprint"):
+        if solved.get("mixed_solve"):
+            try:
+                current = mixed.fingerprint(document, mixed.partition(document)) == solved["process_fingerprint"]
+            except (DraftError, KeyError, TypeError, ValueError):
+                current = False
+        elif solved.get("result_fingerprint"):
             try:
                 current = result_fingerprint(document, dwsim_version=solved["dwsim_version"],
                                              mcp_sha256=solved["mcp_sha256"]) == solved["result_fingerprint"]
@@ -850,10 +841,16 @@ def results_state(head: dict[str, Any], runs: list[dict[str, Any]], document: di
         else:  # runs recorded before spec 162 carry only the full materialization fingerprint
             current = fingerprint(expected(document), dwsim_version=solved["dwsim_version"],
                                   mcp_sha256=solved["mcp_sha256"]) == solved["materialization_fingerprint"]
+    if last is not solved and last is not None and last.get("action") == "run" and last.get("status") in {
+        "unconverged", "segment_failed"
+    }:
+        # A failed mixed attempt on the latest revision never promotes an older
+        # completed run as the current answer to this operator request.
+        current = False
     return {"state": "current" if current else "stale", "run_id": solved["run_id"],
             "draft_revision": solved["draft_revision"],
             "edits_since": 0 if current else edits_since if edits_since is not None else head["seq"] - seq,
-            "materialization_fingerprint": solved["materialization_fingerprint"], "last_attempt": _attempt(last)}
+            "materialization_fingerprint": solved.get("materialization_fingerprint"), "last_attempt": _attempt(last)}
 
 
 def _attempt(run: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -903,6 +900,7 @@ def result_findings(document: dict[str, Any], solved: dict[str, Any] | None,
     tags = {item["tag"]: item for item in document["objects"].values()}
     if solved is not None:
         findings.extend(solved.get("culture_findings") or [])
+        findings.extend(solved.get("mixed_findings") or [])
         for tag, result in sorted((solved.get("streams") or {}).items()):
             item = tags.get(tag)
             flow = result.get("mass_flow_kg_s")
@@ -939,7 +937,8 @@ def registry_projection() -> dict[str, Any]:
                          "default": item.default, "classification": "input", "minimum": item.minimum_si,
                          "maximum": item.maximum_si} for item in spec.params],
              "reactions": spec.type == "PFR",
-             "result_properties": capabilities["objects"].get(spec.dwsim_type, {}).get("result_properties", [])}
+             "result_properties": capabilities["objects"].get(spec.dwsim_type, {}).get("result_properties", [])
+             if spec.owner == "dwsim" else []}
             for spec in UNIT_REGISTRY.values()
         ],
         "dwsim_capabilities": capabilities,
@@ -1248,7 +1247,7 @@ def _endpoint_tag(view: dict[str, Any], endpoint: dict[str, Any] | None) -> str 
 
 def execute(workspace_id: str, draft_id: str, revision: str, action: str) -> dict[str, Any]:
     """Compile the exact revision into DWSIM; validate, or solve only after a verified materialization."""
-    from app.modules.process_stack import draft_compiler, editor
+    from app.modules.process_stack import draft_compiler, editor, mixed, mixed_runtime
 
     if action not in {"validate", "run"}:
         raise DraftError("action_invalid", "action must be validate or run")
@@ -1270,12 +1269,17 @@ def execute(workspace_id: str, draft_id: str, revision: str, action: str) -> dic
                            "mcp_sha256": mcp_sha256, "started_at": started}
     try:
         with client:
-            outcome = draft_compiler.materialize(
-                record["document"], action=action, client=client, dwsim_version=dwsim_version,
-                mcp_sha256=mcp_sha256, label=f"jarvis-draft-{draft_id[:8]}-{revision}",
-                keep_case=runs_dir(directory) / run_id / "solved.dwxmz" if action == "run" else None)
+            if mixed.needs_mixed_solve(record["document"]):
+                outcome = mixed_runtime.run(record["document"], action=action, client=client,
+                                            dwsim_version=dwsim_version, mcp_sha256=mcp_sha256,
+                                            run_dir=runs_dir(directory) / run_id)
+            else:
+                outcome = draft_compiler.materialize(
+                    record["document"], action=action, client=client, dwsim_version=dwsim_version,
+                    mcp_sha256=mcp_sha256, label=f"jarvis-draft-{draft_id[:8]}-{revision}",
+                    keep_case=runs_dir(directory) / run_id / "solved.dwxmz" if action == "run" else None)
         run.update(outcome)
-        if action == "run" and outcome.get("status") == "completed":
+        if action == "run" and outcome.get("status") == "completed" and not mixed.needs_mixed_solve(record["document"]):
             culture_results, culture_findings = culture_engine.propagate(record["document"], outcome.get("streams", {}))
             run["culture"] = culture_results
             run["culture_findings"] = culture_findings

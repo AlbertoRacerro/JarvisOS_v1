@@ -170,6 +170,8 @@ export type ResultProperty = {
   specification: boolean;
 };
 export type StreamResult = {
+  owner?: "dwsim" | "jarvis_bio";
+  state_source?: string;
   temperature_K: number | null;
   pressure_Pa: number | null;
   mass_flow_kg_s: number | null;
@@ -198,9 +200,29 @@ export type DraftRun = {
   streams?: Record<string, StreamResult>;
   culture?: Record<string, CultureResult>;
   culture_findings?: Finding[];
+  mixed_solve?: {
+    status: string;
+    reason?: string;
+    version?: number;
+    method?: string;
+    culture_only?: boolean;
+    history?: { iteration: number; omega: number; max_normalized_residual: number | null; worst_tear?: string;
+      non_finite?: string; pattern_mismatch_fields?: string[];
+      worst_field?: string; residuals?: Record<string, Record<string, number | null>>;
+      normalized_residuals?: Record<string, Record<string, number | null>> }[];
+    partition?: { segments?: { id: number; units: string[]; level: number }[]; consumed?: string[] };
+    limits?: { iterations?: number; wall_s?: number; reserve_s?: number };
+    failed_segment?: string;
+    failed_units?: string[];
+    message?: string | null;
+    diagnosis?: string;
+    errors?: unknown;
+    elapsed_s?: Record<string, number>;
+  };
   units?: Record<
     string,
-    { calculated: boolean; error: string; reported: Record<string, { value: string; units: string }>; properties?: ResultProperty[] }
+    { owner?: "dwsim" | "jarvis_bio"; calculated: boolean; error?: string; evaluator?: string; version?: number;
+      fidelity?: string; caveats?: string[]; label?: string; reported: Record<string, { value: string | number; units?: string }>; properties?: ResultProperty[] }
   >;
   mass_balance?: { status: string; residual_kg_s?: number; boundary_kg_s?: Record<string, number>; error?: string };
   compile_seconds?: number;

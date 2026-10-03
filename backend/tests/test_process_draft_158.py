@@ -66,7 +66,9 @@ def _compiled_writes() -> tuple[set[tuple[str, str]], set[tuple[str, str, int]]]
     """Every (type, property) the compiler sets and every (type, role, port) it connects over MCP."""
     written: set[tuple[str, str]] = set()
     connected: set[tuple[str, str, int]] = set()
-    for unit_type in UNIT_REGISTRY:
+    for unit_type, unit_spec in UNIT_REGISTRY.items():
+        if unit_spec.owner != "dwsim":
+            continue
         for mode in _modes(unit_type):
             for name, args in draft_compiler.plan(_synthetic_document(unit_type, mode)):
                 owner = unit_type if args.get("name", args.get("unitop")) == "U" else "EnergyStream"
@@ -100,6 +102,8 @@ def test_every_compiled_input_property_is_settable_in_the_manifest() -> None:
     for unit_type, prop in written:
         assert _manifest_object(unit_type)["settable_property_evidence"][prop]
     for unit_type, spec in UNIT_REGISTRY.items():
+        if spec.owner != "dwsim":
+            continue
         native_xml = _manifest_object(unit_type)["native_xml_inputs"]
         registry_native = {item.dwsim_property for item in spec.params if item.dwsim_property.startswith("__")}
         compiled_native = {key for mode in _modes(unit_type)
@@ -110,6 +114,8 @@ def test_every_compiled_input_property_is_settable_in_the_manifest() -> None:
 
 def test_every_registry_mode_and_enum_value_is_in_the_manifest() -> None:
     for unit_type, spec in UNIT_REGISTRY.items():
+        if spec.owner != "dwsim":
+            continue
         capability = _manifest_object(unit_type)
         assert set(spec.modes.values()) <= set(capability["modes"]), unit_type
         assert all(capability["mode_evidence"][mode] for mode in spec.modes.values())
@@ -125,6 +131,8 @@ def test_every_registry_and_compiled_port_is_a_manifest_native_port() -> None:
     _written, connected = _compiled_writes()
     used = set(connected)
     for unit_type, spec in UNIT_REGISTRY.items():
+        if spec.owner != "dwsim":
+            continue
         unit = {"type": unit_type}
         used |= {(unit_type, "feed", port) for port in range(len(spec.inlets))}
         used |= {(unit_type, "product", port) for port in range(len(spec.outlets))}
@@ -151,6 +159,8 @@ def test_registry_modes_and_ports_are_present_in_pinned_manifest() -> None:
     manifest = projection["dwsim_capabilities"]
     assert manifest["runtime"] == "DWSIM 10.2.9"
     for unit in UNIT_REGISTRY.values():
+        if unit.owner != "dwsim":
+            continue
         capability = manifest["objects"][unit.dwsim_type]
         assert set(unit.modes.values()) <= set(capability["modes"])
         assert capability["native_type"] in unit.native_types

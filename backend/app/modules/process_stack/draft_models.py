@@ -71,7 +71,7 @@ class ParamSpec:
 class UnitSpec:
     type: str
     label: str
-    dwsim_type: str
+    dwsim_type: str | None
     # Simulation class suffix in the saved native case (Mixer saves as NodeIn/Mixer).
     native_types: tuple[str, ...]
     inlets: tuple[str, ...]
@@ -186,7 +186,7 @@ UNIT_REGISTRY: dict[str, UnitSpec] = {
     ),
     "Recycle": UnitSpec(
         type="Recycle", label="Recycle", dwsim_type="Recycle", native_types=("Recycle",),
-        inlets=("inlet",), outlets=("outlet",), required_inlets=1, culture_rule="refuse",
+        inlets=("inlet",), outlets=("outlet",), required_inlets=1, culture_rule="tear",
     ),
     "PFR": UnitSpec(
         type="PFR", label="Plug flow reactor", dwsim_type="PFR", native_types=("PFR", "Reactor_PFR"),
@@ -214,7 +214,24 @@ UNIT_REGISTRY: dict[str, UnitSpec] = {
                 ParamSpec("reboiler_spec", "Bottoms molar flow", "molar_flow", "Reboiler_Specification_Value", ("column",), default=27.5, minimum_si=0)),
         modes={"column": "Wang-Henke (Bubble Point)"},
     ),
+    "SpecifiedSeparator": UnitSpec(
+        type="SpecifiedSeparator", label="Specified separator", dwsim_type=None, native_types=(),
+        inlets=("inlet",), outlets=("concentrate", "clarified"), required_inlets=1,
+        modes={"specified": "specified"}, owner="jarvis_bio", culture_rule="separator",
+        params=(
+            ParamSpec("biomass_recovery", "Biomass recovery", "percent", "", ("specified",),
+                      default=90.0, minimum_si=0.0, maximum_si=100.0),
+            ParamSpec("concentration_factor", "Concentration factor", "dimensionless", "", ("specified",),
+                      default=10.0, minimum_si=1.0, maximum_si=1000.0),
+        ),
+    ),
 }
+
+if any((spec.owner == "dwsim") != (spec.dwsim_type is not None and bool(spec.native_types))
+       for spec in UNIT_REGISTRY.values()):
+    raise RuntimeError("Process unit registry owner/native-type contract is inconsistent")
+if any(spec.owner not in {"dwsim", "jarvis_bio"} for spec in UNIT_REGISTRY.values()):
+    raise RuntimeError("Process unit registry contains an unsupported owner")
 
 UNSUPPORTED_TYPES: dict[str, str] = {
     "Reactor": "Only the kinetically defined PFR subset is supported.",

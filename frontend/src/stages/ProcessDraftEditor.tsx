@@ -120,6 +120,40 @@ function solveFailureMessages(run: DraftRun) {
   return messages;
 }
 
+function mixedFailureMessage(errors: unknown): string {
+  if (typeof errors === "string") return errors;
+  if (!errors || typeof errors !== "object") return "See the failed segment details.";
+  const record = errors as { message?: unknown; errors?: unknown; dwsim_message?: unknown; detail?: unknown;
+    findings?: unknown; diffs?: unknown; code?: unknown };
+  if (typeof record.message === "string" && record.message) return record.message;
+  if (typeof record.dwsim_message === "string") return record.dwsim_message;
+  // Failed DWSIM check: the findings name the unit and the problem.
+  if (Array.isArray(record.findings)) {
+    const text = record.findings.slice(0, 3).map((item) => {
+      const row = item as { object?: string; message?: string; code?: string };
+      return row.message ? (row.object ? `${row.object}: ${row.message}` : row.message) : row.code ?? "";
+    }).filter(Boolean);
+    if (text.length) return text.join("; ");
+  }
+  // Materialization mismatch: what the draft expects against what DWSIM holds.
+  if (Array.isArray(record.diffs)) {
+    const text = record.diffs.slice(0, 3).map((item) => {
+      const row = item as { path?: string; expected?: unknown; actual?: unknown };
+      return `${row.path ?? "value"}: draft expects ${String(row.expected)}, DWSIM holds ${String(row.actual)}`;
+    });
+    if (text.length) return text.join("; ");
+  }
+  if (Array.isArray(record.errors)) {
+    const message = record.errors.find((item) => typeof item === "string");
+    if (typeof message === "string") return message;
+    const first = record.errors.find((item) => item && typeof item === "object" && "message" in item) as { message?: unknown } | undefined;
+    if (typeof first?.message === "string") return first.message;
+  }
+  if (record.detail && typeof record.detail === "object") return mixedFailureMessage(record.detail);
+  if (typeof record.code === "string") return record.code;
+  return "See the failed segment details.";
+}
+
 const errorText = (cause: unknown) =>
   cause instanceof DraftApiError
     ? `${cause.message}${cause.detail.field ? ` (${String(cause.detail.field)})` : ""} · ${cause.code}`
@@ -667,7 +701,9 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
           <rect x={point.x - width / 2} y={point.y - UNIT_H / 2} width={width} height={UNIT_H} rx={6} />
           <text x={point.x} y={point.y - 3} textAnchor="middle" className="draft-node__tag">{item.tag}</text>
           <text x={point.x} y={point.y + 12} textAnchor="middle" className="draft-node__type">{spec?.label ?? item.type}</text>
-          <text x={point.x + width / 2 - 5} y={point.y - UNIT_H / 2 + 10} textAnchor="end" className="draft-owner-badge">DWSIM</text>
+          <text x={point.x + width / 2 - 5} y={point.y - UNIT_H / 2 + 10} textAnchor="end" className="draft-owner-badge">
+            {spec?.owner === "jarvis_bio" ? "Jarvis" : "DWSIM"}
+          </text>
           {inlets.map((name, port) => { const anchor = portAnchor(item, "target", port, false); return <rect key={`in-${port}`} className="draft-port" x={anchor.at.x - 2} y={anchor.at.y - 3} width={4} height={6}><title>{name}</title></rect>; })}
           {outlets.map((name, port) => { const anchor = portAnchor(item, "source", port, false); return <rect key={`out-${port}`} className="draft-port" x={anchor.at.x - 2} y={anchor.at.y - 3} width={4} height={6}><title>{name}</title></rect>; })}
           {[...(spec?.energy_inlets ?? []), ...(spec?.energy_outlets ?? [])].map((name, index, all) => (
@@ -707,11 +743,12 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
     });
 
   /** Read-only DWSIM results for the selection, only after a run and bound to its revision. */
-  const renderResultSection = (properties: ResultProperty[] | undefined, legacy: React.ReactNode) => {
+  const renderResultSection = (properties: ResultProperty[] | undefined, legacy: React.ReactNode,
+                              owner: "dwsim" | "jarvis_bio" = "dwsim") => {
     if (!solvedRun || results.state === "none") return null;
     return (
       <fieldset className={`draft-fieldset draft-outputs${results.state === "stale" ? " is-stale" : ""}`} aria-label="Results (read-only)">
-        <legend>Results · DWSIM{results.state === "stale" ? " (stale)" : ""}</legend>
+        <legend>Results · {owner === "jarvis_bio" ? "Jarvis" : "DWSIM"}{results.state === "stale" ? " (stale)" : ""}</legend>
         {properties?.length ? <ResultProperties properties={properties} stale={results.state === "stale"} label="Result properties" /> : legacy}
       </fieldset>
     );
@@ -933,6 +970,7 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
               {shown.vapor_fraction != null && <div><dt>vapor fraction</dt><dd>{shown.vapor_fraction.toPrecision(4)}</dd></div>}
             </dl>
           ),
+          shown?.owner === "jarvis_bio" ? "jarvis_bio" : "dwsim",
         )}
       </>
     );
@@ -974,13 +1012,15 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
     const connected = (end: "source" | "target", port: number, energy: boolean) =>
       objects.find((item) => item.kind === "stream" && isEnergy(item) === energy && item[end]?.unit === unit.id && item[end]?.port === port)?.tag ?? "—";
     const reported = solvedRun?.units?.[unit.tag];
+    // A consumed Recycle is a DWSIM block whose result Jarvis synthesized: the result owner wins.
+    const reportedOwner = reported?.owner ?? spec.owner;
     const reactions = Object.entries(draft.reactions ?? {});
     const assigned = reactionPick ?? unit.reactions ?? [];
     const reactionsChanged = reactionPick !== null && JSON.stringify(reactionPick) !== JSON.stringify(unit.reactions ?? []);
     const optionsChanged = Object.keys(optionForm).length > 0;
     return (
       <>
-        <p className="draft-owner-line">Owner: {spec.owner} · Culture rule: {spec.culture_rule}</p>
+        <p className="draft-owner-line"><span className="draft-owner-badge-label">{spec.owner === "jarvis_bio" ? "Jarvis" : "DWSIM"}</span> · Culture rule: {spec.culture_rule}</p>
         <dl className="draft-ports">
           {spec.inlets.map((name, port) => (<div key={`in${port}`}><dt>{name}</dt><dd>{connected("target", port, false)}</dd></div>))}
           {spec.outlets.map((name, port) => (<div key={`out${port}`}><dt>{name}</dt><dd>{connected("source", port, false)}</dd></div>))}
@@ -1051,7 +1091,32 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
             </button>
           </fieldset>
         )}
-        {renderResultSection(
+        {reportedOwner === "jarvis_bio" && reported && (
+          <fieldset className={`draft-fieldset draft-outputs${results.state === "stale" ? " is-stale" : ""}`} aria-label="Jarvis unit results">
+            <legend>Results · Jarvis{results.state === "stale" ? " (stale)" : ""}</legend>
+            <dl className="draft-results-inline">
+              {Object.entries(reported.reported ?? {}).map(([key, value]) => (
+                <div key={key}><dt>{key.replace(/_/g, " ")}</dt><dd>
+                  {typeof value.value === "number" ? Number(value.value.toPrecision(6)) : value.value}
+                  {value.units ? ` ${value.units}` : ""}
+                </dd></div>
+              ))}
+            </dl>
+            {reported.label && <p>{reported.label}</p>}
+            {reported.fidelity && <p className="draft-hint">{reported.fidelity}</p>}
+          </fieldset>
+        )}
+        {unit.type === "SpecifiedSeparator" && (
+          <p className="draft-hint" data-testid="separator-derived-split">
+            Derived split: R/f = {(() => {
+              const recovery = Number(unit.params?.biomass_recovery?.si);
+              const factor = Number(unit.params?.concentration_factor?.si);
+              return Number.isFinite(recovery) && Number.isFinite(factor) && factor > 0
+                ? `${(recovery / factor).toPrecision(4)}% carrier to concentrate` : "—";
+            })()}
+          </p>
+        )}
+        {reportedOwner === "dwsim" && renderResultSection(
           reported?.properties,
           reported && Object.keys(reported.reported ?? {}).length > 0 && (
             <dl className={`draft-results-inline${results.state === "stale" ? " is-stale" : ""}`}>
@@ -1068,9 +1133,66 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
   const renderRun = (run: DraftRun) => (
     <section className={`draft-run draft-run--${run.status}`} aria-label="Last DWSIM attempt">
       <header>
-        <strong>{run.action === "validate" ? "Validate" : "Run"}: {run.status.replace(/_/g, " ")}</strong>
+        <strong>{run.action === "validate" ? "Validate" : run.mixed_solve ? "Mixed solve" : "Run"}: {run.status.replace(/_/g, " ")}</strong>
         <span>revision {run.draft_revision.split(":")[0]} · {run.compile_seconds ?? "—"} s</span>
       </header>
+      {run.mixed_solve && run.action === "run" && (
+        <section className="draft-mixed-summary" aria-label="Mixed solve summary">
+          <p role="status">
+            {run.status === "completed" && run.mixed_solve.culture_only
+              ? "Converged · culture-only loop, solved as a culture fixed point on DWSIM flows (no cross-engine tear to iterate)"
+              : run.status === "completed"
+              ? `Converged in ${run.mixed_solve.history?.length ?? 0} ${(run.mixed_solve.history?.length ?? 0) === 1 ? "iteration" : "iterations"} · max residual ${(() => {
+                const last = run.mixed_solve.history?.[Math.max(0, (run.mixed_solve.history?.length ?? 1) - 1)]?.max_normalized_residual;
+                return last == null ? "n/a" : Number(last).toPrecision(4);
+              })()}`
+              : run.status === "unconverged"
+                ? `Not converged (${run.mixed_solve.reason ?? "unknown"}) — last iterate`
+                : `Segment failed: ${run.mixed_solve.failed_units?.length ? run.mixed_solve.failed_units.join(", ") : run.mixed_solve.failed_segment ?? "unknown"} · ${run.mixed_solve.message || mixedFailureMessage(run.mixed_solve.errors)}`}
+          </p>
+          {run.mixed_solve.diagnosis && <p className="draft-hint">{run.mixed_solve.diagnosis}</p>}
+          <details>
+            <summary>{run.mixed_solve.culture_only
+              ? "Convergence · culture-only (no tear iteration)"
+              : <>Convergence · {run.mixed_solve.history?.length ?? 0} {(run.mixed_solve.history?.length ?? 0) === 1 ? "iteration" : "iterations"}</>}</summary>
+            <div className="draft-convergence-table">
+              <table>
+                <thead><tr><th>Iteration</th><th>Max normalized residual</th><th>ω</th><th>Worst field</th></tr></thead>
+                <tbody>{(run.mixed_solve.history ?? []).map((row) => (
+                  <tr key={row.iteration}><td>{row.iteration}</td>
+                    <td>{row.max_normalized_residual == null
+                      ? `no finite value${row.non_finite ? ` (${row.non_finite}; null/value mismatch${row.pattern_mismatch_fields?.length ? `: ${row.pattern_mismatch_fields.join(", ")}` : ""})` : ""}`
+                      : Number(row.max_normalized_residual).toPrecision(5)}</td>
+                    <td>{row.omega.toPrecision(3)}</td>
+                    <td>{row.worst_field || "—"}</td></tr>
+                ))}</tbody>
+              </table>
+            </div>
+            <div className="draft-segment-list" aria-label="Owner and segment listing">
+              {(run.mixed_solve.partition?.segments ?? []).filter((segment) => Array.isArray(segment?.units)).map((segment) => (
+                <p key={segment.id}><strong>DWSIM · segment {segment.id + 1}</strong> · level {segment.level}: {segment.units.join(", ")}</p>
+              ))}
+              <p><strong>Jarvis</strong>: {objects.filter((item) => item.kind === "unit" && unitSpec(item.type)?.owner === "jarvis_bio").map((item) => item.tag).join(", ") || "culture propagation"}</p>
+            </div>
+          </details>
+        </section>
+      )}
+      {run.mixed_solve && run.action === "run" && run.status !== "completed" && Object.keys(run.streams ?? {}).length > 0 && (
+        <details className="draft-last-iterate">
+          <summary>Not converged — last iterate results</summary>
+          <div className="draft-convergence-table">
+            <table>
+              <thead><tr><th>Stream</th><th>Owner</th><th>Temperature</th><th>Pressure</th><th>Mass flow</th></tr></thead>
+              <tbody>{Object.entries(run.streams ?? {}).map(([tag, stream]) => (
+                <tr key={tag}><td>{tag}</td><td>{stream.owner === "jarvis_bio" ? "Jarvis" : "DWSIM"}</td>
+                  <td>{formatQuantity(stream.display?.temperature)}</td>
+                  <td>{formatQuantity(stream.display?.pressure)}</td>
+                  <td>{formatQuantity(stream.display?.mass_flow)}</td></tr>
+              ))}</tbody>
+            </table>
+          </div>
+        </details>
+      )}
       {run.status === "materialization_mismatch" && (
         <>
           <p>DWSIM did not reproduce the draft exactly, so nothing was solved. Differences:</p>
@@ -1147,7 +1269,10 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
         <span className="draft-revision">revision {draft.seq}</span>
         <button type="button" onClick={() => setBiologyOpen((open) => !open)}>Biology models…</button>
         <button type="button" className="draft-run-button" disabled={busy !== null || blockers.length > 0} onClick={() => void act("run")}>
-          {busy === "run" ? "Running…" : "Run (DWSIM)"}
+          {busy === "run"
+            ? registry.units.some((unit) => unit.owner === "jarvis_bio") && objects.some((item) => item.kind === "unit" && unitSpec(item.type)?.owner === "jarvis_bio")
+              ? "Running mixed solve (DWSIM + Jarvis)…" : "Running…"
+            : "Run"}
         </button>
         <span className={`draft-readiness ${blockers.length ? "has-blockers" : "is-ready"}`} data-testid="readiness-chip" role="status">
           {blockers.length ? `${shownBlockerCount} blocker${shownBlockerCount === 1 ? "" : "s"}` : "Ready to run"} · {shownWarningCount} warning{shownWarningCount === 1 ? "" : "s"}
@@ -1179,7 +1304,14 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
           >
             Energy stream
           </button>
-          {registry.units.map((unit) => (
+          {registry.units.some((unit) => unit.owner === "jarvis_bio") && <>
+            <h3>Jarvis units</h3>
+            {registry.units.filter((unit) => unit.owner === "jarvis_bio").map((unit) => (
+              <button key={unit.type} type="button" onClick={() => addUnit(unit.type)}>{unit.label}</button>
+            ))}
+          </>}
+          <h3>DWSIM units</h3>
+          {registry.units.filter((unit) => unit.owner !== "jarvis_bio").map((unit) => (
             <button key={unit.type} type="button" onClick={() => addUnit(unit.type)}>{unit.label}</button>
           ))}
           <h3>Not yet supported</h3>
