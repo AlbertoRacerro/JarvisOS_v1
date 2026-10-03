@@ -228,6 +228,8 @@ def validation_findings(document: dict[str, Any]) -> list[dict[str, Any]]:
         code = str(exc)
         if code in {"ENERGY_STREAM_CROSSES_JARVIS_LEVEL", "NATIVE_RECYCLE_IN_JARVIS_LOOP"}:
             add("blocker", code, "", code.replace("_", " ").capitalize() + ".")
+        else:
+            add("blocker", "MIXED_PARTITION_INVALID", "", f"The process cannot be partitioned for a mixed solve: {code}.")
     else:
         for uid in value["consumed"]:
             add("info", "TEAR_CONSUMED", units[uid]["tag"],
@@ -302,13 +304,15 @@ def iterate(initial: dict[str, dict[str, Any]], evaluate: Any, *,
     history: list[dict[str, Any]] = []
     last: Any = None
     last_input: dict[str, dict[str, Any]] | None = None
+    restarted = False  # the pending iterate is the best one after a growth restart
     status, reason = "unconverged", "max_iterations"
     for iteration in range(1, MAX_ITERATIONS + 1):
         stop_reason = before_iteration(iteration) if before_iteration is not None else None
         if stop_reason:
             reason = stop_reason
             if last_input is not None:
-                guess = last_input
+                # After a growth restart the stored iterate is the best one, not the worsening one.
+                guess = copy.deepcopy(best) if restarted else last_input
             break
         last_input = copy.deepcopy(guess)
         last = evaluate(copy.deepcopy(guess), iteration)
@@ -337,6 +341,7 @@ def iterate(initial: dict[str, dict[str, Any]], evaluate: Any, *,
                 break
             omega = max(omega / 2, 0.125)
             guess = copy.deepcopy(best)
+            restarted = True
             continue
         if max_residual < best_residual:
             best_residual = max_residual
@@ -344,12 +349,14 @@ def iterate(initial: dict[str, dict[str, Any]], evaluate: Any, *,
         if iteration == MAX_ITERATIONS:
             reason = "max_iterations"
             break
+        restarted = False
         updated = copy.deepcopy(guess)
         for tag, output in last.items():
             for name in ("temperature_K", "pressure_Pa", "mass_flow_kg_s"):
                 updated[tag][name] += omega * (output[name] - guess[tag][name])
             for name, value in output["mass_fractions"].items():
-                updated[tag]["mass_fractions"][name] += omega * (value - guess[tag]["mass_fractions"][name])
+                updated[tag]["mass_fractions"][name] = guess[tag]["mass_fractions"].get(name, 0.0) + omega * (
+                    value - guess[tag]["mass_fractions"].get(name, 0.0))
             for name in CULTURE_FIELDS:
                 before = guess[tag]["culture"].get(name)
                 after = output.get("culture", {}).get(name)
