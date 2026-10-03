@@ -68,3 +68,27 @@ Each entry must contain:
 - **Expected benefit if revisited:** correct admission if L-147/H-146 evidence shows admission spanning independent processes (for example a solver or worker that allocates GPU/RAM outside the backend) or restart-surviving occupancy that runtime observation cannot see.
 - **Likely surface:** a K-owned additive migration storing exactly the frozen lease fields (id, request/owner/correlation, resources, snapshot generation, state, version, granted/expires/ended timestamps, release reason), with `WHERE id=? AND state=? AND version=?` transitions and startup reconciliation against observed runtime state.
 - **Freshness invalidators:** reopen only with concrete L/H evidence of cross-process GPU/RAM admission or unobservable restart-surviving occupancy.
+
+### F13 — BLUECAD logical-design version history UX — PARK
+
+- **Origin:** maintainer product direction, 2026-10-03; master `f46122db` after 171 reconciliation.
+- **Observation:** iterative Jarvis edits should update one logical design in the left navigation, showing only its current/latest artifact there. The design needs `View history`, open/restore of earlier immutable revisions, automatic viewer switching to a newly generated revision, and a safe `Delete superseded versions` action that preserves the current and referenced revisions.
+- **Disposition:** PARK; outside the accepted 168 mixed solve and 170 PBR unit contracts. No implementation authority is implied.
+- **Expected benefit:** a usable revision workflow without clutter or accidental deletion of referenced designs.
+- **Likely surface:** BLUECAD artifact/revision owner and workbench navigation/viewer.
+
+### F14 — end-to-end cancellation of active AI requests — PARK
+
+- **Origin:** maintainer product direction, 2026-10-03; master `f46122db` after 171 reconciliation.
+- **Observation:** `Stop while generating` must abort local inference, terminate Relay where supported, and stop subsequent tool/action steps. It must preserve emitted transcript and provenance, report a truthful cancelled state, and prevent post-cancel workspace mutation unless an action crossed a recorded apply/commit boundary before cancellation.
+- **Disposition:** PARK; outside the accepted 168 and 170 contracts. A frontend-only stop affordance would not satisfy this outcome.
+- **Expected benefit:** real operator control over active model work and its downstream actions.
+- **Likely surface:** Sidecar UI, AI job/execution spine, Relay/local provider adapters, action loop and apply ledger.
+
+### F15 — Sidecar file and image ingestion after 180 — PARK
+
+- **Origin:** maintainer product direction, 2026-10-03; master `f46122db` after 171 reconciliation.
+- **Observation:** after 180, Sidecar should accept images, PDFs, papers, spreadsheets and documents for the current turn under policy and persist originals, digests, metadata, extracted representations, provenance, trust state and conversation links. Scientific papers belong in Literature/evidence; project files belong in workspace/project context. Upload never automatically verifies literature. The UI should show storage location and support inspect, reclassify, detach and delete.
+- **Disposition:** PARK; outside the accepted 168 and 170 contracts, with no current implementation authority.
+- **Expected benefit:** durable, inspectable context with explicit trust and ownership.
+- **Likely surface:** Sidecar upload/context UI, files/knowledge/literature owners, conversation attachment records and policy enforcement.
