@@ -17,8 +17,8 @@ Code survey and prototypes: `out/wpbr/a170.report.md` (scratch in `/tmp/a170`).
    - `probe_q2_light.py:cylinder_collimated` gives every point on a chord one depth. It is not an area integral. The true collimated cylinder (beam normal to the axis) is −0.3 % to +39 % against the 107 slab, not "at most 18 %".
    - The probe's isotropic case is an in-plane 2-D proxy (+2.7 % to +162 %). A full 3-D isotropic field (Bickley–Naylor Ki₂) gives +5 % to +118 %.
    - The record's conclusion stands: tube geometry dominates and belongs in Tier 1. The numbers are restated here and supersede record §10.1 Q2.
-3. **Washout trap.** With an inlet of zero biomass, the trivial state X = 0 is always a periodic fixed point. In the prototype, Newton on the 24-hour map converged to it even where a productive branch exists (HRT 3 and 5 d). The thin-culture growth rate Λ (below) decides the branch only for a monotone light response. For the 107 Monod fixture, Λ = 0.01529 h⁻¹, a critical HRT of 2.73 d. Haldane, Steele and Eilers–Peeters can instead have a productive branch even when Λ ≤ D because biomass shading relieves photoinhibition; this Tier 1 solver refuses those forms until branch selection is proven.
-4. **Cost.** One 24-hour map takes 4–14 ms (slab to cylinder). A Newton periodic-steady solve from a warm start takes 0.1–0.5 s. The first call in a process pays about 3.9 s of cold imports (CoolProp, fluids, scikit-sundae).
+3. **Washout trap.** With an inlet of zero biomass, the trivial state X = 0 is always a periodic fixed point. In the prototype, Newton on the 24-hour map converged to it even where a productive branch exists (HRT 3 and 5 d). The thin-culture growth rate Λ (below) decides the branch only for a monotone light response. For the synthetic 107 parameters with **Monod** light and N_in = 0.05 kg m⁻³, Λ = 0.02361 h⁻¹, a critical HRT of 1.765 d. The previously quoted 0.01529 h⁻¹ and 2.73 d used Haldane light, which T1 refuses. Haldane, Steele and Eilers–Peeters can instead have a productive branch even when Λ ≤ D because biomass shading relieves photoinhibition; this Tier 1 solver refuses those forms until branch selection is proven.
+4. **Cost.** The refined cylinder prototype at rtol 1e-11 takes about 50–90 ms per 24-hour map and 0.4–0.9 s per periodic solve. These are local prototype measurements, not a production wall-time guarantee. The first call in a process pays about 3.9 s of cold imports (CoolProp, fluids, scikit-sundae).
 5. **107 v2 is pinned by evidence.** The 107 ledger, the 108/109/149 runtime evidence and `engineering_ui_operator_proof.mjs` pin `bluerev.pbr_day_night` / `pbr_day_night.v2`. `test_bio_models_forms.py` imports `_rhs` and `_cardinal_temperature` from `pbr_evaluator`.
 6. **169 pins one `FORM_VERSION`.** Every stored card pins `FORM_VERSION = "1.0.0"`, and `evaluate_card` refuses a mismatch with 409. Bumping it would orphan every card.
 7. **Gaps.**
@@ -130,6 +130,8 @@ The card's `n_source` (`NH3` or `HNO3`) determines its oxygen yield and is pinne
 
 **Optics.** The card's optics factor is superseded by the unit geometry. The unit always averages the response over the cylinder (capability 3), and a card that names `optics.slab_*` gets the caveat "card optics replaced by unit geometry (cylinder)". The card's `k_X` (m² kg⁻¹) is the extinction coefficient.
 
+The cylinder form is a documented production kernel and reference target, not a selectable 169 card factor. `evaluate_card` continues to evaluate only its supported slab optics; a direct attempt to evaluate the cylinder form outside the PBR returns a clear typed 422 explaining that it is evaluated inside `PhotobioreactorT1`. Existing pinned slab cards receive the caveat above. The 169 model-library set editor gains a `k_X` parameter row and the PBR stoichiometry symbols, labelled as PBR inputs, so an operator can create a complete set and card through the UI. A missing symbol gives `PBR_MODEL_CARD_SYMBOL_MISSING`, listing the symbols and linking the Biology tab to the library; the picker has a "No model cards — Browse models…" empty state.
+
 **Parameter states.** Values in state `candidate` raise `PBR_PARAMETER_UNVERIFIED` (info), listing the symbols. They are never blocked and never promoted.
 
 **Run record.** The run stores the card id, revision and digest, the set id, revision and digest, the N-source assumption, and the form versions.
@@ -153,9 +155,9 @@ This is a new 169 form card at `FORM_VERSION 1.0.0`. It has typed MathML and a s
 **Numerics** (fixed under `MODEL_VERSION`):
 
 - The supported optical-depth domain is 0 ≤ τ = κD ≤ 1000. A larger τ produces `PBR_OPTICS_OUT_OF_RANGE` and no current outlet; the result never silently falls back to slab optics. The operator sees τ and this Tier-1 limit.
-- Compute the area response with a deterministic adaptive or boundary-layer-aware quadrature. A fixed set of strictly interior radial nodes is insufficient at large τ because it loses the illuminated boundary layer. At τ = 0, use the analytic thin limit.
-- The 3-D diffuse field uses a converged directional quadrature and Ki₂ evaluation checked against an independent integral reference. Large-argument asymptotics require enough correction terms to meet the stated accuracy; the leading √(π/2a)·e^(−a) term alone is insufficient at a = 316.
-- On a declared grid spanning τ = 0 to 1000, irradiance, diffuse field and the final area-averaged light response agree with an independent, refined reference to 1e-4 relative where the reference is nonzero and 1e-8 absolute near zero. The reference method and convergence evidence are recorded.
+- The production ODE uses a fixed-rule, boundary-layer-aware area quadrature whose response is continuous, preferably C¹, in I₀ and κ. Nodes may move only through a smooth τ-dependent map; an adaptive rule that changes node counts inside the RHS is excluded. At τ = 0, use the analytic thin limit. Independent adaptive refinement is used for the reference only.
+- The 3-D diffuse field uses a fixed directional rule and a smooth Ki₂ evaluation (a smooth interpolant or matched series/asymptotic pieces), checked against an independent integral reference. Large-argument asymptotics require enough correction terms to meet the stated accuracy; the leading √(π/2a)·e^(−a) term alone is insufficient at a = 316.
+- On a declared grid spanning τ = 0 to 1000, irradiance, diffuse field and the final area-averaged light response agree with an independent, refined reference under |production − reference| ≤ 1e-4·|reference| + 1e-8·I₀. The reference method, convergence evidence and smoothness under small changes in I₀ and κ are recorded.
 
 All constants and refinement rules are deterministic. Exponentials may underflow to zero at extreme optical path, but τ itself is never used as a divisor without its analytic zero limit.
 
@@ -189,6 +191,8 @@ N is clipped at 0 only in its growth factor, as in 107; the oxygen transfer term
 
 The inlet volumetric values are the inlet's 167 mass-specific values × ρ_in. Biomass, dissolved N and dissolved O₂ must each be specified and finite on the PBR inlet; 167 permits N and O₂ to be unknown, but T1 refuses an unknown value instead of assuming zero. An explicit zero remains valid. P, DIC and salinity are not consumed in T1. They pass through, with the caveat "carbon and phosphorus assumed externally supplied and non-limiting; elemental C/P balances are not modeled". pH passes through unchanged with the caveat "pH not modeled; photosynthetic DIC uptake would raise it". Two more equation conventions inherited from 107 are disclosed as caveats: "biomass loss returns its N quota to dissolved N and consumes O₂ at Y_O2" and "O₂ saturation is the declared constant, independent of temperature and salinity". The 169 stoichiometry card's phosphorus term is disclosed but is not applied as a Tier-1 phosphorus consumption or a claim of full elemental conservation.
 
+In 168's `context.validation` mode the evaluator returns a carrier and culture pass-through with zero generation. It does not run the periodic solver or refuse absent culture values in the synthetic validation inlet; instant validation owns those findings. In Run mode a nonfinite `context.inlet_density_kg_m3` gives a typed `PBR_INLET_DENSITY_UNAVAILABLE` failure with the hint "place a Mixer or Heater between the Recycle and the PBR". A consumed tear immediately upstream of a PBR is therefore diagnosed rather than calculated with an invented density.
+
 **Map.** Φ₂₄(y₀) integrates 24 h with `integrate_ode` (CVODE BDF) at rtol 1e-11 and atol 1e-14 kg m⁻³, fixed under `MODEL_VERSION`. Augmented quadrature states give the daily means of X, N, O₂ and r_X, and the signed net O₂ gas transfer. Positive transfer is degassing; negative transfer is oxygen absorption from the gas phase. Integration error, not the root solver, limits attainable periodicity: the survey measured map noise of about rtol relative. Every tolerance below keeps at least a 100× margin over rtol.
 
 **Reduced periodic problem (normative).** The T1 equations have exact structure, and the solver uses it instead of a blind three-state Newton iteration:
@@ -209,9 +213,11 @@ The inlet volumetric values are the inlet's 167 mass-specific values × ρ_in. B
 
 **Certification.** From y* = (X*, N_in + q·(X_in − X*), O₂*), integrate the full three-state system once more. The root is accepted only if all of these hold:
 
-- **Periodicity:** |Φ₂₄(y*)_i − y*_i| ≤ 1e-9·max(|y*_i|, 1e-6 kg m⁻³) for every state;
+- **Periodicity:** the X tolerance is 1e-9·max(X*, 1e-6 kg m⁻³), the N tolerance is 1e-9·max(Z_in, 1e-6 kg m⁻³), and the O₂ tolerance is 1e-9·max(|O₂*|, O₂sat). The N scale follows the exact conserved Z identity, so a valid N-limited X root is not spuriously refused;
 - **Z identity:** |N(t) + q·X(t) − Z_in| ≤ 1e-9·max(Z_in, 1e-6 kg m⁻³) at the output samples;
 - **Physical trajectory:** the trajectory is finite, and X, N, O₂ ≥ −1e-12 kg m⁻³. A violation gives `PBR_NONPHYSICAL_STATE`.
+
+A failed periodicity or Z certification gives the typed `PBR_PERIODIC_STEADY_FAILED` result with each achieved residual and tolerance. Outlet means, generation and allowances all come from this same full-state certification integration with its quadrature states.
 
 **Generation allowance (additive 168 interface).** For each field at the certified orbit, in − out + generation equals V times the daily mean of dy/dt: V·(y_i(24) − y_i(0))/86,400 kg/s. That is residual periodicity, not a modelling error. At long HRT, 168's 1e-9-relative per-unit rule is stricter than any attainable periodicity. The unit therefore declares an allowance with each generation term, in the same units: a_i = V·(|Φ₂₄(y*)_i − y*_i| + 1e-12 kg m⁻³)/86,400 kg/s. 168's per-unit and whole-graph culture balances add declared allowances to their tolerance, exactly as they add tear and native-Recycle allowances. Units that declare none (the separator) are unchanged. Generation always comes from the integrated rate quadratures and never from in − out, so the balance stays an independent check. The result reports each allowance next to its residual.
 
@@ -250,7 +256,7 @@ The per-unit residual closes as in − out + generation to 167's rule. A whole-g
 - HRT outside [0.1, 100] d raises `PBR_HRT_OUT_OF_RANGE` (warning).
 - An inlet vapor fraction above 1e-6 fails, following the 167 liquid-only rule.
 - A negative periodic state, missing finite productive root, or unresolved branch fails with the typed result above; none is published as a current culture outlet.
-- **Wall time:** each evaluation is capped at 5 s. Eager module imports happen at server startup; any import inside a Run counts against the 168 wall budget. A typed `wall_budget` unit failure feeds the 168 budget rule.
+- **Wall time:** each evaluation is capped at min(5 s, `context.remaining_s()`). Eager module imports happen at server startup; any import inside a Run counts against the 168 wall budget. The evaluator raises `TimeoutError` when its deadline is reached; 168 records `JARVIS_UNIT_TIMEOUT`, and the outer run may end with reason `wall_budget`. The real mixed-loop evidence records PBR time per iteration.
 
 **106 evaluator.** It has `backend_kind="dynamic_simulator"`, `fidelity="reduced_order"`, and an `unqualified` envelope. Its `qualification_record_ref` points to a new synthetic-unqualified ledger. It can also be called headless with scalar outputs (X̄, productivity, Λ, HRT, ΔP, power), but it is not added to Engineering Studies in 170.
 
@@ -285,11 +291,13 @@ It also carries the fidelity label "T1 · unqualified · periodic steady state, 
 | Code | Severity | Condition |
 |---|---|---|
 | `PBR_REQUIRES_CULTURE_INLET` | blocker | The inlet is not reached by culture. |
+| `PBR_REQUIRES_BIOMASS` | blocker | Biomass is absent or unknown on the PBR inlet. Explicit zero is valid. |
 | `PBR_REQUIRES_NITROGEN` | blocker | Dissolved N is absent or unknown on the PBR inlet. Explicit zero is valid. |
 | `PBR_REQUIRES_OXYGEN` | blocker | Dissolved O₂ is absent or unknown on the PBR inlet. Explicit zero is valid. |
 | `PBR_REQUIRES_MODEL_CARD` | blocker | The unit has no model pin. |
 | `PBR_MODEL_CARD_UNAVAILABLE` | blocker | The pin does not resolve, or its digest or form versions differ. |
 | `PBR_MODEL_CARD_FORM_UNSUPPORTED` | blocker | The card uses a refused form. |
+| `PBR_MODEL_CARD_SYMBOL_MISSING` | blocker | The resolved set lacks a required PBR symbol; the finding lists the symbols. |
 | `PBR_PARAMETER_UNVERIFIED` | info | The card's set has `candidate` values. |
 | `PBR_HRT_OUT_OF_RANGE` | warning | HRT outside [0.1, 100] d. Before a run, it is evaluated only when the PBR inlet is a feed stream, using that feed's ṁ/ρ with ρ the 167 density basis. When the inlet comes from a unit or a recycle, the instant check is skipped and the finding comes from the solved inlet after Run. The finding labels which basis was used. |
 | `PBR_TEMPERATURE_DECLARED_DIFFERS` | info | \|T_mean − T_inlet\| > 5 K (ruling 1). |
@@ -298,6 +306,10 @@ It also carries the fidelity label "T1 · unqualified · periodic steady state, 
 | `PBR_NO_FINITE_PRODUCTIVE_STATE` | error | The supported equations lack a finite positive periodic root for the selected inputs/card. |
 | `PBR_BRANCH_UNRESOLVED` | error | The branch lies below declared numerical resolution or a unique physical root cannot be certified. |
 | `PBR_OPTICS_OUT_OF_RANGE` | error | The computed optical depth exceeds the supported Tier-1 range. |
+| `PBR_PERIODIC_STEADY_FAILED` | error | The map, periodicity or conserved-state certification fails or exhausts the evaluation cap. |
+| `PBR_NO_THROUGHFLOW` | error | The solved inlet has zero carrier flow. |
+| `PBR_INLET_DENSITY_UNAVAILABLE` | error | The solved inlet has no finite DWSIM density; the message suggests a Mixer or Heater before the PBR. |
+| `JARVIS_UNIT_TIMEOUT` | error | The PBR exceeds its own or the remaining 168 wall time; 168 owns this code. |
 
 168's findings apply unchanged. A PBR on a consumed tear's cycle is a normal 168 mixed loop.
 
@@ -323,7 +335,7 @@ Editing a PBR parameter or re-pinning the card stales results. Layout edits do n
 
 - **Overview:** the owner, fidelity, derived V/Q/HRT and the last run status.
 - **Geometry, Operation, Light & environment:** typed QuantityInputs with units and inline domain validation. The amplitude uses °C/K difference units.
-- **Biology:** an embeddable **model card picker** built from `listBioCards` and `listBioSets`. It shows each card's factors with their equations through the existing allowlisted MathML renderer, the set's verification chips, the assumed N source and the pin's revision. Pinning applies `set_unit_model`. A "newer revision available" notice offers to re-pin.
+- **Biology:** an embeddable **model card picker** built from `listBioCards` and `listBioSets`. It shows each card's factors with their equations through the existing allowlisted MathML renderer, the set's verification chips, the assumed N source and the pin's revision. Pinning applies `set_unit_model`. An empty picker links to the Biology model library, whose set editor exposes `k_X` and PBR stoichiometry symbols. A newer set revision or a newer compatible card is shown explicitly; no pinned digest changes silently.
 - **Results:** branch, Λ vs D, HRT, X̄, productivity, N/O₂ means and extremes, hydraulics, balance residuals with allowances, and map residuals. Grouped under `Results · Jarvis`, they carry the fidelity label and the caveats. The unit's non-failing `result.findings` (for example `PBR_WASHOUT`, `PBR_HRT_OUT_OF_RANGE` after Run) are shown here as readable messages. A typed unit failure (for example `PBR_NONPHYSICAL_STATE`) is shown in 168's failed-segment message with its code meaning in plain words and an operator hint, such as raising `oxygen_kla` for night-time oxygen depletion.
 - The outlet stream shows `Culture · Jarvis`.
 
@@ -349,7 +361,7 @@ Editing a PBR parameter or re-pinning the card stales results. Layout edits do n
   - the Z identity holds on the orbit; the closed-form O₂* equals a brute-force full-map fixed point; the Brent and bracket constants give bit-identical results across two runs;
   - bracket refusals: q = 0 with k_X = 0, the doubling cap, τ beyond 1000, and a positive root below X_res;
   - long-HRT (100 d) and short-HRT (0.1 d) cases certify without relaxing any tolerance;
-  - the washout rule on the 107 fixture with X_in = 0 at HRT 2, 3, 5 and 8 d: washout at or below the 2.73 d critical HRT, the productive branch above it, and never the trivial state on the productive side;
+  - the Monod version of the synthetic 107 fixture with N_in = 0.05 kg m⁻³ and X_in = 0: washout at HRT 1.5 and 1.7 d, productive at 2, 3, 5 and 8 d, with a numerical tie probe around the 1.765 d critical HRT; never accept the trivial state on the productive side;
   - X_in > 0 gives a unique positive state when the supported growth feedback admits a finite root; the no-root case is separately refused;
   - D_s ↔ D_h, kLa_s ↔ kLa_h, photoperiod seconds ↔ hours, hourly generation ↔ kg/s, and hourly productivity ↔ kg/day conversions close against an independent steady mass-balance calculation;
   - with X_in > 0, net productivity is based on X̄ − X_in while outlet biomass throughput remains a distinct quantity;
@@ -357,7 +369,7 @@ Editing a PBR parameter or re-pinning the card stales results. Layout edits do n
   - oxygen depletion, no finite productive root (q = k_X = 0), near-bifurcation unresolved branch and any detected multiple-root ambiguity yield typed failures without a current outlet;
   - determinism over two runs and cold/warm processes;
   - typed refusals mirror 107's matrix.
-- **Model card resolution:** pins, mismatches, unsupported forms, a missing stoichiometry factor and the nutrient index binding.
+- **Model card resolution:** pins, mismatches, unsupported forms, a missing stoichiometry factor, the nutrient index binding, validation pass-through and typed missing-density refusal.
 - **Culture input refusal:** missing or unknown dissolved N and O₂ each block before Run, while explicit zero values remain valid inputs.
 - **The new quantity kinds,** including that `temperature_difference` has no offset.
 - **DraftOp `set_unit_model`:** CAS, undo, stale and refusal on other unit types.
@@ -379,7 +391,7 @@ Editing a PBR parameter or re-pinning the card stales results. Layout edits do n
 
 **4. Exact-head real Chromium at 1280 and 1440 CSS px** (local Gemma for the Sidecar steps).
 
-1. Add the PBR from the palette, connect it, and pick a card in Biology, seeing the verification chips.
+1. Create a complete synthetic parameter set and card through the Biology model library UI, including `k_X`, then add the PBR from the palette, connect it, and pick that card in Biology, seeing the verification chips.
 2. Configure geometry, operation and light, and see an off-range warning.
 3. Run, and inspect Results (branch, HRT, Λ, X̄, productivity, balances, hydraulics) and the outlet `Culture · Jarvis`.
 4. Edit a parameter, see the results go stale, and Run again.
