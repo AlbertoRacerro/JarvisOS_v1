@@ -1012,6 +1012,8 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
     const connected = (end: "source" | "target", port: number, energy: boolean) =>
       objects.find((item) => item.kind === "stream" && isEnergy(item) === energy && item[end]?.unit === unit.id && item[end]?.port === port)?.tag ?? "—";
     const reported = solvedRun?.units?.[unit.tag];
+    // A consumed Recycle is a DWSIM block whose result Jarvis synthesized: the result owner wins.
+    const reportedOwner = reported?.owner ?? spec.owner;
     const reactions = Object.entries(draft.reactions ?? {});
     const assigned = reactionPick ?? unit.reactions ?? [];
     const reactionsChanged = reactionPick !== null && JSON.stringify(reactionPick) !== JSON.stringify(unit.reactions ?? []);
@@ -1089,7 +1091,7 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
             </button>
           </fieldset>
         )}
-        {spec.owner === "jarvis_bio" && reported && (
+        {reportedOwner === "jarvis_bio" && reported && (
           <fieldset className={`draft-fieldset draft-outputs${results.state === "stale" ? " is-stale" : ""}`} aria-label="Jarvis unit results">
             <legend>Results · Jarvis{results.state === "stale" ? " (stale)" : ""}</legend>
             <dl className="draft-results-inline">
@@ -1114,7 +1116,7 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
             })()}
           </p>
         )}
-        {spec.owner === "dwsim" && renderResultSection(
+        {reportedOwner === "dwsim" && renderResultSection(
           reported?.properties,
           reported && Object.keys(reported.reported ?? {}).length > 0 && (
             <dl className={`draft-results-inline${results.state === "stale" ? " is-stale" : ""}`}>
@@ -1137,7 +1139,9 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
       {run.mixed_solve && run.action === "run" && (
         <section className="draft-mixed-summary" aria-label="Mixed solve summary">
           <p role="status">
-            {run.status === "completed"
+            {run.status === "completed" && run.mixed_solve.culture_only
+              ? "Converged · culture-only loop, solved as a culture fixed point on DWSIM flows (no cross-engine tear to iterate)"
+              : run.status === "completed"
               ? `Converged in ${run.mixed_solve.history?.length ?? 0} ${(run.mixed_solve.history?.length ?? 0) === 1 ? "iteration" : "iterations"} · max residual ${(() => {
                 const last = run.mixed_solve.history?.[Math.max(0, (run.mixed_solve.history?.length ?? 1) - 1)]?.max_normalized_residual;
                 return last == null ? "n/a" : Number(last).toPrecision(4);
@@ -1148,7 +1152,9 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
           </p>
           {run.mixed_solve.diagnosis && <p className="draft-hint">{run.mixed_solve.diagnosis}</p>}
           <details>
-            <summary>Convergence · {run.mixed_solve.history?.length ?? 0} {(run.mixed_solve.history?.length ?? 0) === 1 ? "iteration" : "iterations"}</summary>
+            <summary>{run.mixed_solve.culture_only
+              ? "Convergence · culture-only (no tear iteration)"
+              : <>Convergence · {run.mixed_solve.history?.length ?? 0} {(run.mixed_solve.history?.length ?? 0) === 1 ? "iteration" : "iterations"}</>}</summary>
             <div className="draft-convergence-table">
               <table>
                 <thead><tr><th>Iteration</th><th>Max normalized residual</th><th>ω</th><th>Worst field</th></tr></thead>

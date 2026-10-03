@@ -205,6 +205,7 @@ export type DraftRun = {
     reason?: string;
     version?: number;
     method?: string;
+    culture_only?: boolean;
     history?: { iteration: number; omega: number; max_normalized_residual: number | null; worst_tear?: string;
       non_finite?: string; pattern_mismatch_fields?: string[];
       worst_field?: string; residuals?: Record<string, Record<string, number | null>>;

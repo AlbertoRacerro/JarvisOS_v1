@@ -571,3 +571,278 @@ def test_mid_iteration_failure_carries_the_pressure_per_pass_diagnosis(
     assert record["status"] == "segment_failed"
     assert record["failed_units"] == []
     assert "pressure falls by" in record["diagnosis"]
+
+
+# ---- Final-review regressions (r168final) -------------------------------------------------
+
+def _liquid(flow: float = 1.0, temperature: float = 298.15) -> dict:
+    return {"temperature_K": temperature, "pressure_Pa": 101325.0, "mass_flow_kg_s": flow,
+            "mass_fractions": {"Water": 1.0}, "vapor_fraction": 0.0,
+            "phases": [{"name": "Mixture", "density_kg_m3": 1000.0}]}
+
+
+def _plain_feed(uid: str, tag: str, target: str, **spec) -> dict:
+    feed = _stream(uid, tag, target=target)
+    feed["spec"] = {"pressure": {"si": 101325.0}, "composition_basis": "mass",
+                    "composition": {"Water": 1.0}, **spec}
+    return feed
+
+
+def _document(objects: dict, compounds: list[str] | None = None) -> dict:
+    return {"schema_version": 1, "name": "t", "compounds": compounds or ["Water"],
+            "property_package": "NRTL", "objects": objects, "reactions": {}}
+
+
+def test_m1_non_culture_inlets_dilute_and_units_they_feed_still_pass_culture_on() -> None:
+    from app.modules.process_stack import culture
+
+    document = _document({
+        "f1": _stream("f1", "F1", target="m"),
+        "f2": _plain_feed("f2", "F2", "p", mass_flow={"si": 1.0}, temperature={"si": 298.15}),
+        "p": _unit("p", "Pump", "Pump"),
+        "pm": _stream("pm", "PM", "p", "m", target_port=1),
+        "m": _unit("m", "Mixer", "Mixer"),
+        "out": _stream("out", "Out", "m", None),
+    })
+    streams = {tag: _liquid(1.0) for tag in ("F1", "F2", "PM", "Out")}
+    streams["Out"] = _liquid(2.0)
+    states = mixed_runtime._propagate_culture(document, {"streams": streams}, {})
+    assert {"F1", "Out"} <= set(states) and "PM" not in states  # the pump outlet carries no culture
+    # 167 rule: the culture-free half dilutes as zero culture, so biomass halves.
+    expected, _ = culture.mix_mass_specific(
+        [(1.0, {"mass_specific": states["F1"], "reasons": {}})], 2.0, 2, "Mixer")
+    assert states["Out"]["biomass"] == pytest.approx(0.5 * states["F1"]["biomass"])
+    assert states["Out"]["biomass"] == pytest.approx(expected["biomass"])
+    assert states["Out"]["ph"] is None  # pH placeholder survives only when every inlet carries culture
+
+
+def _bypass_document() -> dict:
+    return _document({
+        "feed": _plain_feed("feed", "Feed", "s", mass_flow={"si": 1.0}, temperature={"si": 298.15}),
+        "s": _unit("s", "Splitter", "Splitter"),
+        "s_h": _stream("s_h", "SH", "s", "h", source_port=0),
+        "s_m": _stream("s_m", "SM", "s", "m", source_port=1, target_port=0),
+        "h": _unit("h", "Heater", "Heater"),
+        "h_j": _stream("h_j", "HJ", "h", "j"),
+        "j": _unit("j", "Separator", "SpecifiedSeparator"),
+        "j_m": _stream("j_m", "JM", "j", "m", source_port=0, target_port=1),
+        "j_p": _stream("j_p", "JP", "j", None, source_port=1),
+        "m": _unit("m", "Mixer", "Mixer"),
+        "out": _stream("out", "Out", "m", None),
+    })
+
+
+def test_m3_validate_builds_cross_level_dwsim_edges_of_the_bypass_case(
+        monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    document = _bypass_document()
+    document["objects"]["feed"]["spec"]["culture"] = _stream("x", "x", target="s")["spec"]["culture"]
+    assert [[document["objects"][uid]["tag"] for uid in ids] for ids in mixed.partition(document)["segments"]] == [
+        ["Heater", "Splitter"], ["Mixer"]]
+    built: list[dict] = []
+
+    def capture(segment, _client, **_kwargs):
+        built.append(segment)
+        return {"status": "validated"}
+
+    monkeypatch.setattr(mixed_runtime, "_full", capture)
+    result = _run_document(document, tmp_path, action="validate")
+    assert result["status"] == "validated"
+    mixer = next(segment for segment in built if "m" in segment["objects"])
+    assert mixer["objects"]["s_m"]["source"] is None and mixer["objects"]["s_m"]["spec"]["mass_flow"]["si"] > 0
+
+
+def test_m4_m5_feed_state_covers_every_compound_and_a_molar_only_flow() -> None:
+    feed = _plain_feed("f", "F", "j", molar_flow={"si": 1000.0})
+    feed["spec"]["composition"] = {"Water": 1.0}
+    document = _tear_document()
+    document["compounds"] = ["Water", "Ethanol"]
+    state = mixed_runtime._state_from_spec(feed, document["compounds"])
+    assert state["mass_fractions"] == {"Water": 1.0, "Ethanol": 0.0}
+    assert state["mass_flow_kg_s"] == pytest.approx(18.01528 / 1000 * 1000.0)  # 1000 mol/s of water
+    document["objects"]["feed"]["spec"].pop("mass_flow")
+    document["objects"]["feed"]["spec"]["molar_flow"] = {"si": 1000.0}
+    seed = mixed_runtime._seed(document, mixed.partition(document))
+    assert set(seed["Tear"]["mass_fractions"]) == {"Water", "Ethanol"}
+    assert seed["Tear"]["mass_flow_kg_s"] > 0
+    document["objects"]["feed"]["spec"].pop("molar_flow")  # no flow in kg/s at all: still never zero
+    assert mixed_runtime._seed(document, mixed.partition(document))["Tear"]["mass_flow_kg_s"] > 0
+
+
+def _direct_jarvis_feed_document() -> dict:
+    feed = _plain_feed("feed", "Feed", "j", molar_flow={"si": 100.0})
+    feed["spec"]["culture"] = _stream("x", "x", target="j")["spec"]["culture"]
+    return _document({
+        "feed": feed, "j": _unit("j", "Separator", "SpecifiedSeparator"),
+        "j_c": _stream("j_c", "Conc", "j", None, source_port=0),
+        "j_k": _stream("j_k", "Clar", "j", None, source_port=1)})
+
+
+def test_m4_jarvis_bound_feed_is_flashed_with_its_actual_spec(
+        monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    document = _direct_jarvis_feed_document()
+    seen: list[dict] = []
+
+    def fake_flash(state, tag, _client, **kwargs):
+        seen.append(kwargs["spec"])
+        return _liquid(2.0, temperature=310.0)
+
+    monkeypatch.setattr(mixed_runtime, "_flash", fake_flash)
+    result = mixed_runtime._evaluate(document, mixed.partition(document), {}, client=object(), full=False,
+                                     run_dir=tmp_path, iteration=1, dwsim_version="10.2.9",
+                                     mcp_sha256="a" * 64, remaining_s=30.0)
+    assert "molar_flow" in seen[0] and "mass_flow" not in seen[0]
+    assert result["known"]["Conc"]["mass_flow_kg_s"] == pytest.approx(2.0 * 0.9 / 10.0)
+    assert result["known"]["Conc"]["temperature_K"] == 310.0
+
+
+def test_flash_of_an_operator_feed_passes_the_actual_spec_and_all_compounds(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict = {}
+
+    def light(document, _client, **_kwargs):
+        captured["document"] = document
+        return {"streams": {"F": _liquid()}, "dwsim_check": {}}
+
+    monkeypatch.setattr(mixed_runtime, "_light", light)
+    spec = {"pressure": {"si": 1e5}, "vapor_fraction": {"si": 0.0}, "molar_flow": {"si": 5.0},
+            "composition_basis": "mole", "composition": {"Water": 1.0}}
+    mixed_runtime._flash({}, "F", None, label="x", dwsim_version="v", mcp_sha256="a" * 64,
+                         property_package="NRTL", full=False, remaining_s=10.0,
+                         compounds=["Water", "Ethanol"], spec=spec)
+    assert captured["document"]["objects"]["F"]["spec"] is spec
+    assert captured["document"]["compounds"] == ["Water", "Ethanol"]
+
+
+def _fake_light(segment, _client, **_kwargs):
+    """A conserving stand-in for one DWSIM segment: inbound spec flows split over the outlets."""
+    objects = segment["objects"]
+    streams = [item for item in objects.values() if item["kind"] == "stream"]
+    inbound = sum(float(item["spec"]["mass_flow"]["si"]) for item in streams if item.get("source") is None)
+    outbound = [item for item in streams if item.get("target") is None and item.get("source") is not None]
+    results = {}
+    for item in streams:
+        if item.get("source") is None:
+            flow = float(item["spec"]["mass_flow"]["si"])
+        else:
+            flow = inbound / max(1, len(outbound)) if item in outbound else inbound
+        results[item["tag"]] = _liquid(flow)
+    return {"status": "completed", "streams": results, "units": {},
+            "elapsed_s_by_phase": {"build": 0.01, "solve": 0.01, "culture": 0.0}}
+
+
+def test_m6_minor1_consumed_recycle_row_shape_and_jarvis_ownership_survive_downstream_segments(
+        monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    objects = {
+        "feed": _stream("feed", "Feed", target="m"),
+        "m": _unit("m", "Mixer", "Mixer"),
+        "m_j": _stream("m_j", "M_to_J", "m", "j"),
+        "j": _unit("j", "Separator", "SpecifiedSeparator"),
+        "j_c": _stream("j_c", "Concentrate", "j", "m2", source_port=0, target_port=0),
+        "j_k": _stream("j_k", "Clarified", "j", "m2", source_port=1, target_port=1),
+        "m2": _unit("m2", "Mixer2", "Mixer"),
+        "m2_s": _stream("m2_s", "M2_out", "m2", "s"),
+        "s": _unit("s", "Splitter", "Splitter"),
+        "s_p": _stream("s_p", "Product", "s", None, source_port=0),
+        "s_r": _stream("s_r", "Return", "s", "r", source_port=1),
+        "r": _unit("r", "Recycle", "Recycle"),
+        "r_m": _stream("r_m", "Tear", "r", "m", target_port=1),
+    }
+    document = _document(objects)
+    monkeypatch.setattr(mixed_runtime, "_light", _fake_light)
+    part = mixed.partition(document)
+    assert part["consumed"] == ["r"]
+    tear = mixed_runtime._seed(document, part)
+    result = mixed_runtime._evaluate(document, part, tear, client=object(), full=False, run_dir=tmp_path,
+                                     iteration=1, dwsim_version="10.2.9", mcp_sha256="a" * 64,
+                                     remaining_s=30.0)
+    row = result["units"]["Recycle"]
+    assert row["owner"] == "jarvis_bio" and row["label"] == "Converged by Jarvis (cross-engine tear)"
+    for name, units in (("Mass Flow Error", "kg/h"), ("Temperature Error", "K"), ("Pressure Error", "Pa")):
+        assert set(row["reported"][name]) == {"value", "units"} and row["reported"][name]["units"] == units
+    # Jarvis outlets feeding the downstream DWSIM segment and the tear keep their Jarvis ownership.
+    assert result["streams"]["Concentrate"]["owner"] == "jarvis_bio"
+    assert result["streams"]["Concentrate"]["state_source"] == "jarvis_unit"
+    assert result["streams"]["Tear"]["owner"] == "jarvis_bio"
+    assert result["streams"]["Feed"]["owner"] == "dwsim"
+
+
+def test_minor5_a_tear_straight_into_a_jarvis_unit_needs_no_density(
+        monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    objects = {
+        "feed": _stream("feed", "Feed", target="m"),
+        "m": _unit("m", "Mixer", "Mixer"),
+        "m_s": _stream("m_s", "MS", "m", "s"),
+        "s": _unit("s", "Splitter", "Splitter"),
+        "s_p": _stream("s_p", "Product", "s", None, source_port=0),
+        "s_r": _stream("s_r", "Return", "s", "r", source_port=1),
+        "r": _unit("r", "Recycle", "Recycle"),
+        "r_j": _stream("r_j", "Tear", "r", "j"),
+        "j": _unit("j", "Separator", "SpecifiedSeparator"),
+        "j_m": _stream("j_m", "JM", "j", "m", source_port=0, target_port=1),
+        "j_k": _stream("j_k", "Clar", "j", None, source_port=1),
+    }
+    document = _document(objects)
+    part = mixed.partition(document)
+    assert part["consumed"] == ["r"]
+    monkeypatch.setattr(mixed_runtime, "_light", _fake_light)
+    tear = mixed_runtime._seed(document, part)
+    result = mixed_runtime._evaluate(document, part, tear, client=object(), full=False, run_dir=tmp_path,
+                                     iteration=1, dwsim_version="10.2.9", mcp_sha256="a" * 64,
+                                     remaining_s=30.0)
+    assert set(result["produced"]) == {"Tear"}
+
+
+def test_minor3_wall_budget_stop_after_a_growth_restart_stores_the_best_iterate() -> None:
+    def evaluate(tear, iteration):
+        output = copy.deepcopy(tear)
+        for state in output.values():
+            state["temperature_K"] += 0.1 if iteration == 1 else 5.0
+        return output
+
+    initial = {"T": {**_state(1.0), "temperature_K": 300.0}}
+    result = mixed.iterate(initial, evaluate,
+                           before_iteration=lambda iteration: "wall_budget" if iteration == 3 else None)
+    assert result["reason"] == "wall_budget"
+    assert result["iterate"]["T"]["temperature_K"] == 300.0  # best, not the worsening iterate
+
+
+def test_minor4_t_build_is_the_slowest_build_seen_and_three_seconds_only_before_the_first(
+        monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    document = _document({
+        "feed": _plain_feed("feed", "Feed", "h", mass_flow={"si": 1.0}, temperature={"si": 298.15}),
+        "h": _unit("h", "Heater", "Heater"),
+        "out": _stream("out", "Out", "h", None)})
+    builds = iter([0.5, 0.2])
+
+    def fake(_document, _part, _tear, **_kwargs):
+        return {"produced": {}, "streams": {}, "units": {}, "segments": [], "culture_balances": {},
+                "culture_generation": {}, "mixed_findings": [], "max_build_seconds": next(builds, 0.2),
+                "elapsed_s_by_phase": {"build": 0.0, "solve": 0.0, "culture": 0.0},
+                "known": {"Feed": {"mass_flow_kg_s": 1.0}, "Out": {"mass_flow_kg_s": 1.0}}}
+
+    monkeypatch.setattr(mixed_runtime, "_evaluate", fake)
+    record = _run_document(document, tmp_path)["mixed_solve"]
+    assert record["budget"]["t_build_s"] == 0.5  # observed, below the 3 s first-build assumption
+    # MINOR 9: a loop with no cross-engine tear is reported as such, not as a one-iteration convergence.
+    assert record["culture_only"] is True
+
+
+def test_minor6_culture_on_a_recycle_off_any_loop_is_blocked_at_validation() -> None:
+    from app.modules.process_stack import culture
+
+    document = _document({
+        "feed": _stream("feed", "Feed", target="r"), "r": _unit("r", "Recycle", "Recycle"),
+        "out": _stream("out", "Out", "r", None)})
+    findings = culture.culture_findings(document)
+    assert [item["code"] for item in findings if item["severity"] == "blocker"] == ["CULTURE_UNIT_UNSUPPORTED"]
+    # A Recycle that closes a loop is not refused.
+    assert not [item for item in culture.culture_findings(_tear_document()) if item["severity"] == "blocker"]
+
+
+def test_minor7_other_partition_errors_become_a_blocking_finding(monkeypatch: pytest.MonkeyPatch) -> None:
+    def broken(_document):
+        raise ValueError("partition remains cyclic after consumed tears are cut")
+
+    monkeypatch.setattr(mixed, "partition", broken)
+    findings = mixed.validation_findings(_tear_document())
+    assert [item["code"] for item in findings if item["severity"] == "blocker"] == ["MIXED_PARTITION_INVALID"]

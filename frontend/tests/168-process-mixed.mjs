@@ -12,6 +12,8 @@ for (const text of [
   "jarvis_bio", "SpecifiedSeparator",
   // Failure records: tag-based segments are guarded, check findings and diffs are shown, units named.
   "Array.isArray(segment?.units)", "record.findings", "record.diffs", "failed_units",
+  // Result owner wins for a Jarvis-converged Recycle; culture-only loops are not called iterations.
+  "reportedOwner", "culture_only", "no cross-engine tear to iterate",
   "no finite value", "pattern_mismatch_fields", '"iteration" : "iterations"',
 ]) assert.ok(editor.includes(text), "missing mixed Process UI contract: " + text);
 assert.match(contract, /mixed_solve\?:/);
