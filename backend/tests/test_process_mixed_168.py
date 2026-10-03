@@ -5,7 +5,7 @@ import time
 
 import pytest
 
-from app.modules.process_stack import draft, mixed, mixed_runtime
+from app.modules.process_stack import draft, draft_compiler, mixed, mixed_runtime
 
 
 def _unit(uid: str, tag: str, kind: str) -> dict:
@@ -66,6 +66,36 @@ def test_jarvis_evaluator_interface_keeps_separator_behavior_and_run_context() -
     assert context.cache["per_run_key"] == 1
 
 
+def test_internal_feed_flash_exception_requires_exact_one_feed_and_one_finding() -> None:
+    feed = _stream("f", "FlashFeed")
+    document = {"objects": {"f": feed}}
+    check = {"ready": False, "blockers": 1, "warnings": 0,
+             "findings": [{"code": "STREAM_DANGLING", "severity": "blocker", "object": "FlashFeed"}]}
+    allowed = draft_compiler.isolated_feed_flash_check
+    assert allowed(document, "run", check, allowed=True)
+    assert not allowed(document, "run", check, allowed=False)
+    assert not allowed(document, "validate", check, allowed=True)
+    assert not allowed({"objects": {"f": feed, "extra": _stream("extra", "Extra")}}, "run", check, allowed=True)
+    assert not allowed(document, "run", {**check, "findings": [*check["findings"],
+                                                         {"code": "PROPERTY_INVALID", "object": "FlashFeed"}]}, allowed=True)
+    assert not allowed(document, "run", {**check, "findings": [{**check["findings"][0],
+                                                                   "object": "Other"}]}, allowed=True)
+
+
+@pytest.mark.parametrize("full", [False, True])
+def test_flash_opts_in_and_retains_real_unready_check(full: bool, monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_path(document: dict, _client: object, **kwargs: object) -> dict:
+        assert kwargs["allow_isolated_feed_flash"] is True
+        assert len(document["objects"]) == 1
+        return {"status": "completed", "streams": {"FlashFeed": {"mass_flow_kg_s": 1.0}},
+                "dwsim_check": {"ready": False, "intentional_isolated_feed_exception": True}}
+
+    monkeypatch.setattr(mixed_runtime, "_full" if full else "_light", fake_path)
+    result = mixed_runtime._flash(_state(1.0), "FlashFeed", None, label="test", dwsim_version="10.2.9",
+                                  mcp_sha256="test", property_package="NRTL", full=full, remaining_s=10)
+    assert result["flash_check_exception"] == "STREAM_DANGLING"
+
+
 def test_jarvis_declared_generation_closes_unit_culture_balance() -> None:
     document = _tear_document()
     # A productive Jarvis unit can declare the growth rate instead of being
@@ -87,6 +117,60 @@ def test_jarvis_declared_generation_closes_unit_culture_balance() -> None:
     balance = mixed_runtime._culture_balances(document, known, {"Separator": {"biomass": 1.0}})
     assert balance["Separator"]["biomass"]["passed"]
     assert balance["Separator"]["biomass"]["generated"] == 1.0
+
+
+@pytest.mark.parametrize("flow,concentration", [(1e6, 1e-6), (1e-9, 100.0)])
+def test_whole_graph_tear_culture_tolerance_has_flux_units(flow: float, concentration: float) -> None:
+    feed = _stream("f", "Feed")
+    product = _stream("p", "Product", source="u")
+    document = {"objects": {"f": feed, "p": product, "u": _unit("u", "Unit", "Heater")}}
+    state = _state()
+    state["mass_flow_kg_s"] = flow
+    state["culture"]["biomass"] = concentration
+    final = {"known": {"Feed": state, "Product": state}, "units": {}, "culture_generation": {}}
+    result = mixed_runtime._whole_graph_balances(document, final, {"Tear": state})
+    delta_m = mixed.tolerance("mass_flow_kg_s", flow)
+    delta_c = mixed.tolerance("biomass", concentration)
+    expected = flow * delta_c + concentration * delta_m + delta_m * delta_c
+    baseline = 1e-9 * abs(flow * concentration) + 1e-12
+    assert result["balances"]["biomass"]["tolerance"] == pytest.approx(expected + baseline)
+    if flow < 1e-6:
+        assert result["balances"]["biomass"]["tolerance"] < 1e-6
+
+
+def test_whole_graph_salinity_tear_tolerance_converts_g_per_kg_to_kg_per_s() -> None:
+    feed = _stream("f", "Feed")
+    product = _stream("p", "Product", source="u")
+    document = {"objects": {"f": feed, "p": product, "u": _unit("u", "Unit", "Heater")}}
+    state = _state()
+    state["culture"]["salinity"] = 35.0
+    final = {"known": {"Feed": state, "Product": state}, "units": {}, "culture_generation": {}}
+    row = mixed_runtime._whole_graph_balances(document, final, {"Tear": state})["balances"]["salinity"]
+    delta_m = mixed.tolerance("mass_flow_kg_s", 1.0)
+    delta_c = mixed.tolerance("salinity", 35.0)
+    expected = (delta_c + 35.0 * delta_m + delta_m * delta_c) * 0.001 + 1e-9 * 0.035 + 1e-12
+    assert row["tolerance"] == pytest.approx(expected)
+
+
+def test_jarvis_outlet_culture_shows_evaluator_fidelity_in_operator_result() -> None:
+    feed = _stream("f", "Feed", target="j")
+    jarvis = _unit("j", "Separator", "SpecifiedSeparator")
+    outlet = _stream("o", "Concentrate", source="j")
+    document = {"objects": {"f": feed, "j": jarvis, "o": outlet}}
+    state = _state()
+    state["culture"]["biomass"] = 0.001
+    dwsim_stream = {"phases": [{"name": "Mixture", "density_kg_m3": 1000.0}]}
+    final = {"known": {"Feed": state, "Concentrate": state},
+             "streams": {"Feed": dwsim_stream, "Concentrate": dwsim_stream},
+             "units": {"Separator": {"fidelity": "screening — specified performance",
+                                     "caveats": ["Dissolved species follow the carrier."],
+                                     "evaluator": "jarvis.specified_separator", "version": 1}},
+             "culture_balances": {}}
+    culture_results = mixed_runtime._culture_results(document, final)
+    assert culture_results["Concentrate"]["fidelity"] == "screening — specified performance"
+    assert "Dissolved species follow the carrier." in culture_results["Concentrate"]["caveats"]
+    assert culture_results["Concentrate"]["evaluator"] == "jarvis.specified_separator"
+    assert culture_results["Feed"]["fidelity"] == mixed_runtime.culture.FIDELITY
 
 
 def test_jarvis_generation_declares_field_specific_rate_units() -> None:

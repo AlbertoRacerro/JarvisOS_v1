@@ -51,6 +51,7 @@ Code survey: `out/wpbr/a168.report.md`. DWSIM probes: `evidence/pbr/p168/p168.re
 ### DWSIM calls
 
 - **Fresh flowsheets every iteration.** Each segment is rebuilt as a new flowsheet on every outer iteration, then read back and verified. Handles are closed after use.
+- **Internal one-feed flashes.** Real DWSIM 10.2.9 evidence at `evidence/168/accept/probe_flash_d656.json` showed that a standalone material feed reads back exactly and solves with measured properties equal to a verified feed-through Heater, while its check reports only `STREAM_DANGLING` because it has no connected unit. The mixed solver may proceed past that exact finding only for its own Run-time flash document containing exactly one isolated material feed; it still records the check as `ready: false` with an explicit intentional exception, then solves and reads back the result. Any additional finding or ordinary Process draft retains the normal check refusal.
 - **Sessions.** Builds run in one long-lived MCP session per Run, **if the session-equivalence probe passes** (Required evidence 1). In the one-session-per-build fallback, a build costs about 1.5–2.5 s, and the converging acceptance case may not fit in 90 s. If the gate selects the fallback, the implementer stops and reports to the coordinator, who amends the budget in this spec before building on it. In-place mutation is a later optimization: it must first prove equivalence to fresh builds on the probe 1 harness.
 
 ### Unchanged paths

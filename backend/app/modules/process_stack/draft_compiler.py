@@ -60,6 +60,27 @@ def _units(document: dict[str, Any]) -> list[dict[str, Any]]:
                   key=lambda item: item["tag"])
 
 
+def isolated_feed_flash_check(document: dict[str, Any], action: str,
+                              check: dict[str, Any], *, allowed: bool) -> bool:
+    """Admit only DWSIM's known dangling finding for an internal one-feed flash."""
+    if not allowed or action != "run" or check.get("ready") is not False:
+        return False
+    objects = list(document.get("objects", {}).values())
+    if len(objects) != 1:
+        return False
+    feed = objects[0]
+    if (feed.get("kind") != "stream" or feed.get("type") != "MaterialStream"
+            or feed.get("source") is not None or feed.get("target") is not None):
+        return False
+    findings = check.get("findings")
+    return (isinstance(findings, list) and len(findings) == 1
+            and isinstance(findings[0], dict)
+            and findings[0].get("code") == "STREAM_DANGLING"
+            and findings[0].get("severity") == "blocker"
+            and findings[0].get("object") == feed.get("tag")
+            and check.get("blockers", 1) == 1 and check.get("warnings", 0) == 0)
+
+
 def _composition(document: dict[str, Any], stream: dict[str, Any]) -> dict[str, float]:
     given = stream["spec"].get("composition", {})
     return {name: float(given.get(name, 0.0)) for name in document["compounds"]}
@@ -703,7 +724,8 @@ def _snapshot_properties(rows: list[dict[str, Any]], tag: str) -> list[dict[str,
 
 
 def materialize(document: dict[str, Any], *, action: str, client: DwsimMcpClient, dwsim_version: str,
-                mcp_sha256: str, label: str, keep_case: Path | None = None) -> dict[str, Any]:
+                mcp_sha256: str, label: str, keep_case: Path | None = None,
+                allow_isolated_feed_flash: bool = False) -> dict[str, Any]:
     """Compile, read back, compare; then check (validate) or check+solve (run). Refuses on mismatch."""
     started = time.perf_counter()
     exp = expected(document)
@@ -761,11 +783,15 @@ def materialize(document: dict[str, Any], *, action: str, client: DwsimMcpClient
                           "message": item.get("message"), "fix": item.get("fix"), "source": "dwsim"}
                          for item in check.get("findings", []) if isinstance(item, dict)][:40],
         }
+        flash_exception = isolated_feed_flash_check(document, action, check,
+                                                     allowed=allow_isolated_feed_flash)
+        if flash_exception:
+            outcome["dwsim_check"]["intentional_isolated_feed_exception"] = True
         if action == "validate":
             outcome.update(status="validated" if check.get("ready") else "check_failed",
                            compile_seconds=round(time.perf_counter() - started, 3))
             return outcome
-        if not check.get("ready"):
+        if not check.get("ready") and not flash_exception:
             outcome.update(status="check_failed", compile_seconds=round(time.perf_counter() - started, 3))
             return outcome
         solve = client.call("dwsim_solve_run", {"flowsheet_id": flow, "timeout_s": 120}, 150)

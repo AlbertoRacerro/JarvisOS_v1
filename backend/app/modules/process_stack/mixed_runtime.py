@@ -135,7 +135,7 @@ class _ClosingClient:
 
 
 def _light(document: dict[str, Any], client: DwsimMcpClient, *, label: str,
-           remaining_s: float) -> dict[str, Any]:
+           remaining_s: float, allow_isolated_feed_flash: bool = False) -> dict[str, Any]:
     """Same verified build as materialize, skipping only full result catalogue work."""
     deadline = time.monotonic() + max(0.0, remaining_s)
     wrapper = _ClosingClient(client, deadline)
@@ -156,7 +156,9 @@ def _light(document: dict[str, Any], client: DwsimMcpClient, *, label: str,
             if diffs:
                 raise SegmentFailure(label, {"code": "materialization_mismatch", "diffs": diffs})
             check = wrapper.call("dwsim_flowsheet_check", {"flowsheet_id": flow}, min(30, remaining_s))
-            if not check.get("ready"):
+            flash_exception = draft_compiler.isolated_feed_flash_check(
+                document, "run", check, allowed=allow_isolated_feed_flash)
+            if not check.get("ready") and not flash_exception:
                 raise SegmentFailure(label, {"code": "check_failed", "findings": check.get("findings", [])})
             build_seconds = time.monotonic() - build_started
             solve_started = time.monotonic()
@@ -171,6 +173,8 @@ def _light(document: dict[str, Any], client: DwsimMcpClient, *, label: str,
                 min(30, remaining_s))) for stream in document["objects"].values()
                 if stream["kind"] == "stream" and stream["type"] != "EnergyStream"}
             return {"status": "completed", "streams": streams,
+                    "dwsim_check": {"ready": check.get("ready"), "findings": check.get("findings", []),
+                                    "intentional_isolated_feed_exception": flash_exception},
                     "elapsed_s": time.monotonic() - started,
                     "elapsed_s_by_phase": {"build": build_seconds, "solve": solve_seconds,
                                             "culture": max(0.0, time.monotonic() - started
@@ -181,12 +185,13 @@ def _light(document: dict[str, Any], client: DwsimMcpClient, *, label: str,
 
 def _full(document: dict[str, Any], client: DwsimMcpClient, *, label: str, keep_case: Path | None,
           dwsim_version: str, mcp_sha256: str, action: str = "run",
-          deadline: float | None = None) -> dict[str, Any]:
+          deadline: float | None = None, allow_isolated_feed_flash: bool = False) -> dict[str, Any]:
     wrapper = _ClosingClient(client, deadline)
     try:
         result = draft_compiler.materialize(document, action=action, client=cast(DwsimMcpClient, wrapper),
                                             dwsim_version=dwsim_version, mcp_sha256=mcp_sha256,
-                                            label=label, keep_case=keep_case)
+                                            label=label, keep_case=keep_case,
+                                            allow_isolated_feed_flash=allow_isolated_feed_flash)
         if result["status"] not in {"completed", "validated"}:
             failed = next((tag for tag, unit in result.get("units", {}).items()
                            if unit.get("calculated") is False or unit.get("error")), label)
@@ -208,10 +213,14 @@ def _flash(state: dict[str, Any], tag: str, client: DwsimMcpClient, *, label: st
                 "reactions": {}}
     outcome = (_full(document, client, label=label, keep_case=keep_case,
                      dwsim_version=dwsim_version, mcp_sha256=mcp_sha256,
-                     deadline=deadline) if full
+                     deadline=deadline, allow_isolated_feed_flash=True) if full
                else _light(document, client, label=label,
-                           remaining_s=max(0.0, (deadline - time.monotonic()) if deadline else remaining_s)))
-    return outcome["streams"][tag]
+                           remaining_s=max(0.0, (deadline - time.monotonic()) if deadline else remaining_s),
+                           allow_isolated_feed_flash=True))
+    result = dict(outcome["streams"][tag])
+    if outcome.get("dwsim_check", {}).get("intentional_isolated_feed_exception") is True:
+        result["flash_check_exception"] = "STREAM_DANGLING"
+    return result
 
 
 def _feeds(document: dict[str, Any]) -> list[dict[str, Any]]:
@@ -507,13 +516,22 @@ def _culture_results(document: dict[str, Any], final: dict[str, Any]) -> dict[st
         values = culture._display_values({"mass_specific": mass_specific, "reasons": reasons}, density)
         source = (stream.get("source") or {}).get("unit")
         unit_tag = document["objects"].get(source, {}).get("tag") if source else None
+        producer = document["objects"].get(source, {}) if source else {}
+        jarvis_result = (final["units"].get(unit_tag, {}) if unit_tag and producer.get("type")
+                         in JARVIS_EVALUATORS else {})
+        caveats = ["DWSIM mixture density uses seawater-as-water approximation."]
+        if jarvis_result:
+            caveats.extend(jarvis_result.get("caveats", []))
+        else:
+            caveats.append("Dissolved O₂ is carried without solubility or degassing changes; heated streams may be supersaturated.")
         results[stream["tag"]] = {
             "owner": "jarvis", "propagation_version": culture.PROPAGATION_VERSION, "status": "completed",
             "density_kg_m3": density, "values": values,
             "unit_balances": final["culture_balances"].get(unit_tag, {}) if unit_tag else {},
-            "fidelity": culture.FIDELITY,
-            "caveats": ["DWSIM mixture density uses seawater-as-water approximation.",
-                        "Dissolved O₂ is carried without solubility or degassing changes; heated streams may be supersaturated."],
+            "fidelity": jarvis_result.get("fidelity", culture.FIDELITY),
+            "caveats": caveats,
+            **({"evaluator": jarvis_result["evaluator"], "version": jarvis_result.get("version")}
+               if jarvis_result.get("evaluator") else {}),
             "pH_reason": reasons.get("ph"),
         }
     return results
@@ -568,8 +586,19 @@ def _whole_graph_balances(document: dict[str, Any], final: dict[str, Any],
         native_allowance = sum(error * float(state.get("culture", {}).get(field) or 0.0) *
                                (0.001 if field == "salinity" else 1.0)
                                for error, state in native_values)
-        tear_allowance = sum(mixed.tolerance(field, state.get("culture", {}).get(field))
-                             for state in tear.values())
+        tear_allowance = 0.0
+        for state in tear.values():
+            concentration = state.get("culture", {}).get(field)
+            if concentration is None:
+                continue
+            mass_flow = float(state["mass_flow_kg_s"])
+            concentration = float(concentration)
+            delta_flow = mixed.tolerance("mass_flow_kg_s", mass_flow)
+            delta_concentration = mixed.tolerance(field, concentration)
+            factor = 0.001 if field == "salinity" else 1.0
+            tear_allowance += (abs(mass_flow) * delta_concentration
+                               + abs(concentration) * delta_flow
+                               + delta_flow * delta_concentration) * factor
         tolerance_value = tear_allowance + native_allowance + 1e-9 * max(abs(amount_in), abs(amount_out)) + 1e-12
         residual_value = amount_in + generated - amount_out
         rows[field] = {"in": amount_in, "out": amount_out, "residual": residual_value,
