@@ -168,9 +168,12 @@ def surface_brief(workspace_id: str, ref: SurfaceRef | None) -> SurfaceBrief:
             if mixed_solve:
                 history = mixed_solve.get("history") or []
                 last_row = history[-1] if history else {}
+                residual_text = (
+                    "no finite value (null/value pattern mismatch)" if last_row.get("non_finite")
+                    else last_row.get("max_normalized_residual", "none"))
                 run_summary = (f"Last mixed run: {mixed_solve.get('status')}; reason {mixed_solve.get('reason', 'unknown')}; "
                                f"{len(history)} iterations; worst field {last_row.get('worst_field', 'none')}; "
-                               f"max normalized residual {last_row.get('max_normalized_residual', 'none')}.")
+                               f"max normalized residual {residual_text}.")
         text = (
             f"Process workspace {workspace_id}; draft {draft_id}; head revision {record['revision']}\n"
             f"Results: {projection['results']['state']}\nObjects ({len(objects)}): "

@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import copy
+import json
 import math
+import re
 import tempfile
 import time
 from collections.abc import Callable
@@ -18,10 +20,92 @@ from app.modules.process_stack.dwsim_mcp import DwsimMcpClient
 
 
 class SegmentFailure(RuntimeError):
-    def __init__(self, segment: str, detail: Any) -> None:
+    def __init__(self, segment: str, detail: Any, units: list[str] | None = None) -> None:
         super().__init__(str(detail))
         self.segment = segment
         self.detail = detail
+        # Operator-visible unit (or stream) tags; the segment label alone is not meaningful to an operator.
+        self.units = units
+
+
+def _named_units(tags: list[str], detail: Any) -> list[str]:
+    """Units the failure names (DWSIM errors name the unit); every unit of the segment otherwise."""
+    text = json.dumps(detail, default=str)
+    named = [tag for tag in tags if re.search(rf"(?<![A-Za-z0-9_]){re.escape(tag)}(?![A-Za-z0-9_])", text)]
+    return named or list(tags)
+
+
+def _failure_message(detail: Any) -> str | None:
+    """One operator sentence from a failure detail: check findings, mismatch diffs, DWSIM errors."""
+    if isinstance(detail, str):
+        return detail
+    if not isinstance(detail, dict):
+        return None
+    if isinstance(detail.get("detail"), (dict, str)) and not detail.get("message"):
+        inner = _failure_message(detail["detail"])
+        if inner:
+            return inner
+    for key in ("findings", "diffs", "errors"):
+        rows = detail.get(key)
+        if not isinstance(rows, list):
+            continue
+        parts: list[str] = []
+        for row in rows[:3]:
+            if isinstance(row, str):
+                parts.append(row)
+            elif isinstance(row, dict):
+                if key == "diffs" and "path" in row:
+                    parts.append(f"{row['path']}: draft expects {row.get('expected')}, DWSIM holds {row.get('actual')}")
+                else:
+                    text = row.get("message") or row.get("code")
+                    if text:
+                        parts.append(f"{row['object']}: {text}" if row.get("object") else str(text))
+        if parts:
+            return "; ".join(parts)
+    for key in ("message", "dwsim_message", "error", "code"):
+        if isinstance(detail.get(key), str) and detail[key]:
+            return detail[key]
+    return None
+
+
+def finite_json(value: Any) -> Any:
+    """Replace every non-finite float with null so records and responses stay valid JSON."""
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if isinstance(value, dict):
+        return {key: finite_json(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [finite_json(item) for item in value]
+    return value
+
+
+def _history_record(history: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """History as stored: infinity stays internal; a row says explicitly that it had none."""
+    rows: list[dict[str, Any]] = []
+    for row in history:
+        record = copy.deepcopy(row)
+        mismatched = sorted(f"{tag}.{name}" for tag, fields in record.get("normalized_residuals", {}).items()
+                            for name, value in fields.items()
+                            if isinstance(value, float) and math.isinf(value))
+        peak = record.get("max_normalized_residual")
+        if isinstance(peak, float) and not math.isfinite(peak):
+            record["non_finite"] = "inf" if peak > 0 else "nan"
+            record["pattern_mismatch_fields"] = mismatched
+        rows.append(finite_json(record))
+    return rows
+
+
+def _partition_record(document: dict[str, Any], part: dict[str, Any],
+                      segments: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    """Tag-based partition, identical in shape for success, failure and validation records."""
+    objects = document["objects"]
+    tags = [[objects[uid]["tag"] for uid in ids] for ids in part["segments"]]
+    rows = segments if segments is not None else [
+        {"id": index, "units": unit_tags, "level": part["levels"][part["segments"][index][0]]}
+        for index, unit_tags in enumerate(tags)]
+    return {"consumed": [objects[uid]["tag"] for uid in part["consumed"]], "segments": rows,
+            "jarvis_units": [objects[uid]["tag"] for uid in part["jarvis_units"]],
+            "levels": {objects[uid]["tag"]: level for uid, level in part["levels"].items()}}
 
 
 @dataclass
@@ -716,11 +800,20 @@ def _evaluate(document: dict[str, Any], part: dict[str, Any], tear: dict[str, di
                 else:
                     outcome = _light(segment, client, label=label,
                                      remaining_s=max(0.0, deadline - time.monotonic()))
+            except SegmentFailure as exc:
+                if exc.units is None:
+                    tags = [objects[uid]["tag"] for uid in ids]
+                    exc.units = [exc.segment] if exc.segment in tags else _named_units(tags, exc.detail)
+                raise
             except Exception as exc:
-                if isinstance(exc, SegmentFailure):
-                    raise
-                raise SegmentFailure(label, {"code": type(exc).__name__, "message": str(exc)}) from exc
-            states = _propagate_culture(segment, outcome, known)
+                raise SegmentFailure(label, {"code": type(exc).__name__, "message": str(exc)},
+                                     [objects[uid]["tag"] for uid in ids]) from exc
+            try:
+                states = _propagate_culture(segment, outcome, known)
+            except SegmentFailure as exc:
+                if exc.units is None:
+                    exc.units = [objects[uid]["tag"] for uid in ids]
+                raise
             phase = outcome.get("elapsed_s_by_phase", {})
             phase_elapsed["build"] += float(phase.get("build", 0.0))
             phase_elapsed["solve"] += float(phase.get("solve", 0.0))
@@ -828,8 +921,32 @@ def _evaluate(document: dict[str, Any], part: dict[str, Any], tear: dict[str, di
             "mixed_findings": mixed_findings}
 
 
+def _failure_record(document: dict[str, Any], part: dict[str, Any], *, reason: str, iteration: int | None,
+                    segment: str, units: list[str] | None, errors: Any, history: list[dict[str, Any]],
+                    phase_totals: dict[str, float]) -> dict[str, Any]:
+    """A segment_failed result with the same tag-based partition as a success record."""
+    record: dict[str, Any] = {
+        "status": "segment_failed", "reason": reason, "iteration": iteration,
+        "failed_segment": segment, "failed_units": list(units or []),
+        "errors": errors, "message": _failure_message(errors),
+        "history": _history_record(history), "partition": _partition_record(document, part),
+        "limits": {"iterations": mixed.MAX_ITERATIONS, "wall_s": mixed.WALL_BUDGET_S},
+        "tolerances": _tolerance_record(), "elapsed_s": phase_totals}
+    diagnosis = _pressure_diagnosis(history)
+    if diagnosis:
+        record["diagnosis"] = diagnosis
+    return {"status": "segment_failed", "mixed_solve": finite_json(record)}
+
+
 def run(document: dict[str, Any], *, action: str, client: DwsimMcpClient,
         dwsim_version: str, mcp_sha256: str, run_dir: Path) -> dict[str, Any]:
+    return cast(dict[str, Any], finite_json(_run(
+        document, action=action, client=client, dwsim_version=dwsim_version,
+        mcp_sha256=mcp_sha256, run_dir=run_dir)))
+
+
+def _run(document: dict[str, Any], *, action: str, client: DwsimMcpClient,
+         dwsim_version: str, mcp_sha256: str, run_dir: Path) -> dict[str, Any]:
     part = mixed.partition(document)
     run_dir.mkdir(parents=True, exist_ok=True)
     initial = _seed(document, part)
@@ -843,9 +960,11 @@ def run(document: dict[str, Any], *, action: str, client: DwsimMcpClient,
                 _full(segment, client, label=f"mixed-validate-{index}", keep_case=None,
                       dwsim_version=dwsim_version, mcp_sha256=mcp_sha256, action="validate")
         except SegmentFailure as exc:
-            return {"status": "segment_failed", "mixed_solve": {"status": "segment_failed",
-                    "failed_segment": exc.segment, "errors": exc.detail}}
-        return {"status": "validated", "mixed_solve": {"status": "validated", "partition": part}}
+            return _failure_record(document, part, reason="validation_failed", iteration=None,
+                                   segment=exc.segment, units=exc.units, errors=exc.detail,
+                                   history=[], phase_totals={"build": 0.0, "solve": 0.0, "culture": 0.0})
+        return {"status": "validated", "mixed_solve": {"status": "validated",
+                                                       "partition": _partition_record(document, part)}}
     t_build = 3.0
     terminal_flashes = sum(1 for stream in document["objects"].values()
                            if stream["kind"] == "stream" and (stream.get("source") or {}).get("unit") in part["jarvis_units"]
@@ -880,7 +999,7 @@ def run(document: dict[str, Any], *, action: str, client: DwsimMcpClient,
                                   iteration=iteration, dwsim_version=dwsim_version,
                                   mcp_sha256=mcp_sha256, remaining_s=remaining, run_cache=run_cache)
         except SegmentFailure as exc:
-            raise SegmentFailure(exc.segment, {"iteration": iteration, "detail": exc.detail}) from exc
+            raise SegmentFailure(exc.segment, {"iteration": iteration, "detail": exc.detail}, exc.units) from exc
         except Exception as exc:  # noqa: BLE001 - preserve engine failures in the mixed run record
             raise SegmentFailure("mixed", {"iteration": iteration, "code": type(exc).__name__,
                                            "message": str(exc)[:600]}) from exc
@@ -895,12 +1014,10 @@ def run(document: dict[str, Any], *, action: str, client: DwsimMcpClient,
                                    on_history=history_rows.append)
     except SegmentFailure as exc:
         detail = exc.detail if isinstance(exc.detail, dict) else {"message": str(exc.detail)}
-        return {"status": "segment_failed", "mixed_solve": {"status": "segment_failed",
-                "reason": "segment_failed", "iteration": detail.get("iteration"),
-                "failed_segment": exc.segment, "errors": detail.get("detail", detail),
-                "history": history_rows, "partition": part,
-                "limits": {"iterations": mixed.MAX_ITERATIONS, "wall_s": mixed.WALL_BUDGET_S},
-                "tolerances": _tolerance_record(), "elapsed_s": phase_totals}}
+        return _failure_record(document, part, reason="segment_failed", iteration=detail.get("iteration"),
+                               segment=exc.segment, units=exc.units,
+                               errors=detail.get("detail", detail), history=history_rows,
+                               phase_totals=phase_totals)
     tear = controller["iterate"]
     status, reason, history = controller["status"], controller["reason"], controller["history"]
     last_iteration = history[-1]["iteration"] if history else None
@@ -916,19 +1033,16 @@ def run(document: dict[str, Any], *, action: str, client: DwsimMcpClient,
         detail = exc.detail if isinstance(exc.detail, dict) else {"message": str(exc.detail)}
         reason = ("wall_budget" if "timeout" in str(detail.get("code", "")).lower()
                   or "budget" in str(detail.get("message", "")).lower() else "full_path_failed")
-        return {"status": "segment_failed", "mixed_solve": {"status": "segment_failed",
-                "reason": reason, "iteration": len(history), "failed_segment": exc.segment,
-                "errors": detail, "history": history, "partition": part,
-                "limits": {"iterations": mixed.MAX_ITERATIONS, "wall_s": mixed.WALL_BUDGET_S},
-                "tolerances": _tolerance_record(), "elapsed_s": phase_totals}}
+        return _failure_record(document, part, reason=reason, iteration=len(history),
+                               segment=exc.segment, units=exc.units, errors=detail,
+                               history=history, phase_totals=phase_totals)
     except Exception as exc:  # noqa: BLE001 - preserve unexpected full-path failures in this record
-        return {"status": "segment_failed", "mixed_solve": {"status": "segment_failed",
-                "reason": "wall_budget" if "timeout" in type(exc).__name__.lower() else "full_path_failed",
-                "iteration": len(history), "failed_segment": "mixed",
-                "errors": {"code": type(exc).__name__, "message": str(exc)[:600]},
-                "history": history, "partition": part,
-                "limits": {"iterations": mixed.MAX_ITERATIONS, "wall_s": mixed.WALL_BUDGET_S},
-                "tolerances": _tolerance_record(), "elapsed_s": phase_totals}}
+        return _failure_record(
+            document, part,
+            reason="wall_budget" if "timeout" in type(exc).__name__.lower() else "full_path_failed",
+            iteration=len(history), segment="mixed", units=None,
+            errors={"code": type(exc).__name__, "message": str(exc)[:600]},
+            history=history, phase_totals=phase_totals)
     for name in phase_totals:
         phase_totals[name] += final["elapsed_s_by_phase"][name]
     mismatch = (_light_full_mismatch(last["produced"], final["produced"])
@@ -941,9 +1055,8 @@ def run(document: dict[str, Any], *, action: str, client: DwsimMcpClient,
             "mixed_findings": final["mixed_findings"],
             "process_fingerprint": mixed.fingerprint(document, part),
             "mixed_solve": {"status": status, "reason": reason, "version": mixed.MIXED_SOLVE_VERSION,
-                            "method": "direct_substitution", "history": history,
-                            "partition": {**part, "consumed": [document["objects"][uid]["tag"] for uid in part["consumed"]],
-                                          "segments": final["segments"]},
+                            "method": "direct_substitution", "history": _history_record(history),
+                            "partition": _partition_record(document, part, final["segments"]),
                             "limits": {"iterations": mixed.MAX_ITERATIONS, "wall_s": mixed.WALL_BUDGET_S,
                                        "reserve_s": reserve_s},
                             "tolerances": _tolerance_record(),

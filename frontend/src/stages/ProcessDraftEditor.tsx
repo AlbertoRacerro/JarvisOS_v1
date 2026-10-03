@@ -120,18 +120,37 @@ function solveFailureMessages(run: DraftRun) {
   return messages;
 }
 
-function mixedFailureMessage(errors: unknown) {
+function mixedFailureMessage(errors: unknown): string {
   if (typeof errors === "string") return errors;
   if (!errors || typeof errors !== "object") return "See the failed segment details.";
-  const record = errors as { message?: unknown; errors?: unknown; dwsim_message?: unknown };
-  if (typeof record.message === "string") return record.message;
+  const record = errors as { message?: unknown; errors?: unknown; dwsim_message?: unknown; detail?: unknown;
+    findings?: unknown; diffs?: unknown; code?: unknown };
+  if (typeof record.message === "string" && record.message) return record.message;
   if (typeof record.dwsim_message === "string") return record.dwsim_message;
+  // Failed DWSIM check: the findings name the unit and the problem.
+  if (Array.isArray(record.findings)) {
+    const text = record.findings.slice(0, 3).map((item) => {
+      const row = item as { object?: string; message?: string; code?: string };
+      return row.message ? (row.object ? `${row.object}: ${row.message}` : row.message) : row.code ?? "";
+    }).filter(Boolean);
+    if (text.length) return text.join("; ");
+  }
+  // Materialization mismatch: what the draft expects against what DWSIM holds.
+  if (Array.isArray(record.diffs)) {
+    const text = record.diffs.slice(0, 3).map((item) => {
+      const row = item as { path?: string; expected?: unknown; actual?: unknown };
+      return `${row.path ?? "value"}: draft expects ${String(row.expected)}, DWSIM holds ${String(row.actual)}`;
+    });
+    if (text.length) return text.join("; ");
+  }
   if (Array.isArray(record.errors)) {
     const message = record.errors.find((item) => typeof item === "string");
     if (typeof message === "string") return message;
     const first = record.errors.find((item) => item && typeof item === "object" && "message" in item) as { message?: unknown } | undefined;
     if (typeof first?.message === "string") return first.message;
   }
+  if (record.detail && typeof record.detail === "object") return mixedFailureMessage(record.detail);
+  if (typeof record.code === "string") return record.code;
   return "See the failed segment details.";
 }
 
@@ -1119,26 +1138,32 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
         <section className="draft-mixed-summary" aria-label="Mixed solve summary">
           <p role="status">
             {run.status === "completed"
-              ? `Converged in ${run.mixed_solve.history?.length ?? 0} iterations · max residual ${Number(run.mixed_solve.history?.[Math.max(0, (run.mixed_solve.history?.length ?? 1) - 1)]?.max_normalized_residual ?? 0).toPrecision(4)}`
+              ? `Converged in ${run.mixed_solve.history?.length ?? 0} ${(run.mixed_solve.history?.length ?? 0) === 1 ? "iteration" : "iterations"} · max residual ${(() => {
+                const last = run.mixed_solve.history?.[Math.max(0, (run.mixed_solve.history?.length ?? 1) - 1)]?.max_normalized_residual;
+                return last == null ? "n/a" : Number(last).toPrecision(4);
+              })()}`
               : run.status === "unconverged"
                 ? `Not converged (${run.mixed_solve.reason ?? "unknown"}) — last iterate`
-                : `Segment failed: ${run.mixed_solve.failed_segment ?? "unknown"} · ${mixedFailureMessage(run.mixed_solve.errors)}`}
+                : `Segment failed: ${run.mixed_solve.failed_units?.length ? run.mixed_solve.failed_units.join(", ") : run.mixed_solve.failed_segment ?? "unknown"} · ${run.mixed_solve.message || mixedFailureMessage(run.mixed_solve.errors)}`}
           </p>
+          {run.mixed_solve.diagnosis && <p className="draft-hint">{run.mixed_solve.diagnosis}</p>}
           <details>
-            <summary>Convergence · {run.mixed_solve.history?.length ?? 0} iteration(s)</summary>
+            <summary>Convergence · {run.mixed_solve.history?.length ?? 0} {(run.mixed_solve.history?.length ?? 0) === 1 ? "iteration" : "iterations"}</summary>
             <div className="draft-convergence-table">
               <table>
                 <thead><tr><th>Iteration</th><th>Max normalized residual</th><th>ω</th><th>Worst field</th></tr></thead>
                 <tbody>{(run.mixed_solve.history ?? []).map((row) => (
                   <tr key={row.iteration}><td>{row.iteration}</td>
-                    <td>{Number(row.max_normalized_residual).toPrecision(5)}</td>
+                    <td>{row.max_normalized_residual == null
+                      ? `no finite value${row.non_finite ? ` (${row.non_finite}; null/value mismatch${row.pattern_mismatch_fields?.length ? `: ${row.pattern_mismatch_fields.join(", ")}` : ""})` : ""}`
+                      : Number(row.max_normalized_residual).toPrecision(5)}</td>
                     <td>{row.omega.toPrecision(3)}</td>
                     <td>{row.worst_field || "—"}</td></tr>
                 ))}</tbody>
               </table>
             </div>
             <div className="draft-segment-list" aria-label="Owner and segment listing">
-              {(run.mixed_solve.partition?.segments ?? []).map((segment) => (
+              {(run.mixed_solve.partition?.segments ?? []).filter((segment) => Array.isArray(segment?.units)).map((segment) => (
                 <p key={segment.id}><strong>DWSIM · segment {segment.id + 1}</strong> · level {segment.level}: {segment.units.join(", ")}</p>
               ))}
               <p><strong>Jarvis</strong>: {objects.filter((item) => item.kind === "unit" && unitSpec(item.type)?.owner === "jarvis_bio").map((item) => item.tag).join(", ") || "culture propagation"}</p>

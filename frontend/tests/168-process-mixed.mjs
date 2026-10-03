@@ -10,6 +10,9 @@ for (const text of [
   "Converged in", "Not converged (", "Convergence ·", "max_normalized_residual",
   "draft-convergence-table", "Owner and segment listing", "Results · Jarvis",
   "jarvis_bio", "SpecifiedSeparator",
+  // Failure records: tag-based segments are guarded, check findings and diffs are shown, units named.
+  "Array.isArray(segment?.units)", "record.findings", "record.diffs", "failed_units",
+  "no finite value", "pattern_mismatch_fields", '"iteration" : "iterations"',
 ]) assert.ok(editor.includes(text), "missing mixed Process UI contract: " + text);
 assert.match(contract, /mixed_solve\?:/);
 assert.match(contract, /normalized_residuals/);

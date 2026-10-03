@@ -205,12 +205,16 @@ export type DraftRun = {
     reason?: string;
     version?: number;
     method?: string;
-    history?: { iteration: number; omega: number; max_normalized_residual: number; worst_tear?: string;
+    history?: { iteration: number; omega: number; max_normalized_residual: number | null; worst_tear?: string;
+      non_finite?: string; pattern_mismatch_fields?: string[];
       worst_field?: string; residuals?: Record<string, Record<string, number | null>>;
-      normalized_residuals?: Record<string, Record<string, number>> }[];
+      normalized_residuals?: Record<string, Record<string, number | null>> }[];
     partition?: { segments?: { id: number; units: string[]; level: number }[]; consumed?: string[] };
     limits?: { iterations?: number; wall_s?: number; reserve_s?: number };
     failed_segment?: string;
+    failed_units?: string[];
+    message?: string | null;
+    diagnosis?: string;
     errors?: unknown;
     elapsed_s?: Record<string, number>;
   };

@@ -490,3 +490,84 @@ def test_native_recycle_mass_flow_error_parses_dwsim_string_values(unit_result: 
                                                                     expected: float | None) -> None:
     value = mixed_runtime._native_mass_flow_error_kg_s(unit_result)
     assert value == (pytest.approx(expected) if expected is not None else None)
+
+
+def _run_document(document: dict, tmp_path, action: str = "run") -> dict:
+    return mixed_runtime.run(document, action=action, client=object(), dwsim_version="10.2.9",
+                             mcp_sha256="a" * 64, run_dir=tmp_path)
+
+
+def test_failure_record_partition_has_the_tag_based_shape_of_a_success_record(
+        monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    """B1: a failed segment must store {id, level, units: [tags]} segments, never raw id lists."""
+    document = _tear_document()
+
+    def failing_light(*_args, **_kwargs):
+        raise mixed_runtime.SegmentFailure("mixed-1-0", {"code": "check_failed", "findings": [
+            {"object": "Mixer", "message": "Mixer has no outlet"}]})
+
+    monkeypatch.setattr(mixed_runtime, "_light", failing_light)
+    record = _run_document(document, tmp_path)["mixed_solve"]
+    assert record["status"] == "segment_failed"
+    part = record["partition"]
+    assert part["consumed"] == [document["objects"]["r"]["tag"]]
+    assert part["segments"] == [{"id": 0, "units": ["Mixer"], "level": 0},
+                                {"id": 1, "units": ["Splitter"], "level": 1}]
+    assert part["jarvis_units"] == ["Separator"]
+    success_shape = mixed_runtime._partition_record(document, mixed.partition(document), [
+        {"id": 0, "units": ["Mixer"], "level": 0, "materialization_fingerprint": None}])
+    assert set(success_shape) == set(part)
+    # M7: the label maps to unit tags, and the check finding is surfaced as a message.
+    assert record["failed_units"] == ["Mixer"]
+    assert "Mixer has no outlet" in record["message"]
+
+
+def test_non_finite_residual_is_serialised_as_null_with_an_explicit_flag(
+        monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    """M2: infinity stays internal; stored and served records contain only finite numbers."""
+    import json
+
+    document = _tear_document()
+    calls = {"n": 0}
+
+    def evaluate(tear, iteration, **_kwargs):
+        calls["n"] += 1
+        if calls["n"] > 1:
+            raise mixed_runtime.SegmentFailure("Separator", {"code": "JARVIS_UNIT_FAILED"})
+        output = copy.deepcopy(tear)
+        for state in output.values():
+            state["culture"]["biomass"] = None  # null/value mismatch -> infinite residual
+        return {"produced": output, "elapsed_s_by_phase": {"build": 0.0, "solve": 0.0, "culture": 0.0},
+                "max_build_seconds": 0.0}
+
+    monkeypatch.setattr(mixed_runtime, "_evaluate", lambda document, part, tear, **kwargs: evaluate(
+        tear, kwargs["iteration"]))
+    record = _run_document(document, tmp_path)["mixed_solve"]
+    row = record["history"][0]
+    assert row["max_normalized_residual"] is None
+    assert row["non_finite"] == "inf"
+    assert row["pattern_mismatch_fields"] == [f"{document['objects']['r_m']['tag']}.biomass"]
+    json.dumps(record, allow_nan=False)
+
+
+def test_mid_iteration_failure_carries_the_pressure_per_pass_diagnosis(
+        monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    """M7: the diagnosis is attached to a segment_failed that follows three one-sided passes."""
+    document = _tear_document()
+    calls = {"n": 0}
+
+    def fake(_document, _part, tear, **_kwargs):
+        calls["n"] += 1
+        if calls["n"] == 4:
+            raise mixed_runtime.SegmentFailure("Separator", {"code": "JARVIS_UNIT_FAILED"})
+        output = copy.deepcopy(tear)
+        for state in output.values():
+            state["pressure_Pa"] -= 100.0
+        return {"produced": output, "elapsed_s_by_phase": {"build": 0.0, "solve": 0.0, "culture": 0.0},
+                "max_build_seconds": 0.0}
+
+    monkeypatch.setattr(mixed_runtime, "_evaluate", fake)
+    record = _run_document(document, tmp_path)["mixed_solve"]
+    assert record["status"] == "segment_failed"
+    assert record["failed_units"] == []
+    assert "pressure falls by" in record["diagnosis"]
