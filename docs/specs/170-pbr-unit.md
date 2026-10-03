@@ -97,6 +97,8 @@ Alternatives rejected:
 - pressure drop: the 104 stack's straight smooth pipe × `baffle_friction_multiplier`; this is a screening hydraulic estimate, not an outlet pressure calculation;
 - circulation pumping power = ΔP·u·(π/4)·D²·n/η, with η = stored `pump_efficiency` percent/100 (the existing `percent` quantity kind stores 50 for 50 %, not 0.5).
 
+These equations describe n parallel tubes of length L, each at velocity u. Hydraulic properties use the 107 CoolProp water basis at T_mean and 1 atm. A transitional Reynolds regime is a visible screening warning, not a unit failure. If Q ≥ u·n·πD²/4, warn that fresh feed is at least the circulation flow and the well-mixed loop assumption is outside its intended range.
+
 The baffle multiplier is an unqualified screening factor. It scales only ΔP and power.
 
 **Model pin.** A document field `unit.model = {card_id, card_revision, card_digest}` holds the model pin. It is not a ParamSpec quantity. The new DraftOp `set_unit_model` sets or clears it with CAS, undo and staleness exactly like other DraftOps. Any other unit type refuses it.
@@ -167,6 +169,7 @@ All constants and refinement rules are deterministic. Exponentials may underflow
 - **Linear response, thick-limit trend** as τ increases within the supported range:
   - beam: 4/(πτ) with τ = κD;
   - 3-D diffuse: 1/τ.
+- The thick-limit checks compare against the exact chord and angular integrals with stated tolerances; their asymptotic trends have O(1/τ) relative corrections and are not treated as exact at finite τ.
 - **Linear-response beam** equals the 1-D chord integral (1/πR²)·∫(1 − e^(−κc(x)))/κ dx to 1e-6.
 - **Accuracy:** the production response meets the independent reference criterion above, including high-τ boundary-layer cases rather than only a coarse-grid comparison.
 
@@ -195,6 +198,8 @@ In 168's `context.validation` mode the evaluator returns a carrier and culture p
 
 **Map.** Φ₂₄(y₀) integrates 24 h with `integrate_ode` (CVODE BDF) at rtol 1e-11 and atol 1e-14 kg m⁻³, fixed under `MODEL_VERSION`. Augmented quadrature states give the daily means of X, N, O₂ and r_X, and the signed net O₂ gas transfer. Positive transfer is degassing; negative transfer is oxygen absorption from the gas phase. Integration error, not the root solver, limits attainable periodicity: the survey measured map noise of about rtol relative. Every tolerance below keeps at least a 100× margin over rtol.
 
+The fixed integration schedule splits at sunrise, sunset and any daylight I₀ = I_dark transition used by `loss.light_dark`; dense output samples (at least 20 per hour) prevent CVODE's internal 500-step limit from becoming an accidental scientific branch rule. `integrate_ode` does not expose `max_num_steps`. The Λ quadrature also splits at these light boundaries and at CTMI T_min/T_max crossings.
+
 **Reduced periodic problem (normative).** The T1 equations have exact structure, and the solver uses it instead of a blind three-state Newton iteration:
 
 - **N is slaved.** Z = N + qX obeys dZ/dt = D_h·(Z_in − Z) with Z_in = N_in + q·X_in. Its only periodic solution is Z ≡ Z_in. On the periodic orbit, N(t) = N_in + q·(X_in − X(t)). Every map evaluation therefore seeds N₀ = N_in + q·(X_in − X₀).
@@ -207,9 +212,10 @@ In 168's `context.validation` mode the evaluator returns a carrier and culture p
   - X_in > 0: the lower end is X_lo = 0, where F(0) > 0. The upper end is X_hi = X_in + N_in/q when q > 0; there N = 0 on the orbit, so F(X_hi) ≤ 0. When q = 0 and k_X > 0, start at max(2·X_in, 1e-3 kg m⁻³) and double until F < 0. Use at most 40 doublings, and never go beyond τ = 1000 (`PBR_OPTICS_OUT_OF_RANGE`). No sign change gives `PBR_NO_FINITE_PRODUCTIVE_STATE`.
   - q = 0 and k_X = 0 (no biomass feedback): N ≡ N_in, and the X equation is linear, dX/dt = (μ_g(t) − k_d(t) − D_h)·X + D_h·X_in, with growth independent of X. No bracket is used. With X_in > 0 and Λ < D_h (Λ as defined in the branch rule, exact here), X* = β/(1 − α) from two integrations, exactly as for O₂, followed by the normal certification. With X_in > 0 and Λ ≥ D_h the result is `PBR_NO_FINITE_PRODUCTIVE_STATE`. X_in = 0 follows the branch rule.
   - X_in = 0 and Λ > D_h: the lower end is the declared resolution X_res = 1e-6 kg m⁻³. F(X_res) must be > 0; otherwise the result is `PBR_BRANCH_UNRESOLVED`, reporting the bracket and the residual. The upper end is found as above.
+  - If the physical upper bound X_hi ≤ X_res, refuse with `PBR_BRANCH_UNRESOLVED` before seeding X_res, because that seed would make N negative.
   - An endpoint where |F| meets the stopping rule below is the root.
 - **Solve.** Use Brent's method. Stop when the bracket width is ≤ 1e-10·max(X, 1e-6 kg m⁻³) or |F| ≤ 1e-9·max(X, 1e-6 kg m⁻³). Use at most 80 map evaluations. Exhaustion gives `PBR_PERIODIC_STEADY_FAILED`, with the achieved bracket and residual.
-- **Uniqueness.** With N slaved, X obeys a scalar 24-hour-periodic equation dX/dt = X·h(t, X), where h = μ_g − k_d − D_h + D_h·X_in/X. Under the supported forms, h is nonincreasing in X at every t (⟨f_I⟩ falls with X when k_X > 0, f_N falls with X when q > 0, and k_d does not depend on X). It is strictly decreasing on a set of hours of positive measure when q > 0 with N > 0, when k_X > 0 in daylight with peak_par > 0, or when X_in > 0. Pointwise strictness is not claimed: at night ⟨f_I⟩ = 0. Two positive periodic solutions X₁ < X₂ would both need ∫₀²⁴ h dt = 0, which this rules out. The positive periodic solution is therefore unique and stable. The solver also checks that its evaluated points show exactly one sign change. Any other pattern gives `PBR_BRANCH_UNRESOLVED`.
+- **Uniqueness.** With N slaved, X obeys a scalar 24-hour-periodic equation dX/dt = X·h(t, X), where h = μ_g − k_d − D_h + D_h·X_in/X. Under the supported forms, h is nonincreasing in X at every t (⟨f_I⟩ falls with X when k_X > 0, f_N falls with X when q > 0, and k_d does not depend on X). It is strictly decreasing on a set of hours of positive measure when q > 0 with N > 0 on daylight hours where f_T > 0, when k_X > 0 on such daylight hours with peak_par > 0, or when X_in > 0. Pointwise strictness is not claimed: at night ⟨f_I⟩ = 0. Two positive periodic solutions X₁ < X₂ would both need ∫₀²⁴ h dt = 0, which this rules out. The positive periodic solution is therefore unique and stable. The solver also checks that its evaluated points show exactly one sign change. Any other pattern gives `PBR_BRANCH_UNRESOLVED`.
 
 **Certification.** From y* = (X*, N_in + q·(X_in − X*), O₂*), integrate the full three-state system once more. The root is accepted only if all of these hold:
 
@@ -232,7 +238,7 @@ At a periodic state, Z = N + qX obeys dZ/dt = D_h·(N_in + qX_in − Z), so N(t)
 
 Λ is computed by deterministic adaptive quadrature to 1e-10 relative, with an absolute floor of 1e-12 h⁻¹ because Λ may be zero or negative. If |Λ − D_h| ≤ 1e-8·D_h with X_in = 0, the branch is a numerical tie and the result is `PBR_BRANCH_UNRESOLVED`, never washout or productive. Λ, D_h, HRT and the branch are always reported with explicit units.
 
-**Initialization and cache.** Each evaluation derives its brackets from its current inlet and model pin using the branch rule above. It does not read a previous outer iteration's state. Identical unit and inlet inputs may use 168's per-Run cache; the result therefore does not depend on iteration order.
+**Initialization and cache.** Each evaluation derives its brackets from its current inlet and model pin using the branch rule above. It does not read a previous outer iteration's state. Identical unit and inlet inputs may use 168's per-Run cache. Its key includes `MODEL_VERSION`, the resolved set digest, card pin, all SI parameters and the exact inlet state including density; the result therefore does not depend on iteration order.
 
 **Outlet.** The outlet is the flow-weighted daily mean:
 
@@ -273,7 +279,7 @@ The per-unit residual closes as in − out + generation to 167's rule. A whole-g
 - Re, ΔP and pumping power;
 - the balance residuals and declared generation allowances.
 
-It also carries the fidelity label "T1 · unqualified · periodic steady state, cylinder light, no energy balance", the caveats, and the card pin.
+It also carries the fidelity label "T1 · unqualified · periodic steady state, cylinder light, no energy balance", the caveats, and the card pin. The visible caveats also state: "well-mixed (0-D) loop; no axial O₂ buildup along tubes, so maximum DO is a loop-mean value", "every tube receives full declared I₀; no array shading or wall losses (174)", and "Q is carrier volume; biomass volume is neglected". The maximum-O₂-saturation number is not presented as a degasser design maximum.
 
 ### 5. Shared growth core and 107 parity
 
@@ -322,7 +328,7 @@ The 168 layout-free fingerprint gains:
 - the resolved set digest;
 - `jarvis.pbr_unit_t1` and `pbr_unit.v1`.
 
-Editing a PBR parameter or re-pinning the card stales results. Layout edits do not. A newer card revision does **not** silently change a unit; the inspector shows "newer card revision available". Single-owner and 168-only drafts keep their fingerprints byte-identical.
+Editing a PBR parameter or re-pinning the card stales results. Layout edits do not. A newer set or card does **not** silently change a pinned unit; the inspector names the newer compatible revision and offers an explicit re-pin. Single-owner and 168-only drafts keep their fingerprints byte-identical.
 
 ### 8. Operator UI and agent actions
 
@@ -337,6 +343,7 @@ Editing a PBR parameter or re-pinning the card stales results. Layout edits do n
 - **Geometry, Operation, Light & environment:** typed QuantityInputs with units and inline domain validation. The amplitude uses °C/K difference units.
 - **Biology:** an embeddable **model card picker** built from `listBioCards` and `listBioSets`. It shows each card's factors with their equations through the existing allowlisted MathML renderer, the set's verification chips, the assumed N source and the pin's revision. Pinning applies `set_unit_model`. An empty picker links to the Biology model library, whose set editor exposes `k_X` and PBR stoichiometry symbols. A newer set revision or a newer compatible card is shown explicitly; no pinned digest changes silently.
 - **Results:** branch, Λ vs D, HRT, X̄, productivity, N/O₂ means and extremes, hydraulics, balance residuals with allowances, and map residuals. Grouped under `Results · Jarvis`, they carry the fidelity label and the caveats. The unit's non-failing `result.findings` (for example `PBR_WASHOUT`, `PBR_HRT_OUT_OF_RANGE` after Run) are shown here as readable messages. A typed unit failure (for example `PBR_NONPHYSICAL_STATE`) is shown in 168's failed-segment message with its code meaning in plain words and an operator hint, such as raising `oxygen_kla` for night-time oxygen depletion.
+- Every typed PBR exception includes its plain-language meaning and operator hint in the exception message itself, within 168's 600-character failure-message limit; the frontend does not depend on a hidden code lookup to explain it.
 - The outlet stream shows `Culture · Jarvis`.
 
 **Layout.** The editor is readable at 1280 and 1440 CSS px with no horizontal overflow and no raw JSON in the normal view.
@@ -345,7 +352,7 @@ Editing a PBR parameter or re-pinning the card stales results. Layout edits do n
 
 - `add_unit`, `insert_unit_after` and `connect` work for the PBR through the registry.
 - `set_value` on PBR parameters is confirm tier, with units validated.
-- A new action `set_unit_model {unit, card}` resolves a card by id or exact name to its current revision and digest. It is confirm tier and maps to one `set_unit_model` DraftOp. It is wired in the action models, `_process_ops`, the brief, the Hermes MCP schema, the thread guard's op list and the frontend presentation.
+- A new action `set_unit_model {unit, card}` resolves a card by id or exact name to its current revision and digest; a name matching more than one card is refused with the matching ids shown. It is confirm tier and maps to one `set_unit_model` DraftOp. It is wired in the action models, `_process_ops`, the brief, the Hermes MCP schema, the thread guard's op list and the frontend presentation.
 - The agent never edits or verifies sets (169 non-goal), and Run stays operator-initiated.
 - **Brief.** The Process brief is registry-derived: unit owners, the PBR card name and verification summary, and the last run's branch, HRT, Λ, residual and status. It stays within the 6000-character cap, and a test asserts it with 35 objects. The static text "Jarvis-native units arrive with 168/170" and 169's "PBR units arrive with 170" are replaced, together with the tests that assert them.
 
