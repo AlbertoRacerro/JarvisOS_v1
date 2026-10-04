@@ -547,8 +547,9 @@ def _install_surface_grants(worker: HermesSupervisor, workspace_id: str, thread_
     act_name = f"mcp__jarvis__jarvis_{prefix}_act"
     if brief.surface == "process":
         from app.modules.bio_models.forms import kinetics_explanation
-        unsupported = (f"{kinetics_explanation()} Reactions and thermo stay in the editor; DWSIM reactions use Arrhenius power-law only. "
-                       "Never substitute an approximation unless the operator explicitly asks. ")
+        unsupported = (f"{kinetics_explanation()} A typed DWSIM reactor reaction can be proposed with set_reaction "
+                       "at confirm tier. Thermo stays in the editor. Never invent literature provenance or "
+                       "substitute an unsupported rate law. ")
     else:
         unsupported = "State unsupported geometry requests plainly. "
     lines = [f"Current surface: {brief.summary}",
@@ -685,7 +686,7 @@ def _guard_tool_shaped_output(text: str) -> tuple[str, str | None]:
     candidates = [stripped, *(match.group(3).strip() for match in fences)]
     shaped = False
     action_ops = {
-        "set_value", "set_unit_model", "add_unit", "insert_unit_after", "connect", "disconnect", "mirror", "move",
+        "set_value", "set_unit_model", "set_reaction", "add_unit", "insert_unit_after", "connect", "disconnect", "mirror", "move",
         "rename", "delete", "duplicate_part", "set_part_param", "move_part", "delete_part",
     }
 

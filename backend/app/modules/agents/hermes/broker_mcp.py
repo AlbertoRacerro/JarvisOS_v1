@@ -59,7 +59,7 @@ _PROCESS_READ_TOOL = {
 }
 _PROCESS_ACT_TOOL = {
     "name": "jarvis_process_act",
-    "description": "Request supported typed Process changes. Use exact tags and base revision from jarvis_process_read; unsupported reactions/thermo stay in the editor.",
+    "description": "Request supported typed Process changes. Use exact tags and base revision from jarvis_process_read; reactor reactions are confirm-tier proposals.",
     "inputSchema": {"type": "object", "properties": {
         "grant_id": {"type": "string", "maxLength": 128},
         "base_revision": {"type": "string", "maxLength": 64},
@@ -71,6 +71,10 @@ _PROCESS_ACT_TOOL = {
             {"type": "object", "properties": {"op": {"const": "set_unit_model"},
              "unit": {"type": "string"}, "card": {"type": "string", "maxLength": 200}},
              "required": ["op", "unit", "card"], "additionalProperties": False},
+            {"type": "object", "properties": {"op": {"const": "set_reaction"},
+             "unit": {"type": "string"}, "reaction_id": {"type": "string"},
+             "reaction": {"type": "object"}},
+             "required": ["op", "unit", "reaction_id", "reaction"], "additionalProperties": False},
             {"type": "object", "properties": {"op": {"const": "add_unit"}, "type": {"type": "string"},
              "tag": {"type": "string"}, "near": {"type": "string"}}, "required": ["op", "type"],
              "additionalProperties": False},

@@ -338,7 +338,9 @@ FORM_CARDS: tuple[dict[str, Any], ...] = tuple(
 def kinetics_explanation() -> str:
     """Deterministic seam for spec 166; derived from the nutrient Monod card metadata."""
     card = next(item for item in FORM_CARDS if item["id"] == "nutrient.monod")
-    return f"Monod is a {card['applies_to']} DWSIM reactor rate laws arrive with 180; Photobioreactor (T1) uses a pinned biological model card. No action is proposed."
+    return (f"Monod is a {card['applies_to']} For a DWSIM PFR or CSTR, select the reactor and open Kinetics "
+            "to define a rate law. Photobioreactor (T1) uses a pinned biological model card. "
+            "An explanation alone proposes no change.")
 
 
 def form_card(form_id: str) -> dict[str, Any]:

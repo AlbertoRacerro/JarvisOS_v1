@@ -177,6 +177,6 @@ def test_kinetics_explanation_is_derived_from_form_metadata() -> None:
     card = forms.form_card("nutrient.monod")
     message = forms.kinetics_explanation()
     assert card["applies_to"] in message
-    assert "DWSIM reactor rate laws arrive with 180" in message
+    assert "select the reactor and open Kinetics" in message
     assert "Photobioreactor (T1) uses a pinned biological model card" in message
-    assert "No action is proposed" in message
+    assert "An explanation alone proposes no change" in message

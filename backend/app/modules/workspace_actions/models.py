@@ -7,7 +7,7 @@ base revision, classifies the policy tier and applies or records them.
 
 from __future__ import annotations
 
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -75,6 +75,14 @@ class SetUnitModel(BaseModel):
     card: str = Field(min_length=1, max_length=200)  # a model card id or its exact name
 
 
+class SetReaction(BaseModel):
+    model_config = _STRICT
+    op: Literal["set_reaction"]
+    unit: Tag
+    reaction_id: Tag
+    reaction: dict[str, Any]
+
+
 class AddUnit(BaseModel):
     model_config = _STRICT
     op: Literal["add_unit"]
@@ -135,7 +143,7 @@ class DeleteObject(BaseModel):
 
 
 ProcessAction = Annotated[
-    SetValue | SetUnitModel | AddUnit | InsertUnitAfter | Connect | Disconnect | Mirror | MoveUnit | Rename | DeleteObject,
+    SetValue | SetUnitModel | SetReaction | AddUnit | InsertUnitAfter | Connect | Disconnect | Mirror | MoveUnit | Rename | DeleteObject,
     Field(discriminator="op"),
 ]
 

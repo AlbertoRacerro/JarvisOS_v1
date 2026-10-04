@@ -113,10 +113,10 @@ def test_process_turn_instructions_show_prefixed_read_and_typed_value_example() 
     assert '"op":"set_value","target":"S1","property":"pressure","value":{"value":2,"unit":"bar"}' in text
     assert "For state proposed" in text and "NOT been applied" in text
     assert "Monod is a nutrient-limitation factor of a bioreactor growth model" in text
-    assert "DWSIM reactor rate laws arrive with 180" in text
+    assert "select the reactor and open Kinetics" in text
     # Spec 170: the PBR now exists, so the roadmap wording is gone and the unit is named.
     assert "arrive with 170" not in text and "Photobioreactor (T1)" in text
-    assert "No action is proposed" in text
+    assert "An explanation alone proposes no change" in text
     assert "only when state is applied and applied is true" in text
     assert '"surface_ref"' not in text
 
