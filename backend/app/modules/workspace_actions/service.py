@@ -10,6 +10,7 @@ from typing import Literal
 from uuid import uuid4
 
 from app.core.database import open_sqlite_connection
+from app.modules.bio_models import service as bio_models
 from app.modules.bluecad.ledger import get_candidate
 from app.modules.bluecad.spec import SUPPORTED_PART_KINDS, canonicalize_geometry_spec
 from app.modules.process_stack import draft
@@ -31,6 +32,9 @@ from app.modules.process_stack.draft_models import (
     SetUnitParams,
 )
 from app.modules.process_stack.draft_models import Connect as DraftConnect
+from app.modules.process_stack.draft_models import (
+    SetUnitModel as DraftSetUnitModel,
+)
 from app.modules.workspace_actions.models import (
     ActionOrigin,
     ActionOutcome,
@@ -155,8 +159,8 @@ def surface_brief(workspace_id: str, ref: SurfaceRef | None) -> SurfaceBrief:
             )
             selected_info.append(f"Selected feed culture values: {fields}.")
         selected_context = ("\n".join(selected_info) + "\n") if selected_info else ""
-        owner_rows = [f"{item['tag']}={UNIT_REGISTRY[item['type']].owner}" for item in objects
-                      if item["kind"] == "unit"]
+        pbr_units = [item for item in objects if item["kind"] == "unit"
+                     and UNIT_REGISTRY[item["type"]].culture_rule == "pbr"]
         run_summary = "No mixed solve recorded."
         last_attempt = projection["results"].get("last_attempt")
         if last_attempt and last_attempt.get("run_id"):
@@ -174,14 +178,14 @@ def surface_brief(workspace_id: str, ref: SurfaceRef | None) -> SurfaceBrief:
                 run_summary = (f"Last mixed run: {mixed_solve.get('status')}; reason {mixed_solve.get('reason', 'unknown')}; "
                                f"{len(history)} iterations; worst field {last_row.get('worst_field', 'none')}; "
                                f"max normalized residual {residual_text}.")
-        text = (
-            f"Process workspace {workspace_id}; draft {draft_id}; head revision {record['revision']}\n"
-            f"Results: {projection['results']['state']}\nObjects ({len(objects)}): "
-            f"{_compact_objects(objects, document)}\nSelected: {selected_names or 'none'}\n"
-            f"Unit owners: {'; '.join(owner_rows)}\n{run_summary}\n"
-            f"{selected_context}"
+        else:
+            last_run = None
+        pbr_rows = _pbr_brief_rows(workspace_id, pbr_units, last_run)
+        # Variable parts first; the fixed vocabulary tail is never cut, so the brief shrinks its lists to fit.
+        tail = (
             "Action JSON examples (submit one or more objects in actions): "
             f'{{"op":"set_value","target":"{stream_tag}","property":"pressure","value":{{"value":2,"unit":"bar"}}}}; '
+            f'{{"op":"set_unit_model","unit":"{unit_tag}","card":"model card name or id"}}; '
             f'{{"op":"add_unit","type":"Pump","tag":"{next_unit_tag}","near":"{unit_tag}"}}; '
             f'{{"op":"insert_unit_after","type":"Pump","after":"{unit_tag}","tag":"{next_unit_tag}"}}; '
             f'{{"op":"connect","from":"{unit_tag}","from_port":"outlet","to":"{next_unit_tag}","to_port":"inlet"}}; '
@@ -192,6 +196,8 @@ def surface_brief(workspace_id: str, ref: SurfaceRef | None) -> SurfaceBrief:
             f'{{"op":"delete","target":"{unit_tag}"}}. '
             f'Example: {{"op":"set_value","target":"{unit_tag}","property":"concentration_factor",'
             '"value":{"value":20,"unit":"dimensionless"}}. '
+            "A Photobioreactor (T1) needs a pinned model card (set_unit_model, confirm tier); the agent never edits or "
+            "verifies parameter sets. "
             "Culture is feed-only and cannot pass through Flash, DistillationColumn or PFR. "
             "Mixed Recycles may be Jarvis tears; native Recycles inside mixed loops are refused. "
             "SpecifiedSeparator requires culture. For a non-convergence question, explain the recorded reason, "
@@ -199,8 +205,13 @@ def surface_brief(workspace_id: str, ref: SurfaceRef | None) -> SurfaceBrief:
             f"Limits: Arrhenius power-law only for DWSIM reactions. {kinetics_explanation()} "
             "DWSIM Run stays operator-only; reactions and thermo are edited in the operator editor."
         )
-        bounded_text = text[:6000]
-        actions = ["set_value", "add_unit", "insert_unit_after", "connect", "disconnect", "mirror", "move", "rename", "delete"]
+        text = _fit_process_brief(
+            header=(f"Process workspace {workspace_id}; draft {draft_id}; head revision {record['revision']}\n"
+                    f"Results: {projection['results']['state']}\n"),
+            objects=objects, document=document, selected_line=f"Selected: {selected_names or 'none'}\n",
+            pbr_rows=pbr_rows, run_summary=run_summary, selected_context=selected_context, tail=tail)
+        bounded_text = text
+        actions = ["set_value", "set_unit_model", "add_unit", "insert_unit_after", "connect", "disconnect", "mirror", "move", "rename", "delete"]
         limits = [f"Arrhenius power-law only; {kinetics_explanation()}", "DWSIM Run is operator-only"]
         payload = {
             "surface": "process",
@@ -301,6 +312,103 @@ def surface_brief(workspace_id: str, ref: SurfaceRef | None) -> SurfaceBrief:
     )
 
 
+BRIEF_TEXT_LIMIT = 6000  # SurfaceBrief.text max_length
+
+
+def _owner_rows(objects: list[dict], *, compact: bool) -> str:
+    """Registry-derived calculation owner of every unit (spec 170); grouped counts when space is tight."""
+    units = [item for item in objects if item["kind"] == "unit"]
+    if not compact:
+        return "; ".join(f"{item['tag']}={UNIT_REGISTRY[item['type']].owner}" for item in units)
+    counts: dict[str, int] = {}
+    for item in units:
+        owner = UNIT_REGISTRY[item["type"]].owner
+        counts[owner] = counts.get(owner, 0) + 1
+    return "; ".join(f"{owner}: {count} unit(s)" for owner, count in sorted(counts.items()))
+
+
+def _number(reported: dict, key: str, unit_fallback: str) -> str:
+    row = reported.get(key)
+    value = row.get("value") if isinstance(row, dict) else None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return "unknown"
+    return f"{value:.4g} {row.get('units') or unit_fallback}"
+
+
+def _verification_summary(workspace_id: str, card: dict) -> str:
+    try:
+        values = bio_models.get_set(workspace_id, card["parameter_set_id"])["values"]
+    except Exception:  # noqa: BLE001 - a missing library record must not break the brief
+        return "parameter set unavailable"
+    if not values:
+        return "parameter set has no values"
+    counts: dict[str, int] = {}
+    for value in values.values():
+        state = str(value.get("state") or "candidate")
+        counts[state] = counts.get(state, 0) + 1
+    return "parameter values: " + ", ".join(f"{count} {state}" for state, count in sorted(counts.items()))
+
+
+def _pbr_brief_rows(workspace_id: str, pbr_units: list[dict], last_run: dict | None) -> list[str]:
+    """One bounded line per Photobioreactor: pinned card, verification summary and the last run's outcome."""
+    if not pbr_units:
+        return []
+    try:
+        cards = {card["id"]: card for card in bio_models.list_cards(workspace_id)}
+    except Exception:  # noqa: BLE001
+        cards = {}
+    rows = []
+    for item in pbr_units[:6]:
+        pin = item.get("model") or {}
+        card = cards.get(pin.get("card_id"))
+        if not pin:
+            model = "no model card pinned"
+        elif card is None:
+            model = "the pinned model card is unavailable"
+        else:
+            newer = "; a newer card revision exists" if card["revision"] != pin.get("card_revision") else ""
+            model = (f"model card \"{_safe_surface_label(card.get('name'), 'unnamed')}\" revision "
+                     f"{pin.get('card_revision')}{newer}; N source assumed {card.get('n_source', 'unknown')}; "
+                     f"{_verification_summary(workspace_id, card)}")
+        row = f"{item['tag']} (Photobioreactor): {model}."
+        if last_run is None:
+            row += " No run recorded."
+        else:
+            result = (last_run.get("units") or {}).get(item["tag"])
+            status = last_run.get("status")
+            if not isinstance(result, dict):
+                reason = (last_run.get("mixed_solve") or {}).get("reason", "unknown")
+                row += f" Last run {status}: no PBR result recorded (reason {reason})."
+            else:
+                reported = result.get("reported") or {}
+                ratios = [abs(balance["residual"]) / balance["tolerance"]
+                          for balance in (result.get("unit_balances") or {}).values()
+                          if isinstance(balance, dict) and isinstance(balance.get("residual"), (int, float))
+                          and isinstance(balance.get("tolerance"), (int, float)) and balance["tolerance"] > 0]
+                residual = f"{max(ratios):.3g} of tolerance" if ratios else "unknown"
+                row += (f" Last run {status}; branch {result.get('branch', 'unknown')}; "
+                        f"HRT {_number(reported, 'hrt_d', 'd')}; thin-culture growth rate "
+                        f"{_number(reported, 'lambda_h', '1/h')}; worst balance residual {residual}.")
+        rows.append(row)
+    return rows
+
+
+def _fit_process_brief(*, header: str, objects: list[dict], document: dict, selected_line: str,
+                       pbr_rows: list[str], run_summary: str, selected_context: str, tail: str) -> str:
+    """Assemble the Process brief within the model-facing cap; the vocabulary tail is never truncated."""
+    def build(limit: int, compact: bool, rows: list[str]) -> str:
+        return (f"{header}Objects ({len(objects)}): {_compact_objects(objects, document, limit)}\n{selected_line}"
+                f"Unit owners: {_owner_rows(objects, compact=compact)}\n"
+                f"{chr(10).join(rows) + chr(10) if rows else ''}{run_summary}\n{selected_context}{tail}")
+
+    text = ""
+    for limit, compact, count in ((35, False, 6), (35, True, 6), (20, True, 6), (10, True, 4), (5, True, 2), (0, True, 1)):
+        text = build(limit, compact, pbr_rows[:count])
+        if len(text) <= BRIEF_TEXT_LIMIT:
+            return text
+    return text[:BRIEF_TEXT_LIMIT]
+
+
 def _process_object_brief(item: dict) -> dict:
     if item["kind"] == "stream":
         properties = {}
@@ -378,18 +486,18 @@ def _safe_surface_label(value: object, fallback: str) -> str:
     return label or fallback
 
 
-def _compact_objects(objects: list[dict], document: dict) -> str:
+def _compact_objects(objects: list[dict], document: dict, limit: int = 35) -> str:
     by_id = document["objects"]
     rows = []
-    for item in objects[:35]:
+    for item in objects[:limit]:
         row = f"{item['tag']}:{item['type']}"
         if item["kind"] == "stream":
             source = by_id.get((item.get("source") or {}).get("unit"), {}).get("tag", "external")
             target = by_id.get((item.get("target") or {}).get("unit"), {}).get("tag", "external")
             row += f" ({source} → {target})"
         rows.append(row)
-    if len(objects) > 35:
-        rows.append(f"… {len(objects) - 35} more")
+    if len(objects) > limit:
+        rows.append(f"… {len(objects) - limit} more")
     return ", ".join(rows) or "none"
 
 
@@ -480,6 +588,10 @@ def _action_summary(request: ActionRequest, changes: list[ChangeLine]) -> str:
             value = re.sub(r"(?<=\d)\.0(?=\s|$)", "", line.after) if line and line.after else None
             summaries.append(f"Set {action.target} {action.property} to {value}" if value else
                              f"Set {action.target} {action.property}")
+        elif action.op == "set_unit_model":
+            line = next((item for item in changes if item.label == f"{action.unit} biological model card"), None)
+            summaries.append(f"Pin model card {line.after} on {action.unit}" if line and line.after
+                             else f"Pin a model card on {action.unit}")
         elif action.op == "add_unit":
             tag = action.tag
             if tag is None:
@@ -606,7 +718,7 @@ def submit(workspace_id: str, request: ActionRequest, origin: ActionOrigin) -> A
         )
     draft_id, record = found
     try:
-        ops, changes = _process_ops(record["document"], request)
+        ops, changes = _process_ops(record["document"], request, workspace_id)
         after = draft.apply_ops(record["document"], ops)
         before_culture_blockers = {
             (item["code"], item["object"], item["field"])
@@ -704,7 +816,7 @@ def _unique_actions(request: ActionRequest) -> list[ProcessAction | BluecadActio
     actions: list[ProcessAction | BluecadAction] = []
     seen: set[str] = set()
     for action in request.actions:
-        if action.op not in {"set_value", "set_part_param"}:
+        if action.op not in {"set_value", "set_unit_model", "set_part_param"}:
             actions.append(action)
             continue
         encoded = _canonical(action.model_dump(mode="json", by_alias=False))
@@ -753,7 +865,23 @@ def _next_tag(objects: dict, prefix: str, ops: list | None = None) -> str:
     return f"{prefix}{index}"
 
 
-def _process_ops(document: dict, request: ActionRequest) -> tuple[list[DraftOp], list[ChangeLine]]:
+def _resolve_model_card(workspace_id: str, reference: str) -> dict:
+    """A card id, else an exact unique name, resolved to its current revision and digest (spec 170)."""
+    cards = bio_models.list_cards(workspace_id)
+    by_id = [card for card in cards if card["id"] == reference]
+    if by_id:
+        return by_id[0]
+    named = [card for card in cards if card["name"] == reference]
+    if not named:
+        raise ValueError(f"No model card has the id or exact name {reference!r}; ask the operator to create or name one "
+                         "in the Biology model library.")
+    if len(named) > 1:
+        raise ValueError(f"Model card name {reference!r} matches more than one card; use one of these ids: "
+                         f"{', '.join(card['id'] for card in named)}.")
+    return named[0]
+
+
+def _process_ops(document: dict, request: ActionRequest, workspace_id: str | None = None) -> tuple[list[DraftOp], list[ChangeLine]]:
     ops: list[DraftOp] = []
     changes: list[ChangeLine] = []
     objects = document["objects"]
@@ -761,7 +889,21 @@ def _process_ops(document: dict, request: ActionRequest) -> tuple[list[DraftOp],
     for action in request.actions:
         if action.op in {"duplicate_part", "set_part_param", "move_part", "delete_part"}:
             raise ValueError("BLUECAD actions cannot execute on the Process surface.")
-        if action.op == "set_value":
+        if action.op == "set_unit_model":
+            target = _target(document, action.unit, "unit")
+            if target["type"] != "PhotobioreactorT1":
+                raise ValueError(f"{target['tag']} is a {target['type']}; only a Photobioreactor (T1) pins a model card.")
+            if workspace_id is None:
+                raise ValueError("Model cards require a workspace context.")
+            card = _resolve_model_card(workspace_id, action.card)
+            pin = {"card_id": card["id"], "card_revision": card["revision"], "card_digest": card["digest"]}
+            ops.append(DraftSetUnitModel(op="set_unit_model", unit=target["id"], model=pin))
+            current = target.get("model") or {}
+            changes.append(ChangeLine(
+                label=f"{target['tag']} biological model card",
+                before=f"{current['card_id']} ({current['card_revision']})" if current else "none",
+                after=f"{card['name']} ({card['revision']})"))
+        elif action.op == "set_value":
             target = _target(document, action.target)
             if target["kind"] == "stream":
                 culture_fields = {"biomass", "nitrogen", "phosphorus", "oxygen", "dic", "ph", "salinity"}
@@ -1034,7 +1176,17 @@ def apply(workspace_id: str, action_id: str) -> ActionOutcome:
     else:
         draft_id, record = found
         try:
-            ops, _ = _process_ops(record["document"], request)
+            ops, derived = _process_ops(record["document"], request, workspace_id)
+            proposed = {line.label: line.after for line in outcome.changes
+                        if line.label.endswith(" biological model card")}
+            moved = [line.label for line in derived
+                     if line.label in proposed and line.after != proposed[line.label]]
+            if moved:
+                # A card revision moved between proposal and Apply: never pin a different one silently.
+                outcome.state, outcome.reason_code = "stale", "stale"
+                outcome.reason = "The model card changed after this proposal; ask again to pin its current revision."
+                _save_outcome(outcome)
+                return outcome
             updated = draft.patch(
                 workspace_id,
                 draft_id,

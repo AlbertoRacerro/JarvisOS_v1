@@ -29,11 +29,17 @@ PROPERTY_PACKAGES: tuple[str, ...] = (
     "Steam Tables (IAPWS-IF97)",
 )
 
-QuantityKind = Literal["temperature", "pressure", "pressure_difference", "mass_flow", "percent", "power", "flow_ratio", "dimensionless", "length", "volume", "area", "heat_transfer_coefficient", "molar_flow", "specific_heat", "volume_flow", "mass_concentration", "molar_concentration", "salinity", "ph"]
+QuantityKind = Literal["temperature", "temperature_difference", "pressure", "pressure_difference", "mass_flow", "percent", "power", "flow_ratio", "dimensionless", "length", "volume", "area", "heat_transfer_coefficient", "molar_flow", "specific_heat", "volume_flow", "mass_concentration", "molar_concentration", "salinity", "ph", "velocity", "photon_flux_density", "time", "specific_rate"]
 
 # SI storage unit and the display units offered by inspectors, per quantity kind.
 QUANTITY_UNITS: dict[str, tuple[str, tuple[str, ...]]] = {
     "temperature": ("K", ("degC", "K")),
+    # A difference, not a point: 3 degC is stored as 3 K (no offset).
+    "temperature_difference": ("K", ("K", "degC")),
+    "velocity": ("m/s", ("m/s",)),
+    "photon_flux_density": ("umol/(m2.s)", ("umol/(m2.s)",)),
+    "time": ("s", ("h", "d", "s")),
+    "specific_rate": ("1/s", ("1/h", "1/d", "1/s")),
     "pressure": ("Pa", ("bar", "kPa", "Pa", "psi")),
     "pressure_difference": ("Pa", ("bar", "kPa", "Pa", "psi")),
     "mass_flow": ("kg/s", ("kg/h", "kg/s", "t/h")),
@@ -65,6 +71,9 @@ class ParamSpec:
     default: float | None = None
     minimum_si: float | None = None
     maximum_si: float | None = None
+    # Spec 170: inspector group (additive, optional) and an open lower bound (value must exceed minimum_si).
+    group: str | None = None
+    exclusive_minimum: bool = False
 
 
 @dataclass(frozen=True)
@@ -124,6 +133,9 @@ def _heat(label: str, dwsim_type: str) -> UnitSpec:
         energy_inlets=("energy feed",),
     )
 
+
+_PBR_MODE = ("periodic_steady",)
+PBR_MAX_PHOTOPERIOD_S = 24.0 * 3600.0
 
 UNIT_REGISTRY: dict[str, UnitSpec] = {
     "Heater": _heat("Heater", "Heater"),
@@ -225,7 +237,49 @@ UNIT_REGISTRY: dict[str, UnitSpec] = {
                       default=10.0, minimum_si=1.0, maximum_si=1000.0),
         ),
     ),
+    "PhotobioreactorT1": UnitSpec(
+        type="PhotobioreactorT1", label="Photobioreactor (T1)", dwsim_type=None, native_types=(),
+        inlets=("inlet",), outlets=("outlet",), required_inlets=1,
+        modes={"periodic_steady": "periodic_steady"}, owner="jarvis_bio", culture_rule="pbr",
+        # Spec 170 capability 1: every parameter is required and none has a default.
+        params=(
+            ParamSpec("tube_inner_diameter", "Tube inner diameter", "length", "", _PBR_MODE,
+                      minimum_si=0.005, maximum_si=0.5, group="Geometry"),
+            ParamSpec("tube_length", "Tube length", "length", "", _PBR_MODE,
+                      minimum_si=0.0, exclusive_minimum=True, group="Geometry"),
+            ParamSpec("tube_count", "Tube count", "dimensionless", "", _PBR_MODE,
+                      minimum_si=1.0, group="Geometry"),
+            ParamSpec("liquid_velocity", "Liquid velocity", "velocity", "", _PBR_MODE,
+                      minimum_si=0.0, exclusive_minimum=True, group="Operation"),
+            ParamSpec("pump_efficiency", "Pump efficiency", "percent", "", _PBR_MODE,
+                      minimum_si=0.0, maximum_si=100.0, exclusive_minimum=True, group="Operation"),
+            ParamSpec("baffle_friction_multiplier", "Baffle friction multiplier", "dimensionless", "", _PBR_MODE,
+                      minimum_si=1.0, group="Operation"),
+            ParamSpec("oxygen_kla", "Oxygen transfer coefficient (kLa)", "specific_rate", "", _PBR_MODE,
+                      minimum_si=0.0, group="Operation"),
+            ParamSpec("oxygen_saturation", "Oxygen saturation concentration", "mass_concentration", "", _PBR_MODE,
+                      minimum_si=0.0, exclusive_minimum=True, group="Operation"),
+            ParamSpec("peak_par", "Peak PAR", "photon_flux_density", "", _PBR_MODE,
+                      minimum_si=0.0, group="Light & environment"),
+            ParamSpec("photoperiod", "Photoperiod", "time", "", _PBR_MODE,
+                      minimum_si=0.0, maximum_si=PBR_MAX_PHOTOPERIOD_S, exclusive_minimum=True,
+                      group="Light & environment"),
+            ParamSpec("diffuse_fraction", "Diffuse fraction", "dimensionless", "", _PBR_MODE,
+                      minimum_si=0.0, maximum_si=1.0, group="Light & environment"),
+            ParamSpec("temperature_mean", "Mean culture temperature", "temperature", "", _PBR_MODE,
+                      minimum_si=0.0, exclusive_minimum=True, group="Light & environment"),
+            ParamSpec("temperature_amplitude", "Diel temperature amplitude", "temperature_difference", "", _PBR_MODE,
+                      minimum_si=0.0, group="Light & environment"),
+        ),
+    ),
 }
+
+def pbr_temperature_invalid(params: dict[str, dict]) -> bool:
+    """Spec 170: the diel temperature minimum T_mean - amplitude must stay above 0 K."""
+    mean = (params.get("temperature_mean") or {}).get("si")
+    amplitude = (params.get("temperature_amplitude") or {}).get("si")
+    return mean is not None and amplitude is not None and not mean - amplitude > 0.0
+
 
 if any((spec.owner == "dwsim") != (spec.dwsim_type is not None and bool(spec.native_types))
        for spec in UNIT_REGISTRY.values()):
@@ -369,6 +423,19 @@ class SetUnitParams(_Op):
     reactions: list[str] | None = None
 
 
+class UnitModelPin(BaseModel):
+    model_config = {"extra": "forbid"}
+    card_id: str = Field(min_length=1, max_length=128)
+    card_revision: str = Field(pattern=r"^r-[a-f0-9]{16}$")
+    card_digest: str = Field(pattern=r"^[a-f0-9]{64}$")
+
+
+class SetUnitModel(_Op):
+    op: Literal["set_unit_model"]
+    unit: str = Field(pattern=ID_PATTERN)
+    model: UnitModelPin | None
+
+
 class SetStreamCulture(_Op):
     op: Literal["set_stream_culture"]
     stream: str = Field(pattern=ID_PATTERN)
@@ -420,7 +487,7 @@ class SetThermo(_Op):
 
 
 DraftOp = Annotated[
-    AddUnit | AddStream | Delete | Move | Rename | Connect | Disconnect | SetRoute | SetOrientation | SetStreamSpec | SetStreamCulture | SetUnitParams | SetReactions | SetThermo,
+    AddUnit | AddStream | Delete | Move | Rename | Connect | Disconnect | SetRoute | SetOrientation | SetStreamSpec | SetStreamCulture | SetUnitParams | SetUnitModel | SetReactions | SetThermo,
     Field(discriminator="op"),
 ]
 

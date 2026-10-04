@@ -14,7 +14,8 @@ from dataclasses import field as dataclass_field
 from pathlib import Path
 from typing import Any, cast
 
-from app.modules.process_stack import culture, draft_compiler, mixed
+# pbr_unit is imported eagerly on purpose (spec 170): an import inside a Run counts against the 168 wall budget.
+from app.modules.process_stack import culture, draft_compiler, mixed, pbr_unit
 from app.modules.process_stack.draft_models import UNIT_REGISTRY
 from app.modules.process_stack.dwsim_mcp import DwsimMcpClient
 
@@ -116,6 +117,7 @@ class JarvisUnitContext:
     deadline: float
     cache: dict[str, Any]
     validation: bool = False
+    workspace_id: str | None = None
 
     def remaining_s(self) -> float:
         return max(0.0, self.deadline - time.monotonic())
@@ -128,6 +130,7 @@ class JarvisUnitEvaluation:
     # Rates are signed production, in kg/s except DIC in mol/s.
     culture_generation: dict[str, float] = dataclass_field(default_factory=dict)
     culture_generation_units: dict[str, str] = dataclass_field(default_factory=dict)
+    culture_generation_allowance: dict[str, float] = dataclass_field(default_factory=dict)
 
 
 JarvisEvaluator = Callable[[dict[str, Any], dict[str, Any], JarvisUnitContext], JarvisUnitEvaluation]
@@ -150,7 +153,9 @@ def _evaluate_separator(unit: dict[str, Any], inlet: dict[str, Any],
     )
 
 
-JARVIS_EVALUATORS: dict[str, JarvisEvaluator] = {"SpecifiedSeparator": _evaluate_separator}
+JARVIS_EVALUATORS: dict[str, JarvisEvaluator] = {
+    "SpecifiedSeparator": _evaluate_separator, "PhotobioreactorT1": pbr_unit.evaluate_pbr,
+}
 GENERATION_UNITS = {name: "mol/s" if name == "dic" else "kg/s" for name in mixed.CULTURE_FIELDS}
 
 
@@ -159,6 +164,8 @@ def _check_evaluation(unit: dict[str, Any], evaluation: JarvisUnitEvaluation) ->
         raise SegmentFailure(unit["tag"], {"code": "JARVIS_OUTLETS_MISMATCH"})
     if (any(name not in mixed.CULTURE_FIELDS or not isinstance(rate, (int, float))
             or not math.isfinite(rate) for name, rate in evaluation.culture_generation.items())
+            or any(name not in mixed.CULTURE_FIELDS or not isinstance(rate, (int, float))
+                   or not math.isfinite(rate) or rate < 0 for name, rate in evaluation.culture_generation_allowance.items())
             or evaluation.culture_generation_units != {
                 name: GENERATION_UNITS[name] for name in evaluation.culture_generation
                 if name in GENERATION_UNITS}):
@@ -424,7 +431,7 @@ def _seed(document: dict[str, Any], part: dict[str, Any]) -> dict[str, dict[str,
     return result
 
 
-def _validation_states(document: dict[str, Any], part: dict[str, Any]) -> dict[str, dict[str, Any]]:
+def _validation_states(document: dict[str, Any], part: dict[str, Any], workspace_id: str | None = None) -> dict[str, dict[str, Any]]:
     """Supply deterministic boundary guesses so Validate can build without solving a segment."""
     feeds = _feeds(document)
     if not feeds:
@@ -453,7 +460,8 @@ def _validation_states(document: dict[str, Any], part: dict[str, Any]) -> dict[s
         inlet = known.get(incoming["tag"], copy.deepcopy(reference))
         evaluation = _call_evaluator(unit, inlet, JarvisUnitContext(
             inlet_density_kg_m3=float(inlet.get("density_kg_m3") or 1000.0),
-            deadline=time.monotonic() + mixed.WALL_BUDGET_S, cache={}, validation=True))
+            deadline=time.monotonic() + mixed.WALL_BUDGET_S, cache={}, validation=True,
+            workspace_id=workspace_id))
         outgoing = sorted((stream for stream in document["objects"].values() if stream["kind"] == "stream"
                            and (stream.get("source") or {}).get("unit") == unit_id),
                           key=lambda stream: stream["source"]["port"])
@@ -581,7 +589,8 @@ def _propagate_culture(segment: dict[str, Any], result: dict[str, Any],
 
 
 def _culture_balances(document: dict[str, Any], known: dict[str, dict[str, Any]],
-                      generation: dict[str, dict[str, float]]) -> dict[str, dict[str, Any]]:
+                      generation: dict[str, dict[str, float]],
+                      allowances: dict[str, dict[str, float]] | None = None) -> dict[str, dict[str, Any]]:
     objects = document["objects"]
     balances: dict[str, dict[str, Any]] = {}
     for unit in (item for item in objects.values() if item["kind"] == "unit" and item["type"] != "Recycle"):
@@ -610,9 +619,10 @@ def _culture_balances(document: dict[str, Any], known: dict[str, dict[str, Any]]
             outbound = sum(amount(stream) for stream in outgoing)
             produced = generation.get(unit["tag"], {}).get(field, 0.0)
             residual_value = inbound + produced - outbound
-            tolerance_value = 1e-9 * max(abs(inbound + produced), abs(outbound)) + 1e-12
+            allowance = (allowances or {}).get(unit["tag"], {}).get(field, 0.0)
+            tolerance_value = 1e-9 * max(abs(inbound + produced), abs(outbound)) + 1e-12 + allowance
             rows[field] = {"in": inbound, "out": outbound, "residual": residual_value,
-                           "generated": produced,
+                           "generated": produced, "generation_allowance": allowance,
                            "tolerance": tolerance_value, "unit": "mol/s" if field == "dic" else "kg/s",
                            "passed": abs(residual_value) <= tolerance_value}
         if rows:
@@ -736,6 +746,7 @@ def _whole_graph_balances(document: dict[str, Any], final: dict[str, Any],
         amount_in = sum(float(value) for value in feed_rates if value is not None)
         amount_out = sum(float(value) for value in product_rates if value is not None)
         generated = sum(unit.get(field, 0.0) for unit in final.get("culture_generation", {}).values())
+        generation_allowance = sum(unit.get(field, 0.0) for unit in final.get("culture_generation_allowance", {}).values())
         native_allowance = sum(error * float(state.get("culture", {}).get(field) or 0.0) *
                                (0.001 if field == "salinity" else 1.0)
                                for error, state in native_values)
@@ -752,10 +763,10 @@ def _whole_graph_balances(document: dict[str, Any], final: dict[str, Any],
             tear_allowance += (abs(mass_flow) * delta_concentration
                                + abs(concentration) * delta_flow
                                + delta_flow * delta_concentration) * factor
-        tolerance_value = tear_allowance + native_allowance + 1e-9 * max(abs(amount_in), abs(amount_out)) + 1e-12
+        tolerance_value = tear_allowance + native_allowance + generation_allowance + 1e-9 * max(abs(amount_in), abs(amount_out)) + 1e-12
         residual_value = amount_in + generated - amount_out
         rows[field] = {"in": amount_in, "out": amount_out, "residual": residual_value,
-                       "generated": generated,
+                       "generated": generated, "generation_allowance": generation_allowance,
                        "tolerance": tolerance_value, "unit": "mol/s" if field == "dic" else "kg/s",
                        "passed": abs(residual_value) <= tolerance_value}
     passed = all(row["passed"] for row in rows.values()) and not native_error_findings
@@ -802,7 +813,7 @@ def _pressure_diagnosis(history: list[dict[str, Any]]) -> str | None:
 def _evaluate(document: dict[str, Any], part: dict[str, Any], tear: dict[str, dict[str, Any]],
               *, client: DwsimMcpClient, full: bool, run_dir: Path, iteration: int,
               dwsim_version: str, mcp_sha256: str, remaining_s: float,
-              run_cache: dict[str, Any] | None = None) -> dict[str, Any]:
+              run_cache: dict[str, Any] | None = None, workspace_id: str | None = None) -> dict[str, Any]:
     objects = document["objects"]
     started = time.monotonic()
     deadline = time.monotonic() + max(0.0, remaining_s)
@@ -812,6 +823,7 @@ def _evaluate(document: dict[str, Any], part: dict[str, Any], tear: dict[str, di
     stream_results: dict[str, Any] = {}
     unit_results: dict[str, Any] = {}
     culture_generation: dict[str, dict[str, float]] = {}
+    culture_generation_allowance: dict[str, dict[str, float]] = {}
     mixed_findings: list[dict[str, Any]] = []
     segment_records: list[dict[str, Any]] = []
     max_build_seconds = 0.0
@@ -907,8 +919,9 @@ def _evaluate(document: dict[str, Any], part: dict[str, Any], tear: dict[str, di
                 raise SegmentFailure(unit["tag"], "Jarvis inlet has no solved liquid DWSIM density")
             evaluation = _call_evaluator(unit, inlet, JarvisUnitContext(
                 inlet_density_kg_m3=float(density), deadline=deadline,
-                cache=run_cache if run_cache is not None else {}))
+                cache=run_cache if run_cache is not None else {}, workspace_id=workspace_id))
             culture_generation[unit["tag"]] = evaluation.culture_generation
+            culture_generation_allowance[unit["tag"]] = evaluation.culture_generation_allowance
             inlet_biomass = (inlet.get("culture") or {}).get("biomass")
             factor = (float(unit["params"]["concentration_factor"]["si"])
                       if unit["type"] == "SpecifiedSeparator" else 0.0)
@@ -970,7 +983,7 @@ def _evaluate(document: dict[str, Any], part: dict[str, Any], tear: dict[str, di
                                     "units": "kg/h"},
                 "Temperature Error": {"value": solved["temperature_K"] - guessed["temperature_K"], "units": "K"},
                 "Pressure Error": {"value": solved["pressure_Pa"] - guessed["pressure_Pa"], "units": "Pa"}}}
-    culture_balances = _culture_balances(document, known, culture_generation)
+    culture_balances = _culture_balances(document, known, culture_generation, culture_generation_allowance)
     for tag, balances in culture_balances.items():
         if unit_results.get(tag, {}).get("owner") == "jarvis_bio":
             unit_results[tag]["unit_balances"] = balances
@@ -979,6 +992,7 @@ def _evaluate(document: dict[str, Any], part: dict[str, Any], tear: dict[str, di
     return {"produced": produced, "streams": stream_results, "units": unit_results,
             "segments": segment_records, "known": known, "culture_balances": culture_balances,
             "culture_generation": culture_generation,
+            "culture_generation_allowance": culture_generation_allowance,
             "max_build_seconds": max_build_seconds, "elapsed_s_by_phase": phase_elapsed,
             "mixed_findings": mixed_findings}
 
@@ -1001,14 +1015,14 @@ def _failure_record(document: dict[str, Any], part: dict[str, Any], *, reason: s
 
 
 def run(document: dict[str, Any], *, action: str, client: DwsimMcpClient,
-        dwsim_version: str, mcp_sha256: str, run_dir: Path) -> dict[str, Any]:
+        dwsim_version: str, mcp_sha256: str, run_dir: Path, workspace_id: str | None = None) -> dict[str, Any]:
     return cast(dict[str, Any], finite_json(_run(
         document, action=action, client=client, dwsim_version=dwsim_version,
-        mcp_sha256=mcp_sha256, run_dir=run_dir)))
+        mcp_sha256=mcp_sha256, run_dir=run_dir, workspace_id=workspace_id)))
 
 
 def _run(document: dict[str, Any], *, action: str, client: DwsimMcpClient,
-         dwsim_version: str, mcp_sha256: str, run_dir: Path) -> dict[str, Any]:
+         dwsim_version: str, mcp_sha256: str, run_dir: Path, workspace_id: str | None = None) -> dict[str, Any]:
     part = mixed.partition(document)
     run_dir.mkdir(parents=True, exist_ok=True)
     initial = _seed(document, part)
@@ -1016,7 +1030,7 @@ def _run(document: dict[str, Any], *, action: str, client: DwsimMcpClient,
     started = time.monotonic()
     if action == "validate":
         try:
-            validation_known = _validation_states(document, part) | _seed(document, part)
+            validation_known = _validation_states(document, part, workspace_id) | _seed(document, part)
             for index, ids in enumerate(part["segments"]):
                 segment = _segment_document(document, ids, validation_known)
                 _full(segment, client, label=f"mixed-validate-{index}", keep_case=None,
@@ -1060,7 +1074,8 @@ def _run(document: dict[str, Any], *, action: str, client: DwsimMcpClient,
         try:
             candidate = _evaluate(document, part, tear_guess, client=client, full=False, run_dir=run_dir,
                                   iteration=iteration, dwsim_version=dwsim_version,
-                                  mcp_sha256=mcp_sha256, remaining_s=remaining, run_cache=run_cache)
+                                  mcp_sha256=mcp_sha256, remaining_s=remaining, run_cache=run_cache,
+                                  workspace_id=workspace_id)
         except SegmentFailure as exc:
             raise SegmentFailure(exc.segment, {"iteration": iteration, "detail": exc.detail}, exc.units) from exc
         except Exception as exc:  # noqa: BLE001 - preserve engine failures in the mixed run record
@@ -1095,7 +1110,7 @@ def _run(document: dict[str, Any], *, action: str, client: DwsimMcpClient,
                           iteration=last_iteration or 0, dwsim_version=dwsim_version,
                           mcp_sha256=mcp_sha256,
                           remaining_s=mixed.WALL_BUDGET_S - (time.monotonic() - started),
-                          run_cache=run_cache)
+                          run_cache=run_cache, workspace_id=workspace_id)
     except SegmentFailure as exc:
         detail = exc.detail if isinstance(exc.detail, dict) else {"message": str(exc.detail)}
         reason = ("wall_budget" if "timeout" in str(detail.get("code", "")).lower()
@@ -1120,7 +1135,7 @@ def _run(document: dict[str, Any], *, action: str, client: DwsimMcpClient,
             "culture": _culture_results(document, final),
             "culture_findings": [],
             "mixed_findings": final["mixed_findings"],
-            "process_fingerprint": mixed.fingerprint(document, part),
+            "process_fingerprint": mixed.fingerprint(document, part, workspace_id),
             "mixed_solve": {"status": status, "reason": reason, "version": mixed.MIXED_SOLVE_VERSION,
                             "method": "direct_substitution", "history": _history_record(history),
                             "culture_only": not part["consumed"],

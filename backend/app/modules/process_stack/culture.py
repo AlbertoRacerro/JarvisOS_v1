@@ -55,12 +55,66 @@ def _water_mass_fraction(feed: dict[str, Any]) -> float:
     return mass.get("Water", 0.0) / total if total > 0 else 0.0
 
 
+def known_culture_fields(document: dict[str, Any], feeds: list[dict[str, Any]],
+                         consumed: set[str]) -> dict[str, set[str]]:
+    """Statically known conserved culture fields per culture-carrying stream id (spec 170).
+
+    Mirrors the 167/168 rules without solving: a feed knows exactly the fields it specifies (an explicit
+    zero is known), a Mixer knows a field only when every culture inlet does, a consumed tear is seeded
+    with the fields every culture feed specifies, and a Photobioreactor adds the three fields it computes.
+    """
+    objects = document["objects"]
+    units = [item for item in objects.values() if item["kind"] == "unit"]
+    known: dict[str, set[str]] = {feed["id"]: set(feed["spec"]["culture"]) & set(CONSERVED) for feed in feeds}
+    seed = set(CONSERVED)
+    for feed in feeds:
+        seed &= known[feed["id"]]
+    tear_ids = {stream["id"] for stream in objects.values() if stream["kind"] == "stream"
+                and (stream.get("source") or {}).get("unit") in consumed}
+    for _ in range(len(objects) + 2):
+        previous = {key: set(value) for key, value in known.items()}
+        updated: dict[str, set[str]] = {feed["id"]: previous[feed["id"]] for feed in feeds}
+        for tear in tear_ids:
+            updated[tear] = set(seed)
+        for unit in sorted(units, key=lambda item: item["tag"]):
+            inputs = [stream for stream in _stream_inputs(document, unit) if stream["id"] in previous]
+            if not inputs:
+                continue
+            outputs = _stream_outputs(document, unit)
+            if unit["id"] in consumed:
+                for output in outputs:
+                    updated[output["id"]] = set(seed) & set.intersection(*(previous[s["id"]] for s in inputs))
+                continue
+            if unit["type"] == "HeatExchanger":
+                for output in outputs:
+                    side = next((s for s in inputs if s["target"]["port"] == output["source"]["port"]), None)
+                    if side is not None:
+                        updated[output["id"]] = set(previous[side["id"]])
+                continue
+            fields = set.intersection(*(previous[s["id"]] for s in inputs))
+            if UNIT_REGISTRY[unit["type"]].culture_rule == "pbr":
+                fields |= {"biomass", "nitrogen", "oxygen"}
+            for output in outputs:
+                updated[output["id"]] = set(fields)
+        if updated == previous:
+            break
+        known = updated
+    return known
+
+
+_PBR_FIELD_CODES = (("biomass", "PBR_REQUIRES_BIOMASS"), ("nitrogen", "PBR_REQUIRES_NITROGEN"),
+                    ("oxygen", "PBR_REQUIRES_OXYGEN"))
+
+
 def culture_findings(document: dict[str, Any]) -> list[dict[str, Any]]:
     """Instant input, carrier, unit-rule and cycle findings; empty for culture-free drafts."""
     objects = document["objects"]
     feeds = [item for item in objects.values() if item["kind"] == "stream" and item["type"] != "EnergyStream"
              and item.get("source") is None and item.get("spec", {}).get("culture") is not None]
-    if not feeds:
+    pbr_units = sorted((item for item in objects.values()
+                        if item["kind"] == "unit" and UNIT_REGISTRY[item["type"]].culture_rule == "pbr"),
+                       key=lambda item: item["tag"])
+    if not feeds and not pbr_units:
         return []
     findings: list[dict[str, Any]] = []
     culture_streams = {stream["id"]: stream for stream in feeds}
@@ -132,6 +186,22 @@ def culture_findings(document: dict[str, Any]) -> list[dict[str, Any]]:
         for output in _stream_outputs(document, unit):
             culture_streams[output["id"]] = output
             queue.append(output)
+
+    if pbr_units:
+        known = known_culture_fields(document, feeds, set(consumed))
+        for unit in pbr_units:
+            inlet = next(iter(_stream_inputs(document, unit)), None)
+            if inlet is None:
+                continue  # the missing inlet is reported by the generic port check
+            if not feeds or inlet["id"] not in culture_streams:
+                _add(findings, "blocker", "PBR_REQUIRES_CULTURE_INLET", unit["tag"], "inlets",
+                     f"{unit['tag']} needs an inlet that carries culture; connect a culture feed or a culture-carrying stream.")
+                continue
+            for field, code in _PBR_FIELD_CODES:
+                if field not in known.get(inlet["id"], set()):
+                    _add(findings, "blocker", code, unit["tag"], field,
+                         f"{unit['tag']} needs the inlet {field} specified or known; an explicit zero is valid, "
+                         "an unspecified or unknown value is not assumed to be zero.")
 
     return findings
 
