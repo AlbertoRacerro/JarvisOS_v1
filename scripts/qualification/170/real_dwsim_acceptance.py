@@ -35,8 +35,9 @@ SYNTHETIC_VALUES = {
     "K_I": (150.0, "umol/(m**2*s)"), "k_X": (150.0, "m**2/kg"),
     "T_min": (278.15, "K"), "T_opt": (298.15, "K"), "T_max": (308.15, "K"),
     "K_j_0": (0.001, "kg/m3"), "k_d": (0.004166666666666667, "1/hour"),
-    # Synthetic formula inputs exercise the 169 stoichiometry, not a measured strain.
-    "a": (1.8, "1"), "b": (0.5, "1"), "c": (0.1, "1"),
+    # Algebraically fitted synthetic formula: 169 NH3 stoichiometry gives the
+    # 107 fixture's q = 0.07 kg N/kg and Y_O2 = 1.4 kg/kg. It is not measured.
+    "a": (1.8, "1"), "b": (0.5129883263806922, "1"), "c": (0.12688224202537762, "1"),
     "d": (0.01, "1"), "w_ash": (0.05, "1"),
 }
 CARD_FACTORS = {
