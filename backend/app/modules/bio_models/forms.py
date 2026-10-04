@@ -257,6 +257,9 @@ def _symbol_node(name: str) -> dict[str, Any]:
 
 
 def _equation_tree(form_id: str, equation: str) -> dict[str, Any]:
+    # The published text names its own left-hand side ("r = k_d", "⟨f⟩ = …");
+    # a reaction equation has none.
+    published = re.match(r"\s*([^\s=()]+)\s*=\s*", equation)
     # Equation bodies use a typed MathML expression tree. The selected forms
     # below cover all forms with nested fraction, index or exponent structure;
     # simple forms still use explicit identifiers and operators.
@@ -302,7 +305,7 @@ def _equation_tree(form_id: str, equation: str) -> dict[str, Any]:
     else:
         # Tokenize the published expression into identifiers, numbers and
         # operators rather than placing the equation in a single mtext node.
-        tokens = re.findall(r"[A-Za-zμĪβ⟨⟩₀ₐᵦ][A-Za-z0-9_₀ₐᵦ,]*|\d+(?:\.\d+)?|[^\s]", equation)
+        tokens = re.findall(r"[A-Za-zμĪβ⟨⟩₀ₐᵦ][A-Za-z0-9_₀ₐᵦ,]*|\d+(?:\.\d+)?|[^\s]", equation[len(published.group(0)):] if published else equation)
         items = []
         for token in tokens:
             if re.fullmatch(r"\d+(?:\.\d+)?", token):
@@ -312,8 +315,9 @@ def _equation_tree(form_id: str, equation: str) -> dict[str, Any]:
             else:
                 items.append(_mo(token))
         body = _row(*items)
-    lhs = "f" if form_id.startswith(("light.", "temperature.", "nutrient.", "combine.")) else "r" if form_id.startswith("loss.") else "equation"
-    return _node("math", _row(_mi(lhs), _mo("="), body))
+    if published is None:
+        return _node("math", _row(body))
+    return _node("math", _row(_mi(published.group(1)), _mo("="), body))
 
 
 FORM_CARDS: tuple[dict[str, Any], ...] = tuple(
