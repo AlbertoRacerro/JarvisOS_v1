@@ -3,7 +3,7 @@ import type { Finding } from "../../api/processDraft";
 import { labels, MathTree } from "./BiologyModelLibrary";
 import {
   humanDate, missingSetSymbols, nSourceLabel, pbrCardRefusal, PBR_PICKER_FINDING, pinStatus, revisionLabel,
-  severityWord, shortRevision, verificationChip, type Pin,
+  setMatchesCard, severityWord, shortRevision, verificationChip, type Pin,
 } from "./pbrLogic";
 
 const factorIds = (card: BioCard): string[] =>
@@ -61,14 +61,16 @@ export default function PbrModelPicker({ cards, sets, forms, pin, unitTag, findi
     {cards.length === 0 ? <p className="pbr-empty">No model cards — <button type="button" className="pbr-link" onClick={openLibrary}>Browse models…</button></p>
       : <ul className="pbr-cards">{cards.map((card) => {
         const set = setOf(card);
+        const setCurrent = setMatchesCard(card, set);
         const refusal = pbrCardRefusal(card, formName);
-        const missing = missingSetSymbols(set);
+        const missing = setCurrent ? missingSetSymbols(set) : [];
         const isPinned = pin?.card_id === card.id;
         const current = isPinned && !status.cardNewer;
         const reasonId = `pbr-card-reason-${card.id}`;
         return <li key={card.id} className={`pbr-card${isPinned ? " is-pinned" : ""}${refusal ? " is-refused" : ""}`}>
           <h5>{card.name}</h5>
-          <p className="pbr-card__meta">Set <strong>{set?.name ?? "unknown"}</strong> · {revisionLabel(set?.history, card.parameter_set_revision ?? set?.revision)}</p>
+          <p className="pbr-card__meta">Card uses set <strong>{set?.name ?? "unavailable"}</strong> · {revisionLabel(set?.history, card.parameter_set_revision)}</p>
+          {set && !setCurrent && <p className="pbr-note pbr-note--warning">The library set is now {revisionLabel(set.history, set.revision)}. Its current values and verification states do not describe the set revision pinned by this card. Create a new card on the latest set to adopt those values.</p>}
           <p className="pbr-card__meta">{nSourceLabel(card.n_source)}</p>
           {refusal && <p id={reasonId} className="pbr-note pbr-note--danger">Not usable in the photobioreactor: {refusal}.</p>}
           {!refusal && missing.length > 0 && <p className="pbr-note pbr-note--warning">This set has no value yet for {missing.join(", ")}; Run stays blocked until they are entered.</p>}
@@ -76,7 +78,9 @@ export default function PbrModelPicker({ cards, sets, forms, pin, unitTag, findi
             <ul className="pbr-factors">{factorIds(card).map((id) => <li key={id} className="pbr-factor"><strong>{formName(id)}</strong>
               {formById.get(id) && <div className="bio-equation" aria-label={`Equation: ${formById.get(id)!.equation_text}`}><MathTree node={formById.get(id)!.equation} /></div>}</li>)}</ul>
           </details>
-          <details open={isPinned}><summary>Verification of values</summary><Chips set={set} /></details>
+          <details open={isPinned}><summary>Verification of {setCurrent ? "pinned" : "current library"} values</summary>
+            {setCurrent ? <Chips set={set} /> : <p className="draft-hint">Pinned revision values are not available in this library list. Open the Biology model library to inspect the current set.</p>}
+          </details>
           <button type="button" disabled={Boolean(refusal) || current} aria-describedby={refusal ? reasonId : undefined}
             aria-label={`${current ? "Pinned" : "Use model card"} ${card.name}`}
             title={`card ${card.id} · revision ${card.revision} · ${humanDate(card.history?.[card.history.length - 1]?.created_at as string | undefined)}`}

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import {
   branchExplanation, entrySi, formatReported, formatSig, gasTransferWords, growthVersusDilution, liquidVolumeM3, missingSetSymbols,
-  nSourceLabel, pbrCardRefusal, pbrFailureHeading, pbrFieldError, pinStatus, severityWord, verificationChip,
+  nSourceLabel, pbrCardRefusal, pbrFailureHeading, pbrFieldError, pinStatus, setMatchesCard, severityWord, verificationChip,
 } from "../src/components/process/pbrLogic.ts";
 import { ownerLabel, ownerShort } from "../src/components/process/processOwners.ts";
 import { actionSummaryText, describeProcessAction, isToolCallShaped } from "../src/components/ai/workspaceActionPresentation.ts";
@@ -57,8 +57,9 @@ assert.match(inspector, /QuantityInput/);
 for (const source of [picker, inspector, resultsView]) assert.doesNotMatch(source, /dangerouslySetInnerHTML|innerHTML\s*=/);
 assert.match(picker, /MathTree/);
 assert.match(library, /allowedMathTags/);
-for (const text of ["Use model card", "Clear model card", "A newer revision is available", "Adopt newer revision", "No model cards", "Browse models…", "Factors and equations", "Verification of values"])
+for (const text of ["Use model card", "Clear model card", "A newer revision is available", "Adopt newer revision", "No model cards", "Browse models…", "Factors and equations", "Verification of"])
   assert.ok(picker.includes(text), `picker missing ${text}`);
+assert.match(picker, /setCurrent \? <Chips set=\{set\} \/>/, "latest set chips must not be presented as pinned values");
 assert.match(picker, /onClick=\{\(\) => onPin\(pinnedCard\)\}/);
 assert.match(picker, /title=\{`card \$\{pin\.card_id\}/, "raw ids stay in a tooltip, not the primary text");
 assert.match(picker, /disabled=\{Boolean\(refusal\) \|\| current\}/);
@@ -136,6 +137,8 @@ const set = (over = {}) => ({ id: "s1", name: "Set one", revision: "r-1111111111
 assert.equal(pbrCardRefusal(card()), null);
 assert.match(pbrCardRefusal(card({ factors: { ...card().factors, light: "light.haldane" } }), (id) => id), /only Monod light response/);
 assert.match(pbrCardRefusal(card({ factors: { ...card().factors, nutrients: ["nutrient.monod", "nutrient.droop"] } })), /Droop/);
+assert.match(pbrCardRefusal(card({ factors: { ...card().factors, nutrients: ["nutrient.monod", "nutrient.monod"] } })), /exactly one Monod/);
+assert.match(pbrCardRefusal(card({ factors: { ...card().factors, light: undefined } })), /no light response factor/);
 assert.match(pbrCardRefusal(card({ factors: { ...card().factors, stoichiometry: undefined } })), /stoichiometry/);
 const pin = { card_id: "c1", card_revision: "r-aaaaaaaaaaaaaaaa", card_digest: "d1" };
 assert.deepEqual(pinStatus(pin, card(), set()), { missing: false, cardNewer: false, setNewer: false, changes: [] });
@@ -149,6 +152,9 @@ assert.match(newerSet.changes[0], /built on 11111111 → now revision 22222222 �
 assert.equal(pinStatus(pin, undefined, undefined).missing, true);
 assert.equal(pinStatus(null, card(), set()).cardNewer, false);
 assert.deepEqual(missingSetSymbols(set({ values: { k_X: {}, a: {} } })), ["b", "c", "d", "w_ash"]);
+assert.equal(setMatchesCard(card(), set()), true);
+assert.equal(setMatchesCard(card(), set({ revision: "r-2222222222222222" })), false);
+assert.equal(setMatchesCard(card(), set({ digest: "sd2" })), false);
 assert.equal(nSourceLabel("NH3"), "N source assumed: NH₃ — inlet N speciation unverified");
 assert.deepEqual(verificationChip("source_changed_since_verification"), { text: "source changed", tone: "warn" });
 assert.deepEqual(verificationChip("expert_reviewed"), { text: "expert reviewed", tone: "good" });

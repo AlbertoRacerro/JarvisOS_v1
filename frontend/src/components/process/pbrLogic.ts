@@ -131,15 +131,33 @@ const asList = (value: unknown): string[] => (Array.isArray(value) ? value.map(S
 /** Why the PBR cannot use this card, or null when its factor forms are supported. */
 export function pbrCardRefusal(card: CardLike, formLabel: (id: string) => string = (id) => id): string | null {
   const light = asList(card.factors.light);
-  if (light.some((id) => id !== "light.monod")) return `Uses ${formLabel(light.find((id) => id !== "light.monod")!)}; the photobioreactor supports only Monod light response`;
-  if (asList(card.factors.nutrients).includes("nutrient.droop")) return "Uses Droop quota limitation, which the photobioreactor does not support";
-  if (asList(card.factors.stoichiometry).length === 0) return "Has no stoichiometry factor; the photobioreactor needs the elemental balance";
+  if (light.length !== 1 || light[0] !== "light.monod") return light.length
+    ? `Uses ${formLabel(light.find((id) => id !== "light.monod") ?? light[0])}; the photobioreactor supports only Monod light response`
+    : "Has no light response factor; the photobioreactor needs Monod light response";
+  const temperature = asList(card.factors.temperature);
+  if (temperature.length !== 1 || !["temperature.isothermal", "temperature.ctmi", "temperature.arrhenius_ref"].includes(temperature[0]))
+    return "Has an unsupported temperature factor";
+  const nutrients = asList(card.factors.nutrients);
+  if (nutrients.includes("nutrient.droop")) return "Uses Droop quota limitation, which the photobioreactor does not support";
+  if (nutrients.length !== 1 || nutrients[0] !== "nutrient.monod") return "Needs exactly one Monod nutrient factor, bound to dissolved nitrogen";
+  const combination = asList(card.factors.combination);
+  if (combination.length !== 1 || !["combine.multiplicative", "combine.liebig"].includes(combination[0]))
+    return "Has an unsupported nutrient combination";
+  const loss = asList(card.factors.loss);
+  if (loss.length !== 1 || !["loss.first_order", "loss.light_dark"].includes(loss[0])) return "Has an unsupported biomass loss factor";
+  if (asList(card.factors.stoichiometry).join() !== "stoich.photoautotrophic") return "Needs the photoautotrophic stoichiometry factor for elemental balance";
   return null;
 }
 
 /** Set symbols the PBR reads that the card's set has no value for (non-blocking hint here; Validate reports it). */
 export const missingSetSymbols = (set: SetLike | undefined): string[] =>
   set ? PBR_SET_SYMBOLS.filter((symbol) => !(symbol in set.values)) : [];
+
+/** The library lists only each set's head; never attribute its values to an older card pin. */
+export const setMatchesCard = (card: CardLike, set: SetLike | undefined): boolean => Boolean(set
+  && set.id === card.parameter_set_id
+  && set.revision === card.parameter_set_revision
+  && set.digest === card.parameter_set_digest);
 
 export const shortRevision = (revision?: string): string => (revision ? revision.replace(/^r-/, "").slice(0, 8) : "unknown");
 
