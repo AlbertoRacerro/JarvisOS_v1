@@ -25,7 +25,12 @@ def _finding(severity: str, code: str, tag: str, field: str, message: str) -> di
 
 @lru_cache(maxsize=256)
 def _water_density(temperature_k: float, pressure_pa: float) -> float | None:
-    """Pre-run stand-in for the 167 density basis (DWSIM mixture density, seawater-as-water approximation)."""
+    """Pre-run density at the feed state.
+
+    The 167 culture basis is the solved DWSIM Mixture density under its seawater-as-water approximation, and a
+    solved density does not exist before Run. For a feed stream that approximation is pure water at the feed T/P,
+    so the CoolProp water density below is that basis evaluated without a DWSIM solve (and the finding labels it).
+    """
     try:
         from CoolProp.CoolProp import PropsSI
 
@@ -98,13 +103,13 @@ def pbr_findings(document: dict[str, Any], workspace_id: str | None = None) -> l
         density = _water_density(float(temperature), float(pressure)) if flow is not None else None
         if flow is None or density is None:
             continue
-        diameter, length, count = (float(value) for value in dims)
+        diameter, length, count = (float(value) for value in dims if value is not None)
         volume = count * math.pi / 4.0 * diameter ** 2 * length
         hrt_days = volume * density / flow / 86400.0
         if not HRT_MIN_DAYS <= hrt_days <= HRT_MAX_DAYS:
             findings.append(_finding(
                 "warning", "PBR_HRT_OUT_OF_RANGE", tag, "tube_length",
-                f"Feed basis: HRT is {hrt_days:.3g} d (volume {volume:.3g} m3, feed {flow:.3g} kg/s, water density "
-                f"{density:.0f} kg/m3 at the feed state), outside {HRT_MIN_DAYS:g}-{HRT_MAX_DAYS:g} d. "
+                f"Feed basis: HRT is {hrt_days:.3g} d (volume {volume:.3g} m3, feed {flow:.3g} kg/s, density "
+                f"{density:.0f} kg/m3, the 167 seawater-as-water basis at the feed state), outside {HRT_MIN_DAYS:g}-{HRT_MAX_DAYS:g} d. "
                 "A solved basis is reported after Run."))
     return findings

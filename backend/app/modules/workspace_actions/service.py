@@ -30,6 +30,7 @@ from app.modules.process_stack.draft_models import (
     SetStreamCulture,
     SetStreamSpec,
     SetUnitParams,
+    UnitModelPin,
 )
 from app.modules.process_stack.draft_models import Connect as DraftConnect
 from app.modules.process_stack.draft_models import (
@@ -329,7 +330,9 @@ def _owner_rows(objects: list[dict], *, compact: bool) -> str:
 
 def _number(reported: dict, key: str, unit_fallback: str) -> str:
     row = reported.get(key)
-    value = row.get("value") if isinstance(row, dict) else None
+    if not isinstance(row, dict):
+        return "unknown"
+    value = row.get("value")
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return "unknown"
     return f"{value:.4g} {row.get('units') or unit_fallback}"
@@ -897,7 +900,7 @@ def _process_ops(document: dict, request: ActionRequest, workspace_id: str | Non
                 raise ValueError("Model cards require a workspace context.")
             card = _resolve_model_card(workspace_id, action.card)
             pin = {"card_id": card["id"], "card_revision": card["revision"], "card_digest": card["digest"]}
-            ops.append(DraftSetUnitModel(op="set_unit_model", unit=target["id"], model=pin))
+            ops.append(DraftSetUnitModel(op="set_unit_model", unit=target["id"], model=UnitModelPin(**pin)))
             current = target.get("model") or {}
             changes.append(ChangeLine(
                 label=f"{target['tag']} biological model card",

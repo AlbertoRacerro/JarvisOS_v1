@@ -37,7 +37,7 @@ def cardinal_temperature(t: float, t_min: float, t_opt: float, t_max: float) -> 
 
 def light_response(light: Light, saturation: float, inhibition: float) -> Light:
     """Local light factor I/(K + I + I²·(1/K_i)); inhibition = 0 gives Monod. Works on NumPy arrays."""
-    return light / (saturation + light + light**2 * inhibition)  # type: ignore[operator, return-value]
+    return light / (saturation + light + light**2 * inhibition)  # type: ignore[operator]
 
 
 def nitrogen_factor(nitrogen: float, half_saturation: float) -> float:

@@ -558,7 +558,8 @@ def resolve_growth_model(workspace_id: str, card_id: str, revision: str, digest:
         raise BioModelError("PBR_MODEL_CARD_SYMBOL_MISSING", f"PBR model needs {', '.join(missing)}; add them in the Biology model library.", 422, symbols=missing)
     params = {symbol: float(row["canonical_value"]) for symbol, row in parameter_set["values"].items()}
     try:
-        stoich = forms.stoich_photoautotrophic(*(params[symbol] for symbol in ("a", "b", "c", "d", "w_ash")), card["n_source"])
+        stoich = forms.stoich_photoautotrophic(
+            params["a"], params["b"], params["c"], params["d"], params["w_ash"], card["n_source"])
     except (forms.FormRefusal, KeyError, ValueError) as exc:
         raise BioModelError("PBR_MODEL_CARD_UNAVAILABLE", "Pinned stoichiometry is invalid for T1; "
                             "correct the parameter set and pin a new card revision.", 422) from exc

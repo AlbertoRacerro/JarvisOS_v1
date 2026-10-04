@@ -28,6 +28,14 @@ MOLECULAR_WEIGHT_KG_PER_KMOL = {
 }
 
 
+def _common_fields(sets: list[set[str]]) -> set[str]:
+    """Intersection of the known-field sets of every input stream."""
+    common = set(sets[0])
+    for other in sets[1:]:
+        common &= other
+    return common
+
+
 def _add(items: list[dict[str, Any]], severity: str, code: str, tag: str, field: str, message: str) -> None:
     items.append({"severity": severity, "code": code, "object": tag, "field": field,
                   "message": message, "source": "jarvis"})
@@ -83,7 +91,7 @@ def known_culture_fields(document: dict[str, Any], feeds: list[dict[str, Any]],
             outputs = _stream_outputs(document, unit)
             if unit["id"] in consumed:
                 for output in outputs:
-                    updated[output["id"]] = set(seed) & set.intersection(*(previous[s["id"]] for s in inputs))
+                    updated[output["id"]] = set(seed) & _common_fields([previous[s["id"]] for s in inputs])
                 continue
             if unit["type"] == "HeatExchanger":
                 for output in outputs:
@@ -91,7 +99,7 @@ def known_culture_fields(document: dict[str, Any], feeds: list[dict[str, Any]],
                     if side is not None:
                         updated[output["id"]] = set(previous[side["id"]])
                 continue
-            fields = set.intersection(*(previous[s["id"]] for s in inputs))
+            fields = _common_fields([previous[s["id"]] for s in inputs])
             if UNIT_REGISTRY[unit["type"]].culture_rule == "pbr":
                 fields |= {"biomass", "nitrogen", "oxygen"}
             for output in outputs:
