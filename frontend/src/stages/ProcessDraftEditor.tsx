@@ -6,6 +6,7 @@ import BiologyModelLibrary from "../components/process/BiologyModelLibrary";
 import PbrInspector from "../components/process/PbrInspector";
 import QuantityInput from "../components/process/QuantityInput";
 import { ownerLabel, ownerShort } from "../components/process/processOwners";
+import { failureTouchesUnit } from "../components/process/pbrLogic";
 import ResultProperties from "../components/process/ResultProperties";
 import { ContextMenu, MenuButton, useContextMenu } from "../components/ui/ContextMenu";
 import type { ContextMenuItem } from "../components/ui/ContextMenu";
@@ -709,7 +710,7 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
   /** A typed unit failure from the last attempt, shown in that unit's own Results tab. */
   const unitFailure = (tag: string) => {
     const solve = lastRun?.mixed_solve;
-    if (!lastRun || !solve || lastRun.status === "completed" || !solve.failed_units?.includes(tag)) return null;
+    if (!lastRun || !solve || lastRun.status === "completed" || !failureTouchesUnit(solve, tag)) return null;
     return { code: mixedFailureCode(solve.errors), message: solve.message || mixedFailureMessage(solve.errors) };
   };
 
@@ -974,7 +975,7 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
     const spec = unitSpec(unit.type);
     if (!spec) return <p>Unsupported unit type.</p>;
     if (unit.type === "PhotobioreactorT1") return <PbrInspector workspaceId={workspaceId} unit={unit} spec={spec} registry={registry}
-      result={solvedRun?.units?.[unit.tag]} results={results} lastRun={lastRun} failure={unitFailure(unit.tag)}
+      result={solvedRun?.units?.[unit.tag]} results={results} lastRun={lastRun} failure={unitFailure(unit.tag)} feedBasis={draft.pbr_feed_basis?.[unit.tag]}
       findings={draft.findings} apply={apply} openLibrary={() => setBiologyOpen(true)}
       showError={(message) => setNotice({ tone: "danger", text: message })} />;
     const modes = spec.modes.map(modeKey);

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { listBioCards, listBioForms, listBioSets, type BioCard, type BioForm, type BioSet } from "../../api/bioModels";
-import type { DraftObject, DraftOp, DraftRegistry, DraftRun, Finding, RegistryParam, RegistryUnit, ResultsState } from "../../api/processDraft";
+import type { DraftObject, DraftOp, DraftRegistry, DraftRun, Finding, PbrFeedBasis, RegistryParam, RegistryUnit, ResultsState } from "../../api/processDraft";
 import PbrModelPicker from "./PbrModelPicker";
 import PbrResults, { type PbrFailure } from "./PbrResults";
 import QuantityInput from "./QuantityInput";
@@ -14,9 +14,10 @@ type Tab = (typeof TABS)[number];
 const PARAM_TABS = new Set<Tab>(["Geometry", "Operation", "Light & environment"]);
 
 /** Typed jarvis-unit run with the matching registry/segment context; see ProcessDraftEditor. */
-export default function PbrInspector({ workspaceId, unit, spec, registry, result, results, lastRun, failure, findings, apply, openLibrary, showError }: {
+export default function PbrInspector({ workspaceId, unit, spec, registry, result, results, lastRun, failure, feedBasis, findings, apply, openLibrary, showError }: {
   workspaceId: string; unit: DraftObject; spec: RegistryUnit; registry: DraftRegistry;
   result?: NonNullable<DraftRun["units"]>[string]; results: ResultsState; lastRun: DraftRun | null; failure: PbrFailure | null;
+  feedBasis?: PbrFeedBasis;
   findings: Finding[]; apply(ops: DraftOp[]): Promise<unknown>; openLibrary(): void; showError(message: string): void;
 }) {
   const base = useId();
@@ -79,8 +80,10 @@ export default function PbrInspector({ workspaceId, unit, spec, registry, result
       <div><dt>Owner</dt><dd>{ownerLabel(spec.owner)}</dd></div>
       <div><dt>Fidelity</dt><dd>{result?.fidelity ?? "Tier 1 · unqualified · screening estimate"}</dd></div>
       <div><dt>Liquid volume V = n·π/4·D²·L</dt><dd>{volume === null ? "Enter diameter, length and tube count" : `${formatSig(volume)} m³ (${formatSig(volume * 1000)} L)`}</dd></div>
-      <div><dt>Feed flow Q</dt><dd>{result?.reported.volumetric_flow_m3_h ? `${formatReported("volumetric_flow_m3_h", result.reported.volumetric_flow_m3_h)}${staleNote}` : "after Run"}</dd></div>
-      <div><dt>Residence time HRT</dt><dd>{result?.reported.hrt_d ? `${formatReported("hrt_d", result.reported.hrt_d)}${staleNote}` : "after Run"}</dd></div>
+      <div><dt>Inlet flow Q</dt><dd>{result?.reported.volumetric_flow_m3_h ? `${formatReported("volumetric_flow_m3_h", result.reported.volumetric_flow_m3_h)}${staleNote}`
+        : feedBasis ? `${formatSig(feedBasis.volume_flow_m3_h)} m³ h⁻¹ (feed basis)` : "available after Run"}</dd></div>
+      <div><dt>Residence time HRT</dt><dd>{result?.reported.hrt_d ? `${formatReported("hrt_d", result.reported.hrt_d)}${staleNote}`
+        : feedBasis ? `${formatSig(feedBasis.hrt_d)} d (feed basis)` : "available after Run"}</dd></div>
       <div><dt>Model card</dt><dd>{unit.model ? `${pinnedCard?.name ?? result?.model_pin?.card_name ?? "Pinned card"} · ${pinnedCard ? revisionLabel(pinnedCard.history, unit.model.card_revision) : "revision " + unit.model.card_revision.replace(/^r-/, "").slice(0, 8)}` : "None pinned"}</dd></div>
       <div><dt>Last run</dt><dd>{runStatus}</dd></div>
       <div><dt>Branch</dt><dd>{result?.branch ? `${result.branch === "washout" ? "Washout" : "Productive"}${staleNote}` : "after Run"}</dd></div>

@@ -215,6 +215,26 @@ export const nSourceLabel = (source?: string): string =>
   source === "HNO3" ? "N source assumed: NO₃⁻ (HNO₃) — inlet N speciation unverified"
     : source === "NH3" ? "N source assumed: NH₃ — inlet N speciation unverified" : "N source not recorded";
 
+/** The spec 170 section 2 provenance line shown in Results next to the card pin. */
+export const nSourceNote = (source?: string): string =>
+  source === "NH3" || source === "HNO3"
+    ? `N source assumed: ${source}; inlet N speciation unverified` : "N source assumed: not recorded; inlet N speciation unverified";
+
+/** Card and parameter-set pin in words: names and short revisions, never digests (ids belong in tooltips). */
+export function pinDescription(pin: { card_name?: string; card_revision?: string; set_name?: string; set_revision?: string } | undefined): string {
+  if (!pin) return "";
+  const card = `${pin.card_name ?? "Model card"}, revision ${shortRevision(pin.card_revision)}`;
+  return pin.set_revision || pin.set_name ? `${card} · parameter set ${pin.set_name ?? "unnamed"}, revision ${shortRevision(pin.set_revision)}` : card;
+}
+
+/**
+ * Whether a failed mixed solve belongs to this unit. 168 records a Jarvis-unit failure under `failed_segment`
+ * (the unit tag) with an empty `failed_units`, while DWSIM segment failures list tags in `failed_units`.
+ */
+export function failureTouchesUnit(solve: { failed_segment?: string; failed_units?: string[] } | undefined, tag: string): boolean {
+  return Boolean(solve && (solve.failed_segment === tag || solve.failed_units?.includes(tag)));
+}
+
 // ------------------------------------------------------------------ findings and failures
 const FAILURE_HEADINGS: Record<string, string> = {
   PBR_NONPHYSICAL_STATE: "Non-physical state",

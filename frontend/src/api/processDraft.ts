@@ -100,6 +100,8 @@ export type DraftProjection = {
   objects: DraftObject[];
   reactions?: Record<string, DraftReaction>;
   findings: Finding[];
+  /** Pre-run Q and HRT for a PBR fed directly by a feed stream (backend feed basis); absent otherwise. */
+  pbr_feed_basis?: Record<string, PbrFeedBasis>;
   results: ResultsState;
   proposals: Proposal[];
   dwsim?: {
@@ -232,6 +234,7 @@ export type ReportedValue = { value: string | number; units?: string; label?: st
 /** Balance row per culture field; `generation_allowance` is the declared generation tolerance (spec 170). */
 export type UnitBalanceRow = { in: number; out: number; generated?: number; residual: number; tolerance: number;
   generation_allowance?: number; unit: string; passed: boolean };
+export type PbrFeedBasis = { basis: "feed"; volume_m3: number; volume_flow_m3_h: number; hrt_d: number; density_kg_m3: number; mass_flow_kg_s: number };
 export type PbrModelPin = { card_id: string; card_name?: string; card_revision: string; card_digest: string; set_id?: string;
   set_name?: string; set_revision?: string; set_digest?: string; form_versions?: Record<string, string>; n_source?: string };
 export type PbrNumerics = {

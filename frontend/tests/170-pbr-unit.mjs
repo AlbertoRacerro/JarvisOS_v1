@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import {
-  branchExplanation, entrySi, formatReported, formatSig, gasTransferWords, growthVersusDilution, liquidVolumeM3, missingSetSymbols,
+  branchExplanation, entrySi, failureTouchesUnit, nSourceNote, pinDescription, formatReported, formatSig, gasTransferWords, growthVersusDilution, liquidVolumeM3, missingSetSymbols,
   nSourceLabel, pbrCardRefusal, pbrFailureHeading, pbrFieldError, pinStatus, setMatchesCard, severityWord, verificationChip,
 } from "../src/components/process/pbrLogic.ts";
 import { ownerLabel, ownerShort } from "../src/components/process/processOwners.ts";
@@ -36,6 +36,23 @@ assert.equal(ownerLabel("somebody_else"), "Somebody else");
 assert.equal(ownerLabel(undefined), "Unknown owner");
 assert.match(editor, /<PbrInspector[\s\S]*findings=\{draft\.findings\}/);
 assert.match(editor, /unitFailure\(unit\.tag\)/);
+assert.match(editor, /failureTouchesUnit\(solve, tag\)/);
+// 168 records a Jarvis-unit failure under failed_segment with an empty failed_units; DWSIM failures list tags.
+assert.equal(failureTouchesUnit({ failed_segment: "PBR-1", failed_units: [] }, "PBR-1"), true);
+assert.equal(failureTouchesUnit({ failed_segment: "mixed-1-0", failed_units: ["PBR-1"] }, "PBR-1"), true);
+assert.equal(failureTouchesUnit({ failed_segment: "Separator", failed_units: [] }, "PBR-1"), false);
+assert.equal(failureTouchesUnit({}, "PBR-1"), false);
+assert.equal(failureTouchesUnit(undefined, "PBR-1"), false);
+// provenance in words, ids only in tooltips
+assert.equal(nSourceNote("NH3"), "N source assumed: NH3; inlet N speciation unverified");
+assert.equal(nSourceNote("HNO3"), "N source assumed: HNO3; inlet N speciation unverified");
+assert.equal(pinDescription({ card_name: "N. gaditana", card_revision: "r-0123456789abcdef", set_name: "Set A", set_revision: "r-fedcba9876543210" }),
+  "N. gaditana, revision 01234567 · parameter set Set A, revision fedcba98");
+assert.match(resultsView, /nSourceNote\(result\.model_pin\.n_source\)/);
+assert.match(resultsView, /pinDescription\(result\.model_pin\)/);
+assert.match(inspector, /feed basis/);
+assert.match(inspector, /available after Run/);
+assert.match(editor, /feedBasis=\{draft\.pbr_feed_basis\?\.\[unit\.tag\]\}/);
 assert.match(editor, /Culture · Jarvis/, "outlet stream keeps its Culture · Jarvis fieldset");
 assert.match(editor, /!feed && cultureResult/, "culture fieldset is owner-independent");
 assert.match(editorCss, /draft-body--wide-inspector[\s\S]*380px/);

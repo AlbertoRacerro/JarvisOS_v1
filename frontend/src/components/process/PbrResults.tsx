@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
 import type { ResultsState, UnitResult } from "../../api/processDraft";
 import {
-  BALANCE_FIELDS, branchExplanation, formatReported, formatSig, gasTransferWords, growthVersusDilution, pbrFailureHeading,
-  prettyUnits, severityWord,
+  BALANCE_FIELDS, branchExplanation, formatReported, formatSig, gasTransferWords, growthVersusDilution, nSourceNote, pbrFailureHeading,
+  pinDescription, prettyUnits, severityWord,
 } from "./pbrLogic";
 
 export type PbrFailure = { code: string | null; message: string };
@@ -47,6 +47,8 @@ export default function PbrResults({ result, results, failure }: {
     {!result && !failure && <p className="draft-hint">No results yet. Press Run to solve this unit.</p>}
     {result && <>
       {result.fidelity && <p className="pbr-fidelity"><strong>Fidelity</strong> {result.fidelity}</p>}
+      {result.model_pin && <p className="pbr-provenance" title={`Card id ${result.model_pin.card_id}, digest ${result.model_pin.card_digest}; parameter set id ${result.model_pin.set_id ?? "unknown"}, digest ${result.model_pin.set_digest ?? "unknown"}`}>
+        <strong>Biological model</strong> {pinDescription(result.model_pin)}<br />{nSourceNote(result.model_pin.n_source)}</p>}
       <Section title="Steady state">
         <p><strong className={`pbr-branch pbr-branch--${result.branch ?? "unknown"}`}>{result.branch === "washout" ? "Washout" : result.branch === "productive" ? "Productive" : "Branch unknown"}</strong></p>
         <p>{branchExplanation(result.branch)}</p>
