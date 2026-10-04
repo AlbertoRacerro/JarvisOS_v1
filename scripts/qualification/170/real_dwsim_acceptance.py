@@ -101,13 +101,13 @@ def _card(client: Any, workspace_id: str, *, name: str, changes: dict[str, tuple
     return {"card": card, "set": parameter_set}
 
 
-def _pbr_params(*, oxygen_kla_h: float = FIXTURE_KLA_H) -> dict[str, Any]:
+def _pbr_params(*, oxygen_kla_h: float = FIXTURE_KLA_H, peak_par: float = 800.0) -> dict[str, Any]:
     return {
         "tube_inner_diameter": Q(0.05, "m"), "tube_length": Q(100, "m"),
         "tube_count": Q(10, "dimensionless"), "liquid_velocity": Q(0.5, "m/s"),
         "pump_efficiency": Q(60, "percent"), "baffle_friction_multiplier": Q(1, "dimensionless"),
         "oxygen_kla": Q(oxygen_kla_h, "1/h"), "oxygen_saturation": Q(FIXTURE_O2_SATURATION * 1000.0, "mg/L"),
-        "peak_par": Q(800, "umol/(m2.s)"), "photoperiod": Q(12, "h"),
+        "peak_par": Q(peak_par, "umol/(m2.s)"), "photoperiod": Q(12, "h"),
         "diffuse_fraction": Q(0.5, "dimensionless"),
         "temperature_mean": Q(298.15, "K"), "temperature_amplitude": Q(3, "K"),
     }
@@ -121,7 +121,8 @@ def _flow_for_hrt(hrt_days: float) -> float:
 
 def _ops(pin: dict[str, Any], *, hrt_days: float, biomass: float = 0.0,
          nitrogen: float = 0.05,
-         oxygen: float = FIXTURE_O2_SATURATION, oxygen_kla_h: float = FIXTURE_KLA_H, mixed: bool = False) -> list[dict[str, Any]]:
+         oxygen: float = FIXTURE_O2_SATURATION, oxygen_kla_h: float = FIXTURE_KLA_H, peak_par: float = 800.0,
+         mixed: bool = False) -> list[dict[str, Any]]:
     def stream(id: str, tag: str, x: int, y: int) -> dict[str, Any]:
         return {"op": "add_stream", "id": id, "tag": tag, "x": x, "y": y}
 
@@ -141,7 +142,7 @@ def _ops(pin: dict[str, Any], *, hrt_days: float, biomass: float = 0.0,
             "biomass": Q(biomass, "kg/m3"), "nitrogen": Q(nitrogen, "kg/m3"),
             "oxygen": Q(oxygen, "kg/m3"), "salinity": Q(35, "g/kg")}},
         unit("pbr", "PhotobioreactorT1", "PBR", 280, 100),
-        {"op": "set_unit_params", "unit": "pbr", "values": _pbr_params(oxygen_kla_h=oxygen_kla_h)},
+        {"op": "set_unit_params", "unit": "pbr", "values": _pbr_params(oxygen_kla_h=oxygen_kla_h, peak_par=peak_par)},
         {"op": "set_unit_model", "unit": "pbr", "model": {
             "card_id": pin["id"], "card_revision": pin["revision"], "card_digest": pin["digest"]}},
     ]
@@ -381,10 +382,12 @@ def main() -> None:
                                                    "card_digest": card["digest"]},
                         "set edit never repins an existing PBR", unit.get("model"), report)
 
-                # Typed failures retain unit, code and operator message in the 168 failed segment.
+                # Typed failures retain unit, code and operator message in the 168 failed segment. The oxygen
+                # case is the contract scenario: no aeration, no inlet O2 and dark biomass decay (a lit,
+                # productive culture makes net O2 and certifies a positive periodic O2).
                 _, oxygen_failure = _case(client, workspace_id, report, "nonphysical_oxygen", card,
                                           hrt_days=3, expected="segment_failed", biomass=0.1,
-                                          oxygen=0.0, oxygen_kla_h=0.0)
+                                          oxygen=0.0, oxygen_kla_h=0.0, peak_par=0.0)
                 _expect(_failure_code(oxygen_failure) == "PBR_NONPHYSICAL_STATE", "typed oxygen failure",
                         oxygen_failure.get("mixed_solve"), report)
                 no_feedback = _card(client, workspace_id, name="170 synthetic no-feedback card",
