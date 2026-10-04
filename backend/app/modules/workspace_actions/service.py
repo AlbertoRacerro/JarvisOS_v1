@@ -352,6 +352,27 @@ def _verification_summary(workspace_id: str, card: dict) -> str:
     return "parameter values: " + ", ".join(f"{count} {state}" for state, count in sorted(counts.items()))
 
 
+def _short_revision(revision: Any) -> str:
+    return f"revision {str(revision).removeprefix('r-')[:8]}" if revision else "revision unknown"
+
+
+def _card_label(card: dict) -> str:
+    return f"{card.get('name') or 'Unnamed card'} ({_short_revision(card.get('revision'))})"
+
+
+def _pinned_card_label(workspace_id: str, pin: dict) -> str:
+    """The currently pinned card by name and revision label; never a raw id."""
+    if not pin:
+        return "none"
+    try:
+        card = next((item for item in bio_models.list_cards(workspace_id) if item["id"] == pin.get("card_id")), None)
+    except Exception:  # noqa: BLE001 - a broken library must not break the Apply card
+        card = None
+    if card is None:
+        return f"Model card no longer in the library ({_short_revision(pin.get('card_revision'))})"
+    return f"{card.get('name') or 'Unnamed card'} ({_short_revision(pin.get('card_revision'))})"
+
+
 def _pbr_brief_rows(workspace_id: str, pbr_units: list[dict], last_run: dict | None) -> list[str]:
     """One bounded line per Photobioreactor: pinned card, verification summary and the last run's outcome."""
     if not pbr_units:
@@ -380,8 +401,16 @@ def _pbr_brief_rows(workspace_id: str, pbr_units: list[dict], last_run: dict | N
             result = (last_run.get("units") or {}).get(item["tag"])
             status = last_run.get("status")
             if not isinstance(result, dict):
-                reason = (last_run.get("mixed_solve") or {}).get("reason", "unknown")
-                row += f" Last run {status}: no PBR result recorded (reason {reason})."
+                solve = last_run.get("mixed_solve") or {}
+                errors = solve.get("errors")
+                ours = solve.get("failed_segment") == item["tag"] or item["tag"] in (solve.get("failed_units") or [])
+                if ours and isinstance(errors, dict) and errors.get("code"):
+                    meaning = _safe_surface_label(errors.get("message"), "", 240)
+                    row += (f" Last run {status}: the PBR failed with {_safe_surface_label(errors['code'], 'unknown')}"
+                            f"{' (' + meaning + ')' if meaning else ''}.")
+                else:
+                    reason = solve.get("reason", "unknown")
+                    row += f" Last run {status}: no PBR result recorded (reason {reason})."
             else:
                 reported = result.get("reported") or {}
                 ratios = [abs(balance["residual"]) / balance["tolerance"]
@@ -479,13 +508,13 @@ def _bluecad_part_brief(part: dict) -> dict:
     }
 
 
-def _safe_surface_label(value: object, fallback: str) -> str:
+def _safe_surface_label(value: object, fallback: str, limit: int = 80) -> str:
     """Keep owner labels readable without echoing paths or credential-like text."""
     if not isinstance(value, str):
         return fallback
     label = re.sub(r"(?:[A-Za-z]:\\|/)[^\s,;]+", "[path]", value)
     label = re.sub(r"(?i)\b(api[_ -]?key|token|password|secret)\s*[:=]\s*\S+", r"\1=[redacted]", label)
-    label = " ".join(label.split())[:80].strip(" .,:;-")
+    label = " ".join(label.split())[:limit].strip(" .,:;-")
     return label or fallback
 
 
@@ -904,8 +933,8 @@ def _process_ops(document: dict, request: ActionRequest, workspace_id: str | Non
             current = target.get("model") or {}
             changes.append(ChangeLine(
                 label=f"{target['tag']} biological model card",
-                before=f"{current['card_id']} ({current['card_revision']})" if current else "none",
-                after=f"{card['name']} ({card['revision']})"))
+                before=_pinned_card_label(workspace_id, current),
+                after=_card_label(card)))
         elif action.op == "set_value":
             target = _target(document, action.target)
             if target["kind"] == "stream":

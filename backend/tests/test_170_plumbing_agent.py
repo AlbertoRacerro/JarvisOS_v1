@@ -98,15 +98,16 @@ def test_set_unit_model_resolves_by_id_or_exact_name_to_the_current_revision_and
     by_name = submit(workspace_id, _request(state, {"op": "set_unit_model", "unit": "PBR", "card": "Synthetic Monod card"}),
                      _origin())
     assert by_name.state == "proposed" and by_name.tier == "confirm", by_name.reason
-    assert by_name.summary == f"Pin model card Synthetic Monod card ({card['revision']}) on PBR"
-    assert by_name.changes[0].before == "none" and card["revision"] in (by_name.changes[0].after or "")
+    assert by_name.summary == f"Pin model card Synthetic Monod card (revision {card['revision'][2:10]}) on PBR"
+    assert by_name.changes[0].before == "none" and by_name.changes[0].after == f"Synthetic Monod card (revision {card['revision'][2:10]})"
     assert "model" not in _pbr(workspace_id, state), "a proposal changes nothing"
     applied = apply(workspace_id, by_name.action_id)
     assert applied.state == "applied" and applied.result_revision != state["revision"]
     assert _pbr(workspace_id, state)["model"] == pin_of(card)
     by_id = submit(workspace_id, _request(draft.projection(workspace_id, state["draft_id"]),
                                           {"op": "set_unit_model", "unit": "PBR", "card": card["id"]}), _origin())
-    assert by_id.state == "proposed" and by_id.changes[0].before == f"{card['id']} ({card['revision']})"
+    assert by_id.state == "proposed" and by_id.changes[0].before == "Synthetic Monod card (revision " + card["revision"][2:10] + ")"
+    assert card["id"] not in (by_id.changes[0].before or "") and card["id"] not in (by_id.changes[0].after or "")
     assert undo(workspace_id, applied.action_id).state == "undone"
     assert "model" not in _pbr(workspace_id, state)
 
@@ -190,10 +191,22 @@ def test_brief_names_owners_card_verification_and_last_run() -> None:
     after_run = surface_brief(workspace_id, ref).text
     assert "Last run completed; branch productive; HRT 2.5 d; thin-culture growth rate 0.0236 1/h; " \
            "worst balance residual 0.5 of tolerance." in after_run
+    # The real 168 record shape: reason is "segment_failed"; the typed code and message live under errors.
+    message = "The photobioreactor has no carrier flow through it, so dilution and residence time are undefined."
     _record_run(workspace_id, state, {"status": "segment_failed", "started_at": "2026-10-03T11:00:00+00:00",
-                                      "mixed_solve": {"status": "segment_failed", "reason": "PBR_NO_THROUGHFLOW"}})
+                                      "mixed_solve": {"status": "segment_failed", "reason": "segment_failed",
+                                                      "failed_segment": "PBR", "failed_units": [], "message": message,
+                                                      "errors": {"code": "PBR_NO_THROUGHFLOW", "error_type": "PbrFailure",
+                                                                 "message": message, "detail": None}}})
     failed = surface_brief(workspace_id, ref).text
-    assert "Last run segment_failed: no PBR result recorded (reason PBR_NO_THROUGHFLOW)." in failed
+    assert f"Last run segment_failed: the PBR failed with PBR_NO_THROUGHFLOW ({message.rstrip('.')})." in failed
+    assert len(failed) <= 6000
+    # A failure elsewhere keeps the generic wording.
+    _record_run(workspace_id, state, {"status": "segment_failed", "started_at": "2026-10-03T12:00:00+00:00",
+                                      "mixed_solve": {"status": "segment_failed", "reason": "segment_failed",
+                                                      "failed_segment": "Mixer", "failed_units": ["Mixer"],
+                                                      "errors": {"code": "check_failed"}}})
+    assert "no PBR result recorded (reason segment_failed)." in surface_brief(workspace_id, ref).text
 
 
 def test_brief_stays_within_the_6000_character_cap_with_35_objects_and_keeps_its_vocabulary() -> None:
