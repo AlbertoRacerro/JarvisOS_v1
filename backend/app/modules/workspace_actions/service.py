@@ -352,7 +352,7 @@ def _verification_summary(workspace_id: str, card: dict) -> str:
     return "parameter values: " + ", ".join(f"{count} {state}" for state, count in sorted(counts.items()))
 
 
-def _short_revision(revision: Any) -> str:
+def _short_revision(revision: object) -> str:
     return f"revision {str(revision).removeprefix('r-')[:8]}" if revision else "revision unknown"
 
 
