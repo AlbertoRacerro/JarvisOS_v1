@@ -41,6 +41,8 @@ from datetime import UTC, datetime
 from typing import Final
 
 from app.modules.ai.jarvis_context_models import SourceRef
+from app.modules.bluerev.pbr_core import cardinal_temperature as _cardinal_temperature
+from app.modules.bluerev.pbr_core import light_response, nitrogen_factor, synthetic_day_inputs
 from app.modules.engineering.evaluator_contracts import (
     EvaluationRequest,
     EvaluationResult,
@@ -132,14 +134,6 @@ MODEL_GAPS: Final[tuple[str, ...]] = (
     "hydraulic_losses: straight smooth tube only; no bends, fittings, degasser or manifold losses",
     "storage: no post-harvest storage/degradation model",
 )
-
-
-def _cardinal_temperature(t: float, t_min: float, t_opt: float, t_max: float) -> float:
-    if not t_min < t < t_max:
-        return 0.0
-    numerator = (t - t_max) * (t - t_min) ** 2
-    denominator = (t_opt - t_min) * ((t_opt - t_min) * (t - t_opt) - (t_opt - t_max) * (t_opt + t_min - 2.0 * t))
-    return max(0.0, numerator / denominator)
 
 
 class PbrDayNightEvaluator:
@@ -316,7 +310,7 @@ def _rhs(x: Mapping[str, float], modes: Mapping[str, str]) -> Callable[[float, t
         )
         optical_depth = x["specific_light_extinction"] * max(biomass, 0.0) * x["tube_inner_diameter"]
         light = surface * np.exp(-optical_depth * depths)
-        local = light / (x["light_saturation_constant"] + light + light**2 * inhibition)
+        local = light_response(light, x["light_saturation_constant"], inhibition)
         thermal = 1.0
         if cardinal:
             _, temperature = synthetic_day_inputs(
@@ -331,8 +325,7 @@ def _rhs(x: Mapping[str, float], modes: Mapping[str, str]) -> Callable[[float, t
         biomass, nitrogen, oxygen, _ = y
         gross = growth(hour, biomass)
         if nitrogen_limited:
-            available = max(nitrogen, 0.0)
-            gross *= available / (x["nitrogen_half_saturation"] + available)
+            gross *= nitrogen_factor(nitrogen, x["nitrogen_half_saturation"])
         d_biomass = (gross - x["biomass_loss_rate"]) * biomass
         degassing = x["oxygen_kla"] * (oxygen - x["oxygen_saturation"])
         return [
@@ -343,21 +336,6 @@ def _rhs(x: Mapping[str, float], modes: Mapping[str, str]) -> Callable[[float, t
         ]
 
     return rhs
-
-
-def synthetic_day_inputs(
-    hour: float, photoperiod: float, peak_par: float, temperature_mean: float, temperature_amplitude: float
-) -> tuple[float, float]:
-    """Return the 107 day-profile PAR and temperature at one evaluator hour."""
-    day_hour = hour % 24.0
-    sunrise = 12.0 - photoperiod / 2.0
-    par = (
-        peak_par * math.sin(math.pi * (day_hour - sunrise) / photoperiod)
-        if sunrise < day_hour < sunrise + photoperiod
-        else 0.0
-    )
-    temperature = temperature_mean + temperature_amplitude * math.sin(2.0 * math.pi * (day_hour - 9.0) / 24.0)
-    return par, temperature
 
 
 def _hydraulics(request: EvaluationRequest, x: Mapping[str, float]) -> dict[str, float]:
