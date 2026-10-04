@@ -213,6 +213,14 @@ _cards = [
     ("light.eilers_peeters_steady", "light", "f = (2 + β)x/(x² + βx + 1), x = I/I_opt", [_symbol("I", "PAR irradiance", "µmol m⁻² s⁻¹", "≥ 0"), _symbol("I_opt", "optimum irradiance", "µmol m⁻² s⁻¹", "> 0"), _symbol("β", "curve shape", "1", "≥ 0")], "steady-state Eilers–Peeters light response, not the dynamic photoinhibition model."),
     ("optics.slab_mean_irradiance", "optics", "Ī = I₀(1 − e^(−τ))/τ", [_symbol("I₀", "surface irradiance", "µmol m⁻² s⁻¹", "≥ 0"), _symbol("k_X", "specific extinction", "m² kg⁻¹", "≥ 0"), _symbol("X", "biomass concentration", "kg m⁻³", "≥ 0"), _symbol("L", "slab depth", "m", "> 0")], "depth-averaged Beer–Lambert slab irradiance."),
     ("optics.slab_response_average", "optics", "⟨f⟩ = (1/L)∫₀ᴸ f(I₀e^(−k_XXz)) dz", [_symbol("I₀", "surface irradiance", "µmol m⁻² s⁻¹", "≥ 0"), _symbol("k_X", "specific extinction", "m² kg⁻¹", "≥ 0"), _symbol("X", "biomass concentration", "kg m⁻³", "≥ 0"), _symbol("L", "slab depth", "m", "> 0")], "8-point Gauss–Legendre depth-averaged response; parity form for 107."),
+    ("optics.cylinder_beam_diffuse_response_average", "optics",
+     "⟨f⟩ = (1/πR²)∬ₐ f[(1−f_d)I₀e^(−k_XXs_b) + f_d I₀S₃] dA, R = D/2",
+     [_symbol("D", "tube inner diameter", "m", "> 0"),
+      _symbol("k_X", "specific extinction", "m² kg⁻¹", "≥ 0"),
+      _symbol("X", "biomass concentration", "kg m⁻³", "≥ 0"),
+      _symbol("I₀", "surface scalar irradiance", "µmol m⁻² s⁻¹", "≥ 0"),
+      _symbol("f_d", "isotropic diffuse fraction", "1", "[0, 1]")],
+     "True cylindrical beam-normal-to-axis and 3-D isotropic diffuse response, evaluated inside PhotobioreactorT1 only."),
     ("temperature.isothermal", "temperature", "f = 1", [_symbol("T", "temperature", "K", "> 0")], "isothermal temperature factor."),
     ("temperature.ctmi", "temperature", "f = (T−T_max)(T−T_min)² / ((T_opt−T_min)[(T_opt−T_min)(T−T_opt)−(T_opt−T_max)(T_opt+T_min−2T)])", [_symbol("T", "temperature", "K", "> 0"), _symbol("T_min", "minimum cardinal temperature", "K", "> 0"), _symbol("T_opt", "optimum cardinal temperature", "K", "T_min < T_opt < T_max"), _symbol("T_max", "maximum cardinal temperature", "K", "> T_opt")], "Rosso cardinal model with inflexion as used by Bernard–Rémond."),
     ("temperature.arrhenius_ref", "temperature", "f = exp[−(E_a/R)(1/T − 1/T_ref)]", [_symbol("T", "temperature", "K", "> 0"), _symbol("T_ref", "reference temperature", "K", "> 0"), _symbol("E_a", "activation energy", "J mol⁻¹", "≥ 0")], "Arrhenius factor; μ_max is defined at T_ref."),
@@ -249,6 +257,9 @@ def _symbol_node(name: str) -> dict[str, Any]:
 
 
 def _equation_tree(form_id: str, equation: str) -> dict[str, Any]:
+    # The published text names its own left-hand side ("r = k_d", "⟨f⟩ = …");
+    # a reaction equation has none.
+    published = re.match(r"\s*([^\s=()]+)\s*=\s*", equation)
     # Equation bodies use a typed MathML expression tree. The selected forms
     # below cover all forms with nested fraction, index or exponent structure;
     # simple forms still use explicit identifiers and operators.
@@ -278,6 +289,15 @@ def _equation_tree(form_id: str, equation: str) -> dict[str, Any]:
         body = _row(_node("mfrac", _mi("1"), _mi("L")), _mo("·"),
             _node("msub", _mo("∫"), _row(_mn("0"), _mo(","), _mi("L"))), _mi("f"), _mo("("),
             _row(_mi("I₀"), _node("msup", _mi("e"), _row(_mo("−"), _symbol_node("k_X"), _mi("X"), _mi("z")))), _mo(")"), _mi("dz"))
+    elif form_id == "optics.cylinder_beam_diffuse_response_average":
+        body = _row(
+            _node("mfrac", _mn("1"), _row(_mi("π"), _node("msup", _mi("R"), _mn("2")))),
+            _mo("∬"), _mi("A"), _mi("f"), _mo("("),
+            _row(_mo("("), _mn("1"), _mo("−"), _mi("f_d"), _mo(")"), _mi("I₀"),
+                 _node("msup", _mi("e"), _row(_mo("−"), _mi("k_X"), _mi("X"), _mi("s_b"))),
+                 _mo("+"), _mi("f_d"), _mi("I₀"), _mi("S₃")),
+            _mo(")"), _mi("dA"), _mo(","), _mi("R"), _mo("="),
+            _node("mfrac", _mi("D"), _mn("2")))
     elif form_id == "temperature.ctmi":
         body = _node("mfrac", _row(_row(_mi("T"), _mo("−"), _symbol_node("T_max")), _node("msup", _row(_mi("T"), _mo("−"), _symbol_node("T_min")), _mn("2"))),
             _row(_symbol_node("T_opt"), _mo("−"), _symbol_node("T_min"), _row(_row(_symbol_node("T_opt"), _mo("−"), _symbol_node("T_min")), _row(_mi("T"), _mo("−"), _symbol_node("T_opt"))),
@@ -285,7 +305,7 @@ def _equation_tree(form_id: str, equation: str) -> dict[str, Any]:
     else:
         # Tokenize the published expression into identifiers, numbers and
         # operators rather than placing the equation in a single mtext node.
-        tokens = re.findall(r"[A-Za-zμĪβ⟨⟩₀ₐᵦ][A-Za-z0-9_₀ₐᵦ,]*|\d+(?:\.\d+)?|[^\s]", equation)
+        tokens = re.findall(r"[A-Za-zμĪβ⟨⟩₀ₐᵦ][A-Za-z0-9_₀ₐᵦ,]*|\d+(?:\.\d+)?|[^\s]", equation[len(published.group(0)):] if published else equation)
         items = []
         for token in tokens:
             if re.fullmatch(r"\d+(?:\.\d+)?", token):
@@ -295,8 +315,9 @@ def _equation_tree(form_id: str, equation: str) -> dict[str, Any]:
             else:
                 items.append(_mo(token))
         body = _row(*items)
-    lhs = "f" if form_id.startswith(("light.", "temperature.", "nutrient.", "combine.")) else "r" if form_id.startswith("loss.") else "equation"
-    return _node("math", _row(_mi(lhs), _mo("="), body))
+    if published is None:
+        return _node("math", _row(body))
+    return _node("math", _row(_mi(published.group(1)), _mo("="), body))
 
 
 FORM_CARDS: tuple[dict[str, Any], ...] = tuple(
@@ -317,7 +338,7 @@ FORM_CARDS: tuple[dict[str, Any], ...] = tuple(
 def kinetics_explanation() -> str:
     """Deterministic seam for spec 166; derived from the nutrient Monod card metadata."""
     card = next(item for item in FORM_CARDS if item["id"] == "nutrient.monod")
-    return f"Monod is a {card['applies_to']} DWSIM reactor rate laws arrive with 180; PBR units arrive with 170. No action is proposed."
+    return f"Monod is a {card['applies_to']} DWSIM reactor rate laws arrive with 180; Photobioreactor (T1) uses a pinned biological model card. No action is proposed."
 
 
 def form_card(form_id: str) -> dict[str, Any]:

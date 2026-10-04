@@ -1,8 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import ProcessProposals from "../components/process/ProcessProposals";
 import { publishProcessSurface } from "../app/workspaceActionSurface";
 import BiologyModelLibrary from "../components/process/BiologyModelLibrary";
+import PbrInspector from "../components/process/PbrInspector";
+import QuantityInput from "../components/process/QuantityInput";
+import { ownerLabel, ownerShort } from "../components/process/processOwners";
+import { failureTouchesUnit } from "../components/process/pbrLogic";
 import ResultProperties from "../components/process/ResultProperties";
 import { ContextMenu, MenuButton, useContextMenu } from "../components/ui/ContextMenu";
 import type { ContextMenuItem } from "../components/ui/ContextMenu";
@@ -154,6 +158,12 @@ function mixedFailureMessage(errors: unknown): string {
   return "See the failed segment details.";
 }
 
+function mixedFailureCode(errors: unknown): string | null {
+  if (!errors || typeof errors !== "object") return null;
+  const record = errors as { code?: unknown; detail?: unknown };
+  return typeof record.code === "string" ? record.code : mixedFailureCode(record.detail);
+}
+
 const errorText = (cause: unknown) =>
   cause instanceof DraftApiError
     ? `${cause.message}${cause.detail.field ? ` (${String(cause.detail.field)})` : ""} · ${cause.code}`
@@ -166,7 +176,7 @@ const isOptionParam = (param: RegistryParam) => Boolean(param.options?.length) |
 const boolOptions: RegistryOption[] = [{ value: true, label: "Yes" }, { value: false, label: "No" }];
 const TAG_PREFIX: Record<string, string> = {
   Heater: "H", Cooler: "C", Pump: "P", Valve: "V", Mixer: "M", Flash: "F", Splitter: "SP",
-  HeatExchanger: "HX", Recycle: "R", PFR: "PFR", CSTR: "CSTR", DistillationColumn: "T",
+  HeatExchanger: "HX", Recycle: "R", PFR: "PFR", CSTR: "CSTR", DistillationColumn: "T", PhotobioreactorT1: "PBR",
 };
 
 function nextTag(objects: DraftObject[], prefix: string) {
@@ -181,51 +191,6 @@ function nextId(objects: DraftObject[], prefix: string) {
   let index = 1;
   while (used.has(`${prefix}${index}`)) index += 1;
   return `${prefix}${index}`;
-}
-
-/** Unit-bearing input: the operator's value and unit travel to the server, which converts. */
-function QuantityInput({
-  label,
-  kind,
-  stored,
-  units,
-  value,
-  onChange,
-}: {
-  label: string;
-  kind: string;
-  stored?: StoredQuantity;
-  units: string[];
-  value: { text: string; unit: string } | undefined;
-  onChange(next: { text: string; unit: string }): void;
-}) {
-  const current = value ?? { text: stored ? String(stored.value) : "", unit: stored?.unit ?? units[0] };
-  return (
-    <label className="draft-quantity">
-      <span>{label}</span>
-      <span className="draft-quantity__row">
-        <input
-          inputMode="decimal"
-          aria-label={label}
-          value={current.text}
-          onChange={(event) => onChange({ ...current, text: event.target.value })}
-        />
-        <select
-          aria-label={`${label} unit`}
-          value={current.unit}
-          onChange={(event) => onChange({ ...current, unit: event.target.value })}
-          disabled={units.length < 2}
-        >
-          {units.map((unit) => (
-            <option key={unit} value={unit}>
-              {unitLabel(unit)}
-            </option>
-          ))}
-        </select>
-      </span>
-      <small data-kind={kind}>{stored ? `stored ${formatQuantity(stored)}` : "not set"}</small>
-    </label>
-  );
 }
 
 type FormState = Record<string, { text: string; unit: string }>;
@@ -702,7 +667,7 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
           <text x={point.x} y={point.y - 3} textAnchor="middle" className="draft-node__tag">{item.tag}</text>
           <text x={point.x} y={point.y + 12} textAnchor="middle" className="draft-node__type">{spec?.label ?? item.type}</text>
           <text x={point.x + width / 2 - 5} y={point.y - UNIT_H / 2 + 10} textAnchor="end" className="draft-owner-badge">
-            {spec?.owner === "jarvis_bio" ? "Jarvis" : "DWSIM"}
+            {ownerShort(spec?.owner)}
           </text>
           {inlets.map((name, port) => { const anchor = portAnchor(item, "target", port, false); return <rect key={`in-${port}`} className="draft-port" x={anchor.at.x - 2} y={anchor.at.y - 3} width={4} height={6}><title>{name}</title></rect>; })}
           {outlets.map((name, port) => { const anchor = portAnchor(item, "source", port, false); return <rect key={`out-${port}`} className="draft-port" x={anchor.at.x - 2} y={anchor.at.y - 3} width={4} height={6}><title>{name}</title></rect>; })}
@@ -742,13 +707,20 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
       return ports.map((name, port) => ({ value: `${unit.id}:${port}`, label: `${unit.tag} · ${name}` }));
     });
 
+  /** A typed unit failure from the last attempt, shown in that unit's own Results tab. */
+  const unitFailure = (tag: string) => {
+    const solve = lastRun?.mixed_solve;
+    if (!lastRun || !solve || lastRun.status === "completed" || !failureTouchesUnit(solve, tag)) return null;
+    return { code: mixedFailureCode(solve.errors), message: solve.message || mixedFailureMessage(solve.errors) };
+  };
+
   /** Read-only DWSIM results for the selection, only after a run and bound to its revision. */
   const renderResultSection = (properties: ResultProperty[] | undefined, legacy: React.ReactNode,
                               owner: "dwsim" | "jarvis_bio" = "dwsim") => {
     if (!solvedRun || results.state === "none") return null;
     return (
       <fieldset className={`draft-fieldset draft-outputs${results.state === "stale" ? " is-stale" : ""}`} aria-label="Results (read-only)">
-        <legend>Results · {owner === "jarvis_bio" ? "Jarvis" : "DWSIM"}{results.state === "stale" ? " (stale)" : ""}</legend>
+        <legend>Results · {ownerShort(owner)}{results.state === "stale" ? " (stale)" : ""}</legend>
         {properties?.length ? <ResultProperties properties={properties} stale={results.state === "stale"} label="Result properties" /> : legacy}
       </fieldset>
     );
@@ -1002,6 +974,10 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
   const renderUnitInspector = (unit: DraftObject) => {
     const spec = unitSpec(unit.type);
     if (!spec) return <p>Unsupported unit type.</p>;
+    if (unit.type === "PhotobioreactorT1") return <PbrInspector workspaceId={workspaceId} unit={unit} spec={spec} registry={registry}
+      result={solvedRun?.units?.[unit.tag]} results={results} lastRun={lastRun} failure={unitFailure(unit.tag)} feedBasis={draft.pbr_feed_basis?.[unit.tag]}
+      findings={draft.findings} apply={apply} libraryOpen={biologyOpen} openLibrary={() => setBiologyOpen(true)}
+      showError={(message) => setNotice({ tone: "danger", text: message })} />;
     const modes = spec.modes.map(modeKey);
     const activeMode = mode || unit.mode || "";
     const params = spec.params.filter(
@@ -1020,7 +996,7 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
     const optionsChanged = Object.keys(optionForm).length > 0;
     return (
       <>
-        <p className="draft-owner-line"><span className="draft-owner-badge-label">{spec.owner === "jarvis_bio" ? "Jarvis" : "DWSIM"}</span> · Culture rule: {spec.culture_rule}</p>
+        <p className="draft-owner-line"><span className="draft-owner-badge-label">{ownerLabel(spec.owner)}</span> · Culture rule: {spec.culture_rule}</p>
         <dl className="draft-ports">
           {spec.inlets.map((name, port) => (<div key={`in${port}`}><dt>{name}</dt><dd>{connected("target", port, false)}</dd></div>))}
           {spec.outlets.map((name, port) => (<div key={`out${port}`}><dt>{name}</dt><dd>{connected("source", port, false)}</dd></div>))}
@@ -1148,7 +1124,7 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
               })()}`
               : run.status === "unconverged"
                 ? `Not converged (${run.mixed_solve.reason ?? "unknown"}) — last iterate`
-                : `Segment failed: ${run.mixed_solve.failed_units?.length ? run.mixed_solve.failed_units.join(", ") : run.mixed_solve.failed_segment ?? "unknown"} · ${run.mixed_solve.message || mixedFailureMessage(run.mixed_solve.errors)}`}
+                : `Segment failed: ${run.mixed_solve.failed_units?.length ? run.mixed_solve.failed_units.join(", ") : run.mixed_solve.failed_segment ?? "unknown"} · ${mixedFailureCode(run.mixed_solve.errors) ? `${mixedFailureCode(run.mixed_solve.errors)} · ` : ""}${run.mixed_solve.message || mixedFailureMessage(run.mixed_solve.errors)}`}
           </p>
           {run.mixed_solve.diagnosis && <p className="draft-hint">{run.mixed_solve.diagnosis}</p>}
           <details>
@@ -1184,7 +1160,7 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
             <table>
               <thead><tr><th>Stream</th><th>Owner</th><th>Temperature</th><th>Pressure</th><th>Mass flow</th></tr></thead>
               <tbody>{Object.entries(run.streams ?? {}).map(([tag, stream]) => (
-                <tr key={tag}><td>{tag}</td><td>{stream.owner === "jarvis_bio" ? "Jarvis" : "DWSIM"}</td>
+                <tr key={tag}><td>{tag}</td><td>{ownerShort(stream.owner)}</td>
                   <td>{formatQuantity(stream.display?.temperature)}</td>
                   <td>{formatQuantity(stream.display?.pressure)}</td>
                   <td>{formatQuantity(stream.display?.mass_flow)}</td></tr>
@@ -1291,7 +1267,7 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
       </div>
       {biologyOpen && <BiologyModelLibrary workspaceId={workspaceId} onClose={() => setBiologyOpen(false)} />}
       {notice && <p className={`draft-notice draft-notice--${notice.tone}`} role="alert">{notice.text}</p>}
-      <div className="draft-body">
+      <div className={`draft-body${selected && selected.type === "PhotobioreactorT1" ? " draft-body--wide-inspector" : ""}`}>
         <aside className="draft-palette" aria-label="Palette">
           <h3>Add</h3>
           <button type="button" onClick={() => addStream("material")}>Material stream</button>
@@ -1310,10 +1286,12 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
               <button key={unit.type} type="button" onClick={() => addUnit(unit.type)}>{unit.label}</button>
             ))}
           </>}
-          <h3>DWSIM units</h3>
-          {registry.units.filter((unit) => unit.owner !== "jarvis_bio").map((unit) => (
-            <button key={unit.type} type="button" onClick={() => addUnit(unit.type)}>{unit.label}</button>
-          ))}
+          {[...new Set(registry.units.filter((unit) => unit.owner !== "jarvis_bio").map((unit) => unit.owner))].map((owner) => <Fragment key={owner}>
+            <h3>{ownerShort(owner)} units</h3>
+            {registry.units.filter((unit) => unit.owner === owner).map((unit) => (
+              <button key={unit.type} type="button" onClick={() => addUnit(unit.type)}>{unit.label}</button>
+            ))}
+          </Fragment>)}
           <h3>Not yet supported</h3>
           <ul className="draft-unsupported">
             {Object.entries(registry.unsupported).map(([type, reason]) => (

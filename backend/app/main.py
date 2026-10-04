@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import sqlite3
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
@@ -94,6 +95,16 @@ async def _reconcile_after_live_owners_exit(
         pending.difference_update(gone_paths)
 
 
+def _warm_pbr_imports() -> None:
+    """Pay the Photobioreactor solver's cold imports at startup instead of inside a Run (spec 170)."""
+    try:
+        from app.modules.process_stack import pbr_unit
+
+        pbr_unit.warm_imports()
+    except Exception:  # noqa: BLE001 - warming is an optimisation and must never block startup
+        logging.getLogger(__name__).warning("Photobioreactor import warm-up failed", exc_info=True)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     lifecycle = create_local_ai_runtime_lifecycle_from_env()
@@ -109,6 +120,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             # Runtime-truth observation must never make JarvisOS fail to start.
             app.state.runtime_startup_snapshot = startup_snapshot_unavailable()
         await lifecycle.startup()
+        await asyncio.to_thread(_warm_pbr_imports)
         llama_owner = get_llama_cpp_runtime_owner()
         if llama_cpp_runtime_config().manage:
             await asyncio.to_thread(llama_owner.start)

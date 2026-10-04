@@ -1,0 +1,57 @@
+/* Photobioreactor (T1) inspector. Sized for the 380 px inspector column; nothing here may force horizontal scroll. */
+.pbr-inspector { min-width: 0; overflow-wrap: anywhere; font-size: 12px; }
+.pbr-inspector h4, .pbr-inspector h5 { margin: 8px 0 4px; font-size: 12px; }
+.pbr-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 3px; margin: 8px 0; }
+.pbr-tabs button { min-width: 0; padding: 6px 4px; font-size: 11px; white-space: normal; line-height: 1.2; }
+.pbr-tabs button[aria-selected="true"] { font-weight: 700; border-bottom: 2px solid currentColor; }
+.pbr-tabs button:focus-visible, .pbr-inspector [role="tabpanel"]:focus-visible { outline: 2px solid var(--color-focus, #2f6f9f); outline-offset: 1px; }
+.pbr-inspector [role="tabpanel"] { min-width: 0; display: grid; gap: 8px; align-content: start; }
+.pbr-inspector [role="tabpanel"][hidden] { display: none; }
+.pbr-rows { margin: 0 0 6px; }
+.pbr-rows > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 8px; padding: 4px 0; border-bottom: 1px solid var(--color-border-default, #d8d1c5); }
+.pbr-rows dt { color: var(--color-text-muted, #687068); }
+.pbr-rows dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.pbr-stale-text { color: #a06a1f; font-style: italic; }
+.pbr-parameters { display: grid; gap: 10px; }
+.pbr-section { display: grid; gap: 2px; padding-top: 4px; border-top: 1px solid var(--color-border-default, #d8d1c5); }
+.pbr-section p { margin: 2px 0; }
+.pbr-fidelity { margin: 4px 0; color: var(--color-text-muted, #687068); }
+.pbr-branch { padding: 1px 8px; border-radius: 999px; background: #e2e8f0; }
+.pbr-branch--productive { background: #dcefe0; color: #1f5a2e; }
+.pbr-branch--washout { background: #f6e5c8; color: #7a4b0a; }
+.pbr-results.is-stale { background: #fbf6ea; }
+.pbr-results.is-stale .pbr-rows dd { color: #a06a1f; font-style: italic; }
+.pbr-failure { padding: 6px 8px; border-left: 3px solid #b3402f; background: #fbe4e1; color: #7c1f16; }
+.pbr-failure p { margin: 3px 0; }
+.pbr-failure small, .pbr-finding small { display: block; color: var(--color-text-muted, #687068); font-size: 10px; }
+.pbr-note { padding: 5px 8px; border-left: 3px solid #a06a1f; background: #fbf6ea; }
+.pbr-note--danger { border-color: #b3402f; background: #fbe4e1; color: #7c1f16; }
+.pbr-note ul { margin: 3px 0; padding-left: 16px; }
+.pbr-findings, .pbr-caveats { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+.pbr-caveats { list-style: disc; padding-left: 16px; }
+.pbr-finding { padding: 4px 8px; border-left: 3px solid #56695a; background: var(--color-bg-subtle, #faf8f3); }
+.pbr-finding--danger { border-color: #b3402f; background: #fbe4e1; }
+.pbr-finding--warning { border-color: #a06a1f; background: #fbf6ea; }
+.pbr-balances { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.pbr-balances li.is-bad { border-left: 3px solid #b3402f; padding-left: 6px; }
+.pbr-numerics summary, .pbr-picker summary { cursor: pointer; }
+.pbr-picker { display: grid; gap: 8px; min-width: 0; }
+.pbr-picker__head { display: flex; justify-content: space-between; align-items: center; }
+.pbr-picker__head h4 { margin: 0; }
+.pbr-link { background: none; border: 0; padding: 0; color: inherit; text-decoration: underline; cursor: pointer; font: inherit; }
+.pbr-pinned { padding: 6px 8px; border: 1px solid var(--color-border-default, #d8d1c5); border-radius: 6px; }
+.pbr-pinned p { margin: 0 0 4px; }
+.pbr-cards { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.pbr-card { padding: 8px; border: 1px solid var(--color-border-default, #d8d1c5); border-radius: 6px; display: grid; gap: 4px; min-width: 0; }
+.pbr-card.is-pinned { border-color: #56695a; box-shadow: inset 3px 0 0 #56695a; }
+.pbr-card.is-refused { opacity: .85; }
+.pbr-card h5 { margin: 0; }
+.pbr-card__meta { margin: 0; color: var(--color-text-muted, #687068); }
+.pbr-factors { margin: 4px 0; padding: 0; list-style: none; }
+.pbr-factor { padding: 4px 0; border-top: 1px solid var(--color-border-default, #d8d1c5); }
+.pbr-factor .bio-equation { max-width: 100%; overflow-x: auto; font-size: 12px; }
+.pbr-chips { margin: 4px 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 4px; }
+.pbr-chip { display: inline-flex; gap: 4px; padding: 1px 6px; border: 1px solid var(--color-border-default, #d8d1c5); border-radius: 999px; font-size: 10px; }
+.pbr-chip--good { background: #dcefe0; color: #1f5a2e; }
+.pbr-chip--warn { background: #fbf6ea; color: #7a4b0a; }
+.pbr-empty { margin: 4px 0; }

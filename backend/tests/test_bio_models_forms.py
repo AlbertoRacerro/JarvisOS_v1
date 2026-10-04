@@ -121,6 +121,23 @@ def test_form_cards_use_allowlisted_typed_mathml() -> None:
     assert haldane["equation"]["children"][0]["children"][2]["tag"] == "mfrac"
 
 
+def test_form_card_equation_names_its_published_left_hand_side() -> None:
+    def lhs(card: dict) -> list[str]:
+        row = card["equation"]["children"][0]["children"]
+        return [node.get("text", "") for node in row[:2]]
+    cards = {card["id"]: card for card in forms.FORM_CARDS}
+    assert lhs(cards["optics.cylinder_beam_diffuse_response_average"]) == ["⟨f⟩", "="]
+    assert lhs(cards["optics.slab_mean_irradiance"]) == ["Ī", "="]
+    assert lhs(cards["nutrient.monod"]) == ["f_j", "="]
+    assert lhs(cards["combine.liebig"]) == ["f_S", "="]
+    assert lhs(cards["loss.first_order"]) == ["r", "="]
+    # The published right-hand side is not repeated after the rendered "lhs =".
+    loss = cards["loss.first_order"]["equation"]["children"][0]["children"]
+    assert [node.get("text") for node in loss[2]["children"]] == ["k_d"]
+    stoich = cards["stoich.photoautotrophic"]["equation"]["children"][0]["children"]
+    assert all(node.get("text") != "equation" for node in stoich)
+
+
 def _math_tags(node: dict) -> set[str]:
     return {node["tag"], *(tag for child in node.get("children", []) for tag in _math_tags(child))}
 
@@ -161,5 +178,5 @@ def test_kinetics_explanation_is_derived_from_form_metadata() -> None:
     message = forms.kinetics_explanation()
     assert card["applies_to"] in message
     assert "DWSIM reactor rate laws arrive with 180" in message
-    assert "PBR units arrive with 170" in message
+    assert "Photobioreactor (T1) uses a pinned biological model card" in message
     assert "No action is proposed" in message

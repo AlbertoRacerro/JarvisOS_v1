@@ -685,7 +685,7 @@ def _guard_tool_shaped_output(text: str) -> tuple[str, str | None]:
     candidates = [stripped, *(match.group(3).strip() for match in fences)]
     shaped = False
     action_ops = {
-        "set_value", "add_unit", "insert_unit_after", "connect", "disconnect", "mirror", "move",
+        "set_value", "set_unit_model", "add_unit", "insert_unit_after", "connect", "disconnect", "mirror", "move",
         "rename", "delete", "duplicate_part", "set_part_param", "move_part", "delete_part",
     }
 

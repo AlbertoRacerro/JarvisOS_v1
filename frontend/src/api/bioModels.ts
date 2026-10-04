@@ -5,7 +5,7 @@ export type BioSymbol = { symbol: string; key: string; meaning: string; unit: st
 export type BioForm = { id: string; version: string; family: string; equation: MathNode; equation_text: string; symbols: BioSymbol[]; parameters: BioSymbol[]; inputs: BioSymbol[]; applies_to: string; citations: string[] };
 export type BioSet = { id: string; name: string; species: string; strain: string; revision: string; digest: string; history: Array<Record<string, unknown>>; values: Record<string, BioValue> };
 export type BioValue = { value: number; entered_value?: number; entered_unit?: string; unit: string; validity_range?: Record<string, number | boolean> | string; provenance?: { source_title?: string; source_state?: string; entry_state?: string; locator_kind?: string; locator_start?: number; locator_end?: number }; basis_ref?: Record<string, unknown> | null; state: string; display_state?: string; verification?: Record<string, unknown> | null; state_changed_by?: string; state_changed_at?: string };
-export type BioCard = { id: string; name: string; parameter_set_id: string; factors: Record<string, unknown>; mu_max: { value: number; unit: string }; revision: string; digest: string };
+export type BioCard = { id: string; name: string; parameter_set_id: string; factors: Record<string, unknown>; mu_max: { value: number; unit: string }; n_source?: "NH3" | "HNO3"; revision: string; digest: string; parameter_set_revision?: string; parameter_set_digest?: string; form_versions?: Record<string, string>; history?: Array<Record<string, unknown>> };
 export type BioQuantity = { value: number; unit: string };
 
 export class BioModelsError extends Error {

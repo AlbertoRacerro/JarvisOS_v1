@@ -68,6 +68,13 @@ class SetValue(BaseModel):
     value: Quantity | str | dict[str, float] | None
 
 
+class SetUnitModel(BaseModel):
+    model_config = _STRICT
+    op: Literal["set_unit_model"]
+    unit: Tag
+    card: str = Field(min_length=1, max_length=200)  # a model card id or its exact name
+
+
 class AddUnit(BaseModel):
     model_config = _STRICT
     op: Literal["add_unit"]
@@ -128,7 +135,7 @@ class DeleteObject(BaseModel):
 
 
 ProcessAction = Annotated[
-    SetValue | AddUnit | InsertUnitAfter | Connect | Disconnect | Mirror | MoveUnit | Rename | DeleteObject,
+    SetValue | SetUnitModel | AddUnit | InsertUnitAfter | Connect | Disconnect | Mirror | MoveUnit | Rename | DeleteObject,
     Field(discriminator="op"),
 ]
 

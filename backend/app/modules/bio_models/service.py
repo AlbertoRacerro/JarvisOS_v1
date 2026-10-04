@@ -484,6 +484,9 @@ def create_card(workspace_id: str, name: str, set_id: str, factors: dict[str, An
         for selected_form in selected:
             if not isinstance(selected_form, str):
                 raise BioModelError("form_not_found", f"Factor {field} must select a biological form")
+            if selected_form == "optics.cylinder_beam_diffuse_response_average":
+                raise BioModelError("form_unit_only", "Cylinder optics is evaluated inside PhotobioreactorT1; "
+                                    "select a slab optics form for a reusable model card.")
             try:
                 selected_card = forms.form_card(selected_form)
             except forms.FormRefusal as exc:
@@ -522,6 +525,70 @@ def list_cards(workspace_id: str) -> list[dict[str, Any]]:
     return output
 
 
+def resolve_growth_model(workspace_id: str, card_id: str, revision: str, digest: str) -> dict[str, Any]:
+    """Resolve one immutable PBR model pin without changing the library head."""
+    if not isinstance(revision, str) or not re.fullmatch(r"r-[0-9a-f]{16}", revision):
+        raise BioModelError("PBR_MODEL_CARD_UNAVAILABLE", "Pinned card revision is invalid; select the card again.", 409)
+    path = _path(workspace_id, "cards", card_id)
+    card_record = _read(path / "revisions" / f"{revision}.json")
+    if (card_record.get("revision") != revision or card_record.get("digest") != digest
+            or _digest(card_record.get("document")) != digest):
+        raise BioModelError("PBR_MODEL_CARD_UNAVAILABLE", "Pinned model card revision or digest is unavailable; select the card again.", 409)
+    card = dict(card_record["document"])
+    card.update(revision=revision, digest=digest)
+    parameter_set = _get_set_revision(workspace_id, card["parameter_set_id"], card["parameter_set_revision"])
+    if parameter_set["digest"] != card["parameter_set_digest"]:
+        raise BioModelError("PBR_MODEL_CARD_UNAVAILABLE", "Pinned parameter set digest changed; select a valid card revision.", 409)
+    for form_id, version in card["form_versions"].items():
+        if forms.form_card(form_id)["version"] != version:
+            raise BioModelError("PBR_MODEL_CARD_UNAVAILABLE", f"Pinned form {form_id} version {version} is unavailable; revise the model card.", 409)
+    factors = card["factors"]
+    supported = {"light": {"light.monod"}, "temperature": {"temperature.isothermal", "temperature.ctmi", "temperature.arrhenius_ref"},
+                 "nutrients": ["nutrient.monod"], "combination": {"combine.multiplicative", "combine.liebig"},
+                 "loss": {"loss.first_order", "loss.light_dark"}, "stoichiometry": {"stoich.photoautotrophic"}}
+    refused = [name for name, allowed in supported.items() if factors.get(name) not in (allowed if name != "nutrients" else [allowed])]
+    if refused:
+        raise BioModelError("PBR_MODEL_CARD_FORM_UNSUPPORTED", f"T1 supports Monod light and nitrogen with photoautotrophic stoichiometry; revise: {', '.join(refused)}.", 422)
+    required = {"K_I", "K_j_0", "k_X", "a", "b", "c", "d", "w_ash"}
+    required |= ({"k_d"} if factors["loss"] == "loss.first_order" else {"I_dark", "m_L", "m_D"})
+    required |= ({"T_min", "T_opt", "T_max"} if factors["temperature"] == "temperature.ctmi" else
+                 {"T_ref", "E_a"} if factors["temperature"] == "temperature.arrhenius_ref" else set())
+    missing = sorted(required - parameter_set["values"].keys())
+    if missing:
+        raise BioModelError("PBR_MODEL_CARD_SYMBOL_MISSING", f"PBR model needs {', '.join(missing)}; add them in the Biology model library.", 422, symbols=missing)
+    params = {symbol: float(row["canonical_value"]) for symbol, row in parameter_set["values"].items()}
+    try:
+        stoich = forms.stoich_photoautotrophic(
+            params["a"], params["b"], params["c"], params["d"], params["w_ash"], card["n_source"])
+    except (forms.FormRefusal, KeyError, ValueError) as exc:
+        raise BioModelError("PBR_MODEL_CARD_UNAVAILABLE", "Pinned stoichiometry is invalid for T1; "
+                            "correct the parameter set and pin a new card revision.", 422) from exc
+    return {"card": card, "set": parameter_set, "parameters": params,
+            "mu_max_h": _quantity_value(card["mu_max"], "mu_max", "1/hour"),
+            "nitrogen_quota": stoich["yields"]["N_consumed_kg_per_kg_total_dry"],
+            "oxygen_yield": stoich["yields"]["O2_produced_kg_per_kg_total_dry"],
+            "stoichiometry": stoich,
+            "candidate_symbols": sorted(symbol for symbol, row in parameter_set["values"].items() if row.get("display_state", row.get("state")) == "candidate")}
+
+
+def pbr_model_findings(workspace_id: str, tag: str, pin: dict[str, Any]) -> list[dict[str, str]]:
+    """Instant PBR model findings from the same resolver used by the Run evaluator."""
+    try:
+        model = resolve_growth_model(workspace_id, pin["card_id"], pin["card_revision"], pin["card_digest"])
+    except (KeyError, TypeError):
+        return [{"severity": "blocker", "code": "PBR_MODEL_CARD_UNAVAILABLE",
+                 "message": f"{tag}: the model pin is incomplete; choose a card in Biology."}]
+    except BioModelError as exc:
+        code = exc.code if exc.code.startswith("PBR_MODEL_CARD_") else "PBR_MODEL_CARD_UNAVAILABLE"
+        return [{"severity": "blocker", "code": code, "message": str(exc)}]
+    findings = [{"severity": "info", "code": "PBR_N_SOURCE_ASSUMED",
+                 "message": f"N source assumed: {model['card']['n_source']}; inlet N speciation unverified."}]
+    if model["candidate_symbols"]:
+        findings.append({"severity": "info", "code": "PBR_PARAMETER_UNVERIFIED",
+                         "message": "Candidate parameter values: " + ", ".join(model["candidate_symbols"]) + "."})
+    return findings
+
+
 def evaluate_card(workspace_id: str, card_id: str, operating: dict[str, Any]) -> dict[str, Any]:
     path = _path(workspace_id, "cards", card_id)
     doc = _current(path)
@@ -554,6 +621,9 @@ def evaluate_card(workspace_id: str, card_id: str, operating: dict[str, Any]) ->
                 return forms.light_steele(irradiance, arguments["I_opt"])
             return forms.light_eilers_peeters_steady(irradiance, arguments["I_opt"], arguments["beta"])
         optics_form = factors.get("optics", "optics.slab_response_average")
+        if optics_form == "optics.cylinder_beam_diffuse_response_average":
+            raise BioModelError("evaluation_form_unit_only", "Cylinder optics is evaluated inside "
+                                "PhotobioreactorT1; evaluate the pinned card through a Process PBR Run.", 422)
         if optics_form == "optics.slab_response_average":
             average = forms.slab_response_average(light_response, required("I0", "umol/(m**2*s)"), required("k_X", "m**2/kg"),
                                                   required("X", "kg/m**3"), required("L", "m"), **light_args)

@@ -20,6 +20,7 @@ export type DraftObject = {
   // Spec 158: enum/bool unit options and the kinetic reactions a reactor uses.
   options?: Record<string, OptionValue>;
   reactions?: string[];
+  model?: { card_id: string; card_revision: string; card_digest: string } | null;
   source?: Endpoint | null;
   target?: Endpoint | null;
   spec?: {
@@ -52,7 +53,7 @@ export type DraftReaction = {
   [field: string]: unknown;
 };
 export type Finding = {
-  severity: "blocker" | "warning" | string;
+  severity: "blocker" | "error" | "warning" | "info" | string;
   code: string;
   object: string;
   field?: string;
@@ -99,6 +100,8 @@ export type DraftProjection = {
   objects: DraftObject[];
   reactions?: Record<string, DraftReaction>;
   findings: Finding[];
+  /** Pre-run Q and HRT for a PBR fed directly by a feed stream (backend feed basis); absent otherwise. */
+  pbr_feed_basis?: Record<string, PbrFeedBasis>;
   results: ResultsState;
   proposals: Proposal[];
   dwsim?: {
@@ -125,6 +128,8 @@ export type RegistryParam = {
   minimum?: number | null;
   maximum?: number | null;
   classification?: "input" | "result" | "advanced";
+  // Inspector grouping from the registry projection (spec 170); absent for other units.
+  group?: string | null;
 };
 export type RegistryMode = string | { key: string; label: string };
 export type RegistryUnit = {
@@ -219,15 +224,29 @@ export type DraftRun = {
     errors?: unknown;
     elapsed_s?: Record<string, number>;
   };
-  units?: Record<
-    string,
-    { owner?: "dwsim" | "jarvis_bio"; calculated: boolean; error?: string; evaluator?: string; version?: number;
-      fidelity?: string; caveats?: string[]; label?: string; reported: Record<string, { value: string | number; units?: string }>; properties?: ResultProperty[] }
-  >;
+  units?: Record<string, UnitResult>;
   mass_balance?: { status: string; residual_kg_s?: number; boundary_kg_s?: Record<string, number>; error?: string };
   compile_seconds?: number;
   error?: string;
   error_detail?: Record<string, unknown>;
+};
+export type ReportedValue = { value: string | number; units?: string; label?: string };
+/** Balance row per culture field; `generation_allowance` is the declared generation tolerance (spec 170). */
+export type UnitBalanceRow = { in: number; out: number; generated?: number; residual: number; tolerance: number;
+  generation_allowance?: number; unit: string; passed: boolean };
+export type PbrFeedBasis = { basis: "feed"; volume_m3: number; volume_flow_m3_h: number; hrt_d: number; density_kg_m3: number; mass_flow_kg_s: number };
+export type PbrModelPin = { card_id: string; card_name?: string; card_revision: string; card_digest: string; set_id?: string;
+  set_name?: string; set_revision?: string; set_digest?: string; form_versions?: Record<string, string>; n_source?: string };
+export type PbrNumerics = {
+  map_evaluations?: number; bracket?: { value: [number, number]; units?: string };
+  periodicity?: Record<string, { residual: number; tolerance: number; units?: string }>;
+  z_identity_max?: { value: number; units?: string }; wall_time_s?: number;
+};
+export type UnitResult = {
+  owner?: "dwsim" | "jarvis_bio"; calculated: boolean; error?: string; evaluator?: string; version?: number; model_version?: string;
+  fidelity?: string; caveats?: string[]; findings?: Finding[]; label?: string; branch?: "productive" | "washout" | string;
+  model_pin?: PbrModelPin; numerics?: PbrNumerics; unit_balances?: Record<string, UnitBalanceRow>;
+  reported: Record<string, ReportedValue>; properties?: ResultProperty[];
 };
 export type CultureResult = {
   owner: "jarvis";

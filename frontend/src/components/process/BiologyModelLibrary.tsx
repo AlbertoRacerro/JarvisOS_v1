@@ -5,7 +5,7 @@ import type { BioCard, BioForm, BioQuantity, BioSet, MathNode } from "../../api/
 import "./BiologyModelLibrary.css";
 
 const allowedMathTags = new Set(["math", "mrow", "mi", "mn", "mo", "mtext", "msup", "msub", "mfrac", "msqrt"]);
-const labels: Record<string, string> = {
+export const labels: Record<string, string> = {
   "light.monod": "Monod light response", "light.haldane": "Haldane light response", "light.steele": "Steele light response",
   "light.eilers_peeters_steady": "Eilers–Peeters steady light response", "optics.slab_mean_irradiance": "Mean slab irradiance",
   "optics.slab_response_average": "Depth averaged light response", "temperature.isothermal": "Isothermal temperature",
@@ -14,13 +14,16 @@ const labels: Record<string, string> = {
   "combine.multiplicative": "Multiplicative nutrient combination", "combine.liebig": "Liebig minimum",
   "loss.first_order": "First order biomass loss", "loss.light_dark": "Light and dark biomass loss",
   "stoich.photoautotrophic": "Photoautotrophic elemental balance",
+  "optics.cylinder_beam_diffuse_response_average": "Cylindrical beam and diffuse light",
 };
 const keyLabel: Record<string, string> = {
   mu_max: "Maximum specific growth rate", K_I: "Light half saturation", K_i: "Light inhibition constant", I_opt: "Optimum irradiance",
   beta: "Eilers–Peeters curve shape", T_min: "Minimum cardinal temperature", T_opt: "Optimum cardinal temperature", T_max: "Maximum cardinal temperature",
   T_ref: "Reference temperature", E_a: "Activation energy", k_d: "Specific biomass loss", I_dark: "Dark threshold", m_L: "Light loss rate", m_D: "Dark loss rate",
-  k_X: "Specific light extinction", X: "Biomass concentration", L: "Optical path length", a: "Biomass H:C ratio", b: "Biomass O:C ratio",
-  c: "Biomass N:C ratio", d: "Biomass P:C ratio", w_ash: "Ash mass fraction",
+  k_X: "Specific light extinction k_X — PBR input", X: "Biomass concentration", L: "Optical path length",
+  a: "Biomass formula coefficient a, H per C-mol — PBR input", b: "Biomass formula coefficient b, O per C-mol — PBR input",
+  c: "Biomass formula coefficient c, N per C-mol — PBR input", d: "Biomass formula coefficient d, P per C-mol — PBR input",
+  w_ash: "Ash mass fraction w_ash — PBR input",
 };
 const symbolKeys = (symbol: BioForm["symbols"][number], index = 0) => {
   if (symbol.key === "formula_coefficients") return ["a", "b", "c", "d"];
@@ -29,9 +32,11 @@ const symbolKeys = (symbol: BioForm["symbols"][number], index = 0) => {
   return [symbol.key];
 };
 const humanName = (id: string) => labels[id] ?? "Biological form";
+// Listed for reference only: the photobioreactor evaluates this form internally, so it is never a card factor.
+const PBR_ONLY_FORMS = new Set(["optics.cylinder_beam_diffuse_response_average"]);
 const displayUnit = (unit: string) => ({ "1/hour": "per hour (h⁻¹)", "1/day": "per day (d⁻¹)", "dimensionless": "dimensionless", "1": "dimensionless", "kg/m3": "kg m⁻³", "kg/m**3": "kg m⁻³", "kg/kg": "kg element per kg dry biomass", "m**2/kg": "m² kg⁻¹", "umol/(m**2*s)": "µmol m⁻² s⁻¹" }[unit] ?? unit);
 
-function MathTree({ node }: { node: MathNode }) {
+export function MathTree({ node }: { node: MathNode }) {
   if (!allowedMathTags.has(node.tag)) return <span>{node.text ?? ""}</span>;
   const children: ReactNode = node.children?.map((child, index) => <MathTree key={`${child.tag}-${index}`} node={child} />) ?? node.text ?? "";
   return createElement(node.tag, node.tag === "math" ? { xmlns: "http://www.w3.org/1998/Math/MathML", display: "block" } : {}, children);
@@ -56,7 +61,7 @@ export default function BiologyModelLibrary({ workspaceId, onClose }: { workspac
   const [setId, setSetId] = useState(""); const [selectedForm, setSelectedForm] = useState("light.haldane"); const [notice, setNotice] = useState("");
   const [sourceTitle, setSourceTitle] = useState(""); const [sourceCitation, setSourceCitation] = useState(""); const [sourceLocator, setSourceLocator] = useState("");
   const [muValue, setMuValue] = useState("0.08"); const [muUnit, setMuUnit] = useState("1/hour");
-  const [cardLight, setCardLight] = useState("light.haldane"); const [cardTemperature, setCardTemperature] = useState("temperature.ctmi");
+  const [cardName, setCardName] = useState("Growth model"); const [cardLight, setCardLight] = useState("light.monod"); const [cardTemperature, setCardTemperature] = useState("temperature.ctmi");
   const [cardNutrients, setCardNutrients] = useState(["nutrient.monod", ""]); const [cardCombination, setCardCombination] = useState("combine.liebig");
   const [cardLoss, setCardLoss] = useState("loss.first_order"); const [nSource, setNSource] = useState<"NH3" | "HNO3">("NH3");
   const [point, setPoint] = useState<Record<string, BioQuantity>>({ I0: { value: 800, unit: "umol/(m**2*s)" }, k_X: { value: 120, unit: "m**2/kg" }, X: { value: 0.7, unit: "kg/m3" }, L: { value: 0.05, unit: "m" }, T: { value: 298.15, unit: "K" }, S_0: { value: 0.1, unit: "kg/m3" }, S_1: { value: 0.05, unit: "kg/m3" }, Q_0: { value: 0.2, unit: "kg/kg" }, Q_1: { value: 0.2, unit: "kg/kg" } });
@@ -76,6 +81,7 @@ export default function BiologyModelLibrary({ workspaceId, onClose }: { workspac
     for (const key of ["a", "b", "c", "d"]) selected.set(key, { unit: "dimensionless", range: "≥ 0" });
     selected.set("w_ash", { unit: "dimensionless", range: "[0, 1)" });
     selected.set("mu_max", { unit: "h⁻¹", range: "> 0" });
+    selected.set("k_X", { unit: "m**2/kg", range: "≥ 0" });
     return [...selected.entries()];
   }, [forms, cardLight, cardTemperature, cardNutrients, cardCombination, cardLoss]);
   const reload = async () => { const [f, s, c] = await Promise.all([listBioForms(workspaceId), listBioSets(workspaceId), listBioCards(workspaceId)]); setForms(f); setSets(s); setCards(c); setSetId((current) => current || s[0]?.id || ""); };
@@ -83,7 +89,7 @@ export default function BiologyModelLibrary({ workspaceId, onClose }: { workspac
   const updateSet = (next: BioSet) => { setSets((items) => [next, ...items.filter((item) => item.id !== next.id)]); setSetId(next.id); };
   const act = async (operation: () => Promise<unknown>) => { setNotice(""); try { await operation(); } catch (error) { if (error instanceof BioModelsError && error.status === 409) { await reload(); setNotice("This set changed elsewhere. Reloaded the latest revision; retry your action."); } else { const message = error instanceof Error ? error.message : "Biology model action failed"; setNotice(message.replace(/mu_max/g, "maximum specific growth rate").replace(/1\/hour/g, "per hour (h⁻¹)").replace(/1\/day/g, "per day (d⁻¹)").replace(/K_j_/g, "nutrient half saturation ").replace(/Q_min_/g, "minimum quota ").replace(/\bbeta\b/g, "Eilers–Peeters curve shape")); } } };
   const saveMu = async () => { if (!currentSet || !(Number(muValue) > 0)) return; const basis = sourceTitle.trim() ? await createLiteratureBasis(workspaceId, sourceTitle.trim(), sourceCitation.trim(), Number(muValue), muUnit, sourceLocator.trim()) : undefined; updateSet(await editBioValue(workspaceId, currentSet, "mu_max", Number(muValue), muUnit, "1/hour", basis)); if (basis) setNotice("Saved an operator-entered source. Verify requires confirming its section locator."); };
-  const createCard = async () => { if (!currentSet || !(Number(muValue) > 0)) return; const nutrients = cardNutrients.filter(Boolean); const card = await createBioCard(workspaceId, "Growth model", currentSet, { light: cardLight, optics: "optics.slab_response_average", temperature: cardTemperature, nutrients, combination: cardCombination, loss: cardLoss, stoichiometry: "stoich.photoautotrophic" }, { value: Number(muValue), unit: muUnit }, nSource); setCards((items) => [card, ...items]); setNotice("Model card created with pinned form versions."); };
+  const createCard = async () => { if (!currentSet || !(Number(muValue) > 0)) return; const nutrients = cardNutrients.filter(Boolean); const card = await createBioCard(workspaceId, cardName.trim() || "Growth model", currentSet, { light: cardLight, optics: "optics.slab_response_average", temperature: cardTemperature, nutrients, combination: cardCombination, loss: cardLoss, stoichiometry: "stoich.photoautotrophic" }, { value: Number(muValue), unit: muUnit }, nSource); setCards((items) => [card, ...items]); setNotice("Model card created with pinned form versions."); };
   const saveEdit = async () => { if (!currentSet || !editTarget) return; const definition = symbols.find(([key]) => key === editTarget.key)?.[1]; if (!definition) return; const previous = currentSet.values[editTarget.key]; const validity = editTarget.min || editTarget.max ? { ...(editTarget.min ? { min: Number(editTarget.min) } : {}), ...(editTarget.max ? { max: Number(editTarget.max) } : {}) } : undefined; const next = await editBioValue(workspaceId, currentSet, editTarget.key, Number(editTarget.value), editTarget.unit, definition.unit === "h⁻¹" ? "1/hour" : definition.unit === "dimensionless" ? "dimensionless" : definition.unit, previous?.basis_ref ?? undefined, validity); updateSet(next); setEditTarget(null); };
   const saveOperating = (key: string, value: string) => setPoint((old) => ({ ...old, [key]: { ...old[key], value: Number(value) } }));
   const unitsFor = (unit: string): string[] => unit === "h⁻¹" ? ["1/hour", "1/day"] : unit === "K" ? ["K"] : unit.includes("µmol") ? ["umol/(m**2*s)", "mmol/(m**2*s)"] : unit.includes("m² kg") ? ["m**2/kg", "cm**2/g"] : unit.includes("kg element") ? ["kg/kg", "g/kg"] : unit.includes("kg m⁻³") ? ["kg/m3", "g/L"] : unit.includes("J mol") ? ["J/mol", "kJ/mol"] : unit === "dimensionless" ? ["dimensionless"] : [unit];
@@ -96,10 +102,10 @@ export default function BiologyModelLibrary({ workspaceId, onClose }: { workspac
     <header className="bio-library__header"><div><p className="eyebrow">Process · Biology</p><h2>Biology model library</h2></div><button type="button" onClick={onClose} aria-label="Close biology model library">Close</button></header>
     {notice && <p role="status" className="bio-library__notice">{notice}</p>}
     <div className="bio-library__layout">
-      <section className="bio-library__forms" aria-label="Biological forms"><h3>Reviewed forms</h3><label>Form<select aria-label="Biological form" value={selectedForm} onChange={(event) => setSelectedForm(event.target.value)}>{forms.map((form) => <option key={form.id} value={form.id}>{humanName(form.id)}</option>)}</select></label>
+      <section className="bio-library__forms" aria-label="Biological forms"><h3>Reviewed forms</h3><label>Form<select aria-label="Biological form" value={selectedForm} onChange={(event) => setSelectedForm(event.target.value)}>{forms.map((form) => <option key={form.id} value={form.id}>{humanName(form.id)}{PBR_ONLY_FORMS.has(form.id) ? " — evaluated inside Photobioreactor (T1)" : ""}</option>)}</select></label>
         {activeForm && <article className="bio-form-card"><h4>{humanName(activeForm.id)} <small>v{activeForm.version}</small></h4><div className="bio-equation" aria-label={`Equation: ${activeForm.equation_text}`}><MathTree node={activeForm.equation} /></div>
           <table><caption>Parameters and valid ranges</caption><thead><tr><th>Parameter</th><th>Meaning</th><th>Unit · range</th></tr></thead><tbody>{activeForm.parameters.map((symbol) => <tr key={symbol.symbol}><th>{symbol.symbol}</th><td>{symbol.meaning}</td><td>{symbol.unit === "dimensionless" ? "dimensionless" : symbol.unit} · {symbol.valid_range}</td></tr>)}</tbody></table>
-          <p>{activeForm.applies_to}</p><p className="bio-library__metadata">Version {activeForm.version}{activeForm.citations.length ? ` · References: ${activeForm.citations.join(", ")}` : ""}</p>
+          {PBR_ONLY_FORMS.has(activeForm.id) && <p className="bio-library__metadata" data-testid="pbr-only-form">Evaluated inside Photobioreactor (T1). It is not selectable as a model card factor.</p>}<p>{activeForm.applies_to}</p><p className="bio-library__metadata">Version {activeForm.version}{activeForm.citations.length ? ` · References: ${activeForm.citations.join(", ")}` : ""}</p>
         </article>}
       </section>
       <section className="bio-library__sets" aria-label="Parameter sets"><h3>Parameter sets</h3><div className="bio-library__actions"><select aria-label="Parameter set" value={setId} onChange={(event) => setSetId(event.target.value)}><option value="">Select set</option>{sets.map((set) => <option key={set.id} value={set.id}>{set.name}</option>)}</select>
@@ -141,7 +147,7 @@ export default function BiologyModelLibrary({ workspaceId, onClose }: { workspac
         </>}
       </section>
       <section className="bio-library__builder" aria-label="Model card builder"><h3>Growth model card</h3><p>Choose reviewed factors. Nutrient parameter keys use zero-based slots, for example K_j_0 / S_0 and Q_min_0 / Q_0.</p>
-        <label>Light response<select aria-label="Light factor" value={cardLight} onChange={(event) => setCardLight(event.target.value)}>{["light.monod", "light.haldane", "light.steele", "light.eilers_peeters_steady"].map((id) => <option key={id} value={id}>{humanName(id)}</option>)}</select></label><label>Temperature response<select aria-label="Temperature factor" value={cardTemperature} onChange={(event) => setCardTemperature(event.target.value)}>{["temperature.ctmi", "temperature.isothermal", "temperature.arrhenius_ref"].map((id) => <option key={id} value={id}>{humanName(id)}</option>)}</select></label>
+        <label>Card name<input aria-label="Model card name" value={cardName} maxLength={80} onChange={(event) => setCardName(event.target.value)} /></label><label>Light response<select aria-label="Light factor" value={cardLight} onChange={(event) => setCardLight(event.target.value)}>{["light.monod", "light.haldane", "light.steele", "light.eilers_peeters_steady"].map((id) => <option key={id} value={id}>{humanName(id)}</option>)}</select></label><label>Temperature response<select aria-label="Temperature factor" value={cardTemperature} onChange={(event) => setCardTemperature(event.target.value)}>{["temperature.ctmi", "temperature.isothermal", "temperature.arrhenius_ref"].map((id) => <option key={id} value={id}>{humanName(id)}</option>)}</select></label>
         {cardNutrients.map((nutrient, index) => <label key={index}>Nutrient {index + 1} {index === 1 && "(optional)"}<select aria-label={`Nutrient factor ${index + 1}`} value={nutrient} onChange={(event) => updateNutrient(index, event.target.value)}><option value="">None</option><option value="nutrient.monod">Monod nutrient limitation</option><option value="nutrient.droop">Droop quota limitation</option></select></label>)}<label>Nutrient combination<select aria-label="Nutrient combination" value={cardCombination} onChange={(event) => setCardCombination(event.target.value)}><option value="combine.liebig">Liebig minimum</option><option value="combine.multiplicative">Multiplicative</option></select></label>
         <label>Biomass loss<select aria-label="Loss factor" value={cardLoss} onChange={(event) => setCardLoss(event.target.value)}><option value="loss.first_order">First order biomass loss</option><option value="loss.light_dark">Light and dark biomass loss</option></select></label><label>Nitrogen source<select aria-label="Nitrogen source" value={nSource} onChange={(event) => setNSource(event.target.value as "NH3" | "HNO3")}><option value="NH3">Ammonia (NH₃)</option><option value="HNO3">Nitric acid (HNO₃)</option></select></label>
         <button type="button" disabled={!currentSet || !(Number(muValue) > 0)} onClick={() => void act(createCard)}>Save model card</button>

@@ -243,16 +243,44 @@ def validation_findings(document: dict[str, Any]) -> list[dict[str, Any]]:
     return findings
 
 
-def fingerprint(document: dict[str, Any], partition_value: dict[str, Any]) -> str:
+def _pbr_set_digest(workspace_id: str | None, unit: dict[str, Any]) -> str:
+    """Resolved parameter-set digest behind a unit's model pin; a stable sentinel when it cannot resolve."""
+    pin = unit.get("model") or {}
+    if workspace_id is None or not pin:
+        return "unresolved"
+    try:
+        from app.modules.bio_models import service as bio_models
+
+        resolved = bio_models.resolve_growth_model(
+            workspace_id, pin["card_id"], pin["card_revision"], pin["card_digest"])
+        return str(resolved["set"]["digest"])
+    except Exception:  # noqa: BLE001 - any resolution failure is one stable sentinel, never a crash
+        return "unresolved"
+
+
+def fingerprint(document: dict[str, Any], partition_value: dict[str, Any], workspace_id: str | None = None) -> str:
+    """Layout-free process fingerprint.
+
+    Photobioreactor parameters and the model pin are already part of the document meaning. When the draft has a
+    PBR the fingerprint additionally binds the evaluator id and model version and the resolved set digest, so a
+    re-pin or a changed evaluator stales results. Drafts without a PBR keep their earlier fingerprints exactly.
+    """
     meaning = copy.deepcopy(document)
     meaning.pop("name", None)
     for item in meaning["objects"].values():
         for field in ("x", "y", "route", "orientation", "flip_x", "flip_y"):
             item.pop(field, None)
-    payload = {"document": meaning, "partition": partition_value, "version": MIXED_SOLVE_VERSION,
-               "culture_schema": "jarvis_culture_result/1",
-               "culture_propagation": "jarvis_culture_propagation/1",
-               "evaluators": {"SpecifiedSeparator": 1}}
+    payload: dict[str, Any] = {"document": meaning, "partition": partition_value, "version": MIXED_SOLVE_VERSION,
+                               "culture_schema": "jarvis_culture_result/1",
+                               "culture_propagation": "jarvis_culture_propagation/1",
+                               "evaluators": {"SpecifiedSeparator": 1}}
+    pbr_units = {uid: item for uid, item in meaning["objects"].items()
+                 if item["kind"] == "unit" and item["type"] == "PhotobioreactorT1"}
+    if pbr_units:
+        from app.modules.process_stack import pbr_unit
+
+        payload["evaluators"]["PhotobioreactorT1"] = {"id": pbr_unit.EVALUATOR_ID, "version": pbr_unit.MODEL_VERSION}
+        payload["pbr_model_sets"] = {uid: _pbr_set_digest(workspace_id, item) for uid, item in sorted(pbr_units.items())}
     raw = json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False)
     return "sha256:" + hashlib.sha256(raw.encode()).hexdigest()
 

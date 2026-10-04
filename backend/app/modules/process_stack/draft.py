@@ -24,6 +24,7 @@ from pydantic import BaseModel
 from app.core.paths import build_paths
 from app.modules.engineering.refs import Quantity
 from app.modules.process_stack import culture as culture_engine
+from app.modules.process_stack import pbr_validation
 from app.modules.process_stack._common import EvaluationRefusal, magnitude
 from app.modules.process_stack.draft_models import (
     COMPILER_VERSION,
@@ -51,8 +52,10 @@ from app.modules.process_stack.draft_models import (
     SetStreamCulture,
     SetStreamSpec,
     SetThermo,
+    SetUnitModel,
     SetUnitParams,
     UnitSpec,
+    pbr_temperature_invalid,
 )
 from app.modules.process_stack.editor import _lock
 from app.modules.workspaces.service import get_workspace
@@ -122,6 +125,11 @@ def draft_dir(workspace_id: str, draft_id: str) -> Path:
 # ---------------------------------------------------------------- quantities
 
 
+# Spec 170: explicit exact factors; time is stored in s and specific_rate in 1/s.
+_TIME_TO_S = {"s": 1.0, "h": 3600.0, "d": 86400.0}
+_PER_TIME_DIVISOR = {"1/s": 1.0, "1/h": 3600.0, "1/d": 86400.0}
+
+
 def _si(quantity: DraftQuantity, kind: str, field: str) -> dict[str, Any]:
     si_unit, allowed = QUANTITY_UNITS[kind]
     if quantity.unit not in allowed:
@@ -131,6 +139,12 @@ def _si(quantity: DraftQuantity, kind: str, field: str) -> dict[str, Any]:
         value = quantity.value * {"kg/m3": 1.0, "g/L": 1.0, "mg/L": 0.001}[quantity.unit]
     elif kind == "molar_concentration":
         value = quantity.value
+    elif kind == "temperature_difference":
+        value = quantity.value  # a difference: K and degC share the scale and there is no offset
+    elif kind == "time":
+        value = quantity.value * _TIME_TO_S[quantity.unit]
+    elif kind == "specific_rate":
+        value = quantity.value / _PER_TIME_DIVISOR[quantity.unit]
     elif kind in {"salinity", "ph", "percent"} or quantity.unit == si_unit:
         value = quantity.value
     else:
@@ -150,6 +164,12 @@ def convert_si(value_si: float, kind: str, unit: str) -> float:
         return value_si / {"kg/m3": 1.0, "g/L": 1.0, "mg/L": 0.001}[unit]
     if kind == "molar_concentration":
         return value_si
+    if kind == "temperature_difference":
+        return value_si
+    if kind == "time":
+        return value_si / _TIME_TO_S[unit]
+    if kind == "specific_rate":
+        return value_si * _PER_TIME_DIVISOR[unit]
     if kind in {"salinity", "ph", "percent"} or unit == si_unit:
         return value_si
     return magnitude(Quantity(value=value_si, unit=si_unit), unit)
@@ -387,15 +407,21 @@ def apply_op(document: dict[str, Any], op: Any) -> None:
                 raise DraftError("param_inactive", f"{param.label} is not used in {spec.label} mode "
                                  f"{unit['mode']!r}", field=key)
             converted = _si(quantity, param.kind, param.label)
-            if (param.minimum_si is not None and converted["si"] < param.minimum_si) or (
-                param.maximum_si is not None and converted["si"] > param.maximum_si
-            ):
+            below = param.minimum_si is not None and (
+                converted["si"] <= param.minimum_si if param.exclusive_minimum else converted["si"] < param.minimum_si)
+            if below or (param.maximum_si is not None and converted["si"] > param.maximum_si):
                 raise DraftError("quantity_out_of_range", f"{param.label} is outside its supported range", field=key)
             if unit["type"] == "SpecifiedSeparator" and key in {"biomass_recovery", "concentration_factor"}:
                 floor = 0.0 if key == "biomass_recovery" else 1.0
                 if converted["si"] <= floor:
                     raise DraftError("quantity_out_of_range", f"{param.label} must be greater than {floor:g}", field=key)
+            if unit["type"] == "PhotobioreactorT1" and key == "tube_count" and converted["si"] != int(converted["si"]):
+                raise DraftError("quantity_out_of_range", f"{param.label} must be a whole number", field=key)
             unit["params"][key] = converted
+        if unit["type"] == "PhotobioreactorT1" and op.values and pbr_temperature_invalid(unit["params"]):
+            raise DraftError("quantity_out_of_range",
+                             "Mean culture temperature minus the diel amplitude must stay above 0 K",
+                             field="temperature_amplitude")
         if op.options:
             raise DraftError("option_unsupported", f"{spec.label} does not expose verified enum/boolean inputs", field="options")
         if op.reactions is not None:
@@ -403,6 +429,14 @@ def apply_op(document: dict[str, Any], op: Any) -> None:
             if missing:
                 raise DraftError("reaction_not_found", f"Reaction ids {missing} are not defined", field="reactions")
             unit["reactions"] = list(dict.fromkeys(op.reactions))
+    elif isinstance(op, SetUnitModel):
+        unit = _object(document, op.unit, "unit")
+        if unit["type"] != "PhotobioreactorT1":
+            raise DraftError("unit_model_unsupported", "Only Photobioreactor (T1) accepts a biological model card.", field="model")
+        if op.model is None:
+            unit.pop("model", None)
+        else:
+            unit["model"] = op.model.model_dump(mode="json")
     elif isinstance(op, SetReactions):
         reactions = {}
         for reaction_id, reaction in op.reactions.items():
@@ -457,8 +491,11 @@ def apply_ops(document: dict[str, Any], ops: list[Any]) -> dict[str, Any]:
 # ---------------------------------------------------------------- validation
 
 
-def validate_document(document: dict[str, Any]) -> list[dict[str, Any]]:
-    """Instant Jarvis-side pre-run findings; DWSIM's own check runs only on Validate."""
+def validate_document(document: dict[str, Any], workspace_id: str | None = None) -> list[dict[str, Any]]:
+    """Instant Jarvis-side pre-run findings; DWSIM's own check runs only on Validate.
+
+    ``workspace_id`` is optional; without it the Photobioreactor model-card library cannot be consulted.
+    """
     findings: list[dict[str, Any]] = []
 
     def add(severity: str, code: str, message: str, tag: str = "", field: str = "") -> None:
@@ -572,6 +609,7 @@ def validate_document(document: dict[str, Any]) -> list[dict[str, Any]]:
     findings.extend(mixed.validation_findings(document))
     _advice(document, add, _cycle_members(graph))
     findings.extend(culture_engine.culture_findings(document))
+    findings.extend(pbr_validation.pbr_findings(document, workspace_id))
     return findings
 
 
@@ -806,7 +844,7 @@ def record_run(directory: Path, run: dict[str, Any]) -> None:
 
 
 def results_state(head: dict[str, Any], runs: list[dict[str, Any]], document: dict[str, Any] | None = None,
-                  edits_since: int | None = None) -> dict[str, Any]:
+                  edits_since: int | None = None, workspace_id: str | None = None) -> dict[str, Any]:
     solved = next((run for run in runs if run["action"] == "run" and run["status"] == "completed"), None)
     last = runs[0] if runs else None
     if solved is None:
@@ -818,7 +856,8 @@ def results_state(head: dict[str, Any], runs: list[dict[str, Any]], document: di
         from app.modules.process_stack.draft_compiler import expected, fingerprint, process_view, result_fingerprint
         if solved.get("mixed_solve"):
             try:
-                current = mixed.fingerprint(document, mixed.partition(document)) == solved["process_fingerprint"]
+                current = mixed.fingerprint(document, mixed.partition(document),
+                                            workspace_id) == solved["process_fingerprint"]
             except (DraftError, KeyError, TypeError, ValueError):
                 current = False
         elif solved.get("result_fingerprint"):
@@ -935,7 +974,8 @@ def registry_projection() -> dict[str, Any]:
              "energy_spec_modes": [], "required_inlets": spec.required_inlets, "modes": list(spec.modes),
              "params": [{"key": item.key, "label": item.label, "kind": item.kind, "modes": list(item.modes),
                          "default": item.default, "classification": "input", "minimum": item.minimum_si,
-                         "maximum": item.maximum_si} for item in spec.params],
+                         "maximum": item.maximum_si, "group": item.group,
+                         "exclusive_minimum": item.exclusive_minimum} for item in spec.params],
              "reactions": spec.type == "PFR",
              "result_properties": capabilities["objects"].get(spec.dwsim_type, {}).get("result_properties", [])
              if spec.owner == "dwsim" else []}
@@ -967,6 +1007,7 @@ def projection(workspace_id: str, draft_id: str) -> dict[str, Any]:
         for seq in range(solved_seq + 1, head["seq"] + 1):
             revision = _read_json(directory / "revisions" / f"{seq}.json", "revision_not_found", "Draft revision was not found")
             edits_since += sum(1 for op in revision.get("ops", []) if op.get("op") not in LAYOUT_OPS)
+    feed_basis = pbr_validation.pbr_feed_basis(document)
     return {
         "workspace_id": workspace_id,
         "draft_id": draft_id,
@@ -977,11 +1018,12 @@ def projection(workspace_id: str, draft_id: str) -> dict[str, Any]:
         "property_package": document["property_package"],
         "objects": _display(document),
         "reactions": copy.deepcopy(document.get("reactions", {})),
-        "findings": validate_document(document) + result_findings(document, solved, runs[0] if runs else None),
-        "results": results_state(head, runs, document, edits_since),
+        "findings": validate_document(document, workspace_id) + result_findings(document, solved, runs[0] if runs else None),
+        "results": results_state(head, runs, document, edits_since, workspace_id),
         "dwsim": dwsim_feedback(runs[0] if runs else None),
         "proposals": [proposal for proposal in list_proposals(workspace_id, draft_id) if proposal["state"] == "pending"
                       or proposal["state"] == "stale"],
+        **({"pbr_feed_basis": feed_basis} if feed_basis else {}),
     }
 
 
@@ -1253,7 +1295,7 @@ def execute(workspace_id: str, draft_id: str, revision: str, action: str) -> dic
         raise DraftError("action_invalid", "action must be validate or run")
     directory = draft_dir(workspace_id, draft_id)
     record = load_revision(directory, revision)
-    blockers = [item for item in validate_document(record["document"]) if item["severity"] == "blocker"]
+    blockers = [item for item in validate_document(record["document"], workspace_id) if item["severity"] == "blocker"]
     if blockers:
         raise DraftError("draft_invalid", "Resolve the draft findings before DWSIM can materialize it", 422,
                          findings=blockers)
@@ -1272,7 +1314,7 @@ def execute(workspace_id: str, draft_id: str, revision: str, action: str) -> dic
             if mixed.needs_mixed_solve(record["document"]):
                 outcome = mixed_runtime.run(record["document"], action=action, client=client,
                                             dwsim_version=dwsim_version, mcp_sha256=mcp_sha256,
-                                            run_dir=runs_dir(directory) / run_id)
+                                            run_dir=runs_dir(directory) / run_id, workspace_id=workspace_id)
             else:
                 outcome = draft_compiler.materialize(
                     record["document"], action=action, client=client, dwsim_version=dwsim_version,
