@@ -202,6 +202,18 @@ def test_hrt_and_temperature_checks_are_skipped_when_the_inlet_is_not_a_feed() -
     document = draft.apply_ops(draft.empty_document("h"), ops)
     findings = draft.validate_document(document)
     assert not _hrt(findings) and not find(findings, "PBR_TEMPERATURE_DECLARED_DIFFERS")
+    assert pbr_validation.pbr_feed_basis(document) == {}
+
+
+def test_feed_basis_projection_gives_q_and_hrt_on_the_same_basis_as_the_finding() -> None:
+    density = pbr_validation._water_density(298.15, 100000.0)
+    assert density is not None
+    basis = pbr_validation.pbr_feed_basis(pbr_document(flow_kg_s=0.5))["PBR"]
+    assert basis["basis"] == "feed" and basis["density_kg_m3"] == density
+    assert basis["volume_m3"] == pytest.approx(_volume_m3())
+    assert basis["volume_flow_m3_h"] == pytest.approx(0.5 / density * 3600)
+    assert basis["hrt_d"] == pytest.approx(_volume_m3() * density / 0.5 / 86400)
+    assert pbr_validation.pbr_feed_basis(pbr_document(params=False)) == {}
 
 
 def test_declared_temperature_difference_is_info_only_above_five_kelvin() -> None:

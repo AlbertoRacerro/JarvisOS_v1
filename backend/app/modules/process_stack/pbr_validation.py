@@ -69,6 +69,43 @@ def _feed_flow_kg_s(document: dict[str, Any], feed: dict[str, Any]) -> float | N
     return flow if math.isfinite(flow) and flow > 0 else None
 
 
+def _feed_basis(document: dict[str, Any], unit: dict[str, Any], inlet: dict[str, Any]) -> dict[str, float] | None:
+    """Volume, flow and HRT of a PBR whose inlet is a feed stream; None when any input is missing."""
+    spec = inlet.get("spec") or {}
+    params = unit["params"]
+    dims = [(params.get(key) or {}).get("si") for key in ("tube_inner_diameter", "tube_length", "tube_count")]
+    temperature = (spec.get("temperature") or {}).get("si")
+    pressure = (spec.get("pressure") or {}).get("si")
+    if not (all(isinstance(value, (int, float)) and value > 0 for value in dims)
+            and isinstance(temperature, (int, float)) and isinstance(pressure, (int, float))):
+        return None
+    flow = _feed_flow_kg_s(document, inlet)
+    density = _water_density(float(temperature), float(pressure)) if flow is not None else None
+    if flow is None or density is None:
+        return None
+    diameter, length, count = (float(value) for value in dims if value is not None)
+    volume = count * math.pi / 4.0 * diameter ** 2 * length
+    return {"volume_m3": volume, "mass_flow_kg_s": flow, "density_kg_m3": density,
+            "volume_flow_m3_h": flow / density * 3600.0, "hrt_d": volume * density / flow / 86400.0}
+
+
+def pbr_feed_basis(document: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Pre-run Q and HRT per PBR tag, only for PBRs fed directly by a feed stream (Overview, labelled feed basis)."""
+    objects = document["objects"]
+    output: dict[str, dict[str, Any]] = {}
+    for unit in objects.values():
+        if unit["kind"] != "unit" or UNIT_REGISTRY[unit["type"]].culture_rule != "pbr":
+            continue
+        inlet = next((item for item in objects.values() if item["kind"] == "stream" and item["type"] != "EnergyStream"
+                      and (item.get("target") or {}).get("unit") == unit["id"]), None)
+        if inlet is None or inlet.get("source") is not None:
+            continue
+        basis = _feed_basis(document, unit, inlet)
+        if basis is not None:
+            output[unit["tag"]] = {**basis, "basis": "feed"}
+    return output
+
+
 def pbr_findings(document: dict[str, Any], workspace_id: str | None = None) -> list[dict[str, Any]]:
     findings: list[dict[str, Any]] = []
     objects = document["objects"]
@@ -94,22 +131,14 @@ def pbr_findings(document: dict[str, Any], workspace_id: str | None = None) -> l
                 f"The declared mean culture temperature differs from the feed temperature by more than "
                 f"{TEMPERATURE_DIFFERS_K:g} K. Tier 1 has no energy balance: growth uses the declared profile "
                 "and the outlet temperature equals the inlet temperature."))
-        dims = [(params.get(key) or {}).get("si") for key in ("tube_inner_diameter", "tube_length", "tube_count")]
-        pressure = (spec.get("pressure") or {}).get("si")
-        if not (all(isinstance(value, (int, float)) and value > 0 for value in dims)
-                and isinstance(temperature, (int, float)) and isinstance(pressure, (int, float))):
+        basis = _feed_basis(document, unit, inlet)
+        if basis is None:
             continue
-        flow = _feed_flow_kg_s(document, inlet)
-        density = _water_density(float(temperature), float(pressure)) if flow is not None else None
-        if flow is None or density is None:
-            continue
-        diameter, length, count = (float(value) for value in dims if value is not None)
-        volume = count * math.pi / 4.0 * diameter ** 2 * length
-        hrt_days = volume * density / flow / 86400.0
-        if not HRT_MIN_DAYS <= hrt_days <= HRT_MAX_DAYS:
+        if not HRT_MIN_DAYS <= basis["hrt_d"] <= HRT_MAX_DAYS:
             findings.append(_finding(
                 "warning", "PBR_HRT_OUT_OF_RANGE", tag, "tube_length",
-                f"Feed basis: HRT is {hrt_days:.3g} d (volume {volume:.3g} m3, feed {flow:.3g} kg/s, density "
-                f"{density:.0f} kg/m3, the 167 seawater-as-water basis at the feed state), outside {HRT_MIN_DAYS:g}-{HRT_MAX_DAYS:g} d. "
+                f"Feed basis: HRT is {basis['hrt_d']:.3g} d (volume {basis['volume_m3']:.3g} m3, feed "
+                f"{basis['mass_flow_kg_s']:.3g} kg/s, density {basis['density_kg_m3']:.0f} kg/m3, the 167 "
+                f"seawater-as-water basis at the feed state), outside {HRT_MIN_DAYS:g}-{HRT_MAX_DAYS:g} d. "
                 "A solved basis is reported after Run."))
     return findings

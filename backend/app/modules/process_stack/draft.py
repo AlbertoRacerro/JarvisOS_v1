@@ -1007,6 +1007,7 @@ def projection(workspace_id: str, draft_id: str) -> dict[str, Any]:
         for seq in range(solved_seq + 1, head["seq"] + 1):
             revision = _read_json(directory / "revisions" / f"{seq}.json", "revision_not_found", "Draft revision was not found")
             edits_since += sum(1 for op in revision.get("ops", []) if op.get("op") not in LAYOUT_OPS)
+    feed_basis = pbr_validation.pbr_feed_basis(document)
     return {
         "workspace_id": workspace_id,
         "draft_id": draft_id,
@@ -1022,6 +1023,7 @@ def projection(workspace_id: str, draft_id: str) -> dict[str, Any]:
         "dwsim": dwsim_feedback(runs[0] if runs else None),
         "proposals": [proposal for proposal in list_proposals(workspace_id, draft_id) if proposal["state"] == "pending"
                       or proposal["state"] == "stale"],
+        **({"pbr_feed_basis": feed_basis} if feed_basis else {}),
     }
 
 
