@@ -54,6 +54,13 @@ def test_cstr_catches_silent_no_reaction_and_wrong_rate_units() -> None:
     assert wrong_unit["residual"] > 0.9
 
 
+def test_zero_rate_accepts_roundoff_scale_flow_change() -> None:
+    reaction = _reaction(v_max=_quantity(0, "kmol/(m3.h)"))
+    result = verify_rate_law_reactor(reactor_type="CSTR", reaction=reaction, volume_m3=1,
+                                     inlet=_stream(10, 0), outlet=_stream(10 - 1e-10, 1e-10))
+    assert result["ok"] is True
+
+
 def test_pfr_integrates_independent_monod_reference() -> None:
     # For Q=1, V = [2 ln(10/Aout) + (10-Aout)] / 5.
     lower, upper = 0.1, 10.0

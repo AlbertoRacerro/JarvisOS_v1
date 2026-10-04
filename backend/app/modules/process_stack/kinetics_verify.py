@@ -184,12 +184,14 @@ def verify_rate_law_reactor(*, reactor_type: str, reaction: Mapping[str, Any], v
         rate_out = _rate(law, co, product["temperature"])
         # For one reaction, every participant's flow change must yield the same
         # base-consumption extent. This also detects an unreported side reaction.
+        # A zero-rate reaction is valid. Use a small inlet-flow scale so solver
+        # roundoff at zero conversion is not treated as a relative failure.
+        flow_scale = max(abs(extent), rate_out * volume, 1e-6 * f_base)
         stoich_residual = max(abs((fo[name] - fi[name]) / normalized[name] - extent)
-                              for name in normalized) / max(abs(extent), rate_out * volume, 1e-12)
+                              for name in normalized) / flow_scale
         if reactor_type == "CSTR":
             predicted_extent = rate_out * volume
-            residual = max(stoich_residual, abs(extent - predicted_extent)
-                           / max(abs(extent), predicted_extent, 1e-12))
+            residual = max(stoich_residual, abs(extent - predicted_extent) / flow_scale)
         else:
             # The measured Q endpoints approximate density change along reaction
             # progress, as in the accepted variable-Q reference. Integrate dX/dV
@@ -217,7 +219,7 @@ def verify_rate_law_reactor(*, reactor_type: str, reaction: Mapping[str, Any], v
                 if x >= 1:
                     x = 1.0
                     break
-            residual = max(stoich_residual, abs(x - conversion) / max(abs(x), abs(conversion), 1e-12))
+            residual = max(stoich_residual, abs(x - conversion) / max(abs(x), abs(conversion), 1e-6))
         findings: list[dict[str, str]] = []
         validity = reaction.get("validity")
         if isinstance(validity, Mapping):
