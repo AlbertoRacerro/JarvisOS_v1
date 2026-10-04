@@ -418,11 +418,21 @@ def _pbr_brief_rows(workspace_id: str, pbr_units: list[dict], last_run: dict | N
                           if isinstance(balance, dict) and isinstance(balance.get("residual"), (int, float))
                           and isinstance(balance.get("tolerance"), (int, float)) and balance["tolerance"] > 0]
                 residual = f"{max(ratios):.3g} of tolerance" if ratios else "unknown"
-                row += (f" Last run {status}; branch {result.get('branch', 'unknown')}; "
-                        f"HRT {_number(reported, 'hrt_d', 'd')}; thin-culture growth rate "
-                        f"{_number(reported, 'lambda_h', '1/h')}; worst balance residual {residual}.")
+                closes = " (balances close)" if ratios and max(ratios) <= 1.0 else ""
+                branch = result.get("branch", "unknown")
+                row += (f" Last run {status}; branch {branch}; "
+                        f"HRT {_number(reported, 'hrt_d', 'd')}; thin-culture growth rate Λ "
+                        f"{_number(reported, 'lambda_h', '1/h')}; dilution rate D {_number(reported, 'dilution_h', '1/h')}; "
+                        f"worst balance residual {residual}{closes}.{_BRANCH_MEANING.get(branch, '')}")
         rows.append(row)
     return rows
+
+
+_BRANCH_MEANING = {
+    "washout": " Washout: Λ < D, so growth cannot outrun dilution and the biomass leaves the tube; a longer HRT "
+               "(lower flow or more volume) or more light would raise Λ relative to D.",
+    "productive": " Productive: Λ > D, so the culture holds a positive periodic steady biomass.",
+}
 
 
 def _fit_process_brief(*, header: str, objects: list[dict], document: dict, selected_line: str,
@@ -897,6 +907,18 @@ def _next_tag(objects: dict, prefix: str, ops: list | None = None) -> str:
     return f"{prefix}{index}"
 
 
+def _registry_unit_type(name: str) -> str:
+    """A registry type, or its operator label ("Photobioreactor (T1)", "Photobioreactor", "flash vessel")."""
+    if name in draft.UNIT_REGISTRY:
+        return name
+    wanted = " ".join(name.lower().split())
+    matches = {key for key, spec in draft.UNIT_REGISTRY.items()
+               if wanted in {key.lower(), spec.label.lower(), re.sub(r"\s*\([^)]*\)$", "", spec.label).lower()}}
+    if len(matches) == 1:
+        return matches.pop()
+    raise ValueError(f"Unsupported unit type {name!r}; supported types: {', '.join(sorted(draft.UNIT_REGISTRY))}.")
+
+
 def _resolve_model_card(workspace_id: str, reference: str) -> dict:
     """A card id, else an exact unique name, resolved to its current revision and digest (spec 170)."""
     cards = bio_models.list_cards(workspace_id)
@@ -1010,10 +1032,7 @@ def _process_ops(document: dict, request: ActionRequest, workspace_id: str | Non
                 )
             )
         elif action.op == "add_unit":
-            if action.type not in draft.UNIT_REGISTRY:
-                raise ValueError(
-                    f"Unsupported unit type {action.type!r}; supported types: {', '.join(sorted(draft.UNIT_REGISTRY))}."
-                )
+            action = action.model_copy(update={"type": _registry_unit_type(action.type)})
             near = _target(document, action.near, "unit") if action.near else None
             tag = action.tag or _next_tag(objects, f"{action.type}_", ops)
             ops.append(
@@ -1027,10 +1046,7 @@ def _process_ops(document: dict, request: ActionRequest, workspace_id: str | Non
             )
             changes.append(ChangeLine(label=f"{tag} — new {action.type}", after="added"))
         elif action.op == "insert_unit_after":
-            if action.type not in draft.UNIT_REGISTRY:
-                raise ValueError(
-                    f"Unsupported unit type {action.type!r}; supported types: {', '.join(sorted(draft.UNIT_REGISTRY))}."
-                )
+            action = action.model_copy(update={"type": _registry_unit_type(action.type)})
             upstream = _target(document, action.after, "unit")
             outlets = [
                 stream

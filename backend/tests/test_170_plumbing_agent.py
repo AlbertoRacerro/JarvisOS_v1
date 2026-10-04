@@ -53,7 +53,11 @@ def test_registry_actions_add_insert_and_connect_a_pbr() -> None:
     assert added.state == "proposed" and added.tier == "confirm", added.reason
     assert apply(workspace_id, added.action_id).state == "applied"
     state = draft.projection(workspace_id, state["draft_id"])
-    inserted = submit(workspace_id, _request(state, {"op": "insert_unit_after", "type": "PhotobioreactorT1",
+    unknown = submit(workspace_id, _request(state, {"op": "insert_unit_after", "type": "Bioreactor", "after": "Pump"}),
+                     _origin())
+    assert unknown.state == "refused" and "PhotobioreactorT1" in (unknown.reason or "")
+    # the operator's word for the unit resolves through the registry label
+    inserted = submit(workspace_id, _request(state, {"op": "insert_unit_after", "type": "Photobioreactor",
                                                      "after": "Pump", "tag": "PBR2"}), _origin())
     assert inserted.state == "proposed", inserted.reason
     assert apply(workspace_id, inserted.action_id).state == "applied"
@@ -191,12 +195,14 @@ def test_brief_names_owners_card_verification_and_last_run() -> None:
     _record_run(workspace_id, state, {
         "status": "completed", "mixed_solve": {"status": "completed", "reason": "converged", "history": []},
         "units": {"PBR": {"owner": "jarvis_bio", "branch": "productive",
-                          "reported": {"hrt_d": {"value": 2.5, "units": "d"}, "lambda_h": {"value": 0.0236, "units": "1/h"}},
+                          "reported": {"hrt_d": {"value": 2.5, "units": "d"}, "lambda_h": {"value": 0.0236, "units": "1/h"},
+                                       "dilution_h": {"value": 0.01667, "units": "1/h"}},
                           "unit_balances": {"biomass": {"residual": 1e-10, "tolerance": 1e-8},
                                             "oxygen": {"residual": -5e-9, "tolerance": 1e-8}}}}})
     after_run = surface_brief(workspace_id, ref).text
-    assert "Last run completed; branch productive; HRT 2.5 d; thin-culture growth rate 0.0236 1/h; " \
-           "worst balance residual 0.5 of tolerance." in after_run
+    assert "Last run completed; branch productive; HRT 2.5 d; thin-culture growth rate Λ 0.0236 1/h; " \
+           "dilution rate D 0.01667 1/h; worst balance residual 0.5 of tolerance (balances close). " \
+           "Productive: Λ > D" in after_run
     # The real 168 record shape: reason is "segment_failed"; the typed code and message live under errors.
     message = "The photobioreactor has no carrier flow through it, so dilution and residence time are undefined."
     _record_run(workspace_id, state, {"status": "segment_failed", "started_at": "2026-10-03T11:00:00+00:00",
