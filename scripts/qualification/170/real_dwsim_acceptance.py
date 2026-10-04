@@ -27,19 +27,34 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "backend"))
 OUTPUT = Path(os.environ.get("JARVISOS_170_EVIDENCE", "/tmp/jarvisos-170-real-dwsim.json"))
-Q = lambda value, unit: {"value": value, "unit": unit}
+FIXTURE_PATH = ROOT / "scripts" / "qualification" / "107" / "synthetic-parameters.json"
+FIXTURE = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))["coefficients"]
 
-# The 107 synthetic fixture supplies the growth coefficients. The Monod card, feed,
-# continuous dilution and cylindrical optics are 170 cases, not 107 validation data.
+
+def Q(value: float, unit: str) -> dict[str, Any]:  # noqa: N802 - short quantity builder used throughout the cases
+    return {"value": value, "unit": unit}
+
+
+def _fixture(name: str) -> tuple[float, str]:
+    value, unit = FIXTURE[name]
+    return float(value), str(unit)
+
+
+# The 107 synthetic fixture supplies the growth coefficients (read from the JSON, never copied). The Monod
+# card, feed, continuous dilution and cylindrical optics are 170 cases, not 107 validation data.
 SYNTHETIC_VALUES = {
-    "K_I": (150.0, "umol/(m**2*s)"), "k_X": (150.0, "m**2/kg"),
-    "T_min": (278.15, "K"), "T_opt": (298.15, "K"), "T_max": (308.15, "K"),
-    "K_j_0": (0.001, "kg/m3"), "k_d": (0.004166666666666667, "1/hour"),
-    # Algebraically fitted synthetic formula: 169 NH3 stoichiometry gives the
-    # 107 fixture's q = 0.07 kg N/kg and Y_O2 = 1.4 kg/kg. It is not measured.
+    "K_I": _fixture("light_saturation_constant"), "k_X": _fixture("specific_light_extinction"),
+    "T_min": _fixture("temperature_min"), "T_opt": _fixture("temperature_opt"), "T_max": _fixture("temperature_max"),
+    "K_j_0": _fixture("nitrogen_half_saturation"),
+    "k_d": (_fixture("biomass_loss_rate")[0], "1/hour"),
+    # Algebraically fitted synthetic formula: 169 NH3 stoichiometry gives the fixture's
+    # q = biomass_nitrogen_fraction and Y_O2 = oxygen_yield (checked in main). It is not measured.
     "a": (1.8, "1"), "b": (0.5129883263806922, "1"), "c": (0.12688224202537762, "1"),
     "d": (0.01, "1"), "w_ash": (0.05, "1"),
 }
+OXYGEN_YIELD = FIXTURE["oxygen_yield"][0]
+FIXTURE_KLA_H = FIXTURE["oxygen_kla"][0]
+FIXTURE_O2_SATURATION = FIXTURE["oxygen_saturation"][0]  # kg/m3
 CARD_FACTORS = {
     "light": "light.monod", "optics": "optics.slab_response_average",
     "temperature": "temperature.ctmi", "nutrients": ["nutrient.monod"],
@@ -86,12 +101,12 @@ def _card(client: Any, workspace_id: str, *, name: str, changes: dict[str, tuple
     return {"card": card, "set": parameter_set}
 
 
-def _pbr_params(*, oxygen_kla_h: float = 5.0) -> dict[str, Any]:
+def _pbr_params(*, oxygen_kla_h: float = FIXTURE_KLA_H) -> dict[str, Any]:
     return {
         "tube_inner_diameter": Q(0.05, "m"), "tube_length": Q(100, "m"),
         "tube_count": Q(10, "dimensionless"), "liquid_velocity": Q(0.5, "m/s"),
         "pump_efficiency": Q(60, "percent"), "baffle_friction_multiplier": Q(1, "dimensionless"),
-        "oxygen_kla": Q(oxygen_kla_h, "1/h"), "oxygen_saturation": Q(7.5, "mg/L"),
+        "oxygen_kla": Q(oxygen_kla_h, "1/h"), "oxygen_saturation": Q(FIXTURE_O2_SATURATION * 1000.0, "mg/L"),
         "peak_par": Q(800, "umol/(m2.s)"), "photoperiod": Q(12, "h"),
         "diffuse_fraction": Q(0.5, "dimensionless"),
         "temperature_mean": Q(298.15, "K"), "temperature_amplitude": Q(3, "K"),
@@ -105,8 +120,8 @@ def _flow_for_hrt(hrt_days: float) -> float:
 
 
 def _ops(pin: dict[str, Any], *, hrt_days: float, biomass: float = 0.0,
-         nitrogen: float = 0.05, oxygen: float = 0.0075,
-         oxygen_kla_h: float = 5.0, mixed: bool = False) -> list[dict[str, Any]]:
+         nitrogen: float = 0.05,
+         oxygen: float = FIXTURE_O2_SATURATION, oxygen_kla_h: float = FIXTURE_KLA_H, mixed: bool = False) -> list[dict[str, Any]]:
     def stream(id: str, tag: str, x: int, y: int) -> dict[str, Any]:
         return {"op": "add_stream", "id": id, "tag": tag, "x": x, "y": y}
 
@@ -208,6 +223,27 @@ def _balances(run: dict[str, Any], name: str, report: dict[str, Any]) -> None:
         whole = run["mixed_solve"]["balances"][field]
         _expect(whole["passed"] and abs(whole["residual"]) <= whole["tolerance"],
                 f"{name}: {field} whole-graph balance", whole, report)
+    _oxygen_transfer(run, name, report)
+
+
+def _oxygen_transfer(run: dict[str, Any], name: str, report: dict[str, Any]) -> None:
+    """Signed net O2 gas transfer is reported with its direction and closes the PBR O2 balance."""
+    unit = run["units"]["PBR"]
+    transfer = unit["reported"]["oxygen_gas_transfer"]
+    production = unit["reported"]["net_biomass_production"]
+    _expect(transfer["units"] == "kg/d" and "degassing" in transfer["label"] and "absorption" in transfer["label"],
+            f"{name}: signed O2 gas transfer is labelled with its direction", transfer, report)
+    row = unit["unit_balances"]["oxygen"]
+    # Net O2 generation (kg/s) = Y_O2 * biomass production - signed gas transfer (+ out of the liquid).
+    expected = (OXYGEN_YIELD * float(production["value"]) - float(transfer["value"])) / 86400.0
+    _expect(abs(row["generated"] - expected) <= row["tolerance"],
+            f"{name}: O2 generation equals Y_O2 production minus signed gas transfer",
+            {"generated_kg_s": row["generated"], "expected_kg_s": expected, "tolerance": row["tolerance"]}, report)
+    _expect(abs(row["in"] - row["out"] + row["generated"]) <= row["tolerance"] + row.get("generation_allowance", 0.0),
+            f"{name}: O2 balance closes with the signed transfer",
+            {"in": row["in"], "out": row["out"], "generated": row["generated"],
+             "transfer_kg_d": transfer["value"], "direction": "degassing" if transfer["value"] > 0 else "absorption"},
+            report)
 
 
 def _failure_code(run: dict[str, Any]) -> str | None:
@@ -235,12 +271,20 @@ def main() -> None:
         "cases": {}, "assertions": [], "complete": False,
     }
     try:
+        from app.modules.bio_models import forms
+
+        yields = forms.stoich_photoautotrophic(*(SYNTHETIC_VALUES[key][0] for key in ("a", "b", "c", "d", "w_ash")),
+                                               "NH3")["yields"]
+        _expect(abs(yields["N_consumed_kg_per_kg_total_dry"] - FIXTURE["biomass_nitrogen_fraction"][0]) < 1e-9
+                and abs(yields["O2_produced_kg_per_kg_total_dry"] - OXYGEN_YIELD) < 1e-9,
+                "fitted stoichiometry reproduces the 107 fixture q and Y_O2", yields, report)
         with tempfile.TemporaryDirectory(prefix="jarvisos-170-accept-") as data_root:
             os.environ["JARVISOS_DATA_ROOT"] = data_root
+            from fastapi.testclient import TestClient
+
             from app.core.config import get_settings
             from app.core.database import initialize_database
             from app.main import app
-            from fastapi.testclient import TestClient
 
             get_settings.cache_clear()
             initialize_database()
@@ -265,7 +309,7 @@ def main() -> None:
                 _balances(productive, "productive", report)
 
                 washout_seed, washout = _case(client, workspace_id, report, "washout_once_through", card,
-                                             hrt_days=2, expected="completed")
+                                             hrt_days=1.5, expected="completed")
                 _expect(washout["units"]["PBR"]["branch"] == "washout", "washout branch",
                         washout["units"]["PBR"].get("branch"), report)
                 washout_lambda = _reported(washout, "lambda_h")
