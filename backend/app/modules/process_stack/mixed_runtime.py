@@ -916,7 +916,11 @@ def _evaluate(document: dict[str, Any], part: dict[str, Any], tear: dict[str, di
                 # (the separator) get NaN, and one that needs it must fail on the NaN itself.
                 density = math.nan
             elif density is None or not math.isfinite(float(density)) or float(density) <= 0:
-                raise SegmentFailure(unit["tag"], "Jarvis inlet has no solved liquid DWSIM density")
+                if unit["type"] == "PhotobioreactorT1":
+                    # Let the PBR return its operator-facing typed density failure.
+                    density = math.nan
+                else:
+                    raise SegmentFailure(unit["tag"], "Jarvis inlet has no solved liquid DWSIM density")
             evaluation = _call_evaluator(unit, inlet, JarvisUnitContext(
                 inlet_density_kg_m3=float(density), deadline=deadline,
                 cache=run_cache if run_cache is not None else {}, workspace_id=workspace_id))
