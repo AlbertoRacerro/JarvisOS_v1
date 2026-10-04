@@ -905,6 +905,11 @@ def _resolve_model_card(workspace_id: str, reference: str) -> dict:
         return by_id[0]
     named = [card for card in cards if card["name"] == reference]
     if not named:
+        # "use model card <name>" often reaches the action with the phrase's own words or quotes
+        # around the name; the stripped name must still match exactly.
+        stripped = re.sub(r"^(?:the\s+)?(?:model\s+)?card\s+", "", reference.strip().strip("\"'“”‘’"), flags=re.IGNORECASE)
+        named = [card for card in cards if card["name"] == stripped.strip("\"'“”‘’")]
+    if not named:
         raise ValueError(f"No model card has the id or exact name {reference!r}; ask the operator to create or name one "
                          "in the Biology model library.")
     if len(named) > 1:

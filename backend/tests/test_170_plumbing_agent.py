@@ -125,6 +125,12 @@ def test_set_unit_model_refuses_ambiguous_unknown_and_wrong_targets() -> None:
     assert unknown.state == "refused" and "Nothing" in (unknown.reason or "")
     partial = submit(workspace_id, _request(state, {"op": "set_unit_model", "unit": "PBR", "card": "Uniq"}), _origin())
     assert partial.state == "refused", "names match exactly, never by prefix"
+    phrased = submit(workspace_id, _request(state, {"op": "set_unit_model", "unit": "PBR", "card": "model card 'Unique'"}),
+                     _origin())
+    assert phrased.state == "proposed", "the request's own 'model card' words and quotes are not part of the name"
+    phrased_partial = submit(workspace_id, _request(state, {"op": "set_unit_model", "unit": "PBR", "card": "model card Uniq"}),
+                             _origin())
+    assert phrased_partial.state == "refused", "the stripped name still matches exactly"
     wrong = submit(workspace_id, _request(state, {"op": "set_unit_model", "unit": "H", "card": "Unique"}), _origin())
     assert wrong.state == "refused" and "only a Photobioreactor" in (wrong.reason or "")
     ghost = submit(workspace_id, _request(state, {"op": "set_unit_model", "unit": "Ghost", "card": "Unique"}), _origin())

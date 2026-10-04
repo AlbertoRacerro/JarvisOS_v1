@@ -27,9 +27,9 @@ function Chips({ set }: { set: BioSet | undefined }) {
   </ul>;
 }
 
-export default function PbrModelPicker({ cards, sets, forms, pin, unitTag, findings, loadError, onPin, openLibrary, onReload }: {
+export default function PbrModelPicker({ cards, sets, forms, pin, unitTag, findings, loadError, adopting, onPin, onAdoptSet, openLibrary, onReload }: {
   cards: BioCard[]; sets: BioSet[]; forms: BioForm[]; pin: Pin | null | undefined; unitTag: string; findings: Finding[]; loadError: string;
-  onPin(card: BioCard | null): void; openLibrary(): void; onReload(): void;
+  adopting: boolean; onPin(card: BioCard | null): void; onAdoptSet(card: BioCard, set: BioSet): void; openLibrary(): void; onReload(): void;
 }) {
   const pinnedCard = cards.find((card) => card.id === pin?.card_id);
   const setOf = (card: BioCard | undefined) => sets.find((item) => item.id === card?.parameter_set_id);
@@ -54,9 +54,10 @@ export default function PbrModelPicker({ cards, sets, forms, pin, unitTag, findi
       <strong>A newer revision is available</strong>
       <ul>{status.changes.map((change) => <li key={change}>{change}</li>)}</ul>
       {status.cardNewer && pinnedCard && <button type="button" onClick={() => onPin(pinnedCard)}>Adopt newer revision</button>}
-      {status.setNewer && !status.cardNewer && <>
-        <p>The pin keeps using the parameter-set revision this card was built on until you choose otherwise. To use the newer set values, create a card on it in the Biology model library, then pick that card here.</p>
-        <button type="button" onClick={openLibrary}>Browse models…</button></>}
+      {status.setNewer && !status.cardNewer && pinnedCard && setOf(pinnedCard) && <>
+        <p>The pin keeps using the parameter-set revision this card was built on until you choose otherwise. Adopting the newer set pins a copy of this card built on {revisionLabel(setOf(pinnedCard)!.history, setOf(pinnedCard)!.revision)}; Results become stale until the next Run.</p>
+        <button type="button" disabled={adopting} onClick={() => onAdoptSet(pinnedCard, setOf(pinnedCard)!)}>{adopting ? "Adopting…" : "Adopt newer set revision"}</button>
+        <button type="button" className="pbr-link" onClick={openLibrary}>Browse models…</button></>}
     </div>}
     {cards.length === 0 ? <p className="pbr-empty">No model cards — <button type="button" className="pbr-link" onClick={openLibrary}>Browse models…</button></p>
       : <ul className="pbr-cards">{cards.map((card) => {

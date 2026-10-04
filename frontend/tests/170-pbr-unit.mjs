@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import {
   branchExplanation, entrySi, failureTouchesUnit, nSourceNote, pinDescription, formatReported, formatSig, gasTransferWords, growthVersusDilution, liquidVolumeM3, missingSetSymbols,
-  nSourceLabel, pbrCardRefusal, pbrFailureHeading, pbrFieldError, pinStatus, setMatchesCard, severityWord, verificationChip,
+  nSourceLabel, pbrCardRefusal, pbrFailureHeading, pbrFieldError, pinStatus, setMatchesCard, cardOnLatestSet, severityWord, verificationChip,
 } from "../src/components/process/pbrLogic.ts";
 import { ownerLabel, ownerShort } from "../src/components/process/processOwners.ts";
 import { actionSummaryText, describeProcessAction, isToolCallShaped } from "../src/components/ai/workspaceActionPresentation.ts";
@@ -172,6 +172,17 @@ assert.deepEqual(missingSetSymbols(set({ values: { k_X: {}, a: {} } })), ["b", "
 assert.equal(setMatchesCard(card(), set()), true);
 assert.equal(setMatchesCard(card(), set({ revision: "r-2222222222222222" })), false);
 assert.equal(setMatchesCard(card(), set({ digest: "sd2" })), false);
+// adopting a newer set revision reuses an identical card already built on it, never a different model
+const latest = set({ revision: "r-2222222222222222", digest: "sd2" });
+const onLatest = card({ id: "c2", parameter_set_revision: "r-2222222222222222", parameter_set_digest: "sd2", mu_max: { value: 0.06, unit: "1/hour" } });
+const pinned = card({ mu_max: { value: 0.06, unit: "1/hour" } });
+assert.equal(cardOnLatestSet([pinned, onLatest], pinned, latest)?.id, "c2");
+assert.equal(cardOnLatestSet([pinned, { ...onLatest, mu_max: { value: 0.07, unit: "1/hour" } }], pinned, latest), undefined);
+assert.equal(cardOnLatestSet([pinned, { ...onLatest, n_source: "HNO3" }], pinned, latest), undefined);
+assert.equal(cardOnLatestSet([pinned, { ...onLatest, factors: { ...onLatest.factors, loss: "loss.light_dark" } }], pinned, latest), undefined);
+assert.equal(cardOnLatestSet([pinned, { ...onLatest, parameter_set_digest: "sd1" }], pinned, latest), undefined);
+assert.equal(cardOnLatestSet([pinned], pinned, set()), undefined, "the pinned card itself is never a newer-set copy");
+assert.match(picker, /onClick=\{\(\) => onAdoptSet\(pinnedCard, setOf\(pinnedCard\)!\)\}>\{adopting \? "Adopting…" : "Adopt newer set revision"\}/);
 assert.equal(nSourceLabel("NH3"), "N source assumed: NH₃ — inlet N speciation unverified");
 assert.deepEqual(verificationChip("source_changed_since_verification"), { text: "source changed", tone: "warn" });
 assert.deepEqual(verificationChip("expert_reviewed"), { text: "expert reviewed", tone: "good" });

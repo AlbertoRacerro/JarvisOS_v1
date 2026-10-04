@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
-import { listBioCards, listBioForms, listBioSets, type BioCard, type BioForm, type BioSet } from "../../api/bioModels";
+import { createBioCard, listBioCards, listBioForms, listBioSets, type BioCard, type BioForm, type BioSet } from "../../api/bioModels";
 import type { DraftObject, DraftOp, DraftRegistry, DraftRun, Finding, PbrFeedBasis, RegistryParam, RegistryUnit, ResultsState } from "../../api/processDraft";
 import PbrModelPicker from "./PbrModelPicker";
 import PbrResults, { type PbrFailure } from "./PbrResults";
 import QuantityInput from "./QuantityInput";
 import { ownerLabel } from "./processOwners";
-import { entrySi, formatReported, formatSig, liquidVolumeM3, pbrFieldError, revisionLabel, type PbrFormValues } from "./pbrLogic";
+import { cardOnLatestSet, entrySi, formatReported, formatSig, liquidVolumeM3, pbrFieldError, revisionLabel, type PbrFormValues } from "./pbrLogic";
 import "./PbrInspector.css";
 
 const TABS = ["Overview", "Geometry", "Biology", "Operation", "Light & environment", "Results"] as const;
@@ -27,6 +27,7 @@ export default function PbrInspector({ workspaceId, unit, spec, registry, result
   const [sets, setSets] = useState<BioSet[]>([]);
   const [forms, setForms] = useState<BioForm[]>([]);
   const [loadError, setLoadError] = useState("");
+  const [adopting, setAdopting] = useState(false);
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   useEffect(() => { setTab("Overview"); setForm({}); }, [unit.id]);
@@ -68,6 +69,18 @@ export default function PbrInspector({ workspaceId, unit, spec, registry, result
     void apply([{ op: "set_unit_params", unit: unit.id, values: Object.fromEntries(keys.map((key) => [key, { value: Number(form[key]!.text), unit: form[key]!.unit }])) }]);
   };
   const pin = (card: BioCard | null) => void apply([{ op: "set_unit_model", unit: unit.id, model: card ? { card_id: card.id, card_revision: card.revision, card_digest: card.digest } : null }]);
+  // A card is immutable on its set revision, so adopting a newer set pins a copy of the card on it
+  // (or an identical copy already in the library). Operator-initiated only; nothing re-pins by itself.
+  const adoptSet = (card: BioCard, set: BioSet) => {
+    const existing = cardOnLatestSet(cards, card, set);
+    if (existing) return pin(existing);
+    if (!card.n_source) return showError("This card does not record its nitrogen source; create the new card in the Biology model library.");
+    setAdopting(true);
+    void createBioCard(workspaceId, `${card.name} · set ${revisionLabel(set.history, set.revision)}`, set, card.factors, card.mu_max, card.n_source)
+      .then((next) => { pin(next); reload(); })
+      .catch((error: unknown) => showError(error instanceof Error ? error.message : "The card on the newer set could not be created"))
+      .finally(() => setAdopting(false));
+  };
 
   const volume = liquidVolumeM3(unit.params);
   const staleNote = results.state === "stale" ? " (previous Run)" : "";
@@ -114,7 +127,7 @@ export default function PbrInspector({ workspaceId, unit, spec, registry, result
       {tab === name && (name === "Overview" ? overview
         : PARAM_TABS.has(name) ? paramPanel(name)
         : name === "Biology" ? <PbrModelPicker cards={cards} sets={sets} forms={forms} pin={unit.model} unitTag={unit.tag} findings={unitFindings}
-            loadError={loadError} onPin={pin} openLibrary={openLibrary} onReload={reload} />
+            loadError={loadError} adopting={adopting} onPin={pin} onAdoptSet={adoptSet} openLibrary={openLibrary} onReload={reload} />
         : <PbrResults result={result} results={results} failure={failure} />)}
     </div>)}
   </section>;

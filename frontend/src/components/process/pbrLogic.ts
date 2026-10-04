@@ -199,6 +199,19 @@ export function pinStatus(pin: Pin | null | undefined, card: CardLike | undefine
   return { missing: false, cardNewer, setNewer, changes };
 }
 
+/**
+ * An existing card that already carries `card`'s model on the latest revision of `set`; adopting a
+ * newer set revision pins it instead of creating a duplicate. mu_max is compared by value.
+ */
+export function cardOnLatestSet<C extends CardLike & { mu_max?: { value: number; unit: string } }>(
+  cards: C[], card: C, set: SetLike,
+): C | undefined {
+  const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+  return cards.find((other) => other.id !== card.id && other.parameter_set_id === set.id
+    && other.parameter_set_revision === set.revision && other.parameter_set_digest === set.digest
+    && other.n_source === card.n_source && same(other.factors, card.factors) && same(other.mu_max, card.mu_max));
+}
+
 /** Verification chip text; the backend's underscored state names read as words. */
 export function verificationChip(state: string | undefined): { text: string; tone: "good" | "warn" | "plain" } {
   switch (state) {
