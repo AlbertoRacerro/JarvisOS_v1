@@ -976,7 +976,7 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
     if (!spec) return <p>Unsupported unit type.</p>;
     if (unit.type === "PhotobioreactorT1") return <PbrInspector workspaceId={workspaceId} unit={unit} spec={spec} registry={registry}
       result={solvedRun?.units?.[unit.tag]} results={results} lastRun={lastRun} failure={unitFailure(unit.tag)} feedBasis={draft.pbr_feed_basis?.[unit.tag]}
-      findings={draft.findings} apply={apply} openLibrary={() => setBiologyOpen(true)}
+      findings={draft.findings} apply={apply} libraryOpen={biologyOpen} openLibrary={() => setBiologyOpen(true)}
       showError={(message) => setNotice({ tone: "danger", text: message })} />;
     const modes = spec.modes.map(modeKey);
     const activeMode = mode || unit.mode || "";

@@ -14,11 +14,11 @@ type Tab = (typeof TABS)[number];
 const PARAM_TABS = new Set<Tab>(["Geometry", "Operation", "Light & environment"]);
 
 /** Typed jarvis-unit run with the matching registry/segment context; see ProcessDraftEditor. */
-export default function PbrInspector({ workspaceId, unit, spec, registry, result, results, lastRun, failure, feedBasis, findings, apply, openLibrary, showError }: {
+export default function PbrInspector({ workspaceId, unit, spec, registry, result, results, lastRun, failure, feedBasis, findings, apply, libraryOpen, openLibrary, showError }: {
   workspaceId: string; unit: DraftObject; spec: RegistryUnit; registry: DraftRegistry;
   result?: NonNullable<DraftRun["units"]>[string]; results: ResultsState; lastRun: DraftRun | null; failure: PbrFailure | null;
   feedBasis?: PbrFeedBasis;
-  findings: Finding[]; apply(ops: DraftOp[]): Promise<unknown>; openLibrary(): void; showError(message: string): void;
+  findings: Finding[]; apply(ops: DraftOp[]): Promise<unknown>; libraryOpen: boolean; openLibrary(): void; showError(message: string): void;
 }) {
   const base = useId();
   const [tab, setTab] = useState<Tab>("Overview");
@@ -41,6 +41,9 @@ export default function PbrInspector({ workspaceId, unit, spec, registry, result
   }, [workspaceId]);
   // Loaded on mount and whenever the Biology tab opens, so a card edited in the library shows up as a newer revision.
   useEffect(() => { if (tab === "Biology" || cards.length === 0) reload(); }, [tab, reload]);
+  // Closing the Biology model library can add cards or set revisions the picker must show.
+  const libraryWasOpen = useRef(libraryOpen);
+  useEffect(() => { if (libraryWasOpen.current && !libraryOpen) reload(); libraryWasOpen.current = libraryOpen; }, [libraryOpen, reload]);
 
   const onTabKey = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
     const last = TABS.length - 1;

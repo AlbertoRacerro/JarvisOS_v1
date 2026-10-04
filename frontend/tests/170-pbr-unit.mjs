@@ -81,6 +81,8 @@ assert.match(picker, /onClick=\{\(\) => onPin\(pinnedCard\)\}/);
 assert.match(picker, /title=\{`card \$\{pin\.card_id\}/, "raw ids stay in a tooltip, not the primary text");
 assert.match(picker, /disabled=\{Boolean\(refusal\) \|\| current\}/);
 assert.doesNotMatch(picker, /useEffect/, "adoption is never triggered by an effect");
+assert.match(inspector, /if \(libraryWasOpen\.current && !libraryOpen\) reload\(\)/, "closing the library refreshes the picker");
+assert.match(editor, /libraryOpen=\{biologyOpen\}/);
 
 // ---- results groups and labels
 for (const text of ["Results · Jarvis", "Steady state", "Residence time", "Culture", "Nitrogen, oxygen and light", "Hydraulics", "Unit balances", "Numerics", "Findings", "Caveats", "Generation allowance", "Tolerance", "Residual", "Fidelity", "Inputs changed since this Run"])
