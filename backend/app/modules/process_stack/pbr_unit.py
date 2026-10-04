@@ -13,11 +13,13 @@ State y = (X, N, O₂) in kg m⁻³, time t in hours from midnight, dilution D_h
 light (``bio_models.cylinder``). The reduced periodic problem uses the exact structure of the system:
 
 - Z = N + qX obeys dZ/dt = D_h·(Z_in − Z), so seeding N₀ = Z_in − qX₀ keeps N = Z_in − qX on every
-  trajectory; root maps therefore integrate X alone with N substituted.
+  trajectory, and X is a scalar root.
 - O₂ is linear with constant decay kLa_h + D_h and no feedback, so O₂(24) = α·O₂(0) + β with
   α = exp(−24·(kLa_h + D_h)); O₂* = β/(1 − α).
 - X is a scalar periodic root F(X₀) = Φ₂₄(X₀) − X₀ found by a deterministic Brent iteration inside a
-  physically derived bracket, then certified by one full three-state integration.
+  physically derived bracket. Each map evaluation integrates the full system from (X₀, N slaved, O₂*),
+  so the final evaluation is the certification integration, whose N, O₂, Z-identity and positivity
+  checks remain independent of the root.
 
 The 107 day profile, light factor and nitrogen factor come from ``bluerev.pbr_core`` (shared core).
 """
@@ -255,17 +257,6 @@ def _integrate(rhs: Callable[[float, tuple[float, ...]], list[float]], state: li
     return samples
 
 
-def _x_rhs(growth: Growth) -> Callable[[float, tuple[float, ...]], list[float]]:
-    q, z_in, x_in, dilution = growth.nitrogen_quota, growth.z_in, growth.inlet[0], growth.dilution_h
-
-    def rhs(hour: float, state: tuple[float, ...]) -> list[float]:
-        biomass = state[0]
-        growth_rate, loss = growth.rates(hour, biomass, z_in - q * biomass)
-        return [(growth_rate - loss) * biomass + dilution * (x_in - biomass)]
-
-    return rhs
-
-
 def _full_rhs(growth: Growth) -> Callable[[float, tuple[float, ...]], list[float]]:
     q, y_o2, kla, o_sat = growth.nitrogen_quota, growth.oxygen_yield, growth.kla_h, growth.oxygen_saturation
     x_in, n_in, o_in = growth.inlet
@@ -306,18 +297,35 @@ class _Root:
     evaluations: int
 
 
+def _seeded_orbit(growth: Growth, x0: float, rhs: Callable[[float, tuple[float, ...]], list[float]],
+                  grids: list[list[float]], clock: _Clock) -> tuple[float, list[tuple[float, ...]]]:
+    """Integrate the full system from (X₀, N slaved, O₂*(X₀)); returns O₂* and the day's samples.
+
+    O₂ is affine in its seed with α = exp(−24·(kLa_h + D_h)), so one integration from O₂ = 0 gives
+    β and O₂* = β/(1 − α) exactly; the second integration starts on the O₂ periodic orbit. The map and
+    the certification therefore integrate the identical initial state, so the certified X periodicity
+    residual is exactly the root residual F(X*) and never a second, independent CVODE error budget.
+    (A one-state X integration accumulated ~1e-9 relative global error at rtol 1e-11 on the 107
+    fixture, which is the certification tolerance itself.)
+    """
+    n0 = growth.z_in - growth.nitrogen_quota * x0
+    beta = _integrate(rhs, [x0, n0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], grids, clock)[-1][2]
+    oxygen_star = beta / -math.expm1(-24.0 * (growth.kla_h + growth.dilution_h))
+    return oxygen_star, _integrate(rhs, [x0, n0, oxygen_star, 0.0, 0.0, 0.0, 0.0, 0.0], grids, clock)
+
+
 class _Map:
     """F(X₀) = Φ₂₄,X(X₀) − X₀ with N slaved; records every evaluation for the sign-change check."""
 
     def __init__(self, growth: Growth, clock: _Clock) -> None:
         self.growth, self.clock = growth, clock
-        self.rhs = _x_rhs(growth)
+        self.rhs = _full_rhs(growth)
         self.grids = _schedule(growth)
         self.points: list[tuple[float, float]] = []
 
     def __call__(self, x0: float) -> float:
         self.clock.check()
-        final = _integrate(self.rhs, [x0], self.grids, self.clock)[-1][0]
+        final = _seeded_orbit(self.growth, x0, self.rhs, self.grids, self.clock)[1][-1][0]
         value = final - x0
         self.points.append((x0, value))
         return value
@@ -429,12 +437,17 @@ def _unresolved(growth: Growth, lambda_h: float, reason: str, detail: dict[str, 
 
 
 def _linear_fixed_point(growth: Growth, clock: _Clock) -> tuple[float, int]:
-    """q = k_X = 0: X(24) = α·X(0) + β, with analytically stable α."""
-    rhs = _x_rhs(growth)
-    grids = _schedule(growth)
-    beta = _integrate(rhs, [0.0], grids, clock)[-1][0]
-    exponent = 24.0 * (thin_growth_rate(growth) - growth.dilution_h)
-    return beta / -math.expm1(exponent), 1
+    """q = k_X = 0: X(24) = α·X(0) + β, so F is affine; two map evaluations give X* = β/(1 − α).
+
+    β = F(0). The second point is the estimate from the quadrature Λ, α = exp(24·(Λ − D_h)), so the
+    secant is taken next to the answer and the certification integration starts where the affine
+    coefficients were measured.
+    """
+    func = _Map(growth, clock)
+    beta = func(0.0)
+    estimate = beta / -math.expm1(24.0 * (thin_growth_rate(growth) - growth.dilution_h))
+    slope = (func(estimate) - beta) / estimate  # α − 1 < 0
+    return -beta / slope, 2
 
 
 def solve_periodic(growth: Growth, clock: _Clock) -> _Solution:
@@ -525,14 +538,9 @@ class _Orbit:
 
 def certify(growth: Growth, x_star: float, clock: _Clock) -> _Orbit:
     """O₂* from the affine O₂ map, then one full three-state certification integration."""
-    rhs = _full_rhs(growth)
-    grids = _schedule(growth)
-    n_star = growth.inlet[1] + growth.nitrogen_quota * (growth.inlet[0] - x_star)
-    beta = _integrate(rhs, [x_star, n_star, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], grids, clock)[-1][2]
-    decay = 24.0 * (growth.kla_h + growth.dilution_h)
-    oxygen_star = beta / -math.expm1(-decay)
+    n_star = growth.z_in - growth.nitrogen_quota * x_star
+    oxygen_star, samples = _seeded_orbit(growth, x_star, _full_rhs(growth), _schedule(growth), clock)
     initial = (x_star, n_star, oxygen_star)
-    samples = _integrate(rhs, [*initial, 0.0, 0.0, 0.0, 0.0, 0.0], grids, clock)
     if not all(math.isfinite(value) for row in samples for value in row):
         raise PbrFailure("PBR_NONPHYSICAL_STATE", "The certified culture trajectory is not finite; check the model "
                          "card values and the unit inputs for extreme magnitudes.")

@@ -126,6 +126,7 @@ MODEL_GAPS: Final[tuple[str, ...]] = (
     "heat_balance: liquid temperature is prescribed; no solar/ambient/pump heat balance or cooling duty",
     "seawater_properties: loop hydraulics use pure-water CoolProp properties at the mean temperature",
     "tube_light_geometry: one-side-lit slab of depth = tube diameter; no circular/multi-side/diffuse light",
+    "tube_light_geometry: resolved in jarvis.pbr_unit_t1",
     "photoacclimation_and_light_dark_cycling: no pigment adaptation or flashing-light effect",
     "oxygen_inhibition: dissolved O2 does not inhibit growth; only reported as saturation ratio",
     "carbon_ph: no CO2/bicarbonate/pH balance; carbon assumed non-limiting",
