@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 import sqlite3
 from datetime import datetime
@@ -37,6 +38,7 @@ from app.modules.workspaces.service import get_workspace
 if TYPE_CHECKING:
     from app.modules.agents.hermes.supervisor import HermesSupervisor
 
+_LOGGER = logging.getLogger(__name__)
 _SAFE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
 _MAX_TITLE = 120
 _MAX_PROMPT = 12_000
@@ -365,6 +367,7 @@ def _submit_hermes_interaction(
             result = worker.turn(prompt, interaction_id=interaction_id, context_blocks=agent_blocks,
                                  allowed_tools=_turn_tools(surface_brief.surface))
     except Exception as exc:
+        _LOGGER.warning("Hermes turn %s raised %s: %.300s", interaction_id, type(exc).__name__, exc)
         _mark_hermes_failed(interaction_id, reservation_flow_id, exc)
         if hasattr(pool, "schedule_idle_stop"):
             pool.schedule_idle_stop(thread_id)
@@ -375,6 +378,8 @@ def _submit_hermes_interaction(
     final = result.get("final_response")
     if result.get("status") != "success" or result.get("completed") is not True \
             or not isinstance(relay_flow_id, str) or not isinstance(final, str):
+        _LOGGER.warning("Hermes turn %s ended without a final answer: status=%s error=%.300s",
+                        interaction_id, result.get("status"), result.get("error"))
         _mark_hermes_failed(interaction_id, reservation_flow_id,
                             "Hermes did not produce a successful final inference")
         pool.schedule_idle_stop(thread_id)
