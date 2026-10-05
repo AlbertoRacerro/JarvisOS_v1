@@ -167,6 +167,33 @@ def test_constant_rate_limit_matches_closed_form(monkeypatch):
     assert result.series["PBR1_X"][-1] == pytest.approx(math.exp(0.02 * 120 / 3600), rel=1e-7)
 
 
+def test_harvest_impulse_closes_hand_computed_biomass_and_nitrogen_balance(monkeypatch):
+    class Growth:
+        nitrogen_quota = 0.05
+        oxygen_yield = 1.0
+        kla_h = 0.0
+        oxygen_saturation = 0.01
+        extinction = 0.0
+        diameter = 0.05
+
+        @staticmethod
+        def rates_at(_par, _temperature, _x, _n):
+            return 0.0, 0.0
+
+    monkeypatch.setattr(dynamic_engine.pbr_unit, "build_growth", lambda *_args: Growth())
+    monkeypatch.setattr(dynamic_engine, "_profile_values", lambda *_args: (0.0, 298.15))
+    snapshot = _minimal_snapshot()
+    snapshot.payload["schedule"]["events"] = [
+        {"type": "harvest", "time_s": 60.0, "unit": "PBR1", "fraction": 0.5}
+    ]
+    result = dynamic_engine.run(snapshot, cancelled=lambda: False, progress=lambda _p: None)
+    assert result.status == "succeeded"
+    assert result.series["PBR1_X"][-1] == pytest.approx(0.5, abs=1e-8)
+    assert result.manifest["event_log"][0]["impulse_inventory"] == pytest.approx([-0.5, -0.125, -0.005])
+    assert result.manifest["balances"]["aggregate"]["biomass"]["residual_abs_kg"] < 1e-8
+    assert result.manifest["balances"]["aggregate"]["total_nitrogen"]["residual_abs_kg"] < 1e-8
+
+
 def test_sampler_failure_is_recorded_without_changing_trajectory_and_cancel_keeps_computed_rows(monkeypatch):
     class Growth:
         nitrogen_quota = 0.0
