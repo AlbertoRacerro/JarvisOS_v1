@@ -106,6 +106,76 @@ def _splitter_ratios(unit: dict[str, Any], outlet_count: int) -> list[float]:
     return ratios
 
 
+def _validate_events(
+    events: list[dict[str, Any]], units: list[dict[str, Any]], topology: dict[str, Any],
+    controller_ids: list[str],
+) -> None:
+    unit_tags = {item["tag"] for item in units}
+    feeds = {stream["tag"] for stream in topology["streams"] if stream.get("source") is None}
+    splitters = {unit["tag"] for unit in topology["units"] if unit.get("type") == "Splitter"}
+    for event in events:
+        observed = event.get("observed")
+        if observed:
+            parts = observed.split(".")
+            if len(parts) != 2 or parts[0] not in unit_tags or parts[1] not in {"X", "N", "O2"}:
+                raise DynamicError("UNSUPPORTED_MEASUREMENT", "Conditional event observes an unsupported channel.",
+                                   {"observed": observed})
+            if event.get("threshold_unit") != "kg/m3" or event.get("direction") not in {"above", "below"}:
+                raise DynamicError("EVENT_UNIT_INVALID", "Conditional threshold requires kg/m3 and a direction.")
+        kind = event["type"]
+        if kind in {"inoculation", "harvest"}:
+            if event.get("unit") not in unit_tags:
+                raise DynamicError("EVENT_TARGET_INVALID", "Event unit is not participating.",
+                                   {"unit": event.get("unit")})
+        if kind == "harvest":
+            if event.get("fraction") is None:
+                raise DynamicError("EVENT_VALUE_INVALID", "Harvest requires a fraction.")
+        elif kind == "inoculation":
+            if event.get("value_unit") != "kg/m3":
+                raise DynamicError("EVENT_UNIT_INVALID", "Inoculation concentration requires kg/m3.")
+            value = event.get("value")
+            if isinstance(value, dict) and (not value or set(value) - {"X", "N", "O2"}):
+                raise DynamicError("EVENT_VALUE_INVALID", "Inoculation has unsupported concentration fields.")
+            values = value.values() if isinstance(value, dict) else [value]
+            if any(not isinstance(v, (int, float)) or not math.isfinite(v) or v < 0 for v in values):
+                raise DynamicError("EVENT_VALUE_INVALID", "Inoculation requires finite nonnegative concentrations.")
+        elif kind in {"feed_change", "dilution"}:
+            target = event.get("target") or ""
+            if target.startswith("splitter:"):
+                if target.partition(":")[2] not in splitters or kind != "dilution":
+                    raise DynamicError("EVENT_TARGET_INVALID", "Event splitter is not participating.")
+            elif (event.get("stream") or target.removeprefix("feed:")) not in feeds:
+                raise DynamicError("EVENT_TARGET_INVALID", "Event feed is not a participating boundary stream.")
+            value = event.get("value")
+            expected_unit = "1" if target.startswith("splitter:") else "m3/s"
+            if not isinstance(value, dict) and event.get("value_unit") != expected_unit:
+                raise DynamicError("EVENT_UNIT_INVALID", f"Event value requires {expected_unit}.")
+            if isinstance(value, dict):
+                if set(value) - {"flow_m3_s", "culture", "culture_unit"} or not value:
+                    raise DynamicError("EVENT_VALUE_INVALID", "Feed change has unsupported fields.")
+                values = [value["flow_m3_s"]] if "flow_m3_s" in value else []
+                culture = value.get("culture", {})
+                if not isinstance(culture, dict) or set(culture) - {"X", "N", "O2"}:
+                    raise DynamicError("EVENT_VALUE_INVALID", "Feed culture has unsupported fields.")
+                if culture and value.get("culture_unit") != "kg/m3":
+                    raise DynamicError("EVENT_UNIT_INVALID", "Feed culture requires kg/m3.")
+                values.extend(culture.values())
+            else:
+                values = [value]
+            if any(not isinstance(v, (int, float)) or not math.isfinite(v) or v < 0 for v in values):
+                raise DynamicError("EVENT_VALUE_INVALID", "Feed/dilution values must be finite and nonnegative.")
+            if target.startswith("splitter:") and not 0 <= float(value) <= 1:
+                raise DynamicError("EVENT_VALUE_INVALID", "Splitter ratio must be in [0,1].")
+        elif kind == "setpoint_change":
+            if event.get("value_unit") != "kg/m3":
+                raise DynamicError("EVENT_UNIT_INVALID", "Controller setpoint requires kg/m3.")
+            if event.get("target") not in controller_ids:
+                raise DynamicError("EVENT_TARGET_INVALID", "Setpoint controller is not participating.")
+            value = event.get("value")
+            if not isinstance(value, (int, float)) or not math.isfinite(value):
+                raise DynamicError("EVENT_VALUE_INVALID", "Setpoint must be finite.")
+
+
 def _topology(document: dict[str, Any], units: list[dict[str, Any]], scenario: dict[str, Any]) -> dict[str, Any]:
     """Build a bounded T1 stream network and solve its steady volumetric flow balance."""
     objects = document["objects"]
@@ -301,7 +371,10 @@ def prepare(workspace_id: str, draft_id: str, scenario_id: str) -> Snapshot:
             if raw is None:
                 raise DynamicError("CONTROLLER_NOT_FOUND", f"Controller {controller_id!r} was not found.")
             controller = Controller.model_validate(raw)
-            if controller.measurement.split(".")[-1] not in {"X", "N", "O2"}:
+            measurement_parts = controller.measurement.split(".")
+            if (len(measurement_parts) not in {1, 2}
+                    or measurement_parts[-1] not in {"X", "N", "O2"}
+                    or (len(measurement_parts) == 2 and measurement_parts[0] != controller.unit)):
                 raise DynamicError(
                     "UNSUPPORTED_MEASUREMENT",
                     "Only T1 X, N and O2 measurements are supported.",
@@ -344,6 +417,9 @@ def prepare(workspace_id: str, draft_id: str, scenario_id: str) -> Snapshot:
             model = pbr_unit._resolve(workspace_id, unit.get("model") or {})
             volume = params["tube_count"] * math.pi * params["tube_inner_diameter"] ** 2 * params["tube_length"] / 4
             initial = scenario.initial.get(tag, {})
+            if set(initial) != {"X", "N", "O2"}:
+                raise DynamicError("INITIAL_STATE_REQUIRED", "Each T1 unit requires explicit X, N and O2 initial state.",
+                                   {"unit": tag})
             state = [float(initial.get(k, 0.0)) for k in ("X", "N", "O2")]
             if any(not math.isfinite(v) or v < 0 for v in state):
                 raise DynamicError(
@@ -409,6 +485,7 @@ def prepare(workspace_id: str, draft_id: str, scenario_id: str) -> Snapshot:
         for node in algebraic:
             visit(node)
         topology = _topology(document, units, scenario.model_dump(mode="json"))
+        _validate_events(expanded_events, units, topology, controller_ids)
         downstream_data = None
         if scenario.downstream_cadence_s:
             samples = math.floor(duration / scenario.downstream_cadence_s)
@@ -647,7 +724,8 @@ def _network_concentrations(topology: dict[str, Any], runtime: dict[str, Any], s
 
 
 def _result_series(snapshot: Snapshot, times: list[float], rows: list[np.ndarray], units: list[dict[str, Any]],
-                   controllers: list[dict[str, Any]], controller_log: list[dict[str, Any]]) -> dict[str, np.ndarray]:
+                   controllers: list[dict[str, Any]], controller_log: list[dict[str, Any]],
+                   flow_log: list[dict[str, Any]] | None = None) -> dict[str, np.ndarray]:
     elapsed = np.asarray(times, dtype=np.float64)
     matrix = np.asarray(rows, dtype=np.float64)
     result = {"t_s": elapsed, "par": np.asarray([_profile_par(snapshot, float(t)) for t in elapsed])}
@@ -658,13 +736,39 @@ def _result_series(snapshot: Snapshot, times: list[float], rows: list[np.ndarray
         result[f"{unit['tag']}_temperature"] = np.asarray(
             [_profile_temperature(snapshot, float(t), i) for t in elapsed]
         )
-        result[f"{unit['tag']}_harvest_X"] = matrix[:, i * 7 + 6]
+        result[f"{unit['tag']}_harvest_X_kg"] = matrix[:, i * 7 + 6] * unit["volume_m3"]
+    result["harvest_X_kg"] = matrix[:, len(units) * 7 + 3] + sum(
+        result[f"{unit['tag']}_harvest_X_kg"] for unit in units
+    )
     for controller in controllers:
         result[f"controller_{controller['id']}"] = np.asarray([
             next((entry["output"] for entry in reversed(controller_log)
                   if entry["controller"] == controller["id"] and entry["time_s"] <= t),
-                 float(controller["output"])) for t in times
+                 float(controller["_initial_output"])) for t in times
         ], dtype=np.float64)
+    if flow_log:
+        topology = snapshot.payload["topology"]
+        flows_at = [next(entry["flows"] for entry in reversed(flow_log) if entry["time_s"] <= t)
+                    for t in times]
+        for stream in topology["streams"]:
+            if stream.get("source") is None:
+                result[f"feed_{stream['tag']}_Q_m3_s"] = np.asarray(
+                    [item[stream["id"]] for item in flows_at], dtype=np.float64
+                )
+        for unit in topology["units"]:
+            if unit.get("type") != "Splitter":
+                continue
+            outlets = sorted(
+                (stream for stream in topology["streams"]
+                 if (stream.get("source") or {}).get("unit") == unit["id"]),
+                key=lambda stream: (stream.get("source") or {}).get("port", 0),
+            )
+            for stream in outlets:
+                result[f"splitter_{unit['tag']}_{stream['tag']}_ratio"] = np.asarray(
+                    [item[stream["id"]] / total if total > 0 else math.nan
+                     for item in flows_at
+                     for total in [sum(item[out["id"]] for out in outlets)]], dtype=np.float64
+                )
     return result
 
 
@@ -697,19 +801,22 @@ def run(
     growths = [pbr_unit.build_growth(item["params"], item["model"], (0, 0, 0), 0) for item in units]
     for item, growth in zip(units, growths, strict=True):
         item["growth"] = growth
-    # Per unit: X,N,O2 plus integrated net growth, oxygen transfer, harvest X and N.
-    initial = np.zeros(n * 7 + 3, dtype=np.float64)
+    # Per unit: X,N,O2 plus integrated generation, transfer and discrete harvest.
+    # Global states: boundary X/N/O2 balance and continuous harvested biomass mass.
+    initial = np.zeros(n * 7 + 4, dtype=np.float64)
     for i, unit in enumerate(units):
         initial[i * 7 : i * 7 + 3] = unit["state"]
     rows: list[np.ndarray] = [initial.copy()]
     times_out = [0.0]
     event_log: list[dict[str, Any]] = []
     controller_log: list[dict[str, Any]] = []
+    flow_log: list[dict[str, Any]] = []
     downstream: list[dict[str, Any]] = []
     events = sorted(
         enumerate(snapshot.payload["schedule"].get("events", [])), key=lambda pair: (pair[1]["time_s"], pair[0])
     )
-    controllers = [dict(value, _integral=0.0, _active=False, _bias=float(value["output"]))
+    controllers = [dict(value, _integral=0.0, _active=False, _bias=float(value["output"]),
+                        _initial_output=float(value["output"]))
                    for value in snapshot.payload.get("controllers", [])]
     controller_cadence = float(scenario.get("controller_cadence_s", 300))
     has_conditional_events = any(event.get("observed") for _, event in events)
@@ -742,13 +849,14 @@ def run(
                 current, events[event_cursor], units, event_log, event_cursor,
                 topology, flows, feeds, setpoints, {item["id"]: item for item in controllers},
             )
+        flow_log.append({"time_s": 0.0, "flows": dict(flows)})
         rows[0] = current.copy()
         for left, right in zip(boundaries, boundaries[1:], strict=False):
             if cancelled():
                 return EngineResult(
                     "cancelled",
                     {"code": "CANCELLED", "message": "Run cancelled.", "detail": {}},
-                    _result_series(snapshot, times_out, rows, units, controllers, controller_log),
+                    _result_series(snapshot, times_out, rows, units, controllers, controller_log, flow_log),
                     _manifest(snapshot, started, event_log, controller_log, downstream),
                 )
 
@@ -786,9 +894,10 @@ def run(
                     result[off:off + 7] = [net_x, net_n, net_o, rx, -growth.nitrogen_quota * rx, transfer, 0.0]
                 # Boundary terms are inventory rates in kg/s. Fourth concentration is q*X,
                 # propagated independently through algebraic mixers/splitters.
+                active_ids = {unit["id"] for unit in topology["units"]}
                 for stream in topology["streams"]:
                     source, target = stream.get("source"), stream.get("target")
-                    if source is not None and target is not None:
+                    if source is not None and (target or {}).get("unit") in active_ids:
                         continue
                     value = feeds.get(stream["id"]) if source is None else concentrations.get(
                         f"stream:{stream['id']}"
@@ -800,7 +909,9 @@ def run(
                     else:
                         quota_x = value[3]
                     q = flows.get(stream["id"], 0.0) * (1.0 if source is None else -1.0)
-                    result[n * 7:] += q * np.asarray([value[0], value[1] + quota_x, value[2]])
+                    result[n * 7:n * 7 + 3] += q * np.asarray([value[0], value[1] + quota_x, value[2]])
+                    if source is not None:
+                        result[n * 7 + 3] += flows.get(stream["id"], 0.0) * value[0]
                 return result
 
             grid = [left, *[float(t) for t in outputs if left < t < right], right]
@@ -840,6 +951,7 @@ def run(
                                     topology, flows, feeds, setpoints, controller_by_id)
                 if times_out and abs(times_out[-1] - right) < 1e-7:
                     rows[-1] = current.copy()
+            flow_log.append({"time_s": right, "flows": dict(flows)})
             if (
                 sampler
                 and scenario.get("downstream_cadence_s")
@@ -849,7 +961,7 @@ def run(
                     return EngineResult(
                         "cancelled",
                         {"code": "CANCELLED", "message": "Run cancelled.", "detail": {}},
-                        _result_series(snapshot, times_out, rows, units, controllers, controller_log),
+                        _result_series(snapshot, times_out, rows, units, controllers, controller_log, flow_log),
                         _manifest(snapshot, started, event_log, controller_log, downstream),
                     )
                 try:
@@ -870,12 +982,26 @@ def run(
                     return EngineResult(
                         "cancelled",
                         {"code": "CANCELLED", "message": "Run cancelled.", "detail": {}},
-                        _result_series(snapshot, times_out, rows, units, controllers, controller_log),
+                        _result_series(snapshot, times_out, rows, units, controllers, controller_log, flow_log),
                         _manifest(snapshot, started, event_log, controller_log, downstream),
                     )
             progress(min(1.0, right / duration))
-        series = _result_series(snapshot, times_out, rows, units, controllers, controller_log)
+        series = _result_series(snapshot, times_out, rows, units, controllers, controller_log, flow_log)
         manifest = _manifest(snapshot, started, event_log, controller_log, downstream)
+        manifest["channels"] = {
+            name: (
+                "s" if name == "t_s" else
+                "umol/(m2*s)" if name == "par" else
+                "K" if name == "temperature" or name.endswith("_temperature") else
+                "kg" if name == "harvest_X_kg" or name.endswith("_harvest_X_kg") else
+                "m3/s" if name.endswith("_Q_m3_s") else
+                "1" if name.endswith("_ratio") else
+                "kg/m3" if name.endswith(("_X", "_N", "_O2")) else
+                ("m3/s" if next(c for c in controllers if name == f"controller_{c['id']}")
+                 ["actuator"].startswith("feed:") else "1")
+                if name.startswith("controller_") else "unknown"
+            ) for name in series
+        }
         manifest["diagnostics"]["roundoff_clips"] = roundoff_clips
         net_boundary = current[n * 7 : n * 7 + 3]
         initial_inventory = np.zeros(3, dtype=np.float64)
@@ -912,12 +1038,29 @@ def run(
                                   "residual_rel": float(abs(residual[i]) / max(1e-12, abs(initial_inventory[i]) + abs(net_boundary[i]) + abs(generated[i]) + abs(impulses[i])))}
                            for i, name in enumerate(("biomass", "total_nitrogen", "oxygen"))},
         }
+        harvest_kg = float(series["harvest_X_kg"][-1])
+        volume_m3 = sum(unit["volume_m3"] for unit in units)
+        area_m2 = (
+            sum(math.pi * unit["params"]["tube_inner_diameter"] * unit["params"]["tube_length"]
+                * unit["params"]["tube_count"] for unit in units)
+            if all({"tube_inner_diameter", "tube_length", "tube_count"} <= unit["params"].keys()
+                   for unit in units) else None
+        )
+        days = duration / 86400.0
+        manifest["productivity"] = {
+            "harvest_kg": harvest_kg,
+            "volumetric_kg_m3_day": harvest_kg / volume_m3 / days,
+            "areal_kg_m2_day": harvest_kg / area_m2 / days if area_m2 else None,
+            "areal_unavailable_reason": None if area_m2 else "Illuminated tube geometry is unavailable.",
+            "energy_per_kg": None,
+            "energy_per_kg_unavailable_reason": "No dynamic pump or aeration energy input is declared.",
+        }
         return EngineResult("succeeded", None, series, manifest)
     except DynamicError as exc:
         return EngineResult(
             "failed",
             {"code": exc.code, "message": exc.message, "detail": exc.detail},
-            _result_series(snapshot, times_out, rows, units, controllers, controller_log),
+            _result_series(snapshot, times_out, rows, units, controllers, controller_log, flow_log),
             _manifest(snapshot, started, event_log, controller_log, downstream),
         )
     except Exception as exc:
@@ -925,7 +1068,7 @@ def run(
         return EngineResult(
             "failed",
             error,
-            _result_series(snapshot, times_out, rows, units, controllers, controller_log),
+            _result_series(snapshot, times_out, rows, units, controllers, controller_log, flow_log),
             _manifest(snapshot, started, event_log, controller_log, downstream),
         )
 
@@ -1077,6 +1220,7 @@ def _apply_dynamic_event(
             flows[outgoing[0]["id"]] = total * ratio
             for outlet in outgoing[1:]:
                 flows[outlet["id"]] = total * (1 - ratio) / (len(outgoing) - 1)
+            _rebalance_flows(topology, flows)
         else:
             stream = next((item for item in topology["streams"] if item["tag"] == stream_tag), None)
             if stream is None or stream.get("source") is not None:
@@ -1147,6 +1291,7 @@ def _sample_controllers(
             flows[outlets[0]["id"]] = total * output
             for stream in outlets[1:]:
                 flows[stream["id"]] = total * (1 - output) / (len(outlets) - 1)
+            _rebalance_flows(topology, flows)
         log.append({"controller": controller["id"], "time_s": time_s, "measurement": measurement, "output": float(output)})
 
 
@@ -1204,6 +1349,7 @@ def _rebalance_flows(topology: dict[str, Any], flows: dict[str, float]) -> None:
         key = unit["id"]
         incoming = [s for s in streams if (s.get("target") or {}).get("unit") == key]
         outgoing = [s for s in streams if (s.get("source") or {}).get("unit") == key]
+        outgoing.sort(key=lambda stream: (stream.get("source") or {}).get("port", 0))
         if not incoming or not outgoing:
             continue
         row = np.zeros(len(streams))
@@ -1224,6 +1370,18 @@ def _rebalance_flows(topology: dict[str, Any], flows: dict[str, float]) -> None:
                 for inlet in incoming:
                     split_row[index[inlet["id"]]] -= ratio
                 rows.append(split_row)
+                rhs.append(0.0)
+        elif unit.get("type") == "SpecifiedSeparator":
+            if len(incoming) != 1 or len(outgoing) != 2:
+                raise DynamicError("SEPARATOR_TOPOLOGY_INVALID", "Separator needs one inlet and two outlets.")
+            params = unit.get("params", {})
+            recovery = float((params.get("biomass_recovery") or {}).get("si", 90.0)) / 100.0
+            factor = float((params.get("concentration_factor") or {}).get("si", 10.0))
+            for stream, ratio in zip(outgoing, (recovery / factor, 1.0 - recovery / factor), strict=True):
+                sep_row = np.zeros(len(streams))
+                sep_row[index[stream["id"]]] = 1.0
+                sep_row[index[incoming[0]["id"]]] = -ratio
+                rows.append(sep_row)
                 rhs.append(0.0)
     solved, *_ = np.linalg.lstsq(np.vstack(rows), np.asarray(rhs), rcond=None)
     if np.any(solved < -1e-10) or np.max(np.abs(np.vstack(rows) @ solved - rhs)) > 1e-8:

@@ -117,12 +117,14 @@ def main() -> int:
             raise RuntimeError("The PBR-to-Heater draft did not produce a downstream sampler")
         result = dynamic_engine.run(snapshot, cancelled=lambda: False, progress=lambda _value: None, sampler=sampler)
         without_downstream = dynamic_engine.run(snapshot, cancelled=lambda: False, progress=lambda _value: None)
-        same_biology = all((result.series[key] == without_downstream.series[key]).all()
-                           for key in result.series if key.startswith("PBR."))
+        biological_channels = sorted(name for name in result.series if name in {"PBR_X", "PBR_N", "PBR_O2"})
+        same_biology = bool(biological_channels) and all(
+            (result.series[key] == without_downstream.series[key]).all() for key in biological_channels
+        )
         outcomes = result.manifest.get("downstream_outcomes", [])
         report.update({"scenario_status": result.status, "downstream_outcomes": outcomes,
                        "series_rows": len(result.series.get("t_s", [])),
-                       "biological_channels": sorted(name for name in result.series if name.startswith("PBR_")),
+                       "biological_channels": biological_channels,
                        "biology_identical_without_sampler": same_biology,
                        "complete": (result.status == "succeeded" and bool(outcomes)
                                     and all(item.get("status") == "succeeded" for item in outcomes)

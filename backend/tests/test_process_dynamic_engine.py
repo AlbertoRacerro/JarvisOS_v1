@@ -13,7 +13,7 @@ from pydantic import TypeAdapter, ValidationError
 from app.modules.process_stack import dynamic_engine
 from app.modules.process_stack.draft import apply_ops, content_digest, empty_document
 from app.modules.process_stack.draft_models import DraftOp
-from app.modules.process_stack.dynamic_models import Scenario, Schedule
+from app.modules.process_stack.dynamic_models import Scenario, Schedule, ScheduleEvent
 from app.modules.process_stack.dynamics import integrate_ode
 
 
@@ -336,6 +336,64 @@ def test_feed_dilution_and_setpoint_events_mutate_runtime_state():
     assert flows["o1"] == pytest.approx(1.4)
     assert flows["o2"] == pytest.approx(0.6)
     assert setpoints["c"] == 4.0
+
+
+def test_dynamic_event_preflight_rejects_bad_observation_and_values():
+    with pytest.raises(ValidationError):
+        ScheduleEvent.model_validate({"type": "harvest", "time_s": 0, "unit": "PBR1",
+                                      "fraction": 0.1, "observed": "PBR1.X", "threshold": 1.0})
+    units = [{"tag": "PBR1"}]
+    topology = {"units": [], "streams": [{"id": "f", "tag": "Feed", "source": None}]}
+    for event in (
+        {"type": "feed_change", "time_s": 0, "stream": "Feed", "value": {"culture": {"X": -1}}},
+        {"type": "setpoint_change", "time_s": 0, "target": "loop", "value": float("nan")},
+        {"type": "harvest", "time_s": 0, "unit": "PBR1", "fraction": 0.1,
+         "observed": "OTHER.X", "threshold": 1, "direction": "above", "hysteresis": 0.1},
+    ):
+        with pytest.raises(dynamic_engine.DynamicError):
+            dynamic_engine._validate_events([event], units, topology, ["loop"])
+
+
+def test_separator_rebalance_preserves_recovery_ratio():
+    feed = {"id": "f", "tag": "Feed", "source": None, "target": {"unit": "sep"}}
+    concentrate = {"id": "c", "tag": "Concentrate", "source": {"unit": "sep", "port": 0}}
+    clarified = {"id": "r", "tag": "Return", "source": {"unit": "sep", "port": 1}}
+    separator = {"id": "sep", "tag": "F301", "type": "SpecifiedSeparator",
+                 "params": {"biomass_recovery": {"si": 95.0}, "concentration_factor": {"si": 20.0}}}
+    topology = {"units": [separator], "streams": [feed, concentrate, clarified]}
+    flows = {"f": 2.0, "c": 0.0475, "r": 0.9525}
+    dynamic_engine._rebalance_flows(topology, flows)
+    assert flows["c"] == pytest.approx(0.095)
+    assert flows["r"] == pytest.approx(1.905)
+
+
+def test_controller_series_uses_initial_output_before_first_sample():
+    snapshot = _minimal_snapshot()
+    controller = {"id": "loop", "output": 0.9, "_initial_output": 0.2}
+    rows = [np.zeros(11), np.zeros(11)]
+    series = dynamic_engine._result_series(snapshot, [0, 60], rows, snapshot.payload["units"],
+                                           [controller], [{"controller": "loop", "time_s": 60, "output": 0.9}])
+    assert series["controller_loop"].tolist() == [0.2, 0.9]
+
+
+def test_continuous_product_outflow_is_reported_as_harvest(monkeypatch):
+    class Growth:
+        nitrogen_quota = oxygen_yield = kla_h = 0.0
+        oxygen_saturation = extinction = 0.0
+        diameter = 0.05
+
+        @staticmethod
+        def rates_at(_par, _temperature, _x, _n):
+            return 0.0, 0.0
+
+    monkeypatch.setattr(dynamic_engine.pbr_unit, "build_growth", lambda *_args: Growth())
+    snapshot = _minimal_snapshot()
+    snapshot.payload["topology"]["flows"] = {"feed": 0.01, "product": 0.01}
+    result = dynamic_engine.run(snapshot, cancelled=lambda: False, progress=lambda _p: None)
+    assert result.status == "succeeded", result.error
+    assert result.series["harvest_X_kg"][-1] == pytest.approx(1.2, rel=1e-5)
+    assert result.manifest["productivity"]["harvest_kg"] == pytest.approx(1.2, rel=1e-5)
+    assert result.series["feed_Feed_Q_m3_s"].tolist() == [0.01, 0.01, 0.01]
 
 
 def test_conditional_event_fires_at_sample_cadence_and_applies_feed_change():

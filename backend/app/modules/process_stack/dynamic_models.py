@@ -16,7 +16,7 @@ MIN_CADENCE_S = 60
 
 
 class StrictModel(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
+    model_config = ConfigDict(extra="forbid", strict=True, allow_inf_nan=False)
 
 
 class ScheduleEvent(StrictModel):
@@ -26,10 +26,12 @@ class ScheduleEvent(StrictModel):
     stream: str | None = None
     target: str | None = None
     value: float | str | dict[str, Any] | None = None
+    value_unit: Literal["kg/m3", "m3/s", "1"] | None = None
     fraction: float | None = Field(default=None, ge=0, le=1)
     medium: dict[str, float] | None = None
     observed: str | None = None
     threshold: float | None = None
+    threshold_unit: Literal["kg/m3"] | None = None
     direction: Literal["above", "below"] | None = None
     hysteresis: float | None = Field(default=None, ge=0)
     every_s: float | None = Field(default=None, gt=0)
@@ -42,6 +44,10 @@ class ScheduleEvent(StrictModel):
             raise ValueError("repeated event requires count or end_s")
         if (self.observed is None) != (self.threshold is None):
             raise ValueError("conditional event requires observed and threshold")
+        if self.observed is not None and (self.direction is None or self.hysteresis is None):
+            raise ValueError("conditional event requires direction and hysteresis")
+        if self.observed is not None and self.threshold_unit != "kg/m3":
+            raise ValueError("conditional threshold requires kg/m3 unit")
         return self
 
 
