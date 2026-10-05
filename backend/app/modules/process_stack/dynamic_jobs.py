@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib
 import json
 import os
 import re
@@ -89,9 +90,8 @@ def _record(workspace_id: str, job_id: str) -> tuple[Path, dict[str, Any]]:
 
 
 def _engine() -> Any:
-    from app.modules.process_stack import dynamic_engine
-
-    return dynamic_engine
+    # Resolve through sys.modules (not the package attribute) so the engine can be substituted in tests.
+    return importlib.import_module("app.modules.process_stack.dynamic_engine")
 
 
 def _error_payload(exc: BaseException) -> dict[str, Any]:
