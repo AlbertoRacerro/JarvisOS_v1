@@ -1,4 +1,5 @@
 import { API_BASE_URL } from "./client";
+import type { MathNode } from "./bioModels";
 
 // Spec 155: Jarvis-owned process draft. Quantities travel as value + unit; the server converts.
 export type DraftQuantity = { value: number; unit: string };
@@ -104,7 +105,7 @@ export type DraftProjection = {
   property_package: string | null;
   objects: DraftObject[];
   reactions?: Record<string, DraftReaction>;
-  kinetics_scripts?: Record<string, { reaction_id: string; script_title: string; script_text: string }>;
+  kinetics_scripts?: Record<string, KineticsScript>;
   findings: Finding[];
   /** Pre-run Q and HRT for a PBR fed directly by a feed stream (backend feed basis); absent otherwise. */
   pbr_feed_basis?: Record<string, PbrFeedBasis>;
@@ -161,6 +162,25 @@ export type RegistryReactions = {
   fields?: RegistryReactionField[];
   [key: string]: unknown;
 };
+/** Spec 180 closed rate-law forms; the registry projection of backend kinetics.form_table(). */
+export type KineticsParam = { key?: string; symbol: string; label?: string; kind: string; domain: string; minimum: number; maximum: number; unit: string };
+export type KineticsFormId = "power_law_arrhenius" | "monod" | "haldane";
+export type KineticsRegistry = {
+  version: string;
+  forms: { id: KineticsFormId; label: string; explanation: string; parameters: (KineticsParam & { key: string })[]; equation: MathNode }[];
+  inhibition: { max_terms: number; kinds: ("noncompetitive" | "competitive")[]; k_i: KineticsParam; explanation: string };
+  temperature: { activation_energy: KineticsParam; reference_temperature: KineticsParam; explanation: string };
+  provenance_kinds: ("literature" | "measurement" | "operator_estimate" | "synthetic")[];
+  unsupported: string[];
+};
+export type KineticsScript = { reaction_id: string; script_title: string; native_reaction_id?: string; script_text: string | null; compilable?: boolean };
+export type KineticsRecord = {
+  verified: boolean; code?: string | null; reaction_id?: string; form?: string; base_reactant?: string; script_title?: string;
+  native_reaction_id?: string; kinetics_version?: string; residual?: number | null; tolerance?: number | null; conversion?: number | null;
+  extent_kmol_h?: number | null; rate_inlet?: number | null; rate_outlet?: number | null;
+  summary?: { outlet_concentrations_kmol_m3?: Record<string, number>; residence_time_h?: number; outlet_temperature_K?: number };
+  findings?: { code: string; severity: string; message: string }[];
+};
 export type DraftRegistry = {
   compiler_version: string;
   compounds: string[];
@@ -169,6 +189,7 @@ export type DraftRegistry = {
   stream_specs: { key: string; label: string; kind: string }[];
   units: RegistryUnit[];
   reactions?: RegistryReactions;
+  kinetics?: KineticsRegistry;
   unsupported: Record<string, string>;
 };
 /** One DWSIM-reported property, captured at solve time; units verbatim from DWSIM. */
@@ -252,8 +273,7 @@ export type UnitResult = {
   owner?: "dwsim" | "jarvis_bio"; calculated: boolean; error?: string; evaluator?: string; version?: number; model_version?: string;
   fidelity?: string; caveats?: string[]; findings?: Finding[]; label?: string; branch?: "productive" | "washout" | string;
   model_pin?: PbrModelPin; numerics?: PbrNumerics; unit_balances?: Record<string, UnitBalanceRow>;
-  kinetics?: { verified?: boolean; form?: string; script_title?: string; script_text?: string; conversion?: number;
-    extent_kmol_h?: number; residual?: number; tolerance?: number; [field: string]: unknown };
+  kinetics?: KineticsRecord;
   reported: Record<string, ReportedValue>; properties?: ResultProperty[];
 };
 export type CultureResult = {
@@ -371,4 +391,5 @@ export const optionLabel = (option: RegistryOption) =>
   typeof option === "string" ? option : option.label;
 
 export const unitLabel = (unit: string) =>
-  ({ degC: "°C", percent: "%", "kg/h": "kg/h", "kg/s": "kg/s", "t/h": "t/h" })[unit] ?? unit;
+  ({ degC: "°C", percent: "%", "kg/h": "kg/h", "kg/s": "kg/s", "t/h": "t/h", "kmol/[m3.h]": "kmol/(m³·h)", "mol/[m3.s]": "mol/(m³·s)",
+    "mol/[L.h]": "mol/(L·h)", "mol/m3": "mol/m³", "kmol/m3": "kmol/m³" })[unit] ?? unit;

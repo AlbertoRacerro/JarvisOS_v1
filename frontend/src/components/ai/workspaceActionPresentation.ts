@@ -93,6 +93,8 @@ export function actionStatePresentation(state: ActionOutcome["state"]): { label:
   }
 }
 
+const RATE_LAW_LABELS: Record<string, string> = { power_law_arrhenius: "Power law (Arrhenius)", monod: "Monod", haldane: "Haldane / Andrews" };
+
 /**
  * Card text for one validated process action. The backend composes `summary`; this is the frontend's own
  * wording for requests whose summary is missing, so `set_unit_model` never falls back to raw JSON.
@@ -101,10 +103,11 @@ export function describeProcessAction(action: Record<string, unknown>): string |
   const text = (value: unknown) => (typeof value === "string" && value ? value : null);
   if (action.op === "set_reaction") {
     const unit = text(action.unit) ?? "the reactor";
-    const reaction = action.reaction as { name?: unknown; rate_law?: { form?: unknown } } | null;
-    const name = text(reaction?.name) ?? text(action.reaction_id) ?? "reaction";
-    const form = text(reaction?.rate_law?.form);
-    return reaction ? `Set ${form ? `${form} ` : ""}reaction ${name} on ${unit}` : `Remove reaction ${name} from ${unit}`;
+    const reaction = action.reaction as { name?: unknown; rate_law?: { form?: unknown } | null } | null;
+    const name = text(reaction?.name);
+    if (!reaction) return `Remove ${name ? `reaction ${name}` : "a reaction"} from ${unit}`;
+    const form = text(reaction.rate_law?.form) ?? "power_law_arrhenius";
+    return `Set ${RATE_LAW_LABELS[form] ?? "rate-law"} reaction${name ? ` ${name}` : ""} on ${unit}`;
   }
   if (action.op === "set_unit_model") {
     const unit = text(action.unit) ?? "the unit";
