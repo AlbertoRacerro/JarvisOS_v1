@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -566,8 +566,40 @@ class SetThermo(_Op):
     property_package: str | None = None
 
 
+class _DynamicSet(_Op):
+    id: str = Field(pattern=ID_PATTERN)
+    value: dict[str, Any]
+
+
+class SetSchedule(_DynamicSet):
+    op: Literal["set_schedule"]
+
+
+class DeleteSchedule(_Op):
+    op: Literal["delete_schedule"]
+    id: str = Field(pattern=ID_PATTERN)
+
+
+class SetController(_DynamicSet):
+    op: Literal["set_controller"]
+
+
+class DeleteController(_Op):
+    op: Literal["delete_controller"]
+    id: str = Field(pattern=ID_PATTERN)
+
+
+class SetScenario(_DynamicSet):
+    op: Literal["set_scenario"]
+
+
+class DeleteScenario(_Op):
+    op: Literal["delete_scenario"]
+    id: str = Field(pattern=ID_PATTERN)
+
+
 DraftOp = Annotated[
-    AddUnit | AddStream | Delete | Move | Rename | Connect | Disconnect | SetRoute | SetOrientation | SetStreamSpec | SetStreamCulture | SetUnitParams | SetUnitModel | SetReactions | SetReactorReaction | SetThermo,
+    AddUnit | AddStream | Delete | Move | Rename | Connect | Disconnect | SetRoute | SetOrientation | SetStreamSpec | SetStreamCulture | SetUnitParams | SetUnitModel | SetReactions | SetReactorReaction | SetThermo | SetSchedule | DeleteSchedule | SetController | DeleteController | SetScenario | DeleteScenario,
     Field(discriminator="op"),
 ]
 

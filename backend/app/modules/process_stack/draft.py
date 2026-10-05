@@ -55,6 +55,7 @@ from app.modules.process_stack.draft_models import (
     SetThermo,
     SetUnitModel,
     SetUnitParams,
+    SetSchedule, DeleteSchedule, SetController, DeleteController, SetScenario, DeleteScenario,
     UnitSpec,
     pbr_temperature_invalid,
 )
@@ -528,8 +529,34 @@ def apply_op(document: dict[str, Any], op: Any) -> None:
                 raise DraftError("package_unsupported", f"{op.property_package!r} is not a supported property package",
                                  field="property_package")
             document["property_package"] = op.property_package
+    elif isinstance(op, SetSchedule | SetController | SetScenario):
+        key = {SetSchedule: "schedules", SetController: "controllers", SetScenario: "scenarios"}[type(op)]
+        value = copy.deepcopy(op.value)
+        value["id"] = op.id
+        document.setdefault(key, {})[op.id] = value
+        _validate_dynamic_refs(document, key, value)
+    elif isinstance(op, DeleteSchedule | DeleteController | DeleteScenario):
+        key = {DeleteSchedule: "schedules", DeleteController: "controllers", DeleteScenario: "scenarios"}[type(op)]
+        document.setdefault(key, {}).pop(op.id, None)
     else:  # pragma: no cover - the discriminated union is closed
         raise DraftError("op_unsupported", "Unsupported draft operation")
+
+
+def _validate_dynamic_refs(document: dict[str, Any], kind: str, value: dict[str, Any]) -> None:
+    """Cheap reference checks; physics, profile integrity and topology belong to prepare()."""
+    if kind == "scenarios":
+        for tag in value.get("units", []):
+            if not any(o.get("kind") == "unit" and o.get("type") == "PhotobioreactorT1" and o.get("tag") == tag
+                       for o in document.get("objects", {}).values()):
+                raise DraftError("dynamic_unit_not_found", f"Scenario PBR tag {tag!r} was not found", field="units")
+        for ref in value.get("profiles", []):
+            if not isinstance(ref, dict) or not isinstance(ref.get("profile_id"), str) or not isinstance(ref.get("digest"), str):
+                raise DraftError("dynamic_profile_invalid", "Scenario profiles require profile_id and digest", field="profiles")
+    if kind == "controllers":
+        for field in ("unit", "stream", "splitter"):
+            tag = value.get(field)
+            if tag is not None and not any(o.get("tag") == tag for o in document.get("objects", {}).values()):
+                raise DraftError("dynamic_reference_not_found", f"Referenced tag {tag!r} was not found", field=field)
 
 
 def apply_ops(document: dict[str, Any], ops: list[Any]) -> dict[str, Any]:
@@ -810,6 +837,32 @@ def _advice(document: dict[str, Any], add: Any, in_loop: set[str]) -> None:
 
 def _digest(document: dict[str, Any]) -> str:
     return hashlib.sha256(canonical(document).encode()).hexdigest()
+
+
+def _content_projection(document: dict[str, Any]) -> dict[str, Any]:
+    value = copy.deepcopy(document)
+    for key in ("schedules", "controllers", "scenarios"):
+        value.setdefault(key, {})
+    for item in value.get("objects", {}).values():
+        item.pop("x", None)
+        item.pop("y", None)
+        item.pop("route", None)
+        item.pop("flip_x", None)
+        item.pop("flip_y", None)
+    return value
+
+
+def content_digest(document: dict[str, Any]) -> str:
+    """Digest semantic draft content while retaining the editor's layout-free currentness rule."""
+    return hashlib.sha256(canonical(_content_projection(document)).encode()).hexdigest()
+
+
+def current_digest(workspace_id: str, draft_id: str) -> str:
+    """Return the latest layout-free semantic digest for a persisted Process draft."""
+    directory = draft_dir(workspace_id, draft_id)
+    head = _head(directory)
+    record = load_revision(directory, head["revision"])
+    return content_digest(record["document"])
 
 
 def _write_revision(directory: Path, document: dict[str, Any], *, parent: str | None, actor: str,
