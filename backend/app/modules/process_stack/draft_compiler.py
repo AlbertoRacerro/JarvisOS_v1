@@ -957,7 +957,7 @@ def verify_kinetics(document: dict[str, Any], streams: dict[str, Any], units: di
         inlet, outlet = _port_stream(document, unit["id"], "target"), _port_stream(document, unit["id"], "source")
         volume = (unit.get("params", {}).get("volume") or {}).get("si")
         if inlet is None or outlet is None or inlet["tag"] not in streams or outlet["tag"] not in streams:
-            verification = {"ok": False, "code": "KINETICS_VERIFICATION_FAILED", "residual": None,
+            verification: dict[str, Any] = {"ok": False, "code": "KINETICS_VERIFICATION_FAILED", "residual": None,
                             "findings": [{"code": "KINETICS_VERIFICATION_FAILED", "severity": "blocker",
                                           "message": "The reactor inlet or outlet stream result is missing."}]}
         else:

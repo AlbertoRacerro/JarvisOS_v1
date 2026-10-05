@@ -89,7 +89,7 @@ def _rate(law: Mapping[str, Any], concentrations: Mapping[str, float], temperatu
     if form not in {"monod", "haldane"}:
         raise ValueError("unsupported rate-law form")
     substrate = law.get("substrate")
-    if substrate not in concentrations:
+    if not isinstance(substrate, str) or substrate not in concentrations:
         raise ValueError("substrate is missing from stream")
     s = max(0.0, concentrations[substrate])
     v_max = _quantity(law.get("v_max"), "rate")
@@ -144,7 +144,7 @@ def _failed(code: str, message: str, tolerance: float) -> dict[str, Any]:
             "extent_kmol_h": None, "rate_inlet": None, "rate_outlet": None}
 
 
-def verify_rate_law_reactor(*, reactor_type: str, reaction: Mapping[str, Any], volume_m3: float,
+def verify_rate_law_reactor(*, reactor_type: str, reaction: Mapping[str, Any], volume_m3: float | None,
                             inlet: Mapping[str, Any], outlet: Mapping[str, Any]) -> dict[str, Any]:
     """Verify one typed CSTR/PFR reaction from raw DWSIM stream responses.
 

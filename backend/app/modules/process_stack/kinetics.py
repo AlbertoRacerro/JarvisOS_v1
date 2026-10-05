@@ -8,6 +8,7 @@ the declared, closed compound list reach the generated IronPython. No caller tex
 from __future__ import annotations
 
 import math
+from collections.abc import Collection
 from typing import Any
 
 from app.modules.process_stack.draft_models import COMPOUNDS
@@ -93,7 +94,7 @@ _LABELS = {"v_max": "V_max", "k_s": "K_S", "k_i": "K_I", "temperature.activation
            "temperature.reference_temperature": "reference temperature"}
 
 
-def problems(reaction: dict[str, Any], declared: set[str] | list[str]) -> list[dict[str, str]]:
+def problems(reaction: dict[str, Any], declared: Collection[str]) -> list[dict[str, str]]:
     """Every pre-Run kinetics finding for one stored rate-law reaction (empty when compilable)."""
     law = reaction.get("rate_law")
     if not law:
@@ -235,9 +236,9 @@ def equation_tree(form: str, inhibitions: list[dict[str, Any]] | None = None,
                   temperature: bool = False) -> dict[str, Any]:
     """Typed MathML tree (the 169 allowlisted renderer's format) for a form and its options."""
     if form == "power_law_arrhenius":
-        body = _row(_mi("A"), _mo("·"), _node("msup", _mi("e"), _row(_mo("−"), _node("mfrac", _mi("E"), _row(_mi("R"), _mi("T"))))),
+        arrhenius = _row(_mi("A"), _mo("·"), _node("msup", _mi("e"), _row(_mo("−"), _node("mfrac", _mi("E"), _row(_mi("R"), _mi("T"))))),
                     _mo("·"), _mo("∏"), _node("msup", _mi("C_i"), _mi("n_i")))
-        return _node("math", _row(_mi("r"), _mo("="), body))
+        return _node("math", _row(_mi("r"), _mo("="), arrhenius))
     inhibitions = inhibitions or []
     k_s: dict[str, Any] = _mi("K_S")
     for index, term in enumerate(inhibitions):
@@ -246,7 +247,7 @@ def equation_tree(form: str, inhibitions: list[dict[str, Any]] | None = None,
     denominator = [k_s, _mo("+"), _mi("S")]
     if form == "haldane":
         denominator += [_mo("+"), _node("mfrac", _node("msup", _mi("S"), _mn("2")), _mi("K_I"))]
-    body = [_node("mfrac", _row(_mi("V_max"), _mo("·"), _mi("S")), _row(*denominator))]
+    body: list[dict[str, Any]] = [_node("mfrac", _row(_mi("V_max"), _mo("·"), _mi("S")), _row(*denominator))]
     for index, term in enumerate(inhibitions):
         if term.get("kind") != "competitive":
             body += [_mo("·"), _node("mfrac", _mi(f"K_i{index + 1}"), _row(_mi(f"K_i{index + 1}"), _mo("+"), _mi(f"I_{index + 1}")))]
