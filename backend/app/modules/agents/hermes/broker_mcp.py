@@ -47,6 +47,28 @@ _DECISION_TOOL = {
 
 _QUANTITY = {"type": "object", "properties": {"value": {"type": "number"}, "unit": {"type": "string"}},
              "required": ["value", "unit"], "additionalProperties": False}
+# Spec 180: the agent proposes only typed Monod/Haldane reactions; KineticReaction stays the apply-time authority.
+_REACTION = {"type": "object", "properties": {
+    "name": {"type": "string", "minLength": 1, "maxLength": 80},
+    "stoichiometry": {"type": "object", "additionalProperties": {"type": "number"}, "minProperties": 2},
+    "base_reactant": {"type": "string"},
+    "phase": {"const": "Liquid"}, "basis": {"const": "MolarConc"},
+    "rate_law": {"type": "object", "properties": {
+        "form": {"enum": ["monod", "haldane"]}, "substrate": {"type": "string"},
+        "v_max": _QUANTITY, "k_s": _QUANTITY, "k_i": _QUANTITY,
+        "inhibitions": {"type": "array", "maxItems": 3, "items": {"type": "object", "properties": {
+            "kind": {"enum": ["noncompetitive", "competitive"]}, "inhibitor": {"type": "string"}, "k_i": _QUANTITY},
+            "required": ["kind", "inhibitor", "k_i"], "additionalProperties": False}},
+        "temperature": {"type": "object", "properties": {"activation_energy": _QUANTITY,
+                        "reference_temperature": _QUANTITY},
+                        "required": ["activation_energy", "reference_temperature"], "additionalProperties": False}},
+        "required": ["form", "substrate", "v_max", "k_s"], "additionalProperties": False},
+    "provenance": {"type": "object", "properties": {
+        "kind": {"enum": ["literature", "measurement", "operator_estimate", "synthetic"]},
+        "citation": {"type": "string", "maxLength": 300}, "note": {"type": "string", "maxLength": 500}},
+        "required": ["kind"], "additionalProperties": False}},
+    "required": ["name", "stoichiometry", "base_reactant", "phase", "rate_law", "provenance"],
+    "additionalProperties": False}
 _PROCESS_READ_TOOL = {
     "name": "jarvis_process_read",
     "description": "Read the current Jarvis process flowsheet draft: tags, typed parameters with units, "
@@ -73,7 +95,7 @@ _PROCESS_ACT_TOOL = {
              "required": ["op", "unit", "card"], "additionalProperties": False},
             {"type": "object", "properties": {"op": {"const": "set_reaction"},
              "unit": {"type": "string"}, "reaction_id": {"type": "string"},
-             "reaction": {"type": "object"}},
+             "reaction": _REACTION},
              "required": ["op", "unit", "reaction_id", "reaction"], "additionalProperties": False},
             {"type": "object", "properties": {"op": {"const": "add_unit"}, "type": {"type": "string"},
              "tag": {"type": "string"}, "near": {"type": "string"}}, "required": ["op", "type"],

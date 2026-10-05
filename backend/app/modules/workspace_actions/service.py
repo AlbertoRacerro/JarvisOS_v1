@@ -9,6 +9,8 @@ from datetime import UTC, datetime
 from typing import Literal
 from uuid import uuid4
 
+from pydantic import ValidationError
+
 from app.core.database import open_sqlite_connection
 from app.modules.bio_models import service as bio_models
 from app.modules.bluecad.ledger import get_candidate
@@ -1000,7 +1002,13 @@ def _process_ops(document: dict, request: ActionRequest, workspace_id: str | Non
             target = _target(document, action.unit, "unit")
             if target["type"] not in {"PFR", "CSTR"}:
                 raise ValueError(f"{target['tag']} is not a kinetic reactor (PFR or CSTR).")
-            reaction = KineticReaction.model_validate(action.reaction)
+            try:
+                reaction = KineticReaction.model_validate(action.reaction)
+            except ValidationError as error:
+                # Operator-facing refusal: name the fields, never pydantic's developer text.
+                fields = sorted({".".join(str(part) for part in item["loc"]) or "reaction" for item in error.errors()})
+                raise ValueError(f"The reaction for {target['tag']} is incomplete or invalid: "
+                                 f"check {', '.join(fields[:6]).replace('_', ' ')}.") from None
             current = (document.get("reactions") or {}).get(action.reaction_id)
             ops.append(SetReactorReaction(op="set_reactor_reaction", unit=target["id"],
                                           reaction_id=action.reaction_id, reaction=reaction))

@@ -158,3 +158,46 @@ def test_inhibition_and_temperature_factor_use_declared_units() -> None:
     result = verify_rate_law_reactor(reactor_type="CSTR", reaction=reaction, volume_m3=1,
                                      inlet=_stream(10, 0), outlet=_stream(10 - extent, extent))
     assert result["ok"] is True
+
+
+def test_hermes_set_reaction_schema_is_typed_and_matches_brief_example() -> None:
+    # An untyped {"type": "object"} let local Gemma submit reaction={} repeatedly until its context overflowed.
+    # `example` is the brief's set_reaction example (workspace_actions/service.py).
+    from app.modules.agents.hermes import broker_mcp
+    from app.modules.process_stack.draft_models import KineticReaction
+
+    example = {"name": "Example", "stoichiometry": {"Ethylene oxide": -1, "Water": -1, "Ethylene glycol": 1},
+               "base_reactant": "Ethylene oxide", "phase": "Liquid", "basis": "MolarConc",
+               "rate_law": {"form": "monod", "substrate": "Ethylene oxide",
+                            "v_max": {"value": 5, "unit": "kmol/[m3.h]"}, "k_s": {"value": 2, "unit": "kmol/m3"}},
+               "provenance": {"kind": "synthetic"}}
+    KineticReaction.model_validate(example)
+
+    def conforms(value: dict, schema: dict) -> bool:
+        return set(schema["required"]) <= set(value) <= set(schema["properties"])
+
+    variants = broker_mcp._PROCESS_ACT_TOOL["inputSchema"]["properties"]["actions"]["items"]["oneOf"]
+    schema = next(item for item in variants if item["properties"]["op"] == {"const": "set_reaction"})
+    reaction = schema["properties"]["reaction"]
+    assert conforms(example, reaction) and not conforms({}, reaction)
+    assert conforms(example["rate_law"], reaction["properties"]["rate_law"])
+    assert conforms(example["provenance"], reaction["properties"]["provenance"])
+    assert reaction["properties"]["rate_law"]["properties"]["form"]["enum"] == ["monod", "haldane"]
+
+
+def test_incomplete_agent_reaction_is_refused_in_operator_words() -> None:
+    import pytest
+
+    from app.modules.workspace_actions.models import ActionRequest
+    from app.modules.workspace_actions.service import _process_ops
+
+    document = {"objects": {"u1": {"id": "u1", "tag": "CSTR-1", "kind": "unit", "type": "CSTR"}}, "reactions": {}}
+    request = ActionRequest.model_validate({"surface": "process", "base_revision": "1:abc", "draft_id": "d",
+                                            "actions": [{"op": "set_reaction", "unit": "CSTR-1",
+                                                         "reaction_id": "r1", "reaction": {}}]})
+    with pytest.raises(ValueError) as refused:
+        _process_ops(document, request)
+    message = str(refused.value)
+    assert message.startswith("The reaction for CSTR-1 is incomplete or invalid: check ")
+    assert "base reactant" in message and "stoichiometry" in message
+    assert "pydantic" not in message and "validation error" not in message
