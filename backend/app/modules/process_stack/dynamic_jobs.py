@@ -133,12 +133,18 @@ def _run_job(workspace_id: str, job_id: str, snapshot: Any) -> None:
             record["started_at"] = _now()
             _atomic_json(directory / "job.json", record)
 
+        written = [0.0]
+
         def progress(value: float) -> None:
+            value = min(1.0, max(0.0, float(value)))
+            if value - written[0] < 0.01:  # each write fsyncs job.json; a 30-day run has >1000 segments
+                return
             with _lock:
                 current = _read_json(directory / "job.json")
                 if current["status"] == "running":
-                    current["progress"] = min(1.0, max(0.0, float(value)))
+                    current["progress"] = value
                     _atomic_json(directory / "job.json", current)
+                    written[0] = value
 
         result = _engine().run(snapshot, cancelled=event.is_set, progress=progress)
         status = result.status
