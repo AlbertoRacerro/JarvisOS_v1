@@ -146,7 +146,12 @@ def _run_job(workspace_id: str, job_id: str, snapshot: Any) -> None:
                     _atomic_json(directory / "job.json", current)
                     written[0] = value
 
-        result = _engine().run(snapshot, cancelled=event.is_set, progress=progress)
+        sampler = None
+        if getattr(snapshot, "payload", {}).get("scenario", {}).get("downstream_cadence_s"):
+            from app.modules.process_stack.dynamic_downstream import build_sampler
+
+            sampler = build_sampler(snapshot)
+        result = _engine().run(snapshot, cancelled=event.is_set, progress=progress, sampler=sampler)
         status = result.status
         if status not in {"succeeded", "failed", "cancelled"}:
             raise ValueError(f"Invalid dynamic engine status: {status}")
