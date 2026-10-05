@@ -10,6 +10,7 @@ export default function QuantityInput({
   value,
   onChange,
   error,
+  hint,
 }: {
   label: string;
   kind: string;
@@ -19,6 +20,8 @@ export default function QuantityInput({
   onChange(next: { text: string; unit: string }): void;
   /** Inline domain message; the input is marked invalid while it is set. */
   error?: string;
+  /** Replaces the stored-value line (an empty string hides it), e.g. the accepted range. */
+  hint?: string;
 }) {
   const current = value ?? { text: stored ? String(stored.value) : "", unit: stored?.unit ?? units[0] };
   const errorId = useId();
@@ -48,7 +51,8 @@ export default function QuantityInput({
         </select>
       </span>
       {error && <small id={errorId} className="draft-quantity__error">{error}</small>}
-      <small data-kind={kind}>{stored ? `stored ${formatQuantity(stored)}` : "not set"}</small>
+      {hint === undefined ? <small data-kind={kind}>{stored ? `stored ${formatQuantity(stored)}` : "not set"}</small>
+        : hint && <small data-kind={kind}>{hint}</small>}
     </label>
   );
 }

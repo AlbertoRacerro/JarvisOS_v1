@@ -1,27 +1,49 @@
-.reactor-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; margin: 8px 0; }
-.reactor-tabs button { min-width: 0; padding: 8px 4px; }
+/* Reactor inspector (spec 180): Setup / Kinetics / Results tabs, reaction cards and editor. */
+.reactor-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 3px; margin: 8px 0; }
+.reactor-tabs button { min-width: 0; padding: 6px 4px; font-size: 11px; white-space: normal; line-height: 1.2; }
 .reactor-tabs button[aria-selected="true"] { font-weight: 700; border-bottom: 2px solid currentColor; }
-.reactor-tabs button:focus-visible, .reactor-kinetics button:focus-visible { outline: 2px solid var(--color-focus, #2f6f9f); outline-offset: 2px; }
-.reactor-kinetics, .reactor-editor, .reactor-reaction-list, .reactor-reaction-card, .reactor-compilation { display: grid; gap: 10px; min-width: 0; }
-.reactor-kinetics h4, .reactor-results h4 { margin: 4px 0; }
-.reactor-kinetics p { margin: 2px 0; line-height: 1.45; }
-.reactor-reaction-card, .reactor-editor, .reactor-compilation { border: 1px solid var(--color-border, #ccd3d8); border-radius: 6px; padding: 10px; }
-.reactor-reaction-card { background: var(--color-surface, #fff); }
-.reactor-equation { overflow-x: auto; max-width: 100%; background: var(--color-surface-muted, #f6f8f9); padding: 6px; }
+.reactor-tabs button:focus-visible, .reactor-inspector-panel:focus-visible, .reactor-kinetics button:focus-visible,
+.reactor-kinetics select:focus-visible, .reactor-kinetics input:focus-visible { outline: 2px solid var(--color-focus, #2f6f9f); outline-offset: 1px; }
+.reactor-kinetics, .reactor-results, .reactor-editor, .reactor-reaction-list, .reactor-reaction-card, .reactor-compilation, .reactor-unsupported { display: grid; gap: 8px; min-width: 0; }
+.reactor-kinetics h4, .reactor-results h4, .reactor-results h5, .reactor-unsupported h4 { margin: 4px 0; }
+.reactor-kinetics p, .reactor-results p { margin: 2px 0; line-height: 1.45; overflow-wrap: anywhere; }
+.reactor-reaction-card, .reactor-editor, .reactor-compilation, .reactor-unsupported { border: 1px solid var(--color-border-default, #d8d1c5); border-radius: 6px; padding: 10px; }
+.reactor-reaction-card header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 6px; }
+.reactor-reaction-card h4 { margin: 0; overflow-wrap: anywhere; }
+.reactor-badge, .reactor-chip { display: inline-flex; padding: 1px 8px; border: 1px solid var(--color-border-default, #d8d1c5); border-radius: 999px; font-size: 11px; }
+.reactor-chip--good { background: #dcefe0; color: #1f5a2e; }
+.reactor-chip--warn { background: #fbf6ea; color: #7a4b0a; }
+.reactor-stoich { font-variant-numeric: tabular-nums; }
+.reactor-equation { overflow-x: auto; max-width: 100%; background: var(--color-surface-muted, #f6f4ee); padding: 6px; border-radius: 4px; }
 .reactor-equation math { font-size: 1rem; }
+.reactor-facts, .reactor-rows { margin: 0; }
+.reactor-facts > div, .reactor-rows > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 8px; padding: 3px 0; border-bottom: 1px solid var(--color-border-default, #d8d1c5); }
+.reactor-facts dt, .reactor-rows dt { color: var(--color-text-muted, #687068); overflow-wrap: anywhere; }
+.reactor-facts dd, .reactor-rows dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.reactor-explain { color: var(--color-text-muted, #4f564f); font-size: 12px; }
+.reactor-note { color: #7a4b0a; font-size: 12px; }
 .reactor-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-.reactor-actions label { flex: 1 1 150px; }
+.reactor-assign { display: grid; gap: 2px; flex: 1 1 160px; min-width: 0; }
+.reactor-confirm { border: 1px solid #a52525; border-radius: 4px; padding: 8px; display: grid; gap: 6px; }
 .reactor-editor fieldset { display: grid; gap: 8px; min-width: 0; margin: 0; }
-.reactor-editor label, .reactor-inhibition label, .reactor-quantity { display: grid; gap: 3px; min-width: 0; }
-.reactor-editor input, .reactor-editor select, .reactor-editor textarea, .reactor-actions select { box-sizing: border-box; width: 100%; min-width: 0; }
-.reactor-editor input[aria-invalid="true"] { border-color: #a33; }
-.reactor-editor small[role="alert"], .reactor-finding { color: #a33; }
-.reactor-quantity__row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(90px, 0.7fr); gap: 4px; }
-.reactor-inhibition { display: grid; gap: 6px; padding: 8px; background: var(--color-surface-muted, #f6f8f9); }
-.reactor-check { display: flex !important; flex-direction: row; align-items: center; }
-.reactor-check input { width: auto; }
-.reactor-compilation pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; }
-.reactor-result { display: flex; justify-content: space-between; gap: 10px; padding: 5px 0; border-bottom: 1px solid var(--color-border, #ccd3d8); }
-.reactor-result span { text-transform: capitalize; }
-.reactor-verified { display: inline-block; margin: 4px 0; color: #136d48; }
-@media (max-width: 1100px) { .reactor-editor { max-width: 100%; } }
+.reactor-field, .reactor-inhibition label { display: grid; gap: 3px; min-width: 0; }
+.reactor-editor input, .reactor-editor select, .reactor-editor textarea, .reactor-assign select { box-sizing: border-box; width: 100%; min-width: 0; }
+.reactor-editor input[aria-invalid="true"], .reactor-editor select[aria-invalid="true"] { border-color: #a52525; }
+.reactor-editor small[role="alert"] { color: #a52525; font-size: 11px; }
+.reactor-row { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 0.8fr) auto; gap: 4px; align-items: center; }
+.reactor-inhibition { display: grid; gap: 6px; padding: 8px; background: var(--color-surface-muted, #f6f4ee); border-radius: 4px; }
+.reactor-substrate { display: flex; justify-content: space-between; gap: 8px; }
+.reactor-check { display: flex !important; flex-direction: row; align-items: center; gap: 6px; }
+.reactor-check input { width: auto !important; }
+.reactor-findings { margin: 0; padding-left: 16px; display: grid; gap: 2px; }
+.reactor-finding--blocker { color: #a52525; }
+.reactor-finding--warning { color: #7a4b0a; }
+.reactor-finding--info { color: var(--color-text-muted, #687068); }
+.reactor-failure { border: 1px solid #a52525; border-radius: 4px; padding: 8px; color: #a52525; }
+.reactor-compile--ok { color: #1f5a2e; }
+.reactor-compile--failed { color: #a52525; }
+.reactor-compile--stale { color: #7a4b0a; font-style: italic; }
+.reactor-compilation code { overflow-wrap: anywhere; }
+.reactor-compilation pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 260px; overflow: auto; font-size: 11px; }
+.reactor-unsupported ul { margin: 0; padding-left: 16px; }
+.reactor-results.is-stale .reactor-rows dd { color: #7a4b0a; font-style: italic; }
