@@ -178,5 +178,7 @@ def test_kinetics_explanation_is_derived_from_form_metadata() -> None:
     message = forms.kinetics_explanation()
     assert card["applies_to"] in message
     assert "select the reactor and open Kinetics" in message
+    assert "not a reaction rate law" not in message
+    assert "a Monod or Haldane rate law is a typed reactor reaction" in message
     assert "Photobioreactor (T1) uses a pinned biological model card" in message
     assert "An explanation alone proposes no change" in message
