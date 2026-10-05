@@ -237,7 +237,7 @@ def test_brief_stays_within_the_6000_character_cap_with_35_objects_and_keeps_its
     brief = surface_brief(workspace_id, SurfaceRef(route_id="design-process", draft_id=state["draft_id"],
                                                    process_selection=[{"kind": "unit", "tag": "PBR"}]))
     assert len(brief.text) <= 6000
-    assert brief.text.endswith("DWSIM Run stays operator-only; reactions and thermo are edited in the operator editor.")
+    assert brief.text.endswith("DWSIM Run stays operator-only; Thermo is edited in the operator editor.")
     assert "Objects (" in brief.text and "set_unit_model" in brief.text and "(Photobioreactor)" in brief.text
     assert "Selected unit owner: jarvis_bio; culture rule: pbr." in brief.text
     assert "set_unit_model" in brief.actions and "Run is operator-only" in " ".join(brief.limits)
@@ -254,6 +254,6 @@ def test_brief_shrinks_its_lists_but_never_its_tail_when_the_cap_would_be_exceed
     tail = "TAIL. " * 100
     huge_rows = ["R" * 900 for _ in range(6)]
     text = service._fit_process_brief(header="H\n", objects=objects, document=document, selected_line="S\n",
-                                      pbr_rows=huge_rows, run_summary="run", selected_context="", tail=tail)
+                                      pbr_rows=huge_rows, reaction_rows=[], run_summary="run", selected_context="", tail=tail)
     assert len(text) <= 6000 and text.endswith(tail)
     assert text.count("R" * 900) < 6

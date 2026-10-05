@@ -2,6 +2,7 @@
 
 import math
 
+from app.modules.process_stack.draft import result_findings
 from app.modules.process_stack.kinetics_verify import verify_rate_law_reactor
 
 
@@ -52,6 +53,16 @@ def test_cstr_catches_silent_no_reaction_and_wrong_rate_units() -> None:
                                         inlet=feed, outlet=_stream(9.99, 0.01))
     assert wrong_unit["ok"] is False
     assert wrong_unit["residual"] > 0.9
+
+
+def test_failed_verification_is_visible_without_blocking_a_repaired_run() -> None:
+    document = {"objects": {}}
+    failed = {"status": "failed", "solve": {"failed_objects": [{"tag": "CSTR-1",
+              "code": "KINETICS_VERIFICATION_FAILED", "error": "Measured conversion disagrees with the rate law."}]}}
+    finding, = result_findings(document, None, failed)
+    assert finding["code"] == "KINETICS_VERIFICATION_FAILED"
+    assert finding["severity"] == "warning"
+    assert finding["message"].startswith("Last Run: ")
 
 
 def test_zero_rate_accepts_roundoff_scale_flow_change() -> None:

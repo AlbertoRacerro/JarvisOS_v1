@@ -1035,9 +1035,10 @@ def result_findings(document: dict[str, Any], solved: dict[str, Any] | None,
     if last is not None and last.get("status") == "failed":
         for item in (last.get("solve") or {}).get("failed_objects", [])[:20]:
             if str(item.get("code") or "").startswith("KINETICS_"):
-                # Jarvis refused DWSIM's reactor result after its own verification (spec 180).
-                findings.append({"severity": "blocker", "code": item["code"], "object": item.get("tag") or "",
-                                 "field": "reactions", "message": plain_text(item.get("error") or item["code"]),
+                # A failed attempt has no accepted result, but cannot prevent the operator from retrying
+                # after repairing the draft. Pre-Run blockers come only from validate_document.
+                findings.append({"severity": "warning", "code": item["code"], "object": item.get("tag") or "",
+                                 "field": "reactions", "message": "Last Run: " + plain_text(item.get("error") or item["code"]),
                                  "source": "jarvis"})
                 continue
             findings.append({"severity": "warning", "code": "DWSIM_OBJECT_FAILED", "object": item.get("tag") or "",
