@@ -180,9 +180,10 @@ def test_hermes_set_reaction_schema_is_typed_and_matches_brief_example() -> None
     schema = next(item for item in variants if item["properties"]["op"] == {"const": "set_reaction"})
     reaction = schema["properties"]["reaction"]
     assert conforms(example, reaction) and not conforms({}, reaction)
-    assert conforms(example["rate_law"], reaction["properties"]["rate_law"])
+    monod, haldane = reaction["properties"]["rate_law"]["oneOf"]
+    assert conforms(example["rate_law"], monod) and "k_i" not in monod["properties"]
+    assert monod["properties"]["form"] == {"const": "monod"} and "k_i" in haldane["properties"]
     assert conforms(example["provenance"], reaction["properties"]["provenance"])
-    assert reaction["properties"]["rate_law"]["properties"]["form"]["enum"] == ["monod", "haldane"]
 
 
 def test_incomplete_agent_reaction_is_refused_in_operator_words() -> None:
