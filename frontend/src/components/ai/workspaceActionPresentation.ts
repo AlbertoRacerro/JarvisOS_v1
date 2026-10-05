@@ -22,7 +22,7 @@ export function isToolCallShaped(text: string | null | undefined): boolean {
   const fences = [...normalized.matchAll(/(```|~~~)([a-z0-9_-]*)\s*\n?([\s\S]*?)\n?\s*\1/gi)];
   const candidates = [normalized, ...fences.map(match => match[3])];
   const actionOps = new Set([
-    "set_value", "set_unit_model", "add_unit", "insert_unit_after", "connect", "disconnect", "mirror", "move",
+    "set_value", "set_unit_model", "set_reaction", "add_unit", "insert_unit_after", "connect", "disconnect", "mirror", "move",
     "rename", "delete", "duplicate_part", "set_part_param", "move_part", "delete_part"
   ]);
   const containsWorkspaceAction = (value: unknown): boolean => {
@@ -99,6 +99,13 @@ export function actionStatePresentation(state: ActionOutcome["state"]): { label:
  */
 export function describeProcessAction(action: Record<string, unknown>): string | null {
   const text = (value: unknown) => (typeof value === "string" && value ? value : null);
+  if (action.op === "set_reaction") {
+    const unit = text(action.unit) ?? "the reactor";
+    const reaction = action.reaction as { name?: unknown; rate_law?: { form?: unknown } } | null;
+    const name = text(reaction?.name) ?? text(action.reaction_id) ?? "reaction";
+    const form = text(reaction?.rate_law?.form);
+    return reaction ? `Set ${form ? `${form} ` : ""}reaction ${name} on ${unit}` : `Remove reaction ${name} from ${unit}`;
+  }
   if (action.op === "set_unit_model") {
     const unit = text(action.unit) ?? "the unit";
     const card = text(action.card);

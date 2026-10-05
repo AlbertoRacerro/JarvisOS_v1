@@ -50,6 +50,11 @@ export type DraftReaction = {
   basis?: string | null;
   A_forward?: StoredQuantity | DraftQuantity | number | null;
   E_forward?: StoredQuantity | DraftQuantity | number | null;
+  rate_law?: { form: "monod" | "haldane"; substrate: string; v_max: DraftQuantity | StoredQuantity; k_s: DraftQuantity | StoredQuantity;
+    k_i?: DraftQuantity | StoredQuantity; inhibitions: { kind: "competitive" | "noncompetitive"; inhibitor: string; k_i: DraftQuantity | StoredQuantity }[];
+    temperature?: { activation_energy: DraftQuantity | StoredQuantity; reference_temperature: DraftQuantity | StoredQuantity } };
+  provenance?: { kind: "literature" | "measurement" | "operator_estimate" | "synthetic"; citation?: string; note?: string };
+  validity?: { temperature_min?: DraftQuantity | StoredQuantity; temperature_max?: DraftQuantity | StoredQuantity; substrate_max?: DraftQuantity | StoredQuantity };
   [field: string]: unknown;
 };
 export type Finding = {
@@ -99,6 +104,7 @@ export type DraftProjection = {
   property_package: string | null;
   objects: DraftObject[];
   reactions?: Record<string, DraftReaction>;
+  kinetics_scripts?: Record<string, { reaction_id: string; script_title: string; script_text: string }>;
   findings: Finding[];
   /** Pre-run Q and HRT for a PBR fed directly by a feed stream (backend feed basis); absent otherwise. */
   pbr_feed_basis?: Record<string, PbrFeedBasis>;
@@ -246,6 +252,8 @@ export type UnitResult = {
   owner?: "dwsim" | "jarvis_bio"; calculated: boolean; error?: string; evaluator?: string; version?: number; model_version?: string;
   fidelity?: string; caveats?: string[]; findings?: Finding[]; label?: string; branch?: "productive" | "washout" | string;
   model_pin?: PbrModelPin; numerics?: PbrNumerics; unit_balances?: Record<string, UnitBalanceRow>;
+  kinetics?: { verified?: boolean; form?: string; script_title?: string; script_text?: string; conversion?: number;
+    extent_kmol_h?: number; residual?: number; tolerance?: number; [field: string]: unknown };
   reported: Record<string, ReportedValue>; properties?: ResultProperty[];
 };
 export type CultureResult = {
