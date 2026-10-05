@@ -446,39 +446,117 @@ def prepare(workspace_id: str, draft_id: str, scenario_id: str) -> Snapshot:
         raise DynamicError(str(code), str(exc), getattr(exc, "detail", {})) from exc
 
 
-def _profile_values(snapshot: Snapshot, epoch: float) -> tuple[float, float]:
+def _profile_par(snapshot: Snapshot, elapsed_s: float) -> float:
     item = snapshot.payload["profiles"][0]
-    profile, times = item["profile"], item["times"]
-    channels = profile["channels"]
-    import bisect
-
-    ix = bisect.bisect_left(times, epoch)
-    # Interval-end values are held over the preceding interval, including the right endpoint.
-    par_ix = max(0, bisect.bisect_left(times, epoch + 1e-9))
+    channels = item["profile"]["channels"]
+    elapsed_edges = [value - snapshot.payload["start_epoch"] for value in item["times"]]
+    par_ix = max(0, bisect.bisect_left(elapsed_edges, elapsed_s))
     raw_par = channels[item["par_name"]][par_ix]
     if raw_par is None:
-        raise DynamicError(
-            "PROFILE_GAP",
-            "Null PAR value blocks the consumed interval.",
-            {"channel": item["par_name"], "time_utc": datetime.fromtimestamp(times[par_ix], UTC).isoformat()},
-        )
+        raise DynamicError("PROFILE_GAP", "Null PAR value blocks the consumed interval.",
+                           {"channel": item["par_name"], "time_utc": datetime.fromtimestamp(item["times"][par_ix], UTC).isoformat()})
     factor = snapshot.payload["scenario"].get("par_from_ghi_factor") if item["par_name"] == "ghi" else 1.0
-    par = float(raw_par) * float(factor or 1.0) * snapshot.payload["scenario"].get("par_scale", 1.0)
+    return float(raw_par) * float(factor or 1.0) * snapshot.payload["scenario"].get("par_scale", 1.0)
+
+
+def _profile_temperature(snapshot: Snapshot, elapsed_s: float, unit_index: int = 0) -> float:
+    item = snapshot.payload["profiles"][0]
     if item["temp_name"] == "unit_mean":
-        temperature = float(snapshot.payload["units"][0]["params"]["temperature_mean"])
-    else:
-        j = min(max(ix, 1), len(times) - 1)
-        before, after = channels[item["temp_name"]][j - 1], channels[item["temp_name"]][j]
-        if before is None or after is None:
-            bad = j - 1 if before is None else j
-            raise DynamicError(
-                "PROFILE_GAP",
-                "Null temperature value blocks the interpolation bracket.",
-                {"channel": item["temp_name"], "time_utc": datetime.fromtimestamp(times[bad], UTC).isoformat()},
-            )
-        weight = (epoch - times[j - 1]) / (times[j] - times[j - 1])
-        temperature = float(before) + weight * (float(after) - float(before))
-    return par, temperature
+        return float(snapshot.payload["units"][unit_index]["params"]["temperature_mean"])
+    times = item["times"]
+    epoch = snapshot.payload["start_epoch"] + elapsed_s
+    channels = item["profile"]["channels"]
+    j = min(max(bisect.bisect_left(times, epoch), 1), len(times) - 1)
+    before, after = channels[item["temp_name"]][j - 1], channels[item["temp_name"]][j]
+    if before is None or after is None:
+        bad = j - 1 if before is None else j
+        raise DynamicError("PROFILE_GAP", "Null temperature value blocks an interpolation bracket.",
+                           {"channel": item["temp_name"], "time_utc": datetime.fromtimestamp(times[bad], UTC).isoformat()})
+    weight = (epoch - times[j - 1]) / (times[j] - times[j - 1])
+    return float(before) + weight * (float(after) - float(before))
+
+
+def _profile_values(snapshot: Snapshot, epoch: float) -> tuple[float, float]:
+    elapsed = epoch - snapshot.payload["start_epoch"]
+    return _profile_par(snapshot, elapsed), _profile_temperature(snapshot, elapsed)
+
+
+def _network_runtime(topology: dict[str, Any], flows: dict[str, float], units: list[dict[str, Any]]) -> dict[str, Any]:
+    """Precompute inlet flow weights and algebraic evaluation order for one flow state."""
+    streams = topology["streams"]
+    by_id = {unit["id"]: unit for unit in topology["units"]}
+    quota_by_id = {item["unit"]["id"]: item["growth"].nitrogen_quota for item in units}
+    incoming: dict[str, list[tuple[dict[str, Any], float]]] = {}
+    for item in units:
+        key = item["unit"]["id"]
+        inlet = [stream for stream in streams if (stream.get("target") or {}).get("unit") == key]
+        total = sum(flows.get(stream["id"], 0.0) for stream in inlet)
+        incoming[key] = [(stream, flows.get(stream["id"], 0.0) / total) for stream in inlet]
+    pending = {key for key, unit in by_id.items() if unit.get("type") in {"Mixer", "Splitter"}}
+    algebraic_incoming = {key: [stream for stream in streams if (stream.get("target") or {}).get("unit") == key]
+                          for key in pending}
+    order = []
+    while pending:
+        ready = sorted(key for key in pending if not any(
+            (stream.get("source") or {}).get("unit") in pending
+            for stream in streams if (stream.get("target") or {}).get("unit") == key
+        ))
+        if not ready:
+            raise DynamicError("ALGEBRAIC_CYCLE", "Mixer/Splitter concentration graph contains a cycle.")
+        order.extend(ready)
+        pending.difference_update(ready)
+    feed_quota = {
+        stream["id"]: quota_by_id.get((stream.get("target") or {}).get("unit"), 0.0)
+        for stream in streams if stream.get("source") is None
+    }
+    return {"incoming": incoming, "algebraic_order": order, "algebraic_incoming": algebraic_incoming,
+            "feed_quota": feed_quota}
+
+
+def _network_concentrations(topology: dict[str, Any], runtime: dict[str, Any], state: tuple[float, ...],
+                            units: list[dict[str, Any]], flows: dict[str, float]) -> dict[str, tuple[float, ...]]:
+    concentrations = {}
+    for i, item in enumerate(units):
+        x, nitrogen, oxygen = (float(v) for v in state[i * 7:i * 7 + 3])
+        concentrations[item["unit"]["id"]] = (x, nitrogen, oxygen,
+                                                item["growth"].nitrogen_quota * x)
+    for key in runtime["algebraic_order"]:
+        inlet = runtime["algebraic_incoming"][key]
+        total = sum(flows.get(stream["id"], 0.0) for stream in inlet)
+        mixed = np.zeros(4, dtype=np.float64)
+        for stream in inlet:
+            source = (stream.get("source") or {}).get("unit")
+            value = topology["feeds"].get(stream["id"]) if source is None else concentrations.get(source)
+            if value is None:
+                raise DynamicError("TOPOLOGY_UNRESOLVED", "A stream concentration could not be resolved.")
+            if source is None:
+                quota = runtime["feed_quota"].get(stream["id"], 0.0)
+                value = (*value[:3], quota * value[0])
+            mixed += flows.get(stream["id"], 0.0) * np.asarray(value)
+        concentrations[key] = tuple((mixed / total).tolist())
+    return concentrations
+
+
+def _result_series(snapshot: Snapshot, times: list[float], rows: list[np.ndarray], units: list[dict[str, Any]],
+                   controllers: list[dict[str, Any]], controller_log: list[dict[str, Any]]) -> dict[str, np.ndarray]:
+    elapsed = np.asarray(times, dtype=np.float64)
+    matrix = np.asarray(rows, dtype=np.float64)
+    result = {"t_s": elapsed, "par": np.asarray([_profile_par(snapshot, float(t)) for t in elapsed])}
+    result["temperature"] = np.asarray([_profile_temperature(snapshot, float(t)) for t in elapsed])
+    for i, unit in enumerate(units):
+        for j, name in enumerate(("X", "N", "O2")):
+            result[f"{unit['tag']}_{name}"] = matrix[:, i * 7 + j]
+        result[f"{unit['tag']}_temperature"] = np.asarray(
+            [_profile_temperature(snapshot, float(t), i) for t in elapsed]
+        )
+        result[f"{unit['tag']}_harvest_X"] = matrix[:, i * 7 + 6]
+    for controller in controllers:
+        result[f"controller_{controller['id']}"] = np.asarray([
+            next((entry["output"] for entry in reversed(controller_log)
+                  if entry["controller"] == controller["id"] and entry["time_s"] <= t),
+                 float(controller["output"])) for t in times
+        ], dtype=np.float64)
+    return result
 
 
 def run(
@@ -490,7 +568,8 @@ def run(
 ) -> EngineResult:
     """Integrate a pinned scenario. All rates stay hourly in the 170 seam and convert once to SI seconds."""
     started = time.perf_counter()
-    scenario, units = snapshot.payload["scenario"], snapshot.payload["units"]
+    scenario = snapshot.payload["scenario"]
+    units = [dict(unit) for unit in snapshot.payload["units"]]
     start, end = snapshot.payload["start_epoch"], snapshot.payload["end_epoch"]
     duration = end - start
     cadence = float(scenario["output_cadence_s"])
@@ -501,7 +580,14 @@ def run(
         outputs = np.insert(outputs, 0, 0.0)
     n = len(units)
     topology = snapshot.payload.get("topology", {"units": [], "streams": [], "flows": {}, "feeds": {}})
-    unit_by_id = {item["id"]: item for item in topology["units"]}
+    topology = dict(topology, feeds={
+        key: ([value.get("X", 0.0), value.get("N", 0.0), value.get("O2", 0.0)]
+              if isinstance(value, dict) else value)
+        for key, value in topology["feeds"].items()
+    })
+    growths = [pbr_unit.build_growth(item["params"], item["model"], (0, 0, 0), 0) for item in units]
+    for item, growth in zip(units, growths, strict=True):
+        item["growth"] = growth
     # Per unit: X,N,O2 plus integrated net growth, oxygen transfer, harvest X and N.
     initial = np.zeros(n * 7 + 3, dtype=np.float64)
     for i, unit in enumerate(units):
@@ -517,7 +603,11 @@ def run(
     controllers = [dict(value, _integral=0.0, _active=False, _bias=float(value["output"]))
                    for value in snapshot.payload.get("controllers", [])]
     controller_cadence = float(scenario.get("controller_cadence_s", 300))
-    controller_times = set(float(t) for t in np.arange(controller_cadence, duration, controller_cadence))
+    has_conditional_events = any(event.get("observed") for _, event in events)
+    controller_times = (
+        set(float(t) for t in np.arange(controller_cadence, duration, controller_cadence))
+        if controllers or has_conditional_events else set()
+    )
     for item in controllers:
         cadence_i = float(item["cadence_s"])
         controller_times.update(float(t) for t in np.arange(cadence_i, duration, cadence_i))
@@ -548,97 +638,59 @@ def run(
                 return EngineResult(
                     "cancelled",
                     {"code": "CANCELLED", "message": "Run cancelled.", "detail": {}},
-                    {"t_s": np.asarray(times_out), "state": np.asarray(rows)},
+                    _result_series(snapshot, times_out, rows, units, controllers, controller_log),
                     _manifest(snapshot, started, event_log, controller_log, downstream),
                 )
 
-            def rhs(elapsed: float, state: tuple[float, ...]) -> list[float]:
-                par, temperature = _profile_values(snapshot, start + elapsed)
+            par_segment = _profile_par(snapshot, (left + right) / 2.0)
+            network = _network_runtime(topology, flows, units)
+
+            def rhs(elapsed: float, state: tuple[float, ...], network_state: dict[str, Any] = network,
+                    par_value: float = par_segment) -> list[float]:
                 result = [0.0] * len(state)
-                concentrations: dict[str, tuple[float, float, float]] = {}
-                # Algebraic units carry no inventory. Evaluate them in stream order, with PBR states
-                # breaking recycle loops and all mixers using their solved volumetric flow weights.
-                for i, item in enumerate(units):
-                    concentrations[item["unit"]["id"]] = tuple(float(v) for v in state[i * 7 : i * 7 + 3])
-                pending = {key for key, value in unit_by_id.items() if value.get("type") in {"Mixer", "Splitter"}}
-                while pending:
-                    progressed = False
-                    for key in list(pending):
-                        incoming = [s for s in topology["streams"] if (s.get("target") or {}).get("unit") == key]
-                        sources = [(s, (s.get("source") or {}).get("unit")) for s in incoming]
-                        if any(source in pending for _, source in sources):
-                            continue
-                        total = sum(topology["flows"].get(s["id"], 0.0) for s in incoming)
-                        if total <= 0:
-                            raise DynamicError(
-                                "ZERO_THROUGHFLOW",
-                                "Mixer or splitter has zero throughflow.",
-                                {"unit": unit_by_id[key].get("tag")},
-                            )
-                        mixed = np.zeros(3, dtype=np.float64)
-                        for stream, source in sources:
-                            flow = flows.get(stream["id"], 0.0)
-                            value = (
-                                feeds.get(stream["id"]) if source is None else concentrations.get(source)
-                            )
-                            if value is None:
-                                raise DynamicError(
-                                    "TOPOLOGY_UNRESOLVED", "A stream concentration could not be resolved."
-                                )
-                            mixed += flow * np.asarray(value, dtype=np.float64)
-                        concentrations[key] = tuple((mixed / total).tolist())
-                        pending.remove(key)
-                        progressed = True
-                    if not progressed:
-                        raise DynamicError("ALGEBRAIC_CYCLE", "Mixer/Splitter concentration graph contains a cycle.")
+                concentrations = _network_concentrations(topology, network_state, state, units, flows)
                 for i, item in enumerate(units):
                     off = i * 7
-                    x, nitrogen, oxygen = state[off : off + 3]
-                    growth = pbr_unit.build_growth(item["params"], item["model"], (0, 0, 0), 0)
-                    mu, loss = growth.rates_at(par, temperature, x, nitrogen)
+                    x, nitrogen, oxygen = state[off:off + 3]
+                    growth = growths[i]
+                    temperature = _profile_temperature(snapshot, elapsed, i)
+                    mu, loss = growth.rates_at(par_value, temperature, x, nitrogen)
                     rx = (mu - loss) * x / 3600.0
                     transfer = growth.kla_h * (growth.oxygen_saturation - oxygen) / 3600.0
-                    incoming = [
-                        s for s in topology["streams"] if (s.get("target") or {}).get("unit") == item["unit"]["id"]
-                    ]
-                    total = sum(
-                        flows.get(stream["id"], 0.0)
-                        for stream in topology["streams"]
-                        if (stream.get("target") or {}).get("unit") == item["unit"]["id"]
-                    )
-                    mixed = np.zeros(3, dtype=np.float64)
-                    for stream in incoming:
+                    inlet = np.zeros(3, dtype=np.float64)
+                    qin = 0.0
+                    for stream, weight in network_state["incoming"][item["unit"]["id"]]:
+                        flow = flows.get(stream["id"], 0.0)
                         source = (stream.get("source") or {}).get("unit")
-                        value = topology["feeds"].get(stream["id"]) if source is None else concentrations.get(source)
+                        value = feeds.get(stream["id"]) if source is None else concentrations.get(source)
                         if value is None:
-                            raise DynamicError(
-                                "TOPOLOGY_UNRESOLVED", "A PBR inlet concentration could not be resolved."
-                            )
-                        mixed += flows.get(stream["id"], 0.0) * np.asarray(value)
-                    inlet = mixed / total
-                    dilution = total / item["volume_m3"]
+                            raise DynamicError("TOPOLOGY_UNRESOLVED", "A PBR inlet concentration could not be resolved.")
+                        inlet += weight * np.asarray(value[:3])
+                        qin += flow
+                    dilution = qin / item["volume_m3"]
                     net_x = rx + dilution * (inlet[0] - x)
                     net_n = -growth.nitrogen_quota * rx + dilution * (inlet[1] - nitrogen)
                     net_o = growth.oxygen_yield * rx + transfer + dilution * (inlet[2] - oxygen)
-                    result[off : off + 7] = [net_x, net_n, net_o, rx, -growth.nitrogen_quota * rx, transfer, 0.0]
+                    result[off:off + 7] = [net_x, net_n, net_o, rx, -growth.nitrogen_quota * rx, transfer, 0.0]
+                # Boundary terms are inventory rates in kg/s. Fourth concentration is q*X,
+                # propagated independently through algebraic mixers/splitters.
                 for stream in topology["streams"]:
                     source, target = stream.get("source"), stream.get("target")
-                    if source is None or target is None:
-                        value = feeds.get(stream["id"]) if source is None else concentrations.get(source["unit"])
-                        if value is not None:
-                            q = flows.get(stream["id"], 0.0) * (1.0 if source is None else -1.0)
-                            quota = sum(
-                                pbr_unit.build_growth(u["params"], u["model"], (0, 0, 0), 0).nitrogen_quota
-                                for u in units
-                            ) / max(1, len(units))
-                            result[n * 7 :] += q * np.asarray([value[0], value[1] + quota * value[0], value[2]])
+                    if source is not None and target is not None:
+                        continue
+                    source_id = source.get("unit") if source else None
+                    value = feeds.get(stream["id"]) if source is None else concentrations.get(source_id)
+                    if value is None:
+                        continue
+                    if source is None:
+                        quota_x = network_state["feed_quota"].get(stream["id"], 0.0) * value[0]
+                    else:
+                        quota_x = value[3]
+                    q = flows.get(stream["id"], 0.0) * (1.0 if source is None else -1.0)
+                    result[n * 7:] += q * np.asarray([value[0], value[1] + quota_x, value[2]])
                 return result
 
             grid = [left, *[float(t) for t in outputs if left < t < right], right]
-            # scikit-sundae reports a two-time tstop solve as unsuccessful on this
-            # runtime. An unexposed midpoint keeps CVODE's regular output contract.
-            if len(grid) == 2:
-                grid.insert(1, (left + right) / 2.0)
             from app.modules.process_stack.dynamics import integrate_ode
 
             solved = integrate_ode(
@@ -652,7 +704,7 @@ def run(
             if not solved.success:
                 raise DynamicError("SOLVER_FAILED", solved.message, {"segment_s": [left, right]})
             for t, state in zip(solved.times[1:], solved.states[1:], strict=True):
-                _valid_state(state, units)
+                _valid_state(state, units, growths)
                 if any(abs(float(t) - float(out)) <= 1e-7 for out in outputs):
                     times_out.append(float(t))
                     rows.append(np.asarray(state, dtype=np.float64))
@@ -681,7 +733,7 @@ def run(
                     return EngineResult(
                         "cancelled",
                         {"code": "CANCELLED", "message": "Run cancelled.", "detail": {}},
-                        {"t_s": np.asarray(times_out), "state": np.asarray(rows)},
+                        _result_series(snapshot, times_out, rows, units, controllers, controller_log),
                         _manifest(snapshot, started, event_log, controller_log, downstream),
                     )
                 try:
@@ -699,25 +751,13 @@ def run(
                 if downstream[-1].get("status") == "unconverged":
                     downstream[-1]["status"] = "downstream_unconverged"
             progress(min(1.0, right / duration))
-        series: dict[str, np.ndarray] = {"t_s": np.asarray(times_out, dtype=np.float64)}
-        forcing = [_profile_values(snapshot, start + float(t)) for t in times_out]
-        series["par"] = np.asarray([value[0] for value in forcing], dtype=np.float64)
-        series["temperature"] = np.asarray([value[1] for value in forcing], dtype=np.float64)
-        matrix = np.asarray(rows, dtype=np.float64)
-        for i, unit in enumerate(units):
-            for j, channel in enumerate(("X", "N", "O2")):
-                series[f"{unit['tag']}_{channel}"] = matrix[:, i * 7 + j]
-        for controller in controllers:
-            series[f"controller_{controller['id']}"] = np.asarray(
-                [next((entry["output"] for entry in reversed(controller_log)
-                       if entry["controller"] == controller["id"] and entry["time_s"] <= t),
-                      float(controller["output"])) for t in times_out], dtype=np.float64)
+        series = _result_series(snapshot, times_out, rows, units, controllers, controller_log)
         manifest = _manifest(snapshot, started, event_log, controller_log, downstream)
         net_boundary = current[n * 7 : n * 7 + 3]
         initial_inventory = np.zeros(3, dtype=np.float64)
         final_inventory = np.zeros(3, dtype=np.float64)
         for i, unit in enumerate(units):
-            growth = pbr_unit.build_growth(unit["params"], unit["model"], (0, 0, 0), 0)
+            growth = growths[i]
             initial_inventory += unit["volume_m3"] * np.asarray(
                 [unit["state"][0], unit["state"][1] + growth.nitrogen_quota * unit["state"][0], unit["state"][2]])
             final_inventory += unit["volume_m3"] * np.asarray(
@@ -725,7 +765,7 @@ def run(
         generated = np.asarray([
             sum(current[i * 7 + 3] * unit["volume_m3"] for i, unit in enumerate(units)),
             0.0,
-            sum((pbr_unit.build_growth(unit["params"], unit["model"], (0, 0, 0), 0).oxygen_yield
+            sum((growths[i].oxygen_yield
                  * current[i * 7 + 3] + current[i * 7 + 5]) * unit["volume_m3"]
                 for i, unit in enumerate(units)),
         ])
@@ -735,22 +775,25 @@ def run(
                 impulses += np.asarray(entry["impulse_inventory"], dtype=np.float64)
         residual = initial_inventory + net_boundary + generated + impulses - final_inventory
         manifest["balances"] = {
+            "sign_conventions": {"oxygen_transfer": "positive means oxygen absorption into liquid"},
+            "units": {
+                unit["tag"]: {
+                    "biomass_generation_kg": float(current[i * 7 + 3] * unit["volume_m3"]),
+                    "nitrogen_total_generation_kg": 0.0,
+                    "oxygen_transfer_kg": float(current[i * 7 + 5] * unit["volume_m3"]),
+                }
+                for i, unit in enumerate(units)
+            },
             "aggregate": {name: {"residual_abs_kg": float(abs(residual[i]),),
                                   "residual_rel": float(abs(residual[i]) / max(1e-12, abs(initial_inventory[i]) + abs(net_boundary[i]) + abs(generated[i]) + abs(impulses[i])))}
                            for i, name in enumerate(("biomass", "total_nitrogen", "oxygen"))},
-            **{unit["tag"]: {
-                "biomass_generation_kg_m3": float(current[i * 7 + 3]),
-                "nitrogen_consumption_kg_m3": float(current[i * 7 + 4]),
-                "oxygen_transfer_kg_m3": float(current[i * 7 + 5]),
-            }
-            for i, unit in enumerate(units)}
         }
         return EngineResult("succeeded", None, series, manifest)
     except DynamicError as exc:
         return EngineResult(
             "failed",
             {"code": exc.code, "message": exc.message, "detail": exc.detail},
-            {"t_s": np.asarray(times_out), "state": np.asarray(rows)},
+            _result_series(snapshot, times_out, rows, units, controllers, controller_log),
             _manifest(snapshot, started, event_log, controller_log, downstream),
         )
     except Exception as exc:
@@ -758,12 +801,12 @@ def run(
         return EngineResult(
             "failed",
             error,
-            {"t_s": np.asarray(times_out), "state": np.asarray(rows)},
+            _result_series(snapshot, times_out, rows, units, controllers, controller_log),
             _manifest(snapshot, started, event_log, controller_log, downstream),
         )
 
 
-def _valid_state(state: tuple[float, ...], units: list[dict[str, Any]]) -> None:
+def _valid_state(state: tuple[float, ...], units: list[dict[str, Any]], growths: list[Any] | None = None) -> None:
     if not all(math.isfinite(float(v)) for v in state):
         raise DynamicError("STATE_NONFINITE", "CVODE produced a nonfinite state.")
     for i, item in enumerate(units):
@@ -778,7 +821,7 @@ def _valid_state(state: tuple[float, ...], units: list[dict[str, Any]]) -> None:
             if value < 0:
                 # Tiny roundoff is tolerated; CVODE state is not altered mid-segment.
                 continue
-        growth = pbr_unit.build_growth(item["params"], item["model"], (0, 0, 0), 0)
+        growth = growths[i] if growths is not None else pbr_unit.build_growth(item["params"], item["model"], (0, 0, 0), 0)
         if growth.extinction * max(0.0, float(state[i * 7])) * growth.diameter > 1e6:
             raise DynamicError("OPTICS_TAU_MAX", "Optical depth exceeds the model limit.", {"unit": item["tag"]})
 
@@ -787,12 +830,16 @@ def _boundary_streams(
     topology: dict[str, Any], state: np.ndarray, units: list[dict[str, Any]],
     flows: dict[str, float], feeds: dict[str, list[float]],
 ) -> dict[str, dict[str, Any]]:
-    by_id = {unit["unit"]["id"]: state[i * 7 : i * 7 + 3].tolist() for i, unit in enumerate(units)}
+    for unit in units:
+        if "growth" not in unit:
+            unit["growth"] = pbr_unit.build_growth(unit["params"], unit["model"], (0, 0, 0), 0)
+    runtime = _network_runtime(topology, flows, units)
+    concentrations = _network_concentrations(topology, runtime, tuple(state), units, flows)
     output = {}
     for stream in topology["streams"]:
         source, target = stream.get("source"), stream.get("target")
         if source is None or target is None:
-            concentration = feeds.get(stream["id"]) if source is None else by_id.get(source.get("unit"))
+            concentration = feeds.get(stream["id"]) if source is None else concentrations.get(source.get("unit"))
             output[stream["tag"]] = {
                 "flow_m3_s": float(flows.get(stream["id"], 0.0)),
                 "X_kg_m3": concentration[0] if concentration is not None else None,

@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import math
-from datetime import UTC, datetime
+import time
+from datetime import UTC, datetime, timedelta
 
 import numpy as np
 import pytest
@@ -13,6 +14,58 @@ from app.modules.process_stack import dynamic_engine
 from app.modules.process_stack.draft import apply_ops, content_digest, empty_document
 from app.modules.process_stack.draft_models import DraftOp
 from app.modules.process_stack.dynamic_models import Scenario, Schedule
+from app.modules.process_stack.dynamics import integrate_ode
+
+
+def _real_scenario(workspace_id: str, duration_s: int, *, cadence_s: int = 3600):
+    from app.modules.bio_models import service as bio_models
+    from app.modules.environment import profiles
+    from app.modules.process_stack import draft
+    from app.modules.process_stack.draft_models import SetScenario, SetUnitModel
+    from tests.plumbing_170_support import pbr_ops
+
+    start = datetime(2026, 1, 1, tzinfo=UTC)
+    end = start + timedelta(seconds=duration_s)
+    stamps = [start + timedelta(seconds=3600 * i) for i in range(duration_s // 3600 + 1)]
+    profile = profiles.create_profile(
+        workspace_id, name="dynamic engine fixture",
+        timestamps=[stamp.isoformat().replace("+00:00", "Z") for stamp in stamps],
+        channels={"par": [500.0] * len(stamps)}, resolution_minutes=60,
+        provenance={"kind": "deterministic_test"},
+    )
+    parameter_set = bio_models.create_set(workspace_id, "dynamic engine parameters")
+    for symbol, value, unit in (
+        ("K_I", 150.0, "umol/(m**2*s)"), ("K_j_0", 0.001, "kg/m3"), ("k_d", 0.003, "1/hour"),
+        ("a", 1.8, "1"), ("b", 0.5, "1"), ("c", 0.1, "1"), ("d", 0.01, "1"),
+        ("w_ash", 0.05, "1"), ("k_X", 150.0, "m**2/kg"), ("T_min", 278.15, "K"),
+        ("T_opt", 298.15, "K"), ("T_max", 318.15, "K"),
+    ):
+        parameter_set = bio_models.edit_set_value(
+            workspace_id, parameter_set["id"], symbol,
+            {"value": value, "unit": unit, "expected_unit": unit},
+            parameter_set["revision"], parameter_set["digest"],
+        )
+    card = bio_models.create_card(
+        workspace_id, "dynamic engine real card", parameter_set["id"],
+        {"light": "light.monod", "optics": "optics.slab_response_average", "temperature": "temperature.ctmi",
+         "nutrients": ["nutrient.monod"], "combination": "combine.liebig", "loss": "loss.first_order",
+         "stoichiometry": "stoich.photoautotrophic"},
+        {"value": 0.08, "unit": "1/hour"},
+    )
+    state = draft.create_draft(workspace_id, "dynamic engine fixture")
+    state = draft.patch(workspace_id, state["draft_id"], state["revision"], pbr_ops(model=False, flow_kg_s=0.001))
+    state = draft.patch(workspace_id, state["draft_id"], state["revision"], [
+        SetUnitModel(op="set_unit_model", unit="pbr", model={
+            "card_id": card["id"], "card_revision": card["revision"], "card_digest": card["digest"]}),
+        SetScenario(op="set_scenario", id="run", value={
+            "units": ["PBR"], "profiles": [{"profile_id": profile["profile_id"], "digest": profile["digest"]}],
+            "start_utc": start.isoformat().replace("+00:00", "Z"),
+            "end_utc": end.isoformat().replace("+00:00", "Z"), "output_cadence_s": cadence_s,
+            "rtol": 1e-10, "atol": 1e-12,
+            "temperature_source": "unit_mean", "initial": {"PBR": {"X": 0.2, "N": 0.05, "O2": 0.008}},
+        }),
+    ])
+    return state, dynamic_engine.prepare(workspace_id, state["draft_id"], "run")
 
 
 def test_dynamic_draft_ops_are_semantic_and_legacy_documents_remain_valid() -> None:
@@ -107,11 +160,13 @@ def _minimal_snapshot(**scenario_changes):
         "solver_method": "BDF", "downstream_cadence_s": None, "temperature_source": "unit_mean",
         **scenario_changes,
     }
-    unit = {"tag": "PBR1", "unit": {"id": "p1"}, "params": {}, "model": {}, "volume_m3": 1.0,
+    unit = {"tag": "PBR1", "unit": {"id": "p1"}, "params": {"temperature_mean": 298.15}, "model": {}, "volume_m3": 1.0,
             "state": [1.0, 0.2, 0.01], "card_qualification": "unqualified"}
     payload = {
         "scenario": scenario, "units": [unit], "start_epoch": start, "end_epoch": start + 120,
-        "profiles": [{"times": [start, start + 120], "ref": {"profile_id": "p", "digest": "p"}}],
+        "profiles": [{"times": [start, start + 120], "profile": {"channels": {"par": [0.0, 0.0]}},
+                       "par_name": "par", "temp_name": "unit_mean",
+                       "ref": {"profile_id": "p", "digest": "p"}}],
         "schedule": {"events": []}, "controllers": [], "draft_id": "draft", "revision": 1,
         "content_digest": "digest", "scenario_id": "run", "topology": {"units": [], "streams": [],
             "flows": {}, "feeds": {}},
@@ -139,6 +194,8 @@ def test_dark_decay_is_analytic_and_runs_are_bit_identical(monkeypatch):
 
     monkeypatch.setattr(dynamic_engine.pbr_unit, "build_growth", lambda *_args: Growth())
     monkeypatch.setattr(dynamic_engine, "_profile_values", lambda *_args: (0.0, 298.15))
+    monkeypatch.setattr(dynamic_engine, "_profile_par", lambda *_args: 0.0)
+    monkeypatch.setattr(dynamic_engine, "_profile_temperature", lambda *_args: 298.15)
     snapshot = _minimal_snapshot()
     first = dynamic_engine.run(snapshot, cancelled=lambda: False, progress=lambda _p: None)
     second = dynamic_engine.run(snapshot, cancelled=lambda: False, progress=lambda _p: None)
@@ -162,6 +219,8 @@ def test_constant_rate_limit_matches_closed_form(monkeypatch):
 
     monkeypatch.setattr(dynamic_engine.pbr_unit, "build_growth", lambda *_args: Growth())
     monkeypatch.setattr(dynamic_engine, "_profile_values", lambda *_args: (0.0, 298.15))
+    monkeypatch.setattr(dynamic_engine, "_profile_par", lambda *_args: 0.0)
+    monkeypatch.setattr(dynamic_engine, "_profile_temperature", lambda *_args: 298.15)
     result = dynamic_engine.run(_minimal_snapshot(), cancelled=lambda: False, progress=lambda _p: None)
     assert result.status == "succeeded"
     assert result.series["PBR1_X"][-1] == pytest.approx(math.exp(0.02 * 120 / 3600), rel=1e-7)
@@ -182,6 +241,8 @@ def test_harvest_impulse_closes_hand_computed_biomass_and_nitrogen_balance(monke
 
     monkeypatch.setattr(dynamic_engine.pbr_unit, "build_growth", lambda *_args: Growth())
     monkeypatch.setattr(dynamic_engine, "_profile_values", lambda *_args: (0.0, 298.15))
+    monkeypatch.setattr(dynamic_engine, "_profile_par", lambda *_args: 0.0)
+    monkeypatch.setattr(dynamic_engine, "_profile_temperature", lambda *_args: 298.15)
     snapshot = _minimal_snapshot()
     snapshot.payload["schedule"]["events"] = [
         {"type": "harvest", "time_s": 60.0, "unit": "PBR1", "fraction": 0.5}
@@ -209,6 +270,8 @@ def test_sampler_failure_is_recorded_without_changing_trajectory_and_cancel_keep
 
     monkeypatch.setattr(dynamic_engine.pbr_unit, "build_growth", lambda *_args: Growth())
     monkeypatch.setattr(dynamic_engine, "_profile_values", lambda *_args: (0.0, 298.15))
+    monkeypatch.setattr(dynamic_engine, "_profile_par", lambda *_args: 0.0)
+    monkeypatch.setattr(dynamic_engine, "_profile_temperature", lambda *_args: 298.15)
     snapshot = _minimal_snapshot(downstream_cadence_s=60.0)
     baseline = dynamic_engine.run(snapshot, cancelled=lambda: False, progress=lambda _p: None)
     calls = []
@@ -289,3 +352,186 @@ def test_conditional_event_fires_at_sample_cadence_and_applies_feed_change():
     assert topology["flows"]["f"] == 1.5
     assert log[0]["conditional"] is True
     assert log[0]["time_s"] == 60.0
+
+
+def test_integrator_two_point_grid_returns_only_requested_times():
+    solved = integrate_ode(lambda _t, _y: [1.0], [0.0], [0.0, 2.0])
+    assert solved.success, solved.message
+    assert solved.times == (0.0, 2.0)
+    assert solved.states[0] == (0.0,)
+    assert solved.states[-1][0] == pytest.approx(2.0)
+
+
+def test_par_is_held_through_interval_end_and_unit_mean_temperature_is_local():
+    snapshot = _minimal_snapshot()
+    start = snapshot.payload["start_epoch"]
+    snapshot.payload["profiles"][0].update(
+        times=[start + 60.0, start + 120.0],
+        profile={"channels": {"par": [11.0, 22.0]}},
+    )
+    snapshot.payload["units"].append({"tag": "PBR2", "params": {"temperature_mean": 310.0}})
+    assert dynamic_engine._profile_par(snapshot, 30.0) == 11.0
+    assert dynamic_engine._profile_par(snapshot, 60.0) == 11.0
+    assert dynamic_engine._profile_par(snapshot, 61.0) == 22.0
+    assert dynamic_engine._profile_temperature(snapshot, 10.0, 1) == 310.0
+
+
+def test_engine_uses_segment_par_at_the_right_endpoint(monkeypatch):
+    seen = []
+
+    class Growth:
+        nitrogen_quota = oxygen_yield = kla_h = 0.0
+        oxygen_saturation = extinction = 0.0
+        diameter = 0.05
+
+        @staticmethod
+        def rates_at(par, _temperature, _x, _n):
+            seen.append(par)
+            return 0.0, 0.0
+
+    monkeypatch.setattr(dynamic_engine.pbr_unit, "build_growth", lambda *_args: Growth())
+    snapshot = _minimal_snapshot()
+    start = snapshot.payload["start_epoch"]
+    snapshot.payload["profiles"][0].update(
+        times=[start + 60.0, start + 120.0], profile={"channels": {"par": [11.0, 22.0]}}
+    )
+    result = dynamic_engine.run(snapshot, cancelled=lambda: False, progress=lambda _p: None)
+    assert result.status == "succeeded", result.error
+    assert result.series["par"].tolist() == [11.0, 11.0, 22.0]
+    assert seen and set(seen) == {11.0, 22.0}
+
+
+def test_cancelled_result_uses_named_one_dimensional_channels(monkeypatch):
+    class Growth:
+        nitrogen_quota = oxygen_yield = kla_h = 0.0
+        oxygen_saturation = extinction = 0.0
+        diameter = 0.05
+
+        @staticmethod
+        def rates_at(_par, _temperature, _x, _n):
+            return 0.0, 0.0
+
+    monkeypatch.setattr(dynamic_engine.pbr_unit, "build_growth", lambda *_args: Growth())
+    monkeypatch.setattr(dynamic_engine, "_profile_par", lambda *_args: 0.0)
+    monkeypatch.setattr(dynamic_engine, "_profile_temperature", lambda *_args: 298.15)
+    calls = iter((False, True))
+    result = dynamic_engine.run(_minimal_snapshot(), cancelled=lambda: next(calls), progress=lambda _p: None)
+    assert result.status == "cancelled"
+    assert "state" not in result.series
+    assert all(value.ndim == 1 for value in result.series.values())
+    assert {"t_s", "par", "temperature", "PBR1_X", "PBR1_N", "PBR1_O2"} <= result.series.keys()
+
+
+def test_sampler_receives_product_concentration_from_algebraic_splitter():
+    units = [{"tag": "PBR1", "unit": {"id": "p1"}, "params": {}, "model": {}, "volume_m3": 1,
+              "state": [2.0, 0.3, 0.1], "growth": type("Growth", (), {"nitrogen_quota": 0.05})()}]
+    splitter = {"id": "s1", "type": "Splitter", "tag": "Split"}
+    topology = {
+        "units": [splitter],
+        "streams": [
+            {"id": "in", "tag": "In", "source": {"unit": "p1"}, "target": {"unit": "s1"}},
+            {"id": "out", "tag": "Out", "source": {"unit": "s1"}, "target": None},
+        ],
+        "flows": {"in": 1.0, "out": 1.0}, "feeds": {},
+    }
+    boundary = dynamic_engine._boundary_streams(topology, np.array([2.0, 0.3, 0.1, 0, 0, 0, 0, 0, 0, 0]),
+                                                 units, topology["flows"], topology["feeds"])
+    assert boundary["Out"]["X_kg_m3"] == 2.0
+    assert boundary["Out"]["N_kg_m3"] == 0.3
+
+
+def test_real_24_hour_run_matches_independent_170_rate_reference():
+    from app.modules.process_stack import pbr_unit
+    from tests.plumbing_170_support import new_workspace
+
+    workspace_id = new_workspace()
+    _state, snapshot = _real_scenario(workspace_id, 24 * 3600)
+    result = dynamic_engine.run(snapshot, cancelled=lambda: False, progress=lambda _p: None)
+    assert result.status == "succeeded", result.error
+    assert result.manifest["balances"]["sign_conventions"]["oxygen_transfer"] == (
+        "positive means oxygen absorption into liquid"
+    )
+    for terms in result.manifest["balances"]["aggregate"].values():
+        assert terms["residual_rel"] <= 1e-6, terms
+    unit = snapshot.payload["units"][0]
+    growth = pbr_unit.build_growth(unit["params"], unit["model"], (0.0, 0.05, 0.0), 0.0)
+    topology = snapshot.payload["topology"]
+    feed = topology["feeds"][next(iter(topology["feeds"]))]
+    inlet = np.asarray([feed["X"], feed["N"], feed["O2"]])
+    flow = next(iter(topology["flows"].values()))
+    dilution = flow / unit["volume_m3"]
+    expected = np.asarray(unit["state"], dtype=np.float64)
+
+    def reference_rhs(elapsed: float, state: tuple[float, ...]) -> list[float]:
+        x, nitrogen, oxygen = state
+        mu, loss = growth.rates_at(500.0, unit["params"]["temperature_mean"], x, nitrogen)
+        rx = (mu - loss) * x / 3600.0
+        transfer = growth.kla_h * (growth.oxygen_saturation - oxygen) / 3600.0
+        return [rx + dilution * (inlet[0] - x), -growth.nitrogen_quota * rx + dilution * (inlet[1] - nitrogen),
+                growth.oxygen_yield * rx + transfer + dilution * (inlet[2] - oxygen)]
+
+    for index in range(24):
+        step = integrate_ode(reference_rhs, expected, [index * 3600.0, (index + 1) * 3600.0],
+                             rtol=snapshot.payload["scenario"]["rtol"], atol=snapshot.payload["scenario"]["atol"])
+        assert step.success, step.message
+        expected = np.asarray(step.states[-1])
+        actual = np.asarray([result.series[f"PBR_{name}"][index + 1] for name in ("X", "N", "O2")])
+        assert np.max(np.abs(actual - expected) / np.maximum(np.abs(expected), 1e-12)) <= 1e-6, (
+            index, actual, expected, result.series["par"][index + 1], flow, inlet.tolist(), dilution
+        )
+
+
+def test_prepare_refuses_tampered_real_profile_digest():
+    from app.core.paths import build_paths
+    from tests.plumbing_170_support import new_workspace
+
+    workspace_id = new_workspace()
+    state, snapshot = _real_scenario(workspace_id, 3600)
+    digest = snapshot.payload["profiles"][0]["ref"]["digest"]
+    artifact = build_paths().environment_profiles_dir(workspace_id) / f"{digest[7:]}.json"
+    artifact.write_bytes(artifact.read_bytes() + b" ")
+    with pytest.raises(dynamic_engine.DynamicError) as raised:
+        dynamic_engine.prepare(workspace_id, state["draft_id"], "run")
+    assert raised.value.code == "PROFILE_DIGEST_INVALID"
+
+
+def test_real_30_day_hourly_run_meets_host_budget_and_api_publishes_artifacts():
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+    from app.modules.process_stack import dynamic_engine
+    from tests.plumbing_170_support import new_workspace
+
+    workspace_id = new_workspace()
+    state, snapshot = _real_scenario(workspace_id, 30 * 86400)
+    started = time.perf_counter()
+    result = dynamic_engine.run(snapshot, cancelled=lambda: False, progress=lambda _p: None)
+    elapsed = time.perf_counter() - started
+    print(f"30-day dynamic T1 wall time: {elapsed:.3f}s")
+    assert result.status == "succeeded", result.error
+    assert len(result.series["t_s"]) == 721
+    assert elapsed < 30.0
+    checks = iter((False, True))
+    cancelled = dynamic_engine.run(snapshot, cancelled=lambda: next(checks), progress=lambda _p: None)
+    assert cancelled.status == "cancelled"
+    assert "state" not in cancelled.series and all(values.ndim == 1 for values in cancelled.series.values())
+
+    # A separate real-engine job exercises the workspace API and immutable artifact reads.
+    api_state, _ = _real_scenario(workspace_id, 24 * 3600)
+    base = f"/workspaces/{workspace_id}/process/drafts/{api_state['draft_id']}/dynamic"
+    with TestClient(app) as client:
+        created = client.post(base + "/runs", json={"scenario_id": "run"})
+        assert created.status_code == 202, created.text
+        job_id = created.json()["job_id"]
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            status = client.get(base + f"/runs/{job_id}")
+            assert status.status_code == 200, status.text
+            if status.json()["status"] in {"succeeded", "failed", "cancelled"}:
+                break
+            time.sleep(0.02)
+        assert status.json()["status"] == "succeeded", status.json()
+        manifest = client.get(base + f"/runs/{job_id}/manifest")
+        series = client.get(base + f"/runs/{job_id}/series?channels=t_s,PBR_X&max_points=100")
+        assert manifest.status_code == 200 and manifest.json()["fidelity"] == "T1"
+        assert series.status_code == 200 and len(series.json()["channels"]["t_s"]) <= 100

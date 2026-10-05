@@ -77,17 +77,24 @@ def integrate_ode(
         yp[:] = derivative
 
     started = time.perf_counter()
+    # scikit-sundae interprets a two-element tspan as an internal-step request. On
+    # the installed CVODE build, its normal tstop return is marked unsuccessful in
+    # that mode. Request one interior output instead, then expose only caller times.
+    requested_grid = grid
+    solver_grid = grid if len(grid) != 2 else (grid[0], (grid[0] + grid[1]) / 2.0, grid[1])
     result = CVODE(native_rhs, method=method, rtol=rtol, atol=atol, max_step=max_step).solve(
-        np.asarray(grid, dtype=float), np.asarray(state0, dtype=float)
+        np.asarray(solver_grid, dtype=float), np.asarray(state0, dtype=float)
     )
     elapsed = time.perf_counter() - started
-    states = tuple(tuple(float(value) for value in row) for row in result.y)
-    success = bool(result.success) and len(states) == len(grid) and all(
-        math.isfinite(value) for row in states for value in row
+    solver_states = tuple(tuple(float(value) for value in row) for row in result.y)
+    success = bool(result.success) and len(solver_states) == len(solver_grid) and all(
+        math.isfinite(value) for row in solver_states for value in row
     )
+    selected = (solver_states[0], solver_states[-1]) if len(requested_grid) == 2 else solver_states
+    selected_times = requested_grid
     return OdeSolution(
-        times=tuple(float(value) for value in result.t) if success else (),
-        states=states if success else (),
+        times=tuple(selected_times) if success else (),
+        states=selected if success else (),
         success=success,
         message=str(result.message),
         # CVODE reports RHS evaluations, the closest native work counter to "iterations".
