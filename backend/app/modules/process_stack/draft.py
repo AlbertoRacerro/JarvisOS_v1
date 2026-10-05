@@ -544,6 +544,16 @@ def apply_op(document: dict[str, Any], op: Any) -> None:
 
 def _validate_dynamic_refs(document: dict[str, Any], kind: str, value: dict[str, Any]) -> None:
     """Cheap reference checks; physics, profile integrity and topology belong to prepare()."""
+    from pydantic import ValidationError
+
+    from app.modules.process_stack.dynamic_models import Controller, Scenario, Schedule
+
+    model = {"schedules": Schedule, "controllers": Controller, "scenarios": Scenario}[kind]
+    try:
+        model.model_validate(value)
+    except ValidationError as exc:
+        raise DraftError("dynamic_content_invalid", f"Invalid {kind[:-1]} content", field=kind,
+                         errors=exc.errors(include_url=False)) from exc
     if kind == "scenarios":
         for tag in value.get("units", []):
             if not any(o.get("kind") == "unit" and o.get("type") == "PhotobioreactorT1" and o.get("tag") == tag
@@ -552,6 +562,12 @@ def _validate_dynamic_refs(document: dict[str, Any], kind: str, value: dict[str,
         for ref in value.get("profiles", []):
             if not isinstance(ref, dict) or not isinstance(ref.get("profile_id"), str) or not isinstance(ref.get("digest"), str):
                 raise DraftError("dynamic_profile_invalid", "Scenario profiles require profile_id and digest", field="profiles")
+        if value.get("schedule_id") and value["schedule_id"] not in document.get("schedules", {}):
+            raise DraftError("dynamic_schedule_not_found", "Scenario schedule was not found", field="schedule_id")
+        missing_controllers = sorted(set(value.get("controllers", [])) - set(document.get("controllers", {})))
+        if missing_controllers:
+            raise DraftError("dynamic_controller_not_found", f"Controllers {missing_controllers} were not found",
+                             field="controllers")
     if kind == "controllers":
         for field in ("unit", "stream", "splitter"):
             tag = value.get(field)

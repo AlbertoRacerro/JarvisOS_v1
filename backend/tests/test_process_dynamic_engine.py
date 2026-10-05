@@ -19,8 +19,16 @@ def test_dynamic_draft_ops_are_semantic_and_legacy_documents_remain_valid() -> N
                                  "x": 1, "y": 2}
     semantic = apply_ops(legacy, [adapter.validate_python(op) for op in (
         {"op": "set_schedule", "id": "feed", "value": {"events": []}},
-        {"op": "set_controller", "id": "loop", "value": {"type": "pi"}},
-        {"op": "set_scenario", "id": "run", "value": {"units": ["PBR1"]}},
+        {"op": "set_controller", "id": "loop", "value": {"type": "pi", "measurement": "X",
+                                                                   "unit": "PBR1", "actuator": "feed:Feed",
+                                                                   "cadence_s": 60, "setpoint": 1}},
+        {"op": "set_scenario", "id": "run", "value": {"units": ["PBR1"],
+                                                             "profiles": [{"profile_id": "p", "digest": "d"}],
+                                                             "start_utc": "2026-01-01T00:00:00Z",
+                                                             "end_utc": "2026-01-01T01:00:00Z",
+                                                             "output_cadence_s": 3600,
+                                                             "temperature_source": "unit_mean",
+                                                             "schedule_id": "feed", "controllers": ["loop"]}},
     )])
     assert legacy.get("schedules", {}) == {}
     assert semantic["schedules"]["feed"]["id"] == "feed"
