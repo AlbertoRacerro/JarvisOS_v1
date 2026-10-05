@@ -264,7 +264,8 @@ def _reaction_item(reaction: Any, declared: set[str]) -> dict[str, Any]:
     if law.form == "haldane":
         parameter_kinds.append(("k_i", "molar_concentration"))
     for key, kind in parameter_kinds:
-        item["rate_law"][key] = _si(getattr(law, key), kind, key)
+        if getattr(law, key) is not None:
+            item["rate_law"][key] = _si(getattr(law, key), kind, key)
     for index, term in enumerate(law.inhibitions):
         item["rate_law"]["inhibitions"][index]["k_i"] = _si(term.k_i, "molar_concentration", "k_i")
     if law.temperature:
@@ -278,10 +279,8 @@ def _reaction_item(reaction: Any, declared: set[str]) -> dict[str, Any]:
             value = getattr(reaction.validity, key)
             if value is not None:
                 item["validity"][key] = _si(value, kind, key)
-    try:
-        kinetics.validate_rate_law(item, declared)
-    except ValueError as exc:
-        raise DraftError("kinetics_parameter_domain", str(exc), field="rate_law") from exc
+    # Missing or out-of-domain parameters, substrate and provenance problems are pre-Run findings
+    # (validate_document), so an operator can save a partly entered reaction and see what is left.
     return item
 
 
@@ -583,7 +582,8 @@ def validate_document(document: dict[str, Any], workspace_id: str | None = None)
         if unit["type"] in {"PFR", "CSTR"} and not unit.get("reactions"):
             add("blocker", "REACTION_SET_MISSING", "Assign at least one kinetic reaction to the reactor.", unit["tag"],
                 "reactions")
-        assigned = [document.get("reactions", {}).get(rid, {}) for rid in unit.get("reactions", [])]
+        assigned_ids = list(unit.get("reactions", []))
+        assigned = [document.get("reactions", {}).get(rid, {}) for rid in assigned_ids]
         if any(reaction.get("rate_law") for reaction in assigned):
             if len(assigned) != 1:
                 add("blocker", "KINETICS_REACTION_SET_UNSUPPORTED", "Use one typed rate law per reactor.",
@@ -596,14 +596,14 @@ def validate_document(document: dict[str, Any], workspace_id: str | None = None)
             ):
                 add("blocker", "KINETICS_TEMPERATURE_PROFILE_UNSUPPORTED",
                     "Temperature factors require an isothermic PFR.", unit["tag"], "mode")
-            for reaction in assigned:
+            for rid, reaction in zip(assigned_ids, assigned, strict=True):
                 if reaction.get("rate_law"):
-                    try:
-                        kinetics.validate_rate_law(reaction, set(document["compounds"]))
-                    except (ValueError, KeyError) as exc:
-                        add("blocker", "KINETICS_PARAMETER_DOMAIN", str(exc), unit["tag"], "reactions")
-                    if reaction["provenance"]["kind"] in {"operator_estimate", "synthetic"}:
-                        add("info", "KINETICS_PARAMETER_UNVERIFIED", "Kinetic parameters are unverified.",
+                    for problem in kinetics.problems(reaction, document["compounds"]):
+                        add("blocker", problem["code"], problem["message"], unit["tag"],
+                            f"reactions.{rid}.{problem['field']}")
+                    if (reaction.get("provenance") or {}).get("kind") in {"operator_estimate", "synthetic"}:
+                        add("info", "KINETICS_PARAMETER_UNVERIFIED",
+                            "Kinetic parameters are an operator estimate or synthetic, not measured or cited.",
                             unit["tag"], "reactions")
         needs_energy = (unit["type"] == "DistillationColumn" or
                         unit["type"] == "CSTR" or
@@ -611,7 +611,7 @@ def validate_document(document: dict[str, Any], workspace_id: str | None = None)
                         unit["type"] in {"Heater", "Cooler"} and unit["mode"] == "energy_stream")
         if needs_energy and not any(_occupant(document, unit["id"], "target", port, energy=True)
                                     for port in range(len(spec.energy_inlets))):
-            add("blocker", "REACTOR_ENERGY_STREAM_MISSING" if unit["type"] == "CSTR"
+            add("blocker", "REACTOR_ENERGY_STREAM_MISSING" if unit["type"] in {"CSTR", "PFR"}
                 else "UNIT_ENERGY_INLET_MISSING", f"Connect an energy stream to {spec.label}.", unit["tag"],
                 "energy_inlets")
         elif not needs_energy:
@@ -1019,6 +1019,11 @@ def result_findings(document: dict[str, Any], solved: dict[str, Any] | None,
     findings: list[dict[str, Any]] = []
     tags = {item["tag"]: item for item in document["objects"].values()}
     if solved is not None:
+        for tag, unit_result in sorted((solved.get("units") or {}).items()):
+            for item in ((unit_result or {}).get("kinetics") or {}).get("findings") or []:
+                findings.append({"severity": item.get("severity", "warning"), "code": item.get("code", ""),
+                                 "object": tag, "field": "reactions", "message": item.get("message", ""),
+                                 "source": "jarvis"})
         findings.extend(solved.get("culture_findings") or [])
         findings.extend(solved.get("mixed_findings") or [])
         for tag, result in sorted((solved.get("streams") or {}).items()):
@@ -1030,6 +1035,12 @@ def result_findings(document: dict[str, Any], solved: dict[str, Any] | None,
                                             f"{solved['draft_revision'].split(':', 1)[0]}).", "source": "dwsim_result"})
     if last is not None and last.get("status") == "failed":
         for item in (last.get("solve") or {}).get("failed_objects", [])[:20]:
+            if str(item.get("code") or "").startswith("KINETICS_"):
+                # Jarvis refused DWSIM's reactor result after its own verification (spec 180).
+                findings.append({"severity": "blocker", "code": item["code"], "object": item.get("tag") or "",
+                                 "field": "reactions", "message": plain_text(item.get("error") or item["code"]),
+                                 "source": "jarvis"})
+                continue
             findings.append({"severity": "warning", "code": "DWSIM_OBJECT_FAILED", "object": item.get("tag") or "",
                              "field": "", "message": f"DWSIM did not calculate it: "
                                                     f"{plain_text(item.get('error') or 'no error text')}",
@@ -1047,6 +1058,7 @@ def registry_projection() -> dict[str, Any]:
         "compounds": list(COMPOUNDS),
         "property_packages": list(PROPERTY_PACKAGES),
         "quantity_units": {kind: {"si": si, "display": list(display)} for kind, (si, display) in QUANTITY_UNITS.items()},
+        "kinetics": kinetics.form_table(),
         "stream_specs": [{"key": key, "label": label, "kind": kind} for key, (kind, _arg, label) in STREAM_SPECS.items()],
         "units": [
             {"type": spec.type, "label": spec.label, "owner": spec.owner, "culture_rule": spec.culture_rule,
@@ -1074,6 +1086,28 @@ def _display(document: dict[str, Any]) -> list[dict[str, Any]]:
     return rows
 
 
+def kinetics_scripts(document: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Per reactor tag: the Jarvis-generated DWSIM script for its typed rate law, or why there is none yet."""
+    scripts: dict[str, dict[str, Any]] = {}
+    for unit in document["objects"].values():
+        if unit["kind"] != "unit" or unit["type"] not in {"PFR", "CSTR"}:
+            continue
+        for rid in unit.get("reactions", []):
+            reaction = document.get("reactions", {}).get(rid) or {}
+            if not reaction.get("rate_law"):
+                continue
+            try:
+                text: str | None = kinetics.render(reaction)
+            except kinetics.KineticsError:
+                text = None
+            users = sum(1 for other in document["objects"].values()
+                        if other["kind"] == "unit" and rid in other.get("reactions", []))
+            scripts[unit["tag"]] = {"reaction_id": rid, "script_title": kinetics.script_title(unit["tag"], rid),
+                                    "native_reaction_id": f"{rid}__{unit['tag']}" if users > 1 else rid,
+                                    "script_text": text, "compilable": text is not None}
+    return scripts
+
+
 def projection(workspace_id: str, draft_id: str) -> dict[str, Any]:
     directory = draft_dir(workspace_id, draft_id)
     head = _head(directory)
@@ -1089,10 +1123,7 @@ def projection(workspace_id: str, draft_id: str) -> dict[str, Any]:
             revision = _read_json(directory / "revisions" / f"{seq}.json", "revision_not_found", "Draft revision was not found")
             edits_since += sum(1 for op in revision.get("ops", []) if op.get("op") not in LAYOUT_OPS)
     feed_basis = pbr_validation.pbr_feed_basis(document)
-    scripts = {unit["tag"]: {"reaction_id": rid, "script_title": f"jarvis-rate-{unit['tag']}-{rid}",
-                              "script_text": kinetics.render(document["reactions"][rid])}
-               for unit in document["objects"].values() if unit["kind"] == "unit"
-               for rid in unit.get("reactions", []) if document["reactions"][rid].get("rate_law")}
+    scripts = kinetics_scripts(document)
     return {
         "workspace_id": workspace_id,
         "draft_id": draft_id,

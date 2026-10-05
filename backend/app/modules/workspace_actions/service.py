@@ -194,7 +194,7 @@ def surface_brief(workspace_id: str, ref: SurfaceRef | None) -> SurfaceBrief:
             '{"name":"Example","stoichiometry":{"Ethylene oxide":-1,"Water":-1,"Ethylene glycol":1},'
             '"base_reactant":"Ethylene oxide","phase":"Liquid","basis":"MolarConc",'
             '"rate_law":{"form":"monod","substrate":"Ethylene oxide",'
-            '"v_max":{"value":5,"unit":"kmol/(m3.h)"},"k_s":{"value":2,"unit":"kmol/m3"}},'
+            '"v_max":{"value":5,"unit":"kmol/[m3.h]"},"k_s":{"value":2,"unit":"kmol/m3"}},'
             '"provenance":{"kind":"synthetic"}}}; '
             f'{{"op":"add_unit","type":"Pump","tag":"{next_unit_tag}","near":"{unit_tag}"}}; '
             f'{{"op":"insert_unit_after","type":"Pump","after":"{unit_tag}","tag":"{next_unit_tag}"}}; '

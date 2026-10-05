@@ -242,6 +242,9 @@ def _light(document: dict[str, Any], client: DwsimMcpClient, *, label: str,
                 wrapper.call(name, {"flowsheet_id": flow, **args}, min(60, max(0.1, remaining_s - (time.monotonic() - started))))
             wrapper.call("dwsim_flowsheet_save", {"flowsheet_id": flow, "filepath": str(case),
                                                        "compressed": False}, min(60, remaining_s))
+            # The same patched build as materialize: reactions, script kinetics and column details
+            # exist only after the native patch and reload (spec 180 fact 7).
+            flow = draft_compiler.reload_native_patch(cast(DwsimMcpClient, wrapper), flow, case, document)
             actual = draft_compiler.read_back(cast(DwsimMcpClient, wrapper), flow, case, exp)
             diffs = draft_compiler.compare(exp, actual)
             if diffs:

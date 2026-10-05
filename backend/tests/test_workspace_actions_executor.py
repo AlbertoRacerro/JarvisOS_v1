@@ -137,7 +137,7 @@ def test_brief_and_http_actions_routes() -> None:
         assert payload["summary"].startswith("Process: Action test · revision ")
         assert "selected: Stream S1" in payload["summary"]
         assert state["draft_id"] not in payload["summary"]
-        assert "Arrhenius" in payload["text"]
+        assert "set_reaction" in payload["text"] and "one typed reaction per PFR/CSTR" in payload["text"]
         assert '"target":"S1"' in payload["text"]
         assert '"target":"P1"' in payload["text"]
         assert '"after":"P1"' in payload["text"]

@@ -12,6 +12,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import re
 import math
 import shutil
 import tempfile
@@ -24,8 +25,9 @@ from xml.etree import ElementTree
 
 from app.modules.process_stack.draft_models import COMPILER_VERSION, STREAM_SPECS, UNIT_REGISTRY
 from app.modules.process_stack import kinetics
+from app.modules.process_stack.kinetics_verify import verify_rate_law_reactor
 from app.modules.process_stack.dwsim import _mass_balance
-from app.modules.process_stack.dwsim_mcp import DwsimMcpClient, DwsimMcpError
+from app.modules.process_stack.dwsim_mcp import DwsimMcpClient, DwsimMcpError, DwsimTimeout
 
 _REL_TOL = 1e-7
 _ABS_TOL = 1e-9
@@ -234,7 +236,7 @@ def _patch_native_xml(case_path: Path, document: dict[str, Any]) -> None:
             sub(reaction, "StoichBalance", "0")
             sub(reaction, "A_Forward", str(forward["value"]))
             if scripted:
-                title = f"jarvis-rate-{unit['tag']}-{reaction_id}"
+                title = kinetics.script_title(unit["tag"], reaction_id)
                 sub(reaction, "ReactionKinetics", "PythonScript")
                 sub(reaction, "ScriptTitle", title)
                 scripts = root.find("ScriptItems")
@@ -445,7 +447,23 @@ def expected(document: dict[str, Any]) -> dict[str, Any]:
                                                       for rid in unit["reactions"]]
                           for unit in _units(document) if unit["type"] in {"PFR", "CSTR"} and unit.get("reactions")},
         "units": {unit["tag"]: _unit_properties(unit) for unit in _units(document)},
+        **_expected_kinetics(document),
     }
+
+
+def _expected_kinetics(document: dict[str, Any]) -> dict[str, Any]:
+    """Rate-law identity that is not a DWSIM field: version, provenance and validity (they change findings).
+
+    Present only when a typed rate law exists, so drafts without one keep their earlier fingerprints. It is
+    not part of ``compare`` (DWSIM stores none of it); the script text itself is compared in ``reactions``.
+    """
+    typed = {rid: reaction for rid, reaction in sorted(document.get("reactions", {}).items()) if reaction.get("rate_law")}
+    if not typed:
+        return {}
+    return {"kinetics": {"version": kinetics.KINETICS_VERSION,
+                         "reactions": {rid: {"provenance": reaction.get("provenance"),
+                                             "validity": reaction.get("validity")}
+                                       for rid, reaction in typed.items()}}}
 
 
 def plan(document: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
@@ -847,7 +865,13 @@ def materialize(document: dict[str, Any], *, action: str, client: DwsimMcpClient
         if not check.get("ready") and not flash_exception:
             outcome.update(status="check_failed", compile_seconds=round(time.perf_counter() - started, 3))
             return outcome
-        solve = client.call("dwsim_solve_run", {"flowsheet_id": flow, "timeout_s": 120}, 150)
+        try:
+            solve = client.call("dwsim_solve_run", {"flowsheet_id": flow, "timeout_s": 120}, 150)
+        except DwsimTimeout as exc:
+            # The bounded client call stopped the MCP subprocess; DWSIM's own timeout_s is not
+            # relied on (a negative script rate once ran 252 s past timeout_s=30, spec 180 fact 3).
+            raise MaterializationError("JARVIS_SOLVE_TIMEOUT", "DWSIM did not finish the solve in 150 s; "
+                                       "Jarvis stopped the DWSIM process", step="dwsim_solve_run") from exc
         snapshot_rows: list[dict[str, Any]] = []
         if solve.get("ok") is True:
             client.call("dwsim_scenario_snapshot", {"flowsheet_id": flow, "label": "jarvis_result"}, 60)
@@ -882,6 +906,8 @@ def materialize(document: dict[str, Any], *, action: str, client: DwsimMcpClient
             balance = {"status": "unavailable", "error": getattr(exc, "code", type(exc).__name__)}
         errors = solve.get("errors") if isinstance(solve.get("errors"), list) else []
         failed = [item for item in object_status if item["calculated"] is False or item["error"]]
+        if solve.get("ok") is True and not errors and not failed:
+            failed = verify_kinetics(document, streams, units)
         outcome.update(
             status="completed" if solve.get("ok") is True and not errors and not failed else "failed",
             solve={"ok": solve.get("ok"), "errors": errors[:20], "failed_objects": failed[:20]},
@@ -893,6 +919,68 @@ def materialize(document: dict[str, Any], *, action: str, client: DwsimMcpClient
             keep_case.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(solved_case, keep_case)
     return outcome
+
+
+_DWSIM_REACTION_OUTPUTS = re.compile(r"^(?P<reaction>.+): (?:Reaction )?(?:Extent|Rate|Heat)$")
+
+
+def _port_stream(document: dict[str, Any], unit_id: str, side: str) -> dict[str, Any] | None:
+    return next((stream for stream in _material_streams(document)
+                 if (stream.get(side) or {}).get("unit") == unit_id and (stream.get(side) or {}).get("port") == 0), None)
+
+
+def verify_kinetics(document: dict[str, Any], streams: dict[str, Any], units: dict[str, Any]) -> list[dict[str, Any]]:
+    """Jarvis verification of every solved reactor with a typed rate law (spec 180 capability 5).
+
+    Mutates ``units`` in place: adds the ``kinetics`` verification record and removes DWSIM's per-reaction
+    Extent, Rate and Heat, which are wrong under script kinetics (fact 4). Returns failed-object rows.
+    """
+    failed: list[dict[str, Any]] = []
+    for unit in _units(document):
+        if unit["type"] not in {"PFR", "CSTR"}:
+            continue
+        typed = [(rid, document["reactions"][rid]) for rid in unit.get("reactions", [])
+                 if document["reactions"][rid].get("rate_law")]
+        if not typed:
+            continue
+        rid, reaction = typed[0]
+        native_ids = {_native_reaction_id(document, unit, item) for item in unit.get("reactions", [])}
+        names = {document["reactions"][item]["name"] for item in unit.get("reactions", [])}
+        result = units.setdefault(unit["tag"], {})
+        reported = result.get("reported") or {}
+        result["reported"] = {key: value for key, value in reported.items()
+                              if not ((match := _DWSIM_REACTION_OUTPUTS.match(key))
+                                      and match.group("reaction") in native_ids | names)}
+        result["properties"] = [row for row in result.get("properties") or []
+                                if not ((match := _DWSIM_REACTION_OUTPUTS.match(str(row.get("name", ""))))
+                                        and match.group("reaction") in native_ids | names)]
+        inlet, outlet = _port_stream(document, unit["id"], "target"), _port_stream(document, unit["id"], "source")
+        volume = (unit.get("params", {}).get("volume") or {}).get("si")
+        if inlet is None or outlet is None or inlet["tag"] not in streams or outlet["tag"] not in streams:
+            verification = {"ok": False, "code": "KINETICS_VERIFICATION_FAILED", "residual": None,
+                            "findings": [{"code": "KINETICS_VERIFICATION_FAILED", "severity": "blocker",
+                                          "message": "The reactor inlet or outlet stream result is missing."}]}
+        else:
+            verification = verify_rate_law_reactor(reactor_type=unit["type"], reaction=reaction,
+                                                   volume_m3=volume, inlet=streams[inlet["tag"]]["reported"],
+                                                   outlet=streams[outlet["tag"]]["reported"])
+        result["kinetics"] = {
+            "verified": verification["ok"], "code": verification.get("code"), "reaction_id": rid,
+            "form": reaction["rate_law"]["form"], "base_reactant": reaction["base_reactant"],
+            "script_title": kinetics.script_title(unit["tag"], rid),
+            "native_reaction_id": _native_reaction_id(document, unit, rid),
+            "kinetics_version": kinetics.KINETICS_VERSION,
+            **{key: verification.get(key) for key in ("residual", "tolerance", "conversion", "extent_kmol_h",
+                                                       "rate_inlet", "rate_outlet", "summary", "findings")},
+        }
+        if not verification["ok"]:
+            # No current result for this reactor: DWSIM's numbers stay only as diagnostics of the attempt.
+            result["calculated"] = False
+            result["error"] = verification.get("code") or "KINETICS_VERIFICATION_FAILED"
+            failed.append({"tag": unit["tag"], "calculated": False,
+                           "error": "; ".join(item["message"] for item in verification.get("findings") or [])
+                           or result["error"], "code": result["error"]})
+    return failed
 
 
 def new_run_id() -> str:

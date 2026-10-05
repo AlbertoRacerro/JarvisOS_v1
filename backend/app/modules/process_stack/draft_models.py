@@ -470,8 +470,9 @@ class TemperatureFactor(BaseModel):
 class _RateLaw(BaseModel):
     model_config = {"extra": "forbid"}
     substrate: str
-    v_max: DraftQuantity
-    k_s: DraftQuantity
+    # Absent parameters are a pre-Run finding (KINETICS_PARAMETER_MISSING), not an apply refusal.
+    v_max: DraftQuantity | None = None
+    k_s: DraftQuantity | None = None
     inhibitions: list[Inhibition] = Field(default_factory=list, max_length=3)
     temperature: TemperatureFactor | None = None
 
@@ -482,7 +483,7 @@ class MonodRateLaw(_RateLaw):
 
 class HaldaneRateLaw(_RateLaw):
     form: Literal["haldane"]
-    k_i: DraftQuantity
+    k_i: DraftQuantity | None = None
 
 
 class ReactionProvenance(BaseModel):
@@ -520,8 +521,8 @@ class KineticReaction(BaseModel):
                 raise ValueError("Arrhenius constants are required")
         elif self.A_forward is not None or self.E_forward is not None or self.orders:
             raise ValueError("script rate laws cannot carry Arrhenius constants or orders")
-        elif self.phase != "Liquid" or self.provenance is None:
-            raise ValueError("script rate laws require Liquid phase and provenance")
+        elif self.phase != "Liquid":
+            raise ValueError("typed rate laws require the Liquid phase")
         return self
 
     @field_validator("stoichiometry")
