@@ -438,6 +438,150 @@ def test_sampler_receives_product_concentration_from_algebraic_splitter():
                                                  units, topology["flows"], topology["feeds"])
     assert boundary["Out"]["X_kg_m3"] == 2.0
     assert boundary["Out"]["N_kg_m3"] == 0.3
+    assert boundary["Out"]["O2_kg_m3"] == 0.1
+
+
+def test_separator_conserves_biomass_across_concentrate_and_clarified_outlets():
+    unit = {"id": "sep", "type": "SpecifiedSeparator", "tag": "Sep", "params": {
+        "biomass_recovery": {"si": 95.0}, "concentration_factor": {"si": 20.0}}}
+    streams = [
+        {"id": "in", "tag": "In", "source": {"unit": "p1"}, "target": {"unit": "sep"}},
+        {"id": "conc", "tag": "Conc", "source": {"unit": "sep", "port": 0}, "target": None},
+        {"id": "clar", "tag": "Clar", "source": {"unit": "sep", "port": 1}, "target": None},
+    ]
+    pbr = {"tag": "PBR", "unit": {"id": "p1"}, "params": {}, "model": {}, "volume_m3": 1,
+           "state": [2.0, 0.3, 0.1], "growth": type("Growth", (), {"nitrogen_quota": 0.05})()}
+    topology = {"units": [unit], "streams": streams,
+                "flows": {"in": 1.0, "conc": 0.0475, "clar": 0.9525}, "feeds": {}}
+    state = np.array([2.0, 0.3, 0.1, 0.0, 0.0, 0.0, 0.0])
+    boundary = dynamic_engine._boundary_streams(topology, state, [pbr], topology["flows"], {})
+    biomass_out = boundary["Conc"]["flow_m3_s"] * boundary["Conc"]["X_kg_m3"]
+    biomass_out += boundary["Clar"]["flow_m3_s"] * boundary["Clar"]["X_kg_m3"]
+    assert biomass_out == pytest.approx(2.0)
+
+
+def test_topology_solves_specified_separator_volumetric_outlets():
+    pbr = {"id": "p1", "kind": "unit", "type": "PhotobioreactorT1", "tag": "PBR"}
+    separator = {"id": "sep", "kind": "unit", "type": "SpecifiedSeparator", "tag": "Sep",
+                 "params": {"biomass_recovery": {"si": 95.0}, "concentration_factor": {"si": 20.0}}}
+    feed = {"id": "feed", "kind": "stream", "type": "MaterialStream", "tag": "Feed", "source": None,
+            "target": {"unit": "p1"}, "spec": {"culture": {}}}
+    product = {"id": "product", "kind": "stream", "type": "MaterialStream", "tag": "Product",
+               "source": {"unit": "p1"}, "target": {"unit": "sep"}, "spec": {}}
+    concentrate = {"id": "conc", "kind": "stream", "type": "MaterialStream", "tag": "Conc",
+                   "source": {"unit": "sep", "port": 0}, "target": None, "spec": {}}
+    clarified = {"id": "clar", "kind": "stream", "type": "MaterialStream", "tag": "Clar",
+                 "source": {"unit": "sep", "port": 1}, "target": None, "spec": {}}
+    result = dynamic_engine._topology(
+        {"objects": {item["id"]: item for item in (pbr, separator, feed, product, concentrate, clarified)}},
+        [{"unit": pbr, "tag": "PBR"}], {"feed_flows": {"Feed": 1.0}},
+    )
+    assert result["flows"]["conc"] == pytest.approx(0.0475)
+    assert result["flows"]["clar"] == pytest.approx(0.9525)
+
+
+def test_pump_and_recycle_are_identity_nodes_for_culture_concentrations():
+    pbr = {"tag": "PBR", "unit": {"id": "p1"}, "params": {}, "model": {}, "volume_m3": 1,
+           "state": [0.8, 0.03, 0.006], "growth": type("Growth", (), {"nitrogen_quota": 0.04})()}
+    direct_stream = {"id": "direct", "tag": "Direct", "source": {"unit": "p1"},
+                     "target": {"unit": "p1"}}
+    direct = {"units": [], "streams": [direct_stream], "flows": {"direct": 1.0}, "feeds": {}}
+    direct_runtime = dynamic_engine._network_runtime(direct, direct["flows"], [pbr])
+    direct_values = dynamic_engine._network_concentrations(
+        direct, direct_runtime, tuple([0.8, 0.03, 0.006, 0.0, 0.0, 0.0, 0.0]), [pbr], direct["flows"])
+
+    pump = {"id": "pump", "tag": "Pump", "type": "Pump"}
+    recycle = {"id": "recycle", "tag": "Recycle", "type": "Recycle"}
+    streams = [
+        {"id": "to_pump", "tag": "ToPump", "source": {"unit": "p1"}, "target": {"unit": "pump"}},
+        {"id": "to_recycle", "tag": "ToRecycle", "source": {"unit": "pump"}, "target": {"unit": "recycle"}},
+        {"id": "return", "tag": "Return", "source": {"unit": "recycle"}, "target": {"unit": "p1"}},
+    ]
+    chained = {"units": [pump, recycle], "streams": streams,
+               "flows": {"to_pump": 1.0, "to_recycle": 1.0, "return": 1.0}, "feeds": {}}
+    chained_runtime = dynamic_engine._network_runtime(chained, chained["flows"], [pbr])
+    chained_values = dynamic_engine._network_concentrations(
+        chained, chained_runtime, tuple([0.8, 0.03, 0.006, 0.0, 0.0, 0.0, 0.0]), [pbr], chained["flows"])
+    assert chained_values["stream:return"] == direct_values["stream:direct"]
+
+
+def test_downstream_boundary_missing_conventional_state_is_refused():
+    boundary = {"CultureOut": {"tag": "CultureOut", "spec": {"temperature": {"si": 298.15}}}}
+    with pytest.raises(dynamic_engine.DynamicError) as raised:
+        dynamic_engine._validate_downstream_boundary_specs(boundary, {})
+    assert raised.value.code == "DOWNSTREAM_BOUNDARY_STATE_UNDECLARED"
+    assert raised.value.detail["streams"] == {"CultureOut": ["pressure", "composition"]}
+
+
+def test_tiny_negative_roundoff_is_clipped_and_recorded():
+    state = np.array([-1e-12, 0.2, 0.01, 0.0, 0.0, 0.0, 0.0])
+    units = [{"tag": "PBR"}]
+    clips: list[dict] = []
+    dynamic_engine._valid_state(state, units, [type("Growth", (), {"extinction": 0, "diameter": 0})()])
+    dynamic_engine._clip_tiny_negatives(state, units, clips, 60.0)
+    assert state[0] == 0.0
+    assert clips == [{"time_s": 60.0, "unit": "PBR", "channel": "X", "value_before": -1e-12,
+                      "value_after": 0.0}]
+
+
+def test_two_pbr_splitter_mixer_recycle_closes_mass_and_nitrogen_balances():
+    from app.modules.process_stack import draft
+    from app.modules.process_stack.draft_models import (
+        AddStream,
+        AddUnit,
+        Connect,
+        Disconnect,
+        DraftQuantity,
+        SetScenario,
+        SetUnitModel,
+        SetUnitParams,
+    )
+    from tests.plumbing_170_support import new_workspace, pbr_quantities
+
+    workspace_id = new_workspace()
+    state, _ = _real_scenario(workspace_id, 24 * 3600)
+    directory = draft.draft_dir(workspace_id, state["draft_id"])
+    head = draft._head(directory)
+    document = draft.load_revision(directory, head["revision"])["document"]
+    pin = document["objects"]["pbr"]["model"]
+    scenario = dict(document["scenarios"]["run"])
+    scenario["units"] = ["PBR", "PBR2"]
+    scenario["initial"] = {
+        "PBR": {"X": 0.2, "N": 0.05, "O2": 0.008},
+        "PBR2": {"X": 0.2, "N": 0.05, "O2": 0.008},
+    }
+    ops = [
+        AddUnit(op="add_unit", id="pbr2", type="PhotobioreactorT1", tag="PBR2", x=300, y=100),
+        AddUnit(op="add_unit", id="split", type="Splitter", tag="Split", x=220, y=0),
+        AddUnit(op="add_unit", id="mixer", type="Mixer", tag="Mixer", x=100, y=100),
+        AddStream(op="add_stream", id="recycle", tag="RecycleFlow", x=260, y=80),
+        AddStream(op="add_stream", id="harvest", tag="Harvest", x=280, y=-20),
+        AddStream(op="add_stream", id="p2out", tag="PBR2Out", x=150, y=120),
+        AddStream(op="add_stream", id="mixout", tag="MixedFeed", x=60, y=80),
+        Disconnect(op="disconnect", stream="feed", end="target"),
+        Connect(op="connect", stream="feed", end="target", unit="mixer", port=0),
+        Connect(op="connect", stream="product", end="target", unit="split", port=0),
+        Connect(op="connect", stream="harvest", end="source", unit="split", port=0),
+        Connect(op="connect", stream="recycle", end="source", unit="split", port=1),
+        Connect(op="connect", stream="recycle", end="target", unit="pbr2", port=0),
+        Connect(op="connect", stream="p2out", end="source", unit="pbr2", port=0),
+        Connect(op="connect", stream="p2out", end="target", unit="mixer", port=1),
+        Connect(op="connect", stream="mixout", end="source", unit="mixer", port=0),
+        Connect(op="connect", stream="mixout", end="target", unit="pbr", port=0),
+        SetUnitParams(op="set_unit_params", unit="pbr2", values=pbr_quantities()),
+        SetUnitModel(op="set_unit_model", unit="pbr2", model=pin),
+        SetUnitParams(op="set_unit_params", unit="split", mode="split_ratios", values={
+            "split_ratio_1": DraftQuantity(value=0.5, unit="dimensionless"),
+            "split_ratio_2": DraftQuantity(value=0.5, unit="dimensionless"),
+        }),
+        SetScenario(op="set_scenario", id="run", value=scenario),
+    ]
+    state = draft.patch(workspace_id, state["draft_id"], state["revision"], ops)
+    snapshot = dynamic_engine.prepare(workspace_id, state["draft_id"], "run")
+    result = dynamic_engine.run(snapshot, cancelled=lambda: False, progress=lambda _progress: None)
+    assert result.status == "succeeded", result.error
+    for species in ("biomass", "total_nitrogen"):
+        assert result.manifest["balances"]["aggregate"][species]["residual_rel"] <= 1e-6
 
 
 def test_real_24_hour_run_matches_independent_170_rate_reference():
@@ -520,6 +664,23 @@ def test_real_30_day_hourly_run_meets_host_budget_and_api_publishes_artifacts():
     api_state, _ = _real_scenario(workspace_id, 24 * 3600)
     base = f"/workspaces/{workspace_id}/process/drafts/{api_state['draft_id']}/dynamic"
     with TestClient(app) as client:
+        long_base = f"/workspaces/{workspace_id}/process/drafts/{state['draft_id']}/dynamic"
+        long_job = client.post(long_base + "/runs", json={"scenario_id": "run"})
+        assert long_job.status_code == 202, long_job.text
+        long_job_id = long_job.json()["job_id"]
+        cancelled_request = client.post(long_base + f"/runs/{long_job_id}/cancel")
+        assert cancelled_request.status_code == 200, cancelled_request.text
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            long_status = client.get(long_base + f"/runs/{long_job_id}")
+            if long_status.json()["status"] in {"succeeded", "failed", "cancelled"}:
+                break
+            time.sleep(0.02)
+        assert long_status.json()["status"] == "cancelled", long_status.json()
+        if long_status.json().get("artifacts"):
+            long_manifest = client.get(long_base + f"/runs/{long_job_id}/manifest").json()
+            assert long_manifest["artifact_label"] == "diagnostic_cancelled"
+
         created = client.post(base + "/runs", json={"scenario_id": "run"})
         assert created.status_code == 202, created.text
         job_id = created.json()["job_id"]

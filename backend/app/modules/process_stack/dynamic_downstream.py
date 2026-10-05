@@ -81,12 +81,6 @@ def _state_feed(original: dict[str, Any], state: dict[str, Any], density: float,
     for key in ("temperature", "pressure", "composition_basis", "composition"):
         if not spec.get(key) and key in carrier_spec:
             spec[key] = copy.deepcopy(carrier_spec[key])
-    spec["temperature"] = spec.get("temperature") or {"si": 298.15, "value": 298.15, "unit": "K"}
-    spec["pressure"] = spec.get("pressure") or {"si": 101325.0, "value": 101325.0, "unit": "Pa"}
-    spec["composition_basis"] = spec.get("composition_basis") or "mass"
-    if not spec.get("composition"):
-        spec["composition"] = {name: 1.0 if index == 0 else 0.0
-                                for index, name in enumerate(["Water"])}
     spec["mass_flow"] = {"si": flow * density, "value": flow * density, "unit": "kg/s"}
     culture = spec.setdefault("culture", {})
     for key, channel in (("biomass", "X"), ("nitrogen", "N"), ("oxygen", "O2")):
@@ -196,6 +190,7 @@ def build_sampler(
                     timeout_s=DWSIM_TIMEOUT_S,
                     max_iterations=DWSIM_ITERATION_CAP,
                     initial_tear=copy.deepcopy(last_converged) if last_converged is not None else None,
+                    include_tear_state=True,
                 )
         except Exception as exc:  # noqa: BLE001 - downstream failure cannot invalidate biology
             reason = "timeout" if "timeout" in type(exc).__name__.lower() or isinstance(exc, TimeoutError) else "solve_error"
@@ -225,6 +220,7 @@ def build_sampler(
                             dwsim_version=version, mcp_sha256=digest, run_dir=Path(directory),
                             timeout_s=max(1.0, DWSIM_TIMEOUT_S - (time.monotonic() - started)),
                             max_iterations=DWSIM_ITERATION_CAP, initial_tear=retry_guess,
+                            include_tear_state=True,
                         )
                     result = second
                 except Exception as exc:  # noqa: BLE001

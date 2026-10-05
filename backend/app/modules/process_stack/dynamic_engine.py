@@ -49,6 +49,24 @@ class EngineResult:
     manifest: dict[str, Any]
 
 
+def _validate_downstream_boundary_specs(
+    boundary_streams: dict[str, dict[str, Any]], carrier_spec: dict[str, Any],
+) -> None:
+    missing_by_stream: dict[str, list[str]] = {}
+    for boundary in boundary_streams.values():
+        spec = boundary.get("spec", {})
+        missing = [field for field in ("temperature", "pressure", "composition")
+                   if not spec.get(field) and not carrier_spec.get(field)]
+        if missing:
+            missing_by_stream[boundary["tag"]] = missing
+    if missing_by_stream:
+        raise DynamicError(
+            "DOWNSTREAM_BOUNDARY_STATE_UNDECLARED",
+            "Downstream boundary streams require declared temperature, pressure and composition.",
+            {"streams": missing_by_stream},
+        )
+
+
 def _canonical(value: Any) -> bytes:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode("utf-8")
 
@@ -69,6 +87,23 @@ def _stream_flow(stream: dict[str, Any], declared: dict[str, float]) -> float | 
         mass = (stream.get("spec", {}).get("mass_flow") or {}).get("si")
         value = float(mass) / 1000.0 if mass is not None else math.nan
     return value if math.isfinite(value) and value >= 0 else None
+
+
+def _splitter_ratios(unit: dict[str, Any], outlet_count: int) -> list[float]:
+    params = unit.get("params", {})
+    if "split_ratios" in params:
+        values = params["split_ratios"]
+        ratios = [float(value.get("si", value)) if isinstance(value, dict) else float(value)
+                  for _, value in sorted(values.items())]
+    else:
+        ratios = [float((params.get(f"split_ratio_{index}") or {}).get("si", 0.5)) for index in (1, 2)]
+        if outlet_count == 3:
+            ratios.append(1.0 - sum(ratios))
+    if (len(ratios) != outlet_count or any(value < 0 or value > 1 for value in ratios)
+            or abs(sum(ratios) - 1.0) > 1e-6):
+        raise DynamicError("SPLITTER_RATIOS_INVALID", "Splitter ratios must be nonnegative and sum to one.",
+                           {"unit": unit.get("tag")})
+    return ratios
 
 
 def _topology(document: dict[str, Any], units: list[dict[str, Any]], scenario: dict[str, Any]) -> dict[str, Any]:
@@ -95,7 +130,9 @@ def _topology(document: dict[str, Any], units: list[dict[str, Any]], scenario: d
             if neighbor is None or neighbor == current:
                 continue
             candidate = by_id.get(neighbor, {})
-            if candidate.get("type") not in {"PhotobioreactorT1", "Mixer", "Splitter"}:
+            if candidate.get("type") not in {
+                "PhotobioreactorT1", "Mixer", "Splitter", "Pump", "Recycle", "SpecifiedSeparator"
+            }:
                 if current == target:
                     raise DynamicError(
                         "UNSUPPORTED_TOPOLOGY",
@@ -155,12 +192,16 @@ def _topology(document: dict[str, Any], units: list[dict[str, Any]], scenario: d
     for key, unit in active_units.items():
         incoming = [s for s in relevant if (s.get("target") or {}).get("unit") == key]
         outgoing = [s for s in relevant if (s.get("source") or {}).get("unit") == key]
+        outgoing.sort(key=lambda stream: (stream.get("source") or {}).get("port", 0))
         if not incoming or not outgoing:
             if key in selected:
                 raise DynamicError(
                     "ZERO_THROUGHFLOW", "Participating PBR must have inlet and outlet streams.", {"unit": unit["tag"]}
                 )
             continue
+        if unit.get("type") in {"Pump", "Recycle"} and (len(incoming) != 1 or len(outgoing) != 1):
+            raise DynamicError("UNIT_TOPOLOGY_INVALID", "Pump and Recycle require one inlet and one outlet.",
+                               {"unit": unit["tag"]})
         row = np.zeros(n)
         for stream in incoming:
             row[index[stream["id"]]] += 1
@@ -168,21 +209,24 @@ def _topology(document: dict[str, Any], units: list[dict[str, Any]], scenario: d
             row[index[stream["id"]]] -= 1
         equations.append(row)
         rhs.append(0.0)
-        if unit.get("type") == "Splitter":
-            ratios = unit.get("params", {}).get("split_ratios", {})
-            ratio_values = [
-                float(v.get("si", v)) if isinstance(v, dict) else float(v) for _, v in sorted(ratios.items())
-            ]
-            if not ratio_values or len(ratio_values) != len(outgoing):
+        if unit.get("type") == "SpecifiedSeparator":
+            params = unit.get("params", {})
+            recovery = float((params.get("biomass_recovery") or {}).get("si", 90.0)) / 100.0
+            factor = float((params.get("concentration_factor") or {}).get("si", 10.0))
+            if len(incoming) != 1 or len(outgoing) != 2 or not 0 < recovery <= 1 or factor <= 1:
                 raise DynamicError(
-                    "SPLITTER_RATIOS_INVALID", "Splitter requires one declared ratio per outlet.", {"unit": unit["tag"]}
-                )
-            if any(v < 0 or v > 1 for v in ratio_values) or abs(sum(ratio_values) - 1.0) > 1e-6:
-                raise DynamicError(
-                    "SPLITTER_RATIOS_INVALID",
-                    "Splitter ratios must be nonnegative and sum to one.",
+                    "SEPARATOR_TOPOLOGY_INVALID",
+                    "Dynamic SpecifiedSeparator requires one inlet, two outlets, valid recovery and factor.",
                     {"unit": unit["tag"]},
                 )
+            for stream, ratio in zip(outgoing, (recovery / factor, 1.0 - recovery / factor), strict=True):
+                row = np.zeros(n)
+                row[index[stream["id"]]] = 1
+                row[index[incoming[0]["id"]]] = -ratio
+                equations.append(row)
+                rhs.append(0.0)
+        elif unit.get("type") == "Splitter":
+            ratio_values = _splitter_ratios(unit, len(outgoing))
             for stream, ratio in zip(outgoing, ratio_values, strict=True):
                 row = np.zeros(n)
                 row[index[stream["id"]]] = 1
@@ -328,10 +372,11 @@ def prepare(workspace_id: str, draft_id: str, scenario_id: str) -> Snapshot:
             source, target = stream.get("source"), stream.get("target")
             if source and target:
                 src, dst = objects.get(source.get("unit"), {}), objects.get(target.get("unit"), {})
-                if src.get("type") in {"Mixer", "Splitter"} and dst.get("type") in {"Mixer", "Splitter"}:
+                supported_algebraic = {"Mixer", "Splitter", "Pump", "Recycle", "SpecifiedSeparator"}
+                if src.get("type") in supported_algebraic and dst.get("type") in supported_algebraic:
                     algebraic.setdefault(src["id"], set()).add(dst["id"])
                 if (target.get("unit") in selected and source.get("unit") not in selected
-                        and src.get("type") not in {"Mixer", "Splitter"}):
+                        and src.get("type") not in supported_algebraic):
                     raise DynamicError(
                         "UNSUPPORTED_TOPOLOGY",
                         "A non-participating unit cannot feed the T1 network.",
@@ -339,7 +384,9 @@ def prepare(workspace_id: str, draft_id: str, scenario_id: str) -> Snapshot:
                     )
             if source and source.get("unit") in selected and target and target.get("unit") not in selected:
                 foreign = objects.get(target["unit"], {})
-                if foreign.get("type") in {"Mixer", "Splitter"}:
+                if foreign.get("type") in {
+                    "Mixer", "Splitter", "Pump", "Recycle", "SpecifiedSeparator"
+                }:
                     continue
             if source and target and source.get("unit") in selected and target.get("unit") in selected:
                 pass  # Native PBR-to-PBR recycle coupling is represented by the ODE below.
@@ -376,6 +423,14 @@ def prepare(workspace_id: str, draft_id: str, scenario_id: str) -> Snapshot:
                     "DOWNSTREAM_UNITS_REQUIRED",
                     "Downstream sampling requires at least one reachable DWSIM-owned unit.",
                 )
+            participating_ids = {item["unit"]["id"] for item in units}
+            carrier_specs = [
+                stream.get("spec", {}) for stream in document["objects"].values()
+                if stream.get("kind") == "stream" and stream.get("source") is None
+                and (stream.get("target") or {}).get("unit") in participating_ids
+            ]
+            carrier_spec = carrier_specs[0] if carrier_specs else {}
+            _validate_downstream_boundary_specs(downstream_data[1], carrier_spec)
         for obj in document["objects"].values():
             if obj.get("type") == "Splitter" and obj.get("mode") != "split_ratios":
                 raise DynamicError(
@@ -510,7 +565,8 @@ def _network_runtime(topology: dict[str, Any], flows: dict[str, float], units: l
         inlet = [stream for stream in streams if (stream.get("target") or {}).get("unit") == key]
         total = sum(flows.get(stream["id"], 0.0) for stream in inlet)
         incoming[key] = [(stream, flows.get(stream["id"], 0.0) / total) for stream in inlet]
-    pending = {key for key, unit in by_id.items() if unit.get("type") in {"Mixer", "Splitter"}}
+    algebraic_types = {"Mixer", "Splitter", "Pump", "Recycle", "SpecifiedSeparator"}
+    pending = {key for key, unit in by_id.items() if unit.get("type") in algebraic_types}
     algebraic_incoming = {key: [stream for stream in streams if (stream.get("target") or {}).get("unit") == key]
                           for key in pending}
     order = []
@@ -533,25 +589,60 @@ def _network_runtime(topology: dict[str, Any], flows: dict[str, float], units: l
 
 def _network_concentrations(topology: dict[str, Any], runtime: dict[str, Any], state: tuple[float, ...],
                             units: list[dict[str, Any]], flows: dict[str, float]) -> dict[str, tuple[float, ...]]:
-    concentrations = {}
+    concentrations: dict[str, tuple[float, ...]] = {}
     for i, item in enumerate(units):
         x, nitrogen, oxygen = (float(v) for v in state[i * 7:i * 7 + 3])
-        concentrations[item["unit"]["id"]] = (x, nitrogen, oxygen,
-                                                item["growth"].nitrogen_quota * x)
+        value = (x, nitrogen, oxygen, item["growth"].nitrogen_quota * x)
+        concentrations[item["unit"]["id"]] = value
+        for stream in topology["streams"]:
+            if (stream.get("source") or {}).get("unit") == item["unit"]["id"]:
+                concentrations[f"stream:{stream['id']}"] = value
     for key in runtime["algebraic_order"]:
         inlet = runtime["algebraic_incoming"][key]
         total = sum(flows.get(stream["id"], 0.0) for stream in inlet)
+        if total <= 0:
+            raise DynamicError("ZERO_THROUGHFLOW", "Algebraic unit has zero throughflow.", {"unit_id": key})
         mixed = np.zeros(4, dtype=np.float64)
         for stream in inlet:
             source = (stream.get("source") or {}).get("unit")
-            value = topology["feeds"].get(stream["id"]) if source is None else concentrations.get(source)
+            value = topology["feeds"].get(stream["id"]) if source is None else concentrations.get(
+                f"stream:{stream['id']}"
+            )
             if value is None:
                 raise DynamicError("TOPOLOGY_UNRESOLVED", "A stream concentration could not be resolved.")
             if source is None:
                 quota = runtime["feed_quota"].get(stream["id"], 0.0)
                 value = (*value[:3], quota * value[0])
             mixed += flows.get(stream["id"], 0.0) * np.asarray(value)
-        concentrations[key] = tuple((mixed / total).tolist())
+        inlet_value = mixed / total
+        unit = next(item for item in topology["units"] if item["id"] == key)
+        kind = unit.get("type")
+        outgoing = sorted(
+            (stream for stream in topology["streams"] if (stream.get("source") or {}).get("unit") == key),
+            key=lambda stream: (stream.get("source") or {}).get("port", 0),
+        )
+        if kind in {"Pump", "Recycle"} and len(outgoing) != 1:
+            raise DynamicError("UNIT_TOPOLOGY_INVALID", "Pump and Recycle require one outlet.",
+                               {"unit": unit.get("tag")})
+        if kind == "SpecifiedSeparator":
+            if len(outgoing) != 2:
+                raise DynamicError("SEPARATOR_TOPOLOGY_INVALID", "SpecifiedSeparator requires two outlets.",
+                                   {"unit": unit.get("tag")})
+            params = unit.get("params", {})
+            recovery = float((params.get("biomass_recovery") or {}).get("si", 90.0)) / 100.0
+            factor = float((params.get("concentration_factor") or {}).get("si", 10.0))
+            concentrate = recovery / factor
+            clarified = 1.0 - concentrate
+            # The ratio-weighted biomass and quota-N concentrations conserve their flow rates.
+            outlet_values = (
+                (inlet_value[0] * factor, inlet_value[1], inlet_value[2], inlet_value[3] * factor),
+                (inlet_value[0] * (1.0 - recovery) / clarified, inlet_value[1], inlet_value[2],
+                 inlet_value[3] * (1.0 - recovery) / clarified),
+            )
+        else:
+            outlet_values = (tuple(inlet_value.tolist()),) * len(outgoing)
+        for stream, value in zip(outgoing, outlet_values, strict=False):
+            concentrations[f"stream:{stream['id']}"] = value
     return concentrations
 
 
@@ -633,6 +724,7 @@ def run(
     setpoints = {value["id"]: float(value["setpoint"]) for value in controllers}
     controller_by_id = {item["id"]: item for item in controllers}
     conditional_state: dict[int, bool] = {}
+    roundoff_clips: list[dict[str, Any]] = []
     boundaries = sorted(
         set(float(v) for v in outputs)
         | {float(t - start) for t in snapshot.payload["profiles"][0]["times"] if start < t < end}
@@ -680,7 +772,9 @@ def run(
                     for stream, weight in network_state["incoming"][item["unit"]["id"]]:
                         flow = flows.get(stream["id"], 0.0)
                         source = (stream.get("source") or {}).get("unit")
-                        value = feeds.get(stream["id"]) if source is None else concentrations.get(source)
+                        value = feeds.get(stream["id"]) if source is None else concentrations.get(
+                            f"stream:{stream['id']}"
+                        )
                         if value is None:
                             raise DynamicError("TOPOLOGY_UNRESOLVED", "A PBR inlet concentration could not be resolved.")
                         inlet += weight * np.asarray(value[:3])
@@ -696,8 +790,9 @@ def run(
                     source, target = stream.get("source"), stream.get("target")
                     if source is not None and target is not None:
                         continue
-                    source_id = source.get("unit") if source else None
-                    value = feeds.get(stream["id"]) if source is None else concentrations.get(source_id)
+                    value = feeds.get(stream["id"]) if source is None else concentrations.get(
+                        f"stream:{stream['id']}"
+                    )
                     if value is None:
                         continue
                     if source is None:
@@ -722,11 +817,14 @@ def run(
             if not solved.success:
                 raise DynamicError("SOLVER_FAILED", solved.message, {"segment_s": [left, right]})
             for t, state in zip(solved.times[1:], solved.states[1:], strict=True):
+                state = np.asarray(state, dtype=np.float64)
                 _valid_state(state, units, growths)
+                _clip_tiny_negatives(state, units, roundoff_clips, float(t))
                 if any(abs(float(t) - float(out)) <= 1e-7 for out in outputs):
                     times_out.append(float(t))
                     rows.append(np.asarray(state, dtype=np.float64))
             current = np.asarray(solved.states[-1], dtype=np.float64)
+            _clip_tiny_negatives(current, units, roundoff_clips, right)
             while event_cursor < len(events) and abs(float(events[event_cursor][1]["time_s"]) - right) < 1e-7:
                 current, event_cursor = _apply_dynamic_event(
                     current, events[event_cursor], units, event_log, event_cursor,
@@ -778,6 +876,7 @@ def run(
             progress(min(1.0, right / duration))
         series = _result_series(snapshot, times_out, rows, units, controllers, controller_log)
         manifest = _manifest(snapshot, started, event_log, controller_log, downstream)
+        manifest["diagnostics"]["roundoff_clips"] = roundoff_clips
         net_boundary = current[n * 7 : n * 7 + 3]
         initial_inventory = np.zeros(3, dtype=np.float64)
         final_inventory = np.zeros(3, dtype=np.float64)
@@ -843,12 +942,21 @@ def _valid_state(state: tuple[float, ...], units: list[dict[str, Any]], growths:
                     f"{name} concentration became materially negative.",
                     {"unit": item["tag"], "channel": name, "value": value},
                 )
-            if value < 0:
-                # Tiny roundoff is tolerated; CVODE state is not altered mid-segment.
-                continue
         growth = growths[i] if growths is not None else pbr_unit.build_growth(item["params"], item["model"], (0, 0, 0), 0)
         if growth.extinction * max(0.0, float(state[i * 7])) * growth.diameter > 1e6:
             raise DynamicError("OPTICS_TAU_MAX", "Optical depth exceeds the model limit.", {"unit": item["tag"]})
+
+
+def _clip_tiny_negatives(
+    state: np.ndarray, units: list[dict[str, Any]], clips: list[dict[str, Any]], time_s: float,
+) -> None:
+    for i, unit in enumerate(units):
+        for offset, channel in enumerate(("X", "N", "O2")):
+            index = i * 7 + offset
+            if state[index] < 0:
+                clips.append({"time_s": time_s, "unit": unit["tag"], "channel": channel,
+                              "value_before": float(state[index]), "value_after": 0.0})
+                state[index] = 0.0
 
 
 def _boundary_streams(
@@ -866,7 +974,9 @@ def _boundary_streams(
         source, target = stream.get("source"), stream.get("target")
         if (source is None or target is None
                 or (source.get("unit") in dynamic_ids and target.get("unit") not in dynamic_ids)):
-            concentration = feeds.get(stream["id"]) if source is None else concentrations.get(source.get("unit"))
+            concentration = feeds.get(stream["id"]) if source is None else concentrations.get(
+                f"stream:{stream['id']}"
+            )
             output[stream["tag"]] = {
                 "flow_m3_s": float(flows.get(stream["id"], 0.0)),
                 "X_kg_m3": concentration[0] if concentration is not None else None,

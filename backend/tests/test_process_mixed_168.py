@@ -375,6 +375,32 @@ def test_mixed_validate_builds_jarvis_boundaries_without_solving(monkeypatch: py
     assert boundary["spec"]["mass_flow"]["si"] > 0
 
 
+def test_mixed_run_hides_internal_tear_state_unless_requested(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    document = _tear_document()
+    monkeypatch.setattr(mixed, "iterate", lambda *_args, **_kwargs: {
+        "iterate": {"Tear": _state()}, "status": "completed", "reason": "converged", "history": [],
+        "last_input": None, "last": None,
+    })
+    monkeypatch.setattr(mixed_runtime, "_evaluate", lambda *_args, **_kwargs: {
+        "produced": {}, "elapsed_s_by_phase": {"build": 0, "solve": 0, "culture": 0},
+        "max_build_seconds": 0, "streams": {}, "units": {}, "mixed_findings": [], "segments": [],
+    })
+    monkeypatch.setattr(mixed_runtime, "_whole_graph_balances", lambda *_args, **_kwargs: {
+        "balances": [], "status": "succeeded",
+    })
+    monkeypatch.setattr(mixed_runtime, "_culture_results", lambda *_args, **_kwargs: {})
+    monkeypatch.setattr(mixed_runtime, "_partition_record", lambda *_args, **_kwargs: {
+        "consumed": [], "segments": [], "jarvis_units": [], "levels": {},
+    })
+    common = {"action": "run", "client": object(), "dwsim_version": "10.2.9", "mcp_sha256": "a" * 64,
+              "run_dir": tmp_path}
+    normal = mixed_runtime.run(document, **common)
+    sampler = mixed_runtime.run(document, **common, include_tear_state=True)
+    assert "_tear_state" not in normal and "_last_attempt" not in normal
+    assert sampler["_tear_state"] == {"Tear": _state()}
+    assert sampler["_last_attempt"] == {"guess": None, "output": None}
+
+
 def test_residual_uses_field_tolerances_and_keeps_undamped_signed_values() -> None:
     before = {"temperature_K": 300.0, "pressure_Pa": 1e5, "mass_flow_kg_s": 1.0,
               "mass_fraction.Water": 0.5, "biomass": 0.01}
