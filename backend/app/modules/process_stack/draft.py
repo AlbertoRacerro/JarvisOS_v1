@@ -24,8 +24,7 @@ from pydantic import BaseModel
 from app.core.paths import build_paths
 from app.modules.engineering.refs import Quantity
 from app.modules.process_stack import culture as culture_engine
-from app.modules.process_stack import pbr_validation
-from app.modules.process_stack import kinetics
+from app.modules.process_stack import kinetics, pbr_validation
 from app.modules.process_stack._common import EvaluationRefusal, magnitude
 from app.modules.process_stack.draft_models import (
     COMPILER_VERSION,

@@ -300,7 +300,8 @@ if any(spec.owner not in {"dwsim", "jarvis_bio"} for spec in UNIT_REGISTRY.value
     raise RuntimeError("Process unit registry contains an unsupported owner")
 
 UNSUPPORTED_TYPES: dict[str, str] = {
-    "Reactor": "Only the kinetically defined PFR subset is supported.",
+    "Reactor": ("Generic reactors are not offered: use a PFR or CSTR with typed kinetics; Gibbs, conversion and "
+                "equilibrium reactors are not supported."),
 }
 
 # Feed-stream specification keys: SI storage and DWSIM MCP argument / read-back names.

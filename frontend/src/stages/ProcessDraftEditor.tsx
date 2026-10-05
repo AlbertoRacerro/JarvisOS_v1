@@ -721,11 +721,11 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
 
   /** Read-only DWSIM results for the selection, only after a run and bound to its revision. */
   const renderResultSection = (properties: ResultProperty[] | undefined, legacy: React.ReactNode,
-                              owner: "dwsim" | "jarvis_bio" = "dwsim") => {
+                              owner: "dwsim" | "jarvis_bio" = "dwsim", title?: string) => {
     if (!solvedRun || results.state === "none") return null;
     return (
       <fieldset className={`draft-fieldset draft-outputs${results.state === "stale" ? " is-stale" : ""}`} aria-label="Results (read-only)">
-        <legend>Results · {ownerShort(owner)}{results.state === "stale" ? " (stale)" : ""}</legend>
+        <legend>{title ?? `Results · ${ownerShort(owner)}`}{results.state === "stale" ? " (stale)" : ""}</legend>
         {properties?.length ? <ResultProperties properties={properties} stale={results.state === "stale"} label="Result properties" /> : legacy}
       </fieldset>
     );
@@ -1106,6 +1106,8 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
               ))}
             </dl>
           ),
+          "dwsim",
+          reactor && (kineticsRecord || typedRateLaw) ? "All DWSIM unit properties" : undefined,
         )}
         </div>
       </>

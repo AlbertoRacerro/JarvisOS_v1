@@ -12,8 +12,8 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
-import re
 import math
+import re
 import shutil
 import tempfile
 import time
@@ -23,11 +23,11 @@ from typing import Any
 from uuid import uuid4
 from xml.etree import ElementTree
 
-from app.modules.process_stack.draft_models import COMPILER_VERSION, STREAM_SPECS, UNIT_REGISTRY
 from app.modules.process_stack import kinetics
-from app.modules.process_stack.kinetics_verify import verify_rate_law_reactor
+from app.modules.process_stack.draft_models import COMPILER_VERSION, STREAM_SPECS, UNIT_REGISTRY
 from app.modules.process_stack.dwsim import _mass_balance
 from app.modules.process_stack.dwsim_mcp import DwsimMcpClient, DwsimMcpError, DwsimTimeout
+from app.modules.process_stack.kinetics_verify import verify_rate_law_reactor
 
 _REL_TOL = 1e-7
 _ABS_TOL = 1e-9
