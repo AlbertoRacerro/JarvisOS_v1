@@ -152,12 +152,42 @@ def _rel(a: float, b: float) -> float:
     return abs(a - b) / max(abs(b), 1e-300)
 
 
+def _from_reference(reference: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Translate ``reference.py --json`` into draft setup and typed cases (no values are invented here)."""
+    ref_setup = reference["setup"]
+    setup = {"property_package": ref_setup["package"], "temperature_K": ref_setup["T_K"],
+             "pressure_kPa": ref_setup["P_kPa"], "mass_flow_kg_s": ref_setup["mass_flow_kg_s"],
+             "mass_fractions": {"Water": 0.7, EO: 0.3}, "volume_m3": ref_setup["V_m3"], "pfr_length_m": 10.0}
+    if ref_setup["feed"] != "Water 70 / Ethylene oxide 30 wt %":
+        raise SystemExit(f"unexpected reference feed {ref_setup['feed']!r}")
+    cases = []
+    for item in reference["cases"]:
+        p = item["params"]
+        form = "haldane" if item["form"] == "haldane" else "monod"
+        params: dict[str, Any] = {"v_max_kmol_m3_h": p["V_max"], "k_s_kmol_m3": p["K_S"], "inhibitions": []}
+        if form == "haldane":
+            params["k_i_kmol_m3"] = p["K_I"]
+        if item["form"] in {"monod_noncompetitive", "monod_competitive"}:
+            params["inhibitions"].append({"kind": item["form"].split("_", 1)[1], "inhibitor": EG,
+                                          "k_i_kmol_m3": p["K_i_EG"]})
+        if item["form"] == "monod_temperature":
+            params["temperature"] = {"activation_energy_J_mol": p["E_a_J_mol"], "reference_temperature_K": p["T_ref_K"]}
+        known = {"monod", "haldane", "monod_noncompetitive", "monod_competitive", "monod_temperature"}
+        if item["form"] not in known:
+            raise SystemExit(f"unknown reference form {item['form']!r}")
+        cases.append({"id": item["id"], "reactor": item["reactor"], "form": form, "params": params,
+                      "feed_temperature_K": ref_setup["states"][item["state"]]["T_K"],
+                      "X_variable_q": item["X_variable_q"], "X_constant_density": item["X_constant_density"]})
+    return setup, cases
+
+
 def _single_case(client: Any, workspace_id: str, setup: dict[str, Any], case: dict[str, Any],
                  report: dict[str, Any]) -> None:
     unit_type = case["reactor"]
     tag = f"{unit_type}-1"
     seed = _seed(client, workspace_id, f"180 {case['id']} {unit_type}",
-                 _ops(setup, [(unit_type, tag)], _reaction(case)))
+                 _ops({**setup, "temperature_K": case.get("feed_temperature_K", setup["temperature_K"])},
+                      [(unit_type, tag)], _reaction(case)))
     blockers = [f for f in seed["projection"]["findings"] if f["severity"] == "blocker"]
     _expect(not blockers, f"{case['id']} {unit_type}: no pre-Run blockers", blockers, report)
     script = seed["projection"]["kinetics_scripts"][tag]
@@ -190,14 +220,13 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--only", default="", help="comma-separated case ids (A1..A7); default all")
     parser.add_argument("--skip-extras", action="store_true", help="only the A-table cases")
-    parser.add_argument("--reference-json", default="", help="debug only: read reference values from a file")
     args = parser.parse_args()
     runtime = Path(os.environ["JARVISOS_DWSIM_MCP_PATH"]).resolve()
     if not runtime.is_file():
         raise SystemExit(f"DWSIM MCP not found: {runtime}")
     os.environ["JARVISOS_DWSIM_MCP_SHA256"] = _sha256(runtime)
-    reference = (json.loads(Path(args.reference_json).read_text(encoding="utf-8")) if args.reference_json
-                 else json.loads(subprocess.check_output([sys.executable, str(REFERENCE), "--json"], text=True)))
+    reference = json.loads(subprocess.check_output([sys.executable, str(REFERENCE), "--json"], text=True))
+    setup, all_cases = _from_reference(reference)
     report: dict[str, Any] = {
         "source_sha": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
         "source_dirty": bool(subprocess.check_output(["git", "status", "--porcelain"], cwd=ROOT, text=True).strip()),
@@ -205,7 +234,6 @@ def main() -> None:
         "cases": {}, "extras": {}, "assertions": [], "complete": False,
     }
     only = {item.strip() for item in args.only.split(",") if item.strip()}
-    setup = reference["setup"]
     try:
         with tempfile.TemporaryDirectory(prefix="jarvisos-180-accept-") as data_root:
             os.environ["JARVISOS_DATA_ROOT"] = data_root
@@ -221,13 +249,13 @@ def main() -> None:
             with TestClient(app) as client:
                 workspace_id = _request(client, "POST", "/workspaces", {
                     "name": "180 real DWSIM acceptance", "slug": "accept-180-real"})["id"]
-                cases = [case for case in reference["cases"] if not only or case["id"] in only]
+                cases = [case for case in all_cases if not only or case["id"] in only]
                 for case in cases:
                     _single_case(client, workspace_id, setup, case, report)
                 if args.skip_extras:
                     report["complete"] = True
                     return
-                a1 = next(case for case in reference["cases"] if case["id"] == "A1" and case["reactor"] == "CSTR")
+                a1 = next(case for case in all_cases if case["id"] == "A1" and case["reactor"] == "CSTR")
                 # Two CSTRs in series sharing one reaction: one definition, two native ids, both verified.
                 series = _seed(client, workspace_id, "180 shared series",
                                _ops(setup, [("CSTR", "CSTR-1"), ("CSTR", "CSTR-2")], _reaction(a1)))
@@ -269,7 +297,7 @@ def main() -> None:
                 report["extras"]["no_energy"] = {"codes": sorted(codes), "http": refused["status_code"]}
                 _expect("REACTOR_ENERGY_STREAM_MISSING" in codes and refused["status_code"] == 422,
                         "missing CSTR energy stream blocks Run before DWSIM", report["extras"]["no_energy"], report)
-                pfr_case = next(case for case in reference["cases"] if case["reactor"] == "PFR")
+                pfr_case = next(case for case in all_cases if case["reactor"] == "PFR")
                 adiabatic = _seed(client, workspace_id, "180 refused mode",
                                   _ops(setup, [("PFR", "PFR-1")], _reaction(pfr_case), mode="adiabatic"))
                 codes = {f["code"] for f in adiabatic["projection"]["findings"] if f["severity"] == "blocker"}
