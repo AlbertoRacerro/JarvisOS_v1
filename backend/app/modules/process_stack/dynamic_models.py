@@ -62,6 +62,7 @@ class Controller(StrictModel):
     measurement: str
     unit: str
     actuator: str
+    output_unit: Literal["m3/s", "1"]
     cadence_s: float = Field(ge=MIN_CADENCE_S)
     setpoint: float
     lower: float = 0
@@ -76,6 +77,14 @@ class Controller(StrictModel):
     def output_bounds(self) -> Controller:
         if self.lower > self.upper or not self.lower <= self.output <= self.upper:
             raise ValueError("controller output and bounds are inconsistent")
+        if self.actuator.startswith("feed:") and self.output_unit != "m3/s":
+            raise ValueError("feed controller output requires m3/s")
+        if self.actuator.startswith("splitter:") and (
+            self.output_unit != "1" or self.lower < 0 or self.upper > 1
+        ):
+            raise ValueError("splitter controller output requires a ratio in [0,1]")
+        if self.type == "turbidostat" and not self.actuator.startswith("splitter:"):
+            raise ValueError("turbidostat output is a harvest ratio and requires a splitter actuator")
         return self
 
 
@@ -83,6 +92,7 @@ class Scenario(StrictModel):
     id: str = Field(pattern=r"^[a-z][a-z0-9_-]{0,39}$")
     units: list[str] = Field(min_length=1, max_length=MAX_PARTICIPATING_PBRS)
     profiles: list[dict[str, str]] = Field(min_length=1, max_length=8)
+    forcing_profile_id: str | None = None
     schedule_id: str | None = None
     controllers: list[str] = Field(default_factory=list, max_length=MAX_CONTROLLERS)
     start_utc: str

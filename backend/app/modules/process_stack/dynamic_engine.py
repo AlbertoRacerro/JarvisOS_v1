@@ -518,6 +518,11 @@ def prepare(workspace_id: str, draft_id: str, scenario_id: str) -> Snapshot:
         from app.modules.environment import profiles
 
         resolved_profiles = []
+        forcing_profile_id = scenario.forcing_profile_id or scenario.profiles[0]["profile_id"]
+        if forcing_profile_id not in {ref.get("profile_id") for ref in scenario.profiles}:
+            raise DynamicError("PROFILE_NOT_BOUND", "Forcing profile must be one of the bound profiles.")
+        if len({ref.get("profile_id") for ref in scenario.profiles}) != len(scenario.profiles):
+            raise DynamicError("PROFILE_DUPLICATE", "Scenario profiles must have distinct identities.")
         for ref in scenario.profiles:
             try:
                 profile = profiles._read(workspace_id, ref["digest"])
@@ -531,6 +536,10 @@ def prepare(workspace_id: str, draft_id: str, scenario_id: str) -> Snapshot:
                 raise DynamicError("PROFILE_ID_MISMATCH", "Profile id must equal its immutable digest.")
             times = [_stamp(s) for s in profile["timestamps"]]
             channels = profile["channels"]
+            if ref["profile_id"] != forcing_profile_id:
+                resolved_profiles.append({"ref": ref, "profile": profile, "times": times,
+                                          "par_name": None, "temp_name": None})
+                continue
             par_name = "par" if "par" in channels else "ghi"
             if par_name == "ghi" and scenario.par_from_ghi_factor is None:
                 raise DynamicError("PAR_UNAVAILABLE", "Profile has GHI but no declared PAR conversion factor.")
@@ -563,6 +572,7 @@ def prepare(workspace_id: str, draft_id: str, scenario_id: str) -> Snapshot:
             resolved_profiles.append(
                 {"ref": ref, "profile": profile, "times": times, "par_name": par_name, "temp_name": temp_name}
             )
+        resolved_profiles.sort(key=lambda item: item["ref"]["profile_id"] != forcing_profile_id)
         payload = {
             "workspace_id": workspace_id,
             "draft_id": draft_id,
@@ -793,7 +803,7 @@ def run(
         outputs = np.insert(outputs, 0, 0.0)
     n = len(units)
     topology = snapshot.payload.get("topology", {"units": [], "streams": [], "flows": {}, "feeds": {}})
-    topology = dict(topology, feeds={
+    topology = dict(topology, flows=dict(topology["flows"]), feeds={
         key: ([value.get("X", 0.0), value.get("N", 0.0), value.get("O2", 0.0)]
               if isinstance(value, dict) else value)
         for key, value in topology["feeds"].items()
@@ -813,7 +823,8 @@ def run(
     flow_log: list[dict[str, Any]] = []
     downstream: list[dict[str, Any]] = []
     events = sorted(
-        enumerate(snapshot.payload["schedule"].get("events", [])), key=lambda pair: (pair[1]["time_s"], pair[0])
+        ((index, dict(event)) for index, event in enumerate(snapshot.payload["schedule"].get("events", []))),
+        key=lambda pair: (pair[1]["time_s"], pair[0]),
     )
     controllers = [dict(value, _integral=0.0, _active=False, _bias=float(value["output"]),
                         _initial_output=float(value["output"]))
@@ -1406,6 +1417,7 @@ def _manifest(
         "content_digest": p["content_digest"],
         "scenario_id": p["scenario_id"],
         "profiles": [item["ref"] for item in p["profiles"]],
+        "forcing_profile_id": p["profiles"][0]["ref"]["profile_id"],
         "units": [{"tag": u["tag"], "model_card_qualification": u["card_qualification"]} for u in p["units"]],
         "solver": {
             "method": p["scenario"]["solver_method"],

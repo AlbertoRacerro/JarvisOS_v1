@@ -86,6 +86,7 @@ def test_dynamic_draft_ops_are_semantic_and_legacy_documents_remain_valid() -> N
                         "measurement": "X",
                         "unit": "PBR1",
                         "actuator": "feed:Feed",
+                        "output_unit": "m3/s",
                         "cadence_s": 60,
                         "setpoint": 1,
                     },
@@ -394,6 +395,33 @@ def test_continuous_product_outflow_is_reported_as_harvest(monkeypatch):
     assert result.series["harvest_X_kg"][-1] == pytest.approx(1.2, rel=1e-5)
     assert result.manifest["productivity"]["harvest_kg"] == pytest.approx(1.2, rel=1e-5)
     assert result.series["feed_Feed_Q_m3_s"].tolist() == [0.01, 0.01, 0.01]
+
+
+def test_conditional_run_does_not_mutate_snapshot_or_change_repeat_result(monkeypatch):
+    class Growth:
+        nitrogen_quota = oxygen_yield = kla_h = 0.0
+        oxygen_saturation = extinction = 0.0
+        diameter = 0.05
+
+        @staticmethod
+        def rates_at(_par, _temperature, _x, _n):
+            return 0.0, 0.0
+
+    monkeypatch.setattr(dynamic_engine.pbr_unit, "build_growth", lambda *_args: Growth())
+    snapshot = _minimal_snapshot()
+    snapshot.payload["schedule"]["events"] = [{
+        "type": "harvest", "time_s": 0.0, "unit": "PBR1", "fraction": 0.2,
+        "observed": "PBR1.X", "threshold": 0.5, "threshold_unit": "kg/m3",
+        "direction": "above", "hysteresis": 0.1,
+    }]
+    original_flows = dict(snapshot.payload["topology"]["flows"])
+    first = dynamic_engine.run(snapshot, cancelled=lambda: False, progress=lambda _p: None)
+    second = dynamic_engine.run(snapshot, cancelled=lambda: False, progress=lambda _p: None)
+    assert first.status == second.status == "succeeded"
+    assert first.series["PBR1_X"].tolist() == second.series["PBR1_X"].tolist()
+    assert first.manifest["event_log"] == second.manifest["event_log"]
+    assert "_fired" not in snapshot.payload["schedule"]["events"][0]
+    assert snapshot.payload["topology"]["flows"] == original_flows
 
 
 def test_conditional_event_fires_at_sample_cadence_and_applies_feed_change():
