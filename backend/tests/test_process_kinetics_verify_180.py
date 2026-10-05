@@ -202,3 +202,12 @@ def test_incomplete_agent_reaction_is_refused_in_operator_words() -> None:
     assert message.startswith("The reaction for CSTR-1 is incomplete or invalid: check ")
     assert "base reactant" in message and "stoichiometry" in message
     assert "pydantic" not in message and "validation error" not in message
+
+    vapor = {"name": "R", "stoichiometry": {"Ethylene oxide": -1, "Ethylene glycol": 1},
+             "base_reactant": "Ethylene oxide", "phase": "Vapor",
+             "rate_law": {"form": "monod", "substrate": "Ethylene oxide"}, "provenance": {"kind": "synthetic"}}
+    request = ActionRequest.model_validate({"surface": "process", "base_revision": "1:abc", "draft_id": "d",
+                                            "actions": [{"op": "set_reaction", "unit": "CSTR-1",
+                                                         "reaction_id": "r1", "reaction": vapor}]})
+    with pytest.raises(ValueError, match="typed rate laws require the Liquid phase"):
+        _process_ops(document, request)
