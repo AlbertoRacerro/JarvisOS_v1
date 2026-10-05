@@ -88,7 +88,14 @@ def main() -> None:
     ]
     EVIDENCE.mkdir(parents=True, exist_ok=True)
     target = EVIDENCE / "qualify_30d.json"
-    target.write_text(json.dumps({"branches": outcomes}, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    report = {
+        "branches": outcomes,
+        "four_pbr_bluerev_loop": {
+            "status": "not_run",
+            "reason": "The qualification builder covers single-PBR branch cases only; no four-PBR result is claimed.",
+        },
+    }
+    target.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(target)
     print(json.dumps(outcomes, indent=2, sort_keys=True))
 
