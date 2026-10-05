@@ -197,6 +197,14 @@
       }
     },
     {
+      "op": "assert-visible",
+      "name": "180:1280:feed-conditions-saved",
+      "locator": {
+        "kind": "css",
+        "selector": ".draft-revision:has-text(\"revision 8\")"
+      }
+    },
+    {
       "op": "fill",
       "name": "180:1280:feed-water-fraction",
       "locator": {
@@ -976,7 +984,7 @@
       "name": "180:1280:pfr-feed-conditions-saved",
       "locator": {
         "kind": "css",
-        "selector": ".draft-revision:has-text(\"revision 22\")"
+        "selector": ".draft-revision:has-text(\"revision 23\")"
       }
     },
     {
