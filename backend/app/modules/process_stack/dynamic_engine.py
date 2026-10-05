@@ -26,6 +26,7 @@ from app.modules.process_stack.dynamic_models import (
 )
 
 EVALUATOR_VERSION = "process_dynamic_t1/1"
+MAX_DWSIM_SAMPLES = 200
 
 
 class DynamicError(ValueError):
@@ -83,23 +84,29 @@ def _topology(document: dict[str, Any], units: list[dict[str, Any]], scenario: d
     while frontier:
         current = frontier.pop()
         for stream in streams:
-            endpoints = [stream.get("source"), stream.get("target")]
-            ids = [endpoint.get("unit") for endpoint in endpoints if endpoint]
-            if current not in ids:
+            source = (stream.get("source") or {}).get("unit")
+            target = (stream.get("target") or {}).get("unit")
+            if current == source:
+                neighbor = target
+            elif current == target:
+                neighbor = source
+            else:
                 continue
-            for neighbor in ids:
-                if neighbor == current:
-                    continue
-                candidate = by_id.get(neighbor, {})
-                if candidate.get("type") not in {"PhotobioreactorT1", "Mixer", "Splitter"}:
+            if neighbor is None or neighbor == current:
+                continue
+            candidate = by_id.get(neighbor, {})
+            if candidate.get("type") not in {"PhotobioreactorT1", "Mixer", "Splitter"}:
+                if current == target:
                     raise DynamicError(
                         "UNSUPPORTED_TOPOLOGY",
-                        "A non-participating unit lies on the T1 network.",
+                        "A non-participating unit cannot feed the T1 network.",
                         {"unit": candidate.get("tag")},
                     )
-                if neighbor not in active_ids:
-                    active_ids.add(neighbor)
-                    frontier.append(neighbor)
+                # A product stream can cross into the optional downstream DWSIM sampler.
+                continue
+            if neighbor not in active_ids:
+                active_ids.add(neighbor)
+                frontier.append(neighbor)
     active_units = {key: by_id[key] for key in active_ids}
     relevant: list[dict[str, Any]] = []
     for stream in streams:
@@ -323,17 +330,12 @@ def prepare(workspace_id: str, draft_id: str, scenario_id: str) -> Snapshot:
                 src, dst = objects.get(source.get("unit"), {}), objects.get(target.get("unit"), {})
                 if src.get("type") in {"Mixer", "Splitter"} and dst.get("type") in {"Mixer", "Splitter"}:
                     algebraic.setdefault(src["id"], set()).add(dst["id"])
-                if (source.get("unit") in selected or target.get("unit") in selected) and (
-                    src.get("type") not in {"PhotobioreactorT1", "Mixer", "Splitter"}
-                    or dst.get("type") not in {"PhotobioreactorT1", "Mixer", "Splitter"}
-                ):
-                    foreign = (
-                        src if src.get("id") not in selected and src.get("type") not in {"Mixer", "Splitter"} else dst
-                    )
+                if (target.get("unit") in selected and source.get("unit") not in selected
+                        and src.get("type") not in {"Mixer", "Splitter"}):
                     raise DynamicError(
                         "UNSUPPORTED_TOPOLOGY",
-                        "A non-T1 unit is connected to participating topology.",
-                        {"unit": foreign.get("tag")},
+                        "A non-participating unit cannot feed the T1 network.",
+                        {"unit": src.get("tag")},
                     )
             if source and source.get("unit") in selected and target and target.get("unit") not in selected:
                 foreign = objects.get(target["unit"], {})
@@ -360,6 +362,20 @@ def prepare(workspace_id: str, draft_id: str, scenario_id: str) -> Snapshot:
         for node in algebraic:
             visit(node)
         topology = _topology(document, units, scenario.model_dump(mode="json"))
+        downstream_data = None
+        if scenario.downstream_cadence_s:
+            samples = math.floor(duration / scenario.downstream_cadence_s)
+            if samples > MAX_DWSIM_SAMPLES:
+                raise DynamicError("DWSIM_SAMPLE_LIMIT", "Scenario exceeds 200 downstream samples.")
+            from app.modules.process_stack.dynamic_downstream import downstream_document
+
+            downstream_data = downstream_document(Snapshot(
+                {"document": document, "units": units, "topology": topology}, ""))
+            if downstream_data[0] is None:
+                raise DynamicError(
+                    "DOWNSTREAM_UNITS_REQUIRED",
+                    "Downstream sampling requires at least one reachable DWSIM-owned unit.",
+                )
         for obj in document["objects"].values():
             if obj.get("type") == "Splitter" and obj.get("mode") != "split_ratios":
                 raise DynamicError(
@@ -429,6 +445,8 @@ def prepare(workspace_id: str, draft_id: str, scenario_id: str) -> Snapshot:
             "document": document,
             "schedule": {"id": schedule.id, "events": expanded_events},
             "controllers": controller_items,
+            "downstream": ({"document": downstream_data[0], "boundary_streams": downstream_data[1]}
+                           if downstream_data is not None else None),
         }
         payload["topology"] = topology
         digest = hashlib.sha256(
@@ -750,6 +768,13 @@ def run(
                                        "error_type": type(exc).__name__})
                 if downstream[-1].get("status") == "unconverged":
                     downstream[-1]["status"] = "downstream_unconverged"
+                if cancelled():
+                    return EngineResult(
+                        "cancelled",
+                        {"code": "CANCELLED", "message": "Run cancelled.", "detail": {}},
+                        _result_series(snapshot, times_out, rows, units, controllers, controller_log),
+                        _manifest(snapshot, started, event_log, controller_log, downstream),
+                    )
             progress(min(1.0, right / duration))
         series = _result_series(snapshot, times_out, rows, units, controllers, controller_log)
         manifest = _manifest(snapshot, started, event_log, controller_log, downstream)
@@ -835,10 +860,12 @@ def _boundary_streams(
             unit["growth"] = pbr_unit.build_growth(unit["params"], unit["model"], (0, 0, 0), 0)
     runtime = _network_runtime(topology, flows, units)
     concentrations = _network_concentrations(topology, runtime, tuple(state), units, flows)
+    dynamic_ids = {item["id"] for item in topology["units"]}
     output = {}
     for stream in topology["streams"]:
         source, target = stream.get("source"), stream.get("target")
-        if source is None or target is None:
+        if (source is None or target is None
+                or (source.get("unit") in dynamic_ids and target.get("unit") not in dynamic_ids)):
             concentration = feeds.get(stream["id"]) if source is None else concentrations.get(source.get("unit"))
             output[stream["tag"]] = {
                 "flow_m3_s": float(flows.get(stream["id"], 0.0)),
