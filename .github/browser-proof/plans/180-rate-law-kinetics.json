@@ -277,6 +277,14 @@
       }
     },
     {
+      "op": "click",
+      "name": "180:1280:select-energy-stream",
+      "locator": {
+        "kind": "css",
+        "selector": "g[data-testid^=\"node-E1\"]"
+      }
+    },
+    {
       "op": "fill",
       "name": "180:1280:energy-target",
       "locator": {
