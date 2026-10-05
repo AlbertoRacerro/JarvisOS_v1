@@ -117,6 +117,12 @@
   gap: 6px;
   overflow: auto;
 }
+.draft-palette button {
+  height: auto;
+  min-height: 32px;
+  white-space: normal;
+  line-height: 1.2;
+}
 .draft-palette h3,
 .draft-inspector h3,
 .draft-findings-panel h3,

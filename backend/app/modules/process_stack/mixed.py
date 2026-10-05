@@ -274,6 +274,10 @@ def fingerprint(document: dict[str, Any], partition_value: dict[str, Any], works
                                "culture_schema": "jarvis_culture_result/1",
                                "culture_propagation": "jarvis_culture_propagation/1",
                                "evaluators": {"SpecifiedSeparator": 1}}
+    if any(reaction.get("rate_law") for reaction in (meaning.get("reactions") or {}).values()):
+        from app.modules.process_stack.kinetics import KINETICS_VERSION
+
+        payload["kinetics_version"] = KINETICS_VERSION
     pbr_units = {uid: item for uid, item in meaning["objects"].items()
                  if item["kind"] == "unit" and item["type"] == "PhotobioreactorT1"}
     if pbr_units:

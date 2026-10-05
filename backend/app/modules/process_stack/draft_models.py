@@ -12,7 +12,7 @@ import math
 from dataclasses import dataclass, field
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 COMPILER_VERSION = "162.1"
 MAX_OBJECTS = 60
@@ -29,7 +29,7 @@ PROPERTY_PACKAGES: tuple[str, ...] = (
     "Steam Tables (IAPWS-IF97)",
 )
 
-QuantityKind = Literal["temperature", "temperature_difference", "pressure", "pressure_difference", "mass_flow", "percent", "power", "flow_ratio", "dimensionless", "length", "volume", "area", "heat_transfer_coefficient", "molar_flow", "specific_heat", "volume_flow", "mass_concentration", "molar_concentration", "salinity", "ph", "velocity", "photon_flux_density", "time", "specific_rate"]
+QuantityKind = Literal["temperature", "temperature_difference", "pressure", "pressure_difference", "mass_flow", "percent", "power", "flow_ratio", "dimensionless", "length", "volume", "area", "heat_transfer_coefficient", "molar_flow", "specific_heat", "volume_flow", "mass_concentration", "molar_concentration", "molar_energy", "reaction_rate", "salinity", "ph", "velocity", "photon_flux_density", "time", "specific_rate"]
 
 # SI storage unit and the display units offered by inspectors, per quantity kind.
 QUANTITY_UNITS: dict[str, tuple[str, tuple[str, ...]]] = {
@@ -55,7 +55,9 @@ QUANTITY_UNITS: dict[str, tuple[str, tuple[str, ...]]] = {
     "specific_heat": ("J/kg.K", ("J/kg.K",)),
     "volume_flow": ("m3/s", ("m3/s",)),
     "mass_concentration": ("kg/m3", ("kg/m3", "g/L", "mg/L")),
-    "molar_concentration": ("mol/m3", ("mol/m3", "mmol/L")),
+    "molar_concentration": ("mol/m3", ("mol/m3", "mmol/L", "kmol/m3")),
+    "molar_energy": ("J/mol", ("J/mol", "kJ/mol")),
+    "reaction_rate": ("mol/[m3.s]", ("kmol/[m3.h]", "mol/[m3.s]", "mol/[L.h]")),
     "salinity": ("g/kg", ("g/kg",)),
     "ph": ("pH", ("pH",)),
 }
@@ -200,6 +202,16 @@ UNIT_REGISTRY: dict[str, UnitSpec] = {
         type="Recycle", label="Recycle", dwsim_type="Recycle", native_types=("Recycle",),
         inlets=("inlet",), outlets=("outlet",), required_inlets=1, culture_rule="tear",
     ),
+    "CSTR": UnitSpec(
+        type="CSTR", label="Continuous stirred tank reactor", dwsim_type="CSTR",
+        native_types=("CSTR", "Reactor_CSTR"), inlets=("inlet",), outlets=("outlet",),
+        required_inlets=1, energy_inlets=("energy feed",), culture_rule="refuse",
+        modes={"isothermic": "Isothermic", "outlet_temperature": "OutletTemperature"},
+        params=(ParamSpec("volume", "Volume", "volume", "Volume", ("isothermic", "outlet_temperature"),
+                          minimum_si=0.0, exclusive_minimum=True),
+                ParamSpec("outlet_temperature", "Outlet temperature", "temperature", "OutletTemperature",
+                          ("outlet_temperature",), minimum_si=1.0)),
+    ),
     "PFR": UnitSpec(
         type="PFR", label="Plug flow reactor", dwsim_type="PFR", native_types=("PFR", "Reactor_PFR"),
         inlets=("inlet",), outlets=("outlet",), required_inlets=1, energy_inlets=("energy feed",), culture_rule="refuse",
@@ -288,7 +300,8 @@ if any(spec.owner not in {"dwsim", "jarvis_bio"} for spec in UNIT_REGISTRY.value
     raise RuntimeError("Process unit registry contains an unsupported owner")
 
 UNSUPPORTED_TYPES: dict[str, str] = {
-    "Reactor": "Only the kinetically defined PFR subset is supported.",
+    "Reactor": ("Generic reactors are not offered: use a PFR or CSTR with typed kinetics; Gibbs, conversion and "
+                "equilibrium reactors are not supported."),
 }
 
 # Feed-stream specification keys: SI storage and DWSIM MCP argument / read-back names.
@@ -442,6 +455,52 @@ class SetStreamCulture(_Op):
     culture: dict[str, DraftQuantity] | None
 
 
+class Inhibition(BaseModel):
+    model_config = {"extra": "forbid"}
+    kind: Literal["noncompetitive", "competitive"]
+    inhibitor: str
+    k_i: DraftQuantity
+
+
+class TemperatureFactor(BaseModel):
+    model_config = {"extra": "forbid"}
+    activation_energy: DraftQuantity
+    reference_temperature: DraftQuantity
+
+
+class _RateLaw(BaseModel):
+    model_config = {"extra": "forbid"}
+    substrate: str
+    # Absent parameters are a pre-Run finding (KINETICS_PARAMETER_MISSING), not an apply refusal.
+    v_max: DraftQuantity | None = None
+    k_s: DraftQuantity | None = None
+    inhibitions: list[Inhibition] = Field(default_factory=list, max_length=3)
+    temperature: TemperatureFactor | None = None
+
+
+class MonodRateLaw(_RateLaw):
+    form: Literal["monod"]
+
+
+class HaldaneRateLaw(_RateLaw):
+    form: Literal["haldane"]
+    k_i: DraftQuantity | None = None
+
+
+class ReactionProvenance(BaseModel):
+    model_config = {"extra": "forbid"}
+    kind: Literal["literature", "measurement", "operator_estimate", "synthetic"]
+    citation: str | None = Field(default=None, max_length=300)
+    note: str | None = Field(default=None, max_length=500)
+
+
+class ReactionValidity(BaseModel):
+    model_config = {"extra": "forbid"}
+    temperature_min: DraftQuantity | None = None
+    temperature_max: DraftQuantity | None = None
+    substrate_max: DraftQuantity | None = None
+
+
 class KineticReaction(BaseModel):
     model_config = {"extra": "forbid"}
     name: str = Field(min_length=1, max_length=80)
@@ -450,8 +509,22 @@ class KineticReaction(BaseModel):
     base_reactant: str
     phase: Literal["Mixture", "Vapor", "Liquid"] = "Mixture"
     basis: Literal["MolarConc"] = "MolarConc"
-    A_forward: DraftQuantity
-    E_forward: DraftQuantity
+    A_forward: DraftQuantity | None = None
+    E_forward: DraftQuantity | None = None
+    rate_law: Annotated[MonodRateLaw | HaldaneRateLaw, Field(discriminator="form")] | None = None
+    provenance: ReactionProvenance | None = None
+    validity: ReactionValidity | None = None
+
+    @model_validator(mode="after")
+    def _form_contract(self) -> KineticReaction:
+        if self.rate_law is None:
+            if self.A_forward is None or self.E_forward is None:
+                raise ValueError("Arrhenius constants are required")
+        elif self.A_forward is not None or self.E_forward is not None or self.orders:
+            raise ValueError("script rate laws cannot carry Arrhenius constants or orders")
+        elif self.phase != "Liquid":
+            raise ValueError("typed rate laws require the Liquid phase")
+        return self
 
     @field_validator("stoichiometry")
     @classmethod
@@ -470,7 +543,7 @@ class KineticReaction(BaseModel):
     @field_validator("A_forward", "E_forward")
     @classmethod
     def _nonnegative_constants(cls, value: DraftQuantity) -> DraftQuantity:
-        if value.value < 0:
+        if value is not None and value.value < 0:
             raise ValueError("kinetic constants must be nonnegative")
         return value
 
@@ -480,6 +553,13 @@ class SetReactions(_Op):
     reactions: dict[str, KineticReaction] = Field(max_length=12)
 
 
+class SetReactorReaction(_Op):
+    op: Literal["set_reactor_reaction"]
+    unit: str = Field(pattern=ID_PATTERN)
+    reaction_id: str = Field(pattern=r"^[A-Za-z][A-Za-z0-9_-]{0,31}$")
+    reaction: KineticReaction | None
+
+
 class SetThermo(_Op):
     op: Literal["set_thermo"]
     compounds: list[str] | None = Field(default=None, max_length=12)
@@ -487,7 +567,7 @@ class SetThermo(_Op):
 
 
 DraftOp = Annotated[
-    AddUnit | AddStream | Delete | Move | Rename | Connect | Disconnect | SetRoute | SetOrientation | SetStreamSpec | SetStreamCulture | SetUnitParams | SetUnitModel | SetReactions | SetThermo,
+    AddUnit | AddStream | Delete | Move | Rename | Connect | Disconnect | SetRoute | SetOrientation | SetStreamSpec | SetStreamCulture | SetUnitParams | SetUnitModel | SetReactions | SetReactorReaction | SetThermo,
     Field(discriminator="op"),
 ]
 

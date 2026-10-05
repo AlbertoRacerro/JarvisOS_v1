@@ -370,7 +370,7 @@ def test_reactor_and_energy_stream_units_need_reaction_set_and_energy_stream(mon
                 {"op": "set_unit_params", "unit": "pfr", "mode": "heat_exchange"},
                 {"op": "set_unit_params", "unit": "h1", "mode": "energy_stream"})
     findings = {(item["object"], item["code"]) for item in validate_document(bare)}
-    assert {("PFR", "REACTION_SET_MISSING"), ("PFR", "UNIT_ENERGY_INLET_MISSING"),
+    assert {("PFR", "REACTION_SET_MISSING"), ("PFR", "REACTOR_ENERGY_STREAM_MISSING"),
             ("H1", "UNIT_ENERGY_INLET_MISSING"), ("COL", "UNIT_ENERGY_INLET_MISSING"),
             ("COL", "UNIT_ENERGY_OUTLET_MISSING")} <= findings
     wired = _doc({"op": "set_reactions", "reactions": {"R1": _HYDRATION}},
@@ -378,7 +378,7 @@ def test_reactor_and_energy_stream_units_need_reaction_set_and_energy_stream(mon
                  *_link("qr", None, "pfr", energy=True), *_link("qh", None, "h1", energy=True),
                  *_link("qb", None, "col", energy=True), *_link("qc", "col", None, energy=True), base=bare)
     remaining = {(item["object"], item["code"]) for item in validate_document(wired)}
-    assert not {code for _tag, code in remaining} & {"REACTION_SET_MISSING", "UNIT_ENERGY_INLET_MISSING",
+    assert not {code for _tag, code in remaining} & {"REACTION_SET_MISSING", "UNIT_ENERGY_INLET_MISSING", "REACTOR_ENERGY_STREAM_MISSING",
                                                       "UNIT_ENERGY_OUTLET_MISSING"}
     # A heater that is not in energy-stream mode does not need one, and a duty on its stream is flagged.
     fixed = _doc({"op": "set_unit_params", "unit": "h1", "mode": "outlet_temperature"},

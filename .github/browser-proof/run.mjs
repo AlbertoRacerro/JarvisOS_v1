@@ -114,7 +114,16 @@ async function execute(step, index) {
   else if (step.op === "assert-visible") { await locatorFromSpec(step.locator).waitFor({ state: "visible" }); record(name, true, "locator visible"); }
   else if (step.op === "assert-count") { const locator = locatorFromSpec(step.locator); const deadline = Date.now() + ASSERTION_POLL_TIMEOUT_MS; let count = await locator.count(); while (count !== step.equals && Date.now() < deadline) { await page.waitForTimeout(ASSERTION_POLL_INTERVAL_MS); count = await locator.count(); } record(name, count === step.equals, `count=${count} expected=${step.equals}`); }
   else if (step.op === "click") { await locatorFromSpec(step.locator).click(); record(name, true, "clicked trusted locator"); }
-  else if (step.op === "fill") { await locatorFromSpec(step.locator).fill(step.value); record(name, true, "filled trusted locator"); }
+  else if (step.op === "fill") {
+    const locator = locatorFromSpec(step.locator);
+    if (await locator.evaluate((node) => node.tagName === "SELECT")) {
+      const options = await locator.locator("option").evaluateAll((nodes) => nodes.map((node) => ({ value: node.value, label: node.label })));
+      const match = options.find((option) => option.value === step.value) ?? options.find((option) => option.label === step.value);
+      if (!match) throw new Error(`${name}: select option ${JSON.stringify(step.value)} is unavailable`);
+      await locator.selectOption(match.value);
+    } else await locator.fill(step.value);
+    record(name, true, "filled trusted locator");
+  }
   else if (step.op === "open-technical-details") { await openTechnicalDetails(locatorFromSpec(step.locator)); record(name, true, "keyboard disclosure verified and left open"); }
   else if (step.op === "assert-attribute") { const value = await locatorFromSpec(step.locator).getAttribute(step.attribute); record(name, value === step.equals, `${step.attribute}=${JSON.stringify(value)} expected=${JSON.stringify(step.equals)}`); }
   else if (step.op === "assert-input-empty") { const locator = locatorFromSpec(step.locator); await locator.waitFor({ state: "visible" }); const result = inputEmptyResult(await locator.inputValue()); record(name, result.pass, result.detail); }

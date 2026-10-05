@@ -13,6 +13,7 @@ import copy
 import hashlib
 import json
 import math
+import re
 import shutil
 import tempfile
 import time
@@ -22,9 +23,11 @@ from typing import Any
 from uuid import uuid4
 from xml.etree import ElementTree
 
+from app.modules.process_stack import kinetics
 from app.modules.process_stack.draft_models import COMPILER_VERSION, STREAM_SPECS, UNIT_REGISTRY
 from app.modules.process_stack.dwsim import _mass_balance
-from app.modules.process_stack.dwsim_mcp import DwsimMcpClient, DwsimMcpError
+from app.modules.process_stack.dwsim_mcp import DwsimMcpClient, DwsimMcpError, DwsimTimeout
+from app.modules.process_stack.kinetics_verify import verify_rate_law_reactor
 
 _REL_TOL = 1e-7
 _ABS_TOL = 1e-9
@@ -52,12 +55,28 @@ def _energy_streams(document: dict[str, Any]) -> list[dict[str, Any]]:
 
 def _native_energy_port(unit: dict[str, Any], port: int) -> int:
     return port + (10 if unit["type"] == "DistillationColumn" else
-                   1 if unit["type"] in {"Heater", "Cooler", "PFR"} else 0)
+                   1 if unit["type"] in {"Heater", "Cooler", "PFR", "CSTR"} else 0)
 
 
 def _units(document: dict[str, Any]) -> list[dict[str, Any]]:
     return sorted((item for item in document["objects"].values() if item["kind"] == "unit"),
                   key=lambda item: item["tag"])
+
+
+def _native_reaction_id(document: dict[str, Any], unit: dict[str, Any], reaction_id: str) -> str:
+    users = [item for item in _units(document) if reaction_id in item.get("reactions", [])]
+    return f"{reaction_id}__{unit['tag']}" if len(users) > 1 else reaction_id
+
+
+def _native_reactions(document: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    selected = {_native_reaction_id(document, unit, rid): document["reactions"][rid]
+                for unit in _units(document) if unit["type"] in {"PFR", "CSTR"}
+                for rid in unit.get("reactions", [])}
+    # Preserve legacy expected() for documents with unassigned Arrhenius definitions.
+    if not any(reaction.get("rate_law") for reaction in document.get("reactions", {}).values()):
+        selected.update({rid: reaction for rid, reaction in document.get("reactions", {}).items()
+                         if rid not in selected and not any(rid in unit.get("reactions", []) for unit in _units(document))})
+    return selected
 
 
 def isolated_feed_flash_check(document: dict[str, Any], action: str,
@@ -147,7 +166,7 @@ def _unit_properties(unit: dict[str, Any]) -> dict[str, Any]:
     if not spec.modes:
         return {}
     properties: dict[str, Any] = {}
-    if unit["type"] == "PFR":
+    if unit["type"] in {"PFR", "CSTR"}:
         properties["ReactorOperationMode"] = spec.modes[unit["mode"]]
     elif unit["type"] == "Splitter":
         properties["OperationMode"] = spec.modes[unit["mode"]]
@@ -162,7 +181,7 @@ def _unit_properties(unit: dict[str, Any]) -> dict[str, Any]:
         properties[key] = float(unit["params"][param.key]["si"])
     if unit["type"] == "DistillationColumn":
         properties.update(CondenserType="Total_Condenser", MaxIterations=500)
-    if unit["type"] == "PFR" and unit.get("reactions"):
+    if unit["type"] in {"PFR", "CSTR"} and unit.get("reactions"):
         properties["__ReactionSetID"] = f"JARVIS_{unit['tag']}"
     return properties
 
@@ -176,7 +195,7 @@ def _child(parent: ElementTree.Element, path: str) -> ElementTree.Element:
 
 def _patch_native_xml(case_path: Path, document: dict[str, Any]) -> None:
     """Materialize proven native details absent from the pinned MCP connector."""
-    if not any(unit["type"] == "DistillationColumn" or unit["type"] == "PFR" and unit.get("reactions")
+    if not any(unit["type"] == "DistillationColumn" or unit["type"] in {"PFR", "CSTR"} and unit.get("reactions")
                for unit in _units(document)):
         return
     tree = ElementTree.parse(case_path)
@@ -185,7 +204,7 @@ def _patch_native_xml(case_path: Path, document: dict[str, Any]) -> None:
     native_by_tag = {tag: node.findtext("Name") or "" for tag, node in graphics.items()}
     simulations = {node.findtext("Name"): node for node in root.findall("./SimulationObjects/SimulationObject")}
 
-    for unit in (item for item in _units(document) if item["type"] == "PFR" and item.get("reactions")):
+    for unit in (item for item in _units(document) if item["type"] in {"PFR", "CSTR"} and item.get("reactions")):
         reaction_root = root.find("Reactions")
         set_root = root.find("ReactionSets")
         if reaction_root is None or set_root is None:
@@ -194,8 +213,10 @@ def _patch_native_xml(case_path: Path, document: dict[str, Any]) -> None:
         selected = unit["reactions"]
         for reaction_id in selected:
             data = document["reactions"][reaction_id]
-            forward = data["A_forward"]
-            activation = data["E_forward"]
+            native_id = _native_reaction_id(document, unit, reaction_id)
+            scripted = bool(data.get("rate_law"))
+            forward = data.get("A_forward") or {"value": 0.0, "unit": "kmol/[m3.h]"}
+            activation = data.get("E_forward") or {"value": 0.0, "unit": "J/mol"}
             reaction = ElementTree.SubElement(reaction_root, "Reaction")
             def sub(parent: ElementTree.Element, name: str, value: str = "") -> ElementTree.Element:
                 child = ElementTree.SubElement(parent, name)
@@ -205,7 +226,7 @@ def _patch_native_xml(case_path: Path, document: dict[str, Any]) -> None:
             sub(reaction, "BaseReactant", data["base_reactant"])
             sub(reaction, "Description")
             sub(reaction, "Equation", " + ".join(data["stoichiometry"]))
-            sub(reaction, "ID", reaction_id)
+            sub(reaction, "ID", native_id)
             sub(reaction, "Name", data["name"])
             sub(reaction, "ReactionBasis", data["basis"])
             sub(reaction, "ReactionHeat", "0")
@@ -214,6 +235,19 @@ def _patch_native_xml(case_path: Path, document: dict[str, Any]) -> None:
             sub(reaction, "ReactionType", "Kinetic")
             sub(reaction, "StoichBalance", "0")
             sub(reaction, "A_Forward", str(forward["value"]))
+            if scripted:
+                title = kinetics.script_title(unit["tag"], reaction_id)
+                sub(reaction, "ReactionKinetics", "PythonScript")
+                sub(reaction, "ScriptTitle", title)
+                scripts = root.find("ScriptItems")
+                if scripts is None:
+                    raise MaterializationError("script_native_shape", "DWSIM script container is unavailable")
+                script = ElementTree.SubElement(scripts, "ScriptItem")
+                for key, value in (("ID", f"script-{native_id}"), ("Title", title),
+                                   ("ScriptText", kinetics.render(data)), ("LinkedObjectType", "FlowsheetObject"),
+                                   ("LinkedObjectName", ""), ("LinkedEventType", "SimulationOpened"),
+                                   ("Linked", "false"), ("PythonInterpreter", "IronPython")):
+                    sub(script, key, value)
             for name, value in (("A_Reverse", "0"), ("Approach", "0"), ("ConcUnit", "kmol/m3"),
                                 ("ConstantKeqValue", "0"), ("E_Forward", str(activation["value"])),
                                 ("E_Reverse", "0"), ("Expression", ""), ("KExprType", "Gibbs"),
@@ -236,7 +270,8 @@ def _patch_native_xml(case_path: Path, document: dict[str, Any]) -> None:
             child.text = value
         reactions_node = ElementTree.SubElement(reaction_set, "Reactions")
         for rank, reaction_id in enumerate(selected):
-            ElementTree.SubElement(reactions_node, "Reaction", {"Key": reaction_id, "ReactionID": reaction_id,
+            native_id = _native_reaction_id(document, unit, reaction_id)
+            ElementTree.SubElement(reactions_node, "Reaction", {"Key": native_id, "ReactionID": native_id,
                                                                   "Rank": str(rank), "IsActive": "true"})
         native_name = next((name for name, tag in ((node.findtext("Name"), node.findtext("Tag"))
                                                    for node in root.findall("./GraphicObjects/GraphicObject"))
@@ -330,6 +365,23 @@ def _patch_native_xml(case_path: Path, document: dict[str, Any]) -> None:
     tree.write(case_path, encoding="utf-8", xml_declaration=True)
 
 
+def reload_native_patch(client: DwsimMcpClient, flow: str, case: Path, document: dict[str, Any]) -> str:
+    """Patch saved native features and return the reloaded flowsheet handle when needed."""
+    if not any(unit["type"] == "DistillationColumn" or
+               unit["type"] in {"PFR", "CSTR"} and unit.get("reactions") for unit in _units(document)):
+        return flow
+    _patch_native_xml(case, document)
+    loaded = client.call("dwsim_flowsheet_load", {"filepath": str(case)}, 60)
+    new_flow = loaded.get("flowsheet_id")
+    if not isinstance(new_flow, str):
+        raise MaterializationError("native_reload_failed", "DWSIM did not reload the patched case")
+    for unit in _units(document):
+        if unit["type"] in {"PFR", "CSTR"} and unit.get("reactions"):
+            client.call("dwsim_unitop_set", {"flowsheet_id": new_flow, "name": unit["tag"],
+                     "properties": {"ReactionSetID": f"JARVIS_{unit['tag']}"}}, 60)
+    return new_flow
+
+
 def _attach_column(connector: ElementTree.Element, other_id: str, other_index: int, direction: str,
                    side: str) -> None:
     """Write the native column connectors using DWSIM's stream-side connection flags."""
@@ -346,6 +398,23 @@ def _attach_column(connector: ElementTree.Element, other_id: str, other_index: i
                                     "AttachedFromEnergyConn": "False"} if direction == "input" else
                                    {"AttachedToObjID": other_id, "AttachedToConnIndex": str(other_index),
                                     "AttachedToEnergyConn": "False"}))
+
+
+def _expected_reaction(reaction: dict[str, Any]) -> dict[str, Any]:
+    result = {
+        "name": reaction["name"], "stoichiometry": reaction["stoichiometry"],
+        "orders": {compound: float(reaction.get("orders", {}).get(
+            compound, 1.0 if compound == reaction["base_reactant"] else 0.0))
+                   for compound in reaction["stoichiometry"]},
+        "base_reactant": reaction["base_reactant"], "phase": reaction["phase"], "basis": reaction["basis"],
+        "A_forward": float((reaction.get("A_forward") or {"value": 0.0})["value"]),
+        "A_forward_unit": (reaction.get("A_forward") or {"unit": "kmol/[m3.h]"})["unit"],
+        "E_forward": float((reaction.get("E_forward") or {"value": 0.0})["value"]),
+        "E_forward_unit": (reaction.get("E_forward") or {"unit": "J/mol"})["unit"],
+    }
+    if reaction.get("rate_law"):
+        result.update(kinetics="PythonScript", script_text=kinetics.render(reaction))
+    return result
 
 
 def expected(document: dict[str, Any]) -> dict[str, Any]:
@@ -372,21 +441,29 @@ def expected(document: dict[str, Any]) -> dict[str, Any]:
         "energy_streams": {stream["tag"]: ({"EnergyFlow": float(stream["spec"]["duty"]["si"])}
                                            if "duty" in stream["spec"] else {})
                            for stream in _energy_streams(document)},
-        "reactions": {reaction_id: {
-            "name": reaction["name"], "stoichiometry": reaction["stoichiometry"],
-            "orders": {compound: float(reaction["orders"].get(
-                compound, 1.0 if compound == reaction["base_reactant"] else 0.0))
-                       for compound in reaction["stoichiometry"]},
-            "base_reactant": reaction["base_reactant"], "phase": reaction["phase"],
-            "basis": reaction["basis"], "A_forward": float(reaction["A_forward"]["value"]),
-            "A_forward_unit": reaction["A_forward"]["unit"],
-            "E_forward": float(reaction["E_forward"]["value"]),
-            "E_forward_unit": reaction["E_forward"]["unit"],
-        } for reaction_id, reaction in document.get("reactions", {}).items()},
-        "reaction_sets": {f"JARVIS_{unit['tag']}": list(unit["reactions"])
-                          for unit in _units(document) if unit["type"] == "PFR" and unit.get("reactions")},
+        "reactions": {reaction_id: _expected_reaction(reaction)
+                      for reaction_id, reaction in _native_reactions(document).items()},
+        "reaction_sets": {f"JARVIS_{unit['tag']}": [_native_reaction_id(document, unit, rid)
+                                                      for rid in unit["reactions"]]
+                          for unit in _units(document) if unit["type"] in {"PFR", "CSTR"} and unit.get("reactions")},
         "units": {unit["tag"]: _unit_properties(unit) for unit in _units(document)},
+        **_expected_kinetics(document),
     }
+
+
+def _expected_kinetics(document: dict[str, Any]) -> dict[str, Any]:
+    """Rate-law identity that is not a DWSIM field: version, provenance and validity (they change findings).
+
+    Present only when a typed rate law exists, so drafts without one keep their earlier fingerprints. It is
+    not part of ``compare`` (DWSIM stores none of it); the script text itself is compared in ``reactions``.
+    """
+    typed = {rid: reaction for rid, reaction in sorted(document.get("reactions", {}).items()) if reaction.get("rate_law")}
+    if not typed:
+        return {}
+    return {"kinetics": {"version": kinetics.KINETICS_VERSION,
+                         "reactions": {rid: {"provenance": reaction.get("provenance"),
+                                             "validity": reaction.get("validity")}
+                                       for rid, reaction in typed.items()}}}
 
 
 def plan(document: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
@@ -545,9 +622,10 @@ def read_back(client: DwsimMcpClient, flow: str, case_path: Path, exp: dict[str,
                     spec_node = node.find(f"./Specs/Spec[@ID='{spec_id}']")
                     values[key] = _float(spec_node.findtext("SpecValue")) if spec_node is not None else None
                 units[tag] = {name: values.get(name, _float(node.findtext(name))) for name in wanted}
-            elif objects[tag]["type"] == "PFR":
+            elif objects[tag]["type"] in {"PFR", "CSTR"}:
                 units[tag] = {name: (node.findtext("ReactionSetID") if name == "__ReactionSetID"
-                                     else _float(node.findtext(name)) if name != "CalcMode" else node.findtext(name))
+                                     else node.findtext(name) if name == "ReactorOperationMode"
+                                     else _float(node.findtext(name)))
                               for name in wanted}
             elif objects[tag]["type"] == "Splitter":
                 ratios = [_float(item.text) for item in node.findall("./SplitRatios/SplitRatio")]
@@ -588,6 +666,12 @@ def read_back(client: DwsimMcpClient, flow: str, case_path: Path, exp: dict[str,
             "E_forward": _float(reaction.findtext("E_Forward")) if reaction is not None else None,
             "E_forward_unit": reaction.findtext("E_Forward_Unit") if reaction is not None else None,
         }
+        if "script_text" in exp["reactions"][reaction_id]:
+            title = reaction.findtext("ScriptTitle") if reaction is not None else None
+            script = next((item for item in root.findall("./ScriptItems/ScriptItem")
+                           if item.findtext("Title") == title), None)
+            reactions[reaction_id]["kinetics"] = reaction.findtext("ReactionKinetics") if reaction is not None else None
+            reactions[reaction_id]["script_text"] = script.findtext("ScriptText") if script is not None else None
     reaction_sets = {}
     for reaction_set_id in exp.get("reaction_sets", {}):
         reaction_set = root.find(f"./ReactionSets/ReactionSet[ID='{reaction_set_id}']")
@@ -743,21 +827,8 @@ def materialize(document: dict[str, Any], *, action: str, client: DwsimMcpClient
                 client.call(step, {"flowsheet_id": flow, **args}, 60)
             step = "dwsim_flowsheet_save"
             client.call("dwsim_flowsheet_save", {"flowsheet_id": flow, "filepath": str(case), "compressed": False}, 60)
-            native_patch_required = any(unit["type"] == "DistillationColumn" or
-                                        unit["type"] == "PFR" and unit.get("reactions")
-                                        for unit in _units(document))
-            if native_patch_required:
-                step = "column_native_patch"
-                _patch_native_xml(case, document)
-                step = "column_reload"
-                reloaded = client.call("dwsim_flowsheet_load", {"filepath": str(case)}, 60)
-                flow = reloaded.get("flowsheet_id")
-                if not isinstance(flow, str):
-                    raise MaterializationError("column_reload_failed", "DWSIM did not reload the patched column case")
-                for unit in _units(document):
-                    if unit["type"] == "PFR" and unit.get("reactions"):
-                        client.call("dwsim_unitop_set", {"flowsheet_id": flow, "name": unit["tag"],
-                                                          "properties": {"ReactionSetID": f"JARVIS_{unit['tag']}"}}, 60)
+            step = "native_patch_reload"
+            flow = reload_native_patch(client, flow, case, document)
             step = "read_back"
             actual = read_back(client, flow, case, exp)
         except DwsimMcpError as exc:
@@ -794,7 +865,13 @@ def materialize(document: dict[str, Any], *, action: str, client: DwsimMcpClient
         if not check.get("ready") and not flash_exception:
             outcome.update(status="check_failed", compile_seconds=round(time.perf_counter() - started, 3))
             return outcome
-        solve = client.call("dwsim_solve_run", {"flowsheet_id": flow, "timeout_s": 120}, 150)
+        try:
+            solve = client.call("dwsim_solve_run", {"flowsheet_id": flow, "timeout_s": 120}, 150)
+        except DwsimTimeout as exc:
+            # The bounded client call stopped the MCP subprocess; DWSIM's own timeout_s is not
+            # relied on (a negative script rate once ran 252 s past timeout_s=30, spec 180 fact 3).
+            raise MaterializationError("JARVIS_SOLVE_TIMEOUT", "DWSIM did not finish the solve in 150 s; "
+                                       "Jarvis stopped the DWSIM process", step="dwsim_solve_run") from exc
         snapshot_rows: list[dict[str, Any]] = []
         if solve.get("ok") is True:
             client.call("dwsim_scenario_snapshot", {"flowsheet_id": flow, "label": "jarvis_result"}, 60)
@@ -829,6 +906,8 @@ def materialize(document: dict[str, Any], *, action: str, client: DwsimMcpClient
             balance = {"status": "unavailable", "error": getattr(exc, "code", type(exc).__name__)}
         errors = solve.get("errors") if isinstance(solve.get("errors"), list) else []
         failed = [item for item in object_status if item["calculated"] is False or item["error"]]
+        if solve.get("ok") is True and not errors and not failed:
+            failed = verify_kinetics(document, streams, units)
         outcome.update(
             status="completed" if solve.get("ok") is True and not errors and not failed else "failed",
             solve={"ok": solve.get("ok"), "errors": errors[:20], "failed_objects": failed[:20]},
@@ -840,6 +919,68 @@ def materialize(document: dict[str, Any], *, action: str, client: DwsimMcpClient
             keep_case.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(solved_case, keep_case)
     return outcome
+
+
+_DWSIM_REACTION_OUTPUTS = re.compile(r"^(?P<reaction>.+): (?:Reaction )?(?:Extent|Rate|Heat)$")
+
+
+def _port_stream(document: dict[str, Any], unit_id: str, side: str) -> dict[str, Any] | None:
+    return next((stream for stream in _material_streams(document)
+                 if (stream.get(side) or {}).get("unit") == unit_id and (stream.get(side) or {}).get("port") == 0), None)
+
+
+def verify_kinetics(document: dict[str, Any], streams: dict[str, Any], units: dict[str, Any]) -> list[dict[str, Any]]:
+    """Jarvis verification of every solved reactor with a typed rate law (spec 180 capability 5).
+
+    Mutates ``units`` in place: adds the ``kinetics`` verification record and removes DWSIM's per-reaction
+    Extent, Rate and Heat, which are wrong under script kinetics (fact 4). Returns failed-object rows.
+    """
+    failed: list[dict[str, Any]] = []
+    for unit in _units(document):
+        if unit["type"] not in {"PFR", "CSTR"}:
+            continue
+        typed = [(rid, document["reactions"][rid]) for rid in unit.get("reactions", [])
+                 if document["reactions"][rid].get("rate_law")]
+        if not typed:
+            continue
+        rid, reaction = typed[0]
+        native_ids = {_native_reaction_id(document, unit, item) for item in unit.get("reactions", [])}
+        names = {document["reactions"][item]["name"] for item in unit.get("reactions", [])}
+        result = units.setdefault(unit["tag"], {})
+        reported = result.get("reported") or {}
+        result["reported"] = {key: value for key, value in reported.items()
+                              if not ((match := _DWSIM_REACTION_OUTPUTS.match(key))
+                                      and match.group("reaction") in native_ids | names)}
+        result["properties"] = [row for row in result.get("properties") or []
+                                if not ((match := _DWSIM_REACTION_OUTPUTS.match(str(row.get("name", ""))))
+                                        and match.group("reaction") in native_ids | names)]
+        inlet, outlet = _port_stream(document, unit["id"], "target"), _port_stream(document, unit["id"], "source")
+        volume = (unit.get("params", {}).get("volume") or {}).get("si")
+        if inlet is None or outlet is None or inlet["tag"] not in streams or outlet["tag"] not in streams:
+            verification: dict[str, Any] = {"ok": False, "code": "KINETICS_VERIFICATION_FAILED", "residual": None,
+                            "findings": [{"code": "KINETICS_VERIFICATION_FAILED", "severity": "blocker",
+                                          "message": "The reactor inlet or outlet stream result is missing."}]}
+        else:
+            verification = verify_rate_law_reactor(reactor_type=unit["type"], reaction=reaction,
+                                                   volume_m3=volume, inlet=streams[inlet["tag"]]["reported"],
+                                                   outlet=streams[outlet["tag"]]["reported"])
+        result["kinetics"] = {
+            "verified": verification["ok"], "code": verification.get("code"), "reaction_id": rid,
+            "form": reaction["rate_law"]["form"], "base_reactant": reaction["base_reactant"],
+            "script_title": kinetics.script_title(unit["tag"], rid),
+            "native_reaction_id": _native_reaction_id(document, unit, rid),
+            "kinetics_version": kinetics.KINETICS_VERSION,
+            **{key: verification.get(key) for key in ("residual", "tolerance", "conversion", "extent_kmol_h",
+                                                       "rate_inlet", "rate_outlet", "summary", "findings")},
+        }
+        if not verification["ok"]:
+            # No current result for this reactor: DWSIM's numbers stay only as diagnostics of the attempt.
+            result["calculated"] = False
+            result["error"] = verification.get("code") or "KINETICS_VERIFICATION_FAILED"
+            failed.append({"tag": unit["tag"], "calculated": False,
+                           "error": "; ".join(item["message"] for item in verification.get("findings") or [])
+                           or result["error"], "code": result["error"]})
+    return failed
 
 
 def new_run_id() -> str:

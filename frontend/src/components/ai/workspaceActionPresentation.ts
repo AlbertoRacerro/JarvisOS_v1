@@ -22,7 +22,7 @@ export function isToolCallShaped(text: string | null | undefined): boolean {
   const fences = [...normalized.matchAll(/(```|~~~)([a-z0-9_-]*)\s*\n?([\s\S]*?)\n?\s*\1/gi)];
   const candidates = [normalized, ...fences.map(match => match[3])];
   const actionOps = new Set([
-    "set_value", "set_unit_model", "add_unit", "insert_unit_after", "connect", "disconnect", "mirror", "move",
+    "set_value", "set_unit_model", "set_reaction", "add_unit", "insert_unit_after", "connect", "disconnect", "mirror", "move",
     "rename", "delete", "duplicate_part", "set_part_param", "move_part", "delete_part"
   ]);
   const containsWorkspaceAction = (value: unknown): boolean => {
@@ -93,12 +93,22 @@ export function actionStatePresentation(state: ActionOutcome["state"]): { label:
   }
 }
 
+const RATE_LAW_LABELS: Record<string, string> = { power_law_arrhenius: "Power law (Arrhenius)", monod: "Monod", haldane: "Haldane / Andrews" };
+
 /**
  * Card text for one validated process action. The backend composes `summary`; this is the frontend's own
  * wording for requests whose summary is missing, so `set_unit_model` never falls back to raw JSON.
  */
 export function describeProcessAction(action: Record<string, unknown>): string | null {
   const text = (value: unknown) => (typeof value === "string" && value ? value : null);
+  if (action.op === "set_reaction") {
+    const unit = text(action.unit) ?? "the reactor";
+    const reaction = action.reaction as { name?: unknown; rate_law?: { form?: unknown } | null } | null;
+    const name = text(reaction?.name);
+    if (!reaction) return `Remove ${name ? `reaction ${name}` : "a reaction"} from ${unit}`;
+    const form = text(reaction.rate_law?.form) ?? "power_law_arrhenius";
+    return `Set ${RATE_LAW_LABELS[form] ?? "rate-law"} reaction${name ? ` ${name}` : ""} on ${unit}`;
+  }
   if (action.op === "set_unit_model") {
     const unit = text(action.unit) ?? "the unit";
     const card = text(action.card);

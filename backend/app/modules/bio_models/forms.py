@@ -224,7 +224,7 @@ _cards = [
     ("temperature.isothermal", "temperature", "f = 1", [_symbol("T", "temperature", "K", "> 0")], "isothermal temperature factor."),
     ("temperature.ctmi", "temperature", "f = (T−T_max)(T−T_min)² / ((T_opt−T_min)[(T_opt−T_min)(T−T_opt)−(T_opt−T_max)(T_opt+T_min−2T)])", [_symbol("T", "temperature", "K", "> 0"), _symbol("T_min", "minimum cardinal temperature", "K", "> 0"), _symbol("T_opt", "optimum cardinal temperature", "K", "T_min < T_opt < T_max"), _symbol("T_max", "maximum cardinal temperature", "K", "> T_opt")], "Rosso cardinal model with inflexion as used by Bernard–Rémond."),
     ("temperature.arrhenius_ref", "temperature", "f = exp[−(E_a/R)(1/T − 1/T_ref)]", [_symbol("T", "temperature", "K", "> 0"), _symbol("T_ref", "reference temperature", "K", "> 0"), _symbol("E_a", "activation energy", "J mol⁻¹", "≥ 0")], "Arrhenius factor; μ_max is defined at T_ref."),
-    ("nutrient.monod", "nutrient", "f_j = S_j/(K_j + S_j)", [_symbol("S_j", "nutrient concentration", "kg m⁻³", "≥ 0"), _symbol("K_j", "half-saturation concentration", "kg m⁻³", "> 0")], "nutrient-limitation factor of a bioreactor growth model; not a reaction rate law in a DWSIM reactor (see 180)."),
+    ("nutrient.monod", "nutrient", "f_j = S_j/(K_j + S_j)", [_symbol("S_j", "nutrient concentration", "kg m⁻³", "≥ 0"), _symbol("K_j", "half-saturation concentration", "kg m⁻³", "> 0")], "nutrient-limitation factor of a bioreactor growth model; in a DWSIM PFR or CSTR, Monod is instead a typed reactor rate law (180)."),
     ("nutrient.droop", "nutrient", "f_j = max(0, 1 − Q_min,j/Q_j)", [_symbol("Q_j", "intracellular quota", "kg element kg⁻¹ dry biomass", "≥ 0"), _symbol("Q_min,j", "minimum quota", "kg element kg⁻¹ dry biomass", "> 0")], "quota limitation factor; 170 carries quota as state."),
     ("combine.multiplicative", "combination", "f_S = ∏ⱼ f_j", [_symbol("f_j", "per-nutrient factor", "1", "[0, 1]")], "combines nutrient limitation factors multiplicatively."),
     ("combine.liebig", "combination", "f_S = minⱼ f_j", [_symbol("f_j", "per-nutrient factor", "1", "[0, 1]")], "combines nutrient limitation by Liebig minimum."),
@@ -338,7 +338,10 @@ FORM_CARDS: tuple[dict[str, Any], ...] = tuple(
 def kinetics_explanation() -> str:
     """Deterministic seam for spec 166; derived from the nutrient Monod card metadata."""
     card = next(item for item in FORM_CARDS if item["id"] == "nutrient.monod")
-    return f"Monod is a {card['applies_to']} DWSIM reactor rate laws arrive with 180; Photobioreactor (T1) uses a pinned biological model card. No action is proposed."
+    return (f"The biological Monod card is a {card['applies_to']} For a DWSIM PFR or CSTR, a Monod or Haldane "
+            "rate law is a typed reactor reaction: select the reactor and open Kinetics to define it. "
+            "Photobioreactor (T1) uses a pinned biological model card. "
+            "An explanation alone proposes no change.")
 
 
 def form_card(form_id: str) -> dict[str, Any]:

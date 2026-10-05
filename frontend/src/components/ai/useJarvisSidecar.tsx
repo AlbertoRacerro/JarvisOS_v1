@@ -138,7 +138,8 @@ function outcomeNotice(interaction: ThreadInteraction): string | null {
       ? "This answer stopped at the output limit. You can ask Jarvis to continue."
       : "This answer ended before completion. You can try again or continue from the last visible text.";
   }
-  if (interaction.flow_state === "failed_terminal") {
+  // A failed Hermes agent turn closes its reservation flow as cancelled with reason agent_failed.
+  if (interaction.flow_state === "failed_terminal" || interaction.terminal_reason === "agent_failed") {
     if (interaction.terminal_reason?.endsWith("output_budget_exhausted")) return "The model spent its whole output budget before producing a visible answer. Try a shorter or more direct request.";
     return "Jarvis could not complete this request. Check that the selected responder is available, then try again.";
   }

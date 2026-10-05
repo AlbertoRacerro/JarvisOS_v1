@@ -51,7 +51,7 @@ def _reported(flow: float, density: float = 1000.0, vapor: float = 0.0) -> dict[
 
 def test_culture_units_are_explicit_and_pH_is_a_scalar() -> None:
     assert QUANTITY_UNITS["mass_concentration"] == ("kg/m3", ("kg/m3", "g/L", "mg/L"))
-    assert QUANTITY_UNITS["molar_concentration"] == ("mol/m3", ("mol/m3", "mmol/L"))
+    assert QUANTITY_UNITS["molar_concentration"] == ("mol/m3", ("mol/m3", "mmol/L", "kmol/m3"))
     assert draft._si(draft.DraftQuantity(value=1.5, unit="g/L"), "mass_concentration", "biomass")["si"] == 1.5
     assert draft._si(draft.DraftQuantity(value=1500, unit="mg/L"), "mass_concentration", "biomass")["si"] == 1.5
     assert draft._si(draft.DraftQuantity(value=4.2, unit="mmol/L"), "molar_concentration", "dic")["si"] == 4.2
@@ -108,8 +108,8 @@ def test_culture_operation_is_cas_reversible_and_outside_dwsim_materialization()
 def test_registry_owners_and_rules_cover_all_existing_units() -> None:
     projection = draft.registry_projection()
     dwsim_units = [item for item in projection["units"] if item["owner"] == "dwsim"]
-    assert len(dwsim_units) == 11
-    assert len(projection["units"]) == 13
+    assert len(dwsim_units) == 12
+    assert len(projection["units"]) == 14
     assert {item["type"] for item in projection["units"] if item["owner"] == "jarvis_bio"} == {"SpecifiedSeparator", "PhotobioreactorT1"}
     assert {item["owner"] for item in projection["units"]} == {"dwsim", "jarvis_bio"}
     assert {item["type"]: item["culture_rule"] for item in projection["units"]}["Mixer"] == "mixer"

@@ -9,6 +9,8 @@ from datetime import UTC, datetime
 from typing import Literal
 from uuid import uuid4
 
+from pydantic import ValidationError
+
 from app.core.database import open_sqlite_connection
 from app.modules.bio_models import service as bio_models
 from app.modules.bluecad.ledger import get_candidate
@@ -24,9 +26,11 @@ from app.modules.process_stack.draft_models import (
     Disconnect,
     DraftOp,
     DraftQuantity,
+    KineticReaction,
     Move,
     Rename,
     SetOrientation,
+    SetReactorReaction,
     SetStreamCulture,
     SetStreamSpec,
     SetUnitParams,
@@ -182,11 +186,18 @@ def surface_brief(workspace_id: str, ref: SurfaceRef | None) -> SurfaceBrief:
         else:
             last_run = None
         pbr_rows = _pbr_brief_rows(workspace_id, pbr_units, last_run)
+        reaction_rows = _reaction_brief_rows(document, last_run)
         # Variable parts first; the fixed vocabulary tail is never cut, so the brief shrinks its lists to fit.
         tail = (
             "Action JSON examples (submit one or more objects in actions): "
             f'{{"op":"set_value","target":"{stream_tag}","property":"pressure","value":{{"value":2,"unit":"bar"}}}}; '
             f'{{"op":"set_unit_model","unit":"{unit_tag}","card":"model card name or id"}}; '
+            '{"op":"set_reaction","unit":"PFR_1","reaction_id":"r1","reaction":'
+            '{"name":"Example","stoichiometry":{"Ethylene oxide":-1,"Water":-1,"Ethylene glycol":1},'
+            '"base_reactant":"Ethylene oxide","phase":"Liquid","basis":"MolarConc",'
+            '"rate_law":{"form":"monod","substrate":"Ethylene oxide",'
+            '"v_max":{"value":5,"unit":"kmol/[m3.h]"},"k_s":{"value":2,"unit":"kmol/m3"}},'
+            '"provenance":{"kind":"synthetic"}}}; '
             f'{{"op":"add_unit","type":"Pump","tag":"{next_unit_tag}","near":"{unit_tag}"}}; '
             f'{{"op":"insert_unit_after","type":"Pump","after":"{unit_tag}","tag":"{next_unit_tag}"}}; '
             f'{{"op":"connect","from":"{unit_tag}","from_port":"outlet","to":"{next_unit_tag}","to_port":"inlet"}}; '
@@ -203,17 +214,18 @@ def surface_brief(workspace_id: str, ref: SurfaceRef | None) -> SurfaceBrief:
             "Mixed Recycles may be Jarvis tears; native Recycles inside mixed loops are refused. "
             "SpecifiedSeparator requires culture. For a non-convergence question, explain the recorded reason, "
             "iteration count, worst field and residual without proposing a change unless requested. "
-            f"Limits: Arrhenius power-law only for DWSIM reactions. {kinetics_explanation()} "
-            "DWSIM Run stays operator-only; reactions and thermo are edited in the operator editor."
+            f"Kinetics: one typed reaction per PFR/CSTR; use a citation for literature provenance. {kinetics_explanation()} "
+            "DWSIM Run stays operator-only; Thermo is edited in the operator editor."
         )
         text = _fit_process_brief(
             header=(f"Process workspace {workspace_id}; draft {draft_id}; head revision {record['revision']}\n"
                     f"Results: {projection['results']['state']}\n"),
             objects=objects, document=document, selected_line=f"Selected: {selected_names or 'none'}\n",
-            pbr_rows=pbr_rows, run_summary=run_summary, selected_context=selected_context, tail=tail)
+            pbr_rows=pbr_rows, reaction_rows=reaction_rows, run_summary=run_summary,
+            selected_context=selected_context, tail=tail)
         bounded_text = text
-        actions = ["set_value", "set_unit_model", "add_unit", "insert_unit_after", "connect", "disconnect", "mirror", "move", "rename", "delete"]
-        limits = [f"Arrhenius power-law only; {kinetics_explanation()}", "DWSIM Run is operator-only"]
+        actions = ["set_value", "set_unit_model", "set_reaction", "add_unit", "insert_unit_after", "connect", "disconnect", "mirror", "move", "rename", "delete"]
+        limits = [f"One typed reaction per reactor; {kinetics_explanation()}", "DWSIM Run is operator-only"]
         payload = {
             "surface": "process",
             "route_id": ref.route_id,
@@ -435,17 +447,39 @@ _BRANCH_MEANING = {
 }
 
 
+def _reaction_brief_rows(document: dict, last_run: dict | None) -> list[str]:
+    rows: list[str] = []
+    reactions = document.get("reactions") or {}
+    solved = (last_run or {}).get("units") or {}
+    for unit in document["objects"].values():
+        if unit["kind"] != "unit" or unit["type"] not in {"PFR", "CSTR"}:
+            continue
+        for reaction_id in unit.get("reactions") or []:
+            reaction = reactions.get(reaction_id) or {}
+            law = reaction.get("rate_law") or {}
+            verification = (solved.get(unit["tag"]) or {}).get("kinetics") or {}
+            state = "verified" if verification.get("verified") else "not verified"
+            rows.append(f"{unit['tag']} reaction {reaction_id}: {law.get('form', 'power law')}, "
+                        f"base {reaction.get('base_reactant', 'unknown')}; last run {state}.")
+    return rows[:12]
+
+
 def _fit_process_brief(*, header: str, objects: list[dict], document: dict, selected_line: str,
-                       pbr_rows: list[str], run_summary: str, selected_context: str, tail: str) -> str:
+                       pbr_rows: list[str], reaction_rows: list[str], run_summary: str,
+                       selected_context: str, tail: str) -> str:
     """Assemble the Process brief within the model-facing cap; the vocabulary tail is never truncated."""
-    def build(limit: int, compact: bool, rows: list[str]) -> str:
+    def build(limit: int, compact: bool, rows: list[str], reactions: list[str]) -> str:
         return (f"{header}Objects ({len(objects)}): {_compact_objects(objects, document, limit)}\n{selected_line}"
                 f"Unit owners: {_owner_rows(objects, compact=compact)}\n"
-                f"{chr(10).join(rows) + chr(10) if rows else ''}{run_summary}\n{selected_context}{tail}")
+                f"{chr(10).join(rows) + chr(10) if rows else ''}"
+                f"{chr(10).join(reactions) + chr(10) if reactions else ''}"
+                f"{run_summary}\n{selected_context}{tail}")
 
     text = ""
-    for limit, compact, count in ((35, False, 6), (35, True, 6), (20, True, 6), (10, True, 4), (5, True, 2), (0, True, 1)):
-        text = build(limit, compact, pbr_rows[:count])
+    for limit, compact, count, reaction_count in ((35, False, 6, 12), (35, True, 6, 12),
+                                                   (20, True, 6, 8), (10, True, 4, 5),
+                                                   (5, True, 2, 2), (0, True, 1, 0)):
+        text = build(limit, compact, pbr_rows[:count], reaction_rows[:reaction_count])
         if len(text) <= BRIEF_TEXT_LIMIT:
             return text
     return text[:BRIEF_TEXT_LIMIT]
@@ -634,6 +668,8 @@ def _action_summary(request: ActionRequest, changes: list[ChangeLine]) -> str:
             line = next((item for item in changes if item.label == f"{action.unit} biological model card"), None)
             summaries.append(f"Pin model card {line.after} on {action.unit}" if line and line.after
                              else f"Pin a model card on {action.unit}")
+        elif action.op == "set_reaction":
+            summaries.append(f"Set reaction {action.reaction_id} on {action.unit}")
         elif action.op == "add_unit":
             tag = action.tag
             if tag is None:
@@ -962,6 +998,24 @@ def _process_ops(document: dict, request: ActionRequest, workspace_id: str | Non
                 label=f"{target['tag']} biological model card",
                 before=_pinned_card_label(workspace_id, current),
                 after=_card_label(card)))
+        elif action.op == "set_reaction":
+            target = _target(document, action.unit, "unit")
+            if target["type"] not in {"PFR", "CSTR"}:
+                raise ValueError(f"{target['tag']} is not a kinetic reactor (PFR or CSTR).")
+            try:
+                reaction = KineticReaction.model_validate(action.reaction)
+            except ValidationError as error:
+                # Operator-facing refusal: name the fields, never pydantic's developer text.
+                # A model-level rule has no field location; its own message is the actionable part.
+                fields = sorted({".".join(str(part) for part in item["loc"]).replace("_", " ")
+                                 or str(item["msg"]).removeprefix("Value error, ") for item in error.errors()})
+                raise ValueError(f"The reaction for {target['tag']} is incomplete or invalid: "
+                                 f"check {', '.join(fields[:6])}.") from None
+            current = (document.get("reactions") or {}).get(action.reaction_id)
+            ops.append(SetReactorReaction(op="set_reactor_reaction", unit=target["id"],
+                                          reaction_id=action.reaction_id, reaction=reaction))
+            changes.append(ChangeLine(label=f"{target['tag']} reaction {action.reaction_id}",
+                                      before=(current or {}).get("name"), after=reaction.name))
         elif action.op == "set_value":
             target = _target(document, action.target)
             if target["kind"] == "stream":

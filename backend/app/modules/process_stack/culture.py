@@ -434,7 +434,7 @@ def propagate(document: dict[str, Any], streams: dict[str, Any]) -> tuple[dict[s
             for output in outputs:
                 fail(output, "CULTURE_UPSTREAM_FAILED", f"Culture result failed downstream of {unit['tag']}.")
             continue
-        if unit["type"] in {"Flash", "DistillationColumn", "PFR", "Recycle"}:
+        if unit["type"] in {"Flash", "DistillationColumn", "PFR", "CSTR", "Recycle"}:
             for output in outputs:
                 fail(output, "CULTURE_UNIT_UNSUPPORTED", f"Culture cannot pass through {unit['type']} {unit['tag']}.")
             continue

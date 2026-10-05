@@ -27,11 +27,13 @@ TYPES = (
     "HeatExchanger",
     "Recycle",
     "PFR",
+    "CSTR",
     "DistillationColumn",
 )
-CAPTURES = ("units.json", "ports.json", "pfr_ok.json", "column2.json", "inputs.json")
+CAPTURES = ("units.json", "ports.json", "pfr_ok.json", "column2.json", "inputs.json", "cstr_180.json")
 # Native object type names reported by solve/DOF/result captures -> manifest type.
-NATIVE_ALIASES = {"NodeOut": "Splitter", "NodeIn": "Mixer", "RCT_PFR": "PFR", "PFR reactor": "PFR"}
+NATIVE_ALIASES = {"NodeOut": "Splitter", "NodeIn": "Mixer", "RCT_PFR": "PFR", "PFR reactor": "PFR",
+                  "RCT_CSTR": "CSTR", "CSTR reactor": "CSTR"}
 # Properties whose written value selects a calculation mode or a native enum.
 MODE_PROPERTIES = ("CalcMode", "CalculationMode", "OperationMode", "ReactorOperationMode")
 ENUM_PROPERTIES = ("CondenserType",)
@@ -47,7 +49,9 @@ COLUMN_XML = (
 # returned by dwsim_unitop_get_results; only Adiabatic and HeatExchange are in a checked-in
 # capture, the other alternatives are recorded by the spec's pinned-runtime probe findings.
 PFR_MODES = ("Isothermic", "Adiabatic", "OutletTemperature", "NonIsothermalNonAdiabatic", "HeatExchange")
-DECLARED_MODES: dict[str, dict[str, str]] = {"PFR": {mode: SPEC_FINDINGS for mode in PFR_MODES}}
+DECLARED_MODES: dict[str, dict[str, str]] = {"PFR": {mode: SPEC_FINDINGS for mode in PFR_MODES},
+                                            "CSTR": {mode: "evidence/pbr/pDWSIM4/q1b_raw.json"
+                                                     for mode in ("Isothermic", "OutletTemperature")}}
 # Native ports without a checked-in connection capture: (type, role, port) -> source.
 DECLARED_PORTS: dict[tuple[str, str, int], str] = {
     ("Cooler", "feed", 0): f"{COMPILER}:plan (draft material port is the native port; Heater-family wiring)",
@@ -66,6 +70,9 @@ DECLARED_PORTS: dict[tuple[str, str, int], str] = {
     ("Mixer", "product", 0): f"{COMPILER}:plan (155 registry)",
     ("Recycle", "feed", 0): f"{SPEC_FINDINGS} (Recycle: 1 inlet and 1 outlet)",
     ("Recycle", "product", 0): f"{SPEC_FINDINGS} (Recycle: 1 inlet and 1 outlet)",
+    ("CSTR", "feed", 0): "evidence/pbr/pDWSIM4/q1b_raw.json",
+    ("CSTR", "product", 0): "evidence/pbr/pDWSIM4/q1b_raw.json",
+    ("CSTR", "energy_feed", 1): "evidence/pbr/pDWSIM4/q1b_raw.json",
     ("DistillationColumn", "energy_feed", 10): f"{COLUMN_XML} (reboiler duty)",
     ("DistillationColumn", "energy_product", 10): f"{COLUMN_XML} (condenser duty)",
 }
@@ -199,6 +206,8 @@ def build_manifest() -> dict[str, Any]:
         captured_modes = found.modes.get(name, {})
         if name == "PFR":
             modes = list(PFR_MODES)
+        elif name == "CSTR":
+            modes = ["Isothermic", "OutletTemperature"]
         elif name == "DistillationColumn" and dof.get("mode"):
             modes = [dof["mode"]]
         else:
