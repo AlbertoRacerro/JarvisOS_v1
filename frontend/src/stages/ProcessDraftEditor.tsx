@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import ProcessProposals from "../components/process/ProcessProposals";
 import { publishProcessSurface } from "../app/workspaceActionSurface";
@@ -385,8 +385,9 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
     return map;
   }, [pending]);
 
-  // Inspector drafts reset whenever the selection or its revision changes.
-  useEffect(() => {
+  // Inspector drafts reset whenever the selection or its revision changes. Layout effect: the reset lands
+  // before the new revision is painted, so input typed after it appears is never wiped.
+  useLayoutEffect(() => {
     setForm({});
     setCultureForm({});
     setOptionForm({});
