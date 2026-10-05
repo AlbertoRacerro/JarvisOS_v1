@@ -4,9 +4,297 @@
     "evidence/158/ports.json",
     "evidence/158/pfr_ok.json",
     "evidence/158/column2.json",
-    "evidence/158/inputs.json"
+    "evidence/158/inputs.json",
+    "evidence/158/cstr_180.json"
   ],
   "objects": {
+    "CSTR": {
+      "dof": {
+        "mode": "Adiabatic",
+        "slots": [
+          {
+            "property": "ReactionSetID",
+            "required": true,
+            "units": null
+          },
+          {
+            "property": "ReactorOperationMode",
+            "required": false,
+            "units": null
+          },
+          {
+            "property": "Volume",
+            "required": true,
+            "units": "m3"
+          },
+          {
+            "property": "Headspace",
+            "required": false,
+            "units": "m3"
+          },
+          {
+            "property": "DeltaP",
+            "required": false,
+            "units": "Pa"
+          }
+        ],
+        "supported": true
+      },
+      "enum_values": {},
+      "mode_evidence": {
+        "Isothermic": [
+          "cstr_180.json:CSTR.results (calculation_modes)",
+          "cstr_180.json:CSTR.set (applied)"
+        ],
+        "OutletTemperature": [
+          "cstr_180.json:CSTR.results (calculation_modes)",
+          "cstr_180.json:CSTR.set (applied)"
+        ]
+      },
+      "mode_property": {
+        "ReactorOperationMode": [
+          "cstr_180.json:CSTR.set (applied)"
+        ]
+      },
+      "modes": [
+        "Isothermic",
+        "OutletTemperature"
+      ],
+      "native_type": "CSTR",
+      "native_xml_inputs": {},
+      "observed_mode": null,
+      "ports": {
+        "energy_feed": [
+          {
+            "captured": true,
+            "evidence": [
+              "cstr_180.json:CSTR.set"
+            ],
+            "port": 1
+          }
+        ],
+        "feed": [
+          {
+            "captured": true,
+            "evidence": [
+              "cstr_180.json:CSTR.set"
+            ],
+            "port": 0
+          }
+        ],
+        "product": [
+          {
+            "captured": true,
+            "evidence": [
+              "cstr_180.json:CSTR.set"
+            ],
+            "port": 0
+          }
+        ]
+      },
+      "refused_properties": [],
+      "result_properties": [
+        {
+          "classification": "result",
+          "name": "Area Calculation Mode",
+          "unit": ""
+        },
+        {
+          "classification": "result",
+          "name": "Calculate External HTC",
+          "unit": ""
+        },
+        {
+          "classification": "result",
+          "name": "Calculate Internal HTC",
+          "unit": ""
+        },
+        {
+          "classification": "result",
+          "name": "Calculated External HTC",
+          "unit": "W/m2.K"
+        },
+        {
+          "classification": "result",
+          "name": "Calculated Internal HTC",
+          "unit": "W/m2.K"
+        },
+        {
+          "classification": "result",
+          "name": "Calculated Overall HTC",
+          "unit": "W/m2.K"
+        },
+        {
+          "classification": "result",
+          "name": "Coolant Density",
+          "unit": "kg/m3"
+        },
+        {
+          "classification": "result",
+          "name": "Coolant Flow Direction",
+          "unit": ""
+        },
+        {
+          "classification": "result",
+          "name": "Coolant Inlet Temperature",
+          "unit": "C"
+        },
+        {
+          "classification": "result",
+          "name": "Coolant Mass Flow Rate",
+          "unit": "kg/h"
+        },
+        {
+          "classification": "result",
+          "name": "Coolant Specific Heat",
+          "unit": "J/kg.K"
+        },
+        {
+          "classification": "result",
+          "name": "Coolant Thermal Conductivity",
+          "unit": "W/m.K"
+        },
+        {
+          "classification": "result",
+          "name": "Coolant Viscosity",
+          "unit": "Pa.s"
+        },
+        {
+          "classification": "result",
+          "name": "Diameter",
+          "unit": "mm"
+        },
+        {
+          "classification": "result",
+          "name": "External Heat Transfer Coefficient",
+          "unit": "W/m2.K"
+        },
+        {
+          "classification": "input",
+          "name": "Headspace",
+          "unit": "m3"
+        },
+        {
+          "classification": "result",
+          "name": "Heat Exchange Area",
+          "unit": "m2"
+        },
+        {
+          "classification": "result",
+          "name": "Heat load",
+          "unit": "kW"
+        },
+        {
+          "classification": "result",
+          "name": "Impeller Diameter",
+          "unit": "mm"
+        },
+        {
+          "classification": "result",
+          "name": "Impeller Speed",
+          "unit": "RPM"
+        },
+        {
+          "classification": "result",
+          "name": "Impeller Type",
+          "unit": ""
+        },
+        {
+          "classification": "result",
+          "name": "Internal Heat Transfer Coefficient",
+          "unit": "W/m2.K"
+        },
+        {
+          "classification": "result",
+          "name": "Jacket Diameter",
+          "unit": "mm"
+        },
+        {
+          "classification": "result",
+          "name": "Outlet Temperature",
+          "unit": "C"
+        },
+        {
+          "classification": "result",
+          "name": "Overall Heat Transfer Coefficient",
+          "unit": "W/m2.K"
+        },
+        {
+          "classification": "result",
+          "name": "Pressure Drop",
+          "unit": "bar"
+        },
+        {
+          "classification": "result",
+          "name": "Residence time",
+          "unit": "s"
+        },
+        {
+          "classification": "result",
+          "name": "Select the calculation mode of this reactor.",
+          "unit": ""
+        },
+        {
+          "classification": "result",
+          "name": "Temperature delta",
+          "unit": "C."
+        },
+        {
+          "classification": "result",
+          "name": "Use Utility Stream",
+          "unit": ""
+        },
+        {
+          "classification": "result",
+          "name": "Use Wall Properties",
+          "unit": ""
+        },
+        {
+          "classification": "result",
+          "name": "Vapor residence time",
+          "unit": "s"
+        },
+        {
+          "classification": "input",
+          "name": "Volume",
+          "unit": "m3"
+        },
+        {
+          "classification": "result",
+          "name": "Wall Thickness",
+          "unit": "m"
+        }
+      ],
+      "settable_properties": [
+        "DeltaP",
+        "Headspace",
+        "OutletTemperature",
+        "ReactionSetID",
+        "ReactorOperationMode",
+        "Volume"
+      ],
+      "settable_property_evidence": {
+        "DeltaP": [
+          "units.json:CSTR.dof (dof_slot)"
+        ],
+        "Headspace": [
+          "units.json:CSTR.dof (dof_slot)"
+        ],
+        "OutletTemperature": [
+          "cstr_180.json:CSTR.set (applied)"
+        ],
+        "ReactionSetID": [
+          "units.json:CSTR.dof (dof_slot)"
+        ],
+        "ReactorOperationMode": [
+          "cstr_180.json:CSTR.set (applied)",
+          "units.json:CSTR.dof (dof_slot)"
+        ],
+        "Volume": [
+          "units.json:CSTR.dof (dof_slot)"
+        ]
+      }
+    },
     "Cooler": {
       "dof": {
         "mode": "HeatRemoved",
