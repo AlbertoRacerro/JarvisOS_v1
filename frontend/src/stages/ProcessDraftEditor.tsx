@@ -4,6 +4,7 @@ import ProcessProposals from "../components/process/ProcessProposals";
 import { publishProcessSurface } from "../app/workspaceActionSurface";
 import BiologyModelLibrary from "../components/process/BiologyModelLibrary";
 import PbrInspector from "../components/process/PbrInspector";
+import ReactorKinetics from "../components/process/ReactorKinetics";
 import QuantityInput from "../components/process/QuantityInput";
 import { ownerLabel, ownerShort } from "../components/process/processOwners";
 import { failureTouchesUnit } from "../components/process/pbrLogic";
@@ -226,6 +227,8 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
   const [cultureEnabled, setCultureEnabled] = useState(false);
   const [optionForm, setOptionForm] = useState<Record<string, OptionValue>>({});
   const [reactionPick, setReactionPick] = useState<string[] | null>(null);
+  const [reactorTab, setReactorTab] = useState<"Setup" | "Kinetics" | "Results">("Setup");
+  const reactorTabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const [composition, setComposition] = useState<Record<string, string>>({});
   const [mode, setMode] = useState<string>("");
   const [flowBasis, setFlowBasis] = useState<"mass_flow" | "molar_flow">("mass_flow");
@@ -400,6 +403,7 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
       Object.fromEntries((draft?.compounds ?? []).map((name) => [name, String(selected?.spec?.composition?.[name] ?? "")])),
     );
   }, [selected?.id, draft?.revision]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setReactorTab("Setup"); }, [selected?.id]);
 
   const orientationItems: ContextMenuItem[] = contextUnit ? [
     { id: "mirror-lr", label: contextUnit.flip_x ? "Unmirror left ↔ right" : "Mirror left ↔ right", onSelect: () => void apply([{ op: "set_orientation", id: contextUnit.id, flip_x: !contextUnit.flip_x }]) },
@@ -978,6 +982,7 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
       result={solvedRun?.units?.[unit.tag]} results={results} lastRun={lastRun} failure={unitFailure(unit.tag)} feedBasis={draft.pbr_feed_basis?.[unit.tag]}
       findings={draft.findings} apply={apply} libraryOpen={biologyOpen} openLibrary={() => setBiologyOpen(true)}
       showError={(message) => setNotice({ tone: "danger", text: message })} />;
+    const reactor = unit.type === "PFR" || unit.type === "CSTR";
     const modes = spec.modes.map(modeKey);
     const activeMode = mode || unit.mode || "";
     const params = spec.params.filter(
@@ -992,10 +997,16 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
     const reportedOwner = reported?.owner ?? spec.owner;
     const reactions = Object.entries(draft.reactions ?? {});
     const assigned = reactionPick ?? unit.reactions ?? [];
+    const rateLawReactor = reactor && assigned.some((reactionId) => Boolean((draft.reactions?.[reactionId] as DraftReaction | undefined)?.rate_law));
     const reactionsChanged = reactionPick !== null && JSON.stringify(reactionPick) !== JSON.stringify(unit.reactions ?? []);
     const optionsChanged = Object.keys(optionForm).length > 0;
     return (
       <>
+        {reactor && <div className="reactor-tabs" role="tablist" aria-label="Reactor sections">{(["Setup", "Kinetics", "Results"] as const).map((name, index, tabs) =>
+          <button key={name} ref={(node) => { reactorTabRefs.current[index] = node; }} type="button" role="tab" aria-selected={reactorTab === name} tabIndex={reactorTab === name ? 0 : -1}
+            onClick={() => setReactorTab(name)} onKeyDown={(event) => { const next = event.key === "ArrowRight" ? (index + 1) % tabs.length : event.key === "ArrowLeft" ? (index + tabs.length - 1) % tabs.length : event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : null;
+              if (next !== null) { event.preventDefault(); setReactorTab(tabs[next]); reactorTabRefs.current[next]?.focus(); } }}>{name}</button>)}</div>}
+        <div role={reactor ? "tabpanel" : undefined} hidden={reactor && reactorTab !== "Setup"}>
         <p className="draft-owner-line"><span className="draft-owner-badge-label">{ownerLabel(spec.owner)}</span> · Culture rule: {spec.culture_rule}</p>
         <dl className="draft-ports">
           {spec.inlets.map((name, port) => (<div key={`in${port}`}><dt>{name}</dt><dd>{connected("target", port, false)}</dd></div>))}
@@ -1026,7 +1037,7 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
               />
             ))}
             {options.map((param) => optionControl(param, unit.options?.[param.key]))}
-            {spec.reactions && (
+            {spec.reactions && !reactor && (
               <div className="draft-field" role="group" aria-label="Reactions">
                 <span>Reactions (kinetic)</span>
                 {reactions.length ? (
@@ -1041,7 +1052,7 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
                     </label>
                   ))
                 ) : (
-                  <p className="draft-hint">Define kinetic reactions under Thermo (click the empty canvas).</p>
+                  <p className="draft-hint">Reactions are defined on each reactor (select a PFR or CSTR).</p>
                 )}
               </div>
             )}
@@ -1067,6 +1078,11 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
             </button>
           </fieldset>
         )}
+        </div>
+        {reactor && <div role="tabpanel" hidden={reactorTab !== "Kinetics"}><ReactorKinetics unit={unit} objects={objects} reactions={draft.reactions ?? {}} compounds={draft.compounds}
+          findings={draft.findings} results={results} run={solvedRun} script={draft.kinetics_scripts?.[unit.tag]} apply={apply}
+          showError={(message) => setNotice({ tone: "danger", text: message })} /></div>}
+        <div role={reactor ? "tabpanel" : undefined} hidden={reactor && reactorTab !== "Results"}>
         {reportedOwner === "jarvis_bio" && reported && (
           <fieldset className={`draft-fieldset draft-outputs${results.state === "stale" ? " is-stale" : ""}`} aria-label="Jarvis unit results">
             <legend>Results · Jarvis{results.state === "stale" ? " (stale)" : ""}</legend>
@@ -1092,16 +1108,24 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
             })()}
           </p>
         )}
+        {reactor && <section className="reactor-results"><h4>Results · DWSIM</h4>
+          {results.state === "stale" && <p>Previous Run · inputs changed since this Run</p>}
+          {results.state === "none" && <p>Run the draft to see reactor results.</p>}
+          {Boolean((reported as typeof reported & { kinetics?: { verified?: boolean } } | undefined)?.kinetics?.verified) && results.state === "current" && <strong className="reactor-verified">Verified by Jarvis</strong>}
+          {reported && Object.entries((reported as typeof reported & { kinetics?: Record<string, unknown> }).kinetics ?? {}).filter(([key, value]) => key !== "script_title" && key !== "verified" && (typeof value === "number" || typeof value === "string")).map(([key, value]) =>
+            <div className="reactor-result" key={key}><span>{key.replace(/_/g, " ")}</span><strong>{typeof value === "number" ? Number(value.toPrecision(6)) : String(value)}</strong></div>)}
+        </section>}
         {reportedOwner === "dwsim" && renderResultSection(
-          reported?.properties,
+          reported?.properties?.filter((property) => !rateLawReactor || !/^R\d+[: ]/.test(property.name)),
           reported && Object.keys(reported.reported ?? {}).length > 0 && (
             <dl className={`draft-results-inline${results.state === "stale" ? " is-stale" : ""}`}>
-              {Object.entries(reported.reported).slice(0, 8).map(([key, value]) => (
+              {Object.entries(reported.reported).filter(([key]) => !rateLawReactor || !/^R\d+[: ]/.test(key)).slice(0, 8).map(([key, value]) => (
                 <div key={key}><dt>{key}</dt><dd>{Number.isFinite(Number(value.value)) && value.value !== "" ? Number(Number(value.value).toPrecision(6)) : value.value} {value.units}</dd></div>
               ))}
             </dl>
           ),
         )}
+        </div>
       </>
     );
   };
@@ -1267,7 +1291,7 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
       </div>
       {biologyOpen && <BiologyModelLibrary workspaceId={workspaceId} onClose={() => setBiologyOpen(false)} />}
       {notice && <p className={`draft-notice draft-notice--${notice.tone}`} role="alert">{notice.text}</p>}
-      <div className={`draft-body${selected && selected.type === "PhotobioreactorT1" ? " draft-body--wide-inspector" : ""}`}>
+      <div className={`draft-body${selected && (selected.type === "PhotobioreactorT1" || selected.type === "PFR" || selected.type === "CSTR") ? " draft-body--wide-inspector" : ""}`}>
         <aside className="draft-palette" aria-label="Palette">
           <h3>Add</h3>
           <button type="button" onClick={() => addStream("material")}>Material stream</button>
@@ -1402,7 +1426,7 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
                   </label>
                 ))}
               </div>
-              <p className="draft-hint">Select an object on the canvas to edit it.</p>
+              <p className="draft-hint">Reactions are defined on each reactor (select a PFR or CSTR).</p>
             </fieldset>
           )}
         </aside>
