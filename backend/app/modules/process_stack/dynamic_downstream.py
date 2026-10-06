@@ -147,7 +147,7 @@ def build_sampler(
         return (datetime.fromtimestamp(float(start_epoch), UTC) + timedelta(seconds=float(time_s))
                 ).isoformat().replace("+00:00", "Z")
 
-    carrier_spec = next((copy.deepcopy(stream.get("spec", {})) for stream in objects.values()
+    carrier_spec: dict[str, Any] = next((copy.deepcopy(stream.get("spec", {})) for stream in objects.values()
                          if stream.get("kind") == "stream" and stream.get("source") is None
                          and (stream.get("target") or {}).get("unit") in participating_ids), {})
     densities: dict[str, tuple[float, str]] = {}

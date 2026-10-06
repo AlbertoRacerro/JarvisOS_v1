@@ -553,7 +553,10 @@ def _validate_dynamic_refs(document: dict[str, Any], kind: str, value: dict[str,
 
     from app.modules.process_stack.dynamic_models import Controller, Scenario, Schedule
 
-    model = {"schedules": Schedule, "controllers": Controller, "scenarios": Scenario}[kind]
+    models: dict[str, type[Schedule] | type[Controller] | type[Scenario]] = {
+        "schedules": Schedule, "controllers": Controller, "scenarios": Scenario,
+    }
+    model = models[kind]
     try:
         model.model_validate(value)
     except ValidationError as exc:

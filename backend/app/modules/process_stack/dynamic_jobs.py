@@ -100,8 +100,8 @@ def _error_payload(exc: BaseException) -> dict[str, Any]:
             "detail": getattr(exc, "detail", {})}
 
 
-def _write_artifacts(directory: Path, series: dict[str, np.ndarray], manifest: dict[str, Any]) -> dict[str, str] | None:
-    arrays = {str(name): np.asarray(values, dtype=np.float64) for name, values in series.items()}
+def _write_artifacts(directory: Path, series: dict[str, np.ndarray], manifest: dict[str, Any]) -> dict[str, str | int] | None:
+    arrays: dict[str, Any] = {str(name): np.asarray(values, dtype=np.float64) for name, values in series.items()}
     lengths = {len(values) for values in arrays.values()}
     if len(lengths) > 1:
         raise ValueError("Engine returned unequal series lengths")

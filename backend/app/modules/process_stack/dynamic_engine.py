@@ -133,7 +133,7 @@ def _validate_events(
         elif kind == "inoculation":
             if event.get("value_unit") != "kg/m3":
                 raise DynamicError("EVENT_UNIT_INVALID", "Inoculation concentration requires kg/m3.")
-            value = event.get("value")
+            value: Any = event.get("value")
             if isinstance(value, dict) and (not value or set(value) - {"X", "N", "O2"}):
                 raise DynamicError("EVENT_VALUE_INVALID", "Inoculation has unsupported concentration fields.")
             values = value.values() if isinstance(value, dict) else [value]
@@ -572,7 +572,7 @@ def prepare(workspace_id: str, draft_id: str, scenario_id: str) -> Snapshot:
                 )
         from app.modules.environment import profiles
 
-        resolved_profiles = []
+        resolved_profiles: list[dict[str, Any]] = []
         forcing_profile_id = scenario.forcing_profile_id or scenario.profiles[0]["profile_id"]
         if forcing_profile_id not in {ref.get("profile_id") for ref in scenario.profiles}:
             raise DynamicError("PROFILE_NOT_BOUND", "Forcing profile must be one of the bound profiles.")
@@ -628,7 +628,7 @@ def prepare(workspace_id: str, draft_id: str, scenario_id: str) -> Snapshot:
                 {"ref": ref, "profile": profile, "times": times, "par_name": par_name, "temp_name": temp_name}
             )
         resolved_profiles.sort(key=lambda item: item["ref"]["profile_id"] != forcing_profile_id)
-        payload = {
+        payload: dict[str, Any] = {
             "workspace_id": workspace_id,
             "draft_id": draft_id,
             "revision": revision["revision"],
@@ -734,11 +734,11 @@ def _network_concentrations(topology: dict[str, Any], runtime: dict[str, Any], s
     concentrations: dict[str, tuple[float, ...]] = {}
     for i, item in enumerate(units):
         x, nitrogen, oxygen = (float(v) for v in state[i * 7:i * 7 + 3])
-        value = (x, nitrogen, oxygen, item["growth"].nitrogen_quota * x)
-        concentrations[item["unit"]["id"]] = value
+        unit_value = (x, nitrogen, oxygen, item["growth"].nitrogen_quota * x)
+        concentrations[item["unit"]["id"]] = unit_value
         for stream in topology["streams"]:
             if (stream.get("source") or {}).get("unit") == item["unit"]["id"]:
-                concentrations[f"stream:{stream['id']}"] = value
+                concentrations[f"stream:{stream['id']}"] = unit_value
     for key in runtime["algebraic_order"]:
         inlet = runtime["algebraic_incoming"][key]
         total = sum(flows.get(stream["id"], 0.0) for stream in inlet)
@@ -776,7 +776,7 @@ def _network_concentrations(topology: dict[str, Any], runtime: dict[str, Any], s
             concentrate = recovery / factor
             clarified = 1.0 - concentrate
             # The ratio-weighted biomass and quota-N concentrations conserve their flow rates.
-            outlet_values = (
+            outlet_values: tuple[tuple[float, ...], ...] = (
                 (inlet_value[0] * factor, inlet_value[1], inlet_value[2], inlet_value[3] * factor),
                 (inlet_value[0] * (1.0 - recovery) / clarified, inlet_value[1], inlet_value[2],
                  inlet_value[3] * (1.0 - recovery) / clarified),
@@ -918,7 +918,7 @@ def run(
                                            float(scenario["downstream_cadence_s"])))
            if scenario.get("downstream_cadence_s") else set())
     )
-    current = initial
+    current: np.ndarray = initial
     try:
         event_cursor = 0
         while event_cursor < len(events) and float(events[event_cursor][1]["time_s"]) == 0:
@@ -992,7 +992,7 @@ def run(
 
             solved = integrate_ode(
                 rhs,
-                current,
+                current.tolist(),
                 grid,
                 rtol=float(scenario["rtol"]),
                 atol=float(scenario["atol"]),
@@ -1000,13 +1000,13 @@ def run(
             )
             if not solved.success:
                 raise DynamicError("SOLVER_FAILED", solved.message, {"segment_s": [left, right]})
-            for t, state in zip(solved.times[1:], solved.states[1:], strict=True):
-                state = np.asarray(state, dtype=np.float64)
-                _valid_state(state, units, growths)
-                _clip_tiny_negatives(state, units, roundoff_clips, float(t))
+            for t, solved_state in zip(solved.times[1:], solved.states[1:], strict=True):
+                state_row = np.asarray(solved_state, dtype=np.float64)
+                _valid_state(state_row, units, growths)
+                _clip_tiny_negatives(state_row, units, roundoff_clips, float(t))
                 if any(abs(float(t) - float(out)) <= 1e-7 for out in outputs):
                     times_out.append(float(t))
-                    rows.append(np.asarray(state, dtype=np.float64))
+                    rows.append(np.asarray(state_row, dtype=np.float64))
             current = np.asarray(solved.states[-1], dtype=np.float64)
             _clip_tiny_negatives(current, units, roundoff_clips, right)
             while event_cursor < len(events) and abs(float(events[event_cursor][1]["time_s"]) - right) < 1e-7:
@@ -1114,7 +1114,7 @@ def run(
         return diagnostic("failed", error)
 
 
-def _valid_state(state: tuple[float, ...], units: list[dict[str, Any]], growths: list[Any] | None = None) -> None:
+def _valid_state(state: tuple[float, ...] | np.ndarray, units: list[dict[str, Any]], growths: list[Any] | None = None) -> None:
     if not all(math.isfinite(float(v)) for v in state):
         raise DynamicError("STATE_NONFINITE", "CVODE produced a nonfinite state.")
     for i, item in enumerate(units):
@@ -1184,7 +1184,8 @@ def _apply_event(
         raise DynamicError("EVENT_TARGET_INVALID", f"Event target unit {tag!r} is not participating.")
     before = state.copy()
     if event["type"] == "inoculation":
-        value = event.get("value")
+        assert found is not None  # guarded by the EVENT_TARGET_INVALID check above
+        value: Any = event.get("value")
         if isinstance(value, dict):
             for name, channel in (("X", 0), ("N", 1), ("O2", 2)):
                 if name in value:
@@ -1192,6 +1193,7 @@ def _apply_event(
         else:
             state[found * 7] = float(value)
     elif event["type"] == "harvest":
+        assert found is not None  # guarded by the EVENT_TARGET_INVALID check above
         fraction = float(event.get("fraction", 0.0))
         if not 0 <= fraction <= 1:
             raise DynamicError("EVENT_VALUE_INVALID", "Harvest fraction must be between 0 and 1.")
@@ -1249,7 +1251,7 @@ def _apply_dynamic_event(
     kind, target = (event.get("target") or "").split(":", 1) if ":" in (event.get("target") or "") else ("", "")
     if event["type"] in {"feed_change", "dilution"}:
         stream_tag = event.get("stream") or (target if kind == "feed" else None)
-        value = event.get("value")
+        value: Any = event.get("value")
         if kind == "splitter" or (event["type"] == "dilution" and event.get("target", "").startswith("splitter:")):
             splitter_tag = target or event["target"].split(":", 1)[1]
             splitter = next((u for u in topology["units"] if u.get("tag") == splitter_tag and u.get("type") == "Splitter"), None)
