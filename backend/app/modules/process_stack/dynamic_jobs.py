@@ -20,6 +20,7 @@ from app.core.paths import build_paths
 from app.modules.process_stack import draft
 
 MAX_ACTIVE_PER_WORKSPACE = 2
+MAX_ACTIVE_GLOBAL = 8
 MAX_SERIES_POINTS = 5000
 DEFAULT_SERIES_POINTS = 2000
 MAX_SERIES_BYTES = 8 * 1024 * 1024
@@ -123,12 +124,16 @@ def _write_artifacts(directory: Path, series: dict[str, np.ndarray], manifest: d
             "manifest_sha256": hashlib.sha256(manifest_path.read_bytes()).hexdigest(), "rows": rows}
 
 
-def _run_job(workspace_id: str, job_id: str, snapshot: Any) -> None:
+def _run_job(workspace_id: str, job_id: str, snapshot_digest: str) -> None:
     directory, _ = _record(workspace_id, job_id)
     event = _cancel_events[job_id]
     try:
+        engine = _engine()
+        snapshot = engine.Snapshot(_read_json(directory / "input.json"), snapshot_digest)
         with _lock:
             record = _read_json(directory / "job.json")
+            if record["status"] == "cancelled":
+                return
             record["status"] = "running"
             record["started_at"] = _now()
             _atomic_json(directory / "job.json", record)
@@ -191,24 +196,52 @@ def start(workspace_id: str, draft_id: str, scenario_id: str) -> dict[str, Any]:
         raise DynamicJobError(exc.code, str(exc), 422, getattr(exc, "detail", {})) from exc
     with _lock:
         active = 0
+        global_active = 0
         for path in root.glob("*/job.json"):
             try:
                 record = _read_json(path)
             except DynamicJobError:
                 continue
             active += record.get("status") in {"queued", "running"}
+            global_active += record.get("status") in {"queued", "running"}
         if active >= MAX_ACTIVE_PER_WORKSPACE:
             raise DynamicJobError("ACTIVE_JOB_LIMIT", "Workspace already has the maximum active dynamic runs", 409)
+        for path in build_paths().data_root.glob("process_dynamic/*/*/job.json"):
+            if path.parent.parent.name == workspace_id:
+                continue
+            try:
+                record = _read_json(path)
+            except DynamicJobError:
+                continue
+            global_active += record.get("status") in {"queued", "running"}
+        if global_active >= MAX_ACTIVE_GLOBAL:
+            raise DynamicJobError("GLOBAL_ACTIVE_JOB_LIMIT", "Dynamic run capacity is full", 409)
         job_id = str(uuid4())
         directory = root / job_id
         payload = getattr(snapshot, "payload", {})
+        identity = {
+            "workspace_id": workspace_id, "draft_id": draft_id,
+            "draft_revision": payload.get("revision"),
+            "content_digest": payload.get("content_digest"),
+            "snapshot_digest": getattr(snapshot, "digest", None),
+            "scenario_id": scenario_id,
+            "card_refs": [{"tag": unit.get("tag"), "card_id": unit.get("model", {}).get("card", {}).get("id"),
+                           "card_revision": unit.get("model", {}).get("card", {}).get("revision"),
+                           "card_digest": unit.get("model", {}).get("card", {}).get("digest"),
+                           "parameter_set_digest": unit.get("model", {}).get("set", {}).get("digest")}
+                          for unit in payload.get("units", [])],
+            "profile_refs": [{"profile_id": item.get("ref", {}).get("profile_id"),
+                              "digest": item.get("ref", {}).get("digest")}
+                             for item in payload.get("profiles", [])],
+        }
+        _atomic_json(directory / "input.json", payload)
         record = {"job_id": job_id, "workspace_id": workspace_id, "draft_id": draft_id,
                   "scenario_id": scenario_id, "status": "queued", "progress": 0.0,
                   "created_at": _now(), "snapshot_digest": getattr(snapshot, "digest", None),
-                  "identity": payload.get("identity", payload) if isinstance(payload, dict) else {}}
+                  "identity": identity}
         _atomic_json(directory / "job.json", record)
         _cancel_events[job_id] = threading.Event()
-        _futures[job_id] = _executor.submit(_run_job, workspace_id, job_id, snapshot)
+        _futures[job_id] = _executor.submit(_run_job, workspace_id, job_id, getattr(snapshot, "digest", ""))
     return {"job_id": job_id, "status": "queued"}
 
 
@@ -221,21 +254,13 @@ def _owned(workspace_id: str, draft_id: str, job_id: str) -> tuple[Path, dict[st
 
 def _current(workspace_id: str, draft_id: str, record: dict[str, Any]) -> bool | None:
     try:
-        digest = _engine().current_digest(workspace_id, draft_id)
-    except Exception:  # missing draft/current digest means the bound inputs aren't current
-        return False
+        digest = draft.current_digest(workspace_id, draft_id)
+    except draft.DraftError as exc:
+        if exc.code in {"draft_not_found", "workspace_not_found"}:
+            return False
+        raise
     identity = record.get("identity", {})
-
-    def find_digest(value: Any) -> str | None:
-        if isinstance(value, dict):
-            if isinstance(value.get("content_digest"), str):
-                return value["content_digest"]
-            return next((found for child in value.values() if (found := find_digest(child)) is not None), None)
-        if isinstance(value, list):
-            return next((found for child in value if (found := find_digest(child)) is not None), None)
-        return None
-
-    bound = find_digest(identity)
+    bound = identity.get("content_digest")
     return None if bound is None else digest == bound
 
 
@@ -244,7 +269,10 @@ def status(workspace_id: str, draft_id: str, job_id: str) -> dict[str, Any]:
     return {**record, "current": _current(workspace_id, draft_id, record)}
 
 
-def list_jobs(workspace_id: str, draft_id: str) -> list[dict[str, Any]]:
+def list_jobs(workspace_id: str, draft_id: str, limit: int = 50) -> list[dict[str, Any]]:
+    if limit < 1:
+        raise DynamicJobError("INVALID_LIMIT", "limit must be positive", 422)
+    limit = min(limit, 200)
     root = _workspace_root(workspace_id)
     rows = []
     for path in root.glob("*/job.json"):
@@ -255,7 +283,7 @@ def list_jobs(workspace_id: str, draft_id: str) -> list[dict[str, Any]]:
         if record.get("draft_id") == draft_id and record.get("workspace_id") == workspace_id:
             rows.append(record)
     rows.sort(key=lambda item: (item.get("created_at", ""), item.get("job_id", "")), reverse=True)
-    return rows
+    return rows[:limit]
 
 
 def cancel(workspace_id: str, draft_id: str, job_id: str) -> dict[str, Any]:
@@ -268,6 +296,9 @@ def cancel(workspace_id: str, draft_id: str, job_id: str) -> dict[str, Any]:
                 _atomic_json(directory / "job.json", record)
             return record
         record["cancel_requested"] = True
+        if record["status"] == "queued":
+            record.update(status="cancelled", finished_at=_now(),
+                          error={"code": "CANCELLED", "message": "Run cancelled before starting", "detail": {}})
         _atomic_json(directory / "job.json", record)
         event = _cancel_events.get(job_id)
         if event:

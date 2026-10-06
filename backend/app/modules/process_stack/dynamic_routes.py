@@ -32,9 +32,9 @@ async def start(workspace_id: str, draft_id: str, payload: StartRun) -> dict[str
 
 
 @router.get("/runs")
-def list_runs(workspace_id: str, draft_id: str) -> list[dict[str, Any]]:
+def list_runs(workspace_id: str, draft_id: str, limit: int = Query(default=50, ge=1)) -> list[dict[str, Any]]:
     try:
-        return dynamic_jobs.list_jobs(workspace_id, draft_id)
+        return dynamic_jobs.list_jobs(workspace_id, draft_id, limit)
     except dynamic_jobs.DynamicJobError as exc:
         raise _error(exc) from exc
 

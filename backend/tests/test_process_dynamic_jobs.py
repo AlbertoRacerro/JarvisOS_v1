@@ -22,8 +22,8 @@ class FakeDynamicError(ValueError):
 
 class FakeEngine:
     class Snapshot:
-        payload = {"content_digest": "content-1", "draft_revision": "1:abc"}
-        digest = "snapshot-1"
+        def __init__(self, payload: dict[str, Any], digest: str) -> None:
+            self.payload, self.digest = payload, digest
 
     class EngineResult:
         def __init__(self, status: str = "succeeded", rows: int = 5, error: Any = None) -> None:
@@ -43,7 +43,8 @@ class FakeEngine:
     def prepare(self, workspace_id: str, draft_id: str, scenario_id: str) -> Any:
         if self.fail_prepare:
             raise self.DynamicError("PROFILE_GAP", "gap", {"channel": "par"})
-        return self.Snapshot()
+        return self.Snapshot({"content_digest": "content-1", "revision": "1:abc", "scenario": {},
+                              "units": [], "profiles": []}, "snapshot-1")
 
     def run(self, snapshot: Any, *, cancelled: Any, progress: Any, sampler: Any = None) -> Any:
         self.entered.set()
@@ -53,10 +54,6 @@ class FakeEngine:
                 if cancelled():
                     return self.EngineResult("cancelled", rows=2)
         return self.result
-
-    def current_digest(self, workspace_id: str, draft_id: str) -> str:
-        return "content-1"
-
 
 @pytest.fixture
 def api(monkeypatch: pytest.MonkeyPatch) -> Any:
@@ -99,6 +96,11 @@ def test_start_is_prompt_poll_progress_cancel_and_no_success_artifact(api: Any) 
     assert engine.entered.wait(1)
     assert client.post(f"{base}/{did}/dynamic/runs/{job_id}/cancel").status_code == 200
     result = _wait(client, base, did, job_id, "cancelled")
+    assert set(result["identity"]) == {
+        "workspace_id", "draft_id", "draft_revision", "content_digest", "snapshot_digest",
+        "scenario_id", "card_refs", "profile_refs",
+    }
+    assert len(str(result["identity"])) < 1000
     assert result["progress"] == pytest.approx(0.4)
     assert "artifacts" in result  # failed/cancelled diagnostics retain computed rows
     assert client.get(f"{base}/{did}/dynamic/runs/{job_id}/manifest").json()["artifact_label"] == "diagnostic_cancelled"
@@ -185,3 +187,52 @@ def test_prepare_error_active_limit_list_order_and_recovery(api: Any) -> None:
             break
         time.sleep(0.005)
     assert not dynamic_jobs._futures and not dynamic_jobs._cancel_events
+
+
+def test_queued_cancel_never_transitions_to_running(api: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    client, _, wid, did, base = api
+
+    class DeferredExecutor:
+        pending: tuple[Any, tuple[Any, ...]] | None = None
+
+        def submit(self, function: Any, *args: Any) -> Any:
+            self.pending = (function, args)
+            return object()
+
+    executor = DeferredExecutor()
+    monkeypatch.setattr(dynamic_jobs, "_executor", executor)
+    response, job_id = _start(api)
+    assert response.status_code == 202
+    cancelled = client.post(f"{base}/{did}/dynamic/runs/{job_id}/cancel").json()
+    assert cancelled["status"] == "cancelled"
+    assert cancelled["error"]["code"] == "CANCELLED"
+    assert executor.pending is not None
+    executor.pending[0](*executor.pending[1])
+    assert client.get(f"{base}/{did}/dynamic/runs/{job_id}").json()["status"] == "cancelled"
+
+
+def test_global_active_job_cap_and_bounded_list(api: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    client, engine, wid, did, base = api
+    from app.core.paths import build_paths
+
+    monkeypatch.setattr(dynamic_jobs, "MAX_ACTIVE_GLOBAL", 1)
+    other = build_paths().data_root / "process_dynamic" / "other-workspace" / "active-job"
+    other.mkdir(parents=True)
+    (other / "job.json").write_text(
+        '{"job_id":"active-job","workspace_id":"other-workspace","draft_id":"d",'
+        '"status":"running","created_at":"2026-10-06T00:00:00Z"}', encoding="utf-8")
+    with pytest.raises(dynamic_jobs.DynamicJobError) as raised:
+        dynamic_jobs.start(wid, did, "global-cap")
+    assert raised.value.code == "GLOBAL_ACTIVE_JOB_LIMIT"
+    other.joinpath("job.json").unlink()
+    other.rmdir()
+    other.parent.rmdir()
+    monkeypatch.setattr(dynamic_jobs, "MAX_ACTIVE_GLOBAL", 8)
+    engine.block = False
+    for index in range(3):
+        response, job_id = _start(api, f"list-{index}")
+        assert response.status_code == 202
+        _wait(client, base, did, job_id, "succeeded")
+    limited = client.get(f"{base}/{did}/dynamic/runs?limit=1")
+    assert limited.status_code == 200 and len(limited.json()) == 1
+    assert len(dynamic_jobs.list_jobs(wid, did, limit=500)) <= 200
