@@ -58,12 +58,6 @@ def main() -> int:
         from tests.plumbing_170_support import pbr_ops, pin_of
 
         report["dwsim_version"] = dwsim._version(executable)
-        report["recycle_case"] = {
-            "outcome": "not_run",
-            "reason": "The current T1 topology preflight rejects algebraic Mixer/Splitter recycle cycles; "+
-                      "the downstream sampler cannot receive this case without changing the accepted boundary contract.",
-        }
-
         workspace_id = f"172real{int(time.time())}"
         from app.modules.workspaces.models import WorkspaceCreate
         from app.modules.workspaces.service import create_workspace
@@ -139,8 +133,81 @@ def main() -> int:
                                     and all(item.get("status") == "succeeded" for item in outcomes)
                                     and same_biology),
                        "outcome": "completed" if result.status == "succeeded" else result.error})
+        report["recycle_case"] = _recycle_case(
+            workspace_id, state, start, end, profile, card, pin_of, draft, dynamic_engine)
     OUTPUT.write_text(json.dumps(report, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8")
     return 0 if report["complete"] else 1
+
+
+def _recycle_case(workspace_id, state, start, end, profile, card, pin_of, draft, dynamic_engine):
+    """PBR -> Mixer -> Heater -> Splitter -> (purge | recycle to Mixer), sampled by real DWSIM."""
+    from app.modules.process_stack.draft_models import (
+        AddStream,
+        AddUnit,
+        Connect,
+        Disconnect,
+        DraftQuantity,
+        SetScenario,
+        SetUnitModel,
+        SetUnitParams,
+    )
+    from tests.plumbing_170_support import pbr_ops
+
+    result: dict[str, Any] = {"topology": "PBR -> Mixer -> Heater -> Splitter -> purge + recycle to Mixer"}
+    try:
+        recycle = draft.create_draft(workspace_id, "PBR downstream recycle")
+        ops = pbr_ops(model=False, flow_kg_s=0.01) + [
+            AddUnit(op="add_unit", id="mixer", type="Mixer", tag="Mixer", x=250, y=0),
+            AddUnit(op="add_unit", id="heater", type="Heater", tag="Heater", x=350, y=0),
+            AddUnit(op="add_unit", id="split", type="Splitter", tag="Split", x=450, y=0),
+            AddStream(op="add_stream", id="mixed", tag="Mixed", x=300, y=0),
+            AddStream(op="add_stream", id="hot", tag="Hot", x=400, y=0),
+            AddStream(op="add_stream", id="purge", tag="Purge", x=500, y=-50),
+            AddStream(op="add_stream", id="back", tag="Back", x=350, y=80),
+            Disconnect(op="disconnect", stream="product", end="source"),
+            Connect(op="connect", stream="product", end="source", unit="pbr", port=0),
+            Connect(op="connect", stream="product", end="target", unit="mixer", port=0),
+            Connect(op="connect", stream="mixed", end="source", unit="mixer", port=0),
+            Connect(op="connect", stream="mixed", end="target", unit="heater", port=0),
+            Connect(op="connect", stream="hot", end="source", unit="heater", port=0),
+            Connect(op="connect", stream="hot", end="target", unit="split", port=0),
+            Connect(op="connect", stream="purge", end="source", unit="split", port=0),
+            Connect(op="connect", stream="back", end="source", unit="split", port=1),
+            Connect(op="connect", stream="back", end="target", unit="mixer", port=1),
+            SetUnitParams(op="set_unit_params", unit="heater", mode="outlet_temperature",
+                          values={"outlet_temperature": DraftQuantity(value=298.15, unit="K")}),
+            SetUnitParams(op="set_unit_params", unit="split", mode="split_ratios", values={
+                "split_ratio_1": DraftQuantity(value=0.9, unit="dimensionless"),
+                "split_ratio_2": DraftQuantity(value=0.1, unit="dimensionless")}),
+        ]
+        recycle = draft.patch(workspace_id, recycle["draft_id"], recycle["revision"], ops)
+        recycle = draft.patch(workspace_id, recycle["draft_id"], recycle["revision"], [
+            SetUnitModel(op="set_unit_model", unit="pbr", model=pin_of(card)),
+            SetScenario(op="set_scenario", id="recycle", value={
+                "units": ["PBR"], "profiles": [{"profile_id": profile["profile_id"], "digest": profile["digest"]}],
+                "start_utc": start.isoformat().replace("+00:00", "Z"),
+                "end_utc": end.isoformat().replace("+00:00", "Z"), "output_cadence_s": 86400,
+                "downstream_cadence_s": 86400, "temperature_source": "unit_mean",
+                "initial": {"PBR": {"X": 0.2, "N": 0.05, "O2": 0.008}},
+            }),
+        ])
+        snapshot = dynamic_engine.prepare(workspace_id, recycle["draft_id"], "recycle")
+        from app.modules.process_stack.dynamic_downstream import build_sampler
+
+        sampler = build_sampler(snapshot)
+        run = dynamic_engine.run(snapshot, cancelled=lambda: False, progress=lambda _v: None, sampler=sampler)
+        outcomes = run.manifest.get("downstream_outcomes", [])
+        result.update(scenario_status=run.status, downstream_outcomes=outcomes,
+                      outcome=("succeeded" if outcomes and all(o.get("status") == "succeeded" for o in outcomes)
+                               else "downstream_unconverged_or_failed"))
+    except dynamic_engine.DynamicError as exc:
+        result.update(outcome="not_run", reason=(f"T1 topology preflight rejected: {exc.code}: {exc} (dynamic_engine._topology: a Heater, "
+                      "which is not a T1/algebraic unit, feeds the Splitter that is reachable from the PBR network)"),
+                      code=exc.code,
+                      detail=getattr(exc, "detail", {}))
+    except Exception as exc:  # noqa: BLE001 - record the real failure, never hide it
+        result.update(outcome="error", reason=f"{type(exc).__name__}: {exc}")
+    return result
 
 
 if __name__ == "__main__":
