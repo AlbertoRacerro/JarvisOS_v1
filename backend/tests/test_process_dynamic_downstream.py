@@ -99,6 +99,25 @@ def test_double_nonconvergence_records_residual_and_timestamp(monkeypatch: pytes
     assert result["time_utc"] == "2027-01-02T00:00:00Z"
     assert len(calls) == 2
     assert "retry_skipped" not in result
+    assert result["diagnostics"] == {"solve_status": "failed", "solve_reason": "max_iterations", "iterations": 1}
+
+
+def test_segment_failure_is_not_reported_as_nonconvergence_and_keeps_its_cause(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(dynamic_downstream.mixed_runtime, "_seed", lambda *_args, **_kwargs: None)
+
+    def run(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        return {"status": "segment_failed", "mixed_solve": {
+            "status": "segment_failed", "reason": "segment_failed", "failed_segment": "mixed-1-0",
+            "failed_units": ["Mixer", "Split"], "message": "x" * 900, "history": []}}
+
+    sampler = dynamic_downstream.build_sampler(_snapshot(), client_factory=lambda: object(), runner=run)
+    assert sampler is not None
+    result = sampler(_boundary())
+    assert result["status"] == "downstream_unconverged" and result["reason"] == "segment_failed"
+    assert result["residual"] is None and result["retry_skipped"] == {"reason": "no_retry_guess"}
+    diagnostics = result["diagnostics"]
+    assert diagnostics["failed_segment"] == "mixed-1-0" and diagnostics["failed_units"] == ["Mixer", "Split"]
+    assert diagnostics["solve_status"] == "segment_failed" and len(diagnostics["message"]) == 500
 
 
 def test_successful_sampler_flags_assumed_density() -> None:

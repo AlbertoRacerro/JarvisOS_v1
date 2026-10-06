@@ -140,7 +140,8 @@ def main() -> int:
 
 
 def _recycle_case(workspace_id, state, start, end, profile, card, pin_of, draft, dynamic_engine):
-    """PBR -> Mixer -> Heater -> Splitter -> (purge | recycle to Mixer), sampled by real DWSIM."""
+    """PBR -> Heater -> Mixer -> Splitter -> (purge | recycle to Mixer): the loop is wholly downstream of the
+    first non-T1 unit, so real DWSIM owns it while CVODE owns the PBR."""
     from app.modules.process_stack.draft_models import (
         AddStream,
         AddUnit,
@@ -153,24 +154,24 @@ def _recycle_case(workspace_id, state, start, end, profile, card, pin_of, draft,
     )
     from tests.plumbing_170_support import pbr_ops
 
-    result: dict[str, Any] = {"topology": "PBR -> Mixer -> Heater -> Splitter -> purge + recycle to Mixer"}
+    result: dict[str, Any] = {"topology": "PBR -> Heater -> Mixer -> Splitter -> purge + recycle to Mixer"}
     try:
         recycle = draft.create_draft(workspace_id, "PBR downstream recycle")
         ops = pbr_ops(model=False, flow_kg_s=0.01) + [
             AddUnit(op="add_unit", id="mixer", type="Mixer", tag="Mixer", x=250, y=0),
             AddUnit(op="add_unit", id="heater", type="Heater", tag="Heater", x=350, y=0),
             AddUnit(op="add_unit", id="split", type="Splitter", tag="Split", x=450, y=0),
-            AddStream(op="add_stream", id="mixed", tag="Mixed", x=300, y=0),
-            AddStream(op="add_stream", id="hot", tag="Hot", x=400, y=0),
+            AddStream(op="add_stream", id="hot", tag="Hot", x=300, y=0),
+            AddStream(op="add_stream", id="mixed", tag="Mixed", x=400, y=0),
             AddStream(op="add_stream", id="purge", tag="Purge", x=500, y=-50),
-            AddStream(op="add_stream", id="back", tag="Back", x=350, y=80),
+            AddStream(op="add_stream", id="back", tag="Back", x=450, y=80),
             Disconnect(op="disconnect", stream="product", end="source"),
             Connect(op="connect", stream="product", end="source", unit="pbr", port=0),
-            Connect(op="connect", stream="product", end="target", unit="mixer", port=0),
-            Connect(op="connect", stream="mixed", end="source", unit="mixer", port=0),
-            Connect(op="connect", stream="mixed", end="target", unit="heater", port=0),
+            Connect(op="connect", stream="product", end="target", unit="heater", port=0),
             Connect(op="connect", stream="hot", end="source", unit="heater", port=0),
-            Connect(op="connect", stream="hot", end="target", unit="split", port=0),
+            Connect(op="connect", stream="hot", end="target", unit="mixer", port=0),
+            Connect(op="connect", stream="mixed", end="source", unit="mixer", port=0),
+            Connect(op="connect", stream="mixed", end="target", unit="split", port=0),
             Connect(op="connect", stream="purge", end="source", unit="split", port=0),
             Connect(op="connect", stream="back", end="source", unit="split", port=1),
             Connect(op="connect", stream="back", end="target", unit="mixer", port=1),
@@ -201,8 +202,7 @@ def _recycle_case(workspace_id, state, start, end, profile, card, pin_of, draft,
                       outcome=("succeeded" if outcomes and all(o.get("status") == "succeeded" for o in outcomes)
                                else "downstream_unconverged_or_failed"))
     except dynamic_engine.DynamicError as exc:
-        result.update(outcome="not_run", reason=(f"T1 topology preflight rejected: {exc.code}: {exc} (dynamic_engine._topology: a Heater, "
-                      "which is not a T1/algebraic unit, feeds the Splitter that is reachable from the PBR network)"),
+        result.update(outcome="not_run", reason=f"T1 topology preflight rejected: {exc.code}: {exc}",
                       code=exc.code,
                       detail=getattr(exc, "detail", {}))
     except Exception as exc:  # noqa: BLE001 - record the real failure, never hide it

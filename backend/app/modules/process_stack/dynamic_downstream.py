@@ -254,13 +254,26 @@ def build_sampler(
             reason = ("timeout" if solve_detail.get("reason") == "wall_budget"
                       or result.get("reason") == "timeout"
                       or "timeout" in str(result.get("error_type", "")).lower()
+                      else "segment_failed" if result.get("status") == "segment_failed"
                       else "non_convergence")
             residual = None
             history = solve_detail.get("history", [])
             if history:
                 residual = history[-1].get("max_normalized_residual")
+            diagnostics = {key: value for key, value in {
+                "solve_status": result.get("status"),
+                "solve_reason": solve_detail.get("reason") or result.get("reason"),
+                "iterations": len(history) if history else None,
+                "worst_tear": history[-1].get("worst_tear") if history else None,
+                "failed_segment": solve_detail.get("failed_segment"),
+                "failed_units": solve_detail.get("failed_units") or [
+                    item.get("tag") for item in (result.get("solve") or {}).get("failed_objects", [])] or None,
+                "message": str(solve_detail.get("message") or result.get("error")
+                               or "; ".join(map(str, (result.get("solve") or {}).get("errors", []))) or "")[:500]
+                or None,
+            }.items() if value is not None}
             return {"status": "downstream_unconverged", "reason": reason,
-                    "residual": residual, "time_s": boundary_state["time_s"],
+                    "residual": residual, "diagnostics": diagnostics, "time_s": boundary_state["time_s"],
                     "time_utc": sample_timestamp(boundary_state["time_s"]),
                     **({"retry_skipped": retry_skipped} if retry_skipped is not None else {}),
                     "density_assumed": fallback_assumed,
