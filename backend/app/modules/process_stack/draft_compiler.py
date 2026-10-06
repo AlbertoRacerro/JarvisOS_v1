@@ -161,8 +161,31 @@ def _feed_calls(document: dict[str, Any], stream: dict[str, Any]) -> list[tuple[
     return calls
 
 
-def _unit_properties(unit: dict[str, Any]) -> dict[str, Any]:
+# DWSIM's default Recycle mass-flow tolerance is an absolute 36 kg/h. On a 0.01 kg/s loop it accepts the
+# second iterate as converged, so mass balance and phase are wrong while the solve reports success. Jarvis
+# sets it relative to the draft's feed mass flow, at the same relative tolerance as its own tears.
+RECYCLE_MASS_FLOW_RELATIVE_TOLERANCE = 1e-5
+# A molar-flow feed is bounded below by hydrogen's molar mass, which only tightens the tolerance.
+_MIN_MOLAR_MASS_KG_MOL = 0.002016
+
+
+def recycle_mass_flow_tolerance_kg_s(document: dict[str, Any]) -> float:
+    """Absolute native Recycle mass-flow tolerance, in kg/s, for this draft's total feed."""
+    total = 0.0
+    for stream in _material_streams(document):
+        if stream["source"] is None:
+            spec = stream["spec"]
+            if "mass_flow" in spec:
+                total += abs(float(spec["mass_flow"]["si"]))
+            elif "molar_flow" in spec:
+                total += abs(float(spec["molar_flow"]["si"])) * _MIN_MOLAR_MASS_KG_MOL
+    return RECYCLE_MASS_FLOW_RELATIVE_TOLERANCE * max(total, 1e-6)
+
+
+def _unit_properties(unit: dict[str, Any], document: dict[str, Any]) -> dict[str, Any]:
     spec = UNIT_REGISTRY[unit["type"]]
+    if unit["type"] == "Recycle":
+        return {"__MassFlowTolerance": recycle_mass_flow_tolerance_kg_s(document)}
     if not spec.modes:
         return {}
     properties: dict[str, Any] = {}
@@ -307,7 +330,7 @@ def _patch_native_xml(case_path: Path, document: dict[str, Any]) -> None:
         graph = graphics[unit["tag"]]
         native_name = native_by_tag[unit["tag"]]
         node = simulations[native_name]
-        props = _unit_properties(unit)
+        props = _unit_properties(unit, document)
         count = int(props["NumberOfStages"])
         stages = node.find("Stages")
         if stages is None or len(stages) < 2:
@@ -458,7 +481,7 @@ def expected(document: dict[str, Any]) -> dict[str, Any]:
         "reaction_sets": {f"JARVIS_{unit['tag']}": [_native_reaction_id(document, unit, rid)
                                                       for rid in unit["reactions"]]
                           for unit in _units(document) if unit["type"] in {"PFR", "CSTR"} and unit.get("reactions")},
-        "units": {unit["tag"]: _unit_properties(unit) for unit in _units(document)},
+        "units": {unit["tag"]: _unit_properties(unit, document) for unit in _units(document)},
         **_expected_kinetics(document),
     }
 
@@ -516,7 +539,7 @@ def plan(document: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
                          "energy_product" if energy else "product_stream": stream["tag"],
                          "energy_product_port" if energy else "product_port": _native_energy_port(unit, stream["source"]["port"]) if energy else stream["source"]["port"]}))
     for unit in _units(document):
-        properties = _unit_properties(unit)
+        properties = _unit_properties(unit, document)
         if properties:
             if unit["type"] == "DistillationColumn":
                 properties["Condenser_Specification_Value"] = properties["__CondenserSpec"]
@@ -527,6 +550,8 @@ def plan(document: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
                                    if stream["source"] and stream["source"]["unit"] == unit["id"])
                 if outlet_count == 3:
                     properties["SR2"] = properties["__SplitRatio2"]
+            if unit["type"] == "Recycle":  # DWSIM's PROP_RY_1 takes kg/h; the native case stores kg/s
+                properties["PROP_RY_1"] = properties["__MassFlowTolerance"] * 3600.0
             properties = {key: value for key, value in properties.items() if not key.startswith("__")}
             calls.append(("dwsim_unitop_set", {"name": unit["tag"], "properties": properties}))
     for stream in _energy_streams(document):
@@ -651,6 +676,9 @@ def read_back(client: DwsimMcpClient, flow: str, case_path: Path, exp: dict[str,
                         units[tag][name] = node.findtext(name)
                     else:
                         units[tag][name] = _float(node.findtext(name))
+            elif objects[tag]["type"] == "Recycle":
+                units[tag] = {name: _float(node.findtext("ConvergenceParameters/VazaoMassica"))
+                              if name == "__MassFlowTolerance" else None for name in wanted}
             elif objects[tag]["type"] == "HeatExchanger":
                 units[tag] = {name: (node.findtext("CalculationMode") if name == "CalculationMode"
                                      else _float(node.findtext(name))) for name in wanted}

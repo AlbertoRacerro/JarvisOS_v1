@@ -30,7 +30,8 @@ TYPES = (
     "CSTR",
     "DistillationColumn",
 )
-CAPTURES = ("units.json", "ports.json", "pfr_ok.json", "column2.json", "inputs.json", "cstr_180.json")
+CAPTURES = ("units.json", "ports.json", "pfr_ok.json", "column2.json", "inputs.json", "cstr_180.json",
+            "recycle_tolerance.json")
 # Native object type names reported by solve/DOF/result captures -> manifest type.
 NATIVE_ALIASES = {"NodeOut": "Splitter", "NodeIn": "Mixer", "RCT_PFR": "PFR", "PFR reactor": "PFR",
                   "RCT_CSTR": "CSTR", "CSTR reactor": "CSTR"}
@@ -98,6 +99,12 @@ NATIVE_XML_INPUTS: dict[str, dict[str, dict[str, str]]] = {
         "__ReboilerSpec": {
             "xml": "Specs/Spec[@ID='R']/SpecValue",
             "source": f"{COMPILER}:_patch_native_xml; also set as Reboiler_Specification_Value",
+        },
+    },
+    "Recycle": {
+        "__MassFlowTolerance": {
+            "xml": "ConvergenceParameters/VazaoMassica (kg/s)",
+            "source": "recycle_tolerance.json:Recycle.set (written as PROP_RY_1 in kg/h, read back in kg/s)",
         },
     },
     "PFR": {

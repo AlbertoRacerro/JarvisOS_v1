@@ -5,7 +5,8 @@
     "evidence/158/pfr_ok.json",
     "evidence/158/column2.json",
     "evidence/158/inputs.json",
-    "evidence/158/cstr_180.json"
+    "evidence/158/cstr_180.json",
+    "evidence/158/recycle_tolerance.json"
   ],
   "objects": {
     "CSTR": {
@@ -2486,7 +2487,12 @@
       "mode_property": {},
       "modes": [],
       "native_type": "Recycle",
-      "native_xml_inputs": {},
+      "native_xml_inputs": {
+        "__MassFlowTolerance": {
+          "source": "recycle_tolerance.json:Recycle.set (written as PROP_RY_1 in kg/h, read back in kg/s)",
+          "xml": "ConvergenceParameters/VazaoMassica (kg/s)"
+        }
+      },
       "observed_mode": null,
       "ports": {
         "feed": [
@@ -2526,8 +2532,14 @@
           "unit": "C."
         }
       ],
-      "settable_properties": [],
-      "settable_property_evidence": {}
+      "settable_properties": [
+        "PROP_RY_1"
+      ],
+      "settable_property_evidence": {
+        "PROP_RY_1": [
+          "recycle_tolerance.json:Recycle.set (applied)"
+        ]
+      }
     },
     "Splitter": {
       "dof": {
