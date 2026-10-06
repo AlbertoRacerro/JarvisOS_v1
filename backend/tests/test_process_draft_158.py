@@ -63,6 +63,11 @@ def _synthetic_document(unit_type: str, mode: str | None) -> dict[str, Any]:
     return {"compounds": [], "property_package": "NRTL", "objects": objects, "reactions": {}}
 
 
+def _unit_and_document(unit_type: str, mode: str | None) -> tuple[dict[str, Any], dict[str, Any]]:
+    document = _synthetic_document(unit_type, mode)
+    return document["objects"]["u"], document
+
+
 def _compiled_writes() -> tuple[set[tuple[str, str]], set[tuple[str, str, int]]]:
     """Every (type, property) the compiler sets and every (type, role, port) it connects over MCP."""
     written: set[tuple[str, str]] = set()
@@ -108,7 +113,7 @@ def test_every_compiled_input_property_is_settable_in_the_manifest() -> None:
         native_xml = _manifest_object(unit_type)["native_xml_inputs"]
         registry_native = {item.dwsim_property for item in spec.params if item.dwsim_property.startswith("__")}
         compiled_native = {key for mode in _modes(unit_type)
-                           for key in _unit_properties(_synthetic_document(unit_type, mode)["objects"]["u"])
+                           for key in _unit_properties(*_unit_and_document(unit_type, mode))
                            if key.startswith("__") and not key.startswith("__SplitRatio")}
         assert registry_native | compiled_native <= set(native_xml), unit_type
 
@@ -121,7 +126,7 @@ def test_every_registry_mode_and_enum_value_is_in_the_manifest() -> None:
         assert set(spec.modes.values()) <= set(capability["modes"]), unit_type
         assert all(capability["mode_evidence"][mode] for mode in spec.modes.values())
         for mode in _modes(unit_type):
-            properties = _unit_properties(_synthetic_document(unit_type, mode)["objects"]["u"])
+            properties = _unit_properties(*_unit_and_document(unit_type, mode))
             for key in {"CalcMode", "CalculationMode", "OperationMode", "ReactorOperationMode"} & set(properties):
                 assert properties[key] in capability["modes"], (unit_type, key)
             if "CondenserType" in properties:
@@ -780,3 +785,64 @@ def test_real_dwsim_run_with_objects_above_and_left_of_origin_completes() -> Non
     run = draft.execute(workspace_id, state["draft_id"], state["revision"], "run")["run"]
     assert run["status"] == "completed", run.get("materialization_diffs") or run.get("error")
     assert abs(run["streams"]["Product"]["temperature_K"] - 320) < 1e-6
+
+
+def test_native_recycle_mass_flow_tolerance_scales_with_feed_and_is_read_back() -> None:
+    document = _synthetic_document("Recycle", None)
+    feed = next(item for item in document["objects"].values() if item["kind"] == "stream" and item["source"] is None)
+    feed["spec"]["mass_flow"] = {"si": 0.01}
+    tolerance = draft_compiler.recycle_mass_flow_tolerance_kg_s(document)
+    assert tolerance == pytest.approx(1e-7)
+    assert draft_compiler.expected(document)["units"]["U"] == {"__MassFlowTolerance": tolerance}
+    sets = [args["properties"] for name, args in draft_compiler.plan(document)
+            if name == "dwsim_unitop_set" and args["name"] == "U"]
+    assert sets == [{"PROP_RY_1": pytest.approx(tolerance * 3600.0)}]
+    feed["spec"] = {**{k: v for k, v in feed["spec"].items() if k != "mass_flow"}, "molar_flow": {"si": 1.0}}
+    assert draft_compiler.recycle_mass_flow_tolerance_kg_s(document) == pytest.approx(1e-5 * 0.002016)
+
+
+@pytest.mark.skipif(not os.environ.get("JARVISOS_DWSIM_MCP_PATH"), reason="set JARVISOS_DWSIM_MCP_PATH to opt in to DWSIM runtime")
+def test_real_dwsim_small_flow_native_recycle_closes_its_mass_balance() -> None:
+    from app.modules.process_stack.draft_models import (
+        AddStream,
+        AddUnit,
+        Connect,
+        DraftQuantity,
+        SetStreamSpec,
+        SetThermo,
+        SetUnitParams,
+    )
+    from tests.plumbing_170_support import new_workspace
+
+    workspace_id = new_workspace()
+    state = draft.create_draft(workspace_id, "small recycle")
+    streams = (("f", "Feed", 0), ("hot", "Hot", 200), ("mixed", "Mixed", 400), ("purge", "Purge", 500),
+               ("back", "Back", 450), ("torn", "Torn", 300))
+    wiring = (("f", "target", "heater", 0), ("hot", "source", "heater", 0), ("hot", "target", "mixer", 0),
+              ("mixed", "source", "mixer", 0), ("mixed", "target", "split", 0), ("purge", "source", "split", 0),
+              ("back", "source", "split", 1), ("back", "target", "rec", 0), ("torn", "source", "rec", 0),
+              ("torn", "target", "mixer", 1))
+    state = draft.patch(workspace_id, state["draft_id"], state["revision"], [
+        SetThermo(op="set_thermo", compounds=["Water"], property_package="NRTL"),
+        AddUnit(op="add_unit", id="heater", type="Heater", tag="Heater", x=150, y=0),
+        AddUnit(op="add_unit", id="mixer", type="Mixer", tag="Mixer", x=250, y=0),
+        AddUnit(op="add_unit", id="split", type="Splitter", tag="Split", x=450, y=0),
+        AddUnit(op="add_unit", id="rec", type="Recycle", tag="Rec", x=350, y=80),
+        *[AddStream(op="add_stream", id=sid, tag=tag, x=x, y=0) for sid, tag, x in streams],
+        *[Connect(op="connect", stream=sid, end=end, unit=unit, port=port) for sid, end, unit, port in wiring],
+        SetStreamSpec(op="set_stream_spec", stream="f", pressure=DraftQuantity(value=1.0, unit="bar"),
+                      temperature=DraftQuantity(value=300, unit="K"),
+                      mass_flow=DraftQuantity(value=0.01, unit="kg/s"), composition={"Water": 1.0},
+                      composition_basis="mass"),
+        SetUnitParams(op="set_unit_params", unit="heater", mode="outlet_temperature",
+                      values={"outlet_temperature": DraftQuantity(value=298.15, unit="K")}),
+        SetUnitParams(op="set_unit_params", unit="split", mode="split_ratios", values={
+            "split_ratio_1": DraftQuantity(value=0.9, unit="dimensionless"),
+            "split_ratio_2": DraftQuantity(value=0.1, unit="dimensionless")}),
+    ])
+    run = draft.execute(workspace_id, state["draft_id"], state["revision"], "run")["run"]
+    assert run["status"] == "completed", run.get("materialization_diffs") or run.get("error")
+    # DWSIM's default 36 kg/h tolerance reported this loop as solved with Purge 0.019 kg/s and boiling water.
+    assert run["streams"]["Purge"]["mass_flow_kg_s"] == pytest.approx(0.01, rel=2e-5)
+    assert run["streams"]["Mixed"]["mass_flow_kg_s"] == pytest.approx(0.01 / 0.9, rel=2e-5)
+    assert run["streams"]["Mixed"]["vapor_fraction"] == 0.0
