@@ -266,7 +266,15 @@ def _light(document: dict[str, Any], client: DwsimMcpClient, *, label: str,
                 "dwsim_stream_get_results", {"flowsheet_id": flow, "name": stream["tag"]},
                 min(30, remaining_s))) for stream in document["objects"].values()
                 if stream["kind"] == "stream" and stream["type"] != "EnergyStream"}
-            return {"status": "completed", "streams": streams,
+            # Native Recycle errors bound the carrier gap the culture balances may allow (no other unit results).
+            units = {}
+            for unit in document["objects"].values():
+                if unit["kind"] == "unit" and unit["type"] == "Recycle":
+                    reported = wrapper.call("dwsim_unitop_get_results", {"flowsheet_id": flow, "name": unit["tag"]},
+                                            min(30, remaining_s))
+                    units[unit["tag"]] = {"calculated": reported.get("calculated"), "error": reported.get("error", ""),
+                                          "reported": reported.get("properties", {})}
+            return {"status": "completed", "streams": streams, "units": units,
                     "dwsim_check": {"ready": check.get("ready"), "findings": check.get("findings", []),
                                     "intentional_isolated_feed_exception": flash_exception},
                     "elapsed_s": time.monotonic() - started,
@@ -593,7 +601,8 @@ def _propagate_culture(segment: dict[str, Any], result: dict[str, Any],
 
 def _culture_balances(document: dict[str, Any], known: dict[str, dict[str, Any]],
                       generation: dict[str, dict[str, float]],
-                      allowances: dict[str, dict[str, float]] | None = None) -> dict[str, dict[str, Any]]:
+                      allowances: dict[str, dict[str, float]] | None = None,
+                      native_error_kg_s: float = 0.0) -> dict[str, dict[str, Any]]:
     objects = document["objects"]
     balances: dict[str, dict[str, Any]] = {}
     for unit in (item for item in objects.values() if item["kind"] == "unit" and item["type"] != "Recycle"):
@@ -603,6 +612,12 @@ def _culture_balances(document: dict[str, Any], known: dict[str, dict[str, Any]]
         outgoing = sorted((item for item in objects.values() if item["kind"] == "stream"
                            and (item.get("source") or {}).get("unit") == unit["id"]
                            and item["type"] != "EnergyStream"), key=lambda item: item["source"]["port"])
+        # Inside a converged native Recycle loop DWSIM leaves a unit's outlet carrier short of its inlets by up
+        # to the Recycle's mass-flow error. That gap times the largest concentration is allowed, never more.
+        flows_in = sum(float(known.get(stream["tag"], {}).get("mass_flow_kg_s") or 0.0) for stream in incoming)
+        flows_out = sum(float(known.get(stream["tag"], {}).get("mass_flow_kg_s") or 0.0) for stream in outgoing)
+        carrier_gap = abs(flows_in - flows_out)
+        native_gap = carrier_gap if carrier_gap <= native_error_kg_s + 1e-9 * max(flows_in, flows_out) else 0.0
         rows: dict[str, Any] = {}
         for field in mixed.CULTURE_FIELDS:
             values = [known.get(stream["tag"], {}).get("culture", {}) for stream in [*incoming, *outgoing]]
@@ -623,11 +638,16 @@ def _culture_balances(document: dict[str, Any], known: dict[str, dict[str, Any]]
             produced = generation.get(unit["tag"], {}).get(field, 0.0)
             residual_value = inbound + produced - outbound
             allowance = (allowances or {}).get(unit["tag"], {}).get(field, 0.0)
-            tolerance_value = 1e-9 * max(abs(inbound + produced), abs(outbound)) + 1e-12 + allowance
+            native_allowance = native_gap * max(
+                abs(float(value.get(field) or 0.0)) for value in values) * factor
+            tolerance_value = (1e-9 * max(abs(inbound + produced), abs(outbound)) + 1e-12 + allowance
+                               + native_allowance)
             rows[field] = {"in": inbound, "out": outbound, "residual": residual_value,
                            "generated": produced, "generation_allowance": allowance,
                            "tolerance": tolerance_value, "unit": "mol/s" if field == "dic" else "kg/s",
                            "passed": abs(residual_value) <= tolerance_value}
+            if native_allowance:
+                rows[field]["native_recycle_allowance"] = native_allowance
         if rows:
             if any(not row["passed"] for row in rows.values()):
                 raise SegmentFailure(unit["tag"], {"code": "CULTURE_BALANCE_FAILED", "unit_balances": rows})
@@ -990,7 +1010,11 @@ def _evaluate(document: dict[str, Any], part: dict[str, Any], tear: dict[str, di
                                     "units": "kg/h"},
                 "Temperature Error": {"value": solved["temperature_K"] - guessed["temperature_K"], "units": "K"},
                 "Pressure Error": {"value": solved["pressure_Pa"] - guessed["pressure_Pa"], "units": "Pa"}}}
-    culture_balances = _culture_balances(document, known, culture_generation, culture_generation_allowance)
+    native_error = sum(_native_mass_flow_error_kg_s(unit_results.get(unit["tag"], {})) or 0.0
+                       for unit in objects.values() if unit["kind"] == "unit" and unit["type"] == "Recycle"
+                       and unit["id"] not in part["consumed"])
+    culture_balances = _culture_balances(document, known, culture_generation, culture_generation_allowance,
+                                         native_error)
     for tag, balances in culture_balances.items():
         if unit_results.get(tag, {}).get("owner") == "jarvis_bio":
             unit_results[tag]["unit_balances"] = balances
