@@ -993,7 +993,26 @@ def list_runs(directory: Path) -> list[dict[str, Any]]:
             rows.append(json.loads(path.read_text(encoding="utf-8")))
         except (OSError, json.JSONDecodeError):
             continue
+    for row in rows:
+        if not isinstance(row.get("outcome"), dict):
+            # Runs recorded before spec 181 get their outcome on read, against their own revision.
+            try:
+                document = load_revision(directory, row["draft_revision"])["document"]
+            except (DraftError, KeyError, TypeError):
+                document = None
+            row["outcome"] = run_outcome(row, document)
     return sorted(rows, key=lambda row: row["started_at"], reverse=True)
+
+
+def run_outcome(run: dict[str, Any], document: dict[str, Any] | None = None) -> dict[str, Any]:
+    """The single operator-facing outcome of a draft run (spec 181); see ``results_view.run_outcome``."""
+    from app.modules.process_stack import results_view
+    return results_view.run_outcome(run, document)
+
+
+def _outcome(run: dict[str, Any]) -> dict[str, Any]:
+    from app.modules.process_stack import results_view
+    return results_view.outcome_of(run)
 
 
 def record_run(directory: Path, run: dict[str, Any]) -> None:
@@ -1002,10 +1021,10 @@ def record_run(directory: Path, run: dict[str, Any]) -> None:
 
 def results_state(head: dict[str, Any], runs: list[dict[str, Any]], document: dict[str, Any] | None = None,
                   edits_since: int | None = None, workspace_id: str | None = None) -> dict[str, Any]:
-    solved = next((run for run in runs if run["action"] == "run" and run["status"] == "completed"), None)
+    solved = _converged(runs)
     last = runs[0] if runs else None
     if solved is None:
-        return {"state": "none", "last_attempt": _attempt(last)}
+        return {"state": "none", "last_attempt": _attempt(last), "outcome": _outcome(last) if last else None}
     seq = int(solved["draft_revision"].split(":", 1)[0])
     current = solved["draft_revision"] == head["revision"]
     if not current and document is not None:
@@ -1037,22 +1056,38 @@ def results_state(head: dict[str, Any], runs: list[dict[str, Any]], document: di
         else:  # runs recorded before spec 162 carry only the full materialization fingerprint
             current = fingerprint(expected(document), dwsim_version=solved["dwsim_version"],
                                   mcp_sha256=solved["mcp_sha256"]) == solved["materialization_fingerprint"]
-    if last is not solved and last is not None and last.get("action") == "run" and last.get("status") in {
-        "unconverged", "segment_failed"
-    }:
-        # A failed mixed attempt on the latest revision never promotes an older
-        # completed run as the current answer to this operator request.
+    if (last is not solved and last is not None and last.get("action") == "run"
+            and _outcome(last)["state"] in {"non_converged", "failed"} and _same_process(last, solved, head)):
+        # A later non-converged or failed Run of the same process never leaves an older converged
+        # run as the current answer, whatever engine solved either (spec 181 decision 2).
         current = False
     return {"state": "current" if current else "stale", "run_id": solved["run_id"],
             "draft_revision": solved["draft_revision"],
             "edits_since": 0 if current else edits_since if edits_since is not None else head["seq"] - seq,
-            "materialization_fingerprint": solved.get("materialization_fingerprint"), "last_attempt": _attempt(last)}
+            "materialization_fingerprint": solved.get("materialization_fingerprint"), "last_attempt": _attempt(last),
+            "outcome": _outcome(last) if last else None}
+
+
+def _converged(runs: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """The newest Run whose outcome is converged: the only run that can be the current answer."""
+    return next((run for run in runs if run["action"] == "run" and run["status"] == "completed"
+                 and _outcome(run)["state"] == "converged"), None)
+
+
+def _same_process(attempt: dict[str, Any], solved: dict[str, Any], head: dict[str, Any]) -> bool:
+    if attempt.get("draft_revision") == head["revision"]:
+        return True
+    for key in ("process_fingerprint", "result_fingerprint", "materialization_fingerprint"):
+        if attempt.get(key) and attempt.get(key) == solved.get(key):
+            return True
+    return False
 
 
 def _attempt(run: dict[str, Any] | None) -> dict[str, Any] | None:
     if run is None:
         return None
-    return {key: run.get(key) for key in ("run_id", "action", "status", "draft_revision", "started_at")}
+    return {**{key: run.get(key) for key in ("run_id", "action", "status", "draft_revision", "started_at")},
+            "outcome": _outcome(run)}
 
 
 LAYOUT_OPS = frozenset({"move", "set_route", "set_orientation"})
@@ -1072,9 +1107,12 @@ def dwsim_feedback(run: dict[str, Any] | None) -> dict[str, Any] | None:
         return None
     detail = run.get("error_detail") or {}
     solve = run.get("solve") or {}
+    outcome = _outcome(run)
     return {
         "run_id": run.get("run_id"), "action": run.get("action"), "status": run.get("status"),
         "draft_revision": run.get("draft_revision"),
+        "outcome": {key: outcome.get(key) for key in ("state", "label", "reason", "message", "residual",
+                                                      "iterations", "worst_tear", "results_available")},
         "check_findings": [{key: item.get(key) for key in ("severity", "code", "object", "message", "fix")}
                            for item in (run.get("dwsim_check") or {}).get("findings", [])][:20],
         "solve_errors": list(dict.fromkeys(plain_text(item) for item in solve.get("errors", [])))[:20],
@@ -1191,7 +1229,7 @@ def projection(workspace_id: str, draft_id: str) -> dict[str, Any]:
     record = load_revision(directory, head["revision"])
     document = record["document"]
     runs = list_runs(directory)
-    solved = next((run for run in runs if run["action"] == "run" and run["status"] == "completed"), None)
+    solved = _converged(runs)
     edits_since = None
     if solved is not None:
         solved_seq = int(solved["draft_revision"].split(":", 1)[0])
@@ -1529,6 +1567,7 @@ def execute(workspace_id: str, draft_id: str, revision: str, action: str) -> dic
     run["finished_at"] = _now()
     for result in (run.get("streams") or {}).values():
         result["display"] = _stream_display(result)
+    run["outcome"] = run_outcome(run, record["document"])
     with _lock(directory):
         record_run(directory, run)
     return {"run": run, "draft": projection(workspace_id, draft_id)}
@@ -1555,11 +1594,28 @@ def get_run(workspace_id: str, draft_id: str, run_id: str) -> dict[str, Any]:
     directory = draft_dir(workspace_id, draft_id)
     if not re.fullmatch(r"[a-f0-9]{32}", run_id):
         raise DraftError("run_not_found", "Run was not found", 404)
-    return _read_json(runs_dir(directory) / run_id / "run.json", "run_not_found", "Run was not found")
+    run = _read_json(runs_dir(directory) / run_id / "run.json", "run_not_found", "Run was not found")
+    if not isinstance(run.get("outcome"), dict):
+        try:
+            document = load_revision(directory, run["draft_revision"])["document"]
+        except (DraftError, KeyError, TypeError):
+            document = None
+        run["outcome"] = run_outcome(run, document)
+    return run
 
 
 def run_summaries(workspace_id: str, draft_id: str) -> list[dict[str, Any]]:
     directory = draft_dir(workspace_id, draft_id)
     return [{key: run.get(key) for key in ("run_id", "action", "status", "draft_revision", "started_at",
-                                           "materialization_fingerprint", "compile_seconds")}
+                                           "materialization_fingerprint", "compile_seconds", "outcome")}
             for run in list_runs(directory)]
+
+
+def run_results(workspace_id: str, draft_id: str, run_id: str) -> dict[str, Any]:
+    """Results view of one run against the draft document at the run's own revision (spec 181)."""
+    from app.modules.process_stack import results_view
+
+    directory = draft_dir(workspace_id, draft_id)
+    run = get_run(workspace_id, draft_id, run_id)
+    document = load_revision(directory, run["draft_revision"])["document"]
+    return results_view.build(run, document)

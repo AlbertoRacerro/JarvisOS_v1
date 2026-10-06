@@ -939,6 +939,8 @@ def materialize(document: dict[str, Any], *, action: str, client: DwsimMcpClient
             units[unit["tag"]] = {"calculated": reported.get("calculated"), "error": reported.get("error", ""),
                                   "reported": reported.get("properties", {}),
                                   "properties": _snapshot_properties(snapshot_rows, unit["tag"])}
+            if unit["type"] == "Recycle":  # the tolerance compiled into PROP_RY_1 bounds the reported error (181)
+                units[unit["tag"]]["mass_flow_tolerance_kg_s"] = recycle_mass_flow_tolerance_kg_s(document)
         try:
             tagged = [{**item, "tag": item.get("name")} for item in listed if isinstance(item, dict)]
             residual, boundary = _mass_balance(client, flow, solved_case, tagged)
