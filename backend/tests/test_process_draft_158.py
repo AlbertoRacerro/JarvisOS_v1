@@ -3,6 +3,7 @@
 import copy
 import importlib.util
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -730,3 +731,52 @@ def test_only_input_properties_are_proposable(workspace_draft: Any) -> None:
         {"target": "HX", "property": "overall_coefficient", "proposed": Q(800, "W/[m2.K]")}]})
     assert accepted.status_code == 200, accepted.text
     assert accepted.json()["changes"][0]["current"] == {"value": 1000.0, "unit": "W/[m2.K]"}
+
+
+def test_negative_canvas_coordinates_are_shifted_consistently_into_dwsim_space() -> None:
+    document = _synthetic_document("Heater", "outlet_temperature")
+    positive_plan = draft_compiler.plan(document)
+    assert draft_compiler.expected(document)["objects"]["U"] == {"type": "Heater", "x": 0, "y": 0}
+    document["objects"]["u"].update(x=-40, y=-120)
+    document["objects"]["p0"]["y"] = 30
+    objects = draft_compiler.expected(document)["objects"]
+    assert objects["U"]["x"] == 0 and objects["U"]["y"] == 0 and objects["P0"]["y"] == 150
+    edits = {args["name"]: (args["x"], args["y"]) for name, args in draft_compiler.plan(document)
+             if name == "dwsim_graphic_edit"}
+    assert all(edits[tag] == (item["x"], item["y"]) for tag, item in objects.items())
+    assert min(min(xy) for xy in edits.values()) >= 0
+    assert len(positive_plan) == len(draft_compiler.plan(document))
+
+
+@pytest.mark.skipif(not os.environ.get("JARVISOS_DWSIM_MCP_PATH"), reason="set JARVISOS_DWSIM_MCP_PATH to opt in to DWSIM runtime")
+def test_real_dwsim_run_with_objects_above_and_left_of_origin_completes() -> None:
+    from app.modules.process_stack.draft_models import (
+        AddStream,
+        AddUnit,
+        Connect,
+        DraftQuantity,
+        SetStreamSpec,
+        SetThermo,
+        SetUnitParams,
+    )
+    from tests.plumbing_170_support import new_workspace
+
+    workspace_id = new_workspace()
+    state = draft.create_draft(workspace_id, "negative layout")
+    state = draft.patch(workspace_id, state["draft_id"], state["revision"], [
+        SetThermo(op="set_thermo", compounds=["Water"], property_package="NRTL"),
+        AddStream(op="add_stream", id="f", tag="Feed", x=-80, y=0),
+        AddUnit(op="add_unit", id="h", type="Heater", tag="Heater", x=100, y=0),
+        AddStream(op="add_stream", id="p", tag="Product", x=200, y=-50),
+        Connect(op="connect", stream="f", end="target", unit="h", port=0),
+        Connect(op="connect", stream="p", end="source", unit="h", port=0),
+        SetStreamSpec(op="set_stream_spec", stream="f", pressure=DraftQuantity(value=1.0, unit="bar"),
+                      temperature=DraftQuantity(value=300, unit="K"),
+                      mass_flow=DraftQuantity(value=0.01, unit="kg/s"), composition={"Water": 1.0},
+                      composition_basis="mass"),
+        SetUnitParams(op="set_unit_params", unit="h", mode="outlet_temperature",
+                      values={"outlet_temperature": DraftQuantity(value=320, unit="K")}),
+    ])
+    run = draft.execute(workspace_id, state["draft_id"], state["revision"], "run")["run"]
+    assert run["status"] == "completed", run.get("materialization_diffs") or run.get("error")
+    assert abs(run["streams"]["Product"]["temperature_K"] - 320) < 1e-6
