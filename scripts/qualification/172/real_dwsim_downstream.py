@@ -192,6 +192,22 @@ def _recycle_case(workspace_id, state, start, end, profile, card, pin_of, draft,
                 "initial": {"PBR": {"X": 0.2, "N": 0.05, "O2": 0.008}},
             }),
         ])
+        try:
+            dynamic_engine.prepare(workspace_id, recycle["draft_id"], "recycle")
+            result["recycle_free_preflight"] = {"outcome": "admitted"}
+        except dynamic_engine.DynamicError as exc:
+            result["recycle_free_preflight"] = {"outcome": "refused", "code": exc.code,
+                                                "detail": getattr(exc, "detail", {})}
+        # DWSIM orders a loop only through a native Recycle block, so tear Back before the Mixer.
+        recycle = draft.patch(workspace_id, recycle["draft_id"], recycle["revision"], [
+            AddUnit(op="add_unit", id="rec", type="Recycle", tag="Rec", x=350, y=80),
+            AddStream(op="add_stream", id="torn", tag="Torn", x=300, y=80),
+            Disconnect(op="disconnect", stream="back", end="target"),
+            Connect(op="connect", stream="back", end="target", unit="rec", port=0),
+            Connect(op="connect", stream="torn", end="source", unit="rec", port=0),
+            Connect(op="connect", stream="torn", end="target", unit="mixer", port=1),
+        ])
+        result["topology"] += " via native Recycle Rec"
         snapshot = dynamic_engine.prepare(workspace_id, recycle["draft_id"], "recycle")
         from app.modules.process_stack.dynamic_downstream import build_sampler
 

@@ -1315,3 +1315,36 @@ def test_real_prepare_refuses_t1_algebraic_cycle_but_admits_dwsim_owned_downstre
     downstream = draft.patch(workspace_id, state["draft_id"], state["revision"], _loop_ops(heater_first=True))
     snapshot = dynamic_engine.prepare(workspace_id, downstream["draft_id"], "run")
     assert [unit["tag"] for unit in snapshot.payload["units"]] == ["PBR"]
+
+
+def test_real_prepare_refuses_downstream_sampling_of_a_recycle_free_dwsim_loop():
+    from app.modules.process_stack import draft
+    from app.modules.process_stack.draft_models import (
+        AddStream,
+        AddUnit,
+        Connect,
+        Disconnect,
+        SetScenario,
+    )
+    from tests.plumbing_170_support import new_workspace
+
+    workspace_id = new_workspace()
+    state, snapshot = _real_scenario(workspace_id, 3600)
+    sampled = {**snapshot.payload["scenario"], "downstream_enabled": True, "downstream_cadence_s": 3600}
+    state = draft.patch(workspace_id, state["draft_id"], state["revision"],
+                        [*_loop_ops(heater_first=True), SetScenario(op="set_scenario", id="run", value=sampled)])
+    with pytest.raises(dynamic_engine.DynamicError) as raised:
+        dynamic_engine.prepare(workspace_id, state["draft_id"], "run")
+    assert raised.value.code == "DOWNSTREAM_RECYCLE_REQUIRED"
+    assert raised.value.detail == {"loops": [["Mixer", "Split"]]}
+
+    state = draft.patch(workspace_id, state["draft_id"], state["revision"], [
+        AddUnit(op="add_unit", id="rec", type="Recycle", tag="Rec", x=350, y=80),
+        AddStream(op="add_stream", id="torn", tag="Torn", x=300, y=80),
+        Disconnect(op="disconnect", stream="back", end="target"),
+        Connect(op="connect", stream="back", end="target", unit="rec", port=0),
+        Connect(op="connect", stream="torn", end="source", unit="rec", port=0),
+        Connect(op="connect", stream="torn", end="target", unit="mixer", port=1),
+    ])
+    admitted = dynamic_engine.prepare(workspace_id, state["draft_id"], "run")
+    assert [unit["tag"] for unit in admitted.payload["units"]] == ["PBR"]

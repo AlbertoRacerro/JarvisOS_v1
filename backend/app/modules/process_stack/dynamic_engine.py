@@ -555,6 +555,16 @@ def prepare(workspace_id: str, draft_id: str, scenario_id: str) -> Snapshot:
                     "DOWNSTREAM_UNITS_REQUIRED",
                     "Downstream sampling requires at least one reachable DWSIM-owned unit.",
                 )
+            from app.modules.process_stack import mixed
+
+            # DWSIM cannot order a Recycle-free loop, so every sample would fail; refuse before the worker starts.
+            loops = mixed.recycle_free_cycles(downstream_data[0])
+            if loops:
+                raise DynamicError(
+                    "DOWNSTREAM_RECYCLE_REQUIRED",
+                    "Downstream loop requires a Recycle block before DWSIM can sample it.",
+                    {"loops": loops},
+                )
             participating_ids = {item["unit"]["id"] for item in units}
             carrier_specs = [
                 stream.get("spec", {}) for stream in document["objects"].values()
