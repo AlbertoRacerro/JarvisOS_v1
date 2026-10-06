@@ -65,9 +65,9 @@
 .draft-readiness {
   padding: 4px 9px;
   border-radius: 999px;
-  font-weight: 700;
-  background: #e3f1df;
-  color: #24562a;
+  font-weight: 600;
+  background: var(--color-bg-subtle, #f1eee7);
+  color: var(--color-text-muted, #4f564f);
 }
 .draft-readiness.has-blockers { background: #fbe4e1; color: #7c1f16; }
 .draft-secondary { position: relative; }
@@ -142,10 +142,13 @@
   min-width: 0;
   overflow: auto;
 }
+.draft-canvas-frame { position: relative; flex: 0 0 auto; }
+/* Spec 181: the flowsheet is the dominant central area and fills the available height. */
 .draft-canvas {
+  display: block;
   width: 100%;
-  min-height: 320px;
-  max-height: 520px;
+  height: clamp(440px, calc(100vh - 220px), 1600px);
+  cursor: grab;
   border: 1px solid var(--color-border-default, #d8d1c5);
   border-radius: 6px;
   background: var(--color-bg-subtle, #faf8f3);

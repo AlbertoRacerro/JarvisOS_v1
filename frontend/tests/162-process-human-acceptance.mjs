@@ -10,6 +10,8 @@ const stage = read("src/stages/ProcessStage.tsx");
 const api = read("src/api/processDraft.ts");
 const menu = read("src/components/ui/ContextMenu.tsx");
 const editorCss = read("src/stages/ProcessDraftEditor.css");
+// Spec 181 moved the results tables into the run results component.
+const runResults = read("src/components/process/RunResults.tsx");
 
 assert.match(editor, /set_orientation/);
 assert.match(editor, /onContextMenu=\{\(event\).*unitMenu\.targetProps\.onContextMenu/);
@@ -28,7 +30,7 @@ assert.doesNotMatch(editor, /draft\.findings\.length - blockers\.length/);
 assert.match(editor, /solveFailureMessages\(run\)\.map/);
 assert.match(editor, /error_detail\.dwsim_message/);
 assert.match(editor, /molar_flow/);
-assert.match(editor, /volumetric_flow/);
+assert.match(runResults, /volumetric_flow/);
 assert.match(editor, /Composition basis/);
 assert.match(api, /molar_flow\?: StoredQuantity/);
 assert.match(api, /vapor_fraction\?: StoredQuantity/);
