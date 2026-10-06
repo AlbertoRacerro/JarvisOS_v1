@@ -1266,3 +1266,52 @@ def test_real_30_day_hourly_run_meets_host_budget_and_api_publishes_artifacts():
         assert client.get(base + f"/runs/{job_id}").json()["current"] is False
         shutil.rmtree(draft.draft_dir(workspace_id, api_state["draft_id"]))
         assert client.get(base + f"/runs/{job_id}").json()["current"] is False
+
+
+def _loop_ops(*, heater_first: bool):
+    from app.modules.process_stack.draft_models import AddStream, AddUnit, Connect, DraftQuantity, SetUnitParams
+
+    ops = [
+        AddUnit(op="add_unit", id="mixer", type="Mixer", tag="Mixer", x=250, y=0),
+        AddUnit(op="add_unit", id="split", type="Splitter", tag="Split", x=450, y=0),
+        AddStream(op="add_stream", id="mixed", tag="Mixed", x=400, y=0),
+        AddStream(op="add_stream", id="purge", tag="Purge", x=500, y=-50),
+        AddStream(op="add_stream", id="back", tag="Back", x=450, y=80),
+        Connect(op="connect", stream="mixed", end="source", unit="mixer", port=0),
+        Connect(op="connect", stream="mixed", end="target", unit="split", port=0),
+        Connect(op="connect", stream="purge", end="source", unit="split", port=0),
+        Connect(op="connect", stream="back", end="source", unit="split", port=1),
+        Connect(op="connect", stream="back", end="target", unit="mixer", port=1),
+        SetUnitParams(op="set_unit_params", unit="split", mode="split_ratios", values={
+            "split_ratio_1": DraftQuantity(value=0.9, unit="dimensionless"),
+            "split_ratio_2": DraftQuantity(value=0.1, unit="dimensionless")}),
+    ]
+    if not heater_first:
+        return ops + [Connect(op="connect", stream="product", end="target", unit="mixer", port=0)]
+    return ops + [
+        AddUnit(op="add_unit", id="heater", type="Heater", tag="Heater", x=150, y=0),
+        AddStream(op="add_stream", id="hot", tag="Hot", x=200, y=0),
+        Connect(op="connect", stream="product", end="target", unit="heater", port=0),
+        Connect(op="connect", stream="hot", end="source", unit="heater", port=0),
+        Connect(op="connect", stream="hot", end="target", unit="mixer", port=0),
+        SetUnitParams(op="set_unit_params", unit="heater", mode="outlet_temperature",
+                      values={"outlet_temperature": DraftQuantity(value=298.15, unit="K")}),
+    ]
+
+
+def test_real_prepare_refuses_t1_algebraic_cycle_but_admits_dwsim_owned_downstream_loop():
+    from app.modules.process_stack import draft
+    from tests.plumbing_170_support import new_workspace
+
+    workspace_id = new_workspace()
+    state, _ = _real_scenario(workspace_id, 3600)
+    inside = draft.patch(workspace_id, state["draft_id"], state["revision"], _loop_ops(heater_first=False))
+    with pytest.raises(dynamic_engine.DynamicError) as raised:
+        dynamic_engine.prepare(workspace_id, inside["draft_id"], "run")
+    assert raised.value.code == "ALGEBRAIC_CYCLE"
+
+    workspace_id = new_workspace()
+    state, _ = _real_scenario(workspace_id, 3600)
+    downstream = draft.patch(workspace_id, state["draft_id"], state["revision"], _loop_ops(heater_first=True))
+    snapshot = dynamic_engine.prepare(workspace_id, downstream["draft_id"], "run")
+    assert [unit["tag"] for unit in snapshot.payload["units"]] == ["PBR"]

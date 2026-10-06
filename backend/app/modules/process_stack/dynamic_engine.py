@@ -176,6 +176,22 @@ def _validate_events(
                 raise DynamicError("EVENT_VALUE_INVALID", "Setpoint must be finite.")
 
 
+def _t1_reachable(objects: dict[str, Any], selected: set[str]) -> set[str]:
+    """Unit ids connected to the participating PBRs through T1-supported units only (as in _topology)."""
+    supported = {"PhotobioreactorT1", "Mixer", "Splitter", "Pump", "Recycle", "SpecifiedSeparator"}
+    edges = [((s.get("source") or {}).get("unit"), (s.get("target") or {}).get("unit"))
+             for s in objects.values() if s.get("kind") == "stream" and s.get("type") != "EnergyStream"]
+    reached, frontier = set(selected), list(selected)
+    while frontier:
+        current = frontier.pop()
+        for source, target in edges:
+            neighbor = target if source == current else source if target == current else None
+            if neighbor and neighbor not in reached and objects.get(neighbor, {}).get("type") in supported:
+                reached.add(neighbor)
+                frontier.append(neighbor)
+    return reached
+
+
 def _topology(document: dict[str, Any], units: list[dict[str, Any]], scenario: dict[str, Any]) -> dict[str, Any]:
     """Build a bounded T1 stream network and solve its steady volumetric flow balance."""
     objects = document["objects"]
@@ -446,6 +462,7 @@ def prepare(workspace_id: str, draft_id: str, scenario_id: str) -> Snapshot:
         # Reject unsupported connected equipment rather than silently dropping its physics.
         selected = {u["unit"]["id"] for u in units}
         objects = document["objects"]
+        t1_reachable = _t1_reachable(objects, selected)
         algebraic: dict[str, set[str]] = {}
         for stream in objects.values():
             if stream.get("kind") != "stream":
@@ -454,7 +471,10 @@ def prepare(workspace_id: str, draft_id: str, scenario_id: str) -> Snapshot:
             if source and target:
                 src, dst = objects.get(source.get("unit"), {}), objects.get(target.get("unit"), {})
                 supported_algebraic = {"Mixer", "Splitter", "Pump", "Recycle", "SpecifiedSeparator"}
-                if src.get("type") in supported_algebraic and dst.get("type") in supported_algebraic:
+                # Only the T1-reachable algebraic network carries culture state; a loop wholly downstream
+                # of a DWSIM-owned unit belongs to the downstream sampler, which solves its own tears.
+                if (src.get("type") in supported_algebraic and dst.get("type") in supported_algebraic
+                        and src["id"] in t1_reachable and dst["id"] in t1_reachable):
                     algebraic.setdefault(src["id"], set()).add(dst["id"])
                 if (target.get("unit") in selected and source.get("unit") not in selected
                         and src.get("type") not in supported_algebraic):
