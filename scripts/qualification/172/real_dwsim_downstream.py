@@ -32,7 +32,8 @@ def main() -> int:
         "dwsim_path_configured": bool(str(executable)), "complete": False}
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     if not executable.is_file():
-        report["outcome"] = "DWSIM MCP executable unavailable"
+        report.update(dwsim_version=None, outcome="DWSIM MCP executable unavailable",
+                      recycle_case={"outcome": "not_run", "reason": "DWSIM MCP executable unavailable"})
         OUTPUT.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
         return 2
     os.environ["JARVISOS_DWSIM_MCP_SHA256"] = _sha(executable)
@@ -43,7 +44,7 @@ def main() -> int:
                        env=os.environ.copy(), capture_output=True, text=True)
         from app.modules.bio_models import service as bio_models
         from app.modules.environment import profiles
-        from app.modules.process_stack import draft, dynamic_engine
+        from app.modules.process_stack import draft, dwsim, dynamic_engine
         from app.modules.process_stack.draft_models import (
             AddStream,
             AddUnit,
@@ -54,6 +55,13 @@ def main() -> int:
             SetUnitParams,
         )
         from tests.plumbing_170_support import pbr_ops, pin_of
+
+        report["dwsim_version"] = dwsim._version(executable)
+        report["recycle_case"] = {
+            "outcome": "not_run",
+            "reason": "The current T1 topology preflight rejects algebraic Mixer/Splitter recycle cycles; "+
+                      "the downstream sampler cannot receive this case without changing the accepted boundary contract.",
+        }
 
         workspace_id = f"172real{int(time.time())}"
         from app.modules.workspaces.models import WorkspaceCreate
