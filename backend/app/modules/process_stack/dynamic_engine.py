@@ -857,7 +857,12 @@ def run(
     controller_log: list[dict[str, Any]] = []
     flow_log: list[dict[str, Any]] = []
     downstream: list[dict[str, Any]] = []
-    events = [(index, dict(event)) for index, event in enumerate(snapshot.payload["schedule"].get("events", []))]
+    # Prepared snapshots are already ordered; sorting again keeps run() safe for hand-built snapshots.
+    events = sorted(
+        ((index, dict(event)) for index, event in enumerate(snapshot.payload["schedule"].get("events", []))),
+        key=lambda pair: (float(pair[1]["time_s"]), int(pair[1].get("declared_order", pair[0])),
+                          int(pair[1].get("repeat_k", 0)), pair[0]),
+    )
     controllers = [dict(value, _integral=0.0, _active=False, _bias=float(value["output"]),
                         _initial_output=float(value["output"]))
                    for value in snapshot.payload.get("controllers", [])]
@@ -1151,8 +1156,8 @@ def _apply_event(
     units: list[dict[str, Any]],
     log: list[dict[str, Any]],
     order: int,
-) -> tuple[np.ndarray, int]:
-    index, event = indexed
+) -> np.ndarray:
+    _index, event = indexed
     tag = event.get("unit")
     found = next((i for i, unit in enumerate(units) if unit["tag"] == tag), None)
     if event["type"] in {"inoculation", "harvest"} and found is None:
@@ -1189,7 +1194,7 @@ def _apply_event(
             "fraction": event.get("fraction"),
         }
     )
-    return state, index + 1
+    return state
 
 
 def _apply_dynamic_event(
@@ -1209,7 +1214,7 @@ def _apply_dynamic_event(
         return state
     if event["type"] in {"inoculation", "harvest"}:
         before = state.copy()
-        state, _ = _apply_event(state, indexed, units, [], order)
+        state = _apply_event(state, indexed, units, [], order)
         unit_index = next(i for i, unit in enumerate(units) if unit["tag"] == event["unit"])
         growth = pbr_unit.build_growth(units[unit_index]["params"], units[unit_index]["model"], (0, 0, 0), 0)
         volume = units[unit_index]["volume_m3"]

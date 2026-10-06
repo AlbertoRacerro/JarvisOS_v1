@@ -471,6 +471,36 @@ def test_real_prepared_events_sort_expansions_and_preserve_stable_declared_order
     assert [item["repeat_k"] for item in log] == [0, 0, 0, 0]
 
 
+def test_real_run_applies_every_event_even_if_snapshot_events_are_unsorted():
+    from dataclasses import replace
+
+    from tests.plumbing_170_support import new_workspace
+
+    workspace_id = new_workspace()
+    _state, snapshot = _real_scenario(workspace_id, 3600, cadence_s=60)
+    events = [{"type": "harvest", "time_s": t, "unit": "PBR", "fraction": 0.1,
+               "declared_order": i, "repeat_k": 0} for i, t in enumerate((60, 120, 30))]
+    payload = {**snapshot.payload, "schedule": {"events": events}}
+    unsorted_snapshot = replace(snapshot, payload=payload) if hasattr(snapshot, "__dataclass_fields__") \
+        else type(snapshot)(payload=payload, digest=snapshot.digest)
+    result = dynamic_engine.run(unsorted_snapshot, cancelled=lambda: False, progress=lambda _v: None)
+    assert result.status == "succeeded", result.error
+    assert [item["time_s"] for item in result.manifest["event_log"]] == [30, 60, 120]
+
+
+def test_downstream_enabled_without_cadence_defaults_to_daily_and_explicit_hourly_is_kept():
+    from app.modules.process_stack.dynamic_models import Scenario
+    from tests.plumbing_170_support import new_workspace
+
+    _state, snapshot = _real_scenario(new_workspace(), 3600)
+    base = {key: value for key, value in snapshot.payload["scenario"].items()
+            if key not in {"downstream_enabled", "downstream_cadence_s"}}
+    assert Scenario.model_validate({**base, "downstream_enabled": True}).downstream_cadence_s == 86400.0
+    assert Scenario.model_validate(
+        {**base, "downstream_enabled": True, "downstream_cadence_s": 3600}).downstream_cadence_s == 3600
+    assert Scenario.model_validate(base).downstream_cadence_s is None
+
+
 def test_real_conditional_event_rearms_only_after_leaving_hysteresis_band():
     from tests.plumbing_170_support import new_workspace
 
