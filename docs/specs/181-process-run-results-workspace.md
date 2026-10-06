@@ -7,7 +7,7 @@ State: **accepted and ready**. Written under the maintainer directive of 2026-10
 
 ## Fresh evidence
 
-The code audit is at `/home/thera/jarvis-control/work/out/s1/` (process audit, 2026-10-06). It found:
+A coordinator code audit at master `b99e4324` (2026-10-06; file and line citations inline) found:
 
 1. **Green does not mean solved.**
    - The readiness chip says "Ready to run" whenever there is no Jarvis `blocker` finding (`ProcessDraftEditor.tsx:1262`). It ignores DWSIM and run outcomes.
@@ -21,14 +21,15 @@ The code audit is at `/home/thera/jarvis-control/work/out/s1/` (process audit, 2
    - Non-mixed `failed` and mixed `unconverged` runs persist full stream and unit data in `run.json`.
    - `results_state` only ever picks `status == "completed"`, so the UI shows "No results".
    - After a later failed non-mixed attempt, an older completed run stays "current". Only mixed failures demote it (`draft.py:963`).
-4. **A negative-coordinate bug turned valid drafts into failed runs.** DWSIM stores |x| and |y|, so a draft object above or left of the origin failed read-back. Fixed separately by PR #784 (`fix/158-negative-canvas-coordinates`).
+4. **A negative-coordinate bug turned valid drafts into failed runs.** DWSIM stores |x| and |y|, so a draft object above or left of the origin failed read-back. Fixed separately by PR #784 (merged `46f00794`).
 5. **Results surface.**
    - Today only a stream table (T, P, flows, vapour fraction) and per-unit inspector fieldsets exist.
    - There is no composition or culture table, no boundary in/out view, no KPI, and no unit/stream result navigation from the canvas.
 6. **Workspace.**
    - The Thermo/species fieldset fills the right inspector whenever nothing is selected. It stacks into the main column below 1100 px.
    - The canvas is a hand-built SVG capped at 520 px high, with an auto-fit `viewBox`. There is no zoom or pan, and there is no viewport library to reuse.
-7. **Authoritative KPI inputs that already exist.**
+7. **A native Recycle could report success on a wrong flowsheet.** DWSIM's default Recycle mass-flow tolerance is an absolute 36 kg/h. A 0.01 kg/s loop ran `completed` with a 0.019 kg/s purge from a 0.01 kg/s feed. The compiler fix is PR #786 (`fix/158-native-recycle-tolerance`); the outcome below still checks the reported error.
+8. **Authoritative KPI inputs that already exist.**
    - The PBR reports `volumetric_productivity`, `net_biomass_production`, `outlet_biomass_throughput`, `volume_m3`, `volumetric_flow_m3_h` and `biomass_mean` (`pbr_unit.py:838`).
    - The tube count, inner diameter and length are draft parameters.
    - Stream culture values, mass fractions and flows are in `run.streams` / `run.culture`.
@@ -46,7 +47,7 @@ The code audit is at `/home/thera/jarvis-control/work/out/s1/` (process audit, 2
 |---|---|---|
 | `validated` | Validate built and checked the case in DWSIM; **nothing was solved** | `validated` |
 | `converged` | Run solved; all solved objects calculated; balances/verification passed | `completed` |
-| `non_converged` | Solver ran but did not reach a converged, fully calculated flowsheet | mixed `unconverged`; non-mixed `failed` with a `solve` record whose `ok` is false or `failed_objects` is non-empty |
+| `non_converged` | Solver ran but did not reach a converged, fully calculated flowsheet | mixed `unconverged`; non-mixed `failed` with a `solve` record whose `ok` is false or `failed_objects` is non-empty; `completed` with a native Recycle whose reported mass-flow error exceeds its compiled tolerance (reason `NATIVE_RECYCLE_NOT_CONVERGED`) |
 | `failed` | The run could not produce a solve (build, check, segment, verification, timeout, runtime) | `check_failed`, `materialization_mismatch`, `materialization_failed`, `segment_failed`, `JARVIS_SOLVE_TIMEOUT`, `native_reload_failed`, `runtime_failed`, kinetics verification failure, any other status |
 | `cancelled` | Reserved; synchronous draft runs cannot be cancelled today | (dynamic 172 jobs only) |
 
@@ -143,7 +144,7 @@ Adding a KPI later requires an authoritative source quantity. A dashboard slot a
 ## Acceptance
 
 1. Unit tests map every known run status, including legacy runs without `outcome`, to exactly one outcome state with the diagnostics present.
-2. `results_state` demotes an older converged run after a later non-mixed `failed` attempt.
+2. `results_state` demotes an older converged run after a later non-mixed `failed` attempt. A `completed` run whose native Recycle mass-flow error exceeds its tolerance maps to `non_converged`.
 3. The results view and KPI tests cover:
    - available, unavailable, zero and not-computed values;
    - the CO₂ KPIs as unavailable with their reason;
