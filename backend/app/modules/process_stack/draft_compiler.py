@@ -417,6 +417,17 @@ def _expected_reaction(reaction: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+def _dwsim_origin(document: dict[str, Any]) -> tuple[int, int]:
+    """Shift that maps Jarvis canvas coordinates into DWSIM's graphic space, which stores |x|, |y|.
+
+    Layout is not semantic, so only drafts that reach into negative space are translated; drafts with
+    non-negative coordinates keep their exact native positions.
+    """
+    items = list(document["objects"].values())
+    return (max(0, -min((item["x"] for item in items), default=0)),
+            max(0, -min((item["y"] for item in items), default=0)))
+
+
 def expected(document: dict[str, Any]) -> dict[str, Any]:
     """The normalized materialization the compiler must produce for this draft document."""
     by_id = document["objects"]
@@ -430,10 +441,11 @@ def expected(document: dict[str, Any]) -> dict[str, Any]:
             source = by_id[stream["source"]["unit"]]
             native_port = _native_energy_port(source, stream["source"]["port"]) if stream["type"] == "EnergyStream" else stream["source"]["port"]
             connections.append(f"{source['tag']}:out{native_port}>{stream['tag']}")
+    dx, dy = _dwsim_origin(document)
     return {
         "compounds": sorted(document["compounds"]),
         "property_package": document["property_package"],
-        "objects": {item["tag"]: {"type": item["type"], "x": item["x"], "y": item["y"]}
+        "objects": {item["tag"]: {"type": item["type"], "x": item["x"] + dx, "y": item["y"] + dy}
                     for item in document["objects"].values()},
         "connections": sorted(connections),
         "feeds": {stream["tag"]: _feed_expected(document, stream)
@@ -482,8 +494,9 @@ def plan(document: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
             calls.append(("dwsim_stream_add_material", args))
     for unit in _units(document):
         calls.append(("dwsim_unitop_add", {"type": UNIT_REGISTRY[unit["type"]].dwsim_type, "name": unit["tag"]}))
+    dx, dy = _dwsim_origin(document)
     for item in sorted(document["objects"].values(), key=lambda value: value["tag"]):
-        calls.append(("dwsim_graphic_edit", {"name": item["tag"], "x": item["x"], "y": item["y"]}))
+        calls.append(("dwsim_graphic_edit", {"name": item["tag"], "x": item["x"] + dx, "y": item["y"] + dy}))
     by_id = document["objects"]
     for stream in _streams(document):
         if stream["target"]:
