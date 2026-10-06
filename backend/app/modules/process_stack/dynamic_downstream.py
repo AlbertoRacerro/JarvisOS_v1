@@ -7,6 +7,7 @@ import hashlib
 import tempfile
 import time
 from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -138,6 +139,14 @@ def build_sampler(
     if not participating_ids:
         participating_ids = {item["unit"]["id"] for item in payload.get("units", [])}
     objects = payload["document"]["objects"]
+    start_epoch = payload.get("start_epoch")
+
+    def sample_timestamp(time_s: float) -> str | None:
+        if start_epoch is None:
+            return None
+        return (datetime.fromtimestamp(float(start_epoch), UTC) + timedelta(seconds=float(time_s))
+                ).isoformat().replace("+00:00", "Z")
+
     carrier_spec = next((copy.deepcopy(stream.get("spec", {})) for stream in objects.values()
                          if stream.get("kind") == "stream" and stream.get("source") is None
                          and (stream.get("target") or {}).get("unit") in participating_ids), {})
@@ -148,6 +157,7 @@ def build_sampler(
         if flow > 0 and mass is not None and float(mass) > 0:
             densities[tag] = (float(mass) / flow, "declared_mass_flow_over_volumetric_flow")
     fallback_density = next(iter(densities.values()), (1000.0, "water_carrier_default_1000_kg_m3"))
+    fallback_assumed = not bool(densities)
     try:
         last_converged = mixed_runtime._seed(derived, mixed.partition(derived))
     except Exception:  # seed remains optional; DWSIM may still produce a valid run-specific seed
@@ -160,7 +170,7 @@ def build_sampler(
             source = boundary_state.get("streams", {}).get(tag)
             if source is None:
                 continue
-            density, _density_source = densities.get(tag, fallback_density)
+            density, density_source = densities.get(tag, fallback_density)
             feed = _state_feed(original, source, density, carrier_spec)
             feed["source"] = None
             document["objects"][feed["id"]] = feed
@@ -195,7 +205,11 @@ def build_sampler(
         except Exception as exc:  # noqa: BLE001 - downstream failure cannot invalidate biology
             reason = "timeout" if "timeout" in type(exc).__name__.lower() or isinstance(exc, TimeoutError) else "solve_error"
             return {"status": "downstream_unconverged", "reason": reason,
-                    "error_type": type(exc).__name__, "time_s": boundary_state["time_s"]}
+                    "error_type": type(exc).__name__, "time_s": boundary_state["time_s"],
+                    "time_utc": sample_timestamp(boundary_state["time_s"]),
+                    "retry_skipped": {"reason": "initial solve raised before a retry guess was available"},
+                    "density_assumed": fallback_assumed,
+                    **({"density_assumption_reason": fallback_density[1]} if fallback_assumed else {})}
         finally:
             close = getattr(client, "__exit__", None)
             if close:
@@ -208,6 +222,7 @@ def build_sampler(
             failed_attempt = failed or guess or converged
             retry_guess = (_midpoint(converged, failed_attempt)
                            if isinstance(converged, dict) and isinstance(failed_attempt, dict) else None)
+            retry_skipped = None
             if retry_guess is not None and time.monotonic() - started < DWSIM_TIMEOUT_S:
                 retry_client = factory()
                 try:
@@ -233,6 +248,7 @@ def build_sampler(
                         close(None, None, None)
             else:
                 result = first
+                retry_skipped = {"reason": "no_retry_guess" if retry_guess is None else "time_budget_exhausted"}
         if result.get("status") != "completed":
             solve_detail = result.get("mixed_solve", {})
             reason = ("timeout" if solve_detail.get("reason") == "wall_budget"
@@ -245,6 +261,10 @@ def build_sampler(
                 residual = history[-1].get("max_normalized_residual")
             return {"status": "downstream_unconverged", "reason": reason,
                     "residual": residual, "time_s": boundary_state["time_s"],
+                    "time_utc": sample_timestamp(boundary_state["time_s"]),
+                    **({"retry_skipped": retry_skipped} if retry_skipped is not None else {}),
+                    "density_assumed": fallback_assumed,
+                    **({"density_assumption_reason": fallback_density[1]} if fallback_assumed else {}),
                     **({"error_type": result["error_type"]} if result.get("error_type") else {})}
         if isinstance(result.get("_tear_state"), dict):
             last_converged = copy.deepcopy(result["_tear_state"])
@@ -257,8 +277,13 @@ def build_sampler(
                 "pressure_Pa", "vapor_fraction", "density_kg_m3", "enthalpy_kJ_kg",
             ) if key in solved} if isinstance(solved, dict) else None)
         density_sources = {tag: {"rho_kg_m3": densities.get(tag, fallback_density)[0],
-                                 "source": densities.get(tag, fallback_density)[1]} for tag in values}
-        return {"status": "succeeded", "time_s": boundary_state["time_s"], "streams": values,
-                "boundary_density_sources": density_sources}
+                                 "source": densities.get(tag, fallback_density)[1],
+                                 **({"density_assumed": True, "reason": density_source}
+                                    if tag not in densities else {})}
+                           for tag in values for density_source in [densities.get(tag, fallback_density)[1]]}
+        return {"status": "succeeded", "time_s": boundary_state["time_s"],
+                "time_utc": sample_timestamp(boundary_state["time_s"]), "streams": values,
+                "boundary_density_sources": density_sources, "density_assumed": fallback_assumed,
+                **({"density_assumption_reason": fallback_density[1]} if fallback_assumed else {})}
 
     return sample

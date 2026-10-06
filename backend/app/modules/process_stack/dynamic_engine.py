@@ -329,6 +329,8 @@ def prepare(workspace_id: str, draft_id: str, scenario_id: str) -> Snapshot:
         scenario_raw = document.get("scenarios", {}).get(scenario_id)
         if not scenario_raw:
             raise DynamicError("SCENARIO_NOT_FOUND", "Dynamic scenario was not found.")
+        if len(scenario_raw.get("controllers", [])) > MAX_CONTROLLERS:
+            raise DynamicError("CONTROLLER_LIMIT", "At most 16 controllers may participate.")
         scenario = Scenario.model_validate(scenario_raw)
         start, end = _stamp(scenario.start_utc), _stamp(scenario.end_utc)
         duration = end - start
@@ -357,9 +359,12 @@ def prepare(workspace_id: str, draft_id: str, scenario_id: str) -> Snapshot:
                 if item["time_s"] > duration:
                     break
                 item["declared_order"] = order
+                item["repeat_k"] = repeat
                 expanded_events.append(item)
         if len(expanded_events) > MAX_EVENTS:
             raise DynamicError("EVENT_LIMIT", "Expanded schedule exceeds 1000 events.")
+        expanded_events.sort(key=lambda item: (float(item["time_s"]), int(item["declared_order"]),
+                                               int(item["repeat_k"])))
         controllers_raw = document.get("controllers", {})
         controller_ids = scenario_raw.get("controllers", [])
         if len(controller_ids) > MAX_CONTROLLERS:
@@ -485,6 +490,36 @@ def prepare(workspace_id: str, draft_id: str, scenario_id: str) -> Snapshot:
         for node in algebraic:
             visit(node)
         topology = _topology(document, units, scenario.model_dump(mode="json"))
+        card_by_unit = {unit["unit"]["id"]: (unit["model"].get("card", {}).get("digest"),
+                                               unit["model"].get("set", {}).get("digest"))
+                        for unit in units}
+        graph: dict[str, set[str]] = {}
+        for stream in topology["streams"]:
+            source = (stream.get("source") or {}).get("unit")
+            target = (stream.get("target") or {}).get("unit")
+            if source and target:
+                graph.setdefault(source, set()).add(target)
+                graph.setdefault(target, set()).add(source)
+        checked: set[frozenset[str]] = set()
+        for origin in card_by_unit:
+            todo, reached = [origin], {origin}
+            while todo:
+                current = todo.pop()
+                for neighbor in graph.get(current, set()) - reached:
+                    reached.add(neighbor)
+                    todo.append(neighbor)
+            for other in reached & card_by_unit.keys():
+                pair = frozenset((origin, other))
+                if pair in checked:
+                    continue
+                checked.add(pair)
+                if card_by_unit[origin] != card_by_unit[other]:
+                    tags = {unit["unit"]["id"]: unit["tag"] for unit in units}
+                    raise DynamicError(
+                        "TOPOLOGY_CARD_MISMATCH",
+                        "Coupled T1 units must use the same resolved model card and parameter set.",
+                        {"units": sorted(tags[key] for key in pair)},
+                    )
         _validate_events(expanded_events, units, topology, controller_ids)
         downstream_data = None
         if scenario.downstream_cadence_s:
@@ -822,10 +857,7 @@ def run(
     controller_log: list[dict[str, Any]] = []
     flow_log: list[dict[str, Any]] = []
     downstream: list[dict[str, Any]] = []
-    events = sorted(
-        ((index, dict(event)) for index, event in enumerate(snapshot.payload["schedule"].get("events", []))),
-        key=lambda pair: (pair[1]["time_s"], pair[0]),
-    )
+    events = [(index, dict(event)) for index, event in enumerate(snapshot.payload["schedule"].get("events", []))]
     controllers = [dict(value, _integral=0.0, _active=False, _bias=float(value["output"]),
                         _initial_output=float(value["output"]))
                    for value in snapshot.payload.get("controllers", [])]
@@ -843,6 +875,15 @@ def run(
     controller_by_id = {item["id"]: item for item in controllers}
     conditional_state: dict[int, bool] = {}
     roundoff_clips: list[dict[str, Any]] = []
+
+    def diagnostic(status: Literal["failed", "cancelled"], error: dict[str, Any]) -> EngineResult:
+        series = _result_series(snapshot, times_out, rows, units, controllers, controller_log, flow_log)
+        manifest = _manifest(snapshot, started, event_log, controller_log, downstream)
+        _add_diagnostic_evidence(manifest, series, controllers)
+        manifest["balances"] = _partial_balances(current, units, growths, event_log)
+        manifest["artifact_label"] = f"diagnostic_{status}"
+        return EngineResult(status, error, series, manifest)
+
     boundaries = sorted(
         set(float(v) for v in outputs)
         | {float(t - start) for t in snapshot.payload["profiles"][0]["times"] if start < t < end}
@@ -856,20 +897,16 @@ def run(
     try:
         event_cursor = 0
         while event_cursor < len(events) and float(events[event_cursor][1]["time_s"]) == 0:
-            current, event_cursor = _apply_dynamic_event(
+            current = _apply_dynamic_event(
                 current, events[event_cursor], units, event_log, event_cursor,
                 topology, flows, feeds, setpoints, {item["id"]: item for item in controllers},
             )
+            event_cursor += 1
         flow_log.append({"time_s": 0.0, "flows": dict(flows)})
         rows[0] = current.copy()
         for left, right in zip(boundaries, boundaries[1:], strict=False):
             if cancelled():
-                return EngineResult(
-                    "cancelled",
-                    {"code": "CANCELLED", "message": "Run cancelled.", "detail": {}},
-                    _result_series(snapshot, times_out, rows, units, controllers, controller_log, flow_log),
-                    _manifest(snapshot, started, event_log, controller_log, downstream),
-                )
+                return diagnostic("cancelled", {"code": "CANCELLED", "message": "Run cancelled.", "detail": {}})
 
             par_segment = _profile_par(snapshot, (left + right) / 2.0)
             network = _network_runtime(topology, flows, units)
@@ -948,10 +985,11 @@ def run(
             current = np.asarray(solved.states[-1], dtype=np.float64)
             _clip_tiny_negatives(current, units, roundoff_clips, right)
             while event_cursor < len(events) and abs(float(events[event_cursor][1]["time_s"]) - right) < 1e-7:
-                current, event_cursor = _apply_dynamic_event(
+                current = _apply_dynamic_event(
                     current, events[event_cursor], units, event_log, event_cursor,
                     topology, flows, feeds, setpoints, {item["id"]: item for item in controllers},
                 )
+                event_cursor += 1
                 if times_out and abs(times_out[-1] - right) < 1e-7:
                     rows[-1] = current.copy()
             if any(abs(right % float(item["cadence_s"])) < 1e-7 for item in controllers) or (
@@ -969,12 +1007,7 @@ def run(
                 and abs(right % scenario["downstream_cadence_s"]) < 1e-7
             ):
                 if cancelled():
-                    return EngineResult(
-                        "cancelled",
-                        {"code": "CANCELLED", "message": "Run cancelled.", "detail": {}},
-                        _result_series(snapshot, times_out, rows, units, controllers, controller_log, flow_log),
-                        _manifest(snapshot, started, event_log, controller_log, downstream),
-                    )
+                    return diagnostic("cancelled", {"code": "CANCELLED", "message": "Run cancelled.", "detail": {}})
                 try:
                     result = sampler(
                         {
@@ -990,29 +1023,11 @@ def run(
                 if downstream[-1].get("status") == "unconverged":
                     downstream[-1]["status"] = "downstream_unconverged"
                 if cancelled():
-                    return EngineResult(
-                        "cancelled",
-                        {"code": "CANCELLED", "message": "Run cancelled.", "detail": {}},
-                        _result_series(snapshot, times_out, rows, units, controllers, controller_log, flow_log),
-                        _manifest(snapshot, started, event_log, controller_log, downstream),
-                    )
+                    return diagnostic("cancelled", {"code": "CANCELLED", "message": "Run cancelled.", "detail": {}})
             progress(min(1.0, right / duration))
         series = _result_series(snapshot, times_out, rows, units, controllers, controller_log, flow_log)
         manifest = _manifest(snapshot, started, event_log, controller_log, downstream)
-        manifest["channels"] = {
-            name: (
-                "s" if name == "t_s" else
-                "umol/(m2*s)" if name == "par" else
-                "K" if name == "temperature" or name.endswith("_temperature") else
-                "kg" if name == "harvest_X_kg" or name.endswith("_harvest_X_kg") else
-                "m3/s" if name.endswith("_Q_m3_s") else
-                "1" if name.endswith("_ratio") else
-                "kg/m3" if name.endswith(("_X", "_N", "_O2")) else
-                ("m3/s" if next(c for c in controllers if name == f"controller_{c['id']}")
-                 ["actuator"].startswith("feed:") else "1")
-                if name.startswith("controller_") else "unknown"
-            ) for name in series
-        }
+        manifest["channels"] = _channel_units(series, controllers)
         manifest["diagnostics"]["roundoff_clips"] = roundoff_clips
         net_boundary = current[n * 7 : n * 7 + 3]
         initial_inventory = np.zeros(3, dtype=np.float64)
@@ -1068,20 +1083,10 @@ def run(
         }
         return EngineResult("succeeded", None, series, manifest)
     except DynamicError as exc:
-        return EngineResult(
-            "failed",
-            {"code": exc.code, "message": exc.message, "detail": exc.detail},
-            _result_series(snapshot, times_out, rows, units, controllers, controller_log, flow_log),
-            _manifest(snapshot, started, event_log, controller_log, downstream),
-        )
+        return diagnostic("failed", {"code": exc.code, "message": exc.message, "detail": exc.detail})
     except Exception as exc:
         error = {"code": "DYNAMIC_FAILED", "message": str(exc)[:600], "detail": {}}
-        return EngineResult(
-            "failed",
-            error,
-            _result_series(snapshot, times_out, rows, units, controllers, controller_log, flow_log),
-            _manifest(snapshot, started, event_log, controller_log, downstream),
-        )
+        return diagnostic("failed", error)
 
 
 def _valid_state(state: tuple[float, ...], units: list[dict[str, Any]], growths: list[Any] | None = None) -> None:
@@ -1198,10 +1203,10 @@ def _apply_dynamic_event(
     feeds: dict[str, list[float]],
     setpoints: dict[str, float],
     controllers: dict[str, dict[str, Any]],
-) -> tuple[np.ndarray, int]:
+) -> np.ndarray:
     index, event = indexed
     if event.get("observed"):
-        return state, index + 1
+        return state
     if event["type"] in {"inoculation", "harvest"}:
         before = state.copy()
         state, _ = _apply_event(state, indexed, units, [], order)
@@ -1210,10 +1215,12 @@ def _apply_dynamic_event(
         volume = units[unit_index]["volume_m3"]
         delta = state[unit_index * 7 : unit_index * 7 + 3] - before[unit_index * 7 : unit_index * 7 + 3]
         impulse = [delta[0] * volume, (delta[1] + growth.nitrogen_quota * delta[0]) * volume, delta[2] * volume]
-        entry = {"order": order, "time_s": event["time_s"], "type": event["type"], "target": event.get("unit"),
+        entry = {"order": order, "declared_order": event.get("declared_order", order),
+                 "repeat_k": event.get("repeat_k", 0), "time_s": event["time_s"],
+                 "type": event["type"], "target": event.get("unit"),
                  "pre_state": before.tolist(), "post_state": state.tolist(), "impulse_inventory": impulse}
         log.append(entry)
-        return state, index + 1
+        return state
     kind, target = (event.get("target") or "").split(":", 1) if ":" in (event.get("target") or "") else ("", "")
     if event["type"] in {"feed_change", "dilution"}:
         stream_tag = event.get("stream") or (target if kind == "feed" else None)
@@ -1250,9 +1257,11 @@ def _apply_dynamic_event(
         if controller_id not in controllers:
             raise DynamicError("EVENT_TARGET_INVALID", "Setpoint event must target a participating controller.", {"target": controller_id})
         setpoints[controller_id] = float(event["value"])
-    log.append({"order": order, "time_s": event["time_s"], "type": event["type"], "target": event.get("target"),
+    log.append({"order": order, "declared_order": event.get("declared_order", order),
+                "repeat_k": event.get("repeat_k", 0), "time_s": event["time_s"],
+                "type": event["type"], "target": event.get("target"),
                 "value": event.get("value")})
-    return state, index + 1
+    return state
 
 
 def _sample_controllers(
@@ -1313,7 +1322,7 @@ def _conditional_events(
     controllers: dict[str, dict[str, Any]],
 ) -> None:
     for order, event in events:
-        if not event.get("observed") or event.get("_fired") or float(event["time_s"]) > time_s:
+        if not event.get("observed") or float(event["time_s"]) > time_s:
             continue
         unit_tag, _, channel = event["observed"].partition(".")
         unit_index = next((i for i, unit in enumerate(units) if unit["tag"] == unit_tag), None)
@@ -1324,8 +1333,9 @@ def _conditional_events(
         is_active = value >= threshold if event.get("direction") == "above" else value <= threshold
         was_active = active.get(order, False)
         if is_active and not was_active:
-            event["_fired"] = True
-            log.append({"order": order, "time_s": time_s, "type": event["type"], "conditional": True,
+            log.append({"order": order, "declared_order": event.get("declared_order", order),
+                        "repeat_k": event.get("repeat_k", 0), "time_s": time_s,
+                        "type": event["type"], "conditional": True,
                         "observed": event["observed"], "measurement": value, "threshold": threshold,
                         "hysteresis": band, "direction": event["direction"]})
             action = dict(event, time_s=time_s)
@@ -1334,12 +1344,21 @@ def _conditional_events(
             action.pop("direction", None)
             action.pop("hysteresis", None)
             if action["type"] in {"inoculation", "harvest"}:
-                state, _ = _apply_dynamic_event(state, (order, action), units, log, order,
-                                                topology, flows, feeds, setpoints, controllers)
+                state = _apply_dynamic_event(state, (order, action), units, log, order,
+                                             topology, flows, feeds, setpoints, controllers)
             else:
-                _apply_dynamic_event(state, (order, action), units, log, order,
-                                     topology, flows, feeds, setpoints, controllers)
-        active[order] = is_active if (not was_active or abs(value - threshold) > band) else was_active
+                state = _apply_dynamic_event(state, (order, action), units, log, order,
+                                             topology, flows, feeds, setpoints, controllers)
+        if event.get("direction") == "above":
+            if not was_active and value >= threshold:
+                active[order] = True
+            elif was_active and value <= threshold - band:
+                active[order] = False
+        else:
+            if not was_active and value <= threshold:
+                active[order] = True
+            elif was_active and value >= threshold + band:
+                active[order] = False
 
 
 def _rebalance_flows(topology: dict[str, Any], flows: dict[str, float]) -> None:
@@ -1415,10 +1434,26 @@ def _manifest(
         "draft_id": p["draft_id"],
         "draft_revision": p["revision"],
         "content_digest": p["content_digest"],
+        "draft_content_digest": p["content_digest"],
         "scenario_id": p["scenario_id"],
-        "profiles": [item["ref"] for item in p["profiles"]],
+        "profiles": [{
+            "profile_id": item["ref"]["profile_id"], "digest": item["ref"]["digest"],
+            "resolution_minutes": item["profile"].get("resolution_minutes"),
+            "consumed_channels": [name for name in (item.get("par_name"), item.get("temp_name")) if name],
+            "temporal_rule": {
+                "par": "interval-end held over preceding interval; no interpolation",
+                "temperature": "linear between UTC point samples; no extrapolation",
+            },
+        } for item in p["profiles"]],
+        "profile_refs": [item["ref"] for item in p["profiles"]],
         "forcing_profile_id": p["profiles"][0]["ref"]["profile_id"],
-        "units": [{"tag": u["tag"], "model_card_qualification": u["card_qualification"]} for u in p["units"]],
+        "units": [{
+            "tag": u["tag"], "model_card_qualification": u["card_qualification"],
+            "card_id": u["model"].get("card", {}).get("id"),
+            "card_revision": u["model"].get("card", {}).get("revision"),
+            "card_digest": u["model"].get("card", {}).get("digest"),
+            "parameter_set_digest": u["model"].get("set", {}).get("digest"),
+        } for u in p["units"]],
         "solver": {
             "method": p["scenario"]["solver_method"],
             "rtol": p["scenario"]["rtol"],
@@ -1434,4 +1469,77 @@ def _manifest(
         "controller_log": controllers,
         "diagnostics": {"wall_time_s": time.perf_counter() - started},
         "downstream_outcomes": downstream,
+    }
+
+
+def _add_diagnostic_evidence(
+    manifest: dict[str, Any], series: dict[str, np.ndarray], controllers: list[dict[str, Any]],
+) -> None:
+    manifest["channels"] = _channel_units(series, controllers)
+
+
+def _channel_units(series: dict[str, np.ndarray], controllers: list[dict[str, Any]]) -> dict[str, str]:
+    controller_by_id = {item["id"]: item for item in controllers}
+    channels: dict[str, str] = {}
+    for name in series:
+        if name == "t_s":
+            unit = "s"
+        elif name == "par":
+            unit = "umol/(m2*s)"
+        elif name == "temperature" or name.endswith("_temperature"):
+            unit = "K"
+        elif name == "harvest_X_kg" or name.endswith("_harvest_X_kg"):
+            unit = "kg"
+        elif name.endswith("_Q_m3_s"):
+            unit = "m3/s"
+        elif name.endswith("_ratio"):
+            unit = "1"
+        elif name.startswith("controller_"):
+            controller_id = name.removeprefix("controller_")
+            controller = controller_by_id.get(controller_id, {})
+            unit = "m3/s" if controller.get("actuator", "").startswith("feed:") else "1"
+        elif name.endswith(("_X", "_N", "_O2")):
+            unit = "kg/m3"
+        else:
+            unit = "unknown"
+        channels[name] = unit
+    return channels
+
+
+def _partial_balances(
+    state: np.ndarray, units: list[dict[str, Any]], growths: list[Any], events: list[dict[str, Any]],
+) -> dict[str, Any]:
+    n = len(units)
+    boundary = state[n * 7:n * 7 + 3]
+    initial = np.zeros(3, dtype=np.float64)
+    final = np.zeros(3, dtype=np.float64)
+    for index, unit in enumerate(units):
+        quota = growths[index].nitrogen_quota
+        initial += unit["volume_m3"] * np.asarray([
+            unit["state"][0], unit["state"][1] + quota * unit["state"][0], unit["state"][2],
+        ])
+        final += unit["volume_m3"] * np.asarray([
+            state[index * 7], state[index * 7 + 1] + quota * state[index * 7], state[index * 7 + 2],
+        ])
+    generated = np.asarray([
+        sum(state[index * 7 + 3] * unit["volume_m3"] for index, unit in enumerate(units)),
+        0.0,
+        sum((growths[index].oxygen_yield * state[index * 7 + 3] + state[index * 7 + 5]) * unit["volume_m3"]
+            for index, unit in enumerate(units)),
+    ])
+    impulses = np.zeros(3, dtype=np.float64)
+    for event in events:
+        if event.get("impulse_inventory"):
+            impulses += np.asarray(event["impulse_inventory"], dtype=np.float64)
+    residual = initial + boundary + generated + impulses - final
+    names = ("biomass", "total_nitrogen", "oxygen")
+    return {
+        "status": "partial", "boundary_net_kg": boundary.tolist(),
+        "generated_kg": generated.tolist(), "impulse_inventory_kg": impulses.tolist(),
+        "aggregate": {name: {
+            "residual_abs_kg": float(abs(residual[index])),
+            "residual_rel": float(abs(residual[index]) / max(
+                1e-12, abs(initial[index]) + abs(boundary[index]) + abs(generated[index]) + abs(impulses[index]),
+            )),
+        } for index, name in enumerate(names)},
     }

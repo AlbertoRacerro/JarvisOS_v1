@@ -23,7 +23,8 @@ def _snapshot() -> Any:
         payload = {"document": {"schema_version": 1, "name": "downstream", "compounds": ["Water"],
                                  "property_package": "NRTL", "objects": {x["id"]: x for x in
                                  (pbr, heater, product, outlet, feed)}, "reactions": {}},
-                   "units": [{"unit": pbr}], "topology": {"streams": [feed], "flows": {"feed": 1e-5}}}
+                   "units": [{"unit": pbr}], "topology": {"streams": [feed], "flows": {"feed": 1e-5}},
+                   "start_epoch": 1798761600.0}
 
     return Snapshot()
 
@@ -41,6 +42,8 @@ def test_downstream_timeout_is_a_sample_outcome_not_an_exception() -> None:
     assert outcome["status"] == "downstream_unconverged"
     assert outcome["reason"] == "timeout"
     assert outcome["time_s"] == 86400.0
+    assert outcome["retry_skipped"]["reason"] == "initial solve raised before a retry guess was available"
+    assert outcome["time_utc"] == "2027-01-02T00:00:00Z"
 
 
 def test_nonconvergence_retries_from_midpoint_and_reports_missing_separately_from_zero() -> None:
@@ -72,9 +75,13 @@ def test_nonconvergence_retries_from_midpoint_and_reports_missing_separately_fro
     assert result["boundary_density_sources"]["CultureOut"]["source"] == "declared_mass_flow_over_volumetric_flow"
 
 
-def test_double_nonconvergence_records_residual_and_timestamp() -> None:
+def test_double_nonconvergence_records_residual_and_timestamp(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(dynamic_downstream.mixed_runtime, "_seed", lambda *_args, **_kwargs: None)
+    calls: list[dict[str, Any]] = []
+
     def run(*_args: Any, **kwargs: Any) -> dict[str, Any]:
-        if "initial_tear" in kwargs:
+        calls.append(kwargs)
+        if kwargs.get("initial_tear") is not None:
             assert kwargs["include_tear_state"] is True
             return {"status": "failed", "mixed_solve": {"reason": "max_iterations", "history": [
                 {"max_normalized_residual": 0.25}]}}
@@ -89,6 +96,24 @@ def test_double_nonconvergence_records_residual_and_timestamp() -> None:
     assert result["status"] == "downstream_unconverged"
     assert result["residual"] == 0.25
     assert result["time_s"] == 86400.0
+    assert result["time_utc"] == "2027-01-02T00:00:00Z"
+    assert len(calls) == 2
+    assert "retry_skipped" not in result
+
+
+def test_successful_sampler_flags_assumed_density() -> None:
+    snapshot = _snapshot()
+    snapshot.payload["document"]["objects"]["feed"]["spec"].pop("mass_flow")
+    sampler = dynamic_downstream.build_sampler(
+        snapshot, client_factory=lambda: object(),
+        runner=lambda *_args, **_kwargs: {"status": "completed", "streams": {}},
+    )
+    assert sampler is not None
+    result = sampler(_boundary())
+    assert result["status"] == "succeeded"
+    assert result["density_assumed"] is True
+    assert result["density_assumption_reason"] == "water_carrier_default_1000_kg_m3"
+    assert result["boundary_density_sources"]["CultureOut"]["density_assumed"] is True
 
 
 def test_boundary_state_feed_does_not_invent_thermodynamic_defaults() -> None:

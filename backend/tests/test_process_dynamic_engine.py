@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 import time
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import numpy as np
 import pytest
@@ -440,6 +441,431 @@ def test_conditional_event_fires_at_sample_cadence_and_applies_feed_change():
     assert log[0]["time_s"] == 60.0
 
 
+def test_real_prepared_events_sort_expansions_and_preserve_stable_declared_order():
+    from app.modules.process_stack import draft
+    from app.modules.process_stack.draft_models import SetScenario, SetSchedule
+    from tests.plumbing_170_support import new_workspace
+
+    workspace_id = new_workspace()
+    state, _snapshot = _real_scenario(workspace_id, 3600, cadence_s=60)
+    events = [
+        {"type": "harvest", "time_s": 60, "unit": "PBR", "fraction": 0.1},
+        {"type": "harvest", "time_s": 120, "unit": "PBR", "fraction": 0.1},
+        {"type": "harvest", "time_s": 30, "unit": "PBR", "fraction": 0.1},
+        {"type": "harvest", "time_s": 60, "unit": "PBR", "fraction": 0.2},
+    ]
+    state = draft.patch(workspace_id, state["draft_id"], state["revision"], [
+        SetSchedule(op="set_schedule", id="ordered", value={"events": events}),
+        SetScenario(op="set_scenario", id="run", value={
+            **_snapshot.payload["scenario"], "schedule_id": "ordered",
+        }),
+    ])
+    snapshot = dynamic_engine.prepare(workspace_id, state["draft_id"], "run")
+    expanded = snapshot.payload["schedule"]["events"]
+    assert [item["time_s"] for item in expanded] == [30, 60, 60, 120]
+    result = dynamic_engine.run(snapshot, cancelled=lambda: False, progress=lambda _value: None)
+    assert result.status == "succeeded", result.error
+    log = result.manifest["event_log"]
+    assert [item["time_s"] for item in log] == [30, 60, 60, 120]
+    assert [item["declared_order"] for item in log] == [2, 0, 3, 1]
+    assert [item["repeat_k"] for item in log] == [0, 0, 0, 0]
+
+
+def test_real_conditional_event_rearms_only_after_leaving_hysteresis_band():
+    from tests.plumbing_170_support import new_workspace
+
+    workspace_id = new_workspace()
+    _state, snapshot = _real_scenario(workspace_id, 3600, cadence_s=60)
+    event = {"type": "feed_change", "time_s": 0.0, "stream": "Feed", "value": 0.5,
+             "observed": "PBR.X", "threshold": 1.0, "threshold_unit": "kg/m3",
+             "direction": "above", "hysteresis": 0.2}
+    unit = snapshot.payload["units"][0]
+    topology = snapshot.payload["topology"]
+    flows, feeds = dict(topology["flows"]), dict(topology["feeds"])
+    state = np.zeros(11)
+    log, armed = [], {}
+    for time_s, value in ((60, 1.1), (120, 1.05), (180, 0.9), (240, 0.79), (300, 0.95), (360, 1.0)):
+        state[0] = value
+        dynamic_engine._conditional_events(state, [unit], [(0, event)], armed, log, time_s,
+                                           topology, flows, feeds, {}, {})
+    assert [item["time_s"] for item in log if item.get("conditional")] == [60, 360]
+
+
+def test_real_prepare_admission_limits_have_typed_codes():
+    from app.modules.process_stack import draft
+    from app.modules.process_stack.draft_models import SetScenario, SetSchedule
+    from tests.plumbing_170_support import new_workspace
+
+    workspace_id = new_workspace()
+    state, snapshot = _real_scenario(workspace_id, 3600, cadence_s=3600)
+    base = snapshot.payload["scenario"]
+
+    def reject(value: dict, code: str, schedule: dict | None = None) -> None:
+        nonlocal state
+        ops: list[Any] = [SetScenario(op="set_scenario", id="run", value=value)]
+        if schedule is not None:
+            ops.insert(0, SetSchedule(op="set_schedule", id="bounded", value=schedule))
+        state = draft.patch(workspace_id, state["draft_id"], state["revision"], ops)
+        with pytest.raises(dynamic_engine.DynamicError) as raised:
+            dynamic_engine.prepare(workspace_id, state["draft_id"], "run")
+        assert raised.value.code == code
+
+    start = datetime.fromisoformat(base["start_utc"].replace("Z", "+00:00"))
+    reject({**base, "end_utc": (start + timedelta(days=121)).isoformat().replace("+00:00", "Z")},
+           "DURATION_LIMIT")
+    reject({**base, "end_utc": (start + timedelta(days=30)).isoformat().replace("+00:00", "Z"),
+            "output_cadence_s": 60}, "OUTPUT_LIMIT")
+    repeated = {"type": "inoculation", "time_s": 0, "unit": "PBR", "value": 0.2,
+                "value_unit": "kg/m3", "every_s": 1, "count": 600}
+    reject({**base, "schedule_id": "bounded"}, "EVENT_LIMIT", {"events": [repeated, repeated]})
+    revision = draft.load_revision(draft.draft_dir(workspace_id, state["draft_id"]), state["revision"])
+    invalid_document = revision["document"]
+    invalid_document["scenarios"]["run"]["controllers"] = [f"c{i}" for i in range(17)]
+    stored = draft._write_revision(draft.draft_dir(workspace_id, state["draft_id"]), invalid_document,
+                                   parent=state["revision"], actor="test", ops=[])
+    state = {**state, "revision": stored["revision"]}
+    with pytest.raises(dynamic_engine.DynamicError) as raised:
+        dynamic_engine.prepare(workspace_id, state["draft_id"], "run")
+    assert raised.value.code == "CONTROLLER_LIMIT"
+    reject({**base, "end_utc": (start + timedelta(days=120)).isoformat().replace("+00:00", "Z"),
+            "downstream_enabled": True, "downstream_cadence_s": 3600}, "DWSIM_SAMPLE_LIMIT")
+
+
+def test_real_prepare_rejects_unsupported_measurements_and_actuators():
+    from app.modules.process_stack import draft
+    from app.modules.process_stack.draft_models import SetController, SetScenario
+    from tests.plumbing_170_support import new_workspace
+
+    workspace_id = new_workspace()
+    state, snapshot = _real_scenario(workspace_id, 3600)
+    controller = {"id": "unsafe", "type": "pi", "measurement": "CO2", "unit": "PBR",
+                  "actuator": "feed:Feed", "output_unit": "m3/s", "cadence_s": 60,
+                  "setpoint": 0.1, "lower": 0, "upper": 0.001, "output": 0}
+    state = draft.patch(workspace_id, state["draft_id"], state["revision"], [
+        SetController(op="set_controller", id="unsafe", value=controller),
+        SetScenario(op="set_scenario", id="run", value={**snapshot.payload["scenario"],
+                                                          "controllers": ["unsafe"]}),
+    ])
+    with pytest.raises(dynamic_engine.DynamicError) as measurement:
+        dynamic_engine.prepare(workspace_id, state["draft_id"], "run")
+    assert measurement.value.code == "UNSUPPORTED_MEASUREMENT"
+    controller["measurement"] = "X"
+    controller["actuator"] = "thermal:PBR"
+    state = draft.patch(workspace_id, state["draft_id"], state["revision"], [
+        SetController(op="set_controller", id="unsafe", value=controller),
+    ])
+    with pytest.raises(dynamic_engine.DynamicError) as actuator:
+        dynamic_engine.prepare(workspace_id, state["draft_id"], "run")
+    assert actuator.value.code == "UNSUPPORTED_ACTUATOR"
+
+
+def test_real_profile_gap_coverage_and_unused_null_channels():
+    from app.modules.environment import profiles
+    from app.modules.process_stack import draft
+    from app.modules.process_stack.draft_models import SetScenario
+    from tests.plumbing_170_support import new_workspace
+
+    workspace_id = new_workspace()
+    state, snapshot = _real_scenario(workspace_id, 3600)
+    start = datetime.fromisoformat(snapshot.payload["scenario"]["start_utc"].replace("Z", "+00:00"))
+    stamps = [start + timedelta(hours=index) for index in range(2)]
+
+    def bind(channels: dict[str, list[float | None]], temperature: str = "unit_mean") -> Any:
+        nonlocal state
+        profile = profiles.create_profile(
+            workspace_id, name="dynamic gap fixture",
+            timestamps=[stamp.isoformat().replace("+00:00", "Z") for stamp in stamps],
+            channels=channels, resolution_minutes=60, provenance={"kind": "deterministic_test"},
+        )
+        scenario = {**snapshot.payload["scenario"], "temperature_source": temperature,
+                    "profiles": [{"profile_id": profile["profile_id"], "digest": profile["digest"]}]}
+        state = draft.patch(workspace_id, state["draft_id"], state["revision"], [
+            SetScenario(op="set_scenario", id="run", value=scenario),
+        ])
+        return profile
+
+    bind({"par": [100.0, None], "sea_temperature": [280.0, 281.0]})
+    with pytest.raises(dynamic_engine.DynamicError) as raised:
+        dynamic_engine.prepare(workspace_id, state["draft_id"], "run")
+    assert raised.value.code == "PROFILE_GAP"
+    assert raised.value.detail == {"channel": "par", "time_utc": stamps[1].isoformat().replace("+00:00", "Z")}
+
+    bind({"par": [100.0, 100.0], "sea_temperature": [280.0, None]}, "sea_temperature")
+    with pytest.raises(dynamic_engine.DynamicError) as raised:
+        dynamic_engine.prepare(workspace_id, state["draft_id"], "run")
+    assert raised.value.code == "PROFILE_GAP"
+    assert raised.value.detail["channel"] == "sea_temperature"
+    assert raised.value.detail["time_utc"] == stamps[1].isoformat().replace("+00:00", "Z")
+
+    bind({"par": [100.0, 100.0], "sea_temperature": [None, None]})
+    unused_null = dynamic_engine.prepare(workspace_id, state["draft_id"], "run")
+    assert unused_null.payload["profiles"][0]["profile"]["channels"]["sea_temperature"] == [None, None]
+
+    short = profiles.create_profile(
+        workspace_id, name="short profile",
+        timestamps=[stamps[0].isoformat().replace("+00:00", "Z")], channels={"par": [100.0]},
+        resolution_minutes=None,
+        provenance={"kind": "deterministic_test"},
+    )
+    state = draft.patch(workspace_id, state["draft_id"], state["revision"], [
+        SetScenario(op="set_scenario", id="run", value={
+            **snapshot.payload["scenario"],
+            "profiles": [{"profile_id": short["profile_id"], "digest": short["digest"]}],
+        }),
+    ])
+    with pytest.raises(dynamic_engine.DynamicError) as raised:
+        dynamic_engine.prepare(workspace_id, state["draft_id"], "run")
+    assert raised.value.code == "PROFILE_COVERAGE"
+
+
+def test_real_temperature_is_linear_while_par_uses_interval_hold():
+    from app.modules.environment import profiles
+    from app.modules.process_stack import draft
+    from app.modules.process_stack.draft_models import SetScenario
+    from tests.plumbing_170_support import new_workspace
+
+    workspace_id = new_workspace()
+    state, original = _real_scenario(workspace_id, 3600)
+    start = datetime.fromisoformat(original.payload["scenario"]["start_utc"].replace("Z", "+00:00"))
+    stamps = [start + timedelta(hours=index) for index in range(3)]
+    profile = profiles.create_profile(
+        workspace_id, name="dynamic temporal fixture",
+        timestamps=[stamp.isoformat().replace("+00:00", "Z") for stamp in stamps],
+        channels={"par": [10.0, 20.0, 30.0], "sea_temperature": [280.0, 300.0, 320.0]},
+        resolution_minutes=60, provenance={"kind": "deterministic_test"},
+    )
+    state = draft.patch(workspace_id, state["draft_id"], state["revision"], [
+        SetScenario(op="set_scenario", id="run", value={
+            **original.payload["scenario"], "temperature_source": "sea_temperature",
+            "profiles": [{"profile_id": profile["profile_id"], "digest": profile["digest"]}],
+        }),
+    ])
+    snapshot = dynamic_engine.prepare(workspace_id, state["draft_id"], "run")
+    assert dynamic_engine._profile_par(snapshot, 1800) == 20.0
+    assert dynamic_engine._profile_temperature(snapshot, 1800) == pytest.approx(290.0)
+
+
+def test_real_scenario_elapsed_integration_is_unchanged_across_european_dst():
+    from app.modules.environment import profiles
+    from app.modules.process_stack import draft
+    from app.modules.process_stack.draft_models import SetScenario
+    from tests.plumbing_170_support import new_workspace
+
+    workspace_id = new_workspace()
+    state, original = _real_scenario(workspace_id, 3600, cadence_s=3600)
+    utc_start = datetime(2026, 10, 24, tzinfo=UTC)
+    stamps = [utc_start + timedelta(hours=index) for index in range(49)]
+    profile = profiles.create_profile(
+        workspace_id, name="DST elapsed fixture",
+        timestamps=[stamp.isoformat().replace("+00:00", "Z") for stamp in stamps],
+        channels={"par": [100.0] * len(stamps)}, resolution_minutes=60,
+        provenance={"kind": "deterministic_test"},
+    )
+    scenario = {
+        **original.payload["scenario"],
+        "start_utc": "2026-10-24T00:00:00Z", "end_utc": "2026-10-26T00:00:00Z",
+        "output_cadence_s": 3600,
+        "profiles": [{"profile_id": profile["profile_id"], "digest": profile["digest"]}],
+    }
+    state = draft.patch(workspace_id, state["draft_id"], state["revision"], [
+        SetScenario(op="set_scenario", id="run", value=scenario),
+    ])
+    utc_snapshot = dynamic_engine.prepare(workspace_id, state["draft_id"], "run")
+    utc_result = dynamic_engine.run(utc_snapshot, cancelled=lambda: False, progress=lambda _value: None)
+    assert utc_result.status == "succeeded", utc_result.error
+    scenario["start_utc"] = "2026-10-24T02:00:00+02:00"
+    scenario["end_utc"] = "2026-10-26T01:00:00+01:00"
+    state = draft.patch(workspace_id, state["draft_id"], state["revision"], [
+        SetScenario(op="set_scenario", id="run", value=scenario),
+    ])
+    local_snapshot = dynamic_engine.prepare(workspace_id, state["draft_id"], "run")
+    local_result = dynamic_engine.run(local_snapshot, cancelled=lambda: False, progress=lambda _value: None)
+    assert local_result.status == "succeeded", local_result.error
+    assert local_result.series["t_s"].tolist() == utc_result.series["t_s"].tolist()
+    for key in ("PBR_X", "PBR_N", "PBR_O2"):
+        assert np.array_equal(local_result.series[key], utc_result.series[key])
+
+
+def test_dynamic_draft_ops_keep_cas_and_restore_semantics():
+    from app.modules.process_stack import draft
+    from app.modules.process_stack.draft_models import SetController, SetScenario, SetSchedule
+    from tests.plumbing_170_support import new_workspace
+
+    workspace_id = new_workspace()
+    state, snapshot = _real_scenario(workspace_id, 3600)
+    original_revision = state["revision"]
+    scenario = {**snapshot.payload["scenario"], "schedule_id": "schedule", "controllers": ["control"]}
+    added = draft.patch(workspace_id, state["draft_id"], original_revision, [
+        SetSchedule(op="set_schedule", id="schedule", value={"events": []}),
+        SetController(op="set_controller", id="control", value={
+            "type": "onoff", "measurement": "X", "unit": "PBR", "actuator": "feed:Feed",
+            "output_unit": "m3/s", "cadence_s": 60, "setpoint": 0.5,
+            "lower": 0.0, "upper": 0.001, "output": 0.0,
+        }),
+        SetScenario(op="set_scenario", id="run", value=scenario),
+    ])
+    with pytest.raises(draft.DraftError) as stale:
+        draft.patch(workspace_id, state["draft_id"], original_revision, [
+            SetSchedule(op="set_schedule", id="late", value={"events": []}),
+        ])
+    assert stale.value.code == "revision_conflict"
+    restored = draft.restore(workspace_id, state["draft_id"], added["revision"], original_revision)
+    assert restored["revision"] != original_revision
+    assert draft.current_digest(workspace_id, state["draft_id"]) == snapshot.payload["content_digest"]
+
+
+@pytest.mark.parametrize(("rate", "expected"), [(float("nan"), "STATE_NONFINITE"), (-1e6, "STATE_NEGATIVE")])
+def test_real_engine_state_failures_keep_typed_diagnostic_series(monkeypatch, rate: float, expected: str):
+    from types import SimpleNamespace
+
+    from app.modules.process_stack import dynamics
+    from tests.plumbing_170_support import new_workspace
+
+    class Growth:
+        nitrogen_quota = oxygen_yield = kla_h = 0.0
+        oxygen_saturation = extinction = 0.0
+        diameter = 0.05
+
+        @staticmethod
+        def rates_at(_par, _temperature, _x, _n):
+            return rate, 0.0
+
+    workspace_id = new_workspace()
+    _state, snapshot = _real_scenario(workspace_id, 3600, cadence_s=3600)
+    monkeypatch.setattr(dynamic_engine.pbr_unit, "build_growth", lambda *_args: Growth())
+
+    def invalid_solver(rhs: Any, initial: Any, grid: Any, **_kwargs: Any) -> Any:
+        derivative = np.asarray(rhs(float(grid[0]), tuple(initial)), dtype=np.float64)
+        final = np.asarray(initial, dtype=np.float64) + derivative * (float(grid[-1]) - float(grid[0]))
+        return SimpleNamespace(success=True, message="injected state", times=np.asarray(grid),
+                               states=np.vstack((initial, final)))
+
+    monkeypatch.setattr(dynamics, "integrate_ode", invalid_solver)
+    result = dynamic_engine.run(snapshot, cancelled=lambda: False, progress=lambda _value: None)
+    assert result.status == "failed"
+    assert result.error and result.error["code"] == expected
+    assert len(result.series["t_s"]) == 1
+    assert "PBR_X" in result.series
+    assert result.manifest["artifact_label"] == "diagnostic_failed"
+    assert result.manifest["channels"]["PBR_X"] == "kg/m3"
+    assert result.manifest["balances"]["status"] == "partial"
+
+
+def test_real_engine_sampler_retry_preserves_biology_and_cancel_boundary(monkeypatch):
+    from app.modules.process_stack import draft, dynamic_downstream, mixed_runtime
+    from app.modules.process_stack.draft_models import AddStream, AddUnit, Connect, SetScenario
+    from tests.plumbing_170_support import new_workspace
+
+    workspace_id = new_workspace()
+    state, initial = _real_scenario(workspace_id, 3600, cadence_s=3600)
+    state = draft.patch(workspace_id, state["draft_id"], state["revision"], [
+        AddUnit(op="add_unit", id="heater", type="Heater", tag="Heater", x=300, y=0),
+        AddStream(op="add_stream", id="heater_out", tag="HeaterOut", x=400, y=0),
+        Connect(op="connect", stream="product", end="target", unit="heater", port=0),
+        Connect(op="connect", stream="heater_out", end="source", unit="heater", port=0),
+        SetScenario(op="set_scenario", id="run", value={
+            **initial.payload["scenario"], "downstream_cadence_s": 3600,
+        }),
+    ])
+    snapshot = dynamic_engine.prepare(workspace_id, state["draft_id"], "run")
+    monkeypatch.setattr(mixed_runtime, "_seed", lambda *_args, **_kwargs: None)
+    calls: list[dict[str, Any]] = []
+
+    def runner(_document: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
+        calls.append(kwargs)
+        if kwargs.get("initial_tear") is not None:
+            return {"status": "failed", "mixed_solve": {"reason": "max_iterations", "history": [
+                {"max_normalized_residual": 0.25}]}}
+        return {"status": "failed", "_last_attempt": {
+            "guess": {"Tear": {"mass_flow_kg_s": 2.0}},
+            "output": {"Tear": {"mass_flow_kg_s": 4.0}}},
+            "mixed_solve": {"reason": "max_iterations", "history": [
+                {"max_normalized_residual": 0.5}]}}
+
+    sampler = dynamic_downstream.build_sampler(snapshot, client_factory=lambda: object(), runner=runner)
+    assert sampler is not None
+    sampled = dynamic_engine.run(snapshot, cancelled=lambda: False, progress=lambda _value: None, sampler=sampler)
+    baseline = dynamic_engine.run(snapshot, cancelled=lambda: False, progress=lambda _value: None)
+    assert sampled.status == baseline.status == "succeeded"
+    assert len(calls) == 2
+    outcome = sampled.manifest["downstream_outcomes"][0]
+    assert outcome["status"] == "downstream_unconverged"
+    assert outcome["residual"] == 0.25 and outcome["time_s"] == 3600
+    for channel in ("PBR_X", "PBR_N", "PBR_O2"):
+        assert sampled.series[channel].tobytes() == baseline.series[channel].tobytes()
+
+    timeout_calls = 0
+
+    def timeout_runner(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        nonlocal timeout_calls
+        timeout_calls += 1
+        raise TimeoutError("injected DWSIM timeout")
+
+    timeout_sampler = dynamic_downstream.build_sampler(
+        snapshot, client_factory=lambda: object(), runner=timeout_runner,
+    )
+    assert timeout_sampler is not None
+    timed_out = dynamic_engine.run(snapshot, cancelled=lambda: False, progress=lambda _value: None,
+                                   sampler=timeout_sampler)
+    assert timed_out.status == "succeeded" and timeout_calls == 1
+    assert timed_out.manifest["downstream_outcomes"][0]["reason"] == "timeout"
+    for channel in ("PBR_X", "PBR_N", "PBR_O2"):
+        assert timed_out.series[channel].tobytes() == baseline.series[channel].tobytes()
+
+    cancelled = [False]
+
+    def cancel_sampler(_boundary: dict[str, Any]) -> dict[str, Any]:
+        cancelled[0] = True
+        return {"status": "succeeded", "streams": {}}
+
+    stopped = dynamic_engine.run(snapshot, cancelled=lambda: cancelled[0], progress=lambda _value: None,
+                                 sampler=cancel_sampler)
+    assert stopped.status == "cancelled"
+    assert stopped.manifest["artifact_label"] == "diagnostic_cancelled"
+
+
+def test_real_prepare_refuses_coupled_pbrs_with_different_card_or_parameter_digest():
+    from app.modules.bio_models import service as bio_models
+    from app.modules.process_stack import draft
+    from app.modules.process_stack.draft_models import (
+        AddStream,
+        AddUnit,
+        Connect,
+        Disconnect,
+        SetScenario,
+        SetUnitModel,
+        SetUnitParams,
+    )
+    from tests.plumbing_170_support import new_workspace, pbr_quantities, pin_of
+
+    workspace_id = new_workspace()
+    state, snapshot = _real_scenario(workspace_id, 3600)
+    model = snapshot.payload["units"][0]["model"]
+    card = bio_models.create_card(
+        workspace_id, "dynamic distinct card", model["set"]["id"],
+        model["card"]["factors"], {"value": 0.08, "unit": "1/hour"},
+    )
+    state = draft.patch(workspace_id, state["draft_id"], state["revision"], [
+        AddUnit(op="add_unit", id="pbr2", type="PhotobioreactorT1", tag="PBR2", x=300, y=0),
+        SetUnitParams(op="set_unit_params", unit="pbr2", values=pbr_quantities()),
+        SetUnitModel(op="set_unit_model", unit="pbr2", model=pin_of(card)),
+        AddStream(op="add_stream", id="between", tag="Between", x=200, y=0),
+        Disconnect(op="disconnect", stream="product", end="source"),
+        Connect(op="connect", stream="between", end="source", unit="pbr", port=0),
+        Connect(op="connect", stream="between", end="target", unit="pbr2", port=0),
+        Connect(op="connect", stream="product", end="source", unit="pbr2", port=0),
+        SetScenario(op="set_scenario", id="run", value={
+            **snapshot.payload["scenario"], "units": ["PBR", "PBR2"],
+            "initial": {"PBR": {"X": 0.2, "N": 0.05, "O2": 0.008},
+                        "PBR2": {"X": 0.2, "N": 0.05, "O2": 0.008}},
+        }),
+    ])
+    with pytest.raises(dynamic_engine.DynamicError) as raised:
+        dynamic_engine.prepare(workspace_id, state["draft_id"], "run")
+    assert raised.value.code == "TOPOLOGY_CARD_MISMATCH"
+    assert set(raised.value.detail["units"]) == {"PBR", "PBR2"}
+
+
 def test_integrator_two_point_grid_returns_only_requested_times():
     solved = integrate_ode(lambda _t, _y: [1.0], [0.0], [0.0, 2.0])
     assert solved.success, solved.message
@@ -726,10 +1152,12 @@ def test_prepare_refuses_tampered_real_profile_digest():
 
 
 def test_real_30_day_hourly_run_meets_host_budget_and_api_publishes_artifacts():
+    import shutil
+
     from fastapi.testclient import TestClient
 
     from app.main import app
-    from app.modules.process_stack import dynamic_engine
+    from app.modules.process_stack import draft, dynamic_engine
     from tests.plumbing_170_support import new_workspace
 
     workspace_id = new_workspace()
@@ -747,7 +1175,7 @@ def test_real_30_day_hourly_run_meets_host_budget_and_api_publishes_artifacts():
     assert "state" not in cancelled.series and all(values.ndim == 1 for values in cancelled.series.values())
 
     # A separate real-engine job exercises the workspace API and immutable artifact reads.
-    api_state, _ = _real_scenario(workspace_id, 24 * 3600)
+    api_state, api_snapshot = _real_scenario(workspace_id, 24 * 3600)
     base = f"/workspaces/{workspace_id}/process/drafts/{api_state['draft_id']}/dynamic"
     with TestClient(app) as client:
         long_base = f"/workspaces/{workspace_id}/process/drafts/{state['draft_id']}/dynamic"
@@ -781,4 +1209,30 @@ def test_real_30_day_hourly_run_meets_host_budget_and_api_publishes_artifacts():
         manifest = client.get(base + f"/runs/{job_id}/manifest")
         series = client.get(base + f"/runs/{job_id}/series?channels=t_s,PBR_X&max_points=100")
         assert manifest.status_code == 200 and manifest.json()["fidelity"] == "T1"
+        manifest_body = manifest.json()
+        assert manifest_body["snapshot_digest"] == api_snapshot.digest
+        assert manifest_body["draft_content_digest"] == api_snapshot.payload["content_digest"]
+        assert {"card_id", "card_revision", "card_digest", "parameter_set_digest"} <= set(
+            manifest_body["units"][0]
+        )
+        assert {"profile_id", "digest", "resolution_minutes", "consumed_channels", "temporal_rule"} <= set(
+            manifest_body["profiles"][0]
+        )
         assert series.status_code == 200 and len(series.json()["channels"]["t_s"]) <= 100
+        assert status.json()["current"] is True
+        revision = api_state["revision"]
+        moved = client.post(f"/workspaces/{workspace_id}/process/drafts/{api_state['draft_id']}/patch", json={
+            "expected_revision": revision, "ops": [{"op": "move", "id": "pbr", "x": 140, "y": 20}],
+        })
+        assert moved.status_code == 200, moved.text
+        assert client.get(base + f"/runs/{job_id}").json()["current"] is True
+        semantic = client.post(f"/workspaces/{workspace_id}/process/drafts/{api_state['draft_id']}/patch", json={
+            "expected_revision": moved.json()["revision"],
+            "ops": [{"op": "set_scenario", "id": "run", "value": {
+                **api_snapshot.payload["scenario"], "par_scale": 1.5,
+            }}],
+        })
+        assert semantic.status_code == 200, semantic.text
+        assert client.get(base + f"/runs/{job_id}").json()["current"] is False
+        shutil.rmtree(draft.draft_dir(workspace_id, api_state["draft_id"]))
+        assert client.get(base + f"/runs/{job_id}").json()["current"] is False

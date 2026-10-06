@@ -106,7 +106,8 @@ class Scenario(StrictModel):
     temperature_source: Literal["sea_temperature", "air_temperature", "unit_mean"]
     par_scale: float = Field(default=1.0, ge=0)
     par_from_ghi_factor: float | None = Field(default=None, gt=0)
-    downstream_cadence_s: float | None = Field(default=None, ge=MIN_CADENCE_S)
+    downstream_cadence_s: float | None = Field(default=None, ge=3600)
+    downstream_enabled: bool = False
     initial: dict[str, dict[str, float]] = Field(default_factory=dict)
     feed_flows: dict[str, float] = Field(default_factory=dict)
 
@@ -119,3 +120,9 @@ class Scenario(StrictModel):
         if parsed.tzinfo is None or parsed.utcoffset() is None:
             raise ValueError("timestamps must include a UTC offset")
         return value
+
+    @model_validator(mode="after")
+    def downstream_default(self) -> Scenario:
+        if self.downstream_enabled and self.downstream_cadence_s is None:
+            self.downstream_cadence_s = 86400.0
+        return self
