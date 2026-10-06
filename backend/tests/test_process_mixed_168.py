@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import os
 import time
 
 import pytest
@@ -846,3 +847,74 @@ def test_minor7_other_partition_errors_become_a_blocking_finding(monkeypatch: py
     monkeypatch.setattr(mixed, "partition", broken)
     findings = mixed.validation_findings(_tear_document())
     assert [item["code"] for item in findings if item["severity"] == "blocker"] == ["MIXED_PARTITION_INVALID"]
+
+
+def test_native_recycle_carrier_gap_is_allowed_only_up_to_the_reported_recycle_error() -> None:
+    # Real DWSIM 10.2.9: a converged native loop leaves the Mixer outlet short of its inlets by the Recycle error.
+    document = {"objects": {
+        "f": _stream("f", "Hot", target="m"), "m": _unit("m", "Mixer", "Mixer"),
+        "t": _stream("t", "Torn", "r", "m", target_port=1), "o": _stream("o", "Mixed", "m", None),
+        "r": _unit("r", "Recycle", "Recycle")}}
+    hot, torn, mixed_out = _state(), _state(), _state()
+    hot["mass_flow_kg_s"], torn["mass_flow_kg_s"], mixed_out["mass_flow_kg_s"] = 0.01, 0.0011111211, 0.011111211
+    for state in (hot, torn, mixed_out):
+        state["culture"]["biomass"] = 0.5
+    known = {"Hot": hot, "Torn": torn, "Mixed": mixed_out}
+    gap = mixed_out["mass_flow_kg_s"] - hot["mass_flow_kg_s"] - torn["mass_flow_kg_s"]
+    with pytest.raises(mixed_runtime.SegmentFailure):
+        mixed_runtime._culture_balances(document, known, {})
+    with pytest.raises(mixed_runtime.SegmentFailure):
+        mixed_runtime._culture_balances(document, known, {}, None, gap / 2)
+    row = mixed_runtime._culture_balances(document, known, {}, None, gap)["Mixer"]["biomass"]
+    assert row["passed"] and row["native_recycle_allowance"] == pytest.approx(gap * 0.5)
+    mixed_out["culture"]["biomass"] = 0.6  # a real culture error is never covered by the carrier allowance
+    with pytest.raises(mixed_runtime.SegmentFailure):
+        mixed_runtime._culture_balances(document, known, {}, None, gap)
+
+
+@pytest.mark.skipif(not os.environ.get("JARVISOS_DWSIM_MCP_PATH"), reason="set JARVISOS_DWSIM_MCP_PATH to opt in to DWSIM runtime")
+def test_real_dwsim_culture_through_a_native_recycle_loop_converges() -> None:
+    from app.modules.process_stack.draft_models import (
+        AddStream,
+        AddUnit,
+        Connect,
+        DraftQuantity,
+        SetStreamCulture,
+        SetStreamSpec,
+        SetThermo,
+        SetUnitParams,
+    )
+    from tests.plumbing_170_support import new_workspace
+
+    q = DraftQuantity
+    workspace_id = new_workspace()
+    state = draft.create_draft(workspace_id, "culture native loop")
+    wiring = (("f", "target", "heater", 0), ("hot", "source", "heater", 0), ("hot", "target", "mixer", 0),
+              ("mixed", "source", "mixer", 0), ("mixed", "target", "split", 0), ("purge", "source", "split", 0),
+              ("back", "source", "split", 1), ("back", "target", "rec", 0), ("torn", "source", "rec", 0),
+              ("torn", "target", "mixer", 1))
+    state = draft.patch(workspace_id, state["draft_id"], state["revision"], [
+        SetThermo(op="set_thermo", compounds=["Water"], property_package="NRTL"),
+        AddUnit(op="add_unit", id="heater", type="Heater", tag="Heater", x=150, y=0),
+        AddUnit(op="add_unit", id="mixer", type="Mixer", tag="Mixer", x=250, y=0),
+        AddUnit(op="add_unit", id="split", type="Splitter", tag="Split", x=450, y=0),
+        AddUnit(op="add_unit", id="rec", type="Recycle", tag="Rec", x=350, y=80),
+        *[AddStream(op="add_stream", id=sid, tag=sid.title(), x=x, y=0)
+          for sid, x in (("f", 0), ("hot", 200), ("mixed", 400), ("purge", 500), ("back", 450), ("torn", 300))],
+        *[Connect(op="connect", stream=sid, end=end, unit=unit, port=port) for sid, end, unit, port in wiring],
+        SetStreamSpec(op="set_stream_spec", stream="f", pressure=q(value=1.0, unit="bar"),
+                      temperature=q(value=300, unit="K"), mass_flow=q(value=0.01, unit="kg/s"),
+                      composition={"Water": 1.0}, composition_basis="mass"),
+        SetStreamCulture(op="set_stream_culture", stream="f", culture={
+            "biomass": q(value=0.5, unit="kg/m3"), "nitrogen": q(value=0.05, unit="kg/m3"),
+            "oxygen": q(value=0.008, unit="kg/m3"), "salinity": q(value=0.0, unit="g/kg")}),
+        SetUnitParams(op="set_unit_params", unit="heater", mode="outlet_temperature",
+                      values={"outlet_temperature": q(value=298.15, unit="K")}),
+        SetUnitParams(op="set_unit_params", unit="split", mode="split_ratios", values={
+            "split_ratio_1": q(value=0.9, unit="dimensionless"), "split_ratio_2": q(value=0.1, unit="dimensionless")}),
+    ])
+    run = draft.execute(workspace_id, state["draft_id"], state["revision"], "run")["run"]
+    assert run["status"] == "completed", run.get("mixed_solve")
+    assert run["streams"]["Purge"]["mass_flow_kg_s"] == pytest.approx(0.01, rel=2e-5)
+    assert run["culture"]["Purge"]["values"]["biomass"]["mass_specific"] == pytest.approx(
+        run["culture"]["F"]["values"]["biomass"]["mass_specific"], rel=1e-6)
