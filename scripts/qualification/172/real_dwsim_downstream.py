@@ -29,7 +29,8 @@ def main() -> int:
         ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
         "source_dirty": bool(subprocess.check_output(
             ["git", "status", "--porcelain"], cwd=ROOT, text=True).strip()),
-        "dwsim_path_configured": bool(str(executable)), "complete": False}
+        "dwsim_path_configured": bool(os.environ.get("JARVISOS_DWSIM_MCP_PATH")) and executable.is_file(),
+        "complete": False}
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     if not executable.is_file():
         report.update(dwsim_version=None, outcome="DWSIM MCP executable unavailable",
