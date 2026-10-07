@@ -222,3 +222,108 @@ def test_seed_for_a_missing_recycle_is_a_blocker_and_settings_change_the_fingerp
     tuned = _recycle_document() | {"solver": {"method": "broyden"}}
     part = {"consumed": [], "segments": [], "levels": {}, "jarvis_units": []}
     assert mixed.fingerprint(plain, part) != mixed.fingerprint(tuned, part)
+
+
+def _real_pbr_recycle(back_fraction: float):
+    from app.modules.process_stack.draft_models import (
+        AddStream,
+        AddUnit,
+        Connect,
+        Disconnect,
+        DraftQuantity,
+        SetUnitModel,
+        SetUnitParams,
+    )
+    from app.modules.bio_models import service as bio_models
+    from tests.plumbing_170_support import new_workspace, pbr_ops, pin_of
+
+    workspace_id = new_workspace()
+    parameter_set = bio_models.create_set(workspace_id, "183 recycle parameters")
+    for symbol, value, unit in (
+        ("K_I", 150.0, "umol/(m**2*s)"), ("K_j_0", 0.001, "kg/m3"), ("k_d", 0.003, "1/hour"),
+        ("a", 1.8, "1"), ("b", 0.5, "1"), ("c", 0.1, "1"), ("d", 0.01, "1"),
+        ("w_ash", 0.05, "1"), ("k_X", 150.0, "m**2/kg"), ("T_min", 278.15, "K"),
+        ("T_opt", 298.15, "K"), ("T_max", 318.15, "K"),
+    ):
+        parameter_set = bio_models.edit_set_value(
+            workspace_id, parameter_set["id"], symbol, {"value": value, "unit": unit, "expected_unit": unit},
+            parameter_set["revision"], parameter_set["digest"])
+    card = bio_models.create_card(
+        workspace_id, "183 recycle card", parameter_set["id"],
+        {"light": "light.monod", "optics": "optics.slab_response_average", "temperature": "temperature.ctmi",
+         "nutrients": ["nutrient.monod"], "combination": "combine.liebig", "loss": "loss.first_order",
+         "stoichiometry": "stoich.photoautotrophic"},
+        {"value": 0.08, "unit": "1/hour"})
+    state = draft.create_draft(workspace_id, "183 recycle")
+    culture = {"biomass": (0.2, "kg/m3"), "nitrogen": (0.05, "kg/m3"), "oxygen": (0.0, "kg/m3"),
+               "salinity": (35.0, "g/kg")}
+    state = draft.patch(workspace_id, state["draft_id"], state["revision"], [
+        *pbr_ops(culture=culture, flow_kg_s=0.01),
+        SetUnitModel(op="set_unit_model", unit="pbr", model=pin_of(card)),
+        AddUnit(op="add_unit", id="mixer", type="Mixer", tag="Mixer", x=50, y=0),
+        AddUnit(op="add_unit", id="split", type="Splitter", tag="Split", x=300, y=0),
+        AddUnit(op="add_unit", id="rec", type="Recycle", tag="Rec", x=200, y=100),
+        AddStream(op="add_stream", id="mixed", tag="Mixed", x=80, y=0),
+        AddStream(op="add_stream", id="purge", tag="Purge", x=350, y=0),
+        AddStream(op="add_stream", id="back", tag="Back", x=300, y=100),
+        AddStream(op="add_stream", id="torn", tag="Torn", x=100, y=100),
+        Disconnect(op="disconnect", stream="feed", end="target"),
+        Connect(op="connect", stream="feed", end="target", unit="mixer", port=0),
+        Connect(op="connect", stream="mixed", end="source", unit="mixer", port=0),
+        Connect(op="connect", stream="mixed", end="target", unit="pbr", port=0),
+        Connect(op="connect", stream="product", end="target", unit="split", port=0),
+        Connect(op="connect", stream="purge", end="source", unit="split", port=0),
+        Connect(op="connect", stream="back", end="source", unit="split", port=1),
+        Connect(op="connect", stream="back", end="target", unit="rec", port=0),
+        Connect(op="connect", stream="torn", end="source", unit="rec", port=0),
+        Connect(op="connect", stream="torn", end="target", unit="mixer", port=1),
+        SetUnitParams(op="set_unit_params", unit="split", mode="split_ratios", values={
+            "split_ratio_1": DraftQuantity(value=1 - back_fraction, unit="dimensionless"),
+            "split_ratio_2": DraftQuantity(value=back_fraction, unit="dimensionless")}),
+    ])
+    return workspace_id, state
+
+
+@pytest.mark.skipif(not __import__("os").environ.get("JARVISOS_DWSIM_MCP_PATH"),
+                    reason="set JARVISOS_DWSIM_MCP_PATH to opt in to DWSIM runtime")
+def test_real_dwsim_pbr_culture_recycle_with_each_method() -> None:
+    import json
+    import os
+
+    workspace_id, state = _real_pbr_recycle(0.9)
+    blockers = [item for item in draft.validate_document(draft.load_revision(
+        draft.draft_dir(workspace_id, state["draft_id"]), state["revision"])["document"], workspace_id)
+        if item["severity"] == "blocker"]
+    assert blockers == []
+    outcomes = {}
+    for method, extra in (("direct_substitution", {}), ("direct_substitution", {"max_iterations": 200}),
+                          ("broyden", {}), ("wegstein", {"max_iterations": 60})):
+        settings = {"method": method, "seed_mode": "feed", "wall_s": 600, **extra}
+        state = draft.patch(workspace_id, state["draft_id"], state["revision"],
+                            [SetSolver(op="set_solver", solver=settings)])
+        run = draft.execute(workspace_id, state["draft_id"], state["revision"], "run")["run"]
+        solve = run["mixed_solve"]
+        assert solve["method"] == method and solve["solver"]["method"] == method
+        assert solve["solver"]["max_iterations"] == settings.get("max_iterations", 25)
+        assert solve["diagnostics"]["method"] == method
+        outcomes[f"{method}/{settings.get('max_iterations', 25)}"] = {
+            "status": run["status"], "reason": solve["reason"], "iterations": len(solve["history"]),
+            "diagnostics": solve["diagnostics"], "elapsed_s": solve["elapsed_s"],
+            "purge": (run["streams"].get("Purge") or {}).get("mass_flow_kg_s"),
+            "back": (run["streams"].get("Back") or {}).get("mass_flow_kg_s"),
+            "balances_passed": all(row.get("passed", True) for row in solve.get("balances", {}).values())}
+    evidence = os.environ.get("JARVISOS_183_EVIDENCE")
+    if evidence:
+        with open(evidence, "w") as handle:
+            json.dump(outcomes, handle, indent=1, default=str)
+    broyden = outcomes["broyden/25"]
+    assert broyden["status"] == "completed", broyden
+    assert broyden["balances_passed"]
+    assert broyden["purge"] == pytest.approx(0.01, rel=1e-3)
+    assert broyden["back"] == pytest.approx(0.09, rel=1e-3)
+    for key, outcome in outcomes.items():
+        # Every method either converges truthfully or names why it stopped; none converges on the wrong flows.
+        if outcome["status"] == "completed":
+            assert outcome["purge"] == pytest.approx(0.01, rel=1e-3), key
+        else:
+            assert outcome["reason"] in {"iteration_budget_insufficient", "max_iterations"}, (key, outcome)
