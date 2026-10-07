@@ -109,8 +109,10 @@ def test_registry_owners_and_rules_cover_all_existing_units() -> None:
     projection = draft.registry_projection()
     dwsim_units = [item for item in projection["units"] if item["owner"] == "dwsim"]
     assert len(dwsim_units) == 12
-    assert len(projection["units"]) == 14
-    assert {item["type"] for item in projection["units"] if item["owner"] == "jarvis_bio"} == {"SpecifiedSeparator", "PhotobioreactorT1"}
+    assert len(projection["units"]) == 15
+    assert {item["type"] for item in projection["units"] if item["owner"] == "jarvis_bio"} == {
+        "SpecifiedSeparator", "PhotobioreactorT1", "HoldupTank",
+    }
     assert {item["owner"] for item in projection["units"]} == {"dwsim", "jarvis_bio"}
     assert {item["type"]: item["culture_rule"] for item in projection["units"]}["Mixer"] == "mixer"
     assert {item["type"]: item["culture_rule"] for item in projection["units"]}["Splitter"] == "splitter"

@@ -45,10 +45,10 @@ def test_projection_exposes_pbr_group_additively_and_palette_source() -> None:
     assert {item["key"]: item["group"] for item in pbr["params"]} == {k: v[1] for k, v in PBR_TABLE.items()}
     # The Jarvis units palette group is derived from owner == jarvis_bio, exactly like SpecifiedSeparator.
     assert {item["type"] for item in projection["units"] if item["owner"] == "jarvis_bio"} == {
-        "SpecifiedSeparator", "PhotobioreactorT1"}
+        "SpecifiedSeparator", "PhotobioreactorT1", "HoldupTank"}
     assert all(item["group"] is None for name, unit in units.items() if name != "PhotobioreactorT1"
                for item in unit["params"])
-    assert list(units)[-2:] == ["SpecifiedSeparator", "PhotobioreactorT1"], "Jarvis unit order is unchanged"
+    assert list(units)[-3:] == ["SpecifiedSeparator", "PhotobioreactorT1", "HoldupTank"]
     assert list(units).index("CSTR") < list(units).index("PFR"), "180 adds CSTR alongside DWSIM reactors"
     for kind in ("velocity", "photon_flux_density", "temperature_difference", "time", "specific_rate"):
         assert kind in projection["quantity_units"]
