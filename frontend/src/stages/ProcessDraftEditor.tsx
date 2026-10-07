@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { PointerEvent as ReactPointerEvent } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from "react";
 import ProcessProposals from "../components/process/ProcessProposals";
 import { publishProcessSurface } from "../app/workspaceActionSurface";
 import BiologyModelLibrary from "../components/process/BiologyModelLibrary";
@@ -346,6 +346,17 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
   const draftKey = draft?.draft_id;
   const hasCompounds = Boolean(draft?.compounds.length);
   useEffect(() => { if (draftKey) setSetupOpen(!hasCompounds); }, [draftKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Spec 182: Setup is an overlay drawer opened from the toolbar; opening moves focus into it, closing returns it.
+  const setupRef = useRef<HTMLElement | null>(null);
+  const setupToggleRef = useRef<HTMLButtonElement | null>(null);
+  const setupFocus = useRef(false);
+  const openSetup = () => { setupFocus.current = true; setSetupOpen(true); };
+  const closeSetup = () => { setSetupOpen(false); setupToggleRef.current?.focus({ preventScroll: true }); };
+  useEffect(() => {
+    if (!setupOpen || !setupFocus.current) return;
+    setupFocus.current = false;
+    setupRef.current?.focus({ preventScroll: true });
+  }, [setupOpen]);
 
   const apply = useCallback(
     (ops: DraftOp[]) => {
@@ -378,6 +389,31 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
   const byId = useMemo(() => new Map(objects.map((item) => [item.id, item])), [objects]);
   const units = objects.filter((item) => item.kind === "unit");
   const selected = selectedId ? byId.get(selectedId) ?? null : null;
+  // Spec 182: the inspector exists only while something is selected. When it closes with focus inside it,
+  // focus returns to the flowsheet canvas instead of being lost to the document body.
+  const inspectorOpen = Boolean(selected);
+  const wasInspectorOpen = useRef(false);
+  useEffect(() => {
+    const closed = wasInspectorOpen.current && !inspectorOpen;
+    wasInspectorOpen.current = inspectorOpen;
+    if (!closed) return;
+    const active = document.activeElement;
+    if (!active || active === document.body) svgRef.current?.focus({ preventScroll: true });
+  }, [inspectorOpen]);
+  // Escape closes the Setup drawer when focus is in it (or nothing is selected), otherwise clears the selection.
+  // Form fields keep Escape for themselves; menus stop it before it reaches here.
+  const onEditorKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "Escape" || event.defaultPrevented || biologyOpen) return;
+    const target = event.target as HTMLElement;
+    if (target.closest("input:not([type=checkbox]):not([type=radio]), select, textarea")) return;
+    if (setupOpen && (setupRef.current?.contains(target) || !selected)) {
+      event.preventDefault();
+      closeSetup();
+    } else if (selected) {
+      event.preventDefault();
+      setSelectedId(null);
+    }
+  };
   useEffect(() => {
     publishProcessSurface({ draft_id: draft?.draft_id ?? null, process_selection: selected ? [{ kind: selected.kind, id: selected.id, tag: selected.tag }] : [] });
   }, [draft?.draft_id, selected?.id, selected?.kind, selected?.tag]);
@@ -1303,10 +1339,12 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
   );
 
   return (
-    <div className="draft-editor">
-      <div className="draft-toolbar">
+    <div className="draft-editor" onKeyDown={onEditorKeyDown}>
+      <div className="draft-toolbar" role="toolbar" aria-label="Process actions">
         <span className="draft-revision">revision {draft.seq}</span>
         <button type="button" onClick={() => setBiologyOpen((open) => !open)}>Biology models…</button>
+        <button type="button" ref={setupToggleRef} className="draft-setup-toggle" aria-expanded={setupOpen} aria-controls="draft-setup-drawer"
+          onClick={() => (setupOpen ? closeSetup() : openSetup())}>{setupOpen ? "Close setup" : "Setup"}</button>
         <button type="button" className="draft-run-button" disabled={busy !== null || blockers.length > 0} onClick={() => void act("run")}>
           {busy === "run"
             ? registry.units.some((unit) => unit.owner === "jarvis_bio") && objects.some((item) => item.kind === "unit" && unitSpec(item.type)?.owner === "jarvis_bio")
@@ -1318,8 +1356,6 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
         <span className={`draft-readiness ${blockers.length ? "has-blockers" : "is-ready"}`} data-testid="readiness-chip">
           {blockers.length ? `${shownBlockerCount} blocker${shownBlockerCount === 1 ? "" : "s"}` : "No blockers"} · {shownWarningCount} warning{shownWarningCount === 1 ? "" : "s"}
         </span>
-        <button type="button" className="draft-setup-toggle" aria-expanded={setupOpen} aria-controls="draft-setup-drawer"
-          onClick={() => setSetupOpen((open) => !open)}>{setupOpen ? "Close setup" : "Setup"}</button>
         <span className={`draft-state draft-state--${results.state}`} data-testid="results-state">
           {results.state === "none" ? "No results" : results.state === "current" ? "Results current" : `Results stale (${results.edits_since} edits)`}
         </span>
@@ -1334,7 +1370,7 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
       </div>
       {biologyOpen && <BiologyModelLibrary workspaceId={workspaceId} onClose={() => setBiologyOpen(false)} />}
       {notice && <p className={`draft-notice draft-notice--${notice.tone}`} role="alert">{notice.text}</p>}
-      <div className={`draft-body${selected && (selected.type === "PhotobioreactorT1" || selected.type === "PFR" || selected.type === "CSTR") ? " draft-body--wide-inspector" : ""}`}>
+      <div className={`draft-body${selected ? " draft-body--inspector" : ""}${selected && (selected.type === "PhotobioreactorT1" || selected.type === "PFR" || selected.type === "CSTR") ? " draft-body--wide-inspector" : ""}`}>
         <aside className="draft-palette" aria-label="Palette">
           <h3>Add</h3>
           <button type="button" onClick={() => addStream("material")}>Material stream</button>
@@ -1370,16 +1406,10 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
           </ul>
         </aside>
         <div className="draft-canvas-wrap">
-          {setupOpen && (
-            <section id="draft-setup-drawer" className="draft-setup-drawer" aria-label="Setup">
-              <header><h3>Setup · species and thermodynamics</h3>
-                <button type="button" onClick={() => setSetupOpen(false)} aria-label="Close setup">Close</button></header>
-              {thermoFieldset}
-            </section>
-          )}
           <div className="draft-canvas-frame">
           <svg
             ref={viewport.attach}
+            tabIndex={-1}
             className="draft-canvas"
             role="img"
             aria-label="Process flowsheet draft"
@@ -1408,8 +1438,16 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
             <button type="button" aria-pressed={viewport.fitted} onClick={viewport.fitAll}>Fit all</button>
             <button type="button" onClick={viewport.reset}>Reset</button>
           </div>
+          {setupOpen && (
+            <section id="draft-setup-drawer" ref={setupRef} className="draft-setup-drawer" aria-labelledby="draft-setup-title" tabIndex={-1}>
+              <header><h3 id="draft-setup-title">Setup · species and thermodynamics</h3>
+                <button type="button" onClick={closeSetup} aria-label="Close setup">Close</button></header>
+              {thermoFieldset}
+            </section>
+          )}
           </div>
           <ContextMenu label="Unit orientation" items={orientationItems} at={unitMenu.at} onClose={unitMenu.close} />
+          <ProcessProposals workspaceId={workspaceId} draftId={draft.draft_id} proposals={draft.proposals} onDecided={() => void loadDraft(draft.draft_id)} />
           <section className="draft-findings-panel" aria-label="Draft findings">
             <h3>Readiness guidance: {countLabel}</h3>
             <p className="draft-hint">Blockers stop Run. Warnings allow a solve but may make its result physically meaningless.</p>
@@ -1442,32 +1480,25 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
             </section>
           )}
         </div>
-        <aside className="draft-inspector" aria-label="Inspector">
-          <ProcessProposals workspaceId={workspaceId} draftId={draft.draft_id} proposals={draft.proposals} onDecided={() => void loadDraft(draft.draft_id)} />
-          {selected ? (
-            <>
-              <div className="draft-inspector__title"><h3>{selected.kind === "unit" ? unitSpec(selected.type)?.label : "Material stream"} {selected.tag}</h3>
-                {selected.kind === "unit" && <MenuButton label={`Orientation for ${selected.tag}`} items={[
-                  { id: "mirror-lr", label: selected.flip_x ? "Unmirror left ↔ right" : "Mirror left ↔ right", onSelect: () => void apply([{ op: "set_orientation", id: selected.id, flip_x: !selected.flip_x }]) },
-                  { id: "mirror-tb", label: selected.flip_y ? "Unmirror top ↕ bottom" : "Mirror top ↕ bottom", onSelect: () => void apply([{ op: "set_orientation", id: selected.id, flip_y: !selected.flip_y }]) },
-                ]}>Orientation ▾</MenuButton>}
-              </div>
-              <div className="draft-rename">
-                <input aria-label="Tag" value={rename} onChange={(event) => setRename(event.target.value)} />
-                <button type="button" disabled={!rename || rename === selected.tag} onClick={() => void apply([{ op: "rename", id: selected.id, tag: rename }])}>Rename</button>
-                <button type="button" className="draft-delete" onClick={() => { void apply([{ op: "delete", id: selected.id }]); setSelectedId(null); }}>Delete</button>
-              </div>
-              {resultsView && <ObjectResults view={resultsView} kind={selected.kind === "stream" ? "stream" : "unit"} tag={selected.tag}
-                stale={resultsView.run_id === results.run_id && results.state === "stale"} onSelectTag={selectTag} />}
-              {selected.kind === "stream" ? renderStreamInspector(selected) : renderUnitInspector(selected)}
-            </>
-          ) : (
-            <div className="draft-inspector__empty">
-              <p className="draft-hint">Select a stream or unit on the flowsheet to edit it{resultsView ? " and inspect its results" : ""}.</p>
-              {!setupOpen && <button type="button" onClick={() => setSetupOpen(true)}>Open setup (species and thermodynamics)</button>}
+        {selected ? (
+          <aside className="draft-inspector" aria-label="Inspector" data-testid="draft-inspector">
+            <div className="draft-inspector__title"><h3>{selected.kind === "unit" ? unitSpec(selected.type)?.label : "Material stream"} {selected.tag}</h3>
+              {selected.kind === "unit" && <MenuButton label={`Orientation for ${selected.tag}`} items={[
+                { id: "mirror-lr", label: selected.flip_x ? "Unmirror left ↔ right" : "Mirror left ↔ right", onSelect: () => void apply([{ op: "set_orientation", id: selected.id, flip_x: !selected.flip_x }]) },
+                { id: "mirror-tb", label: selected.flip_y ? "Unmirror top ↕ bottom" : "Mirror top ↕ bottom", onSelect: () => void apply([{ op: "set_orientation", id: selected.id, flip_y: !selected.flip_y }]) },
+              ]}>Orientation ▾</MenuButton>}
+              <button type="button" className="draft-inspector__close" aria-label="Close inspector" title="Close inspector (Esc)" onClick={() => setSelectedId(null)}>×</button>
             </div>
-          )}
-        </aside>
+            <div className="draft-rename">
+              <input aria-label="Tag" value={rename} onChange={(event) => setRename(event.target.value)} />
+              <button type="button" disabled={!rename || rename === selected.tag} onClick={() => void apply([{ op: "rename", id: selected.id, tag: rename }])}>Rename</button>
+              <button type="button" className="draft-delete" onClick={() => { void apply([{ op: "delete", id: selected.id }]); setSelectedId(null); }}>Delete</button>
+            </div>
+            {resultsView && <ObjectResults view={resultsView} kind={selected.kind === "stream" ? "stream" : "unit"} tag={selected.tag}
+              stale={resultsView.run_id === results.run_id && results.state === "stale"} onSelectTag={selectTag} />}
+            {selected.kind === "stream" ? renderStreamInspector(selected) : renderUnitInspector(selected)}
+          </aside>
+        ) : null}
       </div>
     </div>
   );

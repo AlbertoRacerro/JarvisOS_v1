@@ -66,6 +66,8 @@
 .draft-viewport-controls button { min-height: 26px; height: 26px; padding: 0 8px; background: var(--color-bg-surface, #fff); }
 .draft-viewport-controls output { min-width: 44px; font-size: 11px; text-align: center; color: var(--color-text-muted, #687068); }
 
-.draft-setup-drawer { padding: 8px; border: 1px solid var(--color-border-default, #d8d1c5); border-radius: 6px; background: var(--color-bg-surface, #fff); }
+/* Spec 182: Setup overlays the flowsheet (below the view controls) and takes no canvas width when closed. */
+.draft-setup-drawer { position: absolute; top: 42px; right: 8px; z-index: 2; display: grid; gap: 6px; width: min(360px, calc(100% - 16px)); max-height: calc(100% - 50px); overflow: auto; padding: 8px; border: 1px solid var(--color-border-default, #d8d1c5); border-radius: 6px; background: var(--color-bg-surface, #fff); box-shadow: 0 6px 20px #26321d33; }
+.draft-setup-drawer:focus-visible { outline: 2px solid #1d5fa8; outline-offset: 1px; }
 .draft-setup-drawer header { display: flex; justify-content: space-between; align-items: center; }
 .draft-setup-drawer header h3 { margin: 0; font-size: 13px; }
