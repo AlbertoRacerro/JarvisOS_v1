@@ -247,7 +247,7 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
   const [rename, setRename] = useState("");
   const revisionRef = useRef<string>("");
   const queue = useRef<Promise<unknown>>(Promise.resolve());
-  const svgRef = useRef<SVGSVGElement>(null);
+  const svgRef = useRef<SVGSVGElement | null>(null);
 
   const accept = useCallback((next: DraftProjection) => {
     revisionRef.current = next.revision;
@@ -1379,7 +1379,7 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
           )}
           <div className="draft-canvas-frame">
           <svg
-            ref={svgRef}
+            ref={viewport.attach}
             className="draft-canvas"
             role="img"
             aria-label="Process flowsheet draft"

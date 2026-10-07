@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
+import { useCallback, useEffect, useRef, useState, type MutableRefObject, type PointerEvent as ReactPointerEvent } from "react";
 
 /** Flowsheet-local zoom and pan (spec 181): only the SVG viewBox changes; page zoom never does. */
 export type Box = { x: number; y: number; w: number; h: number };
@@ -9,14 +9,20 @@ export const ZOOM_MIN = 0.25;
 export const ZOOM_MAX = 4;
 const clampZoom = (zoom: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoom));
 
-export function useFlowsheetViewport(svgRef: RefObject<SVGSVGElement | null>, content: Box) {
+export function useFlowsheetViewport(svgRef: MutableRefObject<SVGSVGElement | null>, content: Box) {
   const [size, setSize] = useState({ w: 800, h: 480 });
   // null follows the content ("Fit all"); an explicit view stays put while the flowsheet is edited.
   const [view, setView] = useState<View | null>(null);
   const gesture = useRef<Gesture | null>(null);
+  // The SVG mounts only after the draft loads, so listeners follow the element, not the first render.
+  const [element, setElement] = useState<SVGSVGElement | null>(null);
+  const attach = useCallback((node: SVGSVGElement | null) => {
+    svgRef.current = node;
+    setElement(node);
+  }, [svgRef]);
 
   useEffect(() => {
-    const svg = svgRef.current;
+    const svg = element;
     if (!svg) return;
     const measure = () => {
       const rect = svg.getBoundingClientRect();
@@ -26,7 +32,7 @@ export function useFlowsheetViewport(svgRef: RefObject<SVGSVGElement | null>, co
     const observer = new ResizeObserver(measure);
     observer.observe(svg);
     return () => observer.disconnect();
-  }, [svgRef]);
+  }, [element]);
 
   const fitted: View = {
     cx: content.x + content.w / 2,
@@ -55,7 +61,7 @@ export function useFlowsheetViewport(svgRef: RefObject<SVGSVGElement | null>, co
   const zoomRef = useRef(zoomAt);
   zoomRef.current = zoomAt;
   useEffect(() => {
-    const svg = svgRef.current;
+    const svg = element;
     if (!svg) return;
     const onWheel = (event: WheelEvent) => {
       event.preventDefault();
@@ -63,7 +69,7 @@ export function useFlowsheetViewport(svgRef: RefObject<SVGSVGElement | null>, co
     };
     svg.addEventListener("wheel", onWheel, { passive: false });
     return () => svg.removeEventListener("wheel", onWheel);
-  }, [svgRef]);
+  }, [element]);
 
   const spread = (pointers: Gesture["pointers"]) => {
     const [a, b] = [...pointers.values()];
@@ -116,6 +122,7 @@ export function useFlowsheetViewport(svgRef: RefObject<SVGSVGElement | null>, co
   };
 
   return {
+    attach,
     viewBox,
     zoom: current.zoom,
     fitted: view === null,
