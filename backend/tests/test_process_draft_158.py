@@ -651,8 +651,10 @@ def test_process_read_view_contains_guidance_results_and_dwsim_errors(workspace_
     view = draft.agent_view(workspace_id, state["draft_id"])
     assert view["guidance"] and isinstance(view["blockers"], list) and isinstance(view["warnings"], list)
     assert view["dwsim"]["solve_errors"] and view["dwsim"]["error"] == "RuntimeError"
-    assert view["current_results"]["state"] == "current"
+    # Spec 181: the later failed Run of the same revision demotes the older converged answer to stale.
+    assert view["current_results"]["state"] == "stale"
     assert view["current_results"]["streams"]["Feed"]["molar_flow"] == "40 kmol/h"
+    assert view["dwsim"]["outcome"]["state"] == "failed"
 
 
 def test_real_dwsim_solver_failure_text_reaches_hermes_view(workspace_draft: Any) -> None:

@@ -104,6 +104,14 @@ def run(workspace_id: str, draft_id: str, run_id: str) -> dict[str, Any]:
         raise _error(exc) from exc
 
 
+@router.get("/{draft_id}/runs/{run_id}/results")
+def run_results(workspace_id: str, draft_id: str, run_id: str) -> dict[str, Any]:
+    try:
+        return draft.run_results(workspace_id, draft_id, run_id)
+    except draft.DraftError as exc:
+        raise _error(exc) from exc
+
+
 @router.get("/{draft_id}/proposals")
 def proposals(workspace_id: str, draft_id: str) -> list[dict[str, Any]]:
     try:

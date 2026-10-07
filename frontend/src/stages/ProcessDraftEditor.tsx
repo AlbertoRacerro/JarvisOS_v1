@@ -10,6 +10,8 @@ import QuantityInput from "../components/process/QuantityInput";
 import { ownerLabel, ownerShort } from "../components/process/processOwners";
 import { failureTouchesUnit } from "../components/process/pbrLogic";
 import ResultProperties from "../components/process/ResultProperties";
+import { ObjectResults, OutcomeDetails, ResultsWorkspace, RunStateIndicator, runState } from "../components/process/RunResults";
+import { useFlowsheetViewport, ZOOM_MAX, ZOOM_MIN } from "../components/process/useFlowsheetViewport";
 import { ContextMenu, MenuButton, useContextMenu } from "../components/ui/ContextMenu";
 import type { ContextMenuItem } from "../components/ui/ContextMenu";
 import {
@@ -21,6 +23,7 @@ import {
   getDraft,
   getDraftRegistry,
   getDraftRun,
+  getRunResults,
   listDraftRevisions,
   listDrafts,
   modeKey,
@@ -46,6 +49,7 @@ import {
   type RegistryUnit,
   type RevisionSummary,
   type ResultProperty,
+  type ResultsView,
   type StoredQuantity,
 } from "../api/processDraft";
 import {
@@ -219,6 +223,8 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
   const [busy, setBusy] = useState<"validate" | "run" | null>(null);
   const [lastRun, setLastRun] = useState<DraftRun | null>(null);
   const [solvedRun, setSolvedRun] = useState<DraftRun | null>(null);
+  const [resultsView, setResultsView] = useState<ResultsView | null>(null);
+  const [setupOpen, setSetupOpen] = useState(false);
   const [revisions, setRevisions] = useState<RevisionSummary[] | null>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
   const [overrides, setOverrides] = useState<Record<string, Point>>({});
@@ -241,7 +247,7 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
   const [rename, setRename] = useState("");
   const revisionRef = useRef<string>("");
   const queue = useRef<Promise<unknown>>(Promise.resolve());
-  const svgRef = useRef<SVGSVGElement>(null);
+  const svgRef = useRef<SVGSVGElement | null>(null);
 
   const accept = useCallback((next: DraftProjection) => {
     revisionRef.current = next.revision;
@@ -323,6 +329,23 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
     if (!draft || !lastAttemptId || lastRun?.run_id === lastAttemptId) return;
     void getDraftRun(workspaceId, draft.draft_id, lastAttemptId).then(setLastRun).catch(() => undefined);
   }, [draft, lastAttemptId, lastRun?.run_id, workspaceId]);
+
+  // Spec 181: the results view shown is the latest Run attempt's when it holds a non-converged last iterate or
+  // was not solved after the converged one; otherwise the converged run (current or stale).
+  const lastAttempt = draft?.results.last_attempt;
+  const viewRunId = lastAttempt?.action === "run" && lastAttempt.outcome && lastAttempt.outcome.state !== "converged"
+    && (lastAttempt.outcome.results_available === "last_iterate" || !solvedRunId) ? lastAttempt.run_id : solvedRunId ?? null;
+  useEffect(() => {
+    if (!draft || !viewRunId) return setResultsView(null);
+    if (resultsView?.run_id === viewRunId) return;
+    let live = true;
+    void getRunResults(workspaceId, draft.draft_id, viewRunId).then((next) => { if (live) setResultsView(next); }).catch(() => undefined);
+    return () => { live = false; };
+  }, [draft, resultsView?.run_id, viewRunId, workspaceId]);
+  // Setup (species and thermodynamics) opens by default only while the draft declares no compounds.
+  const draftKey = draft?.draft_id;
+  const hasCompounds = Boolean(draft?.compounds.length);
+  useEffect(() => { if (draftKey) setSetupOpen(!hasCompounds); }, [draftKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const apply = useCallback(
     (ops: DraftOp[]) => {
@@ -476,6 +499,7 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
     void apply(routeEditOps(streamId, points));
   };
   const onPointerMove = (event: ReactPointerEvent) => {
+    if (viewport.onGestureMove(event)) return;
     if (routeDrag) {
       const point = toSvg(event);
       const a = routeDrag.points[routeDrag.index];
@@ -495,7 +519,13 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
     setDrag({ ...drag, moved: true });
     setOverrides({ [drag.id]: { x: Math.round(drag.origin.x + dx), y: Math.round(drag.origin.y + dy) } });
   };
-  const onPointerUp = () => {
+  const onPointerUp = (event: ReactPointerEvent) => {
+    // A background click without pan or pinch clears the selection.
+    const click = viewport.onGestureUp(event);
+    if (click !== null) {
+      if (click) setSelectedId(null);
+      return;
+    }
     if (routeDrag) {
       const next = routeOverrides[routeDrag.stream];
       setRouteDrag(null);
@@ -528,7 +558,7 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
     try {
       const result = await executeDraft(workspaceId, draft.draft_id, revision ?? draft.revision, action);
       setLastRun(result.run);
-      if (result.run.status === "completed") setSolvedRun(result.run);
+      if (result.run.outcome?.state === "converged") setSolvedRun(result.run);
       accept(result.draft);
     } catch (cause) {
       setNotice({ tone: "danger", text: errorText(cause) });
@@ -536,6 +566,23 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
       setBusy(null);
     }
   };
+
+  // Content bounds for "Fit all"; computed before any early return because the viewport is a hook.
+  const bounds = objects.reduce(
+    (acc, item) => {
+      const point = position(item);
+      return { minX: Math.min(acc.minX, point.x - 90), minY: Math.min(acc.minY, point.y - 90), maxX: Math.max(acc.maxX, point.x + 120), maxY: Math.max(acc.maxY, point.y + 90) };
+    },
+    { minX: 0, minY: 0, maxX: 760, maxY: 360 },
+  );
+  for (const item of objects)
+    for (const point of item.route ?? []) {
+      bounds.minX = Math.min(bounds.minX, point.x - 40);
+      bounds.minY = Math.min(bounds.minY, point.y - 40);
+      bounds.maxX = Math.max(bounds.maxX, point.x + 40);
+      bounds.maxY = Math.max(bounds.maxY, point.y + 40);
+    }
+  const viewport = useFlowsheetViewport(svgRef, { x: bounds.minX, y: bounds.minY, w: bounds.maxX - bounds.minX, h: bounds.maxY - bounds.minY });
 
   if (!registry) return <div className="draft-editor draft-editor--loading">{notice?.text ?? "Loading process draft…"}</div>;
   if (!draft)
@@ -560,20 +607,6 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
   const results = draft.results;
   const energyUnsupported = registry.unsupported.EnergyStream;
   const streamResult = (tag: string) => solvedRun?.streams?.[tag]?.display;
-  const bounds = objects.reduce(
-    (acc, item) => {
-      const point = position(item);
-      return { minX: Math.min(acc.minX, point.x - 90), minY: Math.min(acc.minY, point.y - 90), maxX: Math.max(acc.maxX, point.x + 120), maxY: Math.max(acc.maxY, point.y + 90) };
-    },
-    { minX: 0, minY: 0, maxX: 760, maxY: 360 },
-  );
-  for (const item of objects)
-    for (const point of item.route ?? []) {
-      bounds.minX = Math.min(bounds.minX, point.x - 40);
-      bounds.minY = Math.min(bounds.minY, point.y - 40);
-      bounds.maxX = Math.max(bounds.maxX, point.x + 40);
-      bounds.maxY = Math.max(bounds.maxY, point.y + 40);
-    }
 
   const routes = new Map(objects.filter((item) => item.kind === "stream").map((item) => [item.id, streamRoute(item)]));
   const renderEdges = () =>
@@ -1116,11 +1149,12 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
   };
 
   const renderRun = (run: DraftRun) => (
-    <section className={`draft-run draft-run--${run.status}`} aria-label="Last DWSIM attempt">
+    <section className={`draft-run draft-run--${run.status}${run.outcome ? ` draft-run--outcome-${run.outcome.state}` : ""}`} aria-label="Last DWSIM attempt">
       <header>
-        <strong>{run.action === "validate" ? "Validate" : run.mixed_solve ? "Mixed solve" : "Run"}: {run.status.replace(/_/g, " ")}</strong>
-        <span>revision {run.draft_revision.split(":")[0]} · {run.compile_seconds ?? "—"} s</span>
+        <strong>{run.action === "validate" ? "Validate" : run.mixed_solve ? "Mixed solve" : "Run"}: {run.outcome?.label ?? run.status.replace(/_/g, " ")}</strong>
+        <span>status {run.status.replace(/_/g, " ")} · revision {run.draft_revision.split(":")[0]} · {run.compile_seconds ?? "—"} s</span>
       </header>
+      {run.outcome && <OutcomeDetails outcome={run.outcome} />}
       {run.mixed_solve && run.action === "run" && (
         <section className="draft-mixed-summary" aria-label="Mixed solve summary">
           <p role="status">
@@ -1205,7 +1239,7 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
           ))}
         </ul>
       )}
-      {run.status === "validated" && <p>DWSIM reproduced the draft exactly and its check found nothing blocking.</p>}
+      {run.status === "validated" && <p>Validated, not solved: DWSIM built this revision exactly and its check found nothing blocking. Nothing was calculated — Run to compute results.</p>}
       {run.solve && run.status !== "completed" && <div className="draft-dwsim-error" role="alert">
         <strong>Solve failed</strong>
         {solveFailureMessages(run).map((message, index) => <p key={`${message}-${index}`}>{message}</p>)}
@@ -1214,39 +1248,59 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
   );
 
   const renderResults = () => {
-    if (!solvedRun || results.state === "none") return <p className="draft-hint">No results yet. Run compiles this exact revision into DWSIM.</p>;
+    if (!resultsView) return <p className="draft-hint">No results yet. Run compiles this exact revision into DWSIM.</p>;
+    const stale = resultsView.run_id === results.run_id && results.state === "stale";
     return (
-      <section className={`draft-results draft-results--${results.state}`} aria-label="DWSIM results">
-        <div className="draft-results__banner" role="status">
-          {results.state === "current"
-            ? `Current · run ${solvedRun.run_id.slice(0, 8)} on revision ${solvedRun.draft_revision.split(":")[0]}`
-            : `Stale · ${results.edits_since} edit(s) since run ${solvedRun.run_id.slice(0, 8)} on revision ${solvedRun.draft_revision.split(":")[0]}. Values below describe that revision, not the current draft.`}
-        </div>
-        <table>
-          <thead><tr><th>Stream</th><th>T</th><th>P</th><th>Mass flow</th><th>Molar flow</th><th>Volumetric flow</th><th>Vapor frac.</th></tr></thead>
-          <tbody>
-            {Object.entries(solvedRun.streams ?? {}).map(([tag, value]) => (
-              <tr key={tag}>
-                <td>{tag}</td>
-                <td>{formatQuantity(value.display?.temperature)}</td>
-                <td>{formatQuantity(value.display?.pressure)}</td>
-                <td>{formatQuantity(value.display?.mass_flow)}</td>
-                <td>{formatQuantity(value.display?.molar_flow)}</td>
-                <td>{formatQuantity(value.display?.volumetric_flow)}</td>
-                <td>{value.vapor_fraction == null ? "—" : value.vapor_fraction.toPrecision(4)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <dl className="draft-provenance">
-          <div><dt>Mass balance residual</dt><dd>{solvedRun.mass_balance?.status === "calculated" ? `${solvedRun.mass_balance.residual_kg_s?.toExponential(2)} kg/s` : solvedRun.mass_balance?.error ?? "—"}</dd></div>
-          <div><dt>Revision</dt><dd>{solvedRun.draft_revision}</dd></div>
-          <div><dt>Materialization</dt><dd title={solvedRun.materialization_fingerprint}>{solvedRun.materialization_fingerprint?.slice(0, 19)}…</dd></div>
-          <div><dt>Compiler / DWSIM</dt><dd>{solvedRun.compiler_version} / {solvedRun.dwsim_version} · MCP {solvedRun.mcp_sha256.slice(0, 8)}</dd></div>
-        </dl>
-      </section>
+      <>
+        {stale && <p className="draft-results__banner draft-results--stale" role="status">
+          Stale · {results.edits_since} edit(s) since run {resultsView.run_id.slice(0, 8)} on revision {resultsView.draft_revision.split(":")[0]}. Values below describe that revision, not the current draft.
+        </p>}
+        <ResultsWorkspace view={resultsView} stale={stale} compounds={draft.compounds} onSelectTag={selectTag} />
+        {solvedRun && resultsView.run_id === solvedRun.run_id && (
+          <dl className="draft-provenance">
+            <div><dt>Revision</dt><dd>{solvedRun.draft_revision}</dd></div>
+            <div><dt>Materialization</dt><dd title={solvedRun.materialization_fingerprint}>{solvedRun.materialization_fingerprint?.slice(0, 19) ?? "—"}…</dd></div>
+            <div><dt>Compiler / DWSIM</dt><dd>{solvedRun.compiler_version} / {solvedRun.dwsim_version} · MCP {solvedRun.mcp_sha256.slice(0, 8)}</dd></div>
+          </dl>
+        )}
+      </>
     );
   };
+
+  // The toolbar shows the last attempt's outcome only while it describes the revision on screen.
+  const outcomeHere = results.last_attempt?.outcome && results.last_attempt.draft_revision === draft.revision ? results.last_attempt.outcome : null;
+  const selectTag = (tag: string) => setSelectedId(objects.find((item) => item.tag === tag)?.id ?? null);
+  const thermoFieldset = (
+    <fieldset className="draft-fieldset" aria-label="Thermo">
+      <legend>Thermo</legend>
+      <label className="draft-field">
+        <span>Property package</span>
+        <select
+          aria-label="Property package"
+          value={draft.property_package ?? ""}
+          onChange={(event) => void apply([{ op: "set_thermo", property_package: event.target.value }])}
+        >
+          <option value="" disabled>Choose…</option>
+          {registry.property_packages.map((name) => (<option key={name} value={name}>{name}</option>))}
+        </select>
+      </label>
+      <div className="draft-compounds" role="group" aria-label="Compounds">
+        {registry.compounds.map((name) => (
+          <label key={name}>
+            <input
+              type="checkbox"
+              checked={draft.compounds.includes(name)}
+              onChange={(event) =>
+                void apply([{ op: "set_thermo", compounds: event.target.checked ? [...draft.compounds, name] : draft.compounds.filter((item) => item !== name) }])
+              }
+            />
+            {name}
+          </label>
+        ))}
+      </div>
+      <p className="draft-hint">Reactions are defined on each reactor (select a PFR or CSTR).</p>
+    </fieldset>
+  );
 
   return (
     <div className="draft-editor">
@@ -1259,9 +1313,13 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
               ? "Running mixed solve (DWSIM + Jarvis)…" : "Running…"
             : "Run"}
         </button>
-        <span className={`draft-readiness ${blockers.length ? "has-blockers" : "is-ready"}`} data-testid="readiness-chip" role="status">
-          {blockers.length ? `${shownBlockerCount} blocker${shownBlockerCount === 1 ? "" : "s"}` : "Ready to run"} · {shownWarningCount} warning{shownWarningCount === 1 ? "" : "s"}
+        <RunStateIndicator blockerCount={shownBlockerCount} reason={outcomeHere ? outcomeHere.reason : null}
+          state={runState(busy, blockers.length, outcomeHere, Boolean(outcomeHere))} />
+        <span className={`draft-readiness ${blockers.length ? "has-blockers" : "is-ready"}`} data-testid="readiness-chip">
+          {blockers.length ? `${shownBlockerCount} blocker${shownBlockerCount === 1 ? "" : "s"}` : "No blockers"} · {shownWarningCount} warning{shownWarningCount === 1 ? "" : "s"}
         </span>
+        <button type="button" className="draft-setup-toggle" aria-expanded={setupOpen} aria-controls="draft-setup-drawer"
+          onClick={() => setSetupOpen((open) => !open)}>{setupOpen ? "Close setup" : "Setup"}</button>
         <span className={`draft-state draft-state--${results.state}`} data-testid="results-state">
           {results.state === "none" ? "No results" : results.state === "current" ? "Results current" : `Results stale (${results.edits_since} edits)`}
         </span>
@@ -1312,15 +1370,25 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
           </ul>
         </aside>
         <div className="draft-canvas-wrap">
+          {setupOpen && (
+            <section id="draft-setup-drawer" className="draft-setup-drawer" aria-label="Setup">
+              <header><h3>Setup · species and thermodynamics</h3>
+                <button type="button" onClick={() => setSetupOpen(false)} aria-label="Close setup">Close</button></header>
+              {thermoFieldset}
+            </section>
+          )}
+          <div className="draft-canvas-frame">
           <svg
-            ref={svgRef}
+            ref={viewport.attach}
             className="draft-canvas"
             role="img"
             aria-label="Process flowsheet draft"
-            viewBox={`${bounds.minX} ${bounds.minY} ${bounds.maxX - bounds.minX} ${bounds.maxY - bounds.minY}`}
+            data-testid="flowsheet-canvas"
+            viewBox={`${viewport.viewBox.x} ${viewport.viewBox.y} ${viewport.viewBox.w} ${viewport.viewBox.h}`}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
-            onPointerDown={() => setSelectedId(null)}
+            onPointerCancel={onPointerUp}
+            onPointerDown={viewport.onBackgroundDown}
           >
             <defs>
               <marker id="draft-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
@@ -1333,6 +1401,14 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
             {renderEdges()}
             {objects.map(renderObject)}
           </svg>
+          <div className="draft-viewport-controls" role="toolbar" aria-label="Flowsheet view">
+            <button type="button" aria-label="Zoom out" disabled={viewport.zoom <= ZOOM_MIN + 1e-9} onClick={viewport.zoomOut}>−</button>
+            <output data-testid="zoom-level" aria-label="Zoom level">{Math.round(viewport.zoom * 100)}%</output>
+            <button type="button" aria-label="Zoom in" disabled={viewport.zoom >= ZOOM_MAX - 1e-9} onClick={viewport.zoomIn}>+</button>
+            <button type="button" aria-pressed={viewport.fitted} onClick={viewport.fitAll}>Fit all</button>
+            <button type="button" onClick={viewport.reset}>Reset</button>
+          </div>
+          </div>
           <ContextMenu label="Unit orientation" items={orientationItems} at={unitMenu.at} onClose={unitMenu.close} />
           <section className="draft-findings-panel" aria-label="Draft findings">
             <h3>Readiness guidance: {countLabel}</h3>
@@ -1381,38 +1457,15 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
                 <button type="button" disabled={!rename || rename === selected.tag} onClick={() => void apply([{ op: "rename", id: selected.id, tag: rename }])}>Rename</button>
                 <button type="button" className="draft-delete" onClick={() => { void apply([{ op: "delete", id: selected.id }]); setSelectedId(null); }}>Delete</button>
               </div>
+              {resultsView && <ObjectResults view={resultsView} kind={selected.kind === "stream" ? "stream" : "unit"} tag={selected.tag}
+                stale={resultsView.run_id === results.run_id && results.state === "stale"} onSelectTag={selectTag} />}
               {selected.kind === "stream" ? renderStreamInspector(selected) : renderUnitInspector(selected)}
             </>
           ) : (
-            <fieldset className="draft-fieldset" aria-label="Thermo">
-              <legend>Thermo</legend>
-              <label className="draft-field">
-                <span>Property package</span>
-                <select
-                  aria-label="Property package"
-                  value={draft.property_package ?? ""}
-                  onChange={(event) => void apply([{ op: "set_thermo", property_package: event.target.value }])}
-                >
-                  <option value="" disabled>Choose…</option>
-                  {registry.property_packages.map((name) => (<option key={name} value={name}>{name}</option>))}
-                </select>
-              </label>
-              <div className="draft-compounds" role="group" aria-label="Compounds">
-                {registry.compounds.map((name) => (
-                  <label key={name}>
-                    <input
-                      type="checkbox"
-                      checked={draft.compounds.includes(name)}
-                      onChange={(event) =>
-                        void apply([{ op: "set_thermo", compounds: event.target.checked ? [...draft.compounds, name] : draft.compounds.filter((item) => item !== name) }])
-                      }
-                    />
-                    {name}
-                  </label>
-                ))}
-              </div>
-              <p className="draft-hint">Reactions are defined on each reactor (select a PFR or CSTR).</p>
-            </fieldset>
+            <div className="draft-inspector__empty">
+              <p className="draft-hint">Select a stream or unit on the flowsheet to edit it{resultsView ? " and inspect its results" : ""}.</p>
+              {!setupOpen && <button type="button" onClick={() => setSetupOpen(true)}>Open setup (species and thermodynamics)</button>}
+            </div>
           )}
         </aside>
       </div>

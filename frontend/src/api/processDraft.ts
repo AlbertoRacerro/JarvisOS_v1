@@ -87,13 +87,84 @@ export type Proposal = {
   created_at: string;
   applied_revision: string | null;
 };
+/** Spec 181: the single backend run outcome; the UI never derives one from raw statuses. */
+export type OutcomeState = "validated" | "converged" | "non_converged" | "failed" | "cancelled";
+export type RunOutcome = {
+  state: OutcomeState;
+  label: string;
+  reason: string | null;
+  message: string | null;
+  failing: { tag: string | null; stage: string | null; error: string | null }[];
+  residual: number | null;
+  iterations: number | null;
+  worst_tear: string | null;
+  results_available: "none" | "converged" | "last_iterate";
+  artifact: string | null;
+};
 export type ResultsState = {
   state: "none" | "current" | "stale";
   run_id?: string;
   draft_revision?: string;
   edits_since?: number;
   materialization_fingerprint?: string;
-  last_attempt: { run_id: string; action: string; status: string; draft_revision: string; started_at: string } | null;
+  last_attempt: { run_id: string; action: string; status: string; draft_revision: string; started_at: string; outcome?: RunOutcome } | null;
+  outcome?: RunOutcome | null;
+};
+/** A results-view quantity: a value with its unit, or null with why (spec 181 decision 3). */
+export type ViewQuantity =
+  | { value: number; unit: string; label?: string; status?: undefined; reason?: undefined }
+  | { value: null; status: "unavailable" | "not_computed" | "failed"; reason: string; unit?: undefined; label?: undefined };
+export type ViewStream = {
+  role: "feed" | "product" | "internal";
+  from: string | null;
+  to: string | null;
+  temperature: ViewQuantity;
+  pressure: ViewQuantity;
+  mass_flow: ViewQuantity;
+  molar_flow: ViewQuantity;
+  volumetric_flow: ViewQuantity;
+  vapor_fraction: ViewQuantity;
+  mass_fractions: Record<string, ViewQuantity>;
+  culture: Record<string, ViewQuantity> | null;
+  culture_failure?: string | null;
+  owner: string | null;
+  state_source: string | null;
+};
+export type ViewUnit = {
+  type: string;
+  calculated: boolean | null;
+  error: string | null;
+  quantities: Record<string, ViewQuantity>;
+  inlets: string[];
+  outlets: string[];
+  owner?: string;
+  fidelity?: string;
+};
+export type Kpi = {
+  id: string;
+  label: string;
+  value: number | null;
+  unit: string;
+  status: "available" | "unavailable" | "not_applicable";
+  reason: string | null;
+  definition: string;
+  sources: string[];
+};
+export type BalanceRow = { in?: number; out?: number; residual?: number; residual_kg_s?: number; tolerance?: number; unit?: string;
+  passed?: boolean; status?: string; reason?: string; error?: string; boundary_kg_s?: Record<string, number> };
+export type ResultsView = {
+  run_id: string;
+  draft_revision: string;
+  outcome: RunOutcome;
+  label: "current" | "last_iterate" | "not_solved";
+  value_label: string | null;
+  streams: Record<string, ViewStream>;
+  units: Record<string, ViewUnit>;
+  boundary: { inputs: string[]; outputs: string[]; totals: { mass_flow_in: ViewQuantity; mass_flow_out: ViewQuantity;
+    by_compound_in: Record<string, ViewQuantity>; by_compound_out: Record<string, ViewQuantity> } };
+  balances: { mass: BalanceRow; culture: Record<string, BalanceRow> | null; unit_balances: Record<string, Record<string, BalanceRow>> | null };
+  findings: Finding[];
+  kpis: Kpi[];
 };
 export type DraftProjection = {
   workspace_id: string;
@@ -121,6 +192,7 @@ export type DraftProjection = {
     error?: string | null;
     error_step?: string | null;
     dwsim_message?: string | null;
+    outcome?: Pick<RunOutcome, "state" | "label" | "reason" | "message" | "residual" | "iterations" | "worst_tear" | "results_available">;
   } | null;
 };
 export type RegistryOption = string | { value: string | boolean; label: string };
@@ -216,6 +288,7 @@ export type StreamResult = {
 export type MaterializationDiff = { path: string; expected: unknown; actual: unknown };
 export type DraftRun = {
   run_id: string;
+  outcome?: RunOutcome;
   action: "validate" | "run";
   status: string;
   draft_revision: string;
@@ -355,6 +428,8 @@ export const executeDraft = (workspaceId: string, draftId: string, revision: str
   );
 export const getDraftRun = (workspaceId: string, draftId: string, runId: string) =>
   request<DraftRun>(`${draftPath(workspaceId, draftId)}/runs/${encodeURIComponent(runId)}`);
+export const getRunResults = (workspaceId: string, draftId: string, runId: string) =>
+  request<ResultsView>(`${draftPath(workspaceId, draftId)}/runs/${encodeURIComponent(runId)}/results`);
 export const listProposals = (workspaceId: string, draftId: string) =>
   request<Proposal[]>(`${draftPath(workspaceId, draftId)}/proposals`);
 export const approveProposal = (workspaceId: string, draftId: string, proposalId: string, acceptedChanges?: number[]) =>
