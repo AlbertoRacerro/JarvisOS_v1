@@ -42,7 +42,9 @@ _UNIT_INPUTS: Final = {
 _PIN_OPTIONS: Final = {"card_id", "card_revision", "card_digest"}
 _OUTPUTS: Final = {
     "biomass_mean": "kg/m3", "volumetric_productivity": "kg/(m3*d)",
-    "lambda_h": "1/h", "hrt_d": "d", "pressure_drop": "Pa", "pumping_power": "W",
+    "lambda_h": "1/h", "hrt_d": "d", "circulation_flow_m3_h": "m3/h",
+    "pass_transit_time_s": "s", "circulation_to_throughflow_ratio": "1",
+    "pressure_drop": "Pa", "pumping_power": "W",
 }
 
 

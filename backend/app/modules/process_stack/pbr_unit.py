@@ -815,6 +815,7 @@ def evaluate_pbr(unit: dict[str, Any], inlet: dict[str, Any], context: JarvisUni
     dilution_s = q_m3_s / volume
     dilution_h = 3600.0 * dilution_s
     hrt_d = 1.0 / dilution_s / 86400.0
+    circulation = params["liquid_velocity"] * params["tube_count"] * math.pi * params["tube_inner_diameter"] ** 2 / 4.0
     growth = build_growth(params, model, culture_inlet, dilution_h)
     solution = solve_periodic(growth, clock)
     orbit = certify(growth, solution.x_star, clock)
@@ -841,10 +842,15 @@ def evaluate_pbr(unit: dict[str, Any], inlet: dict[str, Any], context: JarvisUni
     o_series = [row[2] for row in orbit.samples]
     reported = {
         "lambda_h": _quantity(solution.lambda_h, "1/h", "Thin-culture growth rate Λ"),
-        "dilution_h": _quantity(dilution_h, "1/h", "Dilution rate D"),
-        "hrt_d": _quantity(hrt_d, "d", "Hydraulic residence time"),
+        "dilution_h": _quantity(dilution_h, "1/h", "Dilution rate D (process-inlet basis)"),
+        "hrt_d": _quantity(hrt_d, "d", "Hydraulic residence time (process-inlet basis)"),
         "volume_m3": _quantity(volume, "m³", "Liquid volume"),
-        "volumetric_flow_m3_h": _quantity(3600.0 * q_m3_s, "m³/h", "Carrier volumetric flow Q"),
+        "volumetric_flow_m3_h": _quantity(3600.0 * q_m3_s, "m³/h", "Volumetric flow Q (process-inlet basis)"),
+        "circulation_flow_m3_h": _quantity(3600.0 * circulation, "m³/h", "Internal circulation flow"),
+        "pass_transit_time_s": _quantity(params["tube_length"] / params["liquid_velocity"], "s",
+                                          "Internal circulation pass transit time"),
+        "circulation_to_throughflow_ratio": _quantity(circulation / q_m3_s, "1",
+                                                       "Internal circulation / process throughflow"),
         "biomass_mean": _quantity(x_mean, "kg/m³", "Mean biomass X̄"),
         "volumetric_productivity": _quantity(24.0 * dilution_h * (x_mean - x_in), "kg/(m³·d)",
                                              "Net volumetric biomass productivity"),
@@ -873,7 +879,7 @@ def evaluate_pbr(unit: dict[str, Any], inlet: dict[str, Any], context: JarvisUni
                                  "improve light/nitrogen."))
     if not HRT_RANGE_D[0] <= hrt_d <= HRT_RANGE_D[1]:
         findings.append(_finding("warning", "PBR_HRT_OUT_OF_RANGE", tag,
-                                 f"Hydraulic residence time {hrt_d:.3g} d (solved-inlet basis) is outside the 0.1–100 d "
+                                 f"Hydraulic residence time {hrt_d:.3g} d (process-inlet basis) is outside the 0.1–100 d "
                                  "screening range of the T1 model."))
     if model.get("candidate_symbols"):
         findings.append(_finding("info", "PBR_PARAMETER_UNVERIFIED", tag,
@@ -888,11 +894,9 @@ def evaluate_pbr(unit: dict[str, Any], inlet: dict[str, Any], context: JarvisUni
         findings.append(_finding("warning", "PBR_REYNOLDS_TRANSITIONAL", tag,
                                  f"Reynolds number {hydro['reynolds_number']:.4g} is in the laminar–turbulent transition; "
                                  "no screening pressure drop or pumping power is reported. Change velocity or diameter."))
-    circulation = params["liquid_velocity"] * params["tube_count"] * math.pi * params["tube_inner_diameter"] ** 2 / 4.0
     if q_m3_s >= circulation:
         findings.append(_finding("warning", "PBR_FEED_EXCEEDS_CIRCULATION", tag,
-                                 "Fresh feed flow is at least the circulation flow, so the well-mixed loop assumption "
-                                 "is outside its intended range."))
+                                 "Process throughflow exceeds internal circulation."))
     card, parameter_set = model["card"], model["set"]
     caveats = list(CAVEATS)
     caveats.append(f"N source assumed: {card['n_source']}; inlet N speciation unverified; O₂ yield depends on this "

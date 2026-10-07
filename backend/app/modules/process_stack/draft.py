@@ -1553,6 +1553,11 @@ def execute(workspace_id: str, draft_id: str, revision: str, action: str) -> dic
         raise DraftError("action_invalid", "action must be validate or run")
     directory = draft_dir(workspace_id, draft_id)
     record = load_revision(directory, revision)
+    if action == "run":
+        try:
+            draft_compiler.refuse_dynamic_only_units(record["document"])
+        except draft_compiler.MaterializationError as exc:
+            raise DraftError(exc.code, str(exc), 422, **exc.detail) from exc
     blockers = [item for item in validate_document(record["document"], workspace_id) if item["severity"] == "blocker"]
     if blockers:
         raise DraftError("draft_invalid", "Resolve the draft findings before DWSIM can materialize it", 422,
