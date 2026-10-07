@@ -238,6 +238,7 @@ def test_projection_returns_the_stored_solver_settings_so_the_setup_form_round_t
     assert "solver" not in draft.projection(workspace_id, state["draft_id"])
 
 def _real_pbr_recycle(back_fraction: float):
+    from app.modules.bio_models import service as bio_models
     from app.modules.process_stack.draft_models import (
         AddStream,
         AddUnit,
@@ -247,7 +248,6 @@ def _real_pbr_recycle(back_fraction: float):
         SetUnitModel,
         SetUnitParams,
     )
-    from app.modules.bio_models import service as bio_models
     from tests.plumbing_170_support import new_workspace, pbr_ops, pin_of
 
     workspace_id = new_workspace()
