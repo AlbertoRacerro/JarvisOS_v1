@@ -18,6 +18,8 @@ order.reduce((at, needle) => {
   assert.ok(next > at, `toolbar must hold ${needle} after the previous control`);
   return next;
 }, -1);
+// The toolbar name must not collide with the "Process draft" select inside More controls.
+assert.match(editor, /role="toolbar" aria-label="Process actions"/);
 assert.match(toolbar, /aria-expanded=\{setupOpen\} aria-controls="draft-setup-drawer"/);
 assert.match(toolbar, /setupOpen \? closeSetup\(\) : openSetup\(\)/, "Setup toggles open and closed from the toolbar");
 

@@ -1340,7 +1340,7 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
 
   return (
     <div className="draft-editor" onKeyDown={onEditorKeyDown}>
-      <div className="draft-toolbar" role="toolbar" aria-label="Process draft">
+      <div className="draft-toolbar" role="toolbar" aria-label="Process actions">
         <span className="draft-revision">revision {draft.seq}</span>
         <button type="button" onClick={() => setBiologyOpen((open) => !open)}>Biology models…</button>
         <button type="button" ref={setupToggleRef} className="draft-setup-toggle" aria-expanded={setupOpen} aria-controls="draft-setup-drawer"
