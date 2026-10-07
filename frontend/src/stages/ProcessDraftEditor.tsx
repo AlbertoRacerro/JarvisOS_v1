@@ -1,4 +1,6 @@
 import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { SolverSection } from "../components/process/SolverSection";
+import { diagnosticRows, methodLabel, stopReasonText } from "../components/process/solverSettings";
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from "react";
 import ProcessProposals from "../components/process/ProcessProposals";
 import { publishProcessSurface } from "../app/workspaceActionSurface";
@@ -1202,10 +1204,16 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
                 return last == null ? "n/a" : Number(last).toPrecision(4);
               })()}`
               : run.status === "unconverged"
-                ? `Not converged (${run.mixed_solve.reason ?? "unknown"}) — last iterate`
+                ? `Not converged (${stopReasonText(run.mixed_solve.reason)}) — last iterate`
                 : `Segment failed: ${run.mixed_solve.failed_units?.length ? run.mixed_solve.failed_units.join(", ") : run.mixed_solve.failed_segment ?? "unknown"} · ${mixedFailureCode(run.mixed_solve.errors) ? `${mixedFailureCode(run.mixed_solve.errors)} · ` : ""}${run.mixed_solve.message || mixedFailureMessage(run.mixed_solve.errors)}`}
           </p>
           {run.mixed_solve.diagnosis && <p className="draft-hint">{run.mixed_solve.diagnosis}</p>}
+          <dl className="draft-solver-diagnostics" aria-label="Solver diagnostics">
+            <div><dt>Stop reason</dt><dd>{stopReasonText(run.mixed_solve.reason)}</dd></div>
+            {!run.mixed_solve.diagnostics && run.mixed_solve.method && <div><dt>Method</dt><dd>{methodLabel(run.mixed_solve.method)}</dd></div>}
+            {diagnosticRows(run.mixed_solve.diagnostics).map((row) => <div key={row.label}><dt>{row.label}</dt><dd>{row.value}</dd></div>)}
+          </dl>
+          {run.mixed_solve.diagnostics?.recommendation && <p className="draft-hint" role="note">{run.mixed_solve.diagnostics.recommendation}</p>}
           <details>
             <summary>{run.mixed_solve.culture_only
               ? "Convergence · culture-only (no tear iteration)"
@@ -1443,6 +1451,7 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
               <header><h3 id="draft-setup-title">Setup · species and thermodynamics</h3>
                 <button type="button" onClick={closeSetup} aria-label="Close setup">Close</button></header>
               {thermoFieldset}
+              <SolverSection solver={draft.solver} onApply={(solver) => apply([{ op: "set_solver", solver }])} />
             </section>
           )}
           </div>
