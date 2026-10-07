@@ -56,6 +56,7 @@ from app.modules.process_stack.draft_models import (
     SetRoute,
     SetScenario,
     SetSchedule,
+    SetSolver,
     SetStreamCulture,
     SetStreamSpec,
     SetThermo,
@@ -543,6 +544,17 @@ def apply_op(document: dict[str, Any], op: Any) -> None:
     elif isinstance(op, DeleteSchedule | DeleteController | DeleteScenario):
         key = {DeleteSchedule: "schedules", DeleteController: "controllers", DeleteScenario: "scenarios"}[type(op)]
         document.setdefault(key, {}).pop(op.id, None)
+    elif isinstance(op, SetSolver):
+        if op.solver is None:
+            document.pop("solver", None)
+        else:
+            from app.modules.process_stack import tear_solver
+
+            try:
+                tear_solver.parse_settings(op.solver)
+            except ValueError as exc:
+                raise DraftError("solver_settings_invalid", str(exc), field="solver") from exc
+            document["solver"] = copy.deepcopy(op.solver)
     else:  # pragma: no cover - the discriminated union is closed
         raise DraftError("op_unsupported", "Unsupported draft operation")
 
@@ -611,6 +623,18 @@ def validate_document(document: dict[str, Any], workspace_id: str | None = None)
     objects = document["objects"]
     if not objects:
         add("blocker", "DRAFT_EMPTY", "Add streams and equipment to build the flowsheet.")
+    if document.get("solver") is not None:
+        from app.modules.process_stack import tear_solver
+
+        try:
+            solver = tear_solver.parse_settings(document["solver"])
+        except ValueError as exc:
+            add("blocker", "SOLVER_SETTINGS_INVALID", str(exc), field="solver")
+        else:
+            recycles = {item["tag"] for item in objects.values() if item["kind"] == "unit" and item["type"] == "Recycle"}
+            for tag in sorted(set(solver.seeds) - recycles):
+                add("blocker", "SOLVER_SEED_UNKNOWN_RECYCLE", f"Solver seed names {tag}, which is not a Recycle.",
+                    tag, "solver.seeds")
     if not document["compounds"]:
         add("blocker", "NO_COMPOUNDS", "Declare the compounds in Thermo.", field="compounds")
     if not document["property_package"]:

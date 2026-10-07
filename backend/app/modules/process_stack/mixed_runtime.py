@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any, cast
 
 # pbr_unit is imported eagerly on purpose (spec 170): an import inside a Run counts against the 168 wall budget.
-from app.modules.process_stack import culture, draft_compiler, mixed, pbr_unit
+from app.modules.process_stack import culture, draft_compiler, mixed, pbr_unit, tear_solver
 from app.modules.process_stack.draft_models import UNIT_REGISTRY
 from app.modules.process_stack.dwsim_mcp import DwsimMcpClient
 
@@ -410,7 +410,8 @@ def _segment_document(document: dict[str, Any], ids: list[str], known: dict[str,
             "objects": objects, "reactions": document.get("reactions", {})}
 
 
-def _seed(document: dict[str, Any], part: dict[str, Any]) -> dict[str, dict[str, Any]]:
+def _seed(document: dict[str, Any], part: dict[str, Any],
+          settings: tear_solver.Settings | None = None) -> dict[str, dict[str, Any]]:
     feeds = _feeds(document)
     if not feeds:
         raise SegmentFailure("initial_guess", "A mixed draft needs a feed")
@@ -427,10 +428,16 @@ def _seed(document: dict[str, Any], part: dict[str, Any]) -> dict[str, dict[str,
                       and (item.get("source") or {}).get("unit") == uid)
         target = (stream.get("target") or {}).get("unit")
         scale = 1e-3 if target is not None and units[target]["type"] == "HeatExchanger" else 1e-6
+        feed_mode = settings is not None and settings.seed_mode == "feed"
         state = copy.deepcopy(base)
-        state["mass_flow_kg_s"] = scale * total
+        state["mass_flow_kg_s"] = total if feed_mode else scale * total
+        specification = preferred.get("spec", {}).get("culture") or {}
         for field in mixed.CULTURE_FIELDS:
             state["culture"][field] = 0.0
+            if feed_mode and field in specification:
+                # A seed is only an initial guess: the feed culture per kg carrier at an assumed 1000 kg/m3.
+                value = float(specification[field]["si"])
+                state["culture"][field] = value if field == "salinity" else value / 1000.0
         for feed in feeds:
             culture_spec = feed.get("spec", {}).get("culture")
             if culture_spec is not None:
@@ -438,6 +445,13 @@ def _seed(document: dict[str, Any], part: dict[str, Any]) -> dict[str, dict[str,
                     if field not in culture_spec:
                         state["culture"][field] = None
         state["culture"]["ph"] = base["culture"].get("ph")
+        explicit = (settings.seeds if settings is not None else {}).get(units[uid]["tag"], {})
+        for name, value in explicit.items():
+            if name in mixed.CULTURE_FIELDS:
+                if state["culture"].get(name) is not None:
+                    state["culture"][name] = value
+            else:
+                state[name] = value
         result[stream["tag"]] = state
     return result
 
@@ -1030,15 +1044,17 @@ def _evaluate(document: dict[str, Any], part: dict[str, Any], tear: dict[str, di
 
 def _failure_record(document: dict[str, Any], part: dict[str, Any], *, reason: str, iteration: int | None,
                     segment: str, units: list[str] | None, errors: Any, history: list[dict[str, Any]],
-                    phase_totals: dict[str, float]) -> dict[str, Any]:
+                    phase_totals: dict[str, float],
+                    settings: tear_solver.Settings | None = None) -> dict[str, Any]:
     """A segment_failed result with the same tag-based partition as a success record."""
+    settings = settings or tear_solver.Settings()
     record: dict[str, Any] = {
         "status": "segment_failed", "reason": reason, "iteration": iteration,
         "failed_segment": segment, "failed_units": list(units or []),
         "errors": errors, "message": _failure_message(errors),
         "history": _history_record(history), "partition": _partition_record(document, part),
-        "limits": {"iterations": mixed.MAX_ITERATIONS, "wall_s": mixed.WALL_BUDGET_S},
-        "tolerances": _tolerance_record(), "elapsed_s": phase_totals}
+        "limits": {"iterations": settings.max_iterations, "wall_s": settings.wall_s},
+        "solver": settings.record(), "tolerances": _tolerance_record(settings), "elapsed_s": phase_totals}
     diagnosis = _pressure_diagnosis(history)
     if diagnosis:
         record["diagnosis"] = diagnosis
@@ -1064,7 +1080,9 @@ def _run(document: dict[str, Any], *, action: str, client: DwsimMcpClient,
          include_tear_state: bool = False) -> dict[str, Any]:
     part = mixed.partition(document)
     run_dir.mkdir(parents=True, exist_ok=True)
-    initial = _seed(document, part)
+    settings = tear_solver.parse_settings(document.get("solver"))
+    wall_s = settings.wall_s
+    initial = _seed(document, part, settings)
     run_cache: dict[str, Any] = {}
     started = time.monotonic()
     deadline = started + timeout_s if timeout_s is not None else None
@@ -1080,7 +1098,8 @@ def _run(document: dict[str, Any], *, action: str, client: DwsimMcpClient,
         except SegmentFailure as exc:
             return _failure_record(document, part, reason="validation_failed", iteration=None,
                                    segment=exc.segment, units=exc.units, errors=exc.detail,
-                                   history=[], phase_totals={"build": 0.0, "solve": 0.0, "culture": 0.0})
+                                   history=[], phase_totals={"build": 0.0, "solve": 0.0, "culture": 0.0},
+                                   settings=settings)
         return {"status": "validated", "mixed_solve": {"status": "validated",
                                                        "partition": _partition_record(document, part)}}
     t_build = 3.0  # initial assumption; replaced by the slowest build actually seen
@@ -1100,7 +1119,7 @@ def _run(document: dict[str, Any], *, action: str, client: DwsimMcpClient,
     reserve_s = max(3.0, reserve_builds * max(3.0, 1.5 * t_build))
     def before_iteration(_iteration: int) -> str | None:
         nonlocal reserve_s
-        remaining = mixed.WALL_BUDGET_S - (time.monotonic() - started)
+        remaining = wall_s - (time.monotonic() - started)
         if deadline is not None:
             remaining = min(remaining, deadline - time.monotonic())
         reserve_s = max(3.0, reserve_builds * max(3.0, 1.5 * t_build))
@@ -1114,7 +1133,7 @@ def _run(document: dict[str, Any], *, action: str, client: DwsimMcpClient,
 
     def evaluate(tear_guess: dict[str, dict[str, Any]], iteration: int) -> dict[str, dict[str, Any]]:
         nonlocal t_build, builds_seen
-        remaining = mixed.WALL_BUDGET_S - (time.monotonic() - started)
+        remaining = wall_s - (time.monotonic() - started)
         if deadline is not None:
             remaining = min(remaining, deadline - time.monotonic())
         try:
@@ -1140,13 +1159,13 @@ def _run(document: dict[str, Any], *, action: str, client: DwsimMcpClient,
     try:
         controller = mixed.iterate(initial, evaluate, before_iteration=before_iteration,
                                    on_history=history_rows.append,
-                                   max_iterations=max_iterations or mixed.MAX_ITERATIONS)
+                                   max_iterations=max_iterations, settings=settings)
     except SegmentFailure as exc:
         detail: dict[str, Any] = exc.detail if isinstance(exc.detail, dict) else {"message": str(exc.detail)}
         return _failure_record(document, part, reason="segment_failed", iteration=detail.get("iteration"),
                                segment=exc.segment, units=exc.units,
                                errors=detail.get("detail", detail), history=history_rows,
-                               phase_totals=phase_totals)
+                               phase_totals=phase_totals, settings=settings)
     tear = controller["iterate"]
     status, reason, history = controller["status"], controller["reason"], controller["history"]
     last_iteration = history[-1]["iteration"] if history else None
@@ -1156,7 +1175,7 @@ def _run(document: dict[str, Any], *, action: str, client: DwsimMcpClient,
         final = _evaluate(document, part, tear, client=client, full=True, run_dir=run_dir,
                           iteration=last_iteration or 0, dwsim_version=dwsim_version,
                           mcp_sha256=mcp_sha256,
-                          remaining_s=min(mixed.WALL_BUDGET_S - (time.monotonic() - started),
+                          remaining_s=min(wall_s - (time.monotonic() - started),
                                           deadline - time.monotonic() if deadline is not None else math.inf),
                           run_cache=run_cache, workspace_id=workspace_id)
     except SegmentFailure as exc:
@@ -1165,14 +1184,14 @@ def _run(document: dict[str, Any], *, action: str, client: DwsimMcpClient,
                   or "budget" in str(detail.get("message", "")).lower() else "full_path_failed")
         return _failure_record(document, part, reason=reason, iteration=len(history),
                                segment=exc.segment, units=exc.units, errors=detail,
-                               history=history, phase_totals=phase_totals)
+                               history=history, phase_totals=phase_totals, settings=settings)
     except Exception as exc:  # noqa: BLE001 - preserve unexpected full-path failures in this record
         return _failure_record(
             document, part,
             reason="wall_budget" if "timeout" in type(exc).__name__.lower() else "full_path_failed",
             iteration=len(history), segment="mixed", units=None,
             errors={"code": type(exc).__name__, "message": str(exc)[:600]},
-            history=history, phase_totals=phase_totals)
+            history=history, phase_totals=phase_totals, settings=settings)
     for name in phase_totals:
         phase_totals[name] += final["elapsed_s_by_phase"][name]
     mismatch = (_light_full_mismatch(last["produced"], final["produced"])
@@ -1185,12 +1204,14 @@ def _run(document: dict[str, Any], *, action: str, client: DwsimMcpClient,
             "mixed_findings": final["mixed_findings"],
             "process_fingerprint": mixed.fingerprint(document, part, workspace_id),
             "mixed_solve": {"status": status, "reason": reason, "version": mixed.MIXED_SOLVE_VERSION,
-                            "method": "direct_substitution", "history": _history_record(history),
+                            "method": settings.method, "history": _history_record(history),
+                            "solver": settings.record(), "diagnostics": finite_json(controller.get("diagnostics", {})),
                             "culture_only": not part["consumed"],
                             "partition": _partition_record(document, part, final["segments"]),
-                            "limits": {"iterations": mixed.MAX_ITERATIONS, "wall_s": mixed.WALL_BUDGET_S,
+                            "limits": {"iterations": settings.max_iterations if max_iterations is None
+                                       else min(settings.max_iterations, max_iterations), "wall_s": wall_s,
                                        "reserve_s": reserve_s},
-                            "tolerances": _tolerance_record(),
+                            "tolerances": _tolerance_record(settings),
                             "budget": {"t_build_s": t_build, "reserve_s": reserve_s,
                                        "builds_per_iteration": iteration_builds,
                                        "final_sweep_builds": terminal_flashes},
@@ -1205,7 +1226,8 @@ def _run(document: dict[str, Any], *, action: str, client: DwsimMcpClient,
     return record
 
 
-def _tolerance_record() -> dict[str, str]:
-    return {"mass_flow_kg_s": "1e-5 * max(abs(x), 1e-6)",
-            "temperature_K": "0.01", "pressure_Pa": "1e-6 * max(abs(x), 1)",
-            "mass_fraction": "1e-7", "culture": "1e-5 * abs(x) + 1e-12"}
+def _tolerance_record(settings: tear_solver.Settings | None = None) -> dict[str, str]:
+    t = (settings or tear_solver.Settings()).tolerances
+    return {"mass_flow_kg_s": f"{t['mass_flow_rel']:g} * max(abs(x), 1e-6)",
+            "temperature_K": f"{t['temperature_abs']:g}", "pressure_Pa": f"{t['pressure_rel']:g} * max(abs(x), 1)",
+            "mass_fraction": f"{t['mass_fraction_abs']:g}", "culture": f"{t['culture_rel']:g} * abs(x) + 1e-12"}
