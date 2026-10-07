@@ -565,7 +565,7 @@ def kpis(run: dict[str, Any], document: dict[str, Any], solved: bool) -> list[di
         return abs(residual) / boundary, None, [source]
 
     add("mass_balance_closure", "Mass balance closure", "1", "|residual| ÷ boundary mass flow in", closure)
-    for kpi_id, label, unit in (("co2_feed", "CO₂ feed", "kg/d"), ("co2_uptake", "CO₂ uptake", "kg/d"),
-                                ("co2_per_biomass", "CO₂ per biomass", "kg/kg")):
-        rows.append(_kpi(kpi_id, label, unit, "not modelled in T1", status="unavailable", reason=NO_CARBON_REASON))
+    for kpi_id, label, kpi_unit in (("co2_feed", "CO₂ feed", "kg/d"), ("co2_uptake", "CO₂ uptake", "kg/d"),
+                                    ("co2_per_biomass", "CO₂ per biomass", "kg/kg")):
+        rows.append(_kpi(kpi_id, label, kpi_unit, "not modelled in T1", status="unavailable", reason=NO_CARBON_REASON))
     return rows
