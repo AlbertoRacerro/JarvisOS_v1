@@ -143,6 +143,12 @@
   overflow: auto;
 }
 .draft-canvas-frame { position: relative; flex: 0 0 auto; }
+/* In the three-column layout the canvas is exactly as tall as its scroll area, so "Fit all" and the
+   pan surface match what is visible; the single-column layout keeps the viewport-based height. */
+@media (min-width: 1101px) {
+  .draft-canvas-wrap { container-type: size; }
+  .draft-canvas-wrap .draft-canvas { height: max(440px, 100cqh); }
+}
 /* Spec 181: the flowsheet is the dominant central area and fills the available height. */
 .draft-canvas {
   display: block;
