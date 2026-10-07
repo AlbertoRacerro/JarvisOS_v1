@@ -1046,19 +1046,30 @@ def _failure_record(document: dict[str, Any], part: dict[str, Any], *, reason: s
 
 
 def run(document: dict[str, Any], *, action: str, client: DwsimMcpClient,
-        dwsim_version: str, mcp_sha256: str, run_dir: Path, workspace_id: str | None = None) -> dict[str, Any]:
+        dwsim_version: str, mcp_sha256: str, run_dir: Path, workspace_id: str | None = None,
+        timeout_s: float | None = None, max_iterations: int | None = None,
+        initial_tear: dict[str, dict[str, Any]] | None = None,
+        include_tear_state: bool = False) -> dict[str, Any]:
     return cast(dict[str, Any], finite_json(_run(
         document, action=action, client=client, dwsim_version=dwsim_version,
-        mcp_sha256=mcp_sha256, run_dir=run_dir, workspace_id=workspace_id)))
+        mcp_sha256=mcp_sha256, run_dir=run_dir, workspace_id=workspace_id,
+        timeout_s=timeout_s, max_iterations=max_iterations, initial_tear=initial_tear,
+        include_tear_state=include_tear_state)))
 
 
 def _run(document: dict[str, Any], *, action: str, client: DwsimMcpClient,
-         dwsim_version: str, mcp_sha256: str, run_dir: Path, workspace_id: str | None = None) -> dict[str, Any]:
+         dwsim_version: str, mcp_sha256: str, run_dir: Path, workspace_id: str | None = None,
+         timeout_s: float | None = None, max_iterations: int | None = None,
+         initial_tear: dict[str, dict[str, Any]] | None = None,
+         include_tear_state: bool = False) -> dict[str, Any]:
     part = mixed.partition(document)
     run_dir.mkdir(parents=True, exist_ok=True)
     initial = _seed(document, part)
     run_cache: dict[str, Any] = {}
     started = time.monotonic()
+    deadline = started + timeout_s if timeout_s is not None else None
+    if initial_tear is not None:
+        initial = copy.deepcopy(initial_tear)
     if action == "validate":
         try:
             validation_known = _validation_states(document, part, workspace_id) | _seed(document, part)
@@ -1090,6 +1101,8 @@ def _run(document: dict[str, Any], *, action: str, client: DwsimMcpClient,
     def before_iteration(_iteration: int) -> str | None:
         nonlocal reserve_s
         remaining = mixed.WALL_BUDGET_S - (time.monotonic() - started)
+        if deadline is not None:
+            remaining = min(remaining, deadline - time.monotonic())
         reserve_s = max(3.0, reserve_builds * max(3.0, 1.5 * t_build))
         if remaining < iteration_builds * t_build + reserve_s:
             return "wall_budget"
@@ -1102,6 +1115,8 @@ def _run(document: dict[str, Any], *, action: str, client: DwsimMcpClient,
     def evaluate(tear_guess: dict[str, dict[str, Any]], iteration: int) -> dict[str, dict[str, Any]]:
         nonlocal t_build, builds_seen
         remaining = mixed.WALL_BUDGET_S - (time.monotonic() - started)
+        if deadline is not None:
+            remaining = min(remaining, deadline - time.monotonic())
         try:
             candidate = _evaluate(document, part, tear_guess, client=client, full=False, run_dir=run_dir,
                                   iteration=iteration, dwsim_version=dwsim_version,
@@ -1124,7 +1139,8 @@ def _run(document: dict[str, Any], *, action: str, client: DwsimMcpClient,
 
     try:
         controller = mixed.iterate(initial, evaluate, before_iteration=before_iteration,
-                                   on_history=history_rows.append)
+                                   on_history=history_rows.append,
+                                   max_iterations=max_iterations or mixed.MAX_ITERATIONS)
     except SegmentFailure as exc:
         detail: dict[str, Any] = exc.detail if isinstance(exc.detail, dict) else {"message": str(exc.detail)}
         return _failure_record(document, part, reason="segment_failed", iteration=detail.get("iteration"),
@@ -1140,7 +1156,8 @@ def _run(document: dict[str, Any], *, action: str, client: DwsimMcpClient,
         final = _evaluate(document, part, tear, client=client, full=True, run_dir=run_dir,
                           iteration=last_iteration or 0, dwsim_version=dwsim_version,
                           mcp_sha256=mcp_sha256,
-                          remaining_s=mixed.WALL_BUDGET_S - (time.monotonic() - started),
+                          remaining_s=min(mixed.WALL_BUDGET_S - (time.monotonic() - started),
+                                          deadline - time.monotonic() if deadline is not None else math.inf),
                           run_cache=run_cache, workspace_id=workspace_id)
     except SegmentFailure as exc:
         detail = exc.detail if isinstance(exc.detail, dict) else {"message": str(exc.detail)}
@@ -1162,7 +1179,7 @@ def _run(document: dict[str, Any], *, action: str, client: DwsimMcpClient,
                 if last is not None and controller["last_input"] == tear else None)
     balances = _whole_graph_balances(document, final, tear)
     status, reason = _final_status(status, reason, mismatch, balances)
-    return {"status": status, "streams": final["streams"], "units": final["units"],
+    record = {"status": status, "streams": final["streams"], "units": final["units"],
             "culture": _culture_results(document, final),
             "culture_findings": [],
             "mixed_findings": final["mixed_findings"],
@@ -1182,6 +1199,10 @@ def _run(document: dict[str, Any], *, action: str, client: DwsimMcpClient,
                             **({"diagnosis": _pressure_diagnosis(history)}
                                if status != "completed" and _pressure_diagnosis(history) else {}),
                             "results_label": "current" if status == "completed" else "Not converged — last iterate"}}
+    if include_tear_state:
+        record["_tear_state"] = tear
+        record["_last_attempt"] = {"guess": controller.get("last_input"), "output": controller.get("last")}
+    return record
 
 
 def _tolerance_record() -> dict[str, str]:

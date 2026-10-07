@@ -177,6 +177,10 @@ class Growth:
 
     def rates(self, hour: float, biomass: float, nitrogen: float) -> tuple[float, float]:
         par, temperature = self.environment(hour)
+        return self.rates_at(par, temperature, biomass, nitrogen)
+
+    def rates_at(self, par: float, temperature: float, biomass: float, nitrogen: float) -> tuple[float, float]:
+        """Evaluate the reviewed hourly biological rates at explicit environmental inputs."""
         thermal = self.thermal(temperature)
         growth = 0.0
         if par > 0.0 and thermal > 0.0:

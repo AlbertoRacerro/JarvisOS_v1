@@ -37,6 +37,7 @@ from app.modules.memory.literature_routes import router as literature_router
 from app.modules.memory.routes import router as memory_router
 from app.modules.modeling.routes import router as modeling_router
 from app.modules.process_stack.draft_routes import router as process_draft_router
+from app.modules.process_stack.dynamic_routes import router as process_dynamic_router
 from app.modules.process_stack.editor_routes import router as dwsim_editor_router
 from app.modules.project_knowledge.routes import router as project_knowledge_router
 from app.modules.project_search.routes import router as project_search_router
@@ -120,6 +121,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             # Runtime-truth observation must never make JarvisOS fail to start.
             app.state.runtime_startup_snapshot = startup_snapshot_unavailable()
         await lifecycle.startup()
+        from app.modules.process_stack.dynamic_jobs import recover_interrupted
+
+        await asyncio.to_thread(recover_interrupted)
         await asyncio.to_thread(_warm_pbr_imports)
         llama_owner = get_llama_cpp_runtime_owner()
         if llama_cpp_runtime_config().manage:
@@ -184,6 +188,7 @@ def create_app() -> FastAPI:
     app.include_router(engineering_operator_router)
     app.include_router(dwsim_editor_router)
     app.include_router(process_draft_router)
+    app.include_router(process_dynamic_router)
     app.include_router(workspace_actions_router)
     app.include_router(project_knowledge_router)
     app.include_router(coding_runtime_router)

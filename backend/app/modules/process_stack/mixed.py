@@ -326,7 +326,8 @@ def residual_values(guess: dict[str, Any], output: dict[str, Any]) -> dict[str, 
 
 
 def iterate(initial: dict[str, dict[str, Any]], evaluate: Any, *,
-            before_iteration: Any = None, on_history: Any = None) -> dict[str, Any]:
+            before_iteration: Any = None, on_history: Any = None,
+            max_iterations: int = MAX_ITERATIONS) -> dict[str, Any]:
     """Engine-neutral, simultaneous damped tear controller; evaluate returns g(x_k)."""
     guess = copy.deepcopy(initial)
     best = copy.deepcopy(guess)
@@ -338,7 +339,7 @@ def iterate(initial: dict[str, dict[str, Any]], evaluate: Any, *,
     last_input: dict[str, dict[str, Any]] | None = None
     restarted = False  # the pending iterate is the best one after a growth restart
     status, reason = "unconverged", "max_iterations"
-    for iteration in range(1, MAX_ITERATIONS + 1):
+    for iteration in range(1, min(MAX_ITERATIONS, max(1, int(max_iterations))) + 1):
         stop_reason = before_iteration(iteration) if before_iteration is not None else None
         if stop_reason:
             reason = stop_reason
@@ -378,7 +379,7 @@ def iterate(initial: dict[str, dict[str, Any]], evaluate: Any, *,
         if max_residual < best_residual:
             best_residual = max_residual
             best = copy.deepcopy(guess)
-        if iteration == MAX_ITERATIONS:
+        if iteration == min(MAX_ITERATIONS, max(1, int(max_iterations))):
             reason = "max_iterations"
             break
         restarted = False
