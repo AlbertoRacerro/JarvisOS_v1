@@ -237,8 +237,10 @@ def test_closed_pbr_tank_loop_runs_with_dark_tank_and_loop_channels() -> None:
     assert result.manifest["culture_loops"][0]["id"] == "PBR"
     assert result.manifest["culture_loops"][0]["units"] == ["PBR", "Pump", "Tank"]
     assert result.manifest["culture_loops"][0]["circulation_m3_s"] == pytest.approx(5e-4)
+    assert result.manifest["culture_loops"][0]["culture_residence_time_s"] == "∞, batch"
     tank_item = next(unit for unit in snapshot.payload["units"] if unit["tag"] == "Tank")
     dark_growth = dynamic_engine._growth_for_unit(tank_item, dark=True)
     assert dark_growth.rates_at(500.0, 298.15, 0.2, 0.05)[0] == 0.0
     assert result.series["Tank_X"][-1] > 0.0
     assert {"PBR_pass_rate_1_s", "PBR_X_mean", "PBR_N_mean", "PBR_biomass_kg"} <= set(result.series)
+    assert np.isinf(result.series["PBR_culture_residence_time_s"]).all()

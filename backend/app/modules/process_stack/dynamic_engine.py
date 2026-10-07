@@ -286,7 +286,7 @@ def _culture_loops(topology: dict[str, Any], units: list[dict[str, Any]], flows:
                       "circulation_m3_s": q_circ, "pass_transit_time_s": volume / q_circ if q_circ else None,
                       "net_boundary_inflow_m3_s": q_in, "net_boundary_outflow_m3_s": q_out,
                       "net_dilution_1_s": q_out / volume if volume else 0.0,
-                      "culture_residence_time_s": volume / q_out if q_out else "infinity_batch"})
+                      "culture_residence_time_s": volume / q_out if q_out else "∞, batch"})
     return sorted(loops, key=lambda loop: loop["id"])
 
 
@@ -1075,7 +1075,7 @@ def _result_series(snapshot: Snapshot, times: list[float], rows: list[np.ndarray
                                 ("culture_residence_time_s", "culture_residence_time_s")):
                 if key == "culture_residence_time_s":
                     result[f"{tag}_{suffix}"] = np.asarray([
-                        math.inf if values.get("culture_loops", {}).get(tag, {}).get(key) == "infinity_batch"
+                        math.inf if values.get("culture_loops", {}).get(tag, {}).get(key) == "∞, batch"
                         else values.get("culture_loops", {}).get(tag, {}).get(key, math.nan)
                         for values in hydro_at
                     ], dtype=np.float64)
