@@ -10,6 +10,7 @@ MAX_DURATION_S = 120 * 86400
 MAX_OUTPUT_POINTS = 20_000
 MAX_EVENTS = 1_000
 MAX_CONTROLLERS = 16
+MAX_PARTICIPATING_UNITS = 12
 MAX_PARTICIPATING_PBRS = 8
 MAX_DWSIM_SAMPLES = 200
 MIN_CADENCE_S = 60
@@ -90,7 +91,7 @@ class Controller(StrictModel):
 
 class Scenario(StrictModel):
     id: str = Field(pattern=r"^[a-z][a-z0-9_-]{0,39}$")
-    units: list[str] = Field(min_length=1, max_length=MAX_PARTICIPATING_PBRS)
+    units: list[str] = Field(min_length=1, max_length=MAX_PARTICIPATING_UNITS)
     profiles: list[dict[str, str]] = Field(min_length=1, max_length=8)
     forcing_profile_id: str | None = None
     schedule_id: str | None = None
@@ -110,6 +111,7 @@ class Scenario(StrictModel):
     downstream_enabled: bool = False
     initial: dict[str, dict[str, float]] = Field(default_factory=dict)
     feed_flows: dict[str, float] = Field(default_factory=dict)
+    circulation: dict[str, float] = Field(default_factory=dict)
 
     @field_validator("start_utc", "end_utc")
     @classmethod

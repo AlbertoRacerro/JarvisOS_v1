@@ -576,9 +576,10 @@ def _validate_dynamic_refs(document: dict[str, Any], kind: str, value: dict[str,
                          errors=exc.errors(include_url=False)) from exc
     if kind == "scenarios":
         for tag in value.get("units", []):
-            if not any(o.get("kind") == "unit" and o.get("type") == "PhotobioreactorT1" and o.get("tag") == tag
+            if not any(o.get("kind") == "unit" and o.get("type") in {"PhotobioreactorT1", "HoldupTank"}
+                       and o.get("tag") == tag
                        for o in document.get("objects", {}).values()):
-                raise DraftError("dynamic_unit_not_found", f"Scenario PBR tag {tag!r} was not found", field="units")
+                raise DraftError("dynamic_unit_not_found", f"Scenario T1 unit tag {tag!r} was not found", field="units")
         for ref in value.get("profiles", []):
             if not isinstance(ref, dict) or not isinstance(ref.get("profile_id"), str) or not isinstance(ref.get("digest"), str):
                 raise DraftError("dynamic_profile_invalid", "Scenario profiles require profile_id and digest", field="profiles")
