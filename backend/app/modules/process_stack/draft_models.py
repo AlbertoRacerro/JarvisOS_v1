@@ -598,8 +598,15 @@ class DeleteScenario(_Op):
     id: str = Field(pattern=ID_PATTERN)
 
 
+class SetSolver(_Op):
+    """Recycle/tear solver settings for Jarvis-converged tears (spec 183); None restores the defaults."""
+
+    op: Literal["set_solver"]
+    solver: dict[str, Any] | None
+
+
 DraftOp = Annotated[
-    AddUnit | AddStream | Delete | Move | Rename | Connect | Disconnect | SetRoute | SetOrientation | SetStreamSpec | SetStreamCulture | SetUnitParams | SetUnitModel | SetReactions | SetReactorReaction | SetThermo | SetSchedule | DeleteSchedule | SetController | DeleteController | SetScenario | DeleteScenario,
+    AddUnit | AddStream | Delete | Move | Rename | Connect | Disconnect | SetRoute | SetOrientation | SetStreamSpec | SetStreamCulture | SetUnitParams | SetUnitModel | SetReactions | SetReactorReaction | SetThermo | SetSchedule | DeleteSchedule | SetController | DeleteController | SetScenario | DeleteScenario | SetSolver,
     Field(discriminator="op"),
 ]
 

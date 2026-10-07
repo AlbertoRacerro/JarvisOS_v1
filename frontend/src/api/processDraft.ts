@@ -174,6 +174,8 @@ export type DraftProjection = {
   seq: number;
   compounds: string[];
   property_package: string | null;
+  /** Spec 183 operator solver settings (document.solver); absent means defaults. */
+  solver?: Record<string, unknown> | null;
   objects: DraftObject[];
   reactions?: Record<string, DraftReaction>;
   kinetics_scripts?: Record<string, KineticsScript>;
@@ -310,8 +312,11 @@ export type DraftRun = {
     reason?: string;
     version?: number;
     method?: string;
+    solver?: Record<string, unknown>;
+    diagnostics?: import("../components/process/solverSettings").SolveDiagnostics;
     culture_only?: boolean;
-    history?: { iteration: number; omega: number; max_normalized_residual: number | null; worst_tear?: string;
+    history?: { iteration: number; omega: number; method?: string; q_hat?: number | null; q_hat_stable?: number | null;
+      classification?: string; estimated_error_normalized?: number | null; estimate_valid?: boolean; events?: string[]; max_normalized_residual: number | null; worst_tear?: string;
       non_finite?: string; pattern_mismatch_fields?: string[];
       worst_field?: string; residuals?: Record<string, Record<string, number | null>>;
       normalized_residuals?: Record<string, Record<string, number | null>> }[];
