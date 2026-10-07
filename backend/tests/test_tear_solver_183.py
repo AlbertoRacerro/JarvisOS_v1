@@ -224,6 +224,19 @@ def test_seed_for_a_missing_recycle_is_a_blocker_and_settings_change_the_fingerp
     assert mixed.fingerprint(plain, part) != mixed.fingerprint(tuned, part)
 
 
+def test_projection_returns_the_stored_solver_settings_so_the_setup_form_round_trips() -> None:
+    from tests.plumbing_170_support import new_workspace
+
+    workspace_id = new_workspace()
+    state = draft.create_draft(workspace_id, "183 projection")
+    assert "solver" not in draft.projection(workspace_id, state["draft_id"])
+    settings = {"method": "wegstein", "max_iterations": 60, "seeds": {"Rec": {"mass_flow_kg_s": 0.09}}}
+    state = draft.patch(workspace_id, state["draft_id"], state["revision"],
+                        [SetSolver(op="set_solver", solver=settings)])
+    assert draft.projection(workspace_id, state["draft_id"])["solver"] == settings
+    state = draft.patch(workspace_id, state["draft_id"], state["revision"], [SetSolver(op="set_solver", solver=None)])
+    assert "solver" not in draft.projection(workspace_id, state["draft_id"])
+
 def _real_pbr_recycle(back_fraction: float):
     from app.modules.process_stack.draft_models import (
         AddStream,

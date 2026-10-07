@@ -471,7 +471,7 @@ def _recommend(q: float, method: str, needed: int | None, limit: int) -> str:
         text = f"Near-neutral recycle (estimated contraction {q:.4f})"
         if needed is not None:
             text += f": direct substitution needs about {needed} iterations, the budget is {limit}"
-        return text + ". Use Broyden or Anderson acceleration, a better seed, or a dynamic formulation."
+        return text + ". Use the Broyden or Wegstein method, a better seed, or a dynamic formulation."
     return "Increase max_iterations, improve the seed, or try another method."
 
 

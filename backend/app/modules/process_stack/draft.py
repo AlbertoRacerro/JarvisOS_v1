@@ -1280,6 +1280,7 @@ def projection(workspace_id: str, draft_id: str) -> dict[str, Any]:
         "proposals": [proposal for proposal in list_proposals(workspace_id, draft_id) if proposal["state"] == "pending"
                       or proposal["state"] == "stale"],
         **({"pbr_feed_basis": feed_basis} if feed_basis else {}),
+        **({"solver": copy.deepcopy(document["solver"])} if document.get("solver") is not None else {}),
     }
 
 
