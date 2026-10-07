@@ -64,6 +64,12 @@ def isolated_data_root(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Itera
     isolated_root = tmp_path / "jarvisos-data"
 
     monkeypatch.setenv("JARVISOS_DATA_ROOT", str(isolated_root))
+    # Host-level actuator ownership lives under XDG_STATE_HOME/LOCALAPPDATA and is keyed on worktree
+    # paths; pytest reuses /tmp paths after a reboot, so a shared host state leaks across runs.
+    host_state = tmp_path / "host-state"
+    host_state.mkdir(mode=0o700)
+    monkeypatch.setenv("XDG_STATE_HOME", str(host_state))
+    monkeypatch.setenv("LOCALAPPDATA", str(host_state))
     get_settings.cache_clear()
 
     settings = get_settings()
