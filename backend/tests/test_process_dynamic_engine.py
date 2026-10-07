@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import os
 import time
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -1348,3 +1349,53 @@ def test_real_prepare_refuses_downstream_sampling_of_a_recycle_free_dwsim_loop()
     ])
     admitted = dynamic_engine.prepare(workspace_id, state["draft_id"], "run")
     assert [unit["tag"] for unit in admitted.payload["units"]] == ["PBR"]
+
+
+@pytest.mark.skipif(not os.environ.get("JARVISOS_DWSIM_MCP_PATH"), reason="set JARVISOS_DWSIM_MCP_PATH to opt in to DWSIM runtime")
+def test_real_dwsim_recycle_sample_reports_solved_downstream_streams_not_echoed_boundary():
+    from app.modules.process_stack import draft
+    from app.modules.process_stack.draft_models import AddStream, AddUnit, Connect, Disconnect, SetScenario
+    from app.modules.process_stack.dynamic_downstream import build_sampler
+    from tests.plumbing_170_support import new_workspace
+
+    workspace_id = new_workspace()
+    state, snapshot = _real_scenario(workspace_id, 86400)
+    sampled = {**snapshot.payload["scenario"], "downstream_enabled": True, "downstream_cadence_s": 43200}
+    state = draft.patch(workspace_id, state["draft_id"], state["revision"], [
+        *_loop_ops(heater_first=True), SetScenario(op="set_scenario", id="run", value=sampled),
+        AddUnit(op="add_unit", id="rec", type="Recycle", tag="Rec", x=350, y=80),
+        AddStream(op="add_stream", id="torn", tag="Torn", x=300, y=80),
+        Disconnect(op="disconnect", stream="back", end="target"),
+        Connect(op="connect", stream="back", end="target", unit="rec", port=0),
+        Connect(op="connect", stream="torn", end="source", unit="rec", port=0),
+        Connect(op="connect", stream="torn", end="target", unit="mixer", port=1),
+    ])
+    snapshot = dynamic_engine.prepare(workspace_id, state["draft_id"], "run")
+    sampler = build_sampler(snapshot)
+    assert sampler is not None
+    run = dynamic_engine.run(snapshot, cancelled=lambda: False, progress=lambda _v: None, sampler=sampler)
+    plain = dynamic_engine.run(snapshot, cancelled=lambda: False, progress=lambda _v: None)
+    assert run.status == plain.status == "succeeded"
+    for channel in ("PBR_X", "PBR_N", "PBR_O2"):
+        assert np.array_equal(run.series[channel], plain.series[channel])
+    outcomes = run.manifest["downstream_outcomes"]
+    assert [item["time_s"] for item in outcomes] == [43200.0, 86400.0]
+    for outcome in outcomes:
+        assert outcome["status"] == "succeeded", outcome
+        boundary = outcome["boundary_inputs"]["Product"]
+        assert boundary["provenance"] == "jarvis_t1_snapshot"
+        assert "Product" not in outcome["streams"]
+        solved = outcome["streams"]
+        assert set(solved) == {"Hot", "Mixed", "Purge", "Back", "Torn"}
+        assert all(item is not None and item["provenance"] == "dwsim_solved" for item in solved.values())
+        feed = boundary["mass_flow_kg_s"]
+        # Steady state through the 0.9/0.1 split: Purge carries the feed, Mixed carries feed/0.9 -- values
+        # DWSIM can only report by actually solving the loop, never by echoing the boundary input.
+        assert solved["Hot"]["mass_flow_kg_s"] == pytest.approx(feed, rel=1e-4)
+        assert solved["Hot"]["temperature_K"] == pytest.approx(298.15, abs=0.05)
+        assert solved["Purge"]["mass_flow_kg_s"] == pytest.approx(feed, rel=1e-3)
+        assert solved["Mixed"]["mass_flow_kg_s"] == pytest.approx(feed / 0.9, rel=1e-3)
+        assert solved["Back"]["mass_flow_kg_s"] == pytest.approx(feed / 9, rel=1e-2)
+        assert {"Heater", "Mixer", "Split", "Rec"} <= set(outcome["units"])
+        assert outcome["solve"]["status"] == "completed"
+        assert all(row["passed"] for row in outcome["solve"]["balances"].values())

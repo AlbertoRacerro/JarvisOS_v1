@@ -16,7 +16,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "backend"))
 sys.path.insert(0, str(ROOT / "backend" / "tests"))
-OUTPUT = Path("/home/thera/jarvis-control/work/evidence/172/real-dwsim-downstream.json")
+OUTPUT = Path(os.environ.get("JARVISOS_172_EVIDENCE", "/home/thera/jarvis-control/work/evidence/172/real-dwsim-downstream.json"))
 
 
 def _sha(path: Path) -> str:
@@ -130,11 +130,14 @@ def main() -> int:
                        "biological_channels": biological_channels,
                        "biology_identical_without_sampler": same_biology,
                        "complete": (result.status == "succeeded" and bool(outcomes)
-                                    and all(item.get("status") == "succeeded" for item in outcomes)
+                                    and all(item.get("status") == "succeeded"
+                                            and ((item.get("streams") or {}).get("HeaterOut") or {}).get(
+                                                "provenance") == "dwsim_solved" for item in outcomes)
                                     and same_biology),
                        "outcome": "completed" if result.status == "succeeded" else result.error})
         report["recycle_case"] = _recycle_case(
             workspace_id, state, start, end, profile, card, pin_of, draft, dynamic_engine)
+        report["complete"] = report["complete"] and report["recycle_case"].get("outcome") == "succeeded"
     OUTPUT.write_text(json.dumps(report, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8")
     return 0 if report["complete"] else 1
 
@@ -214,8 +217,15 @@ def _recycle_case(workspace_id, state, start, end, profile, card, pin_of, draft,
         sampler = build_sampler(snapshot)
         run = dynamic_engine.run(snapshot, cancelled=lambda: False, progress=lambda _v: None, sampler=sampler)
         outcomes = run.manifest.get("downstream_outcomes", [])
+        # A succeeded sample must carry DWSIM-solved loop streams, not only the echoed Jarvis boundary input.
+        solved_outputs = bool(outcomes) and all(
+            all((o.get("streams") or {}).get(tag, {}) and o["streams"][tag].get("provenance") == "dwsim_solved"
+                for tag in ("Hot", "Mixed", "Purge"))
+            for o in outcomes if o.get("status") == "succeeded")
         result.update(scenario_status=run.status, downstream_outcomes=outcomes,
-                      outcome=("succeeded" if outcomes and all(o.get("status") == "succeeded" for o in outcomes)
+                      solved_outputs_present=solved_outputs,
+                      outcome=("succeeded" if outcomes and solved_outputs
+                               and all(o.get("status") == "succeeded" for o in outcomes)
                                else "downstream_unconverged_or_failed"))
     except dynamic_engine.DynamicError as exc:
         result.update(outcome="not_run", reason=f"T1 topology preflight rejected: {exc.code}: {exc}",

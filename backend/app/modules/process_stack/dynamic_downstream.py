@@ -15,6 +15,10 @@ from app.modules.process_stack import dwsim, mixed, mixed_runtime
 
 DWSIM_TIMEOUT_S = 120.0
 DWSIM_ITERATION_CAP = 12
+_SOLVED_STREAM_FIELDS = (
+    "mass_flow_kg_s", "molar_flow_mol_s", "mass_fractions", "temperature_K",
+    "pressure_Pa", "vapor_fraction", "density_kg_m3", "enthalpy_kJ_kg",
+)
 
 
 def downstream_document(snapshot: Any) -> tuple[dict[str, Any] | None, dict[str, dict[str, Any]]]:
@@ -282,20 +286,60 @@ def build_sampler(
         if isinstance(result.get("_tear_state"), dict):
             last_converged = copy.deepcopy(result["_tear_state"])
         streams = result.get("streams", {})
-        values = {}
-        for tag in {stream["tag"] for stream in boundary_templates.values()}:
-            solved = streams.get(tag)
-            values[tag] = ({key: solved[key] for key in (
-                "mass_flow_kg_s", "molar_flow_mol_s", "mass_fractions", "temperature_K",
-                "pressure_Pa", "vapor_fraction", "density_kg_m3", "enthalpy_kJ_kg",
-            ) if key in solved} if isinstance(solved, dict) else None)
+        boundary_tags = {stream["tag"] for stream in boundary_templates.values()}
+        # Boundary inputs are what Jarvis fed DWSIM from the CVODE state; solved outputs are what DWSIM
+        # returned for every other stream of the downstream subgraph. A solved stream DWSIM did not report
+        # stays None so a missing value is never confused with zero or with an echoed input.
+        solved_streams: dict[str, Any] = {}
+        for item in derived["objects"].values():
+            if item.get("kind") != "stream" or item["tag"] in boundary_tags:
+                continue
+            solved = streams.get(item["tag"])
+            if not isinstance(solved, dict):
+                solved_streams[item["tag"]] = None
+                continue
+            fields = (_SOLVED_STREAM_FIELDS if item.get("type") != "EnergyStream"
+                      else tuple(key for key, value in solved.items() if isinstance(value, (int, float))))
+            solved_streams[item["tag"]] = {
+                **{key: solved[key] for key in fields if key in solved},
+                "provenance": "dwsim_solved", "owner": solved.get("owner", "dwsim")}
+        selected_tags = {item["tag"] for item in derived["objects"].values() if item.get("kind") == "unit"}
+        solved_units = {tag: mixed_runtime.finite_json({**value, "provenance": "dwsim_solved"})
+                        for tag, value in (result.get("units") or {}).items() if tag in selected_tags}
+        boundary_inputs: dict[str, Any] = {}
+        for original in boundary_templates.values():
+            tag = original["tag"]
+            source = boundary_state.get("streams", {}).get(tag)
+            if source is None:
+                boundary_inputs[tag] = None
+                continue
+            fed = document["objects"][original["id"]]["spec"]
+            boundary_inputs[tag] = {
+                "provenance": "jarvis_t1_snapshot",
+                "flow_m3_s": float(source.get("flow_m3_s", 0.0)),
+                "mass_flow_kg_s": fed["mass_flow"]["si"],
+                "concentrations_kg_m3": {key: value["si"] for key, value in fed.get("culture", {}).items()
+                                         if isinstance(value, dict) and "si" in value},
+                **({"temperature_K": fed["temperature"]["si"]} if "si" in (fed.get("temperature") or {}) else {}),
+                **({"pressure_Pa": fed["pressure"]["si"]} if "si" in (fed.get("pressure") or {}) else {}),
+            }
         density_sources = {tag: {"rho_kg_m3": densities.get(tag, fallback_density)[0],
                                  "source": densities.get(tag, fallback_density)[1],
-                                 **({"density_assumed": True, "reason": density_source}
+                                 **({"density_assumed": True, "reason": fallback_density[1]}
                                     if tag not in densities else {})}
-                           for tag in values for density_source in [densities.get(tag, fallback_density)[1]]}
+                           for tag in boundary_inputs}
+        solve_detail = result.get("mixed_solve") or {}
         return {"status": "succeeded", "time_s": boundary_state["time_s"],
-                "time_utc": sample_timestamp(boundary_state["time_s"]), "streams": values,
+                "time_utc": sample_timestamp(boundary_state["time_s"]),
+                "boundary_inputs": boundary_inputs, "streams": solved_streams, "units": solved_units,
+                **({"culture": mixed_runtime.finite_json(result["culture"])} if result.get("culture") else {}),
+                "solve": {key: value for key, value in {
+                    "status": result.get("status"), "reason": solve_detail.get("reason"),
+                    "iterations": len(solve_detail.get("history") or []) or None,
+                    "balances": mixed_runtime.finite_json({
+                        name: {key: row.get(key) for key in ("residual", "tolerance", "unit", "passed")}
+                        for name, row in (solve_detail.get("balances") or {}).items() if isinstance(row, dict)}) or None,
+                }.items() if value is not None},
                 "boundary_density_sources": density_sources, "density_assumed": fallback_assumed,
                 **({"density_assumption_reason": fallback_density[1]} if fallback_assumed else {})}
 

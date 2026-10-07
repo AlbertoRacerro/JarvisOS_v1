@@ -63,14 +63,24 @@ def test_nonconvergence_retries_from_midpoint_and_reports_missing_separately_fro
         assert document["objects"]["product"]["spec"]["culture"]["biomass"]["si"] == 0.2
         assert document["objects"]["product"]["spec"]["mass_flow"]["si"] == pytest.approx(1.0)
         return {"status": "completed", "streams": {
-            "CultureOut": {"mass_flow_kg_s": 0.0, "temperature_K": None}}}
+            "CultureOut": {"mass_flow_kg_s": 1.0, "temperature_K": 300.0},
+            "Product": {"mass_flow_kg_s": 0.0, "temperature_K": None}},
+            "units": {"Heater": {"properties": {"DeltaQ": 2.5}}}}
 
     sampler = dynamic_downstream.build_sampler(_snapshot(), client_factory=lambda: object(), runner=run)
     assert sampler is not None
     result = sampler(_boundary())
     assert result["status"] == "succeeded"
     assert result["time_s"] == 86400.0
-    assert result["streams"] == {"CultureOut": {"mass_flow_kg_s": 0.0, "temperature_K": None}}
+    # The solved outlet keeps its reported zero; the boundary feed is reported as Jarvis input, not a result.
+    assert result["streams"] == {"Product": {"mass_flow_kg_s": 0.0, "temperature_K": None,
+                                             "provenance": "dwsim_solved", "owner": "dwsim"}}
+    assert result["units"] == {"Heater": {"properties": {"DeltaQ": 2.5}, "provenance": "dwsim_solved"}}
+    boundary = result["boundary_inputs"]["CultureOut"]
+    assert boundary["provenance"] == "jarvis_t1_snapshot"
+    assert boundary["flow_m3_s"] == pytest.approx(0.001)
+    assert boundary["mass_flow_kg_s"] == pytest.approx(1.0)
+    assert boundary["concentrations_kg_m3"] == {"biomass": 0.2, "nitrogen": 0.1, "oxygen": 0.01}
     assert result["boundary_density_sources"]["CultureOut"]["rho_kg_m3"] == pytest.approx(1000.0)
     assert result["boundary_density_sources"]["CultureOut"]["source"] == "declared_mass_flow_over_volumetric_flow"
 
@@ -142,3 +152,17 @@ def test_boundary_state_feed_does_not_invent_thermodynamic_defaults() -> None:
     assert "temperature" not in feed["spec"]
     assert "pressure" not in feed["spec"]
     assert "composition" not in feed["spec"]
+
+
+def test_solved_stream_missing_from_dwsim_is_none_not_an_echoed_boundary() -> None:
+    sampler = dynamic_downstream.build_sampler(
+        _snapshot(), client_factory=lambda: object(),
+        runner=lambda *_args, **_kwargs: {"status": "completed", "streams": {
+            "CultureOut": {"mass_flow_kg_s": 1.0}}},
+    )
+    assert sampler is not None
+    result = sampler(_boundary())
+    assert result["status"] == "succeeded"
+    assert result["streams"] == {"Product": None}
+    assert "CultureOut" not in result["streams"]
+    assert result["boundary_inputs"]["CultureOut"]["provenance"] == "jarvis_t1_snapshot"
