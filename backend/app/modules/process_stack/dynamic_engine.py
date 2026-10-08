@@ -8,7 +8,7 @@ import json
 import math
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Any, Literal
 
@@ -20,13 +20,24 @@ from app.modules.process_stack.dynamic_models import (
     MAX_DURATION_S,
     MAX_EVENTS,
     MAX_OUTPUT_POINTS,
+    MAX_PARTICIPATING_PBRS,
     Controller,
     Scenario,
     Schedule,
 )
 
-EVALUATOR_VERSION = "process_dynamic_t1/1"
+EVALUATOR_VERSION = "process_dynamic_t1/2"
 MAX_DWSIM_SAMPLES = 200
+STATE_STRIDE = 7
+FLOW_BALANCE_RTOL = 1e-9  # relative volumetric conservation residual accepted from the flow solve
+
+
+def _slot(index: int, field: int = 0) -> int:
+    return index * STATE_STRIDE + field
+
+
+def _unit_type(item: dict[str, Any]) -> str:
+    return item.get("unit", {}).get("type", "PhotobioreactorT1")
 
 
 class DynamicError(ValueError):
@@ -47,6 +58,18 @@ class EngineResult:
     error: dict[str, Any] | None
     series: dict[str, np.ndarray]
     manifest: dict[str, Any]
+
+
+def _growth_for_unit(item: dict[str, Any], *, dark: bool = False) -> Any:
+    growth = pbr_unit.build_growth(item["params"] if _unit_type(item) == "PhotobioreactorT1"
+                                   else item["growth_template_params"], item["model"], (0, 0, 0), 0)
+    if not dark:
+        return growth
+    params = item["params"]
+    return replace(growth, mu_max_h=0.0, peak_par=0.0, photoperiod_h=0.0,
+                   temperature_mean=params["temperature"], temperature_amplitude=0.0,
+                   kla_h=3600.0 * params.get("oxygen_kla", 0.0),
+                   oxygen_saturation=params.get("oxygen_saturation", growth.oxygen_saturation))
 
 
 def _validate_downstream_boundary_specs(
@@ -144,6 +167,10 @@ def _validate_events(
             if target.startswith("splitter:"):
                 if target.partition(":")[2] not in splitters or kind != "dilution":
                     raise DynamicError("EVENT_TARGET_INVALID", "Event splitter is not participating.")
+                if target.partition(":")[2] in topology.get("implied_splitters", []):
+                    raise DynamicError("SPLIT_IMPLIED_BY_CIRCULATION",
+                                       "This splitter's split follows the specified loop circulation; "
+                                       "change the boundary feed instead.", {"splitter": target.partition(":")[2]})
             elif (event.get("stream") or target.removeprefix("feed:")) not in feeds:
                 raise DynamicError("EVENT_TARGET_INVALID", "Event feed is not a participating boundary stream.")
             value = event.get("value")
@@ -178,7 +205,7 @@ def _validate_events(
 
 def _t1_reachable(objects: dict[str, Any], selected: set[str]) -> set[str]:
     """Unit ids connected to the participating PBRs through T1-supported units only (as in _topology)."""
-    supported = {"PhotobioreactorT1", "Mixer", "Splitter", "Pump", "Recycle", "SpecifiedSeparator"}
+    supported = {"PhotobioreactorT1", "HoldupTank", "Mixer", "Splitter", "Pump", "Recycle", "SpecifiedSeparator"}
     edges = [((s.get("source") or {}).get("unit"), (s.get("target") or {}).get("unit"))
              for s in objects.values() if s.get("kind") == "stream" and s.get("type") != "EnergyStream"]
     reached, frontier = set(selected), list(selected)
@@ -190,6 +217,149 @@ def _t1_reachable(objects: dict[str, Any], selected: set[str]) -> set[str]:
                 reached.add(neighbor)
                 frontier.append(neighbor)
     return reached
+
+
+def _implied_splitters(units: list[dict[str, Any]], streams: list[dict[str, Any]],
+                       circulation_tags: set[str]) -> set[str]:
+    """Splitters inside a loop whose Pump circulation is specified.
+
+    The circulation fixes the flow through the loop, so such a splitter's outlet split follows
+    continuity (net boundary inflow leaves through it); a declared ratio would overdetermine it.
+    """
+    from app.modules.process_stack import mixed
+
+    if not circulation_tags:
+        return set()
+    nodes = {unit["id"] for unit in units}
+    edges = [(s["source"]["unit"], s["target"]["unit"], s) for s in streams
+             if s.get("source") and s.get("target")
+             and s["source"]["unit"] in nodes and s["target"]["unit"] in nodes]
+    implied: set[str] = set()
+    for group in mixed.components(nodes, edges):
+        members = [unit for unit in units if unit["id"] in group]
+        if any(unit.get("type") == "Pump" and unit.get("tag") in circulation_tags for unit in members):
+            implied.update(unit["id"] for unit in members if unit.get("type") == "Splitter")
+    return implied
+
+
+def _solve_flows(topology: dict[str, Any], overrides: dict[str, float] | None = None) -> dict[str, float]:
+    """Solve one full-rank volumetric balance with fixed pump circulation constraints."""
+    overrides = overrides or {}
+    matrix = np.asarray(topology["flow_matrix"], dtype=np.float64)
+    values = np.asarray(topology["flow_rhs"], dtype=np.float64).copy()
+    for row_index, stream_id in topology.get("feed_rows", {}).items():
+        values[int(row_index)] = float(overrides.get(stream_id, topology["flow_rhs"][int(row_index)]))
+    for row_index, pump in topology.get("circulation_rows", {}).items():
+        values[int(row_index)] = float(overrides.get(pump["tag"], pump["flow_m3_s"]))
+    rank = int(np.linalg.matrix_rank(matrix))
+    n = matrix.shape[1]
+    if rank < n:
+        from app.modules.process_stack import mixed
+
+        active = {u["id"] for u in topology["units"]}
+        edges = [(s["source"]["unit"], s["target"]["unit"], s) for s in topology["streams"]
+                 if s.get("source") and s.get("target")
+                 and s["source"]["unit"] in active and s["target"]["unit"] in active]
+        cycles = []
+        for group in mixed.components({u["id"] for u in topology["units"]}, edges):
+            cyclic = len(group) > 1 or any(a == b and a in group for a, b, _ in edges)
+            if cyclic:
+                cycles.append(sorted(u["tag"] for u in topology["units"] if u["id"] in group))
+        specified = set(topology.get("circulation", {})) | set(overrides)
+        unspecified = [cycle for cycle in cycles if not any(
+            unit.get("tag") in specified for unit in topology["units"] if unit["type"] == "Pump"
+        )]
+        cycles = unspecified or cycles
+        raise DynamicError("FLOW_UNDERDETERMINED", "Dynamic flow balance has an unspecified circulation cycle.",
+                           {"cycles": cycles, "units": sorted({tag for cycle in cycles for tag in cycle})})
+    # Full column rank is checked above, so the least-squares solution is unique. It is only a
+    # best fit, though: an overdetermined system is accepted only if it conserves volume exactly.
+    solution, *_ = np.linalg.lstsq(matrix, values, rcond=None)
+    residual = np.abs(matrix @ solution - values)
+    scale = max(float(np.max(np.abs(values))), float(np.max(np.abs(solution))), 1e-300)
+    residual_rel = float(np.max(residual)) / scale
+    if residual_rel > FLOW_BALANCE_RTOL:
+        worst = matrix[int(np.argmax(residual))]
+        raise DynamicError("FLOW_BALANCE_UNSOLVED", "Dynamic volumetric flow balance is inconsistent.", {
+            "reason": "conservation_residual", "residual_rel": residual_rel, "tolerance": FLOW_BALANCE_RTOL,
+            "streams": sorted(topology["streams"][i]["tag"] for i in np.flatnonzero(worst))})
+    if np.any(solution < -FLOW_BALANCE_RTOL * scale):
+        raise DynamicError("FLOW_BALANCE_UNSOLVED", "Dynamic volumetric flow balance needs a negative flow.", {
+            "reason": "negative_flow",
+            "streams": sorted(topology["streams"][i]["tag"] for i in np.flatnonzero(solution < -FLOW_BALANCE_RTOL * scale))})
+    return {stream["id"]: max(0.0, float(solution[index]))
+            for index, stream in enumerate(topology["streams"])}
+
+
+def _culture_loops(topology: dict[str, Any], units: list[dict[str, Any]], flows: dict[str, float]) -> list[dict[str, Any]]:
+    from app.modules.process_stack import mixed
+
+    nodes = {unit["id"] for unit in topology["units"]}
+    edges = [(s["source"]["unit"], s["target"]["unit"], s) for s in topology["streams"]
+             if s.get("source") and s.get("target")
+             and s["source"]["unit"] in nodes and s["target"]["unit"] in nodes]
+    by_id = {unit["id"]: unit for unit in topology["units"]}
+    selected = {item["unit"]["id"]: item for item in units}
+    loops = []
+    for group in mixed.components(nodes, edges):
+        cyclic = len(group) > 1 or any(a == b and a in group for a, b, _ in edges)
+        pbr_tags = sorted(item["tag"] for item in units
+                          if item["unit"]["id"] in group and item["unit"]["type"] == "PhotobioreactorT1")
+        if not cyclic or not pbr_tags:
+            continue
+        members = [selected[key] for key in sorted(group) if key in selected]
+        volume = sum(item["volume_m3"] for item in members)
+        illuminated = sum(item["volume_m3"] for item in members
+                          if item["unit"]["type"] == "PhotobioreactorT1")
+        internal = [s for s in topology["streams"]
+                    if (s.get("source") or {}).get("unit") in group and (s.get("target") or {}).get("unit") in group]
+        inbound = [s for s in topology["streams"] if (s.get("target") or {}).get("unit") in group
+                   and (s.get("source") or {}).get("unit") not in group]
+        outbound = [s for s in topology["streams"] if (s.get("source") or {}).get("unit") in group
+                    and (s.get("target") or {}).get("unit") not in group]
+        q_circ = max((flows.get(s["id"], 0.0) for s in internal), default=0.0)
+        q_in, q_out = sum(flows.get(s["id"], 0.0) for s in inbound), sum(flows.get(s["id"], 0.0) for s in outbound)
+        loops.append({"id": pbr_tags[0], "units": sorted(by_id[key]["tag"] for key in group),
+                      "member_tags": [item["tag"] for item in members], "volume_m3": volume,
+                      "illuminated_fraction": illuminated / volume if volume else 0.0,
+                      "circulation_m3_s": q_circ, "pass_transit_time_s": volume / q_circ if q_circ else None,
+                      "net_boundary_inflow_m3_s": q_in, "net_boundary_outflow_m3_s": q_out,
+                      "net_dilution_1_s": q_out / volume if volume else 0.0,
+                      "culture_residence_time_s": volume / q_out if q_out else "∞, batch"})
+    return sorted(loops, key=lambda loop: loop["id"])
+
+
+def _flow_hydraulics(topology: dict[str, Any], units: list[dict[str, Any]], flows: dict[str, float]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    loops = topology.get("culture_loops", [])
+    result: dict[str, Any] = {}
+    findings: list[dict[str, Any]] = []
+    for item in units:
+        if _unit_type(item) != "PhotobioreactorT1" or "tube_count" not in item["params"]:
+            continue
+        unit_id = item["unit"]["id"]
+        inlet_streams = [s for s in topology["streams"] if (s.get("target") or {}).get("unit") == unit_id]
+        q_in = sum(flows.get(s["id"], 0.0) for s in inlet_streams)
+        loop = next((entry for entry in loops if item["tag"] in entry["member_tags"]), None)
+        specified_loop = bool(loop and any(
+            pump["tag"] in loop["units"] for pump in topology.get("circulation", {}).values()
+        ))
+        params = dict(item["params"])
+        if specified_loop:
+            area = math.pi * params["tube_inner_diameter"] ** 2 / 4.0
+            velocity = q_in / (params["tube_count"] * area)
+            params["liquid_velocity"] = velocity
+            declared = item["params"]["liquid_velocity"]
+            if abs(velocity - declared) / declared > 0.01:
+                findings.append({"code": "PBR_CIRCULATION_VELOCITY_MISMATCH", "severity": "warning",
+                                 "unit": item["tag"], "declared_velocity_m_s": declared,
+                                 "solved_velocity_m_s": velocity})
+        else:
+            velocity = params["liquid_velocity"]
+        hydro = pbr_unit.hydraulics(params)
+        result[item["tag"]] = {**hydro, "velocity_m_s": velocity, "inlet_flow_m3_s": q_in,
+                                "pass_rate_1_s": q_in / item["volume_m3"] if item["volume_m3"] else None,
+                                "culture_loop_id": loop["id"] if loop is not None and specified_loop else None}
+    return result, findings
 
 
 def _topology(document: dict[str, Any], units: list[dict[str, Any]], scenario: dict[str, Any]) -> dict[str, Any]:
@@ -217,7 +387,7 @@ def _topology(document: dict[str, Any], units: list[dict[str, Any]], scenario: d
                 continue
             candidate = by_id.get(neighbor, {})
             if candidate.get("type") not in {
-                "PhotobioreactorT1", "Mixer", "Splitter", "Pump", "Recycle", "SpecifiedSeparator"
+                "PhotobioreactorT1", "HoldupTank", "Mixer", "Splitter", "Pump", "Recycle", "SpecifiedSeparator"
             }:
                 if current == target:
                     raise DynamicError(
@@ -243,11 +413,15 @@ def _topology(document: dict[str, Any], units: list[dict[str, Any]], scenario: d
                 "Dynamic T1 supports split_ratios mode only.",
                 {"unit": item.get("tag")},
             )
-    # Unknown stream Q values obey unit balances; splitter outlet ratios add independent equations.
+    # Unknown stream Q values obey unit balances; splitter outlet ratios add independent equations,
+    # except for splitters whose split is implied by a specified loop circulation.
+    implied_splitters = _implied_splitters(list(active_units.values()), relevant,
+                                           set(scenario.get("circulation", {})))
     n = len(relevant)
     index = {stream["id"]: i for i, stream in enumerate(relevant)}
     equations: list[np.ndarray] = []
     rhs: list[float] = []
+    feed_rows: dict[int, str] = {}
     feeds: dict[str, dict[str, float]] = {}
     for stream in relevant:
         if stream.get("source") is None:
@@ -269,6 +443,7 @@ def _topology(document: dict[str, Any], units: list[dict[str, Any]], scenario: d
             row[index[stream["id"]]] = 1
             equations.append(row)
             rhs.append(flow)
+            feed_rows[len(rhs) - 1] = stream["id"]
             feeds[stream["id"]] = {
                 name: float((culture.get(key) or {}).get("si", 0.0))
                 for name, key in (("X", "biomass"), ("N", "nitrogen"), ("O2", "oxygen"))
@@ -311,7 +486,7 @@ def _topology(document: dict[str, Any], units: list[dict[str, Any]], scenario: d
                 row[index[incoming[0]["id"]]] = -ratio
                 equations.append(row)
                 rhs.append(0.0)
-        elif unit.get("type") == "Splitter":
+        elif unit.get("type") == "Splitter" and key not in implied_splitters:
             ratio_values = _splitter_ratios(unit, len(outgoing))
             for stream, ratio in zip(outgoing, ratio_values, strict=True):
                 row = np.zeros(n)
@@ -320,19 +495,40 @@ def _topology(document: dict[str, Any], units: list[dict[str, Any]], scenario: d
                     row[index[inlet["id"]]] -= ratio
                 equations.append(row)
                 rhs.append(0.0)
+    circulation: dict[str, dict[str, Any]] = {}
+    units_by_tag = {unit.get("tag"): unit for unit in active_units.values()}
+    for pump_tag, flow in scenario.get("circulation", {}).items():
+        pump = units_by_tag.get(pump_tag)
+        if pump is None or pump.get("type") != "Pump":
+            raise DynamicError("CIRCULATION_PUMP_INVALID", "Circulation must target a participating Pump.",
+                               {"pump": pump_tag})
+        if not math.isfinite(float(flow)) or float(flow) <= 0:
+            raise DynamicError("CIRCULATION_FLOW_INVALID", "Specified circulation must be finite and positive.",
+                               {"pump": pump_tag})
+        outlets = [s for s in relevant if (s.get("source") or {}).get("unit") == pump["id"]]
+        if len(outlets) != 1:
+            raise DynamicError("UNIT_TOPOLOGY_INVALID", "Circulation Pump requires one outlet.",
+                               {"pump": pump_tag})
+        row = np.zeros(n)
+        row[index[outlets[0]["id"]]] = 1.0
+        equations.append(row)
+        rhs.append(float(flow))
+        circulation[pump_tag] = {"tag": pump_tag, "flow_m3_s": float(flow), "stream_id": outlets[0]["id"]}
     if not equations:
         raise DynamicError("TOPOLOGY_EMPTY", "No dynamic T1 stream topology is connected.")
     matrix, values = np.vstack(equations), np.asarray(rhs)
-    flows, *_ = np.linalg.lstsq(matrix, values, rcond=None)
-    if np.max(np.abs(matrix @ flows - values)) > 1e-8 or np.any(flows < -1e-10):
-        raise DynamicError("FLOW_BALANCE_UNSOLVED", "Dynamic volumetric flow balance is inconsistent.")
-    flow_map = {stream["id"]: max(0.0, float(flows[index[stream["id"]]])) for stream in relevant}
+    circulation_rows = {row: value for row, value in enumerate(circulation.values(), start=len(rhs) - len(circulation))}
+    topology = {"units": list(active_units.values()), "streams": relevant, "feeds": feeds,
+                "flow_matrix": matrix.tolist(), "flow_rhs": values.tolist(), "feed_rows": feed_rows,
+                "circulation_rows": circulation_rows, "circulation": circulation,
+                "implied_splitters": sorted(active_units[key]["tag"] for key in implied_splitters)}
+    flow_map = _solve_flows(topology)
     for item in units:
         key = item["unit"]["id"]
         qin = sum(flow_map[s["id"]] for s in relevant if (s.get("target") or {}).get("unit") == key)
         if qin <= 0:
             raise DynamicError("ZERO_THROUGHFLOW", "Participating PBR has zero throughflow.", {"unit": item["tag"]})
-    return {"units": list(active_units.values()), "streams": relevant, "flows": flow_map, "feeds": feeds}
+    return {**topology, "flows": flow_map}
 
 
 def prepare(workspace_id: str, draft_id: str, scenario_id: str) -> Snapshot:
@@ -430,13 +626,49 @@ def prepare(workspace_id: str, draft_id: str, scenario_id: str) -> Snapshot:
             controller_items.append(controller.model_dump(mode="json"))
         by_tag = {item["tag"]: item for item in document["objects"].values()}
         units = []
+        pbr_models = {tag: pbr_unit._resolve(workspace_id, by_tag[tag].get("model") or {})
+                      for tag in scenario.units if by_tag.get(tag, {}).get("type") == "PhotobioreactorT1"}
+        first_pbr_model = next(iter(pbr_models.values()), None)
+        growth_template_params = pbr_unit._parameters(by_tag[next(iter(pbr_models))]) if pbr_models else {}
+
+        def tank_model(tank: dict[str, Any]) -> dict[str, Any] | None:
+            graph: dict[str, set[str]] = {}
+            for stream in document["objects"].values():
+                if stream.get("kind") != "stream" or not stream.get("source") or not stream.get("target"):
+                    continue
+                source, target = stream["source"]["unit"], stream["target"]["unit"]
+                graph.setdefault(source, set()).add(target)
+                graph.setdefault(target, set()).add(source)
+            reached, pending = {tank["id"]}, [tank["id"]]
+            while pending:
+                current = pending.pop()
+                for neighbor in graph.get(current, set()) - reached:
+                    reached.add(neighbor)
+                    pending.append(neighbor)
+            candidates = [tag for tag in pbr_models if by_tag[tag]["id"] in reached]
+            return pbr_models[candidates[0]] if candidates else first_pbr_model
         for tag in scenario.units:
             unit = by_tag.get(tag)
-            if unit is None or unit.get("type") != "PhotobioreactorT1":
+            if unit is None or unit.get("type") not in {"PhotobioreactorT1", "HoldupTank"}:
                 raise DynamicError("UNIT_NOT_FOUND", f"Participating T1 unit {tag!r} was not found.")
-            params = pbr_unit._parameters(unit)
-            model = pbr_unit._resolve(workspace_id, unit.get("model") or {})
-            volume = params["tube_count"] * math.pi * params["tube_inner_diameter"] ** 2 * params["tube_length"] / 4
+            model: dict[str, Any] | None
+            if unit["type"] == "PhotobioreactorT1":
+                params = pbr_unit._parameters(unit)
+                model = pbr_models[tag]
+                volume = params["tube_count"] * math.pi * params["tube_inner_diameter"] ** 2 * params["tube_length"] / 4
+            else:
+                params = {key: float((value or {}).get("si", 0.0)) for key, value in unit.get("params", {}).items()}
+                volume = params.get("liquid_volume", 0.0)
+                if (volume <= 0 or params.get("min_volume", 0.0) < 0
+                        or params.get("max_volume", volume) < volume
+                        or params.get("min_volume", 0.0) > volume
+                        or params.get("temperature", 0.0) <= 0):
+                    raise DynamicError("TANK_PARAMETERS_INVALID", "HoldupTank volume limits and temperature are invalid.",
+                                       {"unit": tag})
+                if ("oxygen_kla" in params) != ("oxygen_saturation" in params):
+                    raise DynamicError("TANK_OXYGEN_PARAMETERS_INVALID", "HoldupTank oxygen_kla and oxygen_saturation must be set together.",
+                                       {"unit": tag})
+                model = tank_model(unit)
             initial = scenario.initial.get(tag, {})
             if set(initial) != {"X", "N", "O2"}:
                 raise DynamicError("INITIAL_STATE_REQUIRED", "Each T1 unit requires explicit X, N and O2 initial state.",
@@ -446,6 +678,9 @@ def prepare(workspace_id: str, draft_id: str, scenario_id: str) -> Snapshot:
                 raise DynamicError(
                     "INITIAL_STATE_INVALID", f"Initial concentrations for {tag} must be finite and nonnegative."
                 )
+            if unit["type"] == "HoldupTank" and model is None:
+                raise DynamicError("TOPOLOGY_CARD_MISMATCH", "A HoldupTank requires a participating PBR model card.",
+                                   {"units": [tag]})
             units.append(
                 {
                     "tag": tag,
@@ -454,11 +689,13 @@ def prepare(workspace_id: str, draft_id: str, scenario_id: str) -> Snapshot:
                     "model": model,
                     "volume_m3": volume,
                     "state": state,
-                    "card_qualification": model.get("card", {}).get("qualification_status", "unknown"),
+                    "growth_template_params": growth_template_params if unit["type"] == "HoldupTank" else params,
+                    "card_qualification": model.get("card", {}).get("qualification_status", "unknown") if model else "shared",
                 }
             )
-        if len(units) > 8:
-            raise DynamicError("UNIT_LIMIT", "At most 8 T1 units may participate.")
+        pbr_count = sum(item["unit"]["type"] == "PhotobioreactorT1" for item in units)
+        if pbr_count > MAX_PARTICIPATING_PBRS:
+            raise DynamicError("UNIT_LIMIT", "At most 8 T1 PBRs may participate.")
         # Reject unsupported connected equipment rather than silently dropping its physics.
         selected = {u["unit"]["id"] for u in units}
         objects = document["objects"]
@@ -510,6 +747,12 @@ def prepare(workspace_id: str, draft_id: str, scenario_id: str) -> Snapshot:
         for node in algebraic:
             visit(node)
         topology = _topology(document, units, scenario.model_dump(mode="json"))
+        for controller_item in controller_items:
+            actuator_kind, _, actuator_tag = controller_item["actuator"].partition(":")
+            if actuator_kind == "splitter" and actuator_tag in topology["implied_splitters"]:
+                raise DynamicError("SPLIT_IMPLIED_BY_CIRCULATION",
+                                   "This splitter's split follows the specified loop circulation; "
+                                   "actuate the boundary feed instead.", {"splitter": actuator_tag})
         card_by_unit = {unit["unit"]["id"]: (unit["model"].get("card", {}).get("digest"),
                                                unit["model"].get("set", {}).get("digest"))
                         for unit in units}
@@ -565,12 +808,10 @@ def prepare(workspace_id: str, draft_id: str, scenario_id: str) -> Snapshot:
                     "Downstream loop requires a Recycle block before DWSIM can sample it.",
                     {"loops": loops},
                 )
-            participating_ids = {item["unit"]["id"] for item in units}
-            carrier_specs = [
-                stream.get("spec", {}) for stream in document["objects"].values()
-                if stream.get("kind") == "stream" and stream.get("source") is None
-                and (stream.get("target") or {}).get("unit") in participating_ids
-            ]
+            # The carrier is any boundary feed of the dynamic flow network, including one entering a
+            # culture loop through its Mixer rather than directly into a PBR or tank.
+            carrier_specs = [stream.get("spec", {}) for stream in topology["streams"]
+                             if stream["id"] in topology["feeds"]]
             carrier_spec = carrier_specs[0] if carrier_specs else {}
             _validate_downstream_boundary_specs(downstream_data[1], carrier_spec)
         for obj in document["objects"].values():
@@ -685,9 +926,12 @@ def _profile_par(snapshot: Snapshot, elapsed_s: float) -> float:
 
 
 def _profile_temperature(snapshot: Snapshot, elapsed_s: float, unit_index: int = 0) -> float:
+    unit = snapshot.payload["units"][unit_index]
+    if _unit_type(unit) == "HoldupTank":
+        return float(unit["params"]["temperature"])
     item = snapshot.payload["profiles"][0]
     if item["temp_name"] == "unit_mean":
-        return float(snapshot.payload["units"][unit_index]["params"]["temperature_mean"])
+        return float(unit["params"]["temperature_mean"])
     times = item["times"]
     epoch = snapshot.payload["start_epoch"] + elapsed_s
     channels = item["profile"]["channels"]
@@ -743,7 +987,7 @@ def _network_concentrations(topology: dict[str, Any], runtime: dict[str, Any], s
                             units: list[dict[str, Any]], flows: dict[str, float]) -> dict[str, tuple[float, ...]]:
     concentrations: dict[str, tuple[float, ...]] = {}
     for i, item in enumerate(units):
-        x, nitrogen, oxygen = (float(v) for v in state[i * 7:i * 7 + 3])
+        x, nitrogen, oxygen = (float(v) for v in state[_slot(i):_slot(i, 3)])
         unit_value = (x, nitrogen, oxygen, item["growth"].nitrogen_quota * x)
         concentrations[item["unit"]["id"]] = unit_value
         for stream in topology["streams"]:
@@ -800,19 +1044,20 @@ def _network_concentrations(topology: dict[str, Any], runtime: dict[str, Any], s
 
 def _result_series(snapshot: Snapshot, times: list[float], rows: list[np.ndarray], units: list[dict[str, Any]],
                    controllers: list[dict[str, Any]], controller_log: list[dict[str, Any]],
-                   flow_log: list[dict[str, Any]] | None = None) -> dict[str, np.ndarray]:
+                   flow_log: list[dict[str, Any]] | None = None,
+                   topology_override: dict[str, Any] | None = None) -> dict[str, np.ndarray]:
     elapsed = np.asarray(times, dtype=np.float64)
     matrix = np.asarray(rows, dtype=np.float64)
     result = {"t_s": elapsed, "par": np.asarray([_profile_par(snapshot, float(t)) for t in elapsed])}
     result["temperature"] = np.asarray([_profile_temperature(snapshot, float(t)) for t in elapsed])
     for i, unit in enumerate(units):
         for j, name in enumerate(("X", "N", "O2")):
-            result[f"{unit['tag']}_{name}"] = matrix[:, i * 7 + j]
+            result[f"{unit['tag']}_{name}"] = matrix[:, _slot(i, j)]
         result[f"{unit['tag']}_temperature"] = np.asarray(
             [_profile_temperature(snapshot, float(t), i) for t in elapsed]
         )
-        result[f"{unit['tag']}_harvest_X_kg"] = matrix[:, i * 7 + 6] * unit["volume_m3"]
-    result["harvest_X_kg"] = matrix[:, len(units) * 7 + 3] + sum(
+        result[f"{unit['tag']}_harvest_X_kg"] = matrix[:, _slot(i, 6)] * unit["volume_m3"]
+    result["harvest_X_kg"] = matrix[:, _slot(len(units), 3)] + sum(
         result[f"{unit['tag']}_harvest_X_kg"] for unit in units
     )
     for controller in controllers:
@@ -822,8 +1067,11 @@ def _result_series(snapshot: Snapshot, times: list[float], rows: list[np.ndarray
                  float(controller["_initial_output"])) for t in times
         ], dtype=np.float64)
     if flow_log:
-        topology = snapshot.payload["topology"]
+        topology = topology_override or snapshot.payload["topology"]
         flows_at = [next(entry["flows"] for entry in reversed(flow_log) if entry["time_s"] <= t)
+                    for t in times]
+        hydro_at = [next({**entry.get("hydraulics", {}), "culture_loops": entry.get("culture_loops", {})}
+                         for entry in reversed(flow_log) if entry["time_s"] <= t)
                     for t in times]
         for stream in topology["streams"]:
             if stream.get("source") is None:
@@ -844,6 +1092,44 @@ def _result_series(snapshot: Snapshot, times: list[float], rows: list[np.ndarray
                      for item in flows_at
                      for total in [sum(item[out["id"]] for out in outlets)]], dtype=np.float64
                 )
+        for unit in units:
+            if _unit_type(unit) == "PhotobioreactorT1":
+                result[f"{unit['tag']}_pass_rate_1_s"] = np.asarray([
+                    values.get(unit["tag"], {}).get("pass_rate_1_s", math.nan) for values in hydro_at
+                ], dtype=np.float64)
+        by_tag = {unit["tag"]: i for i, unit in enumerate(units)}
+        for loop in topology.get("culture_loops", []):
+            members = [(by_tag[tag], next(unit for unit in units if unit["tag"] == tag))
+                       for tag in loop["member_tags"]]
+            volume = sum(unit["volume_m3"] for _, unit in members)
+            biomass = sum(matrix[:, _slot(index)] * unit["volume_m3"] for index, unit in members)
+            result[f"{loop['id']}_X_mean"] = biomass / volume
+            result[f"{loop['id']}_N_mean"] = sum(matrix[:, _slot(index, 1)] * unit["volume_m3"]
+                                                   for index, unit in members) / volume
+            result[f"{loop['id']}_biomass_kg"] = biomass
+        for unit in units:
+            tag = unit["tag"]
+            if not any(tag in values for values in hydro_at):
+                continue
+            for key in ("velocity_m_s", "reynolds_number", "pressure_drop", "pumping_power"):
+                result[f"{tag}_{key}"] = np.asarray([values.get(tag, {}).get(key, math.nan)
+                                                     for values in hydro_at], dtype=np.float64)
+        for loop in topology.get("culture_loops", []):
+            tag = loop["id"]
+            for key, suffix in (("pass_transit_time_s", "pass_transit_time_s"),
+                                ("circulation_m3_s", "circulation_Q_m3_s"),
+                                ("net_dilution_1_s", "net_dilution_1_s"),
+                                ("culture_residence_time_s", "culture_residence_time_s")):
+                if key == "culture_residence_time_s":
+                    result[f"{tag}_{suffix}"] = np.asarray([
+                        math.inf if values.get("culture_loops", {}).get(tag, {}).get(key) == "∞, batch"
+                        else values.get("culture_loops", {}).get(tag, {}).get(key, math.nan)
+                        for values in hydro_at
+                    ], dtype=np.float64)
+                else:
+                    result[f"{tag}_{suffix}"] = np.asarray([
+                        values.get("culture_loops", {}).get(tag, {}).get(key, math.nan) for values in hydro_at
+                    ], dtype=np.float64)
     return result
 
 
@@ -861,7 +1147,7 @@ def run(
     start, end = snapshot.payload["start_epoch"], snapshot.payload["end_epoch"]
     duration = end - start
     cadence = float(scenario["output_cadence_s"])
-    outputs = np.arange(0.0, duration, cadence, dtype=np.float64)
+    outputs: np.ndarray = np.arange(0.0, duration, cadence, dtype=np.float64)
     if not len(outputs) or outputs[-1] != duration:
         outputs = np.append(outputs, duration)
     if outputs[0] != 0:
@@ -873,14 +1159,14 @@ def run(
               if isinstance(value, dict) else value)
         for key, value in topology["feeds"].items()
     })
-    growths = [pbr_unit.build_growth(item["params"], item["model"], (0, 0, 0), 0) for item in units]
+    growths = [_growth_for_unit(item, dark=_unit_type(item) == "HoldupTank") for item in units]
     for item, growth in zip(units, growths, strict=True):
         item["growth"] = growth
     # Per unit: X,N,O2 plus integrated generation, transfer and discrete harvest.
     # Global states: boundary X/N/O2 balance and continuous harvested biomass mass.
-    initial = np.zeros(n * 7 + 4, dtype=np.float64)
+    initial = np.zeros(_slot(n) + 4, dtype=np.float64)
     for i, unit in enumerate(units):
-        initial[i * 7 : i * 7 + 3] = unit["state"]
+        initial[_slot(i) : _slot(i, 3)] = unit["state"]
     rows: list[np.ndarray] = [initial.copy()]
     times_out = [0.0]
     event_log: list[dict[str, Any]] = []
@@ -906,13 +1192,28 @@ def run(
         cadence_i = float(item["cadence_s"])
         controller_times.update(float(t) for t in np.arange(cadence_i, duration, cadence_i))
     flows, feeds = topology["flows"], topology["feeds"]
+    topology["culture_loops"] = _culture_loops(topology, units, flows)
+    hydraulic_findings: list[dict[str, Any]] = []
+    hydraulic_cache: dict[tuple[tuple[str, float], ...], dict[str, Any]] = {}
+
+    def record_flow(time_s: float) -> None:
+        signature = tuple(sorted((key, float(value)) for key, value in flows.items()))
+        if signature not in hydraulic_cache:
+            hydro, findings = _flow_hydraulics(topology, units, flows)
+            hydraulic_cache[signature] = hydro
+            for finding in findings:
+                if finding not in hydraulic_findings:
+                    hydraulic_findings.append(finding)
+        flow_log.append({"time_s": time_s, "flows": dict(flows), "hydraulics": hydraulic_cache[signature],
+                         "culture_loops": {loop["id"]: loop for loop in _culture_loops(topology, units, flows)}})
+
     setpoints = {value["id"]: float(value["setpoint"]) for value in controllers}
     controller_by_id = {item["id"]: item for item in controllers}
     conditional_state: dict[int, bool] = {}
     roundoff_clips: list[dict[str, Any]] = []
 
     def diagnostic(status: Literal["failed", "cancelled"], error: dict[str, Any]) -> EngineResult:
-        series = _result_series(snapshot, times_out, rows, units, controllers, controller_log, flow_log)
+        series = _result_series(snapshot, times_out, rows, units, controllers, controller_log, flow_log, topology)
         manifest = _manifest(snapshot, started, event_log, controller_log, downstream)
         _add_diagnostic_evidence(manifest, series, controllers)
         manifest["balances"] = _partial_balances(current, units, growths, event_log)
@@ -937,7 +1238,7 @@ def run(
                 topology, flows, feeds, setpoints, {item["id"]: item for item in controllers},
             )
             event_cursor += 1
-        flow_log.append({"time_s": 0.0, "flows": dict(flows)})
+        record_flow(0.0)
         rows[0] = current.copy()
         for left, right in zip(boundaries, boundaries[1:], strict=False):
             if cancelled():
@@ -951,11 +1252,14 @@ def run(
                 result = [0.0] * len(state)
                 concentrations = _network_concentrations(topology, network_state, state, units, flows)
                 for i, item in enumerate(units):
-                    off = i * 7
+                    off = _slot(i)
                     x, nitrogen, oxygen = state[off:off + 3]
                     growth = growths[i]
                     temperature = _profile_temperature(snapshot, elapsed, i)
-                    mu, loss = growth.rates_at(par_value, temperature, x, nitrogen)
+                    is_tank = _unit_type(item) == "HoldupTank"
+                    mu, loss = growth.rates_at(0.0 if is_tank else par_value,
+                                               item["params"]["temperature"] if is_tank else temperature,
+                                               x, nitrogen)
                     rx = (mu - loss) * x / 3600.0
                     transfer = growth.kla_h * (growth.oxygen_saturation - oxygen) / 3600.0
                     inlet = np.zeros(3, dtype=np.float64)
@@ -992,9 +1296,9 @@ def run(
                     else:
                         quota_x = value[3]
                     q = flows.get(stream["id"], 0.0) * (1.0 if source is None else -1.0)
-                    result[n * 7:n * 7 + 3] += q * np.asarray([value[0], value[1] + quota_x, value[2]])
+                    result[_slot(n):_slot(n, 3)] += q * np.asarray([value[0], value[1] + quota_x, value[2]])
                     if source is not None:
-                        result[n * 7 + 3] += flows.get(stream["id"], 0.0) * value[0]
+                        result[_slot(n, 3)] += flows.get(stream["id"], 0.0) * value[0]
                 return result
 
             grid = [left, *[float(t) for t in outputs if left < t < right], right]
@@ -1035,7 +1339,7 @@ def run(
                                     topology, flows, feeds, setpoints, controller_by_id)
                 if times_out and abs(times_out[-1] - right) < 1e-7:
                     rows[-1] = current.copy()
-            flow_log.append({"time_s": right, "flows": dict(flows)})
+            record_flow(right)
             if (
                 sampler
                 and scenario.get("downstream_cadence_s")
@@ -1047,7 +1351,7 @@ def run(
                     result = sampler(
                         {
                             "time_s": right,
-                            "units": {u["tag"]: current[i * 7 : i * 7 + 3].tolist() for i, u in enumerate(units)},
+                            "units": {u["tag"]: current[_slot(i) : _slot(i, 3)].tolist() for i, u in enumerate(units)},
                             "streams": _boundary_streams(topology, current, units, flows, feeds),
                         }
                     )
@@ -1060,11 +1364,14 @@ def run(
                 if cancelled():
                     return diagnostic("cancelled", {"code": "CANCELLED", "message": "Run cancelled.", "detail": {}})
             progress(min(1.0, right / duration))
-        series = _result_series(snapshot, times_out, rows, units, controllers, controller_log, flow_log)
+        series = _result_series(snapshot, times_out, rows, units, controllers, controller_log, flow_log, topology)
         manifest = _manifest(snapshot, started, event_log, controller_log, downstream)
+        manifest["culture_loops"] = _culture_loops(topology, units, flows)
+        manifest["hydraulics"] = flow_log
+        manifest["findings"] = hydraulic_findings
         manifest["channels"] = _channel_units(series, controllers)
         manifest["diagnostics"]["roundoff_clips"] = roundoff_clips
-        net_boundary = current[n * 7 : n * 7 + 3]
+        net_boundary = current[_slot(n):_slot(n, 3)]
         initial_inventory = np.zeros(3, dtype=np.float64)
         final_inventory = np.zeros(3, dtype=np.float64)
         for i, unit in enumerate(units):
@@ -1072,12 +1379,12 @@ def run(
             initial_inventory += unit["volume_m3"] * np.asarray(
                 [unit["state"][0], unit["state"][1] + growth.nitrogen_quota * unit["state"][0], unit["state"][2]])
             final_inventory += unit["volume_m3"] * np.asarray(
-                [current[i * 7], current[i * 7 + 1] + growth.nitrogen_quota * current[i * 7], current[i * 7 + 2]])
+                [current[_slot(i)], current[_slot(i, 1)] + growth.nitrogen_quota * current[_slot(i)], current[_slot(i, 2)]])
         generated = np.asarray([
-            sum(current[i * 7 + 3] * unit["volume_m3"] for i, unit in enumerate(units)),
+            sum(current[_slot(i, 3)] * unit["volume_m3"] for i, unit in enumerate(units)),
             0.0,
             sum((growths[i].oxygen_yield
-                 * current[i * 7 + 3] + current[i * 7 + 5]) * unit["volume_m3"]
+                 * current[_slot(i, 3)] + current[_slot(i, 5)]) * unit["volume_m3"]
                 for i, unit in enumerate(units)),
         ])
         impulses = np.zeros(3, dtype=np.float64)
@@ -1089,9 +1396,9 @@ def run(
             "sign_conventions": {"oxygen_transfer": "positive means oxygen absorption into liquid"},
             "units": {
                 unit["tag"]: {
-                    "biomass_generation_kg": float(current[i * 7 + 3] * unit["volume_m3"]),
+                    "biomass_generation_kg": float(current[_slot(i, 3)] * unit["volume_m3"]),
                     "nitrogen_total_generation_kg": 0.0,
-                    "oxygen_transfer_kg": float(current[i * 7 + 5] * unit["volume_m3"]),
+                    "oxygen_transfer_kg": float(current[_slot(i, 5)] * unit["volume_m3"]),
                 }
                 for i, unit in enumerate(units)
             },
@@ -1100,12 +1407,17 @@ def run(
                            for i, name in enumerate(("biomass", "total_nitrogen", "oxygen"))},
         }
         harvest_kg = float(series["harvest_X_kg"][-1])
-        volume_m3 = sum(unit["volume_m3"] for unit in units)
+        volume_m3 = sum(unit["volume_m3"] for unit in units
+                        if _unit_type(unit) == "PhotobioreactorT1")
+        if volume_m3 <= 0:
+            volume_m3 = sum(unit["volume_m3"] for unit in units)
         area_m2 = (
             sum(math.pi * unit["params"]["tube_inner_diameter"] * unit["params"]["tube_length"]
-                * unit["params"]["tube_count"] for unit in units)
-            if all({"tube_inner_diameter", "tube_length", "tube_count"} <= unit["params"].keys()
-                   for unit in units) else None
+                * unit["params"]["tube_count"] for unit in units
+                if _unit_type(unit) == "PhotobioreactorT1")
+            if any(_unit_type(unit) == "PhotobioreactorT1" for unit in units)
+            and all({"tube_inner_diameter", "tube_length", "tube_count"} <= unit["params"].keys()
+                    for unit in units if _unit_type(unit) == "PhotobioreactorT1") else None
         )
         days = duration / 86400.0
         manifest["productivity"] = {
@@ -1115,6 +1427,14 @@ def run(
             "areal_unavailable_reason": None if area_m2 else "Illuminated tube geometry is unavailable.",
             "energy_per_kg": None,
             "energy_per_kg_unavailable_reason": "No dynamic pump or aeration energy input is declared.",
+        }
+        # The harvested-mass ledger is network-wide; attribute it to a loop only when it is the only one.
+        manifest["productivity_loop"] = {
+            loop["id"]: ({"harvest_kg": harvest_kg, "volumetric_kg_m3_day": harvest_kg / loop["volume_m3"] / days}
+                         if len(manifest["culture_loops"]) == 1 else
+                         {"harvest_kg": None, "volumetric_kg_m3_day": None,
+                          "unavailable_reason": "Harvest is not attributed per loop when several loops participate."})
+            for loop in manifest["culture_loops"] if loop["volume_m3"] > 0
         }
         return EngineResult("succeeded", None, series, manifest)
     except DynamicError as exc:
@@ -1128,7 +1448,7 @@ def _valid_state(state: tuple[float, ...] | np.ndarray, units: list[dict[str, An
     if not all(math.isfinite(float(v)) for v in state):
         raise DynamicError("STATE_NONFINITE", "CVODE produced a nonfinite state.")
     for i, item in enumerate(units):
-        for name, value in zip(("X", "N", "O2"), state[i * 7 : i * 7 + 3], strict=True):
+        for name, value in zip(("X", "N", "O2"), state[_slot(i) : _slot(i, 3)], strict=True):
             tolerance = max(1e-9, 1e-6 * max(1.0, abs(float(value))))
             if value < -tolerance:
                 raise DynamicError(
@@ -1136,8 +1456,10 @@ def _valid_state(state: tuple[float, ...] | np.ndarray, units: list[dict[str, An
                     f"{name} concentration became materially negative.",
                     {"unit": item["tag"], "channel": name, "value": value},
                 )
-        growth = growths[i] if growths is not None else pbr_unit.build_growth(item["params"], item["model"], (0, 0, 0), 0)
-        if growth.extinction * max(0.0, float(state[i * 7])) * growth.diameter > 1e6:
+        growth = growths[i] if growths is not None else _growth_for_unit(
+            item, dark=_unit_type(item) == "HoldupTank")
+        if (_unit_type(item) == "PhotobioreactorT1"
+                and growth.extinction * max(0.0, float(state[_slot(i)])) * growth.diameter > 1e6):
             raise DynamicError("OPTICS_TAU_MAX", "Optical depth exceeds the model limit.", {"unit": item["tag"]})
 
 
@@ -1146,7 +1468,7 @@ def _clip_tiny_negatives(
 ) -> None:
     for i, unit in enumerate(units):
         for offset, channel in enumerate(("X", "N", "O2")):
-            index = i * 7 + offset
+            index = _slot(i, offset)
             if state[index] < 0:
                 clips.append({"time_s": time_s, "unit": unit["tag"], "channel": channel,
                               "value_before": float(state[index]), "value_after": 0.0})
@@ -1159,7 +1481,7 @@ def _boundary_streams(
 ) -> dict[str, dict[str, Any]]:
     for unit in units:
         if "growth" not in unit:
-            unit["growth"] = pbr_unit.build_growth(unit["params"], unit["model"], (0, 0, 0), 0)
+            unit["growth"] = _growth_for_unit(unit, dark=_unit_type(unit) == "HoldupTank")
     runtime = _network_runtime(topology, flows, units)
     concentrations = _network_concentrations(topology, runtime, tuple(state), units, flows)
     dynamic_ids = {item["id"] for item in topology["units"]}
@@ -1199,16 +1521,16 @@ def _apply_event(
         if isinstance(value, dict):
             for name, channel in (("X", 0), ("N", 1), ("O2", 2)):
                 if name in value:
-                    state[found * 7 + channel] = float(value[name])
+                    state[_slot(found, channel)] = float(value[name])
         else:
-            state[found * 7] = float(value)
+            state[_slot(found)] = float(value)
     elif event["type"] == "harvest":
         assert found is not None  # guarded by the EVENT_TARGET_INVALID check above
         fraction = float(event.get("fraction", 0.0))
         if not 0 <= fraction <= 1:
             raise DynamicError("EVENT_VALUE_INVALID", "Harvest fraction must be between 0 and 1.")
-        state[found * 7 : found * 7 + 3] *= 1.0 - fraction
-        state[found * 7 + 6] += before[found * 7] * fraction
+        state[_slot(found):_slot(found, 3)] *= 1.0 - fraction
+        state[_slot(found, 6)] += before[_slot(found)] * fraction
     elif event["type"] in {"feed_change", "dilution", "setpoint_change"}:
         # These actions affect flow/controller state; the current snapshot does not infer missing actuators.
         raise DynamicError(
@@ -1248,9 +1570,9 @@ def _apply_dynamic_event(
         before = state.copy()
         state = _apply_event(state, indexed, units, [], order)
         unit_index = next(i for i, unit in enumerate(units) if unit["tag"] == event["unit"])
-        growth = pbr_unit.build_growth(units[unit_index]["params"], units[unit_index]["model"], (0, 0, 0), 0)
+        growth = _growth_for_unit(units[unit_index], dark=_unit_type(units[unit_index]) == "HoldupTank")
         volume = units[unit_index]["volume_m3"]
-        delta = state[unit_index * 7 : unit_index * 7 + 3] - before[unit_index * 7 : unit_index * 7 + 3]
+        delta = state[_slot(unit_index):_slot(unit_index, 3)] - before[_slot(unit_index):_slot(unit_index, 3)]
         impulse = [delta[0] * volume, (delta[1] + growth.nitrogen_quota * delta[0]) * volume, delta[2] * volume]
         entry = {"order": order, "declared_order": event.get("declared_order", order),
                  "repeat_k": event.get("repeat_k", 0), "time_s": event["time_s"],
@@ -1312,7 +1634,7 @@ def _sample_controllers(
         channel = controller["measurement"].split(".")[-1]
         if channel not in {"X", "N", "O2"}:
             raise DynamicError("UNSUPPORTED_MEASUREMENT", "Only X, N, and O2 can be measured.")
-        measurement = float(state[unit_index * 7 + {"X": 0, "N": 1, "O2": 2}[channel]])
+        measurement = float(state[_slot(unit_index, {"X": 0, "N": 1, "O2": 2}[channel])])
         error = setpoints[controller["id"]] - measurement
         if controller["type"] == "onoff":
             if controller["direction"] == "above":
@@ -1365,7 +1687,7 @@ def _conditional_events(
         unit_index = next((i for i, unit in enumerate(units) if unit["tag"] == unit_tag), None)
         if unit_index is None or channel not in {"X", "N", "O2"}:
             continue
-        value = float(state[unit_index * 7 + {"X": 0, "N": 1, "O2": 2}[channel]])
+        value = float(state[_slot(unit_index, {"X": 0, "N": 1, "O2": 2}[channel])])
         threshold, band = float(event["threshold"]), float(event.get("hysteresis") or 0)
         is_active = value >= threshold if event.get("direction") == "above" else value <= threshold
         was_active = active.get(order, False)
@@ -1406,12 +1728,14 @@ def _rebalance_flows(topology: dict[str, Any], flows: dict[str, float]) -> None:
     index = {stream["id"]: i for i, stream in enumerate(streams)}
     rows: list[np.ndarray] = []
     rhs: list[float] = []
+    feed_rows: dict[int, str] = {}
     for stream in streams:
         if stream.get("source") is None:
             row = np.zeros(len(streams))
             row[index[stream["id"]]] = 1.0
             rows.append(row)
             rhs.append(float(flows[stream["id"]]))
+            feed_rows[len(rhs) - 1] = stream["id"]
     for unit in units:
         key = unit["id"]
         incoming = [s for s in streams if (s.get("target") or {}).get("unit") == key]
@@ -1426,7 +1750,7 @@ def _rebalance_flows(topology: dict[str, Any], flows: dict[str, float]) -> None:
             row[index[stream["id"]]] -= 1.0
         rows.append(row)
         rhs.append(0.0)
-        if unit.get("type") == "Splitter":
+        if unit.get("type") == "Splitter" and unit.get("tag") not in topology.get("implied_splitters", []):
             total = sum(flows[s["id"]] for s in outgoing)
             if total <= 0:
                 raise DynamicError("ZERO_THROUGHFLOW", "Splitter has zero flow after an actuator change.", {"unit": unit.get("tag")})
@@ -1450,10 +1774,17 @@ def _rebalance_flows(topology: dict[str, Any], flows: dict[str, float]) -> None:
                 sep_row[index[incoming[0]["id"]]] = -ratio
                 rows.append(sep_row)
                 rhs.append(0.0)
-    solved, *_ = np.linalg.lstsq(np.vstack(rows), np.asarray(rhs), rcond=None)
-    if np.any(solved < -1e-10) or np.max(np.abs(np.vstack(rows) @ solved - rhs)) > 1e-8:
-        raise DynamicError("FLOW_BALANCE_UNSOLVED", "Feed actuator produced inconsistent network flows.")
-    flows.update({stream["id"]: max(0.0, float(solved[index[stream["id"]]])) for stream in streams})
+    circulation_rows = {}
+    for _pump_tag, pump in topology.get("circulation", {}).items():
+        row = np.zeros(len(streams))
+        row[index[pump["stream_id"]]] = 1.0
+        rows.append(row)
+        rhs.append(float(pump["flow_m3_s"]))
+        circulation_rows[len(rhs) - 1] = pump
+    solve_topology = dict(topology, flow_matrix=np.vstack(rows).tolist(), flow_rhs=rhs,
+                          feed_rows=feed_rows, circulation_rows=circulation_rows)
+    solved = _solve_flows(solve_topology)
+    flows.update(solved)
 
 
 def _manifest(
@@ -1527,8 +1858,28 @@ def _channel_units(series: dict[str, np.ndarray], controllers: list[dict[str, An
             unit = "K"
         elif name == "harvest_X_kg" or name.endswith("_harvest_X_kg"):
             unit = "kg"
+        elif name.endswith("_biomass_kg"):
+            unit = "kg"
         elif name.endswith("_Q_m3_s"):
             unit = "m3/s"
+        elif name.endswith("_pass_rate_1_s"):
+            unit = "1/s"
+        elif name.endswith("_pass_transit_time_s") or name.endswith("_culture_residence_time_s"):
+            unit = "s"
+        elif name.endswith("_circulation_Q_m3_s"):
+            unit = "m3/s"
+        elif name.endswith("_net_dilution_1_s"):
+            unit = "1/s"
+        elif name.endswith("_velocity_m_s"):
+            unit = "m/s"
+        elif name.endswith("_reynolds_number"):
+            unit = "1"
+        elif name.endswith("_pressure_drop"):
+            unit = "Pa"
+        elif name.endswith("_pumping_power"):
+            unit = "W"
+        elif name.endswith(("_X_mean", "_N_mean")):
+            unit = "kg/m3"
         elif name.endswith("_ratio"):
             unit = "1"
         elif name.startswith("controller_"):
@@ -1547,7 +1898,7 @@ def _partial_balances(
     state: np.ndarray, units: list[dict[str, Any]], growths: list[Any], events: list[dict[str, Any]],
 ) -> dict[str, Any]:
     n = len(units)
-    boundary = state[n * 7:n * 7 + 3]
+    boundary = state[_slot(n):_slot(n, 3)]
     initial = np.zeros(3, dtype=np.float64)
     final = np.zeros(3, dtype=np.float64)
     for index, unit in enumerate(units):
@@ -1556,12 +1907,12 @@ def _partial_balances(
             unit["state"][0], unit["state"][1] + quota * unit["state"][0], unit["state"][2],
         ])
         final += unit["volume_m3"] * np.asarray([
-            state[index * 7], state[index * 7 + 1] + quota * state[index * 7], state[index * 7 + 2],
+            state[_slot(index)], state[_slot(index, 1)] + quota * state[_slot(index)], state[_slot(index, 2)],
         ])
     generated = np.asarray([
-        sum(state[index * 7 + 3] * unit["volume_m3"] for index, unit in enumerate(units)),
+        sum(state[_slot(index, 3)] * unit["volume_m3"] for index, unit in enumerate(units)),
         0.0,
-        sum((growths[index].oxygen_yield * state[index * 7 + 3] + state[index * 7 + 5]) * unit["volume_m3"]
+        sum((growths[index].oxygen_yield * state[_slot(index, 3)] + state[_slot(index, 5)]) * unit["volume_m3"]
             for index, unit in enumerate(units)),
     ])
     impulses = np.zeros(3, dtype=np.float64)

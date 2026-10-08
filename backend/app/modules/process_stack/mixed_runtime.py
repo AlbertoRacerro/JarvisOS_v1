@@ -1042,6 +1042,44 @@ def _evaluate(document: dict[str, Any], part: dict[str, Any], tear: dict[str, di
             "mixed_findings": mixed_findings}
 
 
+def _pbr_process_recycle_findings(document: dict[str, Any], part: dict[str, Any],
+                                 unit_results: dict[str, Any], workspace_id: str | None) -> list[dict[str, Any]]:
+    """Warn when a converged Jarvis tear makes a fast PBR process inlet represent circulation."""
+    if not part["consumed"]:
+        return []
+    objects = document["objects"]
+    units = {item["id"]: item for item in objects.values() if item.get("kind") == "unit"}
+    edges = mixed._edges(document, energy=False)
+    cycle_groups = [group for group in mixed.components(set(units), edges)
+                    if set(part["consumed"]) & group]
+    warnings: list[dict[str, Any]] = []
+    for group in cycle_groups:
+        for unit_id in sorted(group, key=lambda uid: units[uid]["tag"]):
+            unit = units[unit_id]
+            if unit["type"] != "PhotobioreactorT1":
+                continue
+            result = unit_results.get(unit["tag"], {})
+            dilution = ((result.get("reported") or {}).get("dilution_h") or {}).get("value")
+            pin = unit.get("model") or {}
+            if (not workspace_id or not isinstance(dilution, (int, float)) or not math.isfinite(dilution)
+                    or not pin):
+                continue
+            model = pbr_unit._resolve(workspace_id, pin)
+            mu_max_h = model.get("mu_max_h")
+            if not isinstance(mu_max_h, (int, float)) or not math.isfinite(mu_max_h):
+                continue
+            if dilution > 10.0 * mu_max_h:
+                warnings.append({
+                    "severity": "warning", "code": "PBR_LOOP_AS_PROCESS_RECYCLE", "object": unit["tag"],
+                    "field": "dilution_h",
+                    "message": (f"Process-inlet dilution is {dilution:.4g} 1/h, more than 10 times the pinned card's "
+                                f"μ_max ({mu_max_h:.4g} 1/h). In this steady tear cycle the loop behaves as internal "
+                                "circulation; use a dynamic culture loop to represent it."),
+                    "source": "jarvis",
+                })
+    return warnings
+
+
 def _failure_record(document: dict[str, Any], part: dict[str, Any], *, reason: str, iteration: int | None,
                     segment: str, units: list[str] | None, errors: Any, history: list[dict[str, Any]],
                     phase_totals: dict[str, float],
@@ -1198,6 +1236,8 @@ def _run(document: dict[str, Any], *, action: str, client: DwsimMcpClient,
                 if last is not None and controller["last_input"] == tear else None)
     balances = _whole_graph_balances(document, final, tear)
     status, reason = _final_status(status, reason, mismatch, balances)
+    if status == "completed":
+        final["mixed_findings"].extend(_pbr_process_recycle_findings(document, part, final["units"], workspace_id))
     record = {"status": status, "streams": final["streams"], "units": final["units"],
             "culture": _culture_results(document, final),
             "culture_findings": [],

@@ -576,9 +576,10 @@ def _validate_dynamic_refs(document: dict[str, Any], kind: str, value: dict[str,
                          errors=exc.errors(include_url=False)) from exc
     if kind == "scenarios":
         for tag in value.get("units", []):
-            if not any(o.get("kind") == "unit" and o.get("type") == "PhotobioreactorT1" and o.get("tag") == tag
+            if not any(o.get("kind") == "unit" and o.get("type") in {"PhotobioreactorT1", "HoldupTank"}
+                       and o.get("tag") == tag
                        for o in document.get("objects", {}).values()):
-                raise DraftError("dynamic_unit_not_found", f"Scenario PBR tag {tag!r} was not found", field="units")
+                raise DraftError("dynamic_unit_not_found", f"Scenario T1 unit tag {tag!r} was not found", field="units")
         for ref in value.get("profiles", []):
             if not isinstance(ref, dict) or not isinstance(ref.get("profile_id"), str) or not isinstance(ref.get("digest"), str):
                 raise DraftError("dynamic_profile_invalid", "Scenario profiles require profile_id and digest", field="profiles")
@@ -1552,6 +1553,11 @@ def execute(workspace_id: str, draft_id: str, revision: str, action: str) -> dic
         raise DraftError("action_invalid", "action must be validate or run")
     directory = draft_dir(workspace_id, draft_id)
     record = load_revision(directory, revision)
+    if action == "run":
+        try:
+            draft_compiler.refuse_dynamic_only_units(record["document"])
+        except draft_compiler.MaterializationError as exc:
+            raise DraftError(exc.code, str(exc), 422, **exc.detail) from exc
     blockers = [item for item in validate_document(record["document"], workspace_id) if item["severity"] == "blocker"]
     if blockers:
         raise DraftError("draft_invalid", "Resolve the draft findings before DWSIM can materialize it", 422,

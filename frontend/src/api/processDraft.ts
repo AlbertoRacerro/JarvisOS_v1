@@ -336,6 +336,11 @@ export type DraftRun = {
   error_detail?: Record<string, unknown>;
 };
 export type ReportedValue = { value: string | number; units?: string; label?: string };
+export type PbrCirculationOutputs = {
+  circulation_flow_m3_h?: ReportedValue;
+  pass_transit_time_s?: ReportedValue;
+  circulation_to_throughflow_ratio?: ReportedValue;
+};
 /** Balance row per culture field; `generation_allowance` is the declared generation tolerance (spec 170). */
 export type UnitBalanceRow = { in: number; out: number; generated?: number; residual: number; tolerance: number;
   generation_allowance?: number; unit: string; passed: boolean };
@@ -352,7 +357,7 @@ export type UnitResult = {
   fidelity?: string; caveats?: string[]; findings?: Finding[]; label?: string; branch?: "productive" | "washout" | string;
   model_pin?: PbrModelPin; numerics?: PbrNumerics; unit_balances?: Record<string, UnitBalanceRow>;
   kinetics?: KineticsRecord;
-  reported: Record<string, ReportedValue>; properties?: ResultProperty[];
+  reported: Record<string, ReportedValue> & PbrCirculationOutputs; properties?: ResultProperty[];
 };
 export type CultureResult = {
   owner: "jarvis";

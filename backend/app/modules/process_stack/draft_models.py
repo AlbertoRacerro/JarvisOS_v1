@@ -284,6 +284,23 @@ UNIT_REGISTRY: dict[str, UnitSpec] = {
                       minimum_si=0.0, group="Light & environment"),
         ),
     ),
+    "HoldupTank": UnitSpec(
+        type="HoldupTank", label="Holdup tank", dwsim_type=None, native_types=(),
+        inlets=("inlet",), outlets=("outlet",), required_inlets=1,
+        modes={"dynamic": "dynamic"}, owner="jarvis_bio", culture_rule="pbr",
+        params=(
+            ParamSpec("liquid_volume", "Liquid volume", "volume", "", ("dynamic",),
+                      minimum_si=0.0, exclusive_minimum=True),
+            ParamSpec("min_volume", "Minimum working volume", "volume", "", ("dynamic",), minimum_si=0.0),
+            ParamSpec("max_volume", "Maximum working volume", "volume", "", ("dynamic",), minimum_si=0.0),
+            ParamSpec("temperature", "Culture temperature", "temperature", "", ("dynamic",),
+                      minimum_si=0.0, exclusive_minimum=True),
+            ParamSpec("oxygen_kla", "Oxygen transfer coefficient (kLa)", "specific_rate", "", ("dynamic",),
+                      minimum_si=0.0),
+            ParamSpec("oxygen_saturation", "Oxygen saturation concentration", "mass_concentration", "",
+                      ("dynamic",), minimum_si=0.0, exclusive_minimum=True),
+        ),
+    ),
 }
 
 def pbr_temperature_invalid(params: dict[str, dict]) -> bool:

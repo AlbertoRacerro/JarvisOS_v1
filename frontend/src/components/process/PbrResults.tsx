@@ -9,17 +9,23 @@ export type PbrFailure = { code: string | null; message: string };
 
 const GROUPS: Array<{ title: string; keys: string[] }> = [
   { title: "Residence time", keys: ["hrt_d", "volume_m3", "volumetric_flow_m3_h", "dilution_h"] },
+  { title: "Internal circulation", keys: ["circulation_flow_m3_h", "pass_transit_time_s", "circulation_to_throughflow_ratio"] },
   { title: "Culture", keys: ["biomass_mean", "volumetric_productivity", "net_biomass_production", "outlet_biomass_throughput"] },
   { title: "Nitrogen, oxygen and light", keys: ["nitrogen_mean", "nitrogen_min", "oxygen_mean", "oxygen_max", "oxygen_saturation_ratio_max", "oxygen_gas_transfer", "optical_depth_max"] },
   { title: "Hydraulics", keys: ["reynolds_number", "pressure_drop", "pumping_power"] },
 ];
 const SHOWN_ELSEWHERE = new Set(["lambda_h"]);
+const LABEL_OVERRIDES: Record<string, string> = {
+  dilution_h: "Dilution rate D (process-inlet basis)",
+  hrt_d: "Hydraulic residence time (process-inlet basis)",
+  volumetric_flow_m3_h: "Volumetric flow Q (process-inlet basis)",
+};
 const humanKey = (key: string) => key.replace(/_/g, " ").replace(/^./, (letter) => letter.toUpperCase());
 
 function Rows({ result, keys }: { result: UnitResult; keys: string[] }) {
   const rows = keys.filter((key) => result.reported[key] !== undefined);
   if (!rows.length) return null;
-  return <dl className="pbr-rows">{rows.map((key) => <div key={key}><dt>{result.reported[key].label ?? humanKey(key)}</dt><dd>{formatReported(key, result.reported[key])}</dd></div>)}</dl>;
+  return <dl className="pbr-rows">{rows.map((key) => <div key={key}><dt>{LABEL_OVERRIDES[key] ?? result.reported[key].label ?? humanKey(key)}</dt><dd>{formatReported(key, result.reported[key])}</dd></div>)}</dl>;
 }
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
@@ -55,7 +61,7 @@ export default function PbrResults({ result, results, failure }: {
         {typeof lambda === "number" && typeof dilution === "number" && <>
           <dl className="pbr-rows">
             <div><dt>{reported.lambda_h.label ?? "Thin-culture growth rate Λ"}</dt><dd>{formatSig(lambda)} {prettyUnits(reported.lambda_h.units ?? "1/h")}</dd></div>
-            <div><dt>{reported.dilution_h?.label ?? "Dilution rate D"}</dt><dd>{formatSig(dilution)} {prettyUnits(reported.dilution_h?.units ?? "1/h")}</dd></div>
+            <div><dt>{LABEL_OVERRIDES.dilution_h}</dt><dd>{formatSig(dilution)} {prettyUnits(reported.dilution_h?.units ?? "1/h")}</dd></div>
           </dl>
           <p>{growthVersusDilution(lambda, dilution)}</p></>}
       </Section>

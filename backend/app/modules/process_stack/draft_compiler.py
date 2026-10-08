@@ -40,6 +40,17 @@ class MaterializationError(RuntimeError):
         self.code, self.detail = code, detail
 
 
+def refuse_dynamic_only_units(document: dict[str, Any]) -> None:
+    """Keep dynamic-only process units out of the synchronous DWSIM materializer."""
+    tanks = sorted(item.get("tag", item.get("id", "HoldupTank"))
+                   for item in document.get("objects", {}).values()
+                   if item.get("kind") == "unit" and item.get("type") == "HoldupTank")
+    if tanks:
+        raise MaterializationError("HOLDUP_TANK_DYNAMIC_ONLY",
+                                   "HoldupTank is dynamic-only and cannot be run or materialized by the steady solver.",
+                                   units=tanks)
+
+
 def _streams(document: dict[str, Any]) -> list[dict[str, Any]]:
     return sorted((item for item in document["objects"].values() if item["kind"] == "stream"),
                   key=lambda item: item["tag"])
@@ -852,6 +863,7 @@ def materialize(document: dict[str, Any], *, action: str, client: DwsimMcpClient
                 mcp_sha256: str, label: str, keep_case: Path | None = None,
                 allow_isolated_feed_flash: bool = False) -> dict[str, Any]:
     """Compile, read back, compare; then check (validate) or check+solve (run). Refuses on mismatch."""
+    refuse_dynamic_only_units(document)
     started = time.perf_counter()
     exp = expected(document)
     outcome: dict[str, Any] = {"expected_fingerprint": fingerprint(exp, dwsim_version=dwsim_version,
