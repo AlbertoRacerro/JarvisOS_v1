@@ -808,12 +808,10 @@ def prepare(workspace_id: str, draft_id: str, scenario_id: str) -> Snapshot:
                     "Downstream loop requires a Recycle block before DWSIM can sample it.",
                     {"loops": loops},
                 )
-            participating_ids = {item["unit"]["id"] for item in units}
-            carrier_specs = [
-                stream.get("spec", {}) for stream in document["objects"].values()
-                if stream.get("kind") == "stream" and stream.get("source") is None
-                and (stream.get("target") or {}).get("unit") in participating_ids
-            ]
+            # The carrier is any boundary feed of the dynamic flow network, including one entering a
+            # culture loop through its Mixer rather than directly into a PBR or tank.
+            carrier_specs = [stream.get("spec", {}) for stream in topology["streams"]
+                             if stream["id"] in topology["feeds"]]
             carrier_spec = carrier_specs[0] if carrier_specs else {}
             _validate_downstream_boundary_specs(downstream_data[1], carrier_spec)
         for obj in document["objects"].values():

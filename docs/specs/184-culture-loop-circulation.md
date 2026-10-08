@@ -149,7 +149,7 @@ Backend tests. Each uses an independent reference.
    - A steady Run with a tank is refused.
 5. **Steady path.**
    - Existing 170/180/181/183 tests are unchanged, and the new outputs are present.
-   - `PBR_LOOP_AS_PROCESS_RECYCLE` fires on the 183 real-DWSIM recycle shape at 0.9 return, and not on an open chain.
+   - `PBR_LOOP_AS_PROCESS_RECYCLE` keeps the 10 × μ_max threshold on real DWSIM, on the 183 recycle shape at 0.9 return converged with Broyden. With the 183 geometry (100 m tubes) the process-inlet D is 0.184 h⁻¹ = 2.3 μ_max, so it does **not** fire. With 10 m tubes, D exceeds 10 μ_max and it fires. It never fires on an open chain. (Amended at implementation: the 183 geometry alone does not reach the threshold.)
    - Every existing dynamic test topology stays full-rank and green.
 6. **Real DWSIM.** The 172 real-DWSIM downstream test passes. A continuous harvest stream leaving a culture loop is sampled downstream with DWSIM-solved outputs.
 7. **Performance.** A 30-day BlueRev-scale loop (4 PBRs, 2 tanks, Q_circ ≈ 5e-4 m³/s) runs in under 1 s per simulated day on the qualification host. The wall time is recorded.

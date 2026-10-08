@@ -144,11 +144,22 @@ def test_holdup_tank_steady_run_and_materialize_refuse_before_validation_or_dwsi
 
 @pytest.mark.skipif(not os.environ.get("JARVISOS_DWSIM_MCP_PATH"),
                     reason="set JARVISOS_DWSIM_MCP_PATH to opt in to DWSIM runtime")
-def test_real_dwsim_pbr_culture_recycle_emits_steady_warning() -> None:
+@pytest.mark.parametrize(("tube_length_m", "expected"), [(100.0, False), (10.0, True)])
+def test_real_dwsim_pbr_culture_recycle_warns_only_above_ten_mu_max(tube_length_m: float, expected: bool) -> None:
+    from app.modules.process_stack.draft_models import SetSolver, SetUnitParams
+    from tests.plumbing_170_support import pbr_quantities
     from tests.test_tear_solver_183 import _real_pbr_recycle
 
+    # 183 shape at 0.9 return (mu_max 0.08 1/h). With the 183 100 m tubes D_in = 0.184 1/h = 2.3 mu_max: no
+    # warning. With 10 m tubes D_in is ten times larger, above 10 mu_max, and the loop reads as circulation.
     workspace_id, state = _real_pbr_recycle(0.9)
+    # The default 25-iteration direct substitution needs ~119 iterations at 0.9 return (183); Broyden converges.
+    state = draft.patch(workspace_id, state["draft_id"], state["revision"], [
+        SetUnitParams(op="set_unit_params", unit="pbr", values=pbr_quantities(tube_length=(tube_length_m, "m"))),
+        SetSolver(op="set_solver", solver={"method": "broyden", "seed_mode": "feed", "wall_s": 600})])
     run = draft.execute(workspace_id, state["draft_id"], state["revision"], "run")["run"]
     assert run["status"] == "completed", run.get("mixed_solve")
-    assert any(item["code"] == "PBR_LOOP_AS_PROCESS_RECYCLE" and item["object"] == "PBR"
-               for item in run.get("mixed_findings", []))
+    dilution = run["units"]["PBR"]["reported"]["dilution_h"]["value"]
+    assert (dilution > 10 * 0.08) is expected, dilution
+    findings = [item for item in run.get("mixed_findings", []) if item["code"] == "PBR_LOOP_AS_PROCESS_RECYCLE"]
+    assert [item["object"] for item in findings] == (["PBR"] if expected else [])
