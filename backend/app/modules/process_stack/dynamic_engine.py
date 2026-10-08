@@ -203,6 +203,69 @@ def _validate_events(
                 raise DynamicError("EVENT_VALUE_INVALID", "Setpoint must be finite.")
 
 
+def _validate_actions(events: list[dict[str, Any]], units: list[dict[str, Any]], topology: dict[str, Any]) -> None:
+    """Refuse invalid action events in prepare, including an exact volume guard (spec 185).
+
+    Flows stay balanced, so tank volumes change only at events; replaying the expanded schedule is exact.
+    """
+    tanks = {item["tag"]: item for item in units if _unit_type(item) == "HoldupTank"}
+    loops = {tag: loop for loop in _culture_loops(topology, units, topology["flows"]) for tag in loop["member_tags"]}
+    volumes = {item["tag"]: float(item["volume_m3"]) for item in units}
+    for event in events:
+        if event["type"] != "actions":
+            continue
+        if event.get("observed"):
+            raise DynamicError("EVENT_VALUE_INVALID", "State-triggered actions are not available yet (spec 186).")
+        parcel_volume: float | None = None
+        parcel_loop: str | None = None
+        for position, action in enumerate(event["actions"]):
+            detail = {"time_s": event["time_s"], "action": position, "type": action["type"]}
+            names = [action["return_to"]] if action["type"] == "separate" else [action["tank"]]
+            for name in names:
+                if name != "none" and name not in tanks:
+                    raise DynamicError("EVENT_TARGET_INVALID", "Actions act only on participating HoldupTanks.",
+                                       {**detail, "tank": name})
+            touched = names[0]
+            if action["type"] == "draw":
+                if action.get("loop_fraction") is not None:
+                    if touched not in loops:
+                        raise DynamicError("EVENT_TARGET_INVALID", "loop_fraction needs a tank inside a culture loop.",
+                                           {**detail, "tank": touched})
+                    amount = float(action["loop_fraction"]) * sum(volumes[t] for t in loops[touched]["member_tags"])
+                else:
+                    amount = float(action["volume_m3"])
+                loop_id = loops[touched]["id"] if touched in loops else None
+                if parcel_volume is not None and loop_id != parcel_loop:
+                    raise DynamicError("EVENT_VALUE_INVALID", "One event's undivided draws must come from one loop.",
+                                       detail)
+                parcel_volume, parcel_loop = (parcel_volume or 0.0) + amount, loop_id
+                volumes[touched] -= amount
+            elif action["type"] == "separate":
+                if parcel_volume is None:
+                    raise DynamicError("EVENT_VALUE_INVALID", "separate needs a draw earlier in the same event.", detail)
+                if touched != "none":
+                    volumes[touched] += parcel_volume * (1.0 - action["recovery"] / action["concentration_factor"])
+                parcel_volume = parcel_loop = None
+            elif action["type"] == "refill":
+                if action.get("to_volume_m3") is not None:
+                    if action["to_volume_m3"] < volumes[touched]:
+                        raise DynamicError("EVENT_VOLUME_INVALID", "Refill target is below the tank's volume then.",
+                                           {**detail, "tank": touched, "volume_m3": volumes[touched]})
+                    volumes[touched] = float(action["to_volume_m3"])
+                else:
+                    volumes[touched] += float(action["volume_m3"])
+            else:  # dose, inoculate
+                volumes[touched] += float(action.get("volume_m3", 0.0))
+            if touched != "none":
+                params = tanks[touched]["params"]
+                low = params.get("min_volume", 0.0)
+                high = params.get("max_volume", tanks[touched]["volume_m3"])
+                if not (volumes[touched] > 0 and low - 1e-12 <= volumes[touched] <= high + 1e-12):
+                    raise DynamicError("EVENT_VOLUME_INVALID", "An action would take a tank outside its volume limits.",
+                                       {**detail, "tank": touched, "volume_m3": volumes[touched],
+                                        "min_volume_m3": low, "max_volume_m3": high})
+
+
 def _t1_reachable(objects: dict[str, Any], selected: set[str]) -> set[str]:
     """Unit ids connected to the participating PBRs through T1-supported units only (as in _topology)."""
     supported = {"PhotobioreactorT1", "HoldupTank", "Mixer", "Splitter", "Pump", "Recycle", "SpecifiedSeparator"}
@@ -784,6 +847,7 @@ def prepare(workspace_id: str, draft_id: str, scenario_id: str) -> Snapshot:
                         {"units": sorted(tags[key] for key in pair)},
                     )
         _validate_events(expanded_events, units, topology, controller_ids)
+        _validate_actions(expanded_events, units, topology)
         downstream_data = None
         if scenario.downstream_cadence_s:
             samples = math.floor(duration / scenario.downstream_cadence_s)
@@ -1045,10 +1109,19 @@ def _network_concentrations(topology: dict[str, Any], runtime: dict[str, Any], s
 def _result_series(snapshot: Snapshot, times: list[float], rows: list[np.ndarray], units: list[dict[str, Any]],
                    controllers: list[dict[str, Any]], controller_log: list[dict[str, Any]],
                    flow_log: list[dict[str, Any]] | None = None,
-                   topology_override: dict[str, Any] | None = None) -> dict[str, np.ndarray]:
+                   topology_override: dict[str, Any] | None = None,
+                   volume_rows: list[list[float]] | None = None, phase_rows: list[int] | None = None,
+                   order_rows: list[int] | None = None) -> dict[str, np.ndarray]:
     elapsed = np.asarray(times, dtype=np.float64)
     matrix = np.asarray(rows, dtype=np.float64)
+    volumes = (np.asarray(volume_rows, dtype=np.float64) if volume_rows is not None
+               else np.tile([unit["volume_m3"] for unit in units], (len(times), 1)))
+    phases = list(phase_rows) if phase_rows is not None else [0] * len(times)
     result = {"t_s": elapsed, "par": np.asarray([_profile_par(snapshot, float(t)) for t in elapsed])}
+    if any(phases):
+        # Action events (185): two rows share t_s; -1 is the state before the event, +1 after it.
+        result["event_phase"] = np.asarray(phases, dtype=np.float64)
+        result["event_order"] = np.asarray(order_rows or [-1] * len(times), dtype=np.float64)
     result["temperature"] = np.asarray([_profile_temperature(snapshot, float(t)) for t in elapsed])
     for i, unit in enumerate(units):
         for j, name in enumerate(("X", "N", "O2")):
@@ -1056,7 +1129,9 @@ def _result_series(snapshot: Snapshot, times: list[float], rows: list[np.ndarray
         result[f"{unit['tag']}_temperature"] = np.asarray(
             [_profile_temperature(snapshot, float(t), i) for t in elapsed]
         )
-        result[f"{unit['tag']}_harvest_X_kg"] = matrix[:, _slot(i, 6)] * unit["volume_m3"]
+        result[f"{unit['tag']}_harvest_X_kg"] = matrix[:, _slot(i, 6)]
+        if _unit_type(unit) == "HoldupTank":
+            result[f"{unit['tag']}_V_m3"] = volumes[:, i]
     result["harvest_X_kg"] = matrix[:, _slot(len(units), 3)] + sum(
         result[f"{unit['tag']}_harvest_X_kg"] for unit in units
     )
@@ -1068,11 +1143,15 @@ def _result_series(snapshot: Snapshot, times: list[float], rows: list[np.ndarray
         ], dtype=np.float64)
     if flow_log:
         topology = topology_override or snapshot.payload["topology"]
-        flows_at = [next(entry["flows"] for entry in reversed(flow_log) if entry["time_s"] <= t)
-                    for t in times]
-        hydro_at = [next({**entry.get("hydraulics", {}), "culture_loops": entry.get("culture_loops", {})}
-                         for entry in reversed(flow_log) if entry["time_s"] <= t)
-                    for t in times]
+        # A pre-event row reads the flows in force before that instant; every other row uses the latest record.
+        def record_at(t: float, phase: int) -> dict[str, Any]:
+            earlier = [entry for entry in flow_log if entry["time_s"] < t - 1e-7] if phase < 0 else []
+            return earlier[-1] if earlier else next(entry for entry in reversed(flow_log) if entry["time_s"] <= t)
+
+        records = [record_at(float(t), phase) for t, phase in zip(times, phases, strict=True)]
+        flows_at = [entry["flows"] for entry in records]
+        hydro_at = [{**entry.get("hydraulics", {}), "culture_loops": entry.get("culture_loops", {})}
+                    for entry in records]
         for stream in topology["streams"]:
             if stream.get("source") is None:
                 result[f"feed_{stream['tag']}_Q_m3_s"] = np.asarray(
@@ -1101,11 +1180,13 @@ def _result_series(snapshot: Snapshot, times: list[float], rows: list[np.ndarray
         for loop in topology.get("culture_loops", []):
             members = [(by_tag[tag], next(unit for unit in units if unit["tag"] == tag))
                        for tag in loop["member_tags"]]
-            volume = sum(unit["volume_m3"] for _, unit in members)
-            biomass = sum(matrix[:, _slot(index)] * unit["volume_m3"] for index, unit in members)
+            indices = [index for index, _ in members]
+            volume = volumes[:, indices].sum(axis=1)
+            biomass = (matrix[:, [_slot(index) for index in indices]] * volumes[:, indices]).sum(axis=1)
             result[f"{loop['id']}_X_mean"] = biomass / volume
-            result[f"{loop['id']}_N_mean"] = sum(matrix[:, _slot(index, 1)] * unit["volume_m3"]
-                                                   for index, unit in members) / volume
+            result[f"{loop['id']}_N_mean"] = (matrix[:, [_slot(index, 1) for index in indices]]
+                                               * volumes[:, indices]).sum(axis=1) / volume
+            result[f"{loop['id']}_volume_m3"] = volume
             result[f"{loop['id']}_biomass_kg"] = biomass
         for unit in units:
             tag = unit["tag"]
@@ -1162,6 +1243,7 @@ def run(
     growths = [_growth_for_unit(item, dark=_unit_type(item) == "HoldupTank") for item in units]
     for item, growth in zip(units, growths, strict=True):
         item["growth"] = growth
+        item["initial_volume_m3"] = item["volume_m3"]
     # Per unit: X,N,O2 plus integrated generation, transfer and discrete harvest.
     # Global states: boundary X/N/O2 balance and continuous harvested biomass mass.
     initial = np.zeros(_slot(n) + 4, dtype=np.float64)
@@ -1169,6 +1251,41 @@ def run(
         initial[_slot(i) : _slot(i, 3)] = unit["state"]
     rows: list[np.ndarray] = [initial.copy()]
     times_out = [0.0]
+    # Per output row: unit liquid volumes, and the action-event phase (0 sample, -1 pre, +1 post) and order.
+    volume_rows: list[list[float]] = [[unit["volume_m3"] for unit in units]]
+    phase_rows: list[int] = [0]
+    order_rows: list[int] = [-1]
+    ledger = _campaign_ledger()
+
+    def append_row(time_s: float, state: np.ndarray, phase: int = 0, order: int = -1) -> None:
+        times_out.append(float(time_s))
+        rows.append(np.asarray(state, dtype=np.float64).copy())
+        volume_rows.append([unit["volume_m3"] for unit in units])
+        phase_rows.append(phase)
+        order_rows.append(order)
+
+    def overwrite_last(state: np.ndarray) -> None:
+        rows[-1] = state.copy()
+        volume_rows[-1] = [unit["volume_m3"] for unit in units]
+
+    def apply_at(time_s: float, cursor: int, state: np.ndarray) -> np.ndarray:
+        """Apply one scheduled event at an integration boundary, keeping pre/post rows for action events."""
+        event = events[cursor][1]
+        if event["type"] != "actions":
+            state = _apply_dynamic_event(
+                state, events[cursor], units, event_log, cursor,
+                topology, flows, feeds, setpoints, {item["id"]: item for item in controllers},
+            )
+            if times_out and abs(times_out[-1] - time_s) < 1e-7:
+                overwrite_last(state)
+            return state
+        if times_out and abs(times_out[-1] - time_s) < 1e-7 and phase_rows[-1] == 0:
+            phase_rows[-1], order_rows[-1] = -1, cursor
+        else:
+            append_row(time_s, state, -1, cursor)
+        state = _apply_actions(state, events[cursor], units, event_log, cursor, topology, ledger)
+        append_row(time_s, state, 1, cursor)
+        return state
     event_log: list[dict[str, Any]] = []
     controller_log: list[dict[str, Any]] = []
     flow_log: list[dict[str, Any]] = []
@@ -1197,7 +1314,8 @@ def run(
     hydraulic_cache: dict[tuple[tuple[str, float], ...], dict[str, Any]] = {}
 
     def record_flow(time_s: float) -> None:
-        signature = tuple(sorted((key, float(value)) for key, value in flows.items()))
+        signature = (tuple(sorted((key, float(value)) for key, value in flows.items()))
+                     + tuple(("V:" + unit["tag"], float(unit["volume_m3"])) for unit in units))
         if signature not in hydraulic_cache:
             hydro, findings = _flow_hydraulics(topology, units, flows)
             hydraulic_cache[signature] = hydro
@@ -1213,7 +1331,8 @@ def run(
     roundoff_clips: list[dict[str, Any]] = []
 
     def diagnostic(status: Literal["failed", "cancelled"], error: dict[str, Any]) -> EngineResult:
-        series = _result_series(snapshot, times_out, rows, units, controllers, controller_log, flow_log, topology)
+        series = _result_series(snapshot, times_out, rows, units, controllers, controller_log, flow_log, topology,
+                                volume_rows, phase_rows, order_rows)
         manifest = _manifest(snapshot, started, event_log, controller_log, downstream)
         _add_diagnostic_evidence(manifest, series, controllers)
         manifest["balances"] = _partial_balances(current, units, growths, event_log)
@@ -1233,13 +1352,11 @@ def run(
     try:
         event_cursor = 0
         while event_cursor < len(events) and float(events[event_cursor][1]["time_s"]) == 0:
-            current = _apply_dynamic_event(
-                current, events[event_cursor], units, event_log, event_cursor,
-                topology, flows, feeds, setpoints, {item["id"]: item for item in controllers},
-            )
+            current = apply_at(0.0, event_cursor, current)
             event_cursor += 1
         record_flow(0.0)
-        rows[0] = current.copy()
+        if phase_rows[-1] == 0:
+            overwrite_last(current)
         for left, right in zip(boundaries, boundaries[1:], strict=False):
             if cancelled():
                 return diagnostic("cancelled", {"code": "CANCELLED", "message": "Run cancelled.", "detail": {}})
@@ -1274,11 +1391,14 @@ def run(
                             raise DynamicError("TOPOLOGY_UNRESOLVED", "A PBR inlet concentration could not be resolved.")
                         inlet += weight * np.asarray(value[:3])
                         qin += flow
-                    dilution = qin / item["volume_m3"]
+                    volume = item["volume_m3"]
+                    dilution = qin / volume
                     net_x = rx + dilution * (inlet[0] - x)
                     net_n = -growth.nitrogen_quota * rx + dilution * (inlet[1] - nitrogen)
                     net_o = growth.oxygen_yield * rx + transfer + dilution * (inlet[2] - oxygen)
-                    result[off:off + 7] = [net_x, net_n, net_o, rx, -growth.nitrogen_quota * rx, transfer, 0.0]
+                    # Accumulators are inventories in kg (spec 185), so a later volume change cannot rescale them.
+                    result[off:off + 7] = [net_x, net_n, net_o, rx * volume, -growth.nitrogen_quota * rx * volume,
+                                           transfer * volume, 0.0]
                 # Boundary terms are inventory rates in kg/s. Fourth concentration is q*X,
                 # propagated independently through algebraic mixers/splitters.
                 active_ids = {unit["id"] for unit in topology["units"]}
@@ -1319,18 +1439,12 @@ def run(
                 _valid_state(state_row, units, growths)
                 _clip_tiny_negatives(state_row, units, roundoff_clips, float(t))
                 if any(abs(float(t) - float(out)) <= 1e-7 for out in outputs):
-                    times_out.append(float(t))
-                    rows.append(np.asarray(state_row, dtype=np.float64))
+                    append_row(float(t), state_row)
             current = np.asarray(solved.states[-1], dtype=np.float64)
             _clip_tiny_negatives(current, units, roundoff_clips, right)
             while event_cursor < len(events) and abs(float(events[event_cursor][1]["time_s"]) - right) < 1e-7:
-                current = _apply_dynamic_event(
-                    current, events[event_cursor], units, event_log, event_cursor,
-                    topology, flows, feeds, setpoints, {item["id"]: item for item in controllers},
-                )
+                current = apply_at(right, event_cursor, current)
                 event_cursor += 1
-                if times_out and abs(times_out[-1] - right) < 1e-7:
-                    rows[-1] = current.copy()
             if any(abs(right % float(item["cadence_s"])) < 1e-7 for item in controllers) or (
                 controller_cadence and abs(right % controller_cadence) < 1e-7
             ):
@@ -1338,7 +1452,7 @@ def run(
                 _conditional_events(current, units, events, conditional_state, event_log, right,
                                     topology, flows, feeds, setpoints, controller_by_id)
                 if times_out and abs(times_out[-1] - right) < 1e-7:
-                    rows[-1] = current.copy()
+                    overwrite_last(current)
             record_flow(right)
             if (
                 sampler
@@ -1364,7 +1478,8 @@ def run(
                 if cancelled():
                     return diagnostic("cancelled", {"code": "CANCELLED", "message": "Run cancelled.", "detail": {}})
             progress(min(1.0, right / duration))
-        series = _result_series(snapshot, times_out, rows, units, controllers, controller_log, flow_log, topology)
+        series = _result_series(snapshot, times_out, rows, units, controllers, controller_log, flow_log, topology,
+                                volume_rows, phase_rows, order_rows)
         manifest = _manifest(snapshot, started, event_log, controller_log, downstream)
         manifest["culture_loops"] = _culture_loops(topology, units, flows)
         manifest["hydraulics"] = flow_log
@@ -1376,36 +1491,46 @@ def run(
         final_inventory = np.zeros(3, dtype=np.float64)
         for i, unit in enumerate(units):
             growth = growths[i]
-            initial_inventory += unit["volume_m3"] * np.asarray(
+            initial_inventory += unit["initial_volume_m3"] * np.asarray(
                 [unit["state"][0], unit["state"][1] + growth.nitrogen_quota * unit["state"][0], unit["state"][2]])
             final_inventory += unit["volume_m3"] * np.asarray(
                 [current[_slot(i)], current[_slot(i, 1)] + growth.nitrogen_quota * current[_slot(i)], current[_slot(i, 2)]])
         generated = np.asarray([
-            sum(current[_slot(i, 3)] * unit["volume_m3"] for i, unit in enumerate(units)),
+            sum(current[_slot(i, 3)] for i in range(n)),
             0.0,
-            sum((growths[i].oxygen_yield
-                 * current[_slot(i, 3)] + current[_slot(i, 5)]) * unit["volume_m3"]
-                for i, unit in enumerate(units)),
+            sum(growths[i].oxygen_yield * current[_slot(i, 3)] + current[_slot(i, 5)] for i in range(n)),
         ])
         impulses = np.zeros(3, dtype=np.float64)
         for entry in event_log:
             if entry.get("impulse_inventory"):
                 impulses += np.asarray(entry["impulse_inventory"], dtype=np.float64)
         residual = initial_inventory + net_boundary + generated + impulses - final_inventory
+        action_run = any(entry.get("type") == "actions" for entry in event_log)
+        if action_run:
+            # Spec 185: a run with action events must close its aggregate balance before it can succeed.
+            scale = np.abs(initial_inventory) + np.abs(net_boundary) + np.abs(generated) + np.abs(impulses)
+            tolerance = max(1e-6, 100.0 * float(scenario["rtol"])) * scale + AGGREGATE_BALANCE_FLOOR_KG
+            if np.any(np.abs(residual) > tolerance):
+                raise DynamicError("BALANCE_NOT_CLOSED", "The run's aggregate inventory balance does not close.", {
+                    name: {"residual_kg": float(residual[i]), "tolerance_kg": float(tolerance[i])}
+                    for i, name in enumerate(("biomass", "total_nitrogen", "oxygen"))})
         manifest["balances"] = {
             "sign_conventions": {"oxygen_transfer": "positive means oxygen absorption into liquid"},
             "units": {
                 unit["tag"]: {
-                    "biomass_generation_kg": float(current[_slot(i, 3)] * unit["volume_m3"]),
+                    "biomass_generation_kg": float(current[_slot(i, 3)]),
                     "nitrogen_total_generation_kg": 0.0,
-                    "oxygen_transfer_kg": float(current[_slot(i, 5)] * unit["volume_m3"]),
+                    "oxygen_transfer_kg": float(current[_slot(i, 5)]),
                 }
                 for i, unit in enumerate(units)
             },
             "aggregate": {name: {"residual_abs_kg": float(abs(residual[i]),),
                                   "residual_rel": float(abs(residual[i]) / max(1e-12, abs(initial_inventory[i]) + abs(net_boundary[i]) + abs(generated[i]) + abs(impulses[i])))}
                            for i, name in enumerate(("biomass", "total_nitrogen", "oxygen"))},
+            "asserted": action_run,
         }
+        if action_run:
+            manifest["campaign"] = _campaign_kpis(event_log, units, topology, ledger, duration)
         harvest_kg = float(series["harvest_X_kg"][-1])
         volume_m3 = sum(unit["volume_m3"] for unit in units
                         if _unit_type(unit) == "PhotobioreactorT1")
@@ -1530,7 +1655,7 @@ def _apply_event(
         if not 0 <= fraction <= 1:
             raise DynamicError("EVENT_VALUE_INVALID", "Harvest fraction must be between 0 and 1.")
         state[_slot(found):_slot(found, 3)] *= 1.0 - fraction
-        state[_slot(found, 6)] += before[_slot(found)] * fraction
+        state[_slot(found, 6)] += before[_slot(found)] * fraction * units[found]["volume_m3"]
     elif event["type"] in {"feed_change", "dilution", "setpoint_change"}:
         # These actions affect flow/controller state; the current snapshot does not infer missing actuators.
         raise DynamicError(
@@ -1549,6 +1674,280 @@ def _apply_event(
         }
     )
     return state
+
+
+# Inventory vectors are (liquid volume m3, biomass kg, total nitrogen kg, oxygen kg); total N is dissolved plus quota.
+_INVENTORY = ("volume_m3", "biomass_kg", "total_nitrogen_kg", "oxygen_kg")
+EVENT_BALANCE_RTOL = 1e-9
+EVENT_BALANCE_FLOOR = 1e-15
+AGGREGATE_BALANCE_FLOOR_KG = 1e-12
+CAMPAIGN_LAST_K = 3
+PERIODIC_RTOL = 0.01
+_EVENT_BALANCE_TEST_PERTURBATION = 0.0  # test hook: added to the post-event biomass inventory before the check
+
+
+def _campaign_ledger() -> dict[str, list[float]]:
+    return {key: [0.0] * 4 for key in ("added", "removed", "harvested", "purged", "returned",
+                                       "medium_nitrogen")}
+
+
+def _tank_loops(topology: dict[str, Any], units: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Culture loop of each participating tank, by tag."""
+    loops = topology.get("culture_loops") or []
+    return {tag: loop for loop in loops for tag in loop["member_tags"]}
+
+
+def _loop_mean_x(loop: dict[str, Any], units: list[dict[str, Any]], state: np.ndarray,
+                 volumes: dict[str, float]) -> float:
+    index = {unit["tag"]: i for i, unit in enumerate(units)}
+    volume = sum(volumes[tag] for tag in loop["member_tags"])
+    return sum(float(state[_slot(index[tag])]) * volumes[tag] for tag in loop["member_tags"]) / volume
+
+
+def _apply_actions(
+    state: np.ndarray,
+    indexed: tuple[int, dict[str, Any]],
+    units: list[dict[str, Any]],
+    log: list[dict[str, Any]],
+    order: int,
+    topology: dict[str, Any],
+    ledger: dict[str, list[float]],
+) -> np.ndarray:
+    """Execute one atomic ordered action list on tank inventories (spec 185) and assert its balance.
+
+    Actions act on HoldupTank inventory only, never on a Splitter: flows and circulation are unchanged.
+    """
+    _index, event = indexed
+    state = state.copy()
+    index = {unit["tag"]: i for i, unit in enumerate(units)}
+    loops = _tank_loops(topology, units)
+    pre_state = state.copy()
+    pre_volumes = {unit["tag"]: unit["volume_m3"] for unit in units}
+
+    def mix_in(i: int, volume: float, x: float, nitrogen: float, oxygen: float, extra_nitrogen_kg: float = 0.0) -> None:
+        v = units[i]["volume_m3"]
+        total = v + volume
+        old = state[_slot(i):_slot(i, 3)].copy()
+        state[_slot(i)] = (old[0] * v + x * volume) / total
+        state[_slot(i, 1)] = (old[1] * v + nitrogen * volume + extra_nitrogen_kg) / total
+        state[_slot(i, 2)] = (old[2] * v + oxygen * volume) / total
+        units[i]["volume_m3"] = total
+
+    deltas = {key: np.zeros(4) for key in ("added", "removed", "harvested", "purged", "returned")}
+    medium_nitrogen = 0.0
+    parcel: dict[str, Any] | None = None  # culture drawn in this event and not yet separated
+    applied: list[dict[str, Any]] = []
+    for action in event["actions"]:
+        kind = action["type"]
+        tank = action.get("tank")
+        record: dict[str, Any] = {"type": kind, "tank": tank,
+                                  "loop": loops.get(tank, {}).get("id") if tank else None}
+        if kind == "draw":
+            i = index[tank]
+            if action.get("loop_fraction") is not None:
+                loop = loops[tank]
+                volume = float(action["loop_fraction"]) * sum(units[index[t]]["volume_m3"] for t in loop["member_tags"])
+            else:
+                volume = float(action["volume_m3"])
+            if volume >= units[i]["volume_m3"]:
+                raise DynamicError("EVENT_VOLUME_INVALID", "A draw would empty its tank.", {"tank": tank})
+            x, nitrogen, oxygen = (float(value) for value in state[_slot(i):_slot(i, 3)])
+            quota = units[i]["growth"].nitrogen_quota
+            drawn = np.asarray([volume, volume * x, volume * (nitrogen + quota * x), volume * oxygen])
+            units[i]["volume_m3"] -= volume
+            deltas["removed"] += drawn
+            if parcel is None:
+                parcel = {"inventory": np.zeros(4), "dissolved_n_kg": 0.0, "quota": quota, "loop": record["loop"]}
+            parcel["inventory"] += drawn
+            parcel["dissolved_n_kg"] += volume * nitrogen
+            record["volume_m3"] = volume
+        elif kind == "separate":
+            assert parcel is not None  # prepare() requires a preceding draw in the same event
+            whole = parcel["inventory"]
+            v_draw, m_x = whole[0], whole[1]
+            recovery, factor = float(action["recovery"]), float(action["concentration_factor"])
+            v_conc = v_draw * recovery / factor
+            # Dissolved species leave in both products at the draw concentration.
+            dissolved_n_c, oxygen_c = parcel["dissolved_n_kg"] / v_draw, whole[3] / v_draw
+            m_x_conc = recovery * m_x
+            concentrate = np.asarray([v_conc, m_x_conc,
+                                      v_conc * dissolved_n_c + parcel["quota"] * m_x_conc, v_conc * oxygen_c])
+            clarified = whole - concentrate
+            deltas["harvested"] += concentrate
+            target = action["return_to"]
+            if target == "none":
+                deltas["purged"] += clarified
+            else:
+                j = index[target]
+                v_cl = clarified[0]
+                x_cl = clarified[1] / v_cl if v_cl > 0 else 0.0
+                quota_j = units[j]["growth"].nitrogen_quota
+                n_cl = (clarified[2] - quota_j * clarified[1]) / v_cl if v_cl > 0 else 0.0
+                mix_in(j, v_cl, x_cl, n_cl, clarified[3] / v_cl if v_cl > 0 else 0.0)
+                deltas["returned"] += clarified
+            record.update(concentrate_volume_m3=float(v_conc), concentrate_biomass_kg=float(m_x_conc),
+                          clarified_to=target)
+            parcel = None
+        elif kind == "refill":
+            i = index[tank]
+            volume = (float(action["volume_m3"]) if action.get("volume_m3") is not None
+                      else float(action["to_volume_m3"]) - units[i]["volume_m3"])
+            if volume < 0:
+                raise DynamicError("EVENT_VOLUME_INVALID", "Refill target is below the tank's current volume.",
+                                   {"tank": tank})
+            medium = action["medium"]
+            if volume > 0:
+                mix_in(i, volume, 0.0, float(medium["N"]), float(medium["O2"]))
+            added = np.asarray([volume, 0.0, volume * float(medium["N"]), volume * float(medium["O2"])])
+            deltas["added"] += added
+            medium_nitrogen += added[2]
+            record["volume_m3"] = volume
+        elif kind == "dose":
+            i = index[tank]
+            volume, nitrogen_kg = float(action.get("volume_m3", 0.0)), float(action["nitrogen_kg"])
+            mix_in(i, volume, 0.0, 0.0, 0.0, extra_nitrogen_kg=nitrogen_kg)
+            deltas["added"] += np.asarray([volume, 0.0, nitrogen_kg, 0.0])
+            medium_nitrogen += nitrogen_kg
+            record.update(volume_m3=volume, nitrogen_kg=nitrogen_kg)
+        elif kind == "inoculate":
+            i = index[tank]
+            volume, culture = float(action["volume_m3"]), action["culture"]
+            x, nitrogen, oxygen = (float(culture[key]) for key in ("X", "N", "O2"))
+            mix_in(i, volume, x, nitrogen, oxygen)
+            quota = units[i]["growth"].nitrogen_quota
+            deltas["added"] += np.asarray([volume, volume * x, volume * (nitrogen + quota * x), volume * oxygen])
+            record["volume_m3"] = volume
+        applied.append(record)
+    if parcel is not None:  # without `separate`, the whole draw is harvested product
+        deltas["harvested"] += parcel["inventory"]
+    post_volumes = {unit["tag"]: unit["volume_m3"] for unit in units}
+    pre = sum((_inventory_of(pre_state, i, unit, pre_volumes) for i, unit in enumerate(units)), np.zeros(4))
+    post = sum((_inventory_of(state, i, unit, post_volumes) for i, unit in enumerate(units)), np.zeros(4))
+    post = post + np.asarray([0.0, _EVENT_BALANCE_TEST_PERTURBATION, 0.0, 0.0])
+    closure = post - (pre + deltas["added"] - deltas["harvested"] - deltas["purged"])
+    split = deltas["removed"] - (deltas["harvested"] + deltas["purged"] + deltas["returned"])
+    scale = np.maximum.reduce([np.abs(pre), np.abs(post), np.abs(deltas["added"]), np.abs(deltas["removed"])])
+    tolerance = EVENT_BALANCE_RTOL * scale + EVENT_BALANCE_FLOOR
+    if np.any(np.abs(closure) > tolerance) or np.any(np.abs(split) > tolerance):
+        raise DynamicError("EVENT_BALANCE_NOT_CLOSED", "An action event does not conserve its inventories.", {
+            "time_s": event["time_s"], "order": order,
+            "closure": dict(zip(_INVENTORY, closure.tolist(), strict=True)),
+            "draw_split": dict(zip(_INVENTORY, split.tolist(), strict=True))})
+    _valid_state(tuple(state), units)
+    for key in ("added", "removed", "harvested", "purged", "returned"):
+        ledger[key] = (np.asarray(ledger[key]) + deltas[key]).tolist()
+    ledger["medium_nitrogen"][2] += medium_nitrogen
+    # The harvested product joins the network-wide harvested-biomass ledger slot.
+    state[_slot(len(units), 3)] += deltas["harvested"][1]
+    touched = sorted({record["loop"] for record in applied if record.get("loop")})
+    loop_by_id = {loop["id"]: loop for loop in topology.get("culture_loops") or []}
+    log.append({
+        "order": order, "declared_order": event.get("declared_order", order), "repeat_k": event.get("repeat_k", 0),
+        "time_s": event["time_s"], "type": "actions", "semantics": "conservative_inventory_actions",
+        "actions": applied, "pre_state": pre_state.tolist(), "post_state": state.tolist(),
+        "pre_volumes_m3": pre_volumes, "post_volumes_m3": post_volumes,
+        "inventory_deltas": {key: dict(zip(_INVENTORY, value.tolist(), strict=True)) for key, value in deltas.items()},
+        "medium_nitrogen_kg": medium_nitrogen,
+        "balance": {"closure": dict(zip(_INVENTORY, closure.tolist(), strict=True)), "closed": True},
+        "impulse_inventory": (deltas["added"] - deltas["harvested"] - deltas["purged"])[1:].tolist(),
+        "loops": {loop_id: {
+            "x_mean_pre_kg_m3": _loop_mean_x(loop_by_id[loop_id], units, pre_state, pre_volumes),
+            "x_mean_post_kg_m3": _loop_mean_x(loop_by_id[loop_id], units, state, post_volumes),
+            "volume_pre_m3": sum(pre_volumes[tag] for tag in loop_by_id[loop_id]["member_tags"]),
+            "volume_post_m3": sum(post_volumes[tag] for tag in loop_by_id[loop_id]["member_tags"]),
+            "draw": any(record["type"] == "draw" and record["loop"] == loop_id for record in applied),
+        } for loop_id in touched},
+    })
+    return state
+
+
+def _campaign_kpis(event_log: list[dict[str, Any]], units: list[dict[str, Any]], topology: dict[str, Any],
+                   ledger: dict[str, list[float]], duration_s: float) -> dict[str, Any]:
+    """Per-loop cycles between draws and a campaign summary (spec 185).
+
+    A cycle ends at a draw on its loop; the draw's harvest and purge close it, and additions made by the same
+    event (refill, dose, inoculate) open the next cycle. Cycle 0 runs from the start to the first draw.
+    """
+    loops = {loop["id"]: loop for loop in topology.get("culture_loops") or []}
+    by_tag = {unit["tag"]: unit for unit in units}
+    result: dict[str, Any] = {}
+    for loop_id, loop in loops.items():
+        pbrs = [by_tag[tag] for tag in loop["member_tags"] if _unit_type(by_tag[tag]) == "PhotobioreactorT1"]
+        area = sum(math.pi * u["params"]["tube_inner_diameter"] * u["params"]["tube_length"] * u["params"]["tube_count"]
+                   for u in pbrs) if pbrs and all({"tube_inner_diameter", "tube_length", "tube_count"}
+                                                   <= u["params"].keys() for u in pbrs) else None
+        cycles: list[dict[str, Any]] = []
+        open_cycle = {"start_s": 0.0, "medium_volume_m3": 0.0, "nitrogen_added_kg": 0.0}
+        for entry in event_log:
+            if entry.get("type") != "actions" or loop_id not in entry.get("loops", {}):
+                continue
+            info = entry["loops"][loop_id]
+            loop_records = [record for record in entry["actions"] if record.get("loop") == loop_id]
+            added_volume = sum(record.get("volume_m3", 0.0) for record in loop_records
+                               if record["type"] in {"refill", "dose", "inoculate"})
+            if info["draw"]:
+                deltas = entry["inventory_deltas"]
+                harvested, purged = deltas["harvested"], deltas["purged"]
+                length = float(entry["time_s"]) - open_cycle["start_s"]
+                days = length / 86400.0
+                cycles.append({
+                    "index": len(cycles), "startup": not cycles, "start_s": open_cycle["start_s"],
+                    "end_s": float(entry["time_s"]), "length_s": length,
+                    "harvested_biomass_kg": harvested["biomass_kg"], "harvested_volume_m3": harvested["volume_m3"],
+                    "concentrate_biomass_kg_m3": (harvested["biomass_kg"] / harvested["volume_m3"]
+                                                  if harvested["volume_m3"] > 0 else None),
+                    "purge_volume_m3": purged["volume_m3"], "purge_biomass_kg": purged["biomass_kg"],
+                    "medium_volume_m3": open_cycle["medium_volume_m3"],
+                    "nitrogen_added_kg": open_cycle["nitrogen_added_kg"],
+                    "x_mean_before_draw_kg_m3": info["x_mean_pre_kg_m3"],
+                    "x_mean_after_event_kg_m3": info["x_mean_post_kg_m3"],
+                    "loop_volume_before_draw_m3": info["volume_pre_m3"],
+                    "net_volumetric_productivity_kg_m3_day": (harvested["biomass_kg"] / info["volume_pre_m3"] / days
+                                                              if days > 0 else None),
+                    "areal_productivity_kg_m2_day": (harvested["biomass_kg"] / area / days
+                                                     if area and days > 0 else None),
+                })
+                open_cycle = {"start_s": float(entry["time_s"]), "medium_volume_m3": added_volume,
+                              "nitrogen_added_kg": entry["medium_nitrogen_kg"]}
+            else:
+                open_cycle["medium_volume_m3"] += added_volume
+                open_cycle["nitrogen_added_kg"] += entry["medium_nitrogen_kg"]
+        if not cycles:
+            continue
+        regular = [cycle for cycle in cycles if not cycle["startup"]]
+        last = regular[-CAMPAIGN_LAST_K:]
+        pre_x = [cycle["x_mean_before_draw_kg_m3"] for cycle in cycles][-3:]
+        changes = [abs(b - a) / a for a, b in zip(pre_x, pre_x[1:], strict=False) if a > 0]
+        if len(pre_x) < 3:
+            periodic = "insufficient cycles"
+        else:
+            periodic = "periodic campaign reached" if max(changes) < PERIODIC_RTOL else "not yet periodic"
+        result[loop_id] = {
+            "cycles": cycles,
+            "summary": {
+                "draws": len(cycles),
+                "harvested_biomass_kg": sum(cycle["harvested_biomass_kg"] for cycle in cycles),
+                "harvested_volume_m3": sum(cycle["harvested_volume_m3"] for cycle in cycles),
+                "purge_volume_m3": sum(cycle["purge_volume_m3"] for cycle in cycles),
+                "last_k": len(last),
+                "mean_last_k_net_volumetric_productivity_kg_m3_day": (
+                    sum(cycle["net_volumetric_productivity_kg_m3_day"] for cycle in last) / len(last) if last else None),
+                "mean_last_k_harvested_biomass_kg": (
+                    sum(cycle["harvested_biomass_kg"] for cycle in last) / len(last) if last else None),
+                "pre_draw_x_relative_changes": changes,
+                "periodicity": periodic,
+            },
+        }
+    return {"loops": result, "duration_s": duration_s,
+            "ledger": {key: dict(zip(_INVENTORY, value, strict=True)) for key, value in ledger.items()
+                       if key != "medium_nitrogen"},
+            "medium_nitrogen_added_kg": ledger["medium_nitrogen"][2]}
+
+
+def _inventory_of(state: np.ndarray, i: int, unit: dict[str, Any], volumes: dict[str, float]) -> np.ndarray:
+    v = volumes[unit["tag"]]
+    x, nitrogen, oxygen = (float(value) for value in state[_slot(i):_slot(i, 3)])
+    return np.asarray([v, v * x, v * (nitrogen + unit["growth"].nitrogen_quota * x), v * oxygen])
 
 
 def _apply_dynamic_event(
@@ -1577,10 +1976,12 @@ def _apply_dynamic_event(
         entry = {"order": order, "declared_order": event.get("declared_order", order),
                  "repeat_k": event.get("repeat_k", 0), "time_s": event["time_s"],
                  "type": event["type"], "target": event.get("unit"),
+                 "semantics": "implicit_blank_refill" if event["type"] == "harvest" else "overwrite",
                  "pre_state": before.tolist(), "post_state": state.tolist(), "impulse_inventory": impulse}
         log.append(entry)
         return state
     kind, target = (event.get("target") or "").split(":", 1) if ":" in (event.get("target") or "") else ("", "")
+    flows_before, feeds_before, setpoints_before = dict(flows), {k: list(v) for k, v in feeds.items()}, dict(setpoints)
     if event["type"] in {"feed_change", "dilution"}:
         stream_tag = event.get("stream") or (target if kind == "feed" else None)
         value: Any = event.get("value")
@@ -1616,10 +2017,24 @@ def _apply_dynamic_event(
         if controller_id not in controllers:
             raise DynamicError("EVENT_TARGET_INVALID", "Setpoint event must target a participating controller.", {"target": controller_id})
         setpoints[controller_id] = float(event["value"])
+    # Before/after values of what the event changed (spec 185 §4).
+    changed: dict[str, Any]
+    if event["type"] == "setpoint_change":
+        controller_id = str(event["target"])
+        changed = {"before": {"setpoint": setpoints_before.get(controller_id)},
+                   "after": {"setpoint": setpoints.get(controller_id)}}
+    else:
+        tags = {stream["id"]: stream["tag"] for stream in topology["streams"]}
+        moved = sorted(key for key in flows if flows[key] != flows_before.get(key))
+        recultured = sorted(key for key in feeds if feeds[key] != feeds_before.get(key))
+        changed = {"before": {"flows_m3_s": {tags.get(key, key): flows_before.get(key) for key in moved},
+                              "feed_culture": {tags.get(key, key): feeds_before.get(key) for key in recultured}},
+                   "after": {"flows_m3_s": {tags.get(key, key): flows[key] for key in moved},
+                             "feed_culture": {tags.get(key, key): feeds[key] for key in recultured}}}
     log.append({"order": order, "declared_order": event.get("declared_order", order),
                 "repeat_k": event.get("repeat_k", 0), "time_s": event["time_s"],
                 "type": event["type"], "target": event.get("target"),
-                "value": event.get("value")})
+                "value": event.get("value"), **changed})
     return state
 
 
@@ -1860,6 +2275,10 @@ def _channel_units(series: dict[str, np.ndarray], controllers: list[dict[str, An
             unit = "kg"
         elif name.endswith("_biomass_kg"):
             unit = "kg"
+        elif name.endswith(("_V_m3", "_volume_m3")):
+            unit = "m3"
+        elif name in {"event_phase", "event_order"}:
+            unit = "1"
         elif name.endswith("_Q_m3_s"):
             unit = "m3/s"
         elif name.endswith("_pass_rate_1_s"):
@@ -1903,17 +2322,16 @@ def _partial_balances(
     final = np.zeros(3, dtype=np.float64)
     for index, unit in enumerate(units):
         quota = growths[index].nitrogen_quota
-        initial += unit["volume_m3"] * np.asarray([
+        initial += unit.get("initial_volume_m3", unit["volume_m3"]) * np.asarray([
             unit["state"][0], unit["state"][1] + quota * unit["state"][0], unit["state"][2],
         ])
         final += unit["volume_m3"] * np.asarray([
             state[_slot(index)], state[_slot(index, 1)] + quota * state[_slot(index)], state[_slot(index, 2)],
         ])
     generated = np.asarray([
-        sum(state[_slot(index, 3)] * unit["volume_m3"] for index, unit in enumerate(units)),
+        sum(state[_slot(index, 3)] for index in range(n)),
         0.0,
-        sum((growths[index].oxygen_yield * state[_slot(index, 3)] + state[_slot(index, 5)]) * unit["volume_m3"]
-            for index, unit in enumerate(units)),
+        sum(growths[index].oxygen_yield * state[_slot(index, 3)] + state[_slot(index, 5)] for index in range(n)),
     ])
     impulses = np.zeros(3, dtype=np.float64)
     for event in events:

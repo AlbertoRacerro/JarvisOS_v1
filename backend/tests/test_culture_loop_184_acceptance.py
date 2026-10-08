@@ -342,8 +342,11 @@ def test_pumped_loop_harvest_is_continuity_not_an_inventory_draw() -> None:
     result = _run(snapshot)
     assert sum(_volumes(snapshot).values()) == pytest.approx(v_loop, rel=1e-12)
     assert result.manifest["culture_loops"][0]["volume_m3"] == pytest.approx(v_loop, rel=1e-12)
-    # 184 carries no liquid-volume state: inventory volume cannot change, only concentrations do.
-    assert not any(key.endswith(("_V", "_volume_m3")) for key in result.series)
+    # The bleed never changes the inventory: tank and loop volumes stay exactly constant (185 tracks them).
+    for tag in TANK_TAGS:
+        assert np.all(result.series[f"{tag}_V_m3"] == tank_volume)
+    assert np.allclose(result.series["PBR_volume_m3"], v_loop, rtol=1e-12)
+    assert "event_phase" not in result.series
 
 
 def test_inconsistent_overdetermined_flow_balance_is_rejected_not_least_squared() -> None:

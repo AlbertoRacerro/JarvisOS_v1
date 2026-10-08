@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -14,14 +14,85 @@ MAX_PARTICIPATING_UNITS = 12
 MAX_PARTICIPATING_PBRS = 8
 MAX_DWSIM_SAMPLES = 200
 MIN_CADENCE_S = 60
+MAX_ACTIONS = 16
 
 
 class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, allow_inf_nan=False)
 
 
+class DrawAction(StrictModel):
+    """Remove culture from a tank at its current concentrations (spec 185)."""
+
+    type: Literal["draw"]
+    tank: str
+    volume_m3: float | None = Field(default=None, gt=0)
+    loop_fraction: float | None = Field(default=None, gt=0, le=1)
+
+    @model_validator(mode="after")
+    def one_amount(self) -> DrawAction:
+        if (self.volume_m3 is None) == (self.loop_fraction is None):
+            raise ValueError("draw requires exactly one of volume_m3 or loop_fraction")
+        return self
+
+
+class SeparateAction(StrictModel):
+    """Split the culture drawn earlier in the same event into concentrate and clarified liquid."""
+
+    type: Literal["separate"]
+    recovery: float = Field(gt=0, le=1)
+    concentration_factor: float = Field(gt=1)
+    return_to: str
+
+
+class RefillAction(StrictModel):
+    """Add biomass-free medium to a tank."""
+
+    type: Literal["refill"]
+    tank: str
+    volume_m3: float | None = Field(default=None, gt=0)
+    to_volume_m3: float | None = Field(default=None, gt=0)
+    medium: dict[str, float]
+
+    @model_validator(mode="after")
+    def one_amount(self) -> RefillAction:
+        if (self.volume_m3 is None) == (self.to_volume_m3 is None):
+            raise ValueError("refill requires exactly one of volume_m3 or to_volume_m3")
+        if set(self.medium) != {"N", "O2"} or any(value < 0 for value in self.medium.values()):
+            raise ValueError("refill medium requires nonnegative N and O2 in kg/m3")
+        return self
+
+
+class DoseAction(StrictModel):
+    """Add nitrogen mass to a tank, optionally in a biomass- and oxygen-free volume."""
+
+    type: Literal["dose"]
+    tank: str
+    nitrogen_kg: float = Field(gt=0)
+    volume_m3: float = Field(default=0.0, ge=0)
+
+
+class InoculateAction(StrictModel):
+    """Add culture to a tank."""
+
+    type: Literal["inoculate"]
+    tank: str
+    volume_m3: float = Field(gt=0)
+    culture: dict[str, float]
+
+    @model_validator(mode="after")
+    def full_culture(self) -> InoculateAction:
+        if set(self.culture) != {"X", "N", "O2"} or any(value < 0 for value in self.culture.values()):
+            raise ValueError("inoculate culture requires nonnegative X, N and O2 in kg/m3")
+        return self
+
+
+Action = Annotated[DrawAction | SeparateAction | RefillAction | DoseAction | InoculateAction,
+                   Field(discriminator="type")]
+
+
 class ScheduleEvent(StrictModel):
-    type: Literal["inoculation", "feed_change", "setpoint_change", "harvest", "dilution"]
+    type: Literal["inoculation", "feed_change", "setpoint_change", "harvest", "dilution", "actions"]
     time_s: float = Field(ge=0)
     unit: str | None = None
     stream: str | None = None
@@ -38,9 +109,12 @@ class ScheduleEvent(StrictModel):
     every_s: float | None = Field(default=None, gt=0)
     count: int | None = Field(default=None, ge=1, le=MAX_EVENTS)
     end_s: float | None = Field(default=None, ge=0)
+    actions: list[Action] | None = Field(default=None, min_length=1, max_length=MAX_ACTIONS)
 
     @model_validator(mode="after")
     def repeated_bounded(self) -> ScheduleEvent:
+        if (self.type == "actions") != (self.actions is not None):
+            raise ValueError("an actions event carries an actions list, and only an actions event does")
         if self.every_s is not None and self.count is None and self.end_s is None:
             raise ValueError("repeated event requires count or end_s")
         if (self.observed is None) != (self.threshold is None):
