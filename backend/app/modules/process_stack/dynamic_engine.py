@@ -29,6 +29,7 @@ from app.modules.process_stack.dynamic_models import (
 EVALUATOR_VERSION = "process_dynamic_t1/2"
 MAX_DWSIM_SAMPLES = 200
 STATE_STRIDE = 7
+FLOW_BALANCE_RTOL = 1e-9  # relative volumetric conservation residual accepted from the flow solve
 
 
 def _slot(index: int, field: int = 0) -> int:
@@ -166,6 +167,10 @@ def _validate_events(
             if target.startswith("splitter:"):
                 if target.partition(":")[2] not in splitters or kind != "dilution":
                     raise DynamicError("EVENT_TARGET_INVALID", "Event splitter is not participating.")
+                if target.partition(":")[2] in topology.get("implied_splitters", []):
+                    raise DynamicError("SPLIT_IMPLIED_BY_CIRCULATION",
+                                       "This splitter's split follows the specified loop circulation; "
+                                       "change the boundary feed instead.", {"splitter": target.partition(":")[2]})
             elif (event.get("stream") or target.removeprefix("feed:")) not in feeds:
                 raise DynamicError("EVENT_TARGET_INVALID", "Event feed is not a participating boundary stream.")
             value = event.get("value")
@@ -214,6 +219,29 @@ def _t1_reachable(objects: dict[str, Any], selected: set[str]) -> set[str]:
     return reached
 
 
+def _implied_splitters(units: list[dict[str, Any]], streams: list[dict[str, Any]],
+                       circulation_tags: set[str]) -> set[str]:
+    """Splitters inside a loop whose Pump circulation is specified.
+
+    The circulation fixes the flow through the loop, so such a splitter's outlet split follows
+    continuity (net boundary inflow leaves through it); a declared ratio would overdetermine it.
+    """
+    from app.modules.process_stack import mixed
+
+    if not circulation_tags:
+        return set()
+    nodes = {unit["id"] for unit in units}
+    edges = [(s["source"]["unit"], s["target"]["unit"], s) for s in streams
+             if s.get("source") and s.get("target")
+             and s["source"]["unit"] in nodes and s["target"]["unit"] in nodes]
+    implied: set[str] = set()
+    for group in mixed.components(nodes, edges):
+        members = [unit for unit in units if unit["id"] in group]
+        if any(unit.get("type") == "Pump" and unit.get("tag") in circulation_tags for unit in members):
+            implied.update(unit["id"] for unit in members if unit.get("type") == "Splitter")
+    return implied
+
+
 def _solve_flows(topology: dict[str, Any], overrides: dict[str, float] | None = None) -> dict[str, float]:
     """Solve one full-rank volumetric balance with fixed pump circulation constraints."""
     overrides = overrides or {}
@@ -244,10 +272,21 @@ def _solve_flows(topology: dict[str, Any], overrides: dict[str, float] | None = 
         cycles = unspecified or cycles
         raise DynamicError("FLOW_UNDERDETERMINED", "Dynamic flow balance has an unspecified circulation cycle.",
                            {"cycles": cycles, "units": sorted({tag for cycle in cycles for tag in cycle})})
-    # Explicit rank check above plus normal equations handles overdetermined separator balances.
-    solution = np.linalg.solve(matrix.T @ matrix, matrix.T @ values)
-    if np.max(np.abs(matrix @ solution - values)) > 1e-8 or np.any(solution < -1e-10):
-        raise DynamicError("FLOW_BALANCE_UNSOLVED", "Dynamic volumetric flow balance is inconsistent.")
+    # Full column rank is checked above, so the least-squares solution is unique. It is only a
+    # best fit, though: an overdetermined system is accepted only if it conserves volume exactly.
+    solution, *_ = np.linalg.lstsq(matrix, values, rcond=None)
+    residual = np.abs(matrix @ solution - values)
+    scale = max(float(np.max(np.abs(values))), float(np.max(np.abs(solution))), 1e-300)
+    residual_rel = float(np.max(residual)) / scale
+    if residual_rel > FLOW_BALANCE_RTOL:
+        worst = matrix[int(np.argmax(residual))]
+        raise DynamicError("FLOW_BALANCE_UNSOLVED", "Dynamic volumetric flow balance is inconsistent.", {
+            "reason": "conservation_residual", "residual_rel": residual_rel, "tolerance": FLOW_BALANCE_RTOL,
+            "streams": sorted(topology["streams"][i]["tag"] for i in np.flatnonzero(worst))})
+    if np.any(solution < -FLOW_BALANCE_RTOL * scale):
+        raise DynamicError("FLOW_BALANCE_UNSOLVED", "Dynamic volumetric flow balance needs a negative flow.", {
+            "reason": "negative_flow",
+            "streams": sorted(topology["streams"][i]["tag"] for i in np.flatnonzero(solution < -FLOW_BALANCE_RTOL * scale))})
     return {stream["id"]: max(0.0, float(solution[index]))
             for index, stream in enumerate(topology["streams"])}
 
@@ -374,7 +413,10 @@ def _topology(document: dict[str, Any], units: list[dict[str, Any]], scenario: d
                 "Dynamic T1 supports split_ratios mode only.",
                 {"unit": item.get("tag")},
             )
-    # Unknown stream Q values obey unit balances; splitter outlet ratios add independent equations.
+    # Unknown stream Q values obey unit balances; splitter outlet ratios add independent equations,
+    # except for splitters whose split is implied by a specified loop circulation.
+    implied_splitters = _implied_splitters(list(active_units.values()), relevant,
+                                           set(scenario.get("circulation", {})))
     n = len(relevant)
     index = {stream["id"]: i for i, stream in enumerate(relevant)}
     equations: list[np.ndarray] = []
@@ -444,7 +486,7 @@ def _topology(document: dict[str, Any], units: list[dict[str, Any]], scenario: d
                 row[index[incoming[0]["id"]]] = -ratio
                 equations.append(row)
                 rhs.append(0.0)
-        elif unit.get("type") == "Splitter":
+        elif unit.get("type") == "Splitter" and key not in implied_splitters:
             ratio_values = _splitter_ratios(unit, len(outgoing))
             for stream, ratio in zip(outgoing, ratio_values, strict=True):
                 row = np.zeros(n)
@@ -478,7 +520,8 @@ def _topology(document: dict[str, Any], units: list[dict[str, Any]], scenario: d
     circulation_rows = {row: value for row, value in enumerate(circulation.values(), start=len(rhs) - len(circulation))}
     topology = {"units": list(active_units.values()), "streams": relevant, "feeds": feeds,
                 "flow_matrix": matrix.tolist(), "flow_rhs": values.tolist(), "feed_rows": feed_rows,
-                "circulation_rows": circulation_rows, "circulation": circulation}
+                "circulation_rows": circulation_rows, "circulation": circulation,
+                "implied_splitters": sorted(active_units[key]["tag"] for key in implied_splitters)}
     flow_map = _solve_flows(topology)
     for item in units:
         key = item["unit"]["id"]
@@ -704,6 +747,12 @@ def prepare(workspace_id: str, draft_id: str, scenario_id: str) -> Snapshot:
         for node in algebraic:
             visit(node)
         topology = _topology(document, units, scenario.model_dump(mode="json"))
+        for controller_item in controller_items:
+            actuator_kind, _, actuator_tag = controller_item["actuator"].partition(":")
+            if actuator_kind == "splitter" and actuator_tag in topology["implied_splitters"]:
+                raise DynamicError("SPLIT_IMPLIED_BY_CIRCULATION",
+                                   "This splitter's split follows the specified loop circulation; "
+                                   "actuate the boundary feed instead.", {"splitter": actuator_tag})
         card_by_unit = {unit["unit"]["id"]: (unit["model"].get("card", {}).get("digest"),
                                                unit["model"].get("set", {}).get("digest"))
                         for unit in units}
@@ -1381,9 +1430,12 @@ def run(
             "energy_per_kg": None,
             "energy_per_kg_unavailable_reason": "No dynamic pump or aeration energy input is declared.",
         }
+        # The harvested-mass ledger is network-wide; attribute it to a loop only when it is the only one.
         manifest["productivity_loop"] = {
-            loop["id"]: {"harvest_kg": harvest_kg,
-                          "volumetric_kg_m3_day": harvest_kg / loop["volume_m3"] / days}
+            loop["id"]: ({"harvest_kg": harvest_kg, "volumetric_kg_m3_day": harvest_kg / loop["volume_m3"] / days}
+                         if len(manifest["culture_loops"]) == 1 else
+                         {"harvest_kg": None, "volumetric_kg_m3_day": None,
+                          "unavailable_reason": "Harvest is not attributed per loop when several loops participate."})
             for loop in manifest["culture_loops"] if loop["volume_m3"] > 0
         }
         return EngineResult("succeeded", None, series, manifest)
@@ -1700,7 +1752,7 @@ def _rebalance_flows(topology: dict[str, Any], flows: dict[str, float]) -> None:
             row[index[stream["id"]]] -= 1.0
         rows.append(row)
         rhs.append(0.0)
-        if unit.get("type") == "Splitter":
+        if unit.get("type") == "Splitter" and unit.get("tag") not in topology.get("implied_splitters", []):
             total = sum(flows[s["id"]] for s in outgoing)
             if total <= 0:
                 raise DynamicError("ZERO_THROUGHFLOW", "Splitter has zero flow after an actuator change.", {"unit": unit.get("tag")})
