@@ -25,6 +25,7 @@ from app.modules.process_stack.dynamic_models import (
     Scenario,
     Schedule,
 )
+from app.modules.process_stack.state_triggers import Trigger
 
 EVALUATOR_VERSION = "process_dynamic_t1/2"
 MAX_DWSIM_SAMPLES = 200
@@ -206,64 +207,89 @@ def _validate_events(
 def _validate_actions(events: list[dict[str, Any]], units: list[dict[str, Any]], topology: dict[str, Any]) -> None:
     """Refuse invalid action events in prepare, including an exact volume guard (spec 185).
 
-    Flows stay balanced, so tank volumes change only at events; replaying the expanded schedule is exact.
+    Flows stay balanced, so tank volumes change only at events; replaying the expanded time-triggered schedule is
+    exact. A state-triggered event (spec 186) has its targets and observable validated here, but its volumes can
+    only be guarded at run time (``EVENT_VOLUME_INVALID_RUNTIME``), so it neither is range-checked nor moves the
+    replayed volumes.
     """
     tanks = {item["tag"]: item for item in units if _unit_type(item) == "HoldupTank"}
     loops = {tag: loop for loop in _culture_loops(topology, units, topology["flows"]) for tag in loop["member_tags"]}
     volumes = {item["tag"]: float(item["volume_m3"]) for item in units}
+    unit_tags = {item["tag"] for item in units}
     for event in events:
         if event["type"] != "actions":
             continue
         if event.get("observed"):
-            raise DynamicError("EVENT_VALUE_INVALID", "State-triggered actions are not available yet (spec 186).")
-        parcel_volume: float | None = None
-        parcel_loop: str | None = None
-        for position, action in enumerate(event["actions"]):
-            detail = {"time_s": event["time_s"], "action": position, "type": action["type"]}
-            names = [action["return_to"]] if action["type"] == "separate" else [action["tank"]]
-            for name in names:
-                if name != "none" and name not in tanks:
-                    raise DynamicError("EVENT_TARGET_INVALID", "Actions act only on participating HoldupTanks.",
-                                       {**detail, "tank": name})
-            touched = names[0]
-            if action["type"] == "draw":
-                if action.get("loop_fraction") is not None:
-                    if touched not in loops:
-                        raise DynamicError("EVENT_TARGET_INVALID", "loop_fraction needs a tank inside a culture loop.",
-                                           {**detail, "tank": touched})
-                    amount = float(action["loop_fraction"]) * sum(volumes[t] for t in loops[touched]["member_tags"])
-                else:
-                    amount = float(action["volume_m3"])
-                loop_id = loops[touched]["id"] if touched in loops else None
-                if parcel_volume is not None and loop_id != parcel_loop:
-                    raise DynamicError("EVENT_VALUE_INVALID", "One event's undivided draws must come from one loop.",
-                                       detail)
-                parcel_volume, parcel_loop = (parcel_volume or 0.0) + amount, loop_id
-                volumes[touched] -= amount
-            elif action["type"] == "separate":
-                if parcel_volume is None:
-                    raise DynamicError("EVENT_VALUE_INVALID", "separate needs a draw earlier in the same event.", detail)
-                if touched != "none":
-                    volumes[touched] += parcel_volume * (1.0 - action["recovery"] / action["concentration_factor"])
-                parcel_volume = parcel_loop = None
-            elif action["type"] == "refill":
-                if action.get("to_volume_m3") is not None:
-                    if action["to_volume_m3"] < volumes[touched]:
-                        raise DynamicError("EVENT_VOLUME_INVALID", "Refill target is below the tank's volume then.",
-                                           {**detail, "tank": touched, "volume_m3": volumes[touched]})
-                    volumes[touched] = float(action["to_volume_m3"])
-                else:
-                    volumes[touched] += float(action["volume_m3"])
-            else:  # dose, inoculate
-                volumes[touched] += float(action.get("volume_m3", 0.0))
+            raise DynamicError("EVENT_VALUE_INVALID", "State-triggered actions use `condition`, not observed/threshold.")
+        condition = event.get("condition")
+        if condition:
+            unit_tag, _, channel = condition["observed"].rpartition(".")
+            if unit_tag not in unit_tags or (channel.startswith("loop_") and unit_tag not in loops):
+                raise DynamicError("UNSUPPORTED_MEASUREMENT",
+                                   "A state condition observes a unit that is not participating or has no culture loop.",
+                                   {"observed": condition["observed"]})
+            if not all(math.isfinite(float(condition[key])) for key in ("threshold", "hysteresis", "cooldown_s")):
+                raise DynamicError("EVENT_VALUE_INVALID", "State condition values must be finite.")
+        _replay_event_volumes(event, tanks, loops, dict(volumes) if condition else volumes,
+                              "EVENT_VOLUME_INVALID", check_range=not condition)
+
+
+def _replay_event_volumes(
+    event: dict[str, Any], tanks: dict[str, dict[str, Any]], loops: dict[str, dict[str, Any]],
+    volumes: dict[str, float], code: str, *, check_range: bool = True,
+) -> None:
+    """Replay one action event on tank volumes (mutating ``volumes``), refusing with ``code`` outside the limits.
+
+    Prepare uses it for time-triggered events; the run uses it just before a state-triggered fire.
+    """
+    parcel_volume: float | None = None
+    parcel_loop: str | None = None
+    for position, action in enumerate(event["actions"]):
+        detail = {"time_s": event["time_s"], "action": position, "type": action["type"]}
+        names = [action["return_to"]] if action["type"] == "separate" else [action["tank"]]
+        for name in names:
+            if name != "none" and name not in tanks:
+                raise DynamicError("EVENT_TARGET_INVALID", "Actions act only on participating HoldupTanks.",
+                                   {**detail, "tank": name})
+        touched = names[0]
+        if action["type"] == "draw":
+            if action.get("loop_fraction") is not None:
+                if touched not in loops:
+                    raise DynamicError("EVENT_TARGET_INVALID", "loop_fraction needs a tank inside a culture loop.",
+                                       {**detail, "tank": touched})
+                amount = float(action["loop_fraction"]) * sum(volumes[t] for t in loops[touched]["member_tags"])
+            else:
+                amount = float(action["volume_m3"])
+            loop_id = loops[touched]["id"] if touched in loops else None
+            if parcel_volume is not None and loop_id != parcel_loop:
+                raise DynamicError("EVENT_VALUE_INVALID", "One event's undivided draws must come from one loop.",
+                                   detail)
+            parcel_volume, parcel_loop = (parcel_volume or 0.0) + amount, loop_id
+            volumes[touched] -= amount
+        elif action["type"] == "separate":
+            if parcel_volume is None:
+                raise DynamicError("EVENT_VALUE_INVALID", "separate needs a draw earlier in the same event.", detail)
             if touched != "none":
-                params = tanks[touched]["params"]
-                low = params.get("min_volume", 0.0)
-                high = params.get("max_volume", tanks[touched]["volume_m3"])
-                if not (volumes[touched] > 0 and low - 1e-12 <= volumes[touched] <= high + 1e-12):
-                    raise DynamicError("EVENT_VOLUME_INVALID", "An action would take a tank outside its volume limits.",
-                                       {**detail, "tank": touched, "volume_m3": volumes[touched],
-                                        "min_volume_m3": low, "max_volume_m3": high})
+                volumes[touched] += parcel_volume * (1.0 - action["recovery"] / action["concentration_factor"])
+            parcel_volume = parcel_loop = None
+        elif action["type"] == "refill":
+            if action.get("to_volume_m3") is not None:
+                if check_range and action["to_volume_m3"] < volumes[touched]:
+                    raise DynamicError(code, "Refill target is below the tank's volume then.",
+                                       {**detail, "tank": touched, "volume_m3": volumes[touched]})
+                volumes[touched] = float(action["to_volume_m3"])
+            else:
+                volumes[touched] += float(action["volume_m3"])
+        else:  # dose, inoculate
+            volumes[touched] += float(action.get("volume_m3", 0.0))
+        if touched != "none" and check_range:
+            params = tanks[touched]["params"]
+            low = params.get("min_volume", 0.0)
+            high = params.get("max_volume", tanks[touched].get("initial_volume_m3", tanks[touched]["volume_m3"]))
+            if not (volumes[touched] > 0 and low - 1e-12 <= volumes[touched] <= high + 1e-12):
+                raise DynamicError(code, "An action would take a tank outside its volume limits.",
+                                   {**detail, "tank": touched, "volume_m3": volumes[touched],
+                                    "min_volume_m3": low, "max_volume_m3": high})
 
 
 def _t1_reachable(objects: dict[str, Any], selected: set[str]) -> set[str]:
@@ -1279,23 +1305,42 @@ def run(
             if times_out and abs(times_out[-1] - time_s) < 1e-7:
                 overwrite_last(state)
             return state
+        return apply_action_row(time_s, events[cursor], cursor, state)
+
+    def apply_action_row(time_s: float, indexed: tuple[int, dict[str, Any]], order: int,
+                         state: np.ndarray) -> np.ndarray:
+        """One action event at ``time_s``: a pre row, the atomic actions, a post row."""
+        if triggers:  # spec 186: state-triggered fires make volumes unpredictable, so every action is guarded
+            _runtime_volume_guard(indexed[1], units, topology)
         if times_out and abs(times_out[-1] - time_s) < 1e-7 and phase_rows[-1] == 0:
-            phase_rows[-1], order_rows[-1] = -1, cursor
+            phase_rows[-1], order_rows[-1] = -1, order
         else:
-            append_row(time_s, state, -1, cursor)
-        state = _apply_actions(state, events[cursor], units, event_log, cursor, topology, ledger)
-        append_row(time_s, state, 1, cursor)
+            append_row(time_s, state, -1, order)
+        state = _apply_actions(state, indexed, units, event_log, order, topology, ledger)
+        append_row(time_s, state, 1, order)
+        return state
+
+    def fire_trigger(trigger: Trigger, time_s: float, state: np.ndarray, observed: float) -> np.ndarray:
+        """Apply a state-triggered event at its root time and link the fire to its condition (spec 186)."""
+        event = dict(trigger.event, time_s=time_s)
+        state = apply_action_row(time_s, (trigger.order, event), trigger.order, state)
+        event_log[-1].update(trigger="state", condition={
+            **trigger.event["condition"], "fire_index": trigger.fires, "root_time_s": time_s,
+            "observed_value": observed, "earliest_s": float(trigger.event["time_s"])})
         return state
     event_log: list[dict[str, Any]] = []
     controller_log: list[dict[str, Any]] = []
     flow_log: list[dict[str, Any]] = []
     downstream: list[dict[str, Any]] = []
     # Prepared snapshots are already ordered; sorting again keeps run() safe for hand-built snapshots.
-    events = sorted(
+    all_events = sorted(
         ((index, dict(event)) for index, event in enumerate(snapshot.payload["schedule"].get("events", []))),
         key=lambda pair: (float(pair[1]["time_s"]), int(pair[1].get("declared_order", pair[0])),
                           int(pair[1].get("repeat_k", 0)), pair[0]),
     )
+    # State-triggered actions (spec 186) fire at root times, never from the time cursor.
+    events = [pair for pair in all_events if not pair[1].get("condition")]
+    state_events = [pair for pair in all_events if pair[1].get("condition")]
     controllers = [dict(value, _integral=0.0, _active=False, _bias=float(value["output"]),
                         _initial_output=float(value["output"]))
                    for value in snapshot.payload.get("controllers", [])]
@@ -1310,6 +1355,8 @@ def run(
         controller_times.update(float(t) for t in np.arange(cadence_i, duration, cadence_i))
     flows, feeds = topology["flows"], topology["feeds"]
     topology["culture_loops"] = _culture_loops(topology, units, flows)
+    triggers = [Trigger(len(events) + k, event, _make_observer(event["condition"]["observed"], units, topology))
+                for k, (_, event) in enumerate(state_events)]
     hydraulic_findings: list[dict[str, Any]] = []
     hydraulic_cache: dict[tuple[tuple[str, float], ...], dict[str, Any]] = {}
 
@@ -1334,6 +1381,8 @@ def run(
         series = _result_series(snapshot, times_out, rows, units, controllers, controller_log, flow_log, topology,
                                 volume_rows, phase_rows, order_rows)
         manifest = _manifest(snapshot, started, event_log, controller_log, downstream)
+        if triggers:
+            manifest["state_triggers"] = [trigger.summary() for trigger in triggers]
         _add_diagnostic_evidence(manifest, series, controllers)
         manifest["balances"] = _partial_balances(current, units, growths, event_log)
         manifest["artifact_label"] = f"diagnostic_{status}"
@@ -1342,7 +1391,7 @@ def run(
     boundaries = sorted(
         set(float(v) for v in outputs)
         | {float(t - start) for t in snapshot.payload["profiles"][0]["times"] if start < t < end}
-        | {float(event["time_s"]) for _, event in events if 0 < event["time_s"] < duration}
+        | {float(event["time_s"]) for _, event in all_events if 0 < event["time_s"] < duration}
         | controller_times
         | (set(float(t) for t in np.arange(float(scenario["downstream_cadence_s"]), duration,
                                            float(scenario["downstream_cadence_s"])))
@@ -1362,86 +1411,124 @@ def run(
                 return diagnostic("cancelled", {"code": "CANCELLED", "message": "Run cancelled.", "detail": {}})
 
             par_segment = _profile_par(snapshot, (left + right) / 2.0)
-            network = _network_runtime(topology, flows, units)
+            t0, restarts = left, 0
+            while True:
+                restarts += 1
+                if restarts > MAX_SEGMENT_RESTARTS:
+                    raise DynamicError("SOLVER_FAILED", "State triggers restarted the integration too often.",
+                                       {"segment_s": [left, right]})
+                for trigger in triggers:
+                    trigger.settle(t0, current)
+                live = [trigger for trigger in triggers if trigger.live(t0)]
+                stop = min([right, *[t for t in (trigger.stop_after(t0, right) for trigger in triggers)
+                                     if t is not None]])
+                if stop <= t0 + 1e-9:
+                    if stop >= right - 1e-9:
+                        break
+                    t0 = stop
+                    continue
+                network = _network_runtime(topology, flows, units)
 
-            def rhs(elapsed: float, state: tuple[float, ...], network_state: dict[str, Any] = network,
-                    par_value: float = par_segment) -> list[float]:
-                result = [0.0] * len(state)
-                concentrations = _network_concentrations(topology, network_state, state, units, flows)
-                for i, item in enumerate(units):
-                    off = _slot(i)
-                    x, nitrogen, oxygen = state[off:off + 3]
-                    growth = growths[i]
-                    temperature = _profile_temperature(snapshot, elapsed, i)
-                    is_tank = _unit_type(item) == "HoldupTank"
-                    mu, loss = growth.rates_at(0.0 if is_tank else par_value,
-                                               item["params"]["temperature"] if is_tank else temperature,
-                                               x, nitrogen)
-                    rx = (mu - loss) * x / 3600.0
-                    transfer = growth.kla_h * (growth.oxygen_saturation - oxygen) / 3600.0
-                    inlet = np.zeros(3, dtype=np.float64)
-                    qin = 0.0
-                    for stream, weight in network_state["incoming"][item["unit"]["id"]]:
-                        flow = flows.get(stream["id"], 0.0)
-                        source = (stream.get("source") or {}).get("unit")
+                def rhs(elapsed: float, state: tuple[float, ...], network_state: dict[str, Any] = network,
+                        par_value: float = par_segment) -> list[float]:
+                    result = [0.0] * len(state)
+                    concentrations = _network_concentrations(topology, network_state, state, units, flows)
+                    for i, item in enumerate(units):
+                        off = _slot(i)
+                        x, nitrogen, oxygen = state[off:off + 3]
+                        growth = growths[i]
+                        temperature = _profile_temperature(snapshot, elapsed, i)
+                        is_tank = _unit_type(item) == "HoldupTank"
+                        mu, loss = growth.rates_at(0.0 if is_tank else par_value,
+                                                   item["params"]["temperature"] if is_tank else temperature,
+                                                   x, nitrogen)
+                        rx = (mu - loss) * x / 3600.0
+                        transfer = growth.kla_h * (growth.oxygen_saturation - oxygen) / 3600.0
+                        inlet = np.zeros(3, dtype=np.float64)
+                        qin = 0.0
+                        for stream, weight in network_state["incoming"][item["unit"]["id"]]:
+                            flow = flows.get(stream["id"], 0.0)
+                            source = (stream.get("source") or {}).get("unit")
+                            value = feeds.get(stream["id"]) if source is None else concentrations.get(
+                                f"stream:{stream['id']}"
+                            )
+                            if value is None:
+                                raise DynamicError("TOPOLOGY_UNRESOLVED", "A PBR inlet concentration could not be resolved.")
+                            inlet += weight * np.asarray(value[:3])
+                            qin += flow
+                        volume = item["volume_m3"]
+                        dilution = qin / volume
+                        net_x = rx + dilution * (inlet[0] - x)
+                        net_n = -growth.nitrogen_quota * rx + dilution * (inlet[1] - nitrogen)
+                        net_o = growth.oxygen_yield * rx + transfer + dilution * (inlet[2] - oxygen)
+                        # Accumulators are inventories in kg (spec 185), so a later volume change cannot rescale them.
+                        result[off:off + 7] = [net_x, net_n, net_o, rx * volume, -growth.nitrogen_quota * rx * volume,
+                                               transfer * volume, 0.0]
+                    # Boundary terms are inventory rates in kg/s. Fourth concentration is q*X,
+                    # propagated independently through algebraic mixers/splitters.
+                    active_ids = {unit["id"] for unit in topology["units"]}
+                    for stream in topology["streams"]:
+                        source, target = stream.get("source"), stream.get("target")
+                        if source is not None and (target or {}).get("unit") in active_ids:
+                            continue
                         value = feeds.get(stream["id"]) if source is None else concentrations.get(
                             f"stream:{stream['id']}"
                         )
                         if value is None:
-                            raise DynamicError("TOPOLOGY_UNRESOLVED", "A PBR inlet concentration could not be resolved.")
-                        inlet += weight * np.asarray(value[:3])
-                        qin += flow
-                    volume = item["volume_m3"]
-                    dilution = qin / volume
-                    net_x = rx + dilution * (inlet[0] - x)
-                    net_n = -growth.nitrogen_quota * rx + dilution * (inlet[1] - nitrogen)
-                    net_o = growth.oxygen_yield * rx + transfer + dilution * (inlet[2] - oxygen)
-                    # Accumulators are inventories in kg (spec 185), so a later volume change cannot rescale them.
-                    result[off:off + 7] = [net_x, net_n, net_o, rx * volume, -growth.nitrogen_quota * rx * volume,
-                                           transfer * volume, 0.0]
-                # Boundary terms are inventory rates in kg/s. Fourth concentration is q*X,
-                # propagated independently through algebraic mixers/splitters.
-                active_ids = {unit["id"] for unit in topology["units"]}
-                for stream in topology["streams"]:
-                    source, target = stream.get("source"), stream.get("target")
-                    if source is not None and (target or {}).get("unit") in active_ids:
-                        continue
-                    value = feeds.get(stream["id"]) if source is None else concentrations.get(
-                        f"stream:{stream['id']}"
-                    )
-                    if value is None:
-                        continue
-                    if source is None:
-                        quota_x = network_state["feed_quota"].get(stream["id"], 0.0) * value[0]
-                    else:
-                        quota_x = value[3]
-                    q = flows.get(stream["id"], 0.0) * (1.0 if source is None else -1.0)
-                    result[_slot(n):_slot(n, 3)] += q * np.asarray([value[0], value[1] + quota_x, value[2]])
-                    if source is not None:
-                        result[_slot(n, 3)] += flows.get(stream["id"], 0.0) * value[0]
-                return result
+                            continue
+                        if source is None:
+                            quota_x = network_state["feed_quota"].get(stream["id"], 0.0) * value[0]
+                        else:
+                            quota_x = value[3]
+                        q = flows.get(stream["id"], 0.0) * (1.0 if source is None else -1.0)
+                        result[_slot(n):_slot(n, 3)] += q * np.asarray([value[0], value[1] + quota_x, value[2]])
+                        if source is not None:
+                            result[_slot(n, 3)] += flows.get(stream["id"], 0.0) * value[0]
+                    return result
 
-            grid = [left, *[float(t) for t in outputs if left < t < right], right]
-            from app.modules.process_stack.dynamics import integrate_ode
+                grid = [t0, *[float(t) for t in outputs if t0 < t < stop], stop]
+                from app.modules.process_stack.dynamics import integrate_ode
 
-            solved = integrate_ode(
-                rhs,
-                current.tolist(),
-                grid,
-                rtol=float(scenario["rtol"]),
-                atol=float(scenario["atol"]),
-                method=scenario["solver_method"],
-            )
-            if not solved.success:
-                raise DynamicError("SOLVER_FAILED", solved.message, {"segment_s": [left, right]})
-            for t, solved_state in zip(solved.times[1:], solved.states[1:], strict=True):
-                state_row = np.asarray(solved_state, dtype=np.float64)
-                _valid_state(state_row, units, growths)
-                _clip_tiny_negatives(state_row, units, roundoff_clips, float(t))
-                if any(abs(float(t) - float(out)) <= 1e-7 for out in outputs):
-                    append_row(float(t), state_row)
-            current = np.asarray(solved.states[-1], dtype=np.float64)
-            _clip_tiny_negatives(current, units, roundoff_clips, right)
+                solved = integrate_ode(
+                    rhs,
+                    current.tolist(),
+                    grid,
+                    rtol=float(scenario["rtol"]),
+                    atol=float(scenario["atol"]),
+                    method=scenario["solver_method"],
+                    roots=_root_values(live) if live else None,
+                    root_directions=[trigger.direction for trigger in live],
+                )
+                if not solved.success:
+                    raise DynamicError("SOLVER_FAILED", solved.message, {"segment_s": [t0, stop]})
+                for t, solved_state in zip(solved.times[1:], solved.states[1:], strict=True):
+                    state_row = np.asarray(solved_state, dtype=np.float64)
+                    _valid_state(state_row, units, growths)
+                    _clip_tiny_negatives(state_row, units, roundoff_clips, float(t))
+                    if any(abs(float(t) - float(out)) <= 1e-7 for out in outputs):
+                        append_row(float(t), state_row)
+                current = np.asarray(solved.states[-1], dtype=np.float64)
+                if solved.root_time is None:
+                    _clip_tiny_negatives(current, units, roundoff_clips, stop)
+                    t0 = stop
+                    if stop >= right - 1e-9:
+                        break
+                    continue
+                # A root: the exact crossing time. Re-arm roots only change the trigger; a fire applies the actions.
+                root_time = float(solved.root_time)
+                _clip_tiny_negatives(current, units, roundoff_clips, root_time)
+                observed_at_root = {id(live[k]): live[k].observe(current) for k in solved.root_indices}
+                fired = False
+                for k in solved.root_indices:
+                    trigger = live[k]
+                    if trigger.crossed(root_time, current):
+                        current = fire_trigger(trigger, root_time, current, observed_at_root[id(trigger)])
+                        fired = True
+                if fired:
+                    record_flow(root_time)
+                t0 = root_time
+                if t0 >= right - 1e-9:
+                    break
             while event_cursor < len(events) and abs(float(events[event_cursor][1]["time_s"]) - right) < 1e-7:
                 current = apply_at(right, event_cursor, current)
                 event_cursor += 1
@@ -1482,6 +1569,8 @@ def run(
                                 volume_rows, phase_rows, order_rows)
         manifest = _manifest(snapshot, started, event_log, controller_log, downstream)
         manifest["culture_loops"] = _culture_loops(topology, units, flows)
+        if triggers:
+            manifest["state_triggers"] = [trigger.summary() for trigger in triggers]
         manifest["hydraulics"] = flow_log
         manifest["findings"] = hydraulic_findings
         manifest["channels"] = _channel_units(series, controllers)
@@ -1684,6 +1773,41 @@ AGGREGATE_BALANCE_FLOOR_KG = 1e-12
 CAMPAIGN_LAST_K = 3
 PERIODIC_RTOL = 0.01
 _EVENT_BALANCE_TEST_PERTURBATION = 0.0  # test hook: added to the post-event biomass inventory before the check
+
+
+MAX_SEGMENT_RESTARTS = 10_000
+
+
+def _make_observer(observed: str, units: list[dict[str, Any]], topology: dict[str, Any]) -> Callable[..., float]:
+    """Value of a state-condition observable from a state vector, with unit volumes read live (spec 186).
+
+    ``<unit>.X|N|O2`` is the unit's own concentration; ``<unit>.loop_X|loop_N`` is the inventory (volume-weighted)
+    mean of the unit's culture loop, the same quantity the series reports as ``<loop>_X_mean`` / ``_N_mean``.
+    """
+    tag, _, channel = observed.rpartition(".")
+    index = {unit["tag"]: i for i, unit in enumerate(units)}
+    if channel in {"X", "N", "O2"}:
+        slot = _slot(index[tag], {"X": 0, "N": 1, "O2": 2}[channel])
+        return lambda state: float(state[slot])
+    members = [index[member] for member in _tank_loops(topology, units)[tag]["member_tags"]]
+    field = {"loop_X": 0, "loop_N": 1}[channel]
+
+    def loop_mean(state: Any) -> float:
+        volumes = [units[i]["volume_m3"] for i in members]
+        return sum(float(state[_slot(i, field)]) * v for i, v in zip(members, volumes, strict=True)) / sum(volumes)
+
+    return loop_mean
+
+
+def _root_values(live: list[Trigger]) -> Callable[[float, tuple[float, ...]], list[float]]:
+    return lambda _t, y: [trigger.root_value(y) for trigger in live]
+
+
+def _runtime_volume_guard(event: dict[str, Any], units: list[dict[str, Any]], topology: dict[str, Any]) -> None:
+    """Refuse an action that would leave a tank's [min_volume, max_volume] before it is applied (spec 186)."""
+    tanks = {item["tag"]: item for item in units if _unit_type(item) == "HoldupTank"}
+    _replay_event_volumes(event, tanks, _tank_loops(topology, units),
+                          {item["tag"]: float(item["volume_m3"]) for item in units}, "EVENT_VOLUME_INVALID_RUNTIME")
 
 
 def _campaign_ledger() -> dict[str, list[float]]:

@@ -91,6 +91,32 @@ Action = Annotated[DrawAction | SeparateAction | RefillAction | DoseAction | Ino
                    Field(discriminator="type")]
 
 
+STATE_CHANNELS = ("X", "N", "O2", "loop_X", "loop_N")
+
+
+class StateCondition(StrictModel):
+    """Root-found trigger of an ``actions`` event (spec 186); the event's ``time_s`` is the earliest time.
+
+    ``observed`` is ``<unit>.X|N|O2`` or ``<unit>.loop_X|loop_N`` (volume-weighted mean of that unit's culture
+    loop), and ``threshold`` is in kg/m3.
+    """
+
+    observed: str = Field(min_length=3, max_length=80)
+    direction: Literal["above", "below"]
+    threshold: float
+    hysteresis: float = Field(default=0.0, ge=0)
+    cooldown_s: float = Field(default=0.0, ge=0)
+    max_fires: int = Field(default=1, ge=1, le=MAX_EVENTS)
+
+    @field_validator("observed")
+    @classmethod
+    def known_channel(cls, value: str) -> str:
+        unit, _, channel = value.rpartition(".")
+        if not unit or channel not in STATE_CHANNELS:
+            raise ValueError(f"observed must be <unit>.<{'|'.join(STATE_CHANNELS)}>")
+        return value
+
+
 class ScheduleEvent(StrictModel):
     type: Literal["inoculation", "feed_change", "setpoint_change", "harvest", "dilution", "actions"]
     time_s: float = Field(ge=0)
@@ -110,9 +136,17 @@ class ScheduleEvent(StrictModel):
     count: int | None = Field(default=None, ge=1, le=MAX_EVENTS)
     end_s: float | None = Field(default=None, ge=0)
     actions: list[Action] | None = Field(default=None, min_length=1, max_length=MAX_ACTIONS)
+    condition: StateCondition | None = None
 
     @model_validator(mode="after")
     def repeated_bounded(self) -> ScheduleEvent:
+        if self.condition is not None:
+            if self.type != "actions":
+                raise ValueError("only an actions event may carry a state condition")
+            if self.every_s is not None or self.count is not None or self.end_s is not None:
+                raise ValueError("a state-triggered event repeats through max_fires, not every_s/count/end_s")
+            if self.observed is not None or self.threshold is not None:
+                raise ValueError("a state condition replaces the 172 observed/threshold fields")
         if (self.type == "actions") != (self.actions is not None):
             raise ValueError("an actions event carries an actions list, and only an actions event does")
         if self.every_s is not None and self.count is None and self.end_s is None:
