@@ -90,7 +90,8 @@ Wording changes:
 
 **One flow solver.** `_solve_flows(topology, overrides)` replaces both `lstsq` call sites and carries the circulation equations.
 - If `matrix_rank` is below the number of unknown streams, the system is refused with `FLOW_UNDERDETERMINED`, naming the units of each unspecified cycle. There is no minimum-norm fallback.
-- An inconsistent system keeps `FLOW_BALANCE_UNSOLVED`.
+- An inconsistent system keeps `FLOW_BALANCE_UNSOLVED`. Full rank only makes the least-squares solution unique, so after the solve the relative volumetric conservation residual max|A·Q − b| / max(|b|, |Q|) must be ≤ 1e-9; otherwise the run is refused with `reason: conservation_residual`, the residual and the streams of the worst equation. A solution that needs a negative flow is refused with `reason: negative_flow`. The least-squares fit of an inconsistent system is never accepted.
+- **Circulation-implied splitters.** A Splitter inside a loop whose Pump circulation is specified takes its split from continuity (net boundary inflow leaves through it); its declared ratios are not equations. Dilution events and controllers acting on it are refused with `SPLIT_IMPLIED_BY_CIRCULATION`; the operator changes the boundary feed instead. This is a **steady pumped-loop bleed only**: it is not the harvesting mechanism for semi-batch operation.
 - A closed loop with no boundary streams is valid when its circulation is specified.
 - `ZERO_THROUGHFLOW` remains for a PBR whose solved inlet is zero.
 - Feed, dilution, controller and splitter actions re-solve with the circulation equations kept.
@@ -156,7 +157,7 @@ Backend tests. Each uses an independent reference.
 
 ## Non-goals
 
-- Semi-batch events, volume changes and campaign KPIs (185); state-triggered actions (186).
+- Semi-batch events, volume changes and campaign KPIs (185); state-triggered actions (186). Semi-batch harvest is a dynamic inventory operation (draw a fraction → inventory decreases → optional refill) on tanks in 185. It must not be implemented by actuating a circulation-constrained hydraulic Splitter.
 - Steady HoldupTank.
 - Spatial loops, light/dark cycling from mixing, and orientation (175/179).
 - Gas–liquid units, pH and CO₂ (175).

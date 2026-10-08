@@ -37,6 +37,8 @@ A `ScheduleEvent` may carry an ordered `actions` list, executed atomically at it
 | `dose` | `tank`; `nitrogen_kg`; optional `volume_m3` (default 0) | Adds nutrient mass. |
 | `inoculate` | `tank`; `volume_m3`; `culture {X, N, O2}` | Adds culture. |
 
+**Separation from 184 hydraulics.** Actions act on tank inventory, never on a Splitter. In a pumped loop the 184 circulation-implied Splitter stays a steady continuity bleed; a draw lowers the tank's liquid volume while the specified circulation is unchanged, and the loop inventory recovers only through `refill`, `inoculate` or net boundary feed. Splitter dilution events and controllers on a circulation-implied Splitter stay refused (`SPLIT_IMPLIED_BY_CIRCULATION`).
+
 **Harvested product.** Without `separate`, the whole draw is harvested product. With `separate`, only the concentrate is; purge is booked separately.
 
 **Mixing.** Every addition mixes conservatively: c ← (c·V + c_add·V_add)/(V + V_add). Quota N travels with X.
@@ -84,9 +86,10 @@ Backend tests, each with an independent reference:
 3. **Guards.**
    - An over-draw and an over-fill are refused in prepare with `EVENT_VOLUME_INVALID`.
    - A forced imbalance (test hook) gives `EVENT_BALANCE_NOT_CLOSED`.
-4. **Compatibility.** Every 172 dynamic, jobs and downstream test is unchanged. Legacy semantics are labelled in the log.
-5. **Performance.** A 60-day BlueRev-scale campaign (4 PBRs, 2 tanks, 48 h cycles) runs in under 1 s per simulated day on the qualification host. The wall time is recorded.
-6. **Gates.** The full backend suite in a clean environment; ruff, ratchet and architecture.
+4. **Inventory, not hydraulics.** In the 184 pumped loop (circulation specified, implied Splitter): a 20 % `loop_fraction` draw lowers V_loop by exactly 20 %, leaves the circulation series and the implied split unchanged, and an optional `refill` restores V_loop; no Splitter ratio changes at any event.
+5. **Compatibility.** Every 172 dynamic, jobs and downstream test is unchanged. Legacy semantics are labelled in the log.
+6. **Performance.** A 60-day BlueRev-scale campaign (4 PBRs, 2 tanks, 48 h cycles) runs in under 1 s per simulated day on the qualification host. The wall time is recorded.
+7. **Gates.** The full backend suite in a clean environment; ruff, ratchet and architecture.
 
 ## Non-goals
 
