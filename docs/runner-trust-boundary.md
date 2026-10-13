@@ -36,6 +36,13 @@ claim. It does not grant the AI Sidecar execution authority. The existing runner
 continues to execute only exact reviewed bundled implementations; its AST policy
 remains lint and does not become a sandbox.
 
+Spec 188 adds one non-bundled kind to the runner-job flow, `studio_calc_v1`: an
+operator-published Studio calculation. The runner refuses it unless the version is
+published, its source artifact matches the hash recorded at publication, and the
+Studio runtime is enabled and available. Its source executes only inside
+`studio_runtime`, never through the runner's own subprocess path. Every other
+non-bundled kind stays refused.
+
 ## Reopen triggers
 
 Reopen measured runner-isolation work only when at least one condition becomes

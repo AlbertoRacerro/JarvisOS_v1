@@ -72,14 +72,14 @@ def test_darcy_weisbach_structure() -> None:
     assert evaluate["args"] == ["rho", "mu", "v", "d", "length", "rel_rough"]
     assert evaluate["docstring"] == "Pressure loss."
     eqs = evaluate["steps"]
-    assert [s["kind"] for s in eqs] == ["equation"] * 5
+    assert [s["kind"] for s in eqs] == ["equation"] * 4
     assert texts(eqs[0]["target"]) == ["re", "number"]
     assert "ρ" in texts(eqs[0]["expr"]) and "μ" in texts(eqs[0]["expr"])
     assert any(n["tag"] == "mfrac" for n in walk(eqs[0]["expr"]))
     assert texts(eqs[2]["target"]) == ["δ", "p"]
     assert [n["tag"] for n in walk(eqs[2]["target"])] == ["math", "mrow", "msub", "mi", "mi"]
     assert any(n["tag"] == "msup" for n in walk(eqs[2]["expr"]))
-    assert texts(eqs[3]["target"]) == ["δ", "p"] and texts(eqs[4]["target"]) == ["re"]
+    assert texts(eqs[3]["target"]) == ["re"]  # the identity "delta_p": delta_p is not repeated
     # helper: if/else assigning one target -> piecewise
     cond = helper["steps"][0]
     assert cond["kind"] == "conditional" and cond["form"] == "piecewise"

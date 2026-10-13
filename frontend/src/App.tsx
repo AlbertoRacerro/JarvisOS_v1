@@ -107,15 +107,6 @@ function App() {
     ? `${requestedRecordKind}:${requestedRecordId}`
     : null;
   const requestedModelVersionId = boundedSearchParam(routeParams, "modelVersionId");
-  const studioSelectionApplied = useRef<string | null>(null);
-  useEffect(() => {
-    if (route.id !== "design-process") { studioSelectionApplied.current = null; return; }
-    const key = `${workspaceId ?? ""}:${requestedModelVersionId ?? ""}`;
-    if (route.id === "design-process" && requestedModelVersionId && studioSelectionApplied.current !== key && engineeringProperties.implementations.some((item) => item.id === requestedModelVersionId)) {
-      studioSelectionApplied.current = key;
-      engineeringProperties.setSelectedId(requestedModelVersionId);
-    }
-  }, [route.id, requestedModelVersionId, workspaceId, engineeringProperties.implementations, engineeringProperties.setSelectedId]);
   const requestedLiteratureSourceId = boundedSearchParam(routeParams, "sourceId");
   const requestedLiteratureEntryId = boundedSearchParam(routeParams, "entryId");
   const knowledgeStableRef = route.id === "memory-project-basis"
@@ -176,7 +167,7 @@ function App() {
   } else {
     switch (route.id) {
       case "design-studio":
-        content = <Studio workspaceId={workspaceId} navigate={navigate} />;
+        content = <Studio workspaceId={workspaceId} navigate={navigate} engineeringProperties={engineeringProperties} />;
         break;
       case "memory-project-basis":
         content = <><FinalWorkspaceHeader group="memory" active="project-basis" navigate={navigate} /><FinalOperatorReadSurface kind="project-basis" workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} requestedRecordRef={requestedRecordRef} onRecordSelect={selectKnowledge} jarvis={jarvisSidecar} projectSearch={<ProjectSearchPanel workspaceId={workspaceId} navigate={navigate} />} /></>;
@@ -243,7 +234,9 @@ function App() {
   const effectiveShellRegions: ShellRegionContributions = {
     ...shellRegions,
     sidecar: route.primaryNav === "settings" || route.primaryNav === "coding" || IN_PAGE_JARVIS_ROUTES.has(route.id) || workspaceLoadState !== "ready" || !workspaceId ? undefined : jarvisSidecar,
-    ...(route.id === "runs" || route.id === "engineering-data" || route.id === "design-process" ? { dock: <AnalyticsDockContent workspaceId={workspaceId} /> } : {})
+    ...(route.id === "runs" || route.id === "engineering-data" || route.id === "design-process" ? { dock: <AnalyticsDockContent workspaceId={workspaceId} /> } : {}),
+    // Studio is not a canonical Jarvis context route (spec 188 non-goal: no Sidecar code proposals).
+    ...(route.id === "design-studio" ? { sidecar: undefined } : {})
   };
 
   return <Layout route={route} navigate={navigate} selection={selection} propertiesContent={propertiesContent} shellRegions={effectiveShellRegions} shellRegionRequest={shellRegionRequest}><PageErrorBoundary key={resolved.canonicalPath}>{content}</PageErrorBoundary></Layout>;

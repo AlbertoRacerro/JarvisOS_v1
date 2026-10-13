@@ -345,6 +345,8 @@ class _Deriver:
             out: list[Tree] = []
             for key, item in zip(value.keys, value.values, strict=True):
                 assert isinstance(key, ast.Constant)
+                if isinstance(item, ast.Name) and item.id == key.value:
+                    continue  # ``"x": x`` restates an equation already shown above
                 out.extend(self._pair(_symbol(str(key.value)), item, stmt.lineno, stmt, label=repr(key.value)))
             return out
         if isinstance(value, ast.Tuple):

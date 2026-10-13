@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import type { Navigate } from "../../app/AppLink";
 import type { StageSelection } from "../../app/selection";
@@ -134,6 +134,7 @@ export type EngineeringPropertiesController = Readonly<{
   discardPreviousObjectChanges(): void;
   startRun(): void;
   retryRunStart(): void;
+  reload(): Promise<void>;
 }>;
 
 const EMPTY_BINDING: WorkingBinding = { value: "", parameterId: "" };
@@ -421,14 +422,14 @@ export function useEngineeringProperties(
     setPreviousRunBaseline(null);
   }, [workspaceId]);
 
-  useEffect(() => {
+  const reload = useCallback((): Promise<void> => {
+    const generation = ++loadGeneration.current;
     if (!workspaceId) {
       setImplementations([]);
       setParameters([]);
-      return;
+      return Promise.resolve();
     }
-    const generation = ++loadGeneration.current;
-    Promise.all([listModelImplementations(workspaceId), listParameters(workspaceId)])
+    return Promise.all([listModelImplementations(workspaceId), listParameters(workspaceId)])
       .then(([nextImplementations, nextParameters]) => {
         if (generation !== loadGeneration.current) return;
         setImplementations(nextImplementations);
@@ -440,6 +441,8 @@ export function useEngineeringProperties(
         setPreviewMessage(error.message);
       });
   }, [workspaceId]);
+
+  useEffect(() => { void reload(); }, [reload]);
 
   useEffect(() => {
     if (!eligible.some((item) => item.id === selectedId)) setSelectedIdState(eligible[0]?.id ?? "");
@@ -961,7 +964,8 @@ export function useEngineeringProperties(
     revertAll,
     discardPreviousObjectChanges,
     startRun,
-    retryRunStart
+    retryRunStart,
+    reload
   };
 }
 

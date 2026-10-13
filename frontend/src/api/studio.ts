@@ -42,7 +42,7 @@ export const getStudioRuntimeStatus = () => request<StudioRuntimeStatus>("/studi
 export const listStudioModels = (workspaceId: string) => request<StudioModel[]>(`${root(workspaceId)}/models`);
 export const getStudioModel = (workspaceId: string, id: string) => request<StudioModel>(model(workspaceId, id));
 export const createStudioModel = (workspaceId: string, payload: Pick<StudioModel, "name" | "engineering_question" | "inputs" | "outputs">) => request<StudioModel>(`${root(workspaceId)}/models`, "POST", payload);
-export const saveStudioModel = (workspaceId: string, id: string, payload: Partial<Pick<StudioModel, "name" | "engineering_question" | "inputs" | "outputs" | "source" | "annotations" | "assumptions">>) => request<StudioModel>(model(workspaceId, id), "PATCH", payload);
+export const saveStudioModel = (workspaceId: string, id: string, payload: Partial<Pick<StudioModel, "name" | "engineering_question" | "inputs" | "outputs" | "source" | "annotations" | "assumptions">>) => request<StudioModel>(model(workspaceId, id), "PUT", payload);
 export const testStudioModel = (workspaceId: string, id: string, cases: StudioCase[]) => request<StudioReport>(`${model(workspaceId, id)}/test`, "POST", { cases });
 export const publishStudioModel = (workspaceId: string, id: string) => request<StudioVersion>(`${model(workspaceId, id)}/publish`, "POST", {});
 export const reviseStudioModel = (workspaceId: string, id: string) => request<StudioModel>(`${model(workspaceId, id)}/revise`, "POST", {});

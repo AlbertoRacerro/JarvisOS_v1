@@ -134,14 +134,15 @@ function DomainFoundation() {
 
   const onWorkspaceSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const target = event.currentTarget; // React clears currentTarget before the request resolves
+    const form = new FormData(target);
     createWorkspace({
       name: String(form.get("name") ?? ""),
       slug: String(form.get("slug") ?? ""),
       description: String(form.get("description") ?? "")
     })
       .then((workspace) => {
-        event.currentTarget.reset();
+        target.reset();
         setWorkspaceId(workspace.id);
         return refreshWorkspaces();
       })
@@ -181,14 +182,15 @@ function DomainFoundation() {
 
   const onModelSpecSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const target = event.currentTarget; // React clears currentTarget before the request resolves
+    const form = new FormData(target);
     createModelSpec(workspaceId, {
       title: String(form.get("title") ?? ""),
       engineering_question: String(form.get("engineering_question") ?? ""),
       scope: String(form.get("scope") ?? "")
     })
       .then(() => {
-        event.currentTarget.reset();
+        target.reset();
         return refreshWorkspaceRecords(workspaceId);
       })
       .catch((error: Error) => setMessage(error.message));
@@ -196,10 +198,11 @@ function DomainFoundation() {
 
   const onAssumptionSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const statement = String(new FormData(event.currentTarget).get("statement") ?? "");
+    const target = event.currentTarget; // React clears currentTarget before the request resolves
+    const statement = String(new FormData(target).get("statement") ?? "");
     createAssumption(workspaceId, { statement })
       .then(() => {
-        event.currentTarget.reset();
+        target.reset();
         return refreshWorkspaceRecords(workspaceId);
       })
       .catch((error: Error) => setMessage(error.message));
@@ -207,7 +210,8 @@ function DomainFoundation() {
 
   const onParameterSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const target = event.currentTarget; // React clears currentTarget before the request resolves
+    const form = new FormData(target);
     createParameter(workspaceId, {
       name: String(form.get("name") ?? ""),
       symbol: String(form.get("symbol") ?? ""),
@@ -215,7 +219,7 @@ function DomainFoundation() {
       unit: String(form.get("unit") ?? "")
     })
       .then(() => {
-        event.currentTarget.reset();
+        target.reset();
         return refreshWorkspaceRecords(workspaceId);
       })
       .catch((error: Error) => setMessage(error.message));
@@ -223,10 +227,11 @@ function DomainFoundation() {
 
   const onRunSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const runLabelValue = String(new FormData(event.currentTarget).get("run_label") ?? "");
+    const target = event.currentTarget; // React clears currentTarget before the request resolves
+    const runLabelValue = String(new FormData(target).get("run_label") ?? "");
     createSimulationRun(workspaceId, { run_label: runLabelValue, status: "planned" })
       .then(() => {
-        event.currentTarget.reset();
+        target.reset();
         return refreshWorkspaceRecords(workspaceId);
       })
       .catch((error: Error) => setMessage(error.message));
@@ -234,13 +239,14 @@ function DomainFoundation() {
 
   const onDecisionSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const target = event.currentTarget; // React clears currentTarget before the request resolves
+    const form = new FormData(target);
     createDecision(workspaceId, {
       title: String(form.get("title") ?? ""),
       decision_text: String(form.get("decision_text") ?? "")
     })
       .then(() => {
-        event.currentTarget.reset();
+        target.reset();
         return refreshWorkspaceRecords(workspaceId);
       })
       .catch((error: Error) => setMessage(error.message));

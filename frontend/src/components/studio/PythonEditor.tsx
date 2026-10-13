@@ -14,7 +14,7 @@ export default function PythonEditor({ value, onChange, disabled = false }: Prop
     if (!host.current) return;
     const editor = new EditorView({
       parent: host.current,
-      state: EditorState.create({ doc: value, extensions: [lineNumbers(), history(), keymap.of([...defaultKeymap, ...historyKeymap]), python(), EditorState.readOnly.of(disabled), EditorView.updateListener.of((update) => { if (update.docChanged) callback.current(update.state.doc.toString()); })] })
+      state: EditorState.create({ doc: value, extensions: [lineNumbers(), history(), keymap.of([...defaultKeymap, ...historyKeymap]), python(), EditorView.lineWrapping, EditorState.readOnly.of(disabled), EditorView.editable.of(!disabled), EditorView.updateListener.of((update) => { if (update.docChanged) callback.current(update.state.doc.toString()); })] })
     });
     view.current = editor;
     return () => { editor.destroy(); view.current = null; };

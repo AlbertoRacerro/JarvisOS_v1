@@ -24,7 +24,8 @@ def _call(function, *args):
         return function(*args)
     except StudioError as exc:
         code = 404 if exc.code.endswith("not_found") else 409 if exc.code in {
-            "studio_publish_report_required", "studio_no_published_version", "studio_artifact_hash_mismatch"
+            "studio_publish_report_required", "studio_no_published_version", "studio_artifact_hash_mismatch",
+            "studio_draft_open", "studio_revision_required"
         } else 422
         raise HTTPException(status_code=code, detail={"code": exc.code, "message": exc.message}) from exc
 
@@ -49,7 +50,7 @@ def get_model(workspace_id: str, model_spec_id: str) -> dict:
     return _call(service.get, workspace_id, model_spec_id)
 
 
-@router.patch("/workspaces/{workspace_id}/studio/models/{model_spec_id}")
+@router.put("/workspaces/{workspace_id}/studio/models/{model_spec_id}")
 def save_model(workspace_id: str, model_spec_id: str, data: StudioUpdate) -> dict:
     return _call(service.update, workspace_id, model_spec_id, data)
 

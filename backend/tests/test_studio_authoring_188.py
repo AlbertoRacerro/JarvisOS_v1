@@ -64,18 +64,18 @@ def test_test_publish_revise_and_immutable_artifact(client):
     assert refused.status_code == 409
     source = model["source"].replace('    raise NotImplementedError("Complete evaluate before testing")',
                                      '    loss = flow * 10\n    return {"loss": loss}')
-    changed = client.patch(path, json={"source": source, "annotations": "Correlation assumption"})
+    changed = client.put(path, json={"source": source, "annotations": "Correlation assumption"})
     assert changed.status_code == 200, changed.text
     derived = changed.json()["documentation"]["derived"]
     assert derived["status"] == "ok" and derived["unrendered_count"] == 0
-    assert [step["kind"] for step in derived["functions"][0]["steps"]] == ["equation", "equation"]
+    assert [step["kind"] for step in derived["functions"][0]["steps"]] == ["equation"]
     case = {"inputs": {"flow": 0.2}, "expected_outputs": {"loss": 2.0}, "tolerance": 1e-9}
     report = client.post(path + "/test", json={"cases": [case]})
     assert report.status_code == 200 and report.json()["passed"], report.text
     published = client.post(path + "/publish")
     assert published.status_code == 200, published.text
     version = published.json()
-    assert version["version_label"] == "v1"
+    assert version["version_label"] == "Pressure loss v1"
     with open_sqlite_connection() as connection:
         row = connection.execute("""SELECT mv.*, a.stored_path, a.sha256 FROM model_versions mv
             JOIN artifacts a ON a.id = mv.implementation_artifact_id WHERE mv.id = ?""", (version["id"],)).fetchone()
@@ -84,11 +84,13 @@ def test_test_publish_revise_and_immutable_artifact(client):
         assert row["input_contract_payload"]
         assert Path(row["stored_path"]).read_text() == source
         assert row["sha256"] == hashlib.sha256(source.encode()).hexdigest()
-    assert client.patch(path, json={"source": source + "\n# edit"}).status_code == 422
+    assert client.put(path, json={"source": source + "\n# edit"}).status_code == 409
+    assert client.post(path + "/test", json={"cases": [case]}).status_code == 409
     revised = client.post(path + "/revise")
     assert revised.status_code == 200
     assert revised.json()["last_test_report"] is None
-    stale = client.patch(path, json={"source": source + "\n# edit"})
+    assert client.post(path + "/revise").status_code == 409
+    stale = client.put(path, json={"source": source + "\n# edit"})
     assert stale.status_code == 200 and stale.json()["annotations_stale"]
     assert client.post(path + "/publish").status_code == 409
     assert Path(row["stored_path"]).read_text() == source
@@ -106,6 +108,7 @@ def test_invalid_unit_documentation_safety_and_categories(client, tmp_path):
     assert steps[0]["kind"] == "code" and steps[0]["reason"] and docs["unrendered_count"] == 1
     quoted = {**CONTRACT, "inputs": [{**CONTRACT["inputs"][0], "unit": 'm"""'}]}
     assert client.post("/workspaces/bluerev/studio/models", json=quoted).status_code == 422
+    assert client.post("/workspaces/missing/studio/models", json=CONTRACT).status_code == 404
     categories = client.get("/studio/categories").json()
     assert categories[0]["available"] is True
     assert all(not category["available"] and category["reason"] for category in categories[1:])
@@ -116,14 +119,14 @@ def test_report_is_hash_bound_and_outputs_are_checked(client):
     path = _model_path(model)
     source = model["source"].replace('    raise NotImplementedError("Complete evaluate before testing")',
                                      '    return {"wrong": flow}')
-    assert client.patch(path, json={"source": source}).status_code == 200
+    assert client.put(path, json={"source": source}).status_code == 200
     case = {"inputs": {"flow": 0.2}}
     report = client.post(path + "/test", json={"cases": [case]}).json()
     assert report["passed"] is False
     assert "Every declared output" in report["cases"][0]["errors"][0]
     assert client.post(path + "/publish").status_code == 409
     fixed = source.replace('"wrong"', '"loss"')
-    assert client.patch(path, json={"source": fixed}).json()["last_test_report"] is None
+    assert client.put(path, json={"source": fixed}).json()["last_test_report"] is None
     assert client.post(path + "/test", json={"cases": [case]}).json()["passed"]
-    assert client.patch(path, json={"source": fixed + "\n# changed"}).json()["last_test_report"] is None
+    assert client.put(path, json={"source": fixed + "\n# changed"}).json()["last_test_report"] is None
     assert client.post(path + "/publish").status_code == 409

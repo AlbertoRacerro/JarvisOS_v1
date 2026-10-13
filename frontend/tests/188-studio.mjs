@@ -17,7 +17,7 @@ assert.equal(canPublishStudioDraft(model, cases, false, false), false);
 assert.equal(canPublishStudioDraft(model, [], false, true), false);
 assert.equal(canPublishStudioDraft(model, [{ inputs: { length: 12 } }], false, true), false);
 const page = read("src/pages/Studio.tsx");
-for (const text of ["PythonEditor", "VariableForm", "Run Test", "Derived equations", "DerivedDocumentation", "JARVISOS_STUDIO_USER_CODE_ENABLED=1", "Select for calculation", "Revise", "scientifically unqualified"]) assert.ok(page.includes(text), text);
+for (const text of ["PythonEditor", "VariableForm", "Run Test", "Derived equations", "DerivedDocumentation", "JARVISOS_STUDIO_USER_CODE_ENABLED=1", "Select for calculation", "Revise", "scientifically unqualified", "EngineeringPropertiesPanel", "Runs of this model", "Stale:", "Superseded:", "Custom · no preset"]) assert.ok(page.includes(text), text);
 const routes = read("src/app/routes.ts");
 assert.match(routes, /path: "\/design\/studio"/);
 assert.match(read("src/App.tsx"), /case "design-studio"/);

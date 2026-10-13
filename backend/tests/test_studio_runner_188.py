@@ -46,7 +46,7 @@ def _publish(client: TestClient, model_id: str, factor: int = 2) -> str:
     source = client.get(path).json()["source"]
     body = f'    return {{"pressure_loss": driver * {factor}}}'
     source = source.replace(PLACEHOLDER, body) if PLACEHOLDER in source else source.replace("driver * 2", f"driver * {factor}")
-    assert client.patch(path, json={"source": source}).status_code == 200
+    assert client.put(path, json={"source": source}).status_code == 200
     report = client.post(path + "/test", json={"cases": [{"inputs": {"driver": 1.0}}]})
     assert report.status_code == 200 and report.json()["passed"], report.text
     published = client.post(path + "/publish")

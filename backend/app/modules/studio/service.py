@@ -116,10 +116,11 @@ def create(workspace_id: str, data: StudioCreate) -> dict:
     _input_contract(contract)
     source = scaffold(contract)
     now = utc_now()
+    with open_sqlite_connection() as connection:
+        _require_workspace(connection, workspace_id)
     model_id = create_model_spec(workspace_id, ModelSpecCreate(
         title=data.name, engineering_question=data.engineering_question)).id
     with open_sqlite_connection() as connection:
-        _require_workspace(connection, workspace_id)
         connection.execute("""INSERT INTO studio_drafts
             (model_spec_id, workspace_id, contract_json, source, source_sha256, contract_sha256, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
@@ -230,7 +231,7 @@ def publish(workspace_id: str, model_spec_id: str) -> dict:
         input_payload, input_sha = _input_contract(contract)
         next_number = len(_versions(connection, model_spec_id)) + 1
         version_id, artifact_id, now = str(uuid4()), str(uuid4()), utc_now()
-        version_label = f"v{next_number}"
+        version_label = f"{row['title']} v{next_number}"  # the calculation surface lists versions by label alone
         directory = model_implementation_root(workspace_id) / version_id
         directory.mkdir(parents=True, exist_ok=False)
         artifact_path = directory / "studio_calc.py"
@@ -266,10 +267,12 @@ def publish(workspace_id: str, model_spec_id: str) -> dict:
 
 def revise(workspace_id: str, model_spec_id: str) -> dict:
     with open_sqlite_connection() as connection:
-        _draft_row(connection, workspace_id, model_spec_id)
+        row = _draft_row(connection, workspace_id, model_spec_id)
         versions = _versions(connection, model_spec_id)
         if not versions:
             raise StudioError("studio_no_published_version", "Publish a version before revising.")
+        if row["model_status"] == "draft":
+            raise StudioError("studio_draft_open", "A draft is already open; revising again would discard it.")
         version = versions[-1]
         artifact = connection.execute("""SELECT a.stored_path FROM artifacts a
             JOIN model_versions mv ON mv.implementation_artifact_id = a.id WHERE mv.id = ?""", (version["id"],)).fetchone()
