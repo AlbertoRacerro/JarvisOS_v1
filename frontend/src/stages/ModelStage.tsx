@@ -17,6 +17,7 @@ function ModelStage({ onSelectionChange, onShellRegionsChange, requestShellRegio
         <nav className="design-stage__tabs" aria-label="Design workspaces">
           <button type="button" onClick={() => navigate("/design/process")}>Process</button>
           <button type="button" className="is-active" aria-current="page">BLUECAD</button>
+          <button type="button" onClick={() => navigate("/design/studio")}>Studio</button>
         </nav>
       </header>
 

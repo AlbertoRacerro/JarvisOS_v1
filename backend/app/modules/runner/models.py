@@ -23,6 +23,7 @@ class ModelImplementationRead(BaseModel):
     version_label: str
     implementation_artifact_id: str
     status: str
+    implementation_kind: str
     script_sha256: str
     script_path: str
     created_at: str
@@ -112,6 +113,8 @@ class SimulationRunDetail(BaseModel):
     completed_at: str | None = None
     created_at: str
     notes: str | None = None
+    stale: bool = False
+    superseded: bool = False
 
 
 class RunnerJobCreateResponse(BaseModel):

@@ -11,10 +11,12 @@ from app.modules.runner.input_contracts import (
     ModelInputContractV2,
     ModelInputContractV3,
     canonicalize_input_contract,
+    normalize_input_set_v2,
     parse_stored_input_contract,
 )
 from app.modules.runner.linked_parameters import require_linked_parameters_usable
 from app.modules.runner.models import (
+    BindingPreviewRequest,
     ModelImplementationCreate,
     ModelImplementationRead,
     RunnerJobCreate,
@@ -32,8 +34,10 @@ from app.modules.runner.process_kernel_registration import (
 )
 from app.modules.runner.public_models import PublicModelImplementationCreate
 from app.modules.runner.safety import RunnerSafetyError, sha256_file
+from app.modules.studio_runtime import runtime as studio_runtime
 
 RUNNER_SCRIPT_POLICY_VIOLATION = "RUNNER_SCRIPT_POLICY_VIOLATION"
+STUDIO_CALC_KIND = "studio_calc_v1"
 _LEGACY_SANDBOX_VIOLATION = "SANDBOX_VIOLATION"
 BUNDLED_BLUEREV_PROCESS0_SEMANTIC_LABEL = "bluerev-geometry-hydraulics-semantic-v0-bundled"
 
@@ -155,7 +159,14 @@ def create_runner_job(
         return replay
 
     model_version = _load_model_version(workspace_id, payload.model_version_id)
-    _require_exact_bundled(model_version)
+    _require_permitted_implementation(model_version)
+    if model_version["implementation_kind"] == STUDIO_CALC_KIND:
+        preview = _base.preview_model_bindings(
+            workspace_id, payload.model_version_id, BindingPreviewRequest(bindings=payload.input_set)
+        )
+        if preview.state != "ready" or preview.normalized_input_set is None:
+            raise RunnerSafetyError("runner_input_invalid", "Studio inputs do not satisfy the published v2 contract.")
+        payload = payload.model_copy(update={"input_set": preview.normalized_input_set})
     stored_sha = str(model_version["script_sha256"])
     if is_exact_process_kernel_profile(model_version, stored_sha):
         normalized = normalize_process_kernel_input(workspace_id, payload.input_set)
@@ -204,6 +215,26 @@ def _replay_existing_runner_job(
             input_payload, parameter_payload = _base.validate_bluecad_l2_input(payload.input_set)
         elif existing["implementation_kind"] == _base.CALC_V0_IMPLEMENTATION_KIND:
             input_payload, parameter_payload = _base.validate_calc_v0_input(payload.input_set)
+        elif existing["implementation_kind"] == STUDIO_CALC_KIND:
+            model_version = _load_model_version(workspace_id, payload.model_version_id)
+            contract, _ = parse_stored_input_contract(
+                model_version["input_contract_payload"], model_version["input_contract_sha256"]
+            )
+            if not isinstance(contract, ModelInputContractV2):
+                raise RunnerSafetyError("runner_input_contract_invalid", "Studio input contract is not v2.")
+            candidate = normalize_input_set_v2(contract, payload.input_set, studio_pint=True)
+            stored = json.loads(existing["input_payload"])
+            if set(candidate) != set(stored) or any(
+                any(candidate[name].get(field) != stored[name].get(field)
+                    for field in ("value", "unit", "source_parameter_id"))
+                or ("source_parameter_updated_at" in payload.input_set[name]
+                    and payload.input_set[name]["source_parameter_updated_at"]
+                    != stored[name].get("source_parameter_updated_at"))
+                for name in candidate
+            ):
+                raise RunnerSafetyError("runner_request_key_conflict", "Runner request key has different Studio inputs.")
+            input_payload = existing["input_payload"]
+            parameter_payload = existing["parameter_payload"]
         else:
             raise RunnerSafetyError("runner_implementation_kind_unsupported", "Unsupported implementation kind.")
     except RunnerSafetyError as exc:
@@ -250,6 +281,8 @@ def _create_runner_job_idempotent(
         elif implementation_kind == _base.BLUECAD_L2_IMPLEMENTATION_KIND:
             input_payload, parameter_payload = _base.validate_bluecad_l2_input(payload.input_set)
         elif implementation_kind == _base.CALC_V0_IMPLEMENTATION_KIND:
+            input_payload, parameter_payload = _base.validate_calc_v0_input(payload.input_set)
+        elif implementation_kind == STUDIO_CALC_KIND:
             input_payload, parameter_payload = _base.validate_calc_v0_input(payload.input_set)
         else:
             raise RunnerSafetyError("runner_implementation_kind_unsupported", "Unsupported implementation kind.")
@@ -320,7 +353,10 @@ def _create_runner_job_idempotent(
                 )
 
         if _uses_canonical_linked_parameter_contract(model_version):
-            require_linked_parameters_usable(connection, workspace_id, input_payload)
+            require_linked_parameters_usable(
+                connection, workspace_id, input_payload,
+                studio_pint=implementation_kind == STUDIO_CALC_KIND,
+            )
 
         simulation_run_id = str(uuid4())
         runner_job_id = str(uuid4())
@@ -413,7 +449,7 @@ def _create_runner_job_idempotent(
 
 def run_runner_job(runner_job_id: str) -> RunnerJobRunResponse:
     model_version = _load_job_model_version(runner_job_id)
-    _require_exact_bundled(model_version)
+    _require_permitted_implementation(model_version)
     try:
         response = _base.run_runner_job(runner_job_id)
     except RunnerSafetyError as exc:
@@ -449,6 +485,33 @@ def _require_exact_bundled(model_version: dict[str, Any]) -> None:
             RUNNER_SCRIPT_POLICY_VIOLATION,
             "Runner execution is limited to exact server-known bundled implementations.",
         )
+
+
+def _require_permitted_implementation(model_version: dict[str, Any]) -> None:
+    if model_version.get("implementation_kind") != STUDIO_CALC_KIND:
+        _require_exact_bundled(model_version)
+        return
+    if model_version.get("status") != "published":
+        raise RunnerSafetyError(RUNNER_SCRIPT_POLICY_VIOLATION, "Studio model is not published.")
+    contract, _ = parse_stored_input_contract(
+        model_version.get("input_contract_payload"), model_version.get("input_contract_sha256")
+    )
+    if not isinstance(contract, ModelInputContractV2):
+        raise RunnerSafetyError(RUNNER_SCRIPT_POLICY_VIOLATION, "Studio model requires a v2 input contract.")
+    script_path = _base.validate_script_path(model_version["workspace_id"], model_version["script_path"])
+    if sha256_file(script_path) != model_version["script_sha256"]:
+        raise RunnerSafetyError("runner_script_hash_mismatch", "Studio source hash does not match its artifact.")
+    with open_sqlite_connection() as connection:
+        published = connection.execute(
+            """SELECT source_sha256 FROM studio_published_versions
+               WHERE version_id = ? AND model_spec_id = ?""",
+            (model_version["id"], model_version["model_spec_id"]),
+        ).fetchone()
+    if published is None or published["source_sha256"] != model_version["script_sha256"]:
+        raise RunnerSafetyError(RUNNER_SCRIPT_POLICY_VIOLATION, "Studio publication evidence does not match.")
+    state = studio_runtime.status()
+    if not state["enabled"] or not state["available"]:
+        raise RunnerSafetyError("studio_runtime_unavailable", f"Studio runtime is {state['reason']}.")
 
 
 def _is_exact_bundled(model_version: dict[str, Any]) -> bool:

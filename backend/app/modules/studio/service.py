@@ -14,7 +14,7 @@ from app.modules.modeling.service import create_model_spec
 from app.modules.process_kernel.units import parse_unit_token, resolve_unit, unit_registry
 from app.modules.runner.input_contracts import canonicalize_input_contract
 from app.modules.runner.safety import model_implementation_root
-from app.modules.studio.documentation import derive_documentation
+from app.modules.studio.derive import derive_documentation
 from app.modules.studio.models import StudioCreate, StudioError, StudioUpdate, TestRequest, model_payload
 from app.modules.studio_runtime.runtime import RunRequest, run, status
 
@@ -33,7 +33,10 @@ def scaffold(contract: dict) -> str:
     signature = ", ".join(f"{name}: float" for name in names)
     arguments = ", ".join(f"{name}=inputs[{name!r}]" for name in names)
     lines = ["# Studio calculation. Magnitudes use the declared contract units.",
-             f"def evaluate({signature}) -> dict[str, float]:", '    """Return declared output magnitudes in their contract units."""',
+             f"def evaluate({signature}) -> dict[str, float]:",
+             '    """Return every declared output from the declared inputs.', "", "    Inputs:",
+             *(f"        {item['name']} [{item['unit']}]" for item in contract["inputs"]), "    Outputs:",
+             *(f"        {item['name']} [{item['unit']}]" for item in contract["outputs"]), '    """',
              '    raise NotImplementedError("Complete evaluate before testing")', "",
              "", "def main(inputs: dict[str, float]) -> dict[str, float]:",
              f"    return evaluate({arguments})", ""]
@@ -87,7 +90,7 @@ def _draft_row(connection, workspace_id: str, model_spec_id: str):
 def _versions(connection, model_spec_id: str) -> list[dict]:
     rows = connection.execute("""SELECT mv.id, mv.version_label, sp.source_sha256, sp.contract_sha256, mv.created_at
         FROM studio_published_versions sp JOIN model_versions mv ON mv.id = sp.version_id
-        WHERE sp.model_spec_id = ? ORDER BY mv.created_at, mv.id""", (model_spec_id,)).fetchall()
+        WHERE sp.model_spec_id = ? ORDER BY sp.rowid""", (model_spec_id,)).fetchall()
     return [dict(row) for row in rows]
 
 
@@ -99,9 +102,10 @@ def _read(connection, workspace_id: str, model_spec_id: str) -> dict:
             "engineering_question": row["engineering_question"], "category": "calculation",
             **contract, "source": row["source"], "source_sha256": row["source_sha256"],
             "contract_sha256": row["contract_sha256"], "annotations": row["annotations"],
-            "assumptions": row["assumptions"],
+            "assumptions": row["assumption_notes"],
             "annotations_stale": bool(row["annotations"] and row["annotations_source_sha256"] != row["source_sha256"]),
-            "documentation": derive_documentation(row["source"], contract),
+            "status": row["model_status"],
+            "documentation": {"derived": derive_documentation(row["source"]), **contract},
             "test_cases": json.loads(row["test_cases_json"]), "last_test_report": report,
             "versions": _versions(connection, model_spec_id), "created_at": row["created_at"],
             "updated_at": row["updated_at"]}
@@ -143,15 +147,17 @@ def update(workspace_id: str, model_spec_id: str, data: StudioUpdate) -> dict:
         if row["model_status"] != "draft":
             raise StudioError("studio_revision_required", "Revise the published model before editing.")
         old_contract = json.loads(row["contract_json"])
-        contract = {"inputs": [item.model_dump(exclude_none=True) for item in data.inputs] if data.inputs is not None else old_contract["inputs"],
-                    "outputs": [item.model_dump(exclude_none=True) for item in data.outputs] if data.outputs is not None else old_contract["outputs"]}
-        validated = StudioCreate(name=data.name or row["title"],
-                                 engineering_question=data.engineering_question or row["engineering_question"], **contract)
+        validated = StudioCreate.model_validate({
+            "name": data.name or row["title"],
+            "engineering_question": data.engineering_question or row["engineering_question"],
+            "inputs": data.inputs if data.inputs is not None else old_contract["inputs"],
+            "outputs": data.outputs if data.outputs is not None else old_contract["outputs"],
+        })
         contract, contract_sha = _contract(validated)
         _input_contract(contract)
         source = data.source if data.source is not None else row["source"]
         annotations = data.annotations if data.annotations is not None else row["annotations"]
-        assumptions = data.assumptions if data.assumptions is not None else row["assumptions"]
+        assumptions = data.assumptions if data.assumptions is not None else row["assumption_notes"]
         annotation_hash = _sha(source) if data.annotations is not None else row["annotations_source_sha256"]
         changed = _sha(source) != row["source_sha256"] or contract_sha != row["contract_sha256"]
         now = utc_now()
@@ -160,7 +166,7 @@ def update(workspace_id: str, model_spec_id: str, data: StudioUpdate) -> dict:
             workspace_id=workspace_id, expected_updated_at=spec_row["updated_at"],
             title=validated.name, engineering_question=validated.engineering_question))
         connection.execute("""UPDATE studio_drafts SET contract_json = ?, source = ?, source_sha256 = ?,
-            contract_sha256 = ?, annotations = ?, assumptions = ?, annotations_source_sha256 = ?,
+            contract_sha256 = ?, annotations = ?, assumption_notes = ?, annotations_source_sha256 = ?,
             test_report_json = ?, updated_at = ? WHERE model_spec_id = ?""",
             (_json(contract), source, _sha(source), contract_sha, annotations, assumptions, annotation_hash,
              None if changed else row["test_report_json"], now, model_spec_id))
@@ -292,26 +298,6 @@ def library(workspace_id: str) -> list[dict]:
         rows = connection.execute("""SELECT mv.id, mv.model_spec_id, m.title AS name, mv.version_label,
             sp.source_sha256, sp.contract_sha256, mv.created_at FROM studio_published_versions sp
             JOIN model_versions mv ON mv.id = sp.version_id JOIN model_specs m ON m.id = mv.model_spec_id
-            WHERE mv.workspace_id = ? ORDER BY mv.created_at DESC""", (workspace_id,)).fetchall()
+            WHERE mv.workspace_id = ? ORDER BY sp.rowid DESC""", (workspace_id,)).fetchall()
         return [{**dict(row), "scientific_status": "unqualified"} for row in rows]
 
-
-def run_status(workspace_id: str, simulation_run_id: str) -> dict:
-    """Read-only current interpretation of an immutable Studio run."""
-    with open_sqlite_connection() as connection:
-        row = connection.execute("""SELECT sr.model_version_id, mv.model_spec_id, mv.created_at
-            FROM simulation_runs sr JOIN model_versions mv ON mv.id = sr.model_version_id
-            WHERE sr.workspace_id = ? AND sr.id = ? AND mv.implementation_kind = 'studio_calc_v1'""",
-            (workspace_id, simulation_run_id)).fetchone()
-        if row is None:
-            raise StudioError("studio_run_not_found", "Studio run not found.")
-        mark = connection.execute("""SELECT reason_code FROM freshness_marks
-            WHERE workspace_id = ? AND record_ref = ? ORDER BY created_at DESC LIMIT 1""",
-            (workspace_id, f"simulation_run:{simulation_run_id}")).fetchone()
-        newer = connection.execute("""SELECT mv.id FROM model_versions mv
-            WHERE mv.model_spec_id = ? AND mv.implementation_kind = 'studio_calc_v1'
-              AND mv.status = 'published' AND (mv.created_at > ? OR (mv.created_at = ? AND mv.id > ?))
-            ORDER BY mv.created_at DESC, mv.id DESC LIMIT 1""",
-            (row["model_spec_id"], row["created_at"], row["created_at"], row["model_version_id"])).fetchone()
-        return {"stale": mark is not None, "stale_reason": mark["reason_code"] if mark else None,
-                "superseded": newer is not None, "newer_version_id": newer["id"] if newer else None}

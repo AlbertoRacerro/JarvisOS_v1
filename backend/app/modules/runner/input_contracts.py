@@ -11,7 +11,7 @@ from typing import Any, Literal, TypeAlias
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 from app.modules.process_kernel.errors import ProcessKernelError
-from app.modules.process_kernel.units import normalize_magnitude
+from app.modules.process_kernel.units import normalize_magnitude, parse_unit_token, unit_registry
 from app.modules.runner.models import (
     BindingPreviewResponse,
     BindingVariablePreview,
@@ -240,6 +240,7 @@ def build_binding_preview(
     contract_sha256: str | None,
     bindings: dict[str, Any],
     load_parameter: ParameterLoader,
+    studio_pint: bool = False,
 ) -> BindingPreviewResponse:
     contract, digest = parse_stored_input_contract(contract_payload, contract_sha256)
     contract_names = {variable.name for variable in contract.variables}
@@ -271,6 +272,7 @@ def build_binding_preview(
                 variable,
                 item,
                 load_parameter=load_parameter,
+                studio_pint=studio_pint,
             )
         else:
             value, source_parameter_id, errors = _validate_v1_binding(
@@ -340,6 +342,7 @@ def normalize_input_set_v2(
     input_set: dict[str, Any],
     *,
     load_parameter: ParameterLoader | None = None,
+    studio_pint: bool = False,
 ) -> dict[str, dict[str, object]]:
     if set(input_set) != {variable.name for variable in contract.variables}:
         raise RunnerSafetyError("runner_input_invalid", "Input set does not match the schema-v2/v3 contract.")
@@ -349,6 +352,7 @@ def normalize_input_set_v2(
             variable,
             input_set[variable.name],
             load_parameter=load_parameter,
+            studio_pint=studio_pint,
         )
         if errors or value is None:
             raise RunnerSafetyError(
@@ -465,6 +469,7 @@ def _validate_v2_binding(
     item: object,
     *,
     load_parameter: ParameterLoader | None,
+    studio_pint: bool = False,
 ) -> tuple[float | None, str | None, str | None, list[str]]:
     errors: list[str] = []
     value: float | None = None
@@ -485,7 +490,8 @@ def _validate_v2_binding(
         errors.append("binding_value_invalid")
     else:
         try:
-            value = normalize_magnitude(
+            normalizer = normalize_studio_magnitude if studio_pint else normalize_magnitude
+            value = normalizer(
                 float(raw_value),
                 source_unit=source_unit,
                 target_unit=variable.unit,
@@ -528,7 +534,8 @@ def _validate_v2_binding(
                 errors.append("binding_parameter_revision_invalid")
             else:
                 try:
-                    normalized_parameter_value = normalize_magnitude(
+                    normalizer = normalize_studio_magnitude if studio_pint else normalize_magnitude
+                    normalized_parameter_value = normalizer(
                         parameter_value,
                         source_unit=parameter_unit,
                         target_unit=variable.unit,
@@ -545,6 +552,37 @@ def _validate_v2_binding(
                     if not errors:
                         source_parameter_updated_at = parameter_updated_at
     return value, source_parameter_id, source_parameter_updated_at, errors
+
+
+def normalize_studio_magnitude(
+    value: float,
+    *,
+    source_unit: str,
+    target_unit: str,
+    physical_dimension: str,
+    semantic_basis: str | None,
+) -> float:
+    if not physical_dimension.startswith("["):
+        return normalize_magnitude(
+            value, source_unit=source_unit, target_unit=target_unit,
+            physical_dimension=physical_dimension, semantic_basis=semantic_basis,
+        )
+    if semantic_basis is not None or not isfinite(value):
+        raise ProcessKernelError("quantity_dimension_mismatch", "Invalid Studio quantity dimension.")
+    try:
+        registry = unit_registry()
+        source = registry.Unit(parse_unit_token(source_unit))
+        target = registry.Unit(parse_unit_token(target_unit))
+        if str(source.dimensionality) != physical_dimension or str(target.dimensionality) != physical_dimension:
+            raise ProcessKernelError("quantity_dimension_mismatch", "Quantity unit does not match the contract.")
+        converted = float(registry.Quantity(value, source).to(target).magnitude)
+    except ProcessKernelError:
+        raise
+    except Exception as exc:
+        raise ProcessKernelError("quantity_unit_invalid", "Studio unit conversion failed.") from exc
+    if not isfinite(converted):
+        raise ProcessKernelError("quantity_value_invalid", "Converted quantity must be finite.")
+    return converted
 
 
 def _finite_parameter_value(value: object) -> float | None:

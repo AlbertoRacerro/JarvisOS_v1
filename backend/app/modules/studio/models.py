@@ -31,6 +31,9 @@ class Variable(BaseModel):
     @field_validator("unit")
     @classmethod
     def pint_unit(cls, value: str) -> str:
+        # The unit is written into the scaffold docstring, so it must stay one inert line.
+        if not value.isprintable() or any(character in value for character in "\"'\\#"):
+            raise ValueError("Unit contains unsupported characters.")
         parse_unit_token(value)
         return value
 

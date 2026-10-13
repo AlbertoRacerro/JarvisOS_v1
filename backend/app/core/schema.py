@@ -270,7 +270,7 @@ SCHEMA_STATEMENTS = [
         source_sha256 TEXT NOT NULL,
         contract_sha256 TEXT NOT NULL,
         annotations TEXT NOT NULL DEFAULT '',
-        assumptions TEXT NOT NULL DEFAULT '',
+        assumption_notes TEXT NOT NULL DEFAULT '',
         annotations_source_sha256 TEXT,
         test_cases_json TEXT NOT NULL DEFAULT '[]',
         test_report_json TEXT,

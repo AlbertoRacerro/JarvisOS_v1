@@ -7,8 +7,13 @@ from math import isfinite
 from typing import Any
 
 from app.modules.process_kernel.errors import ProcessKernelError
-from app.modules.process_kernel.units import normalize_magnitude, resolve_unit
-from app.modules.runner.input_contracts import parse_stored_input_contract
+from app.modules.process_kernel.units import (
+    normalize_magnitude,
+    parse_unit_token,
+    resolve_unit,
+    unit_registry,
+)
+from app.modules.runner.input_contracts import normalize_studio_magnitude, parse_stored_input_contract
 from app.modules.runner.safety import RunnerSafetyError
 
 LINKED_PARAMETER_UNUSABLE_CODE = "runner_linked_parameter_unusable"
@@ -110,6 +115,8 @@ def require_linked_parameters_usable(
     connection: sqlite3.Connection,
     workspace_id: str,
     normalized_input_payload: str | dict[str, Any],
+    *,
+    studio_pint: bool = False,
 ) -> None:
     """Fail closed when a canonical linked source no longer matches its snapshot.
 
@@ -147,15 +154,24 @@ def require_linked_parameters_usable(
             _raise_linked_parameter_unusable()
 
         try:
-            target = resolve_unit(expected_unit)
-            normalized_current_value = normalize_magnitude(
+            try:
+                target = resolve_unit(expected_unit)
+                physical_dimension = target.physical_dimension
+                semantic_basis = target.semantic_basis
+            except ProcessKernelError:
+                if not studio_pint:
+                    raise
+                physical_dimension = str(unit_registry().Unit(parse_unit_token(str(expected_unit))).dimensionality)
+                semantic_basis = None
+            normalizer = normalize_studio_magnitude if studio_pint else normalize_magnitude
+            normalized_current_value = normalizer(
                 current_value,
                 source_unit=current_unit,
                 target_unit=expected_unit,
-                physical_dimension=target.physical_dimension,
-                semantic_basis=target.semantic_basis,
+                physical_dimension=physical_dimension,
+                semantic_basis=semantic_basis,
             )
-        except ProcessKernelError:
+        except (ProcessKernelError, ValueError, TypeError):
             _raise_linked_parameter_unusable()
         if normalized_current_value != expected_value:
             _raise_linked_parameter_unusable()

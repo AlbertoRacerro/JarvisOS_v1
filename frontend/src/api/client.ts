@@ -669,6 +669,7 @@ export type ModelImplementation = {
   version_label: string;
   implementation_artifact_id: string;
   status: string;
+  implementation_kind?: string | null;
   script_sha256: string;
   script_path: string;
   created_at: string;

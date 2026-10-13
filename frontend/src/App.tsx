@@ -33,6 +33,7 @@ import EngineeringData from "./pages/EngineeringData";
 import LiteratureKnowledge from "./pages/LiteratureKnowledge";
 import ModelDossier from "./pages/ModelDossier";
 import RunsWorkbench from "./pages/RunsWorkbench";
+import Studio from "./pages/Studio";
 import SystemStatus from "./pages/SystemStatus";
 import { PRIMARY_STAGES, type ShellRegion, type ShellRegionContributions } from "./stages/registry";
 
@@ -106,6 +107,15 @@ function App() {
     ? `${requestedRecordKind}:${requestedRecordId}`
     : null;
   const requestedModelVersionId = boundedSearchParam(routeParams, "modelVersionId");
+  const studioSelectionApplied = useRef<string | null>(null);
+  useEffect(() => {
+    if (route.id !== "design-process") { studioSelectionApplied.current = null; return; }
+    const key = `${workspaceId ?? ""}:${requestedModelVersionId ?? ""}`;
+    if (route.id === "design-process" && requestedModelVersionId && studioSelectionApplied.current !== key && engineeringProperties.implementations.some((item) => item.id === requestedModelVersionId)) {
+      studioSelectionApplied.current = key;
+      engineeringProperties.setSelectedId(requestedModelVersionId);
+    }
+  }, [route.id, requestedModelVersionId, workspaceId, engineeringProperties.implementations, engineeringProperties.setSelectedId]);
   const requestedLiteratureSourceId = boundedSearchParam(routeParams, "sourceId");
   const requestedLiteratureEntryId = boundedSearchParam(routeParams, "entryId");
   const knowledgeStableRef = route.id === "memory-project-basis"
@@ -165,6 +175,9 @@ function App() {
     content = <Stage workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} selection={selection} onSelectionChange={setSelection} onShellRegionsChange={setShellRegions} requestShellRegionOpen={requestShellRegionOpen} navigate={navigate} />;
   } else {
     switch (route.id) {
+      case "design-studio":
+        content = <Studio workspaceId={workspaceId} navigate={navigate} />;
+        break;
       case "memory-project-basis":
         content = <><FinalWorkspaceHeader group="memory" active="project-basis" navigate={navigate} /><FinalOperatorReadSurface kind="project-basis" workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} requestedRecordRef={requestedRecordRef} onRecordSelect={selectKnowledge} jarvis={jarvisSidecar} projectSearch={<ProjectSearchPanel workspaceId={workspaceId} navigate={navigate} />} /></>;
         break;

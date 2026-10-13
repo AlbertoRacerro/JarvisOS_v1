@@ -1,6 +1,7 @@
 """Studio authoring evidence over the real spec-187 runtime."""
 
 import hashlib
+import os
 from pathlib import Path
 
 import pytest
@@ -10,16 +11,18 @@ from app.core.bootstrap import initialize_storage
 from app.core.config import get_settings
 from app.core.database import open_sqlite_connection
 from app.main import create_app
-from app.modules.studio.documentation import derive_documentation
+from app.modules.studio.derive import derive_documentation
 from app.modules.studio.service import scaffold
 from app.modules.studio_runtime.runtime import RunRequest, run, status
 
 
 @pytest.fixture
 def client(monkeypatch):
+    if os.getenv("JARVISOS_STUDIO_CI_SANDBOX_UNAVAILABLE") == "1":
+        pytest.skip("CI runner does not permit bubblewrap user namespaces; WSL2 qualification is required")
     monkeypatch.setenv("JARVISOS_STUDIO_USER_CODE_ENABLED", "1")
     get_settings.cache_clear()
-    assert status()["available"], "Real 187 sandbox required for this authoring test"
+    assert status()["available"], "qualification host must run bubblewrap"
     initialize_storage(seed_default=True)
     with TestClient(create_app()) as test_client:
         yield test_client
@@ -63,7 +66,9 @@ def test_test_publish_revise_and_immutable_artifact(client):
                                      '    loss = flow * 10\n    return {"loss": loss}')
     changed = client.patch(path, json={"source": source, "annotations": "Correlation assumption"})
     assert changed.status_code == 200, changed.text
-    assert any(eq["rendered"] and eq["target"] == "loss" for eq in changed.json()["documentation"]["equations"])
+    derived = changed.json()["documentation"]["derived"]
+    assert derived["status"] == "ok" and derived["unrendered_count"] == 0
+    assert [step["kind"] for step in derived["functions"][0]["steps"]] == ["equation", "equation"]
     case = {"inputs": {"flow": 0.2}, "expected_outputs": {"loss": 2.0}, "tolerance": 1e-9}
     report = client.post(path + "/test", json={"cases": [case]})
     assert report.status_code == 200 and report.json()["passed"], report.text
@@ -93,10 +98,14 @@ def test_invalid_unit_documentation_safety_and_categories(client, tmp_path):
     bad = {**CONTRACT, "inputs": [{**CONTRACT["inputs"][0], "unit": "no_such_unit_688"}]}
     assert client.post("/workspaces/bluerev/studio/models", json=bad).status_code == 422
     canary = tmp_path / "canary"
-    source = f"from pathlib import Path\nPath({str(canary)!r}).write_text('executed')\ndef evaluate(x):\n    return {{'y': x}}\n"
-    docs = derive_documentation(source, {"inputs": [], "outputs": []})
+    source = (f"from pathlib import Path\nPath({str(canary)!r}).write_text('executed')\n"
+              "def evaluate(x):\n    for item in x:\n        pass\n    return {'y': x}\n")
+    docs = derive_documentation(source)
     assert not canary.exists()
-    assert any(not equation["rendered"] for equation in docs["equations"])
+    steps = docs["functions"][0]["steps"]
+    assert steps[0]["kind"] == "code" and steps[0]["reason"] and docs["unrendered_count"] == 1
+    quoted = {**CONTRACT, "inputs": [{**CONTRACT["inputs"][0], "unit": 'm"""'}]}
+    assert client.post("/workspaces/bluerev/studio/models", json=quoted).status_code == 422
     categories = client.get("/studio/categories").json()
     assert categories[0]["available"] is True
     assert all(not category["available"] and category["reason"] for category in categories[1:])

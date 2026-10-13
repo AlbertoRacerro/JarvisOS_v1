@@ -73,7 +73,3 @@ def revise_model(workspace_id: str, model_spec_id: str) -> dict:
 def library(workspace_id: str) -> list[dict]:
     return _call(service.library, workspace_id)
 
-
-@router.get("/workspaces/{workspace_id}/studio/runs/{simulation_run_id}/status")
-def run_status(workspace_id: str, simulation_run_id: str) -> dict:
-    return _call(service.run_status, workspace_id, simulation_run_id)
