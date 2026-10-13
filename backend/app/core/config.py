@@ -16,6 +16,7 @@ class Settings:
     ai_provider: str
     cors_origins: list[str]
     coding_repositories: tuple[str, ...]
+    studio_user_code_enabled: bool
 
     @property
     def database_path(self) -> Path:
@@ -49,4 +50,5 @@ def get_settings() -> Settings:
         ai_provider=os.getenv("JARVISOS_AI_PROVIDER", "none"),
         cors_origins=cors_origins,
         coding_repositories=coding_repositories,
+        studio_user_code_enabled=os.getenv("JARVISOS_STUDIO_USER_CODE_ENABLED") == "1",
     )

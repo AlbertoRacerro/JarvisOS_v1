@@ -20,6 +20,22 @@ requires a separate specification with real OS-level isolation, hostile-code
 tests against that boundary, resource and network controls, and explicit
 maintainer acceptance.
 
+## Studio user code, spec 187
+
+`studio_runtime` is a separate, explicitly invoked boundary for operator-authored
+Python. It is off until `JARVISOS_STUDIO_USER_CODE_ENABLED=1`. On Linux/WSL2 it
+requires bubblewrap and a successful namespace probe; otherwise execution is
+unavailable, with no unisolated fallback. Each run gets separate network, PID,
+mount and user namespaces, a read-only Python environment, one temporary writable
+scratch directory, a cleared environment, resource limits and bounded output.
+The temporary directory is removed after each run. The host validates the JSON
+result before returning it. Native Windows is unavailable in this slice.
+
+This is single-operator isolation, not a multi-tenant or internet-facing security
+claim. It does not grant the AI Sidecar execution authority. The existing runner
+continues to execute only exact reviewed bundled implementations; its AST policy
+remains lint and does not become a sandbox.
+
 ## Reopen triggers
 
 Reopen measured runner-isolation work only when at least one condition becomes
