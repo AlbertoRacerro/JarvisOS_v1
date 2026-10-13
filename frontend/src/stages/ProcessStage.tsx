@@ -175,6 +175,7 @@ function ProcessStage(props: PrimaryStageProps) {
           <button type="button" onClick={() => navigate("/design/bluecad")}>
             BLUECAD
           </button>
+          <button type="button" onClick={() => navigate("/design/studio")}>Studio</button>
         </nav>
         <details className="process-advanced"><summary>Advanced · Native DWSIM cases</summary>{tabs}</details>
         <div className="process-environment-toolbar"><button type="button" onClick={() => setEnvironmentOpen(true)}>Environment…</button></div>
@@ -696,6 +697,7 @@ function NativeDwsimCaseEditor({
           <button type="button" onClick={() => navigate("/design/bluecad")}>
             BLUECAD
           </button>
+          <button type="button" onClick={() => navigate("/design/studio")}>Studio</button>
         </nav>
         {modeTabs}
         <div className="dwsim-truth">

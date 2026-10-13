@@ -49,6 +49,7 @@ from app.modules.runner.recovery import (
 )
 from app.modules.runner.routes import router as runner_router
 from app.modules.secrets.routes import router as secrets_router
+from app.modules.studio.routes import router as studio_router
 from app.modules.studio_runtime.routes import router as studio_runtime_router
 from app.modules.workspace_actions.routes import router as workspace_actions_router
 from app.modules.workspaces.routes import router as workspaces_router
@@ -186,6 +187,7 @@ def create_app() -> FastAPI:
     app.include_router(project_search_router)
     app.include_router(runner_router)
     app.include_router(studio_runtime_router)
+    app.include_router(studio_router)
     app.include_router(flowsheet_router)
     app.include_router(engineering_operator_router)
     app.include_router(dwsim_editor_router)

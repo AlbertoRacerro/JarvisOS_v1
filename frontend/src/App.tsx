@@ -33,6 +33,7 @@ import EngineeringData from "./pages/EngineeringData";
 import LiteratureKnowledge from "./pages/LiteratureKnowledge";
 import ModelDossier from "./pages/ModelDossier";
 import RunsWorkbench from "./pages/RunsWorkbench";
+import Studio from "./pages/Studio";
 import SystemStatus from "./pages/SystemStatus";
 import { PRIMARY_STAGES, type ShellRegion, type ShellRegionContributions } from "./stages/registry";
 
@@ -165,6 +166,9 @@ function App() {
     content = <Stage workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} selection={selection} onSelectionChange={setSelection} onShellRegionsChange={setShellRegions} requestShellRegionOpen={requestShellRegionOpen} navigate={navigate} />;
   } else {
     switch (route.id) {
+      case "design-studio":
+        content = <Studio workspaceId={workspaceId} navigate={navigate} engineeringProperties={engineeringProperties} />;
+        break;
       case "memory-project-basis":
         content = <><FinalWorkspaceHeader group="memory" active="project-basis" navigate={navigate} /><FinalOperatorReadSurface kind="project-basis" workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} requestedRecordRef={requestedRecordRef} onRecordSelect={selectKnowledge} jarvis={jarvisSidecar} projectSearch={<ProjectSearchPanel workspaceId={workspaceId} navigate={navigate} />} /></>;
         break;
@@ -230,7 +234,9 @@ function App() {
   const effectiveShellRegions: ShellRegionContributions = {
     ...shellRegions,
     sidecar: route.primaryNav === "settings" || route.primaryNav === "coding" || IN_PAGE_JARVIS_ROUTES.has(route.id) || workspaceLoadState !== "ready" || !workspaceId ? undefined : jarvisSidecar,
-    ...(route.id === "runs" || route.id === "engineering-data" || route.id === "design-process" ? { dock: <AnalyticsDockContent workspaceId={workspaceId} /> } : {})
+    ...(route.id === "runs" || route.id === "engineering-data" || route.id === "design-process" ? { dock: <AnalyticsDockContent workspaceId={workspaceId} /> } : {}),
+    // Studio is not a canonical Jarvis context route (spec 188 non-goal: no Sidecar code proposals).
+    ...(route.id === "design-studio" ? { sidecar: undefined } : {})
   };
 
   return <Layout route={route} navigate={navigate} selection={selection} propertiesContent={propertiesContent} shellRegions={effectiveShellRegions} shellRegionRequest={shellRegionRequest}><PageErrorBoundary key={resolved.canonicalPath}>{content}</PageErrorBoundary></Layout>;

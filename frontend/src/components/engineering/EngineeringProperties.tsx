@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import type { Navigate } from "../../app/AppLink";
 import type { StageSelection } from "../../app/selection";
@@ -134,6 +134,7 @@ export type EngineeringPropertiesController = Readonly<{
   discardPreviousObjectChanges(): void;
   startRun(): void;
   retryRunStart(): void;
+  reload(): Promise<void>;
 }>;
 
 const EMPTY_BINDING: WorkingBinding = { value: "", parameterId: "" };
@@ -168,7 +169,7 @@ function finiteBinding(binding: WorkingBinding | undefined): boolean {
   return Boolean(value) && Number.isFinite(Number(value));
 }
 
-function buildPayload(variables: ModelInputVariable[], bindings: BindingMap): {
+function buildPayload(variables: ModelInputVariable[], bindings: BindingMap, parameters: Parameter[] = [], studio = false): {
   payload: Record<string, Record<string, unknown>>;
   invalidNames: string[];
 } {
@@ -182,7 +183,8 @@ function buildPayload(variables: ModelInputVariable[], bindings: BindingMap): {
       invalidNames.push(variable.name);
       return [];
     }
-    const item: Record<string, unknown> = { value: number, unit: variable.unit };
+    const linked = studio && binding.parameterId ? parameters.find((parameter) => parameter.id === binding.parameterId) : null;
+    const item: Record<string, unknown> = { value: number, unit: linked?.unit ?? variable.unit };
     if (binding.parameterId) item.source_parameter_id = binding.parameterId;
     return [[variable.name, item] as const];
   });
@@ -420,14 +422,14 @@ export function useEngineeringProperties(
     setPreviousRunBaseline(null);
   }, [workspaceId]);
 
-  useEffect(() => {
+  const reload = useCallback((): Promise<void> => {
+    const generation = ++loadGeneration.current;
     if (!workspaceId) {
       setImplementations([]);
       setParameters([]);
-      return;
+      return Promise.resolve();
     }
-    const generation = ++loadGeneration.current;
-    Promise.all([listModelImplementations(workspaceId), listParameters(workspaceId)])
+    return Promise.all([listModelImplementations(workspaceId), listParameters(workspaceId)])
       .then(([nextImplementations, nextParameters]) => {
         if (generation !== loadGeneration.current) return;
         setImplementations(nextImplementations);
@@ -439,6 +441,8 @@ export function useEngineeringProperties(
         setPreviewMessage(error.message);
       });
   }, [workspaceId]);
+
+  useEffect(() => { void reload(); }, [reload]);
 
   useEffect(() => {
     if (!eligible.some((item) => item.id === selectedId)) setSelectedIdState(eligible[0]?.id ?? "");
@@ -608,7 +612,7 @@ export function useEngineeringProperties(
       setPreviewMessage("The selected engineering object is still resolving its authoritative semantic source.");
       return;
     }
-    const built = buildPayload(variables, working);
+    const built = buildPayload(variables, working, parameters, selected.implementation_kind === "studio_calc_v1");
     if (built.invalidNames.length) {
       previewGeneration.current += 1;
       setPreview(null);
@@ -790,7 +794,7 @@ export function useEngineeringProperties(
   };
 
   const selectParameter = (variable: ModelInputVariable, parameterId: string) => {
-    const parameter = parameters.find((item) => item.id === parameterId && item.unit === variable.unit);
+    const parameter = parameters.find((item) => item.id === parameterId && (selected?.implementation_kind === "studio_calc_v1" || item.unit === variable.unit));
     const nextBinding = parameter
       ? { parameterId: parameter.id, value: parameter.value ?? "" }
       : { parameterId: "", value: working[variable.name]?.value ?? "" };
@@ -960,7 +964,8 @@ export function useEngineeringProperties(
     revertAll,
     discardPreviousObjectChanges,
     startRun,
-    retryRunStart
+    retryRunStart,
+    reload
   };
 }
 
@@ -1053,7 +1058,7 @@ export function EngineeringPropertiesPanel({
     const linkedParameter = binding.parameterId ? controller.parameters.find((item) => item.id === binding.parameterId) : undefined;
     const compatible = controller.parameters.filter(
       (parameter) =>
-        parameter.unit === variable.unit &&
+        (selected?.implementation_kind === "studio_calc_v1" || parameter.unit === variable.unit) &&
         parameter.value != null &&
         Number.isFinite(Number(parameter.value)) &&
         (parameter.status !== "superseded" || parameter.id === binding.parameterId)

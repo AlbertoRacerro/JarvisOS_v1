@@ -15,7 +15,7 @@ export type SimulationRunSummary = {
   notes: string | null;
 };
 
-export type SimulationRunDetail = SimulationRunSummary;
+export type SimulationRunDetail = SimulationRunSummary & { stale?: boolean; superseded?: boolean };
 
 export type RunLog = {
   id: string;

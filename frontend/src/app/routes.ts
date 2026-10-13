@@ -6,6 +6,7 @@ export type RouteId =
   | "design-process"
   | "design-studies"
   | "design-bluecad"
+  | "design-studio"
   | "memory-project-basis"
   | "memory-models"
   | "memory-literature"
@@ -43,6 +44,7 @@ export const PRODUCTION_ROUTES: readonly AppRouteDefinition[] = [
   { id: "design-process", path: "/design/process", title: "Process", primaryNav: "design", stageKind: "process" },
   { id: "design-studies", path: "/design/studies", title: "Studies", primaryNav: "design", stageKind: "studies" },
   { id: "design-bluecad", path: "/design/bluecad", title: "BLUECAD", primaryNav: "design", stageKind: "model" },
+  { id: "design-studio", path: "/design/studio", title: "Studio", primaryNav: "design" },
   { id: "memory-project-basis", path: "/memory/project-basis", title: "Project Basis", primaryNav: "memory" },
   { id: "memory-models", path: "/memory/models", title: "Models", primaryNav: "memory" },
   { id: "memory-literature", path: "/memory/literature", title: "Literature", primaryNav: "memory" },
@@ -74,7 +76,8 @@ export const PRIMARY_NAV_ITEMS = [
 export const PEER_NAV_ITEMS: Readonly<Record<PrimaryNavId, readonly PeerNavItem[]>> = {
   design: [
     { label: "Process", href: "/design/process" },
-    { label: "BLUECAD", href: "/design/bluecad" }
+    { label: "BLUECAD", href: "/design/bluecad" },
+    { label: "Studio", href: "/design/studio" }
   ],
   memory: [
     { label: "Project Basis", href: "/memory/project-basis" },

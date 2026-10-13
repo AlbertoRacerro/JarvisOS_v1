@@ -181,6 +181,7 @@ function RunsWorkbench({ workspaceId, onWorkspaceChange, engineeringProperties }
     });
   };
 
+
   const loadLogs = (targetWorkspace: string, runId: string) => {
     const identity = `${targetWorkspace}:${runId}`;
     const generation = ++logsGeneration.current;
@@ -284,7 +285,7 @@ function RunsWorkbench({ workspaceId, onWorkspaceChange, engineeringProperties }
       <header className="runs-toolbar">
         <div><p className="eyebrow">Execution evidence</p><h1 id="runs-title">Runs</h1></div>
         <label>Workspace<select value={workspaceId ?? ""} onChange={(event) => changeWorkspace(event.target.value || null)}>{workspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}</select></label>
-        <button type="button" disabled={!workspaceId || runsState === "loading"} onClick={() => workspaceId && loadRuns(workspaceId)}>Refresh</button>
+        <button type="button" disabled={!workspaceId || runsState === "loading"} onClick={() => { if (workspaceId) { loadRuns(workspaceId); if (selectedId) loadDetail(workspaceId, selectedId); } }}>Refresh</button>
       </header>
 
       <div className="runs-grid">
@@ -305,6 +306,8 @@ function RunsWorkbench({ workspaceId, onWorkspaceChange, engineeringProperties }
           {detailState === "error" && <div className="runs-inline-error"><p>Run detail failed: {detailError}</p><button onClick={() => workspaceId && selectedId && loadDetail(workspaceId, selectedId)}>Retry</button></div>}
           {detail && <>
             <header className="run-detail__header"><div><p className="eyebrow">Persisted run</p><h2>{detail.run_label || "Unnamed run"}</h2></div><strong className="run-status">{detail.status}</strong></header>
+            {detail.stale ? <p className="runs-note" role="status">Stale: a linked Parameter changed. Rebind the current Parameter and run this version again.</p> : null}
+            {detail.superseded ? <p className="runs-note" role="status">Superseded: a newer published Studio version exists. This run remains bound to its original version.</p> : null}
             <dl className="run-facts"><div><dt>Created</dt><dd>{fmt(detail.created_at)}</dd></div><div><dt>Started</dt><dd>{fmt(detail.started_at)}</dd></div><div><dt>Completed</dt><dd>{fmt(detail.completed_at)}</dd></div></dl>
             <section className="run-evidence" aria-label="Working configuration action">
               <header><h3>Working configuration</h3></header>

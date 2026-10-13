@@ -1,3 +1,4 @@
+import hashlib
 import json
 import mimetypes
 import shutil
@@ -71,11 +72,13 @@ from app.modules.runner.topology_m1 import (
     runner_owned_artifacts,
     validate_manifest,
 )
+from app.modules.studio_runtime import runtime as studio_runtime
 
 RUNNER_TYPE = "python_local"
 IMPLEMENTATION_KIND = "batch_growth_v0"
 BLUECAD_L2_IMPLEMENTATION_KIND = "bluecad_l2_v0"
 CALC_V0_IMPLEMENTATION_KIND = "calc_v0"
+STUDIO_CALC_IMPLEMENTATION_KIND = "studio_calc_v1"
 BUNDLED_BLUEREV_PROCESS0_LABEL = "bluerev-geometry-hydraulics-v0-bundled"
 BUNDLED_BLUEREV_PROCESS0_TITLE = "BlueRev geometry and hydraulics bundled V0"
 BUNDLED_BLUEREV_PROCESS1_LABEL = "bluerev-biomass-nutrients-harvest-v0-bundled"
@@ -556,6 +559,7 @@ def preview_model_bindings(
             contract_sha256=model_version["input_contract_sha256"],
             bindings=payload.bindings,
             load_parameter=load_parameter,
+            studio_pint=model_version["implementation_kind"] == STUDIO_CALC_IMPLEMENTATION_KIND,
         )
 
 
@@ -716,17 +720,18 @@ def run_runner_job(runner_job_id: str) -> RunnerJobRunResponse:
             str(job["script_sha256"]),
         )
     try:
-        preflight_script_policy(
-            script_path,
-            ast_policy=(
-                "calc_v0_topology_m1"
-                if topology_profile
-                else CALC_V0_IMPLEMENTATION_KIND
-                if implementation_kind == CALC_V0_IMPLEMENTATION_KIND
-                else None
-            ),
-            ast_import_allowlist=implementation_kind == BLUECAD_L2_IMPLEMENTATION_KIND,
-        )
+        if implementation_kind != STUDIO_CALC_IMPLEMENTATION_KIND:
+            preflight_script_policy(
+                script_path,
+                ast_policy=(
+                    "calc_v0_topology_m1"
+                    if topology_profile
+                    else CALC_V0_IMPLEMENTATION_KIND
+                    if implementation_kind == CALC_V0_IMPLEMENTATION_KIND
+                    else None
+                ),
+                ast_import_allowlist=implementation_kind == BLUECAD_L2_IMPLEMENTATION_KIND,
+            )
     except RunnerSafetyError as exc:
         if (
             implementation_kind in {BLUECAD_L2_IMPLEMENTATION_KIND, CALC_V0_IMPLEMENTATION_KIND}
@@ -777,110 +782,118 @@ def run_runner_job(runner_job_id: str) -> RunnerJobRunResponse:
     output_dir.mkdir(parents=True, exist_ok=True)
     input_file.write_text(_pretty_json(simulation_run.input_payload), encoding="utf-8")
 
-    result = execute_python_script(
-        script_path=script_path,
-        input_file=input_file,
-        output_dir=output_dir,
-        working_dir=working_dir,
-        timeout_seconds=int(job["timeout_seconds"]),
-        max_stdout_bytes=int(job["max_stdout_bytes"]),
-        max_stderr_bytes=int(job["max_stderr_bytes"]),
-    )
-    _capture_logs(workspace_id, simulation_run_id, result)
-    _store_execution_metadata(runner_job_id, result)
+    if implementation_kind == STUDIO_CALC_IMPLEMENTATION_KIND:
+        studio = _run_studio_calc_job(
+            runner_job_id, workspace_id, simulation_run_id, job, simulation_run, script_path, output_dir
+        )
+        if isinstance(studio, RunnerJobRunResponse):
+            return studio
+        output, output_payload, artifact_ids = studio
+    else:
+        result = execute_python_script(
+            script_path=script_path,
+            input_file=input_file,
+            output_dir=output_dir,
+            working_dir=working_dir,
+            timeout_seconds=int(job["timeout_seconds"]),
+            max_stdout_bytes=int(job["max_stdout_bytes"]),
+            max_stderr_bytes=int(job["max_stderr_bytes"]),
+        )
+        _capture_logs(workspace_id, simulation_run_id, result)
+        _store_execution_metadata(runner_job_id, result)
 
-    if result.timed_out:
-        return _finish_failed(
-            runner_job_id,
-            workspace_id,
-            simulation_run_id,
-            status="timed_out",
-            code="runner_timeout",
-            message="The runner timed out.",
-        )
-    if result.return_code != 0:
-        return _finish_failed(
-            runner_job_id,
-            workspace_id,
-            simulation_run_id,
-            status="failed",
-            code="runner_process_failed",
-            message="The runner process exited with a nonzero code.",
-        )
-
-    try:
-        output = _load_result_json(output_dir, int(job["max_output_json_bytes"]))
-        declared_artifacts = output.get("artifacts") or []
-        if not isinstance(declared_artifacts, list):
-            raise RunnerSafetyError("runner_result_invalid_json", "Artifacts declaration must be a list.")
-        if implementation_kind == BLUECAD_L2_IMPLEMENTATION_KIND:
-            _validate_bluecad_l2_output(output_dir, declared_artifacts)
-        calc_outputs: dict[str, dict[str, object]] | None = None
-        if implementation_kind == CALC_V0_IMPLEMENTATION_KIND:
-            calc_outputs = _validate_calc_v0_output(output)
-            output_payload = _canonical_result_json(output)
-            if topology_profile:
-                if "artifacts" in output:
-                    raise RunnerSafetyError(
-                        "runner_topology_artifact_declaration_forbidden",
-                        "Topology M1 artifacts are runner-owned and cannot be declared by the script.",
-                    )
-                if simulation_run.input_payload is None:
-                    raise RunnerSafetyError(
-                        "runner_input_invalid",
-                        "Simulation run is missing input payload.",
-                    )
-                validate_manifest(
-                    output_dir,
-                    simulation_run.input_payload,
-                    output,
-                    max_bytes=min(
-                        int(job["max_output_json_bytes"]),
-                        int(job["max_artifact_bytes"]),
-                    ),
-                )
-                declared_artifacts = runner_owned_artifacts()
-            else:
-                declared_artifacts = [
-                    {
-                        "path": "result.json",
-                        "role": "calc_result_json",
-                        "artifact_type": "json",
-                        "mime_type": "application/json",
-                    }
-                ]
-        artifact_ids = _register_declared_artifacts(
-            workspace_id,
-            simulation_run_id,
-            output_dir,
-            declared_artifacts,
-            int(job["max_artifact_bytes"]),
-        )
-    except RunnerSafetyError as exc:
-        return _finish_failed(
-            runner_job_id,
-            workspace_id,
-            simulation_run_id,
-            status="failed",
-            code=exc.code,
-            message=exc.message,
-        )
-
-    if implementation_kind == CALC_V0_IMPLEMENTATION_KIND:
-        try:
-            _create_calc_parameter_records(workspace_id, runner_job_id, calc_outputs or {})
-        except Exception as exc:
+        if result.timed_out:
+            return _finish_failed(
+                runner_job_id,
+                workspace_id,
+                simulation_run_id,
+                status="timed_out",
+                code="runner_timeout",
+                message="The runner timed out.",
+            )
+        if result.return_code != 0:
             return _finish_failed(
                 runner_job_id,
                 workspace_id,
                 simulation_run_id,
                 status="failed",
-                code="runner_memory_facade_error",
-                message=f"Memory facade failed to create calc parameter proposals: {exc}",
+                code="runner_process_failed",
+                message="The runner process exited with a nonzero code.",
             )
 
+        try:
+            output = _load_result_json(output_dir, int(job["max_output_json_bytes"]))
+            declared_artifacts = output.get("artifacts") or []
+            if not isinstance(declared_artifacts, list):
+                raise RunnerSafetyError("runner_result_invalid_json", "Artifacts declaration must be a list.")
+            if implementation_kind == BLUECAD_L2_IMPLEMENTATION_KIND:
+                _validate_bluecad_l2_output(output_dir, declared_artifacts)
+            calc_outputs: dict[str, dict[str, object]] | None = None
+            if implementation_kind == CALC_V0_IMPLEMENTATION_KIND:
+                calc_outputs = _validate_calc_v0_output(output)
+                output_payload = _canonical_result_json(output)
+                if topology_profile:
+                    if "artifacts" in output:
+                        raise RunnerSafetyError(
+                            "runner_topology_artifact_declaration_forbidden",
+                            "Topology M1 artifacts are runner-owned and cannot be declared by the script.",
+                        )
+                    if simulation_run.input_payload is None:
+                        raise RunnerSafetyError(
+                            "runner_input_invalid",
+                            "Simulation run is missing input payload.",
+                        )
+                    validate_manifest(
+                        output_dir,
+                        simulation_run.input_payload,
+                        output,
+                        max_bytes=min(
+                            int(job["max_output_json_bytes"]),
+                            int(job["max_artifact_bytes"]),
+                        ),
+                    )
+                    declared_artifacts = runner_owned_artifacts()
+                else:
+                    declared_artifacts = [
+                        {
+                            "path": "result.json",
+                            "role": "calc_result_json",
+                            "artifact_type": "json",
+                            "mime_type": "application/json",
+                        }
+                    ]
+            artifact_ids = _register_declared_artifacts(
+                workspace_id,
+                simulation_run_id,
+                output_dir,
+                declared_artifacts,
+                int(job["max_artifact_bytes"]),
+            )
+        except RunnerSafetyError as exc:
+            return _finish_failed(
+                runner_job_id,
+                workspace_id,
+                simulation_run_id,
+                status="failed",
+                code=exc.code,
+                message=exc.message,
+            )
+
+        if implementation_kind == CALC_V0_IMPLEMENTATION_KIND:
+            try:
+                _create_calc_parameter_records(workspace_id, runner_job_id, calc_outputs or {})
+            except Exception as exc:
+                return _finish_failed(
+                    runner_job_id,
+                    workspace_id,
+                    simulation_run_id,
+                    status="failed",
+                    code="runner_memory_facade_error",
+                    message=f"Memory facade failed to create calc parameter proposals: {exc}",
+                )
+
     completed_at = utc_now()
-    if implementation_kind != CALC_V0_IMPLEMENTATION_KIND:
+    if implementation_kind not in {CALC_V0_IMPLEMENTATION_KIND, STUDIO_CALC_IMPLEMENTATION_KIND}:
         output_payload = canonical_json(output)
     with open_sqlite_connection() as connection:
         connection.execute(
@@ -918,6 +931,95 @@ def run_runner_job(runner_job_id: str) -> RunnerJobRunResponse:
     )
 
 
+def _run_studio_calc_job(
+    runner_job_id: str,
+    workspace_id: str,
+    simulation_run_id: str,
+    job,
+    simulation_run: SimulationRunDetail,
+    script_path: Path,
+    output_dir: Path,
+) -> RunnerJobRunResponse | tuple[dict[str, object], str, list[str]]:
+    """Execute published user code only inside the 187 isolated runtime.
+
+    Returns the terminal failure response, or the output for the caller to record as succeeded.
+    """
+    try:
+        source_bytes = script_path.read_bytes()
+        if hashlib.sha256(source_bytes).hexdigest() != job["script_sha256"]:
+            raise RunnerSafetyError("runner_script_hash_mismatch", "Studio source hash changed.")
+        source = source_bytes.decode("utf-8")
+        with open_sqlite_connection() as connection:
+            published = connection.execute(
+                """SELECT contract_json, source_sha256
+                   FROM studio_published_versions WHERE version_id = ?""",
+                (simulation_run.model_version_id,),
+            ).fetchone()
+        if published is None or published["source_sha256"] != job["script_sha256"]:
+            raise RunnerSafetyError("runner_studio_publication_mismatch", "Studio publication evidence changed.")
+        contract = json.loads(published["contract_json"])
+        units = {item["name"]: item["unit"] for item in contract["outputs"]}
+        inputs = {name: item["value"] for name, item in json.loads(simulation_run.input_payload or "{}").items()}
+        record = studio_runtime.run(studio_runtime.RunRequest(
+            source=source,
+            inputs=inputs,
+            limits=studio_runtime.Limits(wall_seconds=min(int(job["timeout_seconds"]), 15)),
+        ))
+        if record.source_sha256 != job["script_sha256"]:
+            raise RunnerSafetyError("runner_script_hash_mismatch", "Studio runtime source hash differs.")
+        _capture_logs(workspace_id, simulation_run_id, LocalPythonResult(
+            return_code=0 if record.classification == "ok" else 1,
+            timed_out=record.classification == "timeout",
+            stdout=record.stdout,
+            stderr=record.stderr,
+            stdout_truncated=record.logs_truncated,
+            stderr_truncated=record.logs_truncated,
+            command_metadata={},
+            environment_metadata={},
+        ))
+        with open_sqlite_connection() as connection:
+            connection.execute(
+                "UPDATE runner_jobs SET command_json = ?, environment_json = ?, updated_at = ? WHERE id = ?",
+                (canonical_json({"mechanism": record.mechanism, "source_sha256": record.source_sha256}),
+                 canonical_json({"isolation": record.mechanism, "limits": record.limits.model_dump()}),
+                 utc_now(), runner_job_id),
+            )
+            connection.commit()
+        if record.classification != "ok":
+            return _finish_failed(
+                runner_job_id, workspace_id, simulation_run_id,
+                status="timed_out" if record.classification == "timeout" else "failed",
+                code=f"studio_runtime_{record.classification}",
+                message=f"Studio runtime returned {record.classification}.",
+            )
+        if not isinstance(record.result, dict) or set(record.result) != set(units):
+            raise RunnerSafetyError("runner_result_invalid_json", "Studio result does not match declared outputs.")
+        output: dict[str, object] = {"outputs": {
+            name: {"value": value, "unit": units[name]}
+            for name, value in record.result.items()
+        }}
+        calc_outputs = _validate_calc_v0_output(output)
+        output_payload = _canonical_result_json(output)
+        result_path = output_dir / "result.json"
+        result_path.write_text(output_payload, encoding="utf-8")
+        artifact_ids = _register_declared_artifacts(
+            workspace_id, simulation_run_id, output_dir,
+            [{"path": "result.json", "role": "calc_result_json", "artifact_type": "json",
+              "mime_type": "application/json"}],
+            int(job["max_artifact_bytes"]),
+        )
+        _create_calc_parameter_records(workspace_id, runner_job_id, calc_outputs)
+    except Exception as exc:  # noqa: BLE001 - claimed job must receive a terminal result
+        code = exc.code if isinstance(exc, RunnerSafetyError) else "runner_studio_execution_error"
+        message = exc.message if isinstance(exc, RunnerSafetyError) else "Studio run could not be completed."
+        return _finish_failed(
+            runner_job_id, workspace_id, simulation_run_id,
+            status="failed", code=code, message=message,
+        )
+
+    return output, output_payload, artifact_ids
+
+
 def get_runner_job(runner_job_id: str) -> RunnerJobRead:
     with open_sqlite_connection() as connection:
         row = _load_runner_job(connection, runner_job_id)
@@ -932,9 +1034,31 @@ def get_simulation_run_detail(workspace_id: str, simulation_run_id: str) -> Simu
             "SELECT * FROM simulation_runs WHERE id = ? AND workspace_id = ?",
             (simulation_run_id, workspace_id),
         ).fetchone()
+        if row is not None:
+            version = connection.execute(
+                "SELECT implementation_kind FROM model_versions WHERE id = ?",
+                (row["model_version_id"],),
+            ).fetchone()
+            stale = False
+            superseded = False
+            if version is not None and version["implementation_kind"] == STUDIO_CALC_IMPLEMENTATION_KIND:
+                try:
+                    require_linked_parameters_usable(
+                        connection, workspace_id, row["input_payload"] or "{}", studio_pint=True
+                    )
+                except RunnerSafetyError as exc:
+                    if exc.code != LINKED_PARAMETER_UNUSABLE_CODE:
+                        raise
+                    stale = True
+                superseded = connection.execute(
+                    """SELECT 1 FROM studio_published_versions newer
+                       JOIN studio_published_versions ran ON ran.model_spec_id = newer.model_spec_id
+                       WHERE ran.version_id = ? AND newer.rowid > ran.rowid LIMIT 1""",
+                    (row["model_version_id"],),
+                ).fetchone() is not None
     if row is None:
         raise RunnerSafetyError("runner_simulation_run_not_found", "Simulation run not found.")
-    return SimulationRunDetail(**dict(row))
+    return SimulationRunDetail(**dict(row), stale=stale, superseded=superseded)
 
 
 def list_run_logs(workspace_id: str, simulation_run_id: str) -> list[RunLogRead]:
@@ -1022,7 +1146,7 @@ def _claim_and_mark_running(runner_job_id: str, workspace_id: str, simulation_ru
 
         model_version = connection.execute(
             """
-            SELECT input_contract_payload, input_contract_sha256
+            SELECT input_contract_payload, input_contract_sha256, implementation_kind
             FROM model_versions
             WHERE id = ? AND workspace_id = ?
             """,
@@ -1037,7 +1161,10 @@ def _claim_and_mark_running(runner_job_id: str, workspace_id: str, simulation_ru
             model_version["input_contract_sha256"],
         ):
             try:
-                require_linked_parameters_usable(connection, workspace_id, run["input_payload"])
+                require_linked_parameters_usable(
+                    connection, workspace_id, run["input_payload"],
+                    studio_pint=model_version["implementation_kind"] == STUDIO_CALC_IMPLEMENTATION_KIND,
+                )
             except RunnerSafetyError as exc:
                 if exc.code != LINKED_PARAMETER_UNUSABLE_CODE:
                     connection.rollback()
@@ -1444,6 +1571,7 @@ def _model_implementation_from_row(row) -> ModelImplementationRead:
         version_label=data["version_label"],
         implementation_artifact_id=data["implementation_artifact_id"],
         status=data["status"],
+        implementation_kind=data["implementation_kind"],
         script_sha256=data["script_sha256"],
         script_path=data["script_path"],
         created_at=data["created_at"],

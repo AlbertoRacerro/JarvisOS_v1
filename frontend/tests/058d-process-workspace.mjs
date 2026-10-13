@@ -24,7 +24,7 @@ includesAll(routes, [
 ], "100f route migration contract");
 const designPeerBlock = routes.match(/design: \[([\s\S]*?)\n  \],\n  memory:/)?.[1] ?? "";
 const designLabels = [...designPeerBlock.matchAll(/label: "([^"]+)"/g)].map((match) => match[1]);
-assert(JSON.stringify(designLabels) === JSON.stringify(["Process", "BLUECAD"]), `100f Design peers drifted: ${designLabels.join(" -> ")}`);
+assert(JSON.stringify(designLabels) === JSON.stringify(["Process", "BLUECAD", "Studio"]), `100f Design peers drifted: ${designLabels.join(" -> ")}`);
 
 // Historical registry ownership remains distinct so retained compatibility code does not collapse Process/Lineage semantics.
 includesAll(registry, [
