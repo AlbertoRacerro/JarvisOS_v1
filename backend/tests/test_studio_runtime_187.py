@@ -3,12 +3,14 @@
 import os
 import socket
 import subprocess
+import tempfile
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
 from app.core.config import get_settings
+from app.core.paths import build_paths
 from app.modules.studio_runtime import runtime
 
 
@@ -46,11 +48,18 @@ def test_network_isolated_for_public_and_host_loopback():
 
 
 def test_host_paths_and_environment_hidden(tmp_path, monkeypatch):
-    canaries = [tmp_path / "home-secret", Path(__file__), get_settings().data_root / "studio-canary"]
-    canaries[0].write_text("secret")
-    monkeypatch.setenv("STUDIO_HOST_SECRET", "never-expose")
-    run = execute(" import os\n from pathlib import Path\n return {'visible': [Path(p).exists() for p in inputs['paths']], 'secret': os.getenv('STUDIO_HOST_SECRET'), 'write': Path(inputs['paths'][0]).parent.exists()}", inputs={"paths": list(map(str, canaries))})
-    assert run.classification == "ok" and run.result == {"visible": [False] * 3, "secret": None, "write": False}
+    repository = Path(__file__).resolve().parents[2]
+    monkeypatch.setenv("JARVISOS_DATA_ROOT", str(tmp_path / "data-root"))
+    get_settings.cache_clear()
+    data_root = build_paths().data_root
+    data_root.mkdir()
+    with tempfile.TemporaryDirectory(dir=Path.home()) as home_dir, tempfile.TemporaryDirectory(dir=repository) as repo_dir:
+        canaries = [Path(home_dir) / "canary", Path(repo_dir) / "canary", data_root / "canary"]
+        for canary in canaries:
+            canary.write_text("secret")
+        monkeypatch.setenv("STUDIO_HOST_SECRET", "never-expose")
+        run = execute(" import os\n from pathlib import Path\n return {'visible': [Path(p).exists() for p in inputs['paths']], 'secret': os.getenv('STUDIO_HOST_SECRET'), 'write': Path(inputs['paths'][0]).parent.exists()}", inputs={"paths": list(map(str, canaries))})
+        assert run.classification == "ok" and run.result == {"visible": [False] * 3, "secret": None, "write": False}
 
 
 def test_write_outside_scratch_and_python_environment_fails(tmp_path):
