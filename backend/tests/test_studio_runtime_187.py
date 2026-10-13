@@ -104,6 +104,8 @@ def test_output_caps_and_invalid_results():
     assert non_finite.classification == "invalid_result"
     missing = execute(" import os\n os._exit(0)")
     assert missing.classification == "invalid_result"
+    deeply_nested = execute(" import os\n from pathlib import Path\n Path('/work/result.json').write_text('['*2000+'0'+']'*2000)\n os._exit(0)")
+    assert deeply_nested.classification == "invalid_result"
 
 
 def test_scratch_aggregate_is_capped():

@@ -216,7 +216,7 @@ def run(request: RunRequest) -> RunRecord:
         else:
             try:
                 data = _result(scratch / "result.json")
-            except (OSError, UnicodeError, ValueError):
+            except (OSError, UnicodeError, ValueError, RecursionError):
                 record.classification = "invalid_result"
             else:
                 record.classification = "ok"
