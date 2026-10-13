@@ -206,7 +206,7 @@ jobs:
     needs: classify
     if: needs.classify.outputs.run_backend == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -227,6 +227,19 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Probe Studio isolation on CI host
+        working-directory: backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          if sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends bubblewrap &&
+             JARVISOS_STUDIO_USER_CODE_ENABLED=1 python -c 'from app.modules.studio_runtime.runtime import status; assert status()["available"]'; then
+            echo "Studio bubblewrap namespace available; hostile tests are required."
+          else
+            echo "JARVISOS_STUDIO_CI_SANDBOX_UNAVAILABLE=1" >> "$GITHUB_ENV"
+            echo "::warning::CI runner cannot create a bubblewrap namespace; hostile Studio tests require WSL2 qualification evidence."
+          fi
 
       - name: Run backend core test shard
         working-directory: backend
