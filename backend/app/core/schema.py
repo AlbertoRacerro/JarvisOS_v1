@@ -262,6 +262,39 @@ SCHEMA_STATEMENTS = [
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS studio_drafts (
+        model_spec_id TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL,
+        contract_json TEXT NOT NULL,
+        source TEXT NOT NULL,
+        source_sha256 TEXT NOT NULL,
+        contract_sha256 TEXT NOT NULL,
+        annotations TEXT NOT NULL DEFAULT '',
+        assumptions TEXT NOT NULL DEFAULT '',
+        annotations_source_sha256 TEXT,
+        test_cases_json TEXT NOT NULL DEFAULT '[]',
+        test_report_json TEXT,
+        revision_of_version_id TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (model_spec_id) REFERENCES model_specs(id),
+        FOREIGN KEY (workspace_id) REFERENCES workspaces(id),
+        FOREIGN KEY (revision_of_version_id) REFERENCES model_versions(id)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS studio_published_versions (
+        version_id TEXT PRIMARY KEY,
+        model_spec_id TEXT NOT NULL,
+        contract_json TEXT NOT NULL,
+        source_sha256 TEXT NOT NULL,
+        contract_sha256 TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (version_id) REFERENCES model_versions(id),
+        FOREIGN KEY (model_spec_id) REFERENCES model_specs(id)
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS simulation_runs (
         id TEXT PRIMARY KEY,
         workspace_id TEXT NOT NULL,
