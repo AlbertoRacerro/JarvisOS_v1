@@ -668,6 +668,7 @@ def test_batch_growth_registration_golden_script_bytes_and_response_shape(client
         "model_spec_id",
         "version_label",
         "implementation_artifact_id",
+        "implementation_kind",
         "input_contract",
         "input_contract_sha256",
         "status",
