@@ -92,3 +92,19 @@ Each entry must contain:
 - **Disposition:** PARK; outside the accepted 168 and 170 contracts, with no current implementation authority.
 - **Expected benefit:** durable, inspectable context with explicit trust and ownership.
 - **Likely surface:** Sidecar upload/context UI, files/knowledge/literature owners, conversation attachment records and policy enforcement.
+
+### F16 — Studio contract edits after the scaffold — PARK
+
+- **Origin:** spec 188 delivery, 2026-10-13; master `b1b32824`.
+- **Observation:** the scaffold is generated once, at creation. When the operator later adds, renames or removes a contract variable, the `evaluate` signature and the `main` wrapper in the source are not updated, and the first sign is a failing Test. An explicit "regenerate signature" action or a contract-versus-signature diagnostic, both computed with `ast` and never executing the source, would close this.
+- **Disposition:** PARK; outside the accepted 188 contract, with no current implementation authority.
+- **Expected benefit:** contract edits stop failing late and for a non-obvious reason.
+- **Likely surface:** `backend/app/modules/studio` (scaffold, derive), Studio Contract and Code tabs.
+
+### F17 — Canonical Parameter edit from a separate frontend origin — PARK
+
+- **Origin:** spec 188 browser proof, 2026-10-13; master `b1b32824`.
+- **Observation:** backend CORS allows GET, POST, PUT and DELETE. The canonical Parameter edit uses PATCH, so it works when the backend serves the built frontend and fails preflight from a separate Vite dev origin. Spec 188 used PUT for its own draft save rather than widening the policy.
+- **Disposition:** PARK; a CORS policy change needs its own accepted decision.
+- **Expected benefit:** Engineering Data edits work in the development setup as they do when deployed.
+- **Likely surface:** `backend/app/main.py` CORS configuration, or the Parameter edit route method.
