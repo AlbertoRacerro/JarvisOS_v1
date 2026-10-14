@@ -16,10 +16,11 @@ from app.modules.modeling.service import create_model_spec
 from app.modules.process_kernel.units import parse_unit_token, resolve_unit, unit_registry
 from app.modules.runner.input_contracts import canonicalize_input_contract
 from app.modules.runner.safety import model_implementation_root
-from app.modules.studio import geometry
+from app.modules.studio import geometry, procedure, procedure_service
 from app.modules.studio.derive import derive_documentation
 from app.modules.studio.geometry import GEOMETRY_KIND, GeometryCreate, GeometryTestRequest
 from app.modules.studio.models import StudioCreate, StudioError, StudioUpdate, TestRequest, model_payload
+from app.modules.studio.procedure import ProcedureCreate, ProcedureTestRequest
 from app.modules.studio.unit_checks import UnitCheckError, check_result, classification_code, host_stream
 from app.modules.studio.unit_models import (
     StudioUnitCreate,
@@ -91,10 +92,12 @@ def _category(contract: dict) -> str:
 
 
 def _artifact_name(category: str) -> str:
-    return {"process_unit": "studio_unit.py", "geometry": "studio_geometry.py"}.get(category, "studio_calc.py")
+    return {"process_unit": "studio_unit.py", "geometry": "studio_geometry.py",
+            "procedure": procedure_service.ARTIFACT_NAME}.get(category, "studio_calc.py")
 
 
-_KINDS = {"process_unit": UNIT_KIND, "geometry": GEOMETRY_KIND, "calculation": "studio_calc_v1"}
+_KINDS = {"process_unit": UNIT_KIND, "geometry": GEOMETRY_KIND,
+          "procedure": procedure.PROCEDURE_KIND, "calculation": "studio_calc_v1"}
 _CATEGORY_OF_KIND = {kind: category for category, kind in _KINDS.items()}
 
 
@@ -130,14 +133,25 @@ def _read(connection, workspace_id: str, model_spec_id: str) -> dict:
             "assumptions": row["assumption_notes"],
             "annotations_stale": bool(row["annotations"] and row["annotations_source_sha256"] != row["source_sha256"]),
             "status": row["model_status"],
-            "documentation": {"derived": derive_documentation(row["source"]), **contract},
+            "documentation": ({"derived": None, **contract} if _category(contract) == "procedure"
+                              else {"derived": derive_documentation(row["source"]), **contract}),
+            **({"steps": procedure.steps_of(row["source"]), "notice": procedure.NOTICE}
+               if _category(contract) == "procedure" else {}),
             "test_cases": json.loads(row["test_cases_json"]), "last_test_report": report,
             "versions": _versions(connection, model_spec_id), "created_at": row["created_at"],
             "updated_at": row["updated_at"]}
 
 
-def create(workspace_id: str, data: StudioCreate | StudioUnitCreate | GeometryCreate) -> dict:
-    if isinstance(data, StudioUnitCreate):
+def _procedure_parts(data: ProcedureCreate) -> tuple[dict, str]:
+    procedure.validate_steps(data.steps, data.parameters)
+    return procedure.procedure_contract(data.parameters), procedure.procedure_source(data.steps)
+
+
+def create(workspace_id: str, data: StudioCreate | StudioUnitCreate | GeometryCreate | ProcedureCreate) -> dict:
+    if isinstance(data, ProcedureCreate):
+        contract, source = _procedure_parts(data)
+        contract_sha = _sha(_json(contract))
+    elif isinstance(data, StudioUnitCreate):
         contract = unit_contract(data)
         contract_sha, source = _sha(_json(contract)), unit_scaffold(contract)
     elif isinstance(data, GeometryCreate):
@@ -185,7 +199,17 @@ def update(workspace_id: str, model_spec_id: str, data: StudioUpdate) -> dict:
         question = data.engineering_question or row["engineering_question"]
         unit_fields = (data.inlets, data.outlets, data.parameters, data.culture_generation)
         symbol_supplied = "symbol" in data.model_fields_set
-        if _category(old_contract) == "process_unit":
+        if _category(old_contract) == "procedure":
+            if any(item is not None for item in (data.inputs, data.outputs, data.inlets, data.outlets,
+                                                  data.culture_generation, data.source)) or symbol_supplied:
+                raise StudioError("studio_category_mismatch", "A procedure declares parameters and steps.")
+            validated_procedure = ProcedureCreate.model_validate({
+                "category": "procedure", "name": name, "engineering_question": question,
+                "parameters": data.parameters if data.parameters is not None else old_contract["parameters"],
+                "steps": data.steps if data.steps is not None else procedure.steps_of(row["source"])})
+            contract, new_source = _procedure_parts(validated_procedure)
+            contract_sha = _sha(_json(contract))
+        elif _category(old_contract) == "process_unit":
             if data.inputs is not None or data.outputs is not None:
                 raise StudioError("studio_category_mismatch", "A process unit declares inlets, outlets and parameters.")
             validated_unit = StudioUnitCreate.model_validate({
@@ -216,7 +240,8 @@ def update(workspace_id: str, model_spec_id: str, data: StudioUpdate) -> dict:
             })
             contract, contract_sha = _contract(validated_calc)
             _input_contract(contract)
-        source = data.source if data.source is not None else row["source"]
+        source = (new_source if _category(old_contract) == "procedure"
+                  else data.source if data.source is not None else row["source"])
         annotations = data.annotations if data.annotations is not None else row["annotations"]
         assumptions = data.assumptions if data.assumptions is not None else row["assumption_notes"]
         annotation_hash = _sha(source) if data.annotations is not None else row["annotations_source_sha256"]
@@ -282,7 +307,8 @@ def _unit_case(source: str, contract: dict, case) -> dict:
             "culture_generation": outcome.culture_generation if outcome else None, "errors": errors}
 
 
-def test(workspace_id: str, model_spec_id: str, data: TestRequest | UnitTestRequest | GeometryTestRequest) -> dict:
+def test(workspace_id: str, model_spec_id: str,
+         data: TestRequest | UnitTestRequest | GeometryTestRequest | ProcedureTestRequest) -> dict:
     with open_sqlite_connection() as connection:
         row = _draft_row(connection, workspace_id, model_spec_id)
         if row["model_status"] != "draft":
@@ -295,7 +321,8 @@ def test(workspace_id: str, model_spec_id: str, data: TestRequest | UnitTestRequ
                 data = wanted.model_validate(data.model_dump(exclude_unset=True))
             except ValidationError as exc:
                 raise StudioError("studio_category_mismatch", "The test cases do not match the model category.") from exc
-        if (_category(contract) == "geometry") != isinstance(data, GeometryTestRequest):
+        category = _category(contract)
+        if (category == "geometry") != isinstance(data, GeometryTestRequest):
             raise StudioError("studio_category_mismatch", "The test cases do not match the model category.")
         if isinstance(data, GeometryTestRequest):
             cases = geometry.run_cases(workspace_id, model_spec_id, source, contract, data.cases)
@@ -306,8 +333,16 @@ def test(workspace_id: str, model_spec_id: str, data: TestRequest | UnitTestRequ
                                              utc_now(), model_spec_id))
             connection.commit()
             return report
-        if (_category(contract) == "process_unit") != isinstance(data, UnitTestRequest):
+        if ((category == "process_unit") != isinstance(data, UnitTestRequest)
+                or (category == "procedure") != isinstance(data, ProcedureTestRequest)):
             raise StudioError("studio_category_mismatch", "The test cases do not match the model category.")
+        if isinstance(data, ProcedureTestRequest):
+            report = procedure_service.run_tests(workspace_id, row, data)
+            connection.execute("""UPDATE studio_drafts SET test_cases_json = ?, test_report_json = ?, updated_at = ?
+                WHERE model_spec_id = ?""", (_json([case.model_dump() for case in data.cases]), _json(report),
+                                             utc_now(), model_spec_id))
+            connection.commit()
+            return report
         if isinstance(data, UnitTestRequest):
             cases = [_unit_case(source, contract, case) for case in data.cases]
             report = {"source_sha256": row["source_sha256"], "contract_sha256": row["contract_sha256"],
@@ -376,9 +411,11 @@ def publish(workspace_id: str, model_spec_id: str) -> dict:
         try:
             artifact_path.write_bytes(row["source"].encode("utf-8"))
             connection.execute("""INSERT INTO artifacts (id, workspace_id, filename, stored_path, artifact_type,
-                mime_type, sha256, source_ref, status, created_at) VALUES (?, ?, ?, ?, 'python_script',
-                'text/x-python', ?, ?, 'registered', ?)""",
-                (artifact_id, workspace_id, artifact_path.name, str(artifact_path), row["source_sha256"],
+                mime_type, sha256, source_ref, status, created_at) VALUES (?, ?, ?, ?, ?,
+                ?, ?, ?, 'registered', ?)""",
+                (artifact_id, workspace_id, artifact_path.name, str(artifact_path),
+                 "studio_procedure" if category == "procedure" else "python_script",
+                 "application/json" if category == "procedure" else "text/x-python", row["source_sha256"],
                  f"model_spec:{model_spec_id}", now))
             connection.execute("""INSERT INTO model_versions (id, workspace_id, model_spec_id, version_label,
                 implementation_artifact_id, implementation_kind, status, changelog, input_contract_payload,

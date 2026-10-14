@@ -9,9 +9,10 @@ from fastapi.responses import FileResponse
 from app.core.database import open_sqlite_connection
 from app.modules.runner.origin import require_runner_origin
 from app.modules.runner.safety import run_root
-from app.modules.studio import service
+from app.modules.studio import procedure_service, service
 from app.modules.studio.geometry import MEDIA_TYPES, GeometryCreate, GeometryTestRequest
 from app.modules.studio.models import StudioCreate, StudioError, StudioUpdate, TestRequest
+from app.modules.studio.procedure import NOTICE, ProcedureCreate, ProcedureTestRequest
 from app.modules.studio.unit_models import StudioUnitCreate, UnitTestRequest
 
 router = APIRouter(tags=["studio"])
@@ -20,22 +21,28 @@ _CATEGORIES = [
     {"id": "calculation", "label": "Calculation", "available": True, "reason": None},
     {"id": "process_unit", "label": "Process unit", "available": True, "reason": None},
     {"id": "dynamic_model", "label": "Dynamic model", "available": False, "reason": "Time integration is not available in this slice."},
-    {"id": "procedure", "label": "Procedure", "available": False, "reason": "Procedure authoring is planned."},
+    {"id": "procedure", "label": "Procedure", "available": True, "reason": None, "notice": NOTICE},
     {"id": "geometry", "label": "Geometry", "available": True, "reason": None},
     {"id": "optimization", "label": "Optimization", "available": False, "reason": "Optimization orchestration is not available."},
     {"id": "cfd_fem", "label": "CFD/FEM", "available": False, "reason": "A governed solver integration is not available."},
 ]
 
 
+_CONFLICTS = {
+    "studio_publish_report_required", "studio_no_published_version", "studio_artifact_hash_mismatch",
+    "studio_draft_open", "studio_revision_required", "studio_procedure_link_modified",
+    "studio_procedure_link_missing", "studio_procedure_schedule_exists", "studio_procedure_scenario_unlinked",
+    "studio_procedure_scenario_schedule_conflict", "studio_procedure_scenario_exists", "revision_conflict",
+}
+
+
 def _call(function, *args):
     try:
         return function(*args)
     except StudioError as exc:
-        code = 404 if exc.code.endswith("not_found") else 409 if exc.code in {
-            "studio_publish_report_required", "studio_no_published_version", "studio_artifact_hash_mismatch",
-            "studio_draft_open", "studio_revision_required"
-        } else 422
-        raise HTTPException(status_code=code, detail={"code": exc.code, "message": exc.message}) from exc
+        code = exc.status or (404 if exc.code.endswith("not_found") else 409 if exc.code in _CONFLICTS else 422)
+        detail = {"code": exc.code, "message": exc.message, **({"detail": exc.detail} if exc.detail else {})}
+        raise HTTPException(status_code=code, detail=detail) from exc
 
 
 @router.get("/studio/categories")
@@ -44,7 +51,7 @@ def categories() -> list[dict]:
 
 
 @router.post("/workspaces/{workspace_id}/studio/models", status_code=201)
-def create_model(workspace_id: str, data: StudioUnitCreate | GeometryCreate | StudioCreate) -> dict:
+def create_model(workspace_id: str, data: StudioUnitCreate | GeometryCreate | ProcedureCreate | StudioCreate) -> dict:
     return _call(service.create, workspace_id, data)
 
 
@@ -64,7 +71,8 @@ def save_model(workspace_id: str, model_spec_id: str, data: StudioUpdate) -> dic
 
 
 @router.post("/workspaces/{workspace_id}/studio/models/{model_spec_id}/test", dependencies=[Depends(require_runner_origin)])
-def test_model(workspace_id: str, model_spec_id: str, data: UnitTestRequest | GeometryTestRequest | TestRequest) -> dict:
+def test_model(workspace_id: str, model_spec_id: str,
+               data: UnitTestRequest | GeometryTestRequest | ProcedureTestRequest | TestRequest) -> dict:
     return _call(service.test, workspace_id, model_spec_id, data)
 
 
@@ -108,3 +116,54 @@ def geometry_run_artifact(workspace_id: str, simulation_run_id: str, name: str) 
         raise HTTPException(status_code=404, detail={"code": "studio_geometry_artifact_not_found",
                                                      "message": "Geometry artifact not found or invalid."})
     return _untrusted_file(path, name)
+
+@router.get("/workspaces/{workspace_id}/studio/procedure/bench/drafts")
+def bench_drafts(workspace_id: str) -> list[dict]:
+    return _call(procedure_service.bench_drafts, workspace_id)
+
+
+@router.post("/workspaces/{workspace_id}/studio/procedure/bench/drafts/{draft_id}/scenarios", status_code=201)
+def bench_create_scenario(workspace_id: str, draft_id: str, data: procedure_service.ScenarioRequest) -> dict:
+    return _call(procedure_service.create_scenario, workspace_id, draft_id, data)
+
+
+@router.post("/workspaces/{workspace_id}/studio/procedure/apply", dependencies=[Depends(require_runner_origin)])
+def apply_procedure(workspace_id: str, data: procedure_service.ApplyRequest) -> dict:
+    return _call(procedure_service.apply, workspace_id, data)
+
+
+@router.get("/workspaces/{workspace_id}/studio/procedure/links")
+def procedure_links(workspace_id: str, draft_id: str | None = None) -> list[dict]:
+    return _call(procedure_service.list_links, workspace_id, draft_id)
+
+
+@router.get("/workspaces/{workspace_id}/studio/procedure/links/{link_id}")
+def procedure_link(workspace_id: str, link_id: str) -> dict:
+    return _call(procedure_service.get_link, workspace_id, link_id)
+
+
+@router.post("/workspaces/{workspace_id}/studio/procedure/links/{link_id}/update",
+             dependencies=[Depends(require_runner_origin)])
+def update_procedure_link(workspace_id: str, link_id: str, data: procedure_service.UpdateRequest) -> dict:
+    return _call(procedure_service.update, workspace_id, link_id, data)
+
+
+@router.post("/workspaces/{workspace_id}/studio/procedure/links/{link_id}/run", status_code=202,
+             dependencies=[Depends(require_runner_origin)])
+def run_procedure_link(workspace_id: str, link_id: str) -> dict:
+    return _call(procedure_service.start_run, workspace_id, link_id)
+
+
+@router.get("/workspaces/{workspace_id}/studio/procedure/drafts/{draft_id}/runs")
+def procedure_runs(workspace_id: str, draft_id: str) -> list[dict]:
+    return _call(procedure_service.list_runs, workspace_id, draft_id)
+
+
+@router.get("/workspaces/{workspace_id}/studio/procedure/drafts/{draft_id}/runs/{job_id}")
+def procedure_run(workspace_id: str, draft_id: str, job_id: str) -> dict:
+    return _call(procedure_service.get_run, workspace_id, draft_id, job_id)
+
+
+@router.get("/workspaces/{workspace_id}/studio/procedure/drafts/{draft_id}/runs/{job_id}/results")
+def procedure_run_results(workspace_id: str, draft_id: str, job_id: str) -> dict:
+    return _call(procedure_service.run_results, workspace_id, draft_id, job_id)

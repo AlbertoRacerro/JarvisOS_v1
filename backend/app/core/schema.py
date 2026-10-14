@@ -295,6 +295,37 @@ SCHEMA_STATEMENTS = [
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS studio_procedure_links (
+        id TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL,
+        draft_id TEXT NOT NULL,
+        schedule_id TEXT NOT NULL,
+        scenario_id TEXT NOT NULL,
+        model_spec_id TEXT NOT NULL,
+        version_id TEXT NOT NULL,
+        source_sha256 TEXT NOT NULL,
+        contract_sha256 TEXT NOT NULL,
+        parameter_values_json TEXT NOT NULL,
+        compiled_sha256 TEXT NOT NULL,
+        applied_draft_revision TEXT NOT NULL,
+        applied_at TEXT NOT NULL,
+        UNIQUE (workspace_id, draft_id, schedule_id),
+        FOREIGN KEY (workspace_id) REFERENCES workspaces(id),
+        FOREIGN KEY (version_id) REFERENCES model_versions(id),
+        FOREIGN KEY (model_spec_id) REFERENCES model_specs(id)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS studio_procedure_runs (
+        job_id TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL,
+        draft_id TEXT NOT NULL,
+        link_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (workspace_id) REFERENCES workspaces(id)
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS simulation_runs (
         id TEXT PRIMARY KEY,
         workspace_id TEXT NOT NULL,
@@ -590,6 +621,8 @@ UNION ALL SELECT 'requirement', id, workspace_id, '', COALESCE(statement, '') ||
 """
 
 SCHEMA_INDEX_STATEMENTS = [
+    "CREATE INDEX IF NOT EXISTS idx_studio_procedure_runs_draft ON studio_procedure_runs(workspace_id, draft_id, created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_studio_procedure_links_draft ON studio_procedure_links(workspace_id, draft_id)",
     "CREATE INDEX IF NOT EXISTS idx_events_workspace_created_at ON events(workspace_id, created_at)",
     "CREATE INDEX IF NOT EXISTS idx_artifacts_workspace_created_at ON artifacts(workspace_id, created_at)",
     "CREATE INDEX IF NOT EXISTS idx_run_artifacts_workspace_run ON run_artifacts(workspace_id, simulation_run_id)",
