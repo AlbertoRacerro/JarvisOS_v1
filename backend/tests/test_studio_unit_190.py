@@ -153,6 +153,25 @@ def test_host_checks_component_imbalance_and_declared_generation():
     gained["culture_generation"] = {"nitrogen": 1e-6}
     checked = _check(gained, generation=["nitrogen"])
     assert checked.culture_generation == {"nitrogen": 1e-6}
+    with pytest.raises(UnitCheckError) as caught:
+        _check(_outlet(culture={"biomass": 0.0, "nitrogen": None}))
+    assert caught.value.code == "STUDIO_UNIT_CULTURE_IMBALANCE"
+    with pytest.raises(UnitCheckError) as caught:
+        _check(_outlet(culture={"biomass": 0.0}))
+    assert caught.value.code == "STUDIO_UNIT_CULTURE_IMBALANCE"
+    with pytest.raises(UnitCheckError) as caught:
+        _check(gained | {"culture_generation": {}}, generation=["nitrogen"])
+    assert caught.value.code == "STUDIO_UNIT_CULTURE_IMBALANCE"
+    with pytest.raises(UnitCheckError) as caught:
+        _check(gained | {"culture_generation": {"nitrogen": 2e-6}}, generation=["nitrogen"])
+    assert caught.value.code == "STUDIO_UNIT_CULTURE_IMBALANCE"
+    unknown_inlets = {name: {**inlet, "culture": {"nitrogen": None}} for name, inlet in _inlets().items()}
+    unknown_outlet = _outlet(culture={"nitrogen": None})
+    assert check_result(unknown_outlet, inlets=unknown_inlets, outlet_names=["outlet"],
+                        compounds=["Water"], generation=[]).outlets["outlet"]["culture"]["nitrogen"] is None
+    zero_unknown = {"zero": {**stream(0.0), "culture": {"nitrogen": None}}, "live": stream(1.0)}
+    assert check_result({"outlets": {"o": stream(1.0)}}, inlets=zero_unknown, outlet_names=["o"],
+                        compounds=["Water"], generation=[]).outlets["o"]["mass_flow_kg_s"] == 1.0
     zero = check_result({"outlets": {"o": {**_outlet(mass_flow_kg_s=0.0)["outlets"]["outlet"]}}},
                         inlets={"a": stream(0.0)}, outlet_names=["o"], compounds=["Water"], generation=[])
     assert zero.outlets["o"]["mass_flow_kg_s"] == 0.0

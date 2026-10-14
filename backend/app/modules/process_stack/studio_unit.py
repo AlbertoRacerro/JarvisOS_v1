@@ -105,7 +105,7 @@ def pin_findings(document: dict[str, Any], workspace_id: str | None, resolve: Re
                 continue
         add("info", "STUDIO_UNIT_LIMITS", unit, HONEST_LIMITS + ".")
         studio = unit.get("studio") or {}
-        newer = latest.get(studio.get("model_spec_id"), 0)
+        newer = latest.get(str(studio.get("model_spec_id") or ""), 0)
         if newer > int(studio.get("version_number", 0)):
             add("info", "STUDIO_UNIT_UPDATE_AVAILABLE", unit,
                 f"Version {newer} of {studio.get('name')} is published; this unit stays on "
@@ -233,7 +233,7 @@ def run_provenance(run: dict[str, Any], document: dict[str, Any], workspace_id: 
         if recorded is None:
             continue
         studio = unit.get("studio") or {}
-        newest = latest.get(studio.get("model_spec_id"), 0)
+        newest = latest.get(str(studio.get("model_spec_id") or ""), 0)
         result[unit["tag"]] = {**recorded, "version_number": studio.get("version_number"), "name": studio.get("name"),
                                "superseded": newest > int(studio.get("version_number", 0)),
                                "latest_version_number": newest or None, "limits": HONEST_LIMITS}

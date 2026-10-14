@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from types import SimpleNamespace
 from typing import Any
 
@@ -40,6 +41,8 @@ Q = DraftQuantity
 
 @pytest.fixture
 def client(monkeypatch):
+    if os.getenv("JARVISOS_STUDIO_CI_SANDBOX_UNAVAILABLE") == "1":
+        pytest.skip("CI runner does not permit bubblewrap user namespaces; WSL2 qualification is required")
     monkeypatch.setenv("JARVISOS_STUDIO_USER_CODE_ENABLED", "1")
     get_settings.cache_clear()
     assert status()["available"], "qualification host must run bubblewrap"

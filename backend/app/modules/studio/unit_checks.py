@@ -116,14 +116,20 @@ def check_result(result: Any, *, inlets: dict[str, dict[str, Any]], outlet_names
             raise UnitCheckError("STUDIO_UNIT_COMPONENT_IMBALANCE",
                                  f"Compound {compound} in {amount_in:.12g} kg/s differs from out {amount_out:.12g} kg/s.")
     for name in CULTURE_FIELDS:
-        if name in generation:
-            continue  # the culture-balance owner checks declared generation
-        if any(name in (item.get("culture") or {}) and item["culture"][name] is None for item in [*inbound, *outbound]):
-            continue
+        active = [item for item in [*inbound, *outbound] if float(item["mass_flow_kg_s"]) > 0]
+        unknown = [item for item in active if (item.get("culture") or {}).get(name, 0.0) is None]
+        if unknown:
+            if len(unknown) != len(active) or rates.get(name, 0.0) != 0.0:
+                raise UnitCheckError("STUDIO_UNIT_CULTURE_IMBALANCE",
+                                     f"Culture {name} cannot be balanced with mixed known and unknown values "
+                                     "or generation against unknown values.")
+            continue  # every active stream is explicitly unknown, with no declared generation
         amount_in = sum(_culture_amount(item, name) for item in inbound)
         amount_out = sum(_culture_amount(item, name) for item in outbound)
-        if abs(amount_in - amount_out) > TOLERANCE * max(abs(amount_in), abs(amount_out)) + 1e-12:
+        declared_rate = float(rates.get(name, 0.0))
+        if abs(amount_out - amount_in - declared_rate) > (
+                TOLERANCE * max(abs(amount_in), abs(amount_out), abs(declared_rate)) + 1e-12):
             raise UnitCheckError("STUDIO_UNIT_CULTURE_IMBALANCE",
-                                 f"Culture {name} in {amount_in:.12g} differs from out {amount_out:.12g} "
-                                 "and no generation is declared for it.")
+                                 f"Culture {name} in {amount_in:.12g} plus declared generation "
+                                 f"{declared_rate:.12g} differs from out {amount_out:.12g}.")
     return CheckedResult(outlets=outlets, culture_generation={name: float(rate) for name, rate in rates.items()})

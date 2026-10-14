@@ -42,11 +42,11 @@ def _render(element: ElementTree.Element, depth: int, count: list[int], root: bo
         if key.startswith("{") or key in {"xmlns"}:
             raise SymbolError(f"Attribute {key!r} is not allowed.")
         if key in _PAINT_ATTRS:
-            valid = _PAINT.fullmatch(value.strip())
+            valid = _PAINT.fullmatch(value.strip()) is not None
         elif key in _GEOMETRY_ATTRS:
-            valid = _GEOMETRY.fullmatch(value) and "url(" not in value.lower()
+            valid = _GEOMETRY.fullmatch(value) is not None and "url(" not in value.lower()
         elif key in _PLAIN_ATTRS:
-            valid = _PLAIN.fullmatch(value)
+            valid = _PLAIN.fullmatch(value) is not None
         else:
             raise SymbolError(f"Attribute {key!r} is not allowed.")
         if not valid:

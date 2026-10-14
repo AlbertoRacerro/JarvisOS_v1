@@ -176,7 +176,7 @@ def update(workspace_id: str, model_spec_id: str, data: StudioUpdate) -> dict:
         if _category(old_contract) == "process_unit":
             if data.inputs is not None or data.outputs is not None:
                 raise StudioError("studio_category_mismatch", "A process unit declares inlets, outlets and parameters.")
-            validated: StudioCreate | StudioUnitCreate = StudioUnitCreate.model_validate({
+            validated_unit = StudioUnitCreate.model_validate({
                 "category": "process_unit", "name": name, "engineering_question": question,
                 "inlets": data.inlets if data.inlets is not None else old_contract["inlets"],
                 "outlets": data.outlets if data.outlets is not None else old_contract["outlets"],
@@ -184,17 +184,17 @@ def update(workspace_id: str, model_spec_id: str, data: StudioUpdate) -> dict:
                 "symbol": data.symbol if symbol_supplied else old_contract["symbol"],
                 "culture_generation": (data.culture_generation if data.culture_generation is not None
                                        else old_contract["culture_generation"])})
-            contract = unit_contract(validated)
+            contract = unit_contract(validated_unit)
             contract_sha = _sha(_json(contract))
         else:
             if any(item is not None for item in unit_fields) or symbol_supplied:
                 raise StudioError("studio_category_mismatch", "A calculation declares inputs and outputs.")
-            validated = StudioCreate.model_validate({
+            validated_calc = StudioCreate.model_validate({
                 "name": name, "engineering_question": question,
                 "inputs": data.inputs if data.inputs is not None else old_contract["inputs"],
                 "outputs": data.outputs if data.outputs is not None else old_contract["outputs"],
             })
-            contract, contract_sha = _contract(validated)
+            contract, contract_sha = _contract(validated_calc)
             _input_contract(contract)
         source = data.source if data.source is not None else row["source"]
         annotations = data.annotations if data.annotations is not None else row["annotations"]
@@ -205,7 +205,7 @@ def update(workspace_id: str, model_spec_id: str, data: StudioUpdate) -> dict:
         spec_row = connection.execute("SELECT updated_at FROM model_specs WHERE id = ?", (model_spec_id,)).fetchone()
         update_model_spec_in_transaction(connection, model_spec_id, ModelSpecProjectUpdate(
             workspace_id=workspace_id, expected_updated_at=spec_row["updated_at"],
-            title=validated.name, engineering_question=validated.engineering_question))
+            title=name, engineering_question=question))
         connection.execute("""UPDATE studio_drafts SET contract_json = ?, source = ?, source_sha256 = ?,
             contract_sha256 = ?, annotations = ?, assumption_notes = ?, annotations_source_sha256 = ?,
             test_report_json = ?, updated_at = ? WHERE model_spec_id = ?""",
