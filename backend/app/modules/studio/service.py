@@ -171,7 +171,8 @@ def update(workspace_id: str, model_spec_id: str, data: StudioUpdate) -> dict:
         old_contract = json.loads(row["contract_json"])
         name = data.name or row["title"]
         question = data.engineering_question or row["engineering_question"]
-        unit_fields = (data.inlets, data.outlets, data.parameters, data.symbol, data.culture_generation)
+        unit_fields = (data.inlets, data.outlets, data.parameters, data.culture_generation)
+        symbol_supplied = "symbol" in data.model_fields_set
         if _category(old_contract) == "process_unit":
             if data.inputs is not None or data.outputs is not None:
                 raise StudioError("studio_category_mismatch", "A process unit declares inlets, outlets and parameters.")
@@ -180,13 +181,13 @@ def update(workspace_id: str, model_spec_id: str, data: StudioUpdate) -> dict:
                 "inlets": data.inlets if data.inlets is not None else old_contract["inlets"],
                 "outlets": data.outlets if data.outlets is not None else old_contract["outlets"],
                 "parameters": data.parameters if data.parameters is not None else old_contract["parameters"],
-                "symbol": data.symbol if data.symbol is not None else old_contract["symbol"],
+                "symbol": data.symbol if symbol_supplied else old_contract["symbol"],
                 "culture_generation": (data.culture_generation if data.culture_generation is not None
                                        else old_contract["culture_generation"])})
             contract = unit_contract(validated)
             contract_sha = _sha(_json(contract))
         else:
-            if any(item is not None for item in unit_fields):
+            if any(item is not None for item in unit_fields) or symbol_supplied:
                 raise StudioError("studio_category_mismatch", "A calculation declares inputs and outputs.")
             validated = StudioCreate.model_validate({
                 "name": name, "engineering_question": question,

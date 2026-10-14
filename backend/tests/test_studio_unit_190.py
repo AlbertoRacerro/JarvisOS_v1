@@ -91,7 +91,8 @@ def test_symbol_sanitizer_keeps_a_safe_symbol_canonical_and_the_route_refuses_th
     assert model["symbol"] == clean
     path = f"/workspaces/bluerev/studio/models/{model['id']}"
     assert client.put(path, json={"symbol": "<svg xmlns='http://www.w3.org/2000/svg'><script/></svg>"}).status_code == 422
-    assert client.put(path, json={"symbol": ""}).json()["symbol"] is None
+    assert client.put(path, json={"name": "Renamed"}).json()["symbol"] == clean
+    assert client.put(path, json={"symbol": None}).json()["symbol"] is None
 
 
 def _inlets(**flows):
@@ -141,6 +142,12 @@ def test_host_checks_component_imbalance_and_declared_generation():
                                  "mass_fractions": {"Water": 0.6, "Salt": 0.4}}}}
     with pytest.raises(UnitCheckError) as caught:
         check_result(swapped, inlets=inlets, outlet_names=["o"], compounds=["Water", "Salt"], generation=[])
+    assert caught.value.code == "STUDIO_UNIT_COMPONENT_IMBALANCE"
+    trace_inlet = {**stream(1.0), "mass_fractions": {"Water": 1.0 - 1e-6, "Ethanol": 1e-6}}
+    trace_outlet = {**trace_inlet, "mass_fractions": {"Water": 1.0 - 1.0001e-6, "Ethanol": 1.0001e-6}}
+    with pytest.raises(UnitCheckError) as caught:
+        check_result({"outlets": {"o": trace_outlet}}, inlets={"a": trace_inlet}, outlet_names=["o"],
+                     compounds=["Water", "Ethanol"], generation=[])
     assert caught.value.code == "STUDIO_UNIT_COMPONENT_IMBALANCE"
     gained = _outlet(culture={"biomass": 0.0, "nitrogen": 0.001 + 1e-6 / 1.5})
     gained["culture_generation"] = {"nitrogen": 1e-6}

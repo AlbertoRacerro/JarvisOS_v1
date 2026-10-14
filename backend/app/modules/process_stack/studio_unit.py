@@ -179,11 +179,12 @@ def evaluate(unit: dict[str, Any], inlets: dict[str, dict[str, Any]], *, compoun
     loaded = _load(unit, cache, workspace_id)
     contract = loaded["contract"]
     try:
-        params = {item["name"]: float(unit["params"][item["name"]]["si"]) for item in contract["parameters"]}
+        params = {item["name"]: float(unit["params"][item["name"]]["value"]) for item in contract["parameters"]}
     except (KeyError, TypeError, ValueError) as exc:
         raise StudioUnitError("STUDIO_UNIT_PARAMETER_MISSING", f"{unit['tag']} is missing a parameter value.") from exc
     streams = {name: host_stream(state) for name, state in inlets.items()}
-    key = hashlib.sha256(json.dumps({"source": loaded["source_sha256"], "params": params, "inlets": streams},
+    key = hashlib.sha256(json.dumps({"source": loaded["source_sha256"], "contract": loaded["contract_sha256"],
+                                    "params": params, "inlets": streams},
                                     sort_keys=True, separators=(",", ":"), allow_nan=False).encode()).hexdigest()
     stats = cache.setdefault("studio_unit_stats", {}).setdefault(unit["tag"], {
         "call_count": 0, "cache_hits": 0, "runtime_classifications": [], "duration_s": 0.0,

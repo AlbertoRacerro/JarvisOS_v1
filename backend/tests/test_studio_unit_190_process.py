@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
-import time
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -14,27 +13,25 @@ from fastapi.testclient import TestClient
 from app.core.config import get_settings
 from app.main import create_app
 from app.modules.process_stack import draft, draft_compiler, dynamic_engine, editor, mixed, mixed_runtime, studio_unit
-from app.modules.process_stack.draft_models import UNIT_REGISTRY
 from app.modules.process_stack.draft_models import (
+    UNIT_REGISTRY,
     AddStream,
     AddUnit,
     Connect,
-    DraftQuantity,
     Disconnect,
+    DraftQuantity,
     SetStreamCulture,
     SetStreamSpec,
     SetThermo,
     SetUnitParams,
-    UpdateStudioUnit,
+    studio_contract_digest,
 )
 from app.modules.studio_runtime.runtime import status
-from tests.plumbing_170_support import codes, find, new_workspace, pbr_document
+from tests.plumbing_170_support import find, new_workspace, pbr_document
 from tests.studio_unit_190_support import (
     GOLDEN_BODY,
     GOLDEN_CONTRACT,
-    MIX_BODY,
     golden_case,
-    publish_next_version,
     publish_unit,
 )
 
@@ -383,6 +380,8 @@ RAISING_BODY = GOLDEN_BODY.replace(
 IMBALANCE_BODY = GOLDEN_BODY.replace(
     'unused = {**d, "mass_flow_kg_s": md - kept}',
     'unused = {**d, "mass_flow_kg_s": md - kept + (0.001 if mc < 0.5 else 0.0)}')
+TIMEOUT_BODY = GOLDEN_BODY.replace(
+    _HEAD, _HEAD + '    if c["mass_flow_kg_s"] < 0.5:\n        import time\n        time.sleep(20)\n', 1)
 
 
 def test_a_unit_whose_evaluate_raises_fails_the_run_with_its_tag_and_a_typed_code(client, dwsim):
@@ -402,3 +401,49 @@ def test_a_unit_that_breaks_mass_conservation_fails_with_the_mass_imbalance_code
     assert run["status"] == "segment_failed" and solve["failed_segment"] == "Dosing", run
     assert solve["errors"]["code"] == "STUDIO_UNIT_MASS_IMBALANCE", solve["errors"]
     assert "Unused" not in dwsim.flashes
+
+
+def test_a_sandbox_timeout_fails_the_run_with_a_typed_code(client, dwsim):
+    _, version = _publish(client, TIMEOUT_BODY)
+    run = _run(client.workspace, _draft(client.workspace, golden_ops(version, heater=False)))
+    solve = run["mixed_solve"]
+    assert run["status"] == "segment_failed" and solve["failed_segment"] == "Dosing", run
+    assert solve["errors"]["code"] == "STUDIO_UNIT_TIMEOUT", solve["errors"]
+    assert solve["errors"]["detail"]["classification"] == "timeout"
+    assert "Outlet" not in dwsim.flashes and "Unused" not in dwsim.flashes
+
+
+def test_run_cache_never_reuses_a_result_checked_against_another_contract(monkeypatch):
+    base = {"category": "process_unit", "inlets": [{"name": "a", "label": "A"}],
+            "outlets": [{"name": "o", "label": "O"}], "parameters": [], "symbol": None,
+            "culture_generation": []}
+    changed = {**base, "outlets": [{"name": "p", "label": "P"}]}
+    source_hash = "a" * 64
+    cache = {"studio_unit_sources": {}}
+    for version_id, contract in (("v1", base), ("v2", changed)):
+        cache["studio_unit_sources"][version_id] = {
+            "version_id": version_id, "source_sha256": source_hash,
+            "contract_sha256": studio_contract_digest(contract), "contract": contract,
+            "source": "same source", "version_label": version_id}
+    inlet = {"mass_flow_kg_s": 1.0, "temperature_K": 300.0, "pressure_Pa": 200000.0,
+             "mass_fractions": {"Water": 1.0}, "culture": {}}
+    calls = []
+
+    def sandbox(_request):
+        calls.append(1)
+        return SimpleNamespace(classification="ok", duration_seconds=0.01,
+                               result={"outlets": {"o": inlet}}, stderr="")
+
+    monkeypatch.setattr(studio_unit.runtime, "run", sandbox)
+
+    def placed(version_id, contract):
+        return {"type": "StudioUnit", "tag": version_id, "params": {},
+                "model": {"version_id": version_id, "source_sha256": source_hash,
+                          "contract_sha256": studio_contract_digest(contract)},
+                "studio": {"name": "cache contract", "contract": contract}}
+
+    studio_unit.evaluate(placed("v1", base), {"a": inlet}, compounds=["Water"], cache=cache, workspace_id="w")
+    with pytest.raises(studio_unit.StudioUnitError) as caught:
+        studio_unit.evaluate(placed("v2", changed), {"a": inlet}, compounds=["Water"], cache=cache,
+                             workspace_id="w")
+    assert caught.value.code == "STUDIO_UNIT_OUTLETS_MISMATCH" and len(calls) == 2

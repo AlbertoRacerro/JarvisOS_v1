@@ -112,7 +112,7 @@ def check_result(result: Any, *, inlets: dict[str, dict[str, Any]], outlet_names
         amount_in = sum(float(item["mass_flow_kg_s"]) * float(item.get("mass_fractions", {}).get(compound, 0.0))
                         for item in inbound)
         amount_out = sum(item["mass_flow_kg_s"] * item["mass_fractions"][compound] for item in outbound)
-        if abs(amount_in - amount_out) > allowed:
+        if abs(amount_in - amount_out) > TOLERANCE * max(abs(amount_in), abs(amount_out)):
             raise UnitCheckError("STUDIO_UNIT_COMPONENT_IMBALANCE",
                                  f"Compound {compound} in {amount_in:.12g} kg/s differs from out {amount_out:.12g} kg/s.")
     for name in CULTURE_FIELDS:
