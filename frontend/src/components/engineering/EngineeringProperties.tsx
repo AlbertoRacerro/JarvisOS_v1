@@ -17,6 +17,7 @@ import {
 } from "../../api/client";
 import type { SimulationRunDetail } from "../../api/runs";
 import InlineNotice from "../ui/InlineNotice";
+import { isStudioKind } from "../../api/studio";
 import {
   reconstructPreviousRunBaseline,
   type PreviousRunBaseline,
@@ -612,7 +613,7 @@ export function useEngineeringProperties(
       setPreviewMessage("The selected engineering object is still resolving its authoritative semantic source.");
       return;
     }
-    const built = buildPayload(variables, working, parameters, selected.implementation_kind === "studio_calc_v1");
+    const built = buildPayload(variables, working, parameters, isStudioKind(selected.implementation_kind));
     if (built.invalidNames.length) {
       previewGeneration.current += 1;
       setPreview(null);
@@ -794,7 +795,7 @@ export function useEngineeringProperties(
   };
 
   const selectParameter = (variable: ModelInputVariable, parameterId: string) => {
-    const parameter = parameters.find((item) => item.id === parameterId && (selected?.implementation_kind === "studio_calc_v1" || item.unit === variable.unit));
+    const parameter = parameters.find((item) => item.id === parameterId && (isStudioKind(selected?.implementation_kind) || item.unit === variable.unit));
     const nextBinding = parameter
       ? { parameterId: parameter.id, value: parameter.value ?? "" }
       : { parameterId: "", value: working[variable.name]?.value ?? "" };
@@ -1058,7 +1059,7 @@ export function EngineeringPropertiesPanel({
     const linkedParameter = binding.parameterId ? controller.parameters.find((item) => item.id === binding.parameterId) : undefined;
     const compatible = controller.parameters.filter(
       (parameter) =>
-        (selected?.implementation_kind === "studio_calc_v1" || parameter.unit === variable.unit) &&
+        (isStudioKind(selected?.implementation_kind) || parameter.unit === variable.unit) &&
         parameter.value != null &&
         Number.isFinite(Number(parameter.value)) &&
         (parameter.status !== "superseded" || parameter.id === binding.parameterId)
