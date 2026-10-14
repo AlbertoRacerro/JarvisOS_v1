@@ -61,6 +61,8 @@ const ok = { inlets: [{ name: "culture", label: "Culture" }], outlets: [{ name: 
 assert.deepEqual(authoring.contractIssues(ok), []);
 assert.ok(authoring.contractIssues({ ...ok, inlets: [] }).length);
 assert.ok(authoring.contractIssues({ ...ok, outlets: [{ name: "1bad", label: "x" }] }).length);
+assert.ok(authoring.contractIssues({ ...ok, outlets: [{ name: "_bad", label: "x" }] }).length);
+assert.ok(authoring.contractIssues({ ...ok, outlets: [{ name: "x".repeat(65), label: "x" }] }).length);
 assert.ok(authoring.contractIssues({ ...ok, inlets: Array.from({ length: 5 }, (_, i) => ({ name: `p${i}`, label: "x" })) }).length);
 assert.equal(authoring.blankUnitCase({ inlets: ok.inlets, parameters: [] }).tolerance, 1e-6);
 

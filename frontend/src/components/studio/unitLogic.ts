@@ -3,7 +3,7 @@ import { CULTURE_FIELDS, type StudioPort, type StudioUnitCase, type StudioUnitCo
 // Spec 190 process-unit authoring helpers. Pure so the build-gating test can import them.
 export const MAX_PORTS = 4;
 export const CULTURE_INPUTS = [...CULTURE_FIELDS, "ph"] as const;
-const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const IDENTIFIER = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
 const KEYWORDS = new Set(["False", "None", "True", "and", "as", "assert", "async", "await", "break", "class", "continue", "def", "del", "elif", "else", "except", "finally", "for", "from", "global", "if", "import", "in", "is", "lambda", "nonlocal", "not", "or", "pass", "raise", "return", "try", "while", "with", "yield"]);
 export const blankPort = (): StudioPort => ({ name: "", label: "" });
 export const defaultStream = (): StudioUnitStream => ({ mass_flow_kg_s: 1, temperature_K: 298.15, pressure_Pa: 101325, mass_fractions: {}, culture: {} });

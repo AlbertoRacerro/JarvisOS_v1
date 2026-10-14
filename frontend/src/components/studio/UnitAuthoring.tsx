@@ -8,7 +8,7 @@ export function PortForm({ title, rows, onChange }: { title: string; rows: Studi
   const kind = title.toLowerCase().slice(0, -1);
   return <fieldset className="studio-variables"><legend>{title} (1 to {MAX_PORTS})</legend>
     {rows.map((row, index) => <div className="studio-port" key={index}>
-      <label>Port name<input required pattern="[A-Za-z_][A-Za-z0-9_]*" value={row.name} onChange={(event) => update(index, { name: event.target.value })} placeholder={kind === "inlet" ? "e.g. culture" : "e.g. outlet"} /></label>
+      <label>Port name<input required pattern="[A-Za-z][A-Za-z0-9_]{0,63}" value={row.name} onChange={(event) => update(index, { name: event.target.value })} placeholder={kind === "inlet" ? "e.g. culture" : "e.g. outlet"} /></label>
       <label>Label<input required value={row.label} onChange={(event) => update(index, { label: event.target.value })} placeholder="Meaning of this port" /></label>
       <button type="button" onClick={() => onChange(rows.filter((_, i) => i !== index))} disabled={rows.length === 1}>Remove</button>
     </div>)}
