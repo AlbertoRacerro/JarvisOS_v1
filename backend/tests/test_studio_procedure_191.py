@@ -464,3 +464,34 @@ def test_bench_creates_a_scenario_applies_runs_and_shows_different_results_for_d
     assert len(links) == 1 and links[0]["parameter_values"] == {"draw_fraction": 10.0}
     bench = client.get(f"/workspaces/{ws}/studio/procedure/bench/drafts").json()
     assert bench[0]["schedules"][-1]["link"]["state"] == "applied"
+
+
+# ---------------------------------------------------------------- 6/7 gap closers (review)
+
+
+def test_no_action_type_or_dynamic_route_exists_outside_185_and_186(client: TestClient) -> None:
+    from typing import get_args
+
+    from app.modules.process_stack import dynamic_models
+
+    union = get_args(get_args(dynamic_models.Action)[0])
+    engine_types = {get_args(model.model_fields["type"].annotation)[0] for model in union}
+    assert engine_types == set(procedure._ACTIONS) == {"draw", "separate", "refill", "dose", "inoculate"}
+    paths = {route.path for route in client.app.routes if "/studio/procedure" in getattr(route, "path", "")}
+    assert all(path.startswith("/workspaces/{workspace_id}/studio/procedure/") for path in paths) and len(paths) == 10
+    # Execution goes through the existing dynamic job owner: no procedure-specific dynamic or campaign route exists.
+    assert not [path for path in paths if "/dynamic" in path or "/campaign" in path or "/process/" in path]
+
+
+def test_draft_without_an_applied_procedure_keeps_document_and_snapshot_digest(client: TestClient) -> None:
+    ws, d = _dark_ring()
+    document_before, revision_before = _document(ws, d)
+    text_before = json.dumps(document_before, sort_keys=True)
+    digest_before = dynamic_engine.prepare(ws, d, "run").digest
+    model = _create(client, ws, _golden_steps())
+    _test(client, ws, model["id"], _case(d, simulate=True))
+    _publish(client, ws, model["id"], d)
+    client.get(f"/workspaces/{ws}/studio/procedure/bench/drafts")
+    document_after, revision_after = _document(ws, d)
+    assert revision_after == revision_before and json.dumps(document_after, sort_keys=True) == text_before
+    assert dynamic_engine.prepare(ws, d, "run").digest == digest_before
