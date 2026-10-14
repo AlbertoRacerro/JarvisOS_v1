@@ -6,6 +6,10 @@ import ProcessProposals from "../components/process/ProcessProposals";
 import { publishProcessSurface } from "../app/workspaceActionSurface";
 import BiologyModelLibrary from "../components/process/BiologyModelLibrary";
 import PbrInspector from "../components/process/PbrInspector";
+import StudioUnitInspector, { StudioProvenance } from "../components/process/StudioUnitInspector";
+import { addStudioUnitOp, isStudioUnit, paletteSpec, placedSpec, portLabels } from "../components/process/studioUnitLogic";
+import { svgDataUri } from "../components/studio/unitLogic";
+import type { Navigate } from "../app/AppLink";
 import ReactorKinetics from "../components/process/ReactorKinetics";
 import ReactorResults from "../components/process/ReactorResults";
 import QuantityInput from "../components/process/QuantityInput";
@@ -49,6 +53,7 @@ import {
   type RegistryOption,
   type RegistryParam,
   type RegistryUnit,
+  type StudioPaletteUnit,
   type RevisionSummary,
   type ResultProperty,
   type ResultsView,
@@ -215,7 +220,7 @@ function quantitiesFrom(form: FormState): Record<string, DraftQuantity> | null {
   return result;
 }
 
-export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspaceId: string }>) {
+export default function ProcessDraftEditor({ workspaceId, navigate }: Readonly<{ workspaceId: string; navigate?: Navigate }>) {
   const [biologyOpen, setBiologyOpen] = useState(false);
   const [registry, setRegistry] = useState<DraftRegistry | null>(null);
   const [drafts, setDrafts] = useState<DraftSummary[]>([]);
@@ -433,6 +438,8 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
   }, [draft, loadDraft, workspaceId]);
   const contextUnit = contextUnitId ? byId.get(contextUnitId) : undefined;
   const unitSpec = (type: string): RegistryUnit | undefined => registry?.units.find((item) => item.type === type);
+  // Spec 190: a placed StudioUnit's ports and parameters come from its own pinned contract.
+  const specOf = (unit: DraftObject): RegistryUnit | undefined => placedSpec(unit) ?? unitSpec(unit.type);
   const blockers = (draft?.findings ?? []).filter((item) => item.severity === "blocker");
   // Shown counts equal the visible guidance rows (deduplicated, collapsed groups count once).
   const shownFindings = useMemo(() => visibleFindings(draft?.findings ?? []), [draft]);
@@ -482,10 +489,10 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
     return { x: point.x, y: point.y };
   };
 
-  const unitWidth = (unit: DraftObject) => Math.max(UNIT_W, (unitSpec(unit.type)?.label.length ?? 8) * 6.2 + 20);
+  const unitWidth = (unit: DraftObject) => Math.max(UNIT_W, (specOf(unit)?.label.length ?? 8) * 6.2 + 20);
   // Port geometry follows the saved layout orientation; endpoint identity and port order stay authoritative.
   const portAnchor = (unit: DraftObject, end: "source" | "target", port: number, energy: boolean): Anchor => {
-    const spec = unitSpec(unit.type);
+    const spec = specOf(unit);
     const u = position(unit);
     if (energy) {
       const inlets = spec?.energy_inlets ?? [];
@@ -576,6 +583,11 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
     if (drag.moved && moved) void apply([{ op: "move", id: drag.id, x: moved.x, y: moved.y }]);
   };
 
+  const addStudioUnit = (entry: StudioPaletteUnit) => {
+    const spot = { x: 80 + (objects.length % 6) * 130, y: 90 + Math.floor(objects.length / 6) * 130 };
+    const id = nextId(objects, "u");
+    void apply([addStudioUnitOp(entry, id, nextTag(objects, "SU-"), spot)]).then(() => setSelectedId(id));
+  };
   const addUnit = (type: string) => {
     const spot = { x: 80 + (objects.length % 6) * 130, y: 90 + Math.floor(objects.length / 6) * 130 };
     const prefix = TAG_PREFIX[type] ?? (type.replace(/[^A-Z]/g, "") || "U");
@@ -730,7 +742,7 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
     ].join(" ");
     if (item.kind === "unit") {
       const point = position(item);
-      const spec = unitSpec(item.type);
+      const spec = specOf(item);
       const width = unitWidth(item);
       const inlets = spec?.inlets ?? [];
       const outlets = spec?.outlets ?? [];
@@ -746,8 +758,14 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
           <text x={point.x + width / 2 - 5} y={point.y - UNIT_H / 2 + 10} textAnchor="end" className="draft-owner-badge">
             {ownerShort(spec?.owner)}
           </text>
-          {inlets.map((name, port) => { const anchor = portAnchor(item, "target", port, false); return <rect key={`in-${port}`} className="draft-port" x={anchor.at.x - 2} y={anchor.at.y - 3} width={4} height={6}><title>{name}</title></rect>; })}
-          {outlets.map((name, port) => { const anchor = portAnchor(item, "source", port, false); return <rect key={`out-${port}`} className="draft-port" x={anchor.at.x - 2} y={anchor.at.y - 3} width={4} height={6}><title>{name}</title></rect>; })}
+          {isStudioUnit(item) && item.studio?.contract.symbol ? <image className="draft-studio-symbol" href={svgDataUri(item.studio.contract.symbol)} x={point.x - width / 2 + 2} y={point.y - UNIT_H / 2 + 2} width={width - 4} height={UNIT_H - 4} preserveAspectRatio="xMidYMid meet" /> : null}
+          {inlets.map((name, port) => { const anchor = portAnchor(item, "target", port, false); return <rect key={`in-${port}`} className="draft-port" data-port={`in:${name}`} x={anchor.at.x - 2} y={anchor.at.y - 3} width={4} height={6}><title>{isStudioUnit(item) ? portLabels(item, "inlets")[port] : name}</title></rect>; })}
+          {outlets.map((name, port) => { const anchor = portAnchor(item, "source", port, false); return <rect key={`out-${port}`} className="draft-port" data-port={`out:${name}`} x={anchor.at.x - 2} y={anchor.at.y - 3} width={4} height={6}><title>{isStudioUnit(item) ? portLabels(item, "outlets")[port] : name}</title></rect>; })}
+          {isStudioUnit(item) && <>
+            {inlets.map((name, port) => { const anchor = portAnchor(item, "target", port, false); return <text key={`inl-${port}`} className="draft-port-label" x={anchor.at.x + (anchor.side === "left" ? 5 : -5)} y={anchor.at.y + 3} textAnchor={anchor.side === "left" ? "start" : "end"}>{name}</text>; })}
+            {outlets.map((name, port) => { const anchor = portAnchor(item, "source", port, false); return <text key={`outl-${port}`} className="draft-port-label" x={anchor.at.x + (anchor.side === "right" ? -5 : 5)} y={anchor.at.y + 3} textAnchor={anchor.side === "right" ? "end" : "start"}>{name}</text>; })}
+            <text x={point.x} y={point.y + UNIT_H / 2 + 11} textAnchor="middle" className="draft-studio-limits-label" data-testid={`studio-limits-${item.tag}`}>{`${item.studio?.version_label ?? ""} · steady only · unqualified`}</text>
+          </>}
           {[...(spec?.energy_inlets ?? []), ...(spec?.energy_outlets ?? [])].map((name, index, all) => (
             <rect key={`energy-${index}`} className="draft-port--energy" x={point.x + energyPortX(all.length, index) * (item.flip_x ? -1 : 1) - 3} y={point.y + (item.flip_y ? -1 : 1) * (UNIT_H / 2 - 3)} width={6} height={6}>
               <title>{name} (energy)</title>
@@ -777,7 +795,7 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
 
   const streamOptions = (end: "source" | "target", energy: boolean) =>
     units.flatMap((unit) => {
-      const spec = unitSpec(unit.type);
+      const spec = specOf(unit);
       const ports = energy
         ? end === "source" ? spec?.energy_outlets ?? [] : spec?.energy_inlets ?? []
         : end === "source" ? spec?.outlets ?? [] : spec?.inlets ?? [];
@@ -806,7 +824,7 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
   // An energy stream's duty is an input only where the connected unit's mode reads it.
   const dutyIsInput = (stream: DraftObject) => {
     const unit = stream.target ? byId.get(stream.target.unit) : undefined;
-    const spec = unit ? unitSpec(unit.type) : undefined;
+    const spec = unit ? specOf(unit) : undefined;
     const reading = spec?.energy_spec_modes;
     if (reading) return Boolean(unit?.mode && reading.includes(unit.mode));
     return !stream.source;
@@ -1049,8 +1067,11 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
   };
 
   const renderUnitInspector = (unit: DraftObject) => {
-    const spec = unitSpec(unit.type);
+    const spec = specOf(unit);
     if (!spec) return <p>Unsupported unit type.</p>;
+    if (isStudioUnit(unit)) return <StudioUnitInspector key={`${unit.id}:${draft.revision}`} unit={unit} objects={objects} status={draft.studio_units?.[unit.id]}
+      provenance={resultsView?.studio_units?.[unit.tag]} failure={unitFailure(unit.tag)} resultsState={results.state} apply={apply} navigate={navigate}
+      showError={(message) => setNotice({ tone: "danger", text: message })} />;
     if (unit.type === "PhotobioreactorT1") return <PbrInspector workspaceId={workspaceId} unit={unit} spec={spec} registry={registry}
       result={solvedRun?.units?.[unit.tag]} results={results} lastRun={lastRun} failure={unitFailure(unit.tag)} feedBasis={draft.pbr_feed_basis?.[unit.tag]}
       findings={draft.findings} apply={apply} libraryOpen={biologyOpen} openLibrary={() => setBiologyOpen(true)}
@@ -1235,7 +1256,7 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
               {(run.mixed_solve.partition?.segments ?? []).filter((segment) => Array.isArray(segment?.units)).map((segment) => (
                 <p key={segment.id}><strong>DWSIM · segment {segment.id + 1}</strong> · level {segment.level}: {segment.units.join(", ")}</p>
               ))}
-              <p><strong>Jarvis</strong>: {objects.filter((item) => item.kind === "unit" && unitSpec(item.type)?.owner === "jarvis_bio").map((item) => item.tag).join(", ") || "culture propagation"}</p>
+              <p><strong>Jarvis</strong>: {objects.filter((item) => item.kind === "unit" && specOf(item)?.owner === "jarvis_bio").map((item) => item.tag).join(", ") || "culture propagation"}</p>
             </div>
           </details>
         </section>
@@ -1300,6 +1321,7 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
           Stale · {results.edits_since} edit(s) since run {resultsView.run_id.slice(0, 8)} on revision {resultsView.draft_revision.split(":")[0]}. Values below describe that revision, not the current draft.
         </p>}
         <ResultsWorkspace view={resultsView} stale={stale} compounds={draft.compounds} onSelectTag={selectTag} />
+        {Object.entries(resultsView.studio_units ?? {}).map(([tag, provenance]) => <StudioProvenance key={tag} tag={tag} provenance={provenance} />)}
         {solvedRun && resultsView.run_id === solvedRun.run_id && (
           <dl className="draft-provenance">
             <div><dt>Revision</dt><dd>{solvedRun.draft_revision}</dd></div>
@@ -1355,7 +1377,7 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
           onClick={() => (setupOpen ? closeSetup() : openSetup())}>{setupOpen ? "Close setup" : "Setup"}</button>
         <button type="button" className="draft-run-button" disabled={busy !== null || blockers.length > 0} onClick={() => void act("run")}>
           {busy === "run"
-            ? registry.units.some((unit) => unit.owner === "jarvis_bio") && objects.some((item) => item.kind === "unit" && unitSpec(item.type)?.owner === "jarvis_bio")
+            ? registry.units.some((unit) => unit.owner === "jarvis_bio") && objects.some((item) => item.kind === "unit" && specOf(item)?.owner === "jarvis_bio")
               ? "Running mixed solve (DWSIM + Jarvis)…" : "Running…"
             : "Run"}
         </button>
@@ -1397,6 +1419,11 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
               <button key={unit.type} type="button" onClick={() => addUnit(unit.type)}>{unit.label}</button>
             ))}
           </>}
+          <h3>Studio units</h3>
+          {(registry.studio_units ?? []).length ? (registry.studio_units ?? []).map((entry) => (
+            <button key={entry.model_spec_id} type="button" data-testid="palette-studio-unit" title={`${entry.label} ${entry.version_label}: ${paletteSpec(entry).inlets.join(", ")} to ${paletteSpec(entry).outlets.join(", ")}. ${entry.limits}`}
+              onClick={() => addStudioUnit(entry)}>{entry.label} <small>{entry.version_label}</small></button>
+          )) : <small className="draft-hint">Published process units from Studio appear here.</small>}
           {[...new Set(registry.units.filter((unit) => unit.owner !== "jarvis_bio").map((unit) => unit.owner))].map((owner) => <Fragment key={owner}>
             <h3>{ownerShort(owner)} units</h3>
             {registry.units.filter((unit) => unit.owner === owner).map((unit) => (
@@ -1491,7 +1518,7 @@ export default function ProcessDraftEditor({ workspaceId }: Readonly<{ workspace
         </div>
         {selected ? (
           <aside className="draft-inspector" aria-label="Inspector" data-testid="draft-inspector">
-            <div className="draft-inspector__title"><h3>{selected.kind === "unit" ? unitSpec(selected.type)?.label : "Material stream"} {selected.tag}</h3>
+            <div className="draft-inspector__title"><h3>{selected.kind === "unit" ? specOf(selected)?.label : "Material stream"} {selected.tag}</h3>
               {selected.kind === "unit" && <MenuButton label={`Orientation for ${selected.tag}`} items={[
                 { id: "mirror-lr", label: selected.flip_x ? "Unmirror left ↔ right" : "Mirror left ↔ right", onSelect: () => void apply([{ op: "set_orientation", id: selected.id, flip_x: !selected.flip_x }]) },
                 { id: "mirror-tb", label: selected.flip_y ? "Unmirror top ↕ bottom" : "Mirror top ↕ bottom", onSelect: () => void apply([{ op: "set_orientation", id: selected.id, flip_y: !selected.flip_y }]) },
