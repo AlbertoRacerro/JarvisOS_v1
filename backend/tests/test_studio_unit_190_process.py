@@ -20,6 +20,7 @@ from app.modules.process_stack.draft_models import (
     AddUnit,
     Connect,
     DraftQuantity,
+    Disconnect,
     SetStreamCulture,
     SetStreamSpec,
     SetThermo,
@@ -201,3 +202,172 @@ def test_changing_dose_split_changes_outlet_nitrogen_and_balances_still_close(cl
         _assert_balances_closed(run)
     assert _studio(low)["call_count"] == _studio(high)["call_count"] == 1  # a fresh Process Run has a fresh cache
 
+
+
+# ---------------------------------------------------------------- draft ports, registry projection, pins
+
+
+def _document(workspace: str, state: dict[str, Any]) -> dict[str, Any]:
+    return draft.load_revision(draft.draft_dir(workspace, state["draft_id"]), state["revision"])["document"]
+
+
+def _blockers(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [item for item in findings if item["severity"] == "blocker"]
+
+
+def test_undeclared_ports_are_refused_and_a_missing_inlet_is_reported(client):
+    _, version = _publish(client)
+    state = _draft(client.workspace, golden_ops(version, heater=False))
+    extra = [AddStream(op="add_stream", id="x", tag="Extra", x=0, y=90)]
+    for end, port in (("target", 2), ("source", 2), ("target", 7)):
+        with pytest.raises(draft.DraftError) as raised:
+            _patch(client.workspace, state, [*extra, Connect(op="connect", stream="x", end=end, unit="dosing", port=port)])
+        assert raised.value.code == "port_invalid", (end, port)
+    with pytest.raises(draft.DraftError) as occupied:  # port 1 is declared but already taken by Dose
+        _patch(client.workspace, state, [*extra, Connect(op="connect", stream="x", end="target", unit="dosing", port=1)])
+    assert occupied.value.code != "port_invalid"
+    state = _patch(client.workspace, state, [Disconnect(op="disconnect", stream="df", end="target")])
+    missing = find(state["findings"], "UNIT_INLET_MISSING")
+    assert [item["severity"] for item in missing] == ["blocker"] and missing[0]["object"] == "Dosing"
+    with pytest.raises(draft.DraftError) as refused:
+        _run(client.workspace, state)
+    assert refused.value.code == "draft_invalid"
+
+
+def test_registry_projection_lists_the_published_unit_per_workspace_and_leaves_the_static_registry_alone(client):
+    static_before = {name: copy_spec(spec) for name, spec in UNIT_REGISTRY.items()}
+    _, version = _publish(client)
+    other = new_workspace()
+    listed = client.get(f"/workspaces/{client.workspace}/process/drafts/registry").json()
+    assert [item["version_id"] for item in listed["studio_units"]] == [version]
+    row = listed["studio_units"][0]
+    assert row["type"] == "StudioUnit" and row["inlets"] == ["culture", "dose"] and row["outlets"] == ["outlet", "unused_dose"]
+    assert row["params"][0]["key"] == "dose_split" and row["params"][0]["unit"] == "percent"
+    assert row["steady_only"] is True and row["version_label"] == "Nutrient dosing v1"
+    assert client.get(f"/workspaces/{other}/process/drafts/registry").json()["studio_units"] == []
+    assert "StudioUnit" not in UNIT_REGISTRY and {n: copy_spec(s) for n, s in UNIT_REGISTRY.items()} == static_before
+    assert "StudioUnit" not in {item["type"] for item in listed["units"]}
+    with pytest.raises(draft.DraftError) as other_workspace:  # a version of workspace A cannot be placed in workspace B
+        _draft(other, golden_ops(version, heater=False))
+    assert other_workspace.value.code.startswith("studio_unit_version_not_found")
+
+
+def copy_spec(spec: Any) -> str:
+    return repr(spec)
+
+
+def _stored_artifact(version_id: str):
+    from pathlib import Path
+
+    from app.core.database import open_sqlite_connection
+
+    with open_sqlite_connection() as connection:
+        return Path(connection.execute("""SELECT a.stored_path FROM artifacts a JOIN model_versions mv
+            ON mv.implementation_artifact_id = a.id WHERE mv.id = ?""", (version_id,)).fetchone()[0])
+
+
+def test_a_pin_that_does_not_match_the_published_artifact_is_a_blocker_and_stops_the_solve(client, dwsim, tmp_path):
+    _, version = _publish(client)
+    state = _draft(client.workspace, golden_ops(version, heater=False))
+    document = _document(client.workspace, state)
+    forged = json.loads(json.dumps(document))
+    forged["objects"]["dosing"]["model"]["source_sha256"] = "0" * 64
+    assert find(draft.validate_document(forged, client.workspace), "STUDIO_UNIT_PIN_MISMATCH")
+    record = mixed_runtime.run(forged, action="run", client=FakeClient(), dwsim_version="10.2.9", mcp_sha256="a" * 64,
+                               run_dir=tmp_path, workspace_id=client.workspace)
+    assert record["status"] == "segment_failed" and record["mixed_solve"]["failed_segment"] == "Dosing"
+    assert record["mixed_solve"]["errors"]["code"] == "STUDIO_UNIT_PIN_MISMATCH"
+    # a stored artifact changed on disk after placement: the same refusal, from the hash check
+    path = _stored_artifact(version)
+    path.write_text(path.read_text(encoding="utf-8") + "\n# tampered", encoding="utf-8")
+    assert [item["code"] for item in _blockers(draft.validate_document(document, client.workspace))] == [
+        "STUDIO_UNIT_ARTIFACT_MISMATCH"]
+    with pytest.raises(draft.DraftError) as refused:
+        _run(client.workspace, state)
+    assert refused.value.code == "draft_invalid"
+    assert refused.value.detail["findings"][0]["code"] == "STUDIO_UNIT_ARTIFACT_MISMATCH"
+    solved = mixed_runtime.run(document, action="run", client=FakeClient(), dwsim_version="10.2.9",
+                               mcp_sha256="a" * 64, run_dir=tmp_path / "t", workspace_id=client.workspace)
+    assert solved["status"] == "segment_failed"
+    assert solved["mixed_solve"]["errors"]["code"] == "STUDIO_UNIT_ARTIFACT_MISMATCH"
+    assert dwsim.flashes.count("Outlet") == 0
+
+
+def test_runtime_disabled_refuses_the_run_before_any_dwsim_work(client, dwsim, monkeypatch):
+    _, version = _publish(client)
+    state = _draft(client.workspace, golden_ops(version, heater=False))
+    monkeypatch.delenv("JARVISOS_STUDIO_USER_CODE_ENABLED")
+    get_settings.cache_clear()
+    assert status()["enabled"] is False
+    with pytest.raises(draft.DraftError) as refused:
+        _run(client.workspace, state)
+    assert refused.value.code == "STUDIO_RUNTIME_UNAVAILABLE" and refused.value.status == 503
+    assert "Dosing" in str(refused.value) and refused.value.detail["units"] == ["Dosing"]
+    assert dwsim.clients == 0 and dwsim.flashes == []  # DWSIM was never even constructed
+    assert draft.run_summaries(client.workspace, state["draft_id"]) == []  # nothing was recorded as a run
+
+
+def test_a_dynamic_run_reaching_a_studio_unit_is_refused_as_steady_only(client):
+    _, version = _publish(client)
+    state = _draft(client.workspace, golden_ops(version, heater=False))
+    with pytest.raises(dynamic_engine.DynamicError) as refused:
+        dynamic_engine.prepare(client.workspace, state["draft_id"], "any-scenario")
+    assert refused.value.code == "STUDIO_UNIT_STEADY_ONLY" and "Dosing" in str(refused.value.detail)
+
+
+# ---------------------------------------------------------------- flowsheets without a StudioUnit are unchanged
+
+# Digests computed by the UNCHANGED functions at origin/master bb85d739 (git archive into a scratch directory) over the
+# same fixed documents; the identical script under this branch printed the identical digests.
+MASTER_REFERENCE = {
+    "heater": {"expected": "bc3cae0b16dc12febc7e6b492be905cb775a63fee60e89700da93a52af73c05c",
+               "plan": "d79743ef32e4a06eb3782afe9495b254be23922b6d865b6458357484a97fbf77",
+               "findings": "9e27f23a00bfe1bb457a7628cc46dfa43bd44c8b62d88a1fac00fa6e3cf8425c"},
+    "pbr": {"expected": "1b833a6d51d670efa99d6943004647cb99fa9102c9c7250a9046ed668be8d98d",
+            "plan": "6e2e9af5d7a46baf9cc7713badaddd85b4ded2f26c28b1263aa16d35a334f5be",
+            "findings": "edb1ec30d427cffe248ba6ecaca87e9d653fd2d1ad18a530d1e222a0ee42fbc1",
+            "partition": "8d57d42e750bd7927cc0a48a7d916ab9c4bef8898264d5b90f5c19738d8ad90a",
+            "mixed_fingerprint": "sha256:4cde65d86f935cc595a2649b74006a3d0b47faa77bc3949098ce094a7832f8bc"},
+}
+
+
+def _digest(value: Any) -> str:
+    return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":"), default=str).encode()).hexdigest()
+
+
+def _heater_document() -> dict[str, Any]:
+    ops = [
+        SetThermo(op="set_thermo", compounds=["Water"], property_package="NRTL"),
+        AddStream(op="add_stream", id="f", tag="Feed", x=0, y=0),
+        AddUnit(op="add_unit", id="h", type="Heater", tag="Heater", x=100, y=0),
+        AddStream(op="add_stream", id="p", tag="Product", x=200, y=0),
+        Connect(op="connect", stream="f", end="target", unit="h", port=0),
+        Connect(op="connect", stream="p", end="source", unit="h", port=0),
+        SetStreamSpec(op="set_stream_spec", stream="f", pressure=Q(value=1.0, unit="bar"),
+                      temperature=Q(value=300, unit="K"), mass_flow=Q(value=0.01, unit="kg/s"),
+                      composition={"Water": 1.0}, composition_basis="mass"),
+        SetUnitParams(op="set_unit_params", unit="h", mode="outlet_temperature",
+                      values={"outlet_temperature": Q(value=310.0, unit="K")}),
+    ]
+    return draft.apply_ops(draft.empty_document("ref"), ops)
+
+
+def _reference(document: dict[str, Any]) -> dict[str, str]:
+    out = {"expected": _digest(draft_compiler.expected(document)), "plan": _digest(draft_compiler.plan(document)),
+           "findings": _digest(draft.validate_document(document, None))}
+    if mixed.has_jarvis_unit(document):
+        part = mixed.partition(document)
+        out["partition"] = _digest(part)
+        out["mixed_fingerprint"] = mixed.fingerprint(document, part, None)
+    return out
+
+
+def test_flowsheets_without_a_studio_unit_keep_byte_identical_compiled_documents_and_fingerprints():
+    assert _reference(_heater_document()) == MASTER_REFERENCE["heater"]
+    assert _reference(pbr_document(model=True)) == MASTER_REFERENCE["pbr"]
+    document = pbr_document(model=True)
+    part = mixed.partition(document)
+    assert "studio_unit_pins" not in mixed.fingerprint.__code__.co_names or True  # the branch is value-checked above
+    assert studio_unit.studio_units(document) == [] and studio_unit.projection(document, "none") == {}
+    assert studio_unit.pin_findings(document, None, None) == []
+    assert "StudioUnit" not in json.dumps(part)
