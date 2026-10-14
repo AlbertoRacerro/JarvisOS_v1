@@ -169,6 +169,15 @@ def test_host_checks_component_imbalance_and_declared_generation():
     unknown_outlet = _outlet(culture={"nitrogen": None})
     assert check_result(unknown_outlet, inlets=unknown_inlets, outlet_names=["outlet"],
                         compounds=["Water"], generation=[]).outlets["outlet"]["culture"]["nitrogen"] is None
+    mixed_unknown = {"known": stream(1.0, nitrogen=0.1),
+                     "unknown": {**stream(1.0), "culture": {"nitrogen": None}}}
+    propagated = {"outlets": {"o": {**stream(2.0), "culture": {"nitrogen": None}}}}
+    assert check_result(propagated, inlets=mixed_unknown, outlet_names=["o"],
+                        compounds=["Water"], generation=[]).outlets["o"]["culture"]["nitrogen"] is None
+    with pytest.raises(UnitCheckError) as caught:
+        check_result({"outlets": {"o": stream(2.0)}}, inlets=mixed_unknown, outlet_names=["o"],
+                     compounds=["Water"], generation=[])
+    assert caught.value.code == "STUDIO_UNIT_CULTURE_IMBALANCE"
     zero_unknown = {"zero": {**stream(0.0), "culture": {"nitrogen": None}}, "live": stream(1.0)}
     assert check_result({"outlets": {"o": stream(1.0)}}, inlets=zero_unknown, outlet_names=["o"],
                         compounds=["Water"], generation=[]).outlets["o"]["mass_flow_kg_s"] == 1.0

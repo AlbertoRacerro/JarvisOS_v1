@@ -116,14 +116,19 @@ def check_result(result: Any, *, inlets: dict[str, dict[str, Any]], outlet_names
             raise UnitCheckError("STUDIO_UNIT_COMPONENT_IMBALANCE",
                                  f"Compound {compound} in {amount_in:.12g} kg/s differs from out {amount_out:.12g} kg/s.")
     for name in CULTURE_FIELDS:
-        active = [item for item in [*inbound, *outbound] if float(item["mass_flow_kg_s"]) > 0]
-        unknown = [item for item in active if (item.get("culture") or {}).get(name, 0.0) is None]
-        if unknown:
-            if len(unknown) != len(active) or rates.get(name, 0.0) != 0.0:
+        active_in = [item for item in inbound if float(item["mass_flow_kg_s"]) > 0]
+        active_out = [item for item in outbound if float(item["mass_flow_kg_s"]) > 0]
+        unknown_in = any((item.get("culture") or {}).get(name, 0.0) is None for item in active_in)
+        unknown_out = [(item.get("culture") or {}).get(name, 0.0) is None for item in active_out]
+        if unknown_in:
+            if not all(unknown_out) or rates.get(name, 0.0) != 0.0:
                 raise UnitCheckError("STUDIO_UNIT_CULTURE_IMBALANCE",
-                                     f"Culture {name} cannot be balanced with mixed known and unknown values "
-                                     "or generation against unknown values.")
-            continue  # every active stream is explicitly unknown, with no declared generation
+                                     f"Culture {name} has an unknown inlet, so active outlets must stay unknown "
+                                     "and cannot declare generation.")
+            continue  # unknown inlet amount propagates; no numeric balance can be claimed
+        if any(unknown_out):
+            raise UnitCheckError("STUDIO_UNIT_CULTURE_IMBALANCE",
+                                 f"Culture {name} has known inlets but an unknown active outlet.")
         amount_in = sum(_culture_amount(item, name) for item in inbound)
         amount_out = sum(_culture_amount(item, name) for item in outbound)
         declared_rate = float(rates.get(name, 0.0))
