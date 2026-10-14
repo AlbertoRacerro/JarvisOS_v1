@@ -2,6 +2,7 @@ import hashlib
 import json
 import mimetypes
 import shutil
+from collections.abc import Sequence
 from math import isfinite
 from pathlib import Path
 from uuid import uuid4
@@ -1366,7 +1367,7 @@ def _register_declared_artifacts(
     workspace_id: str,
     simulation_run_id: str,
     output_dir: Path,
-    artifacts: list[object],
+    artifacts: Sequence[object],
     max_artifact_bytes: int,
 ) -> list[str]:
     artifact_ids: list[str] = []

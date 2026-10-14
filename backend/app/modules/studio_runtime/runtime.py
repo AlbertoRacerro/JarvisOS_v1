@@ -352,7 +352,7 @@ def run(request: RunRequest, profile: Literal["calculation", "geometry"] = "calc
             record.classification, record.limit = "timeout", "wall_seconds"
         elif code is not None and code < 0 and -code in (signal.SIGXCPU, signal.SIGXFSZ, signal.SIGKILL):
             record.classification = "limit"
-            record.limit = {signal.SIGXCPU: "cpu_seconds", signal.SIGXFSZ: "file_bytes"}.get(-code)
+            record.limit = {int(signal.SIGXCPU): "cpu_seconds", int(signal.SIGXFSZ): "file_bytes"}.get(-code)
         elif code in _EXIT_LIMITS:
             record.classification, record.limit = "limit", _EXIT_LIMITS[code]
         elif code != 0:
