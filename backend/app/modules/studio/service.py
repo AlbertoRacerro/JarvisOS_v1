@@ -6,6 +6,8 @@ from math import isfinite
 from pathlib import Path
 from uuid import uuid4
 
+from pydantic import ValidationError
+
 from app.core.database import open_sqlite_connection
 from app.modules.events.service import utc_now
 from app.modules.modeling.models import ModelSpecCreate, ModelSpecProjectUpdate
@@ -14,7 +16,9 @@ from app.modules.modeling.service import create_model_spec
 from app.modules.process_kernel.units import parse_unit_token, resolve_unit, unit_registry
 from app.modules.runner.input_contracts import canonicalize_input_contract
 from app.modules.runner.safety import model_implementation_root
+from app.modules.studio import geometry
 from app.modules.studio.derive import derive_documentation
+from app.modules.studio.geometry import GEOMETRY_KIND, GeometryCreate, GeometryTestRequest
 from app.modules.studio.models import StudioCreate, StudioError, StudioUpdate, TestRequest, model_payload
 from app.modules.studio.unit_checks import UnitCheckError, check_result, classification_code, host_stream
 from app.modules.studio.unit_models import (
@@ -87,7 +91,11 @@ def _category(contract: dict) -> str:
 
 
 def _artifact_name(category: str) -> str:
-    return "studio_unit.py" if category == "process_unit" else "studio_calc.py"
+    return {"process_unit": "studio_unit.py", "geometry": "studio_geometry.py"}.get(category, "studio_calc.py")
+
+
+_KINDS = {"process_unit": UNIT_KIND, "geometry": GEOMETRY_KIND, "calculation": "studio_calc_v1"}
+_CATEGORY_OF_KIND = {kind: category for category, kind in _KINDS.items()}
 
 
 def _require_workspace(connection, workspace_id: str) -> None:
@@ -128,10 +136,14 @@ def _read(connection, workspace_id: str, model_spec_id: str) -> dict:
             "updated_at": row["updated_at"]}
 
 
-def create(workspace_id: str, data: StudioCreate | StudioUnitCreate) -> dict:
+def create(workspace_id: str, data: StudioCreate | StudioUnitCreate | GeometryCreate) -> dict:
     if isinstance(data, StudioUnitCreate):
         contract = unit_contract(data)
         contract_sha, source = _sha(_json(contract)), unit_scaffold(contract)
+    elif isinstance(data, GeometryCreate):
+        contract = geometry.geometry_contract(data)
+        contract_sha, source = _sha(_json(contract)), geometry.geometry_scaffold(contract)
+        _input_contract(contract)
     else:
         contract, contract_sha = _contract(data)
         _input_contract(contract)
@@ -186,6 +198,14 @@ def update(workspace_id: str, model_spec_id: str, data: StudioUpdate) -> dict:
                                        else old_contract["culture_generation"])})
             contract = unit_contract(validated_unit)
             contract_sha = _sha(_json(contract))
+        elif _category(old_contract) == "geometry":
+            if data.outputs is not None or any(item is not None for item in unit_fields) or symbol_supplied:
+                raise StudioError("studio_category_mismatch", "A geometry model declares inputs only.")
+            contract = geometry.geometry_contract(GeometryCreate.model_validate({
+                "category": "geometry", "name": name, "engineering_question": question,
+                "inputs": data.inputs if data.inputs is not None else old_contract["inputs"]}))
+            contract_sha = _sha(_json(contract))
+            _input_contract(contract)
         else:
             if any(item is not None for item in unit_fields) or symbol_supplied:
                 raise StudioError("studio_category_mismatch", "A calculation declares inputs and outputs.")
@@ -262,12 +282,30 @@ def _unit_case(source: str, contract: dict, case) -> dict:
             "culture_generation": outcome.culture_generation if outcome else None, "errors": errors}
 
 
-def test(workspace_id: str, model_spec_id: str, data: TestRequest | UnitTestRequest) -> dict:
+def test(workspace_id: str, model_spec_id: str, data: TestRequest | UnitTestRequest | GeometryTestRequest) -> dict:
     with open_sqlite_connection() as connection:
         row = _draft_row(connection, workspace_id, model_spec_id)
         if row["model_status"] != "draft":
             raise StudioError("studio_revision_required", "Revise the published model before testing.")
         source, contract = row["source"], json.loads(row["contract_json"])
+        # A bare {"inputs": ...} case fits both request shapes; the stored category decides.
+        wanted = GeometryTestRequest if _category(contract) == "geometry" else TestRequest
+        if isinstance(data, (TestRequest, GeometryTestRequest)) and not isinstance(data, wanted):
+            try:
+                data = wanted.model_validate(data.model_dump(exclude_unset=True))
+            except ValidationError as exc:
+                raise StudioError("studio_category_mismatch", "The test cases do not match the model category.") from exc
+        if (_category(contract) == "geometry") != isinstance(data, GeometryTestRequest):
+            raise StudioError("studio_category_mismatch", "The test cases do not match the model category.")
+        if isinstance(data, GeometryTestRequest):
+            cases = geometry.run_cases(workspace_id, model_spec_id, source, contract, data.cases)
+            report = {"source_sha256": row["source_sha256"], "contract_sha256": row["contract_sha256"],
+                      "passed": all(case["passed"] for case in cases), "cases": cases}
+            connection.execute("""UPDATE studio_drafts SET test_cases_json = ?, test_report_json = ?, updated_at = ?
+                WHERE model_spec_id = ?""", (_json([case.model_dump() for case in data.cases]), _json(report),
+                                             utc_now(), model_spec_id))
+            connection.commit()
+            return report
         if (_category(contract) == "process_unit") != isinstance(data, UnitTestRequest):
             raise StudioError("studio_category_mismatch", "The test cases do not match the model category.")
         if isinstance(data, UnitTestRequest):
@@ -327,7 +365,8 @@ def publish(workspace_id: str, model_spec_id: str) -> dict:
             raise StudioError("studio_publish_report_required", "A passing test report for the current source and contract is required.")
         contract = json.loads(row["contract_json"])
         category = _category(contract)
-        input_payload, input_sha = _input_contract(contract) if category == "calculation" else (None, None)
+        input_payload, input_sha = (_input_contract(contract) if category in {"calculation", "geometry"}
+                                    else (None, None))
         next_number = len(_versions(connection, model_spec_id)) + 1
         version_id, artifact_id, now = str(uuid4()), str(uuid4()), utc_now()
         version_label = f"{row['title']} v{next_number}"  # the calculation surface lists versions by label alone
@@ -346,8 +385,7 @@ def publish(workspace_id: str, model_spec_id: str) -> dict:
                 input_contract_sha256, created_at, notes) VALUES (?, ?, ?, ?, ?, ?, 'published',
                 ?, ?, ?, ?, 'Scientifically unqualified')""",
                 (version_id, workspace_id, model_spec_id, version_label, artifact_id,
-                 UNIT_KIND if category == "process_unit" else "studio_calc_v1",
-                 f"Studio {'process unit' if category == 'process_unit' else 'calculation'} publication",
+                 _KINDS[category], f"Studio {category.replace('_', ' ')} publication",
                  input_payload, input_sha, now))
             connection.execute("""INSERT INTO studio_published_versions
                 (version_id, model_spec_id, contract_json, source_sha256, contract_sha256, created_at)
@@ -405,7 +443,7 @@ def library(workspace_id: str) -> list[dict]:
             mv.implementation_kind, sp.source_sha256, sp.contract_sha256, mv.created_at FROM studio_published_versions sp
             JOIN model_versions mv ON mv.id = sp.version_id JOIN model_specs m ON m.id = mv.model_spec_id
             WHERE mv.workspace_id = ? ORDER BY sp.rowid DESC""", (workspace_id,)).fetchall()
-        return [{**dict(row), "category": "process_unit" if row["implementation_kind"] == UNIT_KIND else "calculation",
+        return [{**dict(row), "category": _CATEGORY_OF_KIND.get(row["implementation_kind"], "calculation"),
                  "scientific_status": "unqualified"} for row in rows]
 
 
@@ -454,3 +492,11 @@ def published_units(workspace_id: str) -> list[dict]:
             ORDER BY sp.rowid""", (workspace_id, UNIT_KIND))]
         return [_unit_version(connection, workspace_id, _unit_row(connection, workspace_id, item), with_source=False)
                 for item in ids]
+
+
+def geometry_preview(workspace_id: str, model_spec_id: str, preview_id: str, name: str) -> Path:
+    """One verified artifact from the current draft test report (spec 189)."""
+    with open_sqlite_connection() as connection:
+        row = _draft_row(connection, workspace_id, model_spec_id)
+    report = json.loads(row["test_report_json"]) if row["test_report_json"] else None
+    return geometry.preview_file(workspace_id, model_spec_id, report, preview_id, name)
