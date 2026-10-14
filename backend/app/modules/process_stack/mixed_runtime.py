@@ -199,18 +199,21 @@ def _call_evaluator(unit: dict[str, Any], inlet: dict[str, Any],
     evaluator = JARVIS_EVALUATORS.get(unit["type"])
     if evaluator is None:
         raise SegmentFailure(unit["tag"], {"code": "JARVIS_EVALUATOR_MISSING", "type": unit["type"]})
+    timeout_code = "STUDIO_UNIT_TIMEOUT" if unit["type"] == "StudioUnit" else "JARVIS_UNIT_TIMEOUT"
+    if context.remaining_s() <= 0:
+        raise SegmentFailure(unit["tag"], {"code": timeout_code})
     try:
         evaluation = evaluator(unit, inlet, context)
     except Exception as exc:
         if isinstance(exc, SegmentFailure):
             raise
-        code = "JARVIS_UNIT_TIMEOUT" if isinstance(exc, TimeoutError) else str(
+        code = timeout_code if isinstance(exc, TimeoutError) else str(
             getattr(exc, "code", "JARVIS_UNIT_FAILED"))
         detail = getattr(exc, "detail", None)
         raise SegmentFailure(unit["tag"], {"code": code, "error_type": type(exc).__name__,
                                             "message": str(exc)[:600], "detail": detail}) from exc
     if context.remaining_s() <= 0:
-        raise SegmentFailure(unit["tag"], {"code": "JARVIS_UNIT_TIMEOUT"})
+        raise SegmentFailure(unit["tag"], {"code": timeout_code})
     _check_evaluation(unit, evaluation)
     return evaluation
 
@@ -1245,15 +1248,27 @@ def _run(document: dict[str, Any], *, action: str, client: DwsimMcpClient,
                                phase_totals=phase_totals, settings=settings)
     tear = controller["iterate"]
     status, reason, history = controller["status"], controller["reason"], controller["history"]
+    if reason == "wall_budget" and studio_unit.studio_units(document):
+        return _failure_record(
+            document, part, reason=reason, iteration=len(history), segment="mixed", units=None,
+            errors={"code": "STUDIO_UNIT_TIMEOUT", "message": "The Process solve wall budget is insufficient for another sandbox evaluation."},
+            history=history, phase_totals=phase_totals, settings=settings)
     last_iteration = history[-1]["iteration"] if history else None
     last = candidates.get(last_iteration) if last_iteration is not None else None
+    final_remaining_s = min(wall_s - (time.monotonic() - started),
+                            deadline - time.monotonic() if deadline is not None else math.inf)
+    if final_remaining_s <= 0:
+        return _failure_record(
+            document, part, reason="wall_budget", iteration=len(history), segment="mixed", units=None,
+            errors={"code": "STUDIO_UNIT_TIMEOUT" if studio_unit.studio_units(document) else "MIXED_WALL_TIMEOUT",
+                    "message": "The Process solve wall budget expired before the final sweep."},
+            history=history, phase_totals=phase_totals, settings=settings)
     try:
         reserve_s = max(3.0, reserve_builds * max(3.0, 1.5 * t_build))
         final = _evaluate(document, part, tear, client=client, full=True, run_dir=run_dir,
                           iteration=last_iteration or 0, dwsim_version=dwsim_version,
                           mcp_sha256=mcp_sha256,
-                          remaining_s=min(wall_s - (time.monotonic() - started),
-                                          deadline - time.monotonic() if deadline is not None else math.inf),
+                          remaining_s=final_remaining_s,
                           run_cache=run_cache, workspace_id=workspace_id)
     except SegmentFailure as exc:
         detail = exc.detail if isinstance(exc.detail, dict) else {"message": str(exc.detail)}

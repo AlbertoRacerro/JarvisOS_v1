@@ -416,6 +416,19 @@ def test_a_sandbox_timeout_fails_the_run_with_a_typed_code(client, dwsim):
     assert "Outlet" not in dwsim.flashes and "Unused" not in dwsim.flashes
 
 
+def test_an_insufficient_solve_budget_fails_with_a_typed_timeout_before_evaluation(client, dwsim, tmp_path):
+    _, version = _publish(client)
+    state = _draft(client.workspace, golden_ops(version, heater=False))
+    document = draft.load_revision(draft.draft_dir(client.workspace, state["draft_id"]), state["revision"])["document"]
+    record = mixed_runtime.run(document, action="run", client=FakeClient(), dwsim_version="10.2.9",
+                               mcp_sha256="a" * 64, run_dir=tmp_path, workspace_id=client.workspace,
+                               timeout_s=1.0)
+    solve = record["mixed_solve"]
+    assert record["status"] == "segment_failed" and solve["reason"] == "wall_budget"
+    assert solve["errors"]["code"] == "STUDIO_UNIT_TIMEOUT"
+    assert dwsim.flashes == []
+
+
 def test_run_cache_never_reuses_a_result_checked_against_another_contract(monkeypatch):
     base = {"category": "process_unit", "inlets": [{"name": "a", "label": "A"}],
             "outlets": [{"name": "o", "label": "O"}], "parameters": [], "symbol": None,

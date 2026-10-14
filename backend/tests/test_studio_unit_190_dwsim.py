@@ -152,4 +152,4 @@ def test_a_budget_too_small_stops_with_the_typed_wall_budget_never_a_truncated_c
     solve = record["mixed_solve"]
     print("BUDGET_STOP", record["status"], solve.get("reason"), (solve.get("errors") or {}).get("code"))
     assert record["status"] != "completed" and solve["status"] == record["status"]
-    assert solve["reason"] == "wall_budget" or "timeout" in str((solve.get("errors") or {}).get("code", "")).lower()
+    assert solve["reason"] == "wall_budget" and solve["errors"]["code"] == "STUDIO_UNIT_TIMEOUT"
