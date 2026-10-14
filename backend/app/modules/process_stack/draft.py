@@ -24,7 +24,7 @@ from pydantic import BaseModel
 from app.core.paths import build_paths
 from app.modules.engineering.refs import Quantity
 from app.modules.process_stack import culture as culture_engine
-from app.modules.process_stack import kinetics, pbr_validation
+from app.modules.process_stack import kinetics, pbr_validation, studio_unit
 from app.modules.process_stack._common import EvaluationRefusal, magnitude
 from app.modules.process_stack.draft_models import (
     COMPILER_VERSION,
@@ -34,6 +34,7 @@ from app.modules.process_stack.draft_models import (
     PROPERTY_PACKAGES,
     QUANTITY_UNITS,
     STREAM_SPECS,
+    STUDIO_UNIT,
     UNIT_REGISTRY,
     UNSUPPORTED_TYPES,
     AddStream,
@@ -63,7 +64,9 @@ from app.modules.process_stack.draft_models import (
     SetUnitModel,
     SetUnitParams,
     UnitSpec,
+    UpdateStudioUnit,
     pbr_temperature_invalid,
+    spec_for,
 )
 from app.modules.process_stack.editor import _lock
 from app.modules.workspaces.service import get_workspace
@@ -226,7 +229,72 @@ def _unique_tag(document: dict[str, Any], tag: str, own_id: str | None = None) -
 
 
 def _unit_spec(unit: dict[str, Any]) -> UnitSpec:
-    return UNIT_REGISTRY[unit["type"]]
+    return spec_for(unit)
+
+
+def _resolve_studio(version_id: str | None, resolve: studio_unit.Resolver | None) -> dict[str, Any]:
+    if not version_id or resolve is None:
+        raise DraftError("studio_version_required", "A StudioUnit is placed from a published Studio version", field="version_id")
+    try:
+        return resolve(version_id)
+    except studio_unit.StudioUnitError as exc:
+        raise DraftError(exc.code.lower(), exc.message, field="version_id") from exc
+
+
+def _update_studio_unit(document: dict[str, Any], op: UpdateStudioUnit, resolve: studio_unit.Resolver | None) -> None:
+    unit = _object(document, op.unit, "unit")
+    if unit["type"] != STUDIO_UNIT:
+        raise DraftError("studio_update_unsupported", "Only a StudioUnit can be updated to a newer version", field="unit")
+    resolved = _resolve_studio(op.version_id, resolve)
+    studio = unit["studio"]
+    if resolved["model_spec_id"] != studio["model_spec_id"]:
+        raise DraftError("studio_update_other_model", "The version belongs to a different Studio model", field="version_id")
+    if resolved["version_number"] <= studio["version_number"]:
+        raise DraftError("studio_update_not_newer", f"{studio['name']} v{resolved['version_number']} is not newer "
+                         f"than the pinned v{studio['version_number']}", field="version_id")
+    old, new = spec_for(unit), _studio_spec_of(resolved)
+    for stream in document["objects"].values():
+        for end, ports_old, ports_new in (("source", old.outlets, new.outlets), ("target", old.inlets, new.inlets)):
+            endpoint = stream.get(end) if stream["kind"] == "stream" else None
+            if endpoint and endpoint["unit"] == unit["id"] and stream["type"] != "EnergyStream" and (
+                    endpoint["port"] >= len(ports_new) or ports_new[endpoint["port"]] != ports_old[endpoint["port"]]):
+                raise DraftError("studio_update_ports_changed", f"v{resolved['version_number']} changes the port "
+                                 f"{ports_old[endpoint['port']]} that {stream['tag']} uses; disconnect it first", field="version_id")
+    unit.update(studio_unit.pin_fields(resolved))
+    kept = {item["name"]: item for item in resolved["contract"]["parameters"]}
+    units = {item["name"]: item["unit"] for item in studio["contract"]["parameters"]}
+    unit["params"] = {name: value for name, value in unit["params"].items()
+                      if name in kept and units.get(name) == kept[name]["unit"]
+                      and not _outside(value["si"], kept[name])}
+
+
+def _studio_spec_of(resolved: dict[str, Any]) -> UnitSpec:
+    return spec_for({"type": STUDIO_UNIT, "tag": resolved["name"], **studio_unit.pin_fields(resolved)})
+
+
+def _outside(value: float, variable: dict[str, Any]) -> bool:
+    return (variable.get("min") is not None and value < variable["min"]
+            or variable.get("max") is not None and value > variable["max"])
+
+
+def _set_studio_params(unit: dict[str, Any], op: SetUnitParams) -> None:
+    from app.modules.process_kernel.units import unit_registry
+
+    if op.mode not in (None, "steady") or op.options or op.reactions:
+        raise DraftError("mode_unsupported", "A StudioUnit has no modes, options or reactions", field="mode")
+    declared = {item["name"]: item for item in unit["studio"]["contract"]["parameters"]}
+    for key, quantity in op.values.items():
+        variable = declared.get(key)
+        if variable is None:
+            raise DraftError("param_unsupported", f"{unit['tag']} has no parameter {key!r}", field=key)
+        try:
+            value = float(unit_registry().Quantity(quantity.value, quantity.unit).to(variable["unit"]).magnitude)
+        except Exception as exc:  # noqa: BLE001 - any Pint failure is one operator-facing unit refusal
+            raise DraftError("quantity_invalid", f"{variable['label']} must be in {variable['unit']}", field=key) from exc
+        if not math.isfinite(value) or _outside(value, variable):
+            raise DraftError("quantity_out_of_range", f"{variable['label']} is outside its declared bounds", field=key)
+        # For a StudioUnit "si" is the magnitude in the declared unit, which is also what the inspector shows.
+        unit["params"][key] = {"si": value, "value": value, "unit": variable["unit"]}
 
 
 def _occupant(document: dict[str, Any], unit_id: str, end: str, port: int, *, energy: bool = False) -> dict[str, Any] | None:
@@ -290,11 +358,20 @@ def _reaction_item(reaction: Any, declared: set[str]) -> dict[str, Any]:
     return item
 
 
-def apply_op(document: dict[str, Any], op: Any) -> None:
+def apply_op(document: dict[str, Any], op: Any, resolve: studio_unit.Resolver | None = None) -> None:
     objects = document["objects"]
     if isinstance(op, AddUnit | AddStream) and len(objects) >= MAX_OBJECTS:
         raise DraftError("draft_too_large", f"A draft holds at most {MAX_OBJECTS} objects")
-    if isinstance(op, AddUnit):
+    if isinstance(op, UpdateStudioUnit):
+        _update_studio_unit(document, op, resolve)
+    elif isinstance(op, AddUnit) and op.type == STUDIO_UNIT:
+        resolved = _resolve_studio(op.version_id, resolve)
+        _unique_tag(document, op.tag)
+        object_id = _new_id(document, "u", op.id)
+        objects[object_id] = {"id": object_id, "kind": "unit", "type": STUDIO_UNIT, "tag": op.tag, "x": op.x, "y": op.y,
+                              "mode": "steady", "params": {}, "options": {}, "reactions": [],
+                              **studio_unit.pin_fields(resolved)}
+    elif isinstance(op, AddUnit):
         if op.type not in UNIT_REGISTRY:
             reason = UNSUPPORTED_TYPES.get(op.type, "This equipment type is not in the supported registry.")
             raise DraftError("unsupported_type", f"{op.type}: {reason}", field="type")
@@ -449,6 +526,9 @@ def apply_op(document: dict[str, Any], op: Any) -> None:
     elif isinstance(op, SetUnitParams):
         unit = _object(document, op.unit, "unit")
         spec = _unit_spec(unit)
+        if unit["type"] == STUDIO_UNIT:
+            _set_studio_params(unit, op)
+            return
         if op.mode is not None:
             if op.mode not in spec.modes:
                 raise DraftError("mode_unsupported", f"{spec.label} mode {op.mode!r} is not supported; use one of "
@@ -596,11 +676,11 @@ def _validate_dynamic_refs(document: dict[str, Any], kind: str, value: dict[str,
                 raise DraftError("dynamic_reference_not_found", f"Referenced tag {tag!r} was not found", field=field)
 
 
-def apply_ops(document: dict[str, Any], ops: list[Any]) -> dict[str, Any]:
+def apply_ops(document: dict[str, Any], ops: list[Any], resolve: studio_unit.Resolver | None = None) -> dict[str, Any]:
     result = copy.deepcopy(document)
     for index, op in enumerate(ops):
         try:
-            apply_op(result, op)
+            apply_op(result, op, resolve)
         except DraftError as exc:
             exc.detail.setdefault("op_index", index)
             raise
@@ -610,7 +690,8 @@ def apply_ops(document: dict[str, Any], ops: list[Any]) -> dict[str, Any]:
 # ---------------------------------------------------------------- validation
 
 
-def validate_document(document: dict[str, Any], workspace_id: str | None = None) -> list[dict[str, Any]]:
+def validate_document(document: dict[str, Any], workspace_id: str | None = None,
+                      resolve: studio_unit.Resolver | None = None) -> list[dict[str, Any]]:
     """Instant Jarvis-side pre-run findings; DWSIM's own check runs only on Validate.
 
     ``workspace_id`` is optional; without it the Photobioreactor model-card library cannot be consulted.
@@ -622,6 +703,9 @@ def validate_document(document: dict[str, Any], workspace_id: str | None = None)
                          "source": "jarvis"})
 
     objects = document["objects"]
+    studio_findings = studio_unit.pin_findings(document, workspace_id, resolve)
+    if any(item["severity"] == "blocker" for item in studio_findings):
+        return studio_findings  # a pin that does not verify makes the unit's ports untrustworthy
     if not objects:
         add("blocker", "DRAFT_EMPTY", "Add streams and equipment to build the flowsheet.")
     if document.get("solver") is not None:
@@ -766,7 +850,7 @@ def validate_document(document: dict[str, Any], workspace_id: str | None = None)
     _advice(document, add, _cycle_members(graph))
     findings.extend(culture_engine.culture_findings(document))
     findings.extend(pbr_validation.pbr_findings(document, workspace_id))
-    return findings
+    return [*findings, *studio_findings]
 
 
 def _cycle_members(graph: dict[str, list[str]]) -> set[str]:
@@ -972,7 +1056,7 @@ def patch(workspace_id: str, draft_id: str, expected_revision: str, ops: list[An
         if expected_revision != head["revision"]:
             raise DraftError("revision_conflict", "Expected revision is stale", 409, current_revision=head["revision"])
         current = load_revision(directory, head["revision"])
-        document = apply_ops(current["document"], ops)
+        document = apply_ops(current["document"], ops, studio_unit.resolver(workspace_id))
         _write_revision(directory, document, parent=head["revision"], actor=actor,
                         ops=[op.model_dump(mode="json") if isinstance(op, BaseModel) else op for op in ops],
                         provenance=provenance)
@@ -1191,9 +1275,39 @@ def result_findings(document: dict[str, Any], solved: dict[str, Any] | None,
 # ---------------------------------------------------------------- projection
 
 
-def registry_projection() -> dict[str, Any]:
+def _studio_palette(workspace_id: str) -> list[dict[str, Any]]:
+    """Latest published Studio process-unit version per model, shaped for the Process palette (spec 190)."""
+    from app.modules.studio import service as studio_service
+    from app.modules.studio.unit_checks import HONEST_LIMITS
+
+    latest: dict[str, dict[str, Any]] = {}
+    for version in studio_service.published_units(workspace_id):
+        latest[version["model_spec_id"]] = version  # published_units is oldest first
+    rows = []
+    for version in sorted(latest.values(), key=lambda item: item["name"].lower()):
+        contract = version["contract"]
+        rows.append({
+            "type": STUDIO_UNIT, "label": version["name"], "owner": "jarvis_bio", "culture_rule": "studio",
+            "model_spec_id": version["model_spec_id"], "version_id": version["version_id"],
+            "version_label": version["version_label"], "version_number": version["version_number"],
+            "source_sha256": version["source_sha256"], "contract_sha256": version["contract_sha256"],
+            "inlets": [item["name"] for item in contract["inlets"]],
+            "inlet_labels": [item["label"] for item in contract["inlets"]],
+            "outlets": [item["name"] for item in contract["outlets"]],
+            "outlet_labels": [item["label"] for item in contract["outlets"]],
+            "required_inlets": len(contract["inlets"]), "energy_inlets": [], "energy_outlets": [],
+            "params": [{"key": item["name"], "label": item["label"], "unit": item["unit"],
+                        "description": item["description"], "minimum": item.get("min"), "maximum": item.get("max")}
+                       for item in contract["parameters"]],
+            "symbol": contract["symbol"], "culture_generation": contract["culture_generation"],
+            "limits": HONEST_LIMITS, "steady_only": True})
+    return rows
+
+
+def registry_projection(workspace_id: str | None = None) -> dict[str, Any]:
     capabilities = _capability_manifest()
     return {
+        **({"studio_units": _studio_palette(workspace_id)} if workspace_id else {}),
         "compiler_version": COMPILER_VERSION,
         "compounds": list(COMPOUNDS),
         "property_packages": list(PROPERTY_PACKAGES),
@@ -1276,6 +1390,7 @@ def projection(workspace_id: str, draft_id: str) -> dict[str, Any]:
         "reactions": copy.deepcopy(document.get("reactions", {})),
         "kinetics_scripts": scripts,
         "findings": validate_document(document, workspace_id) + result_findings(document, solved, runs[0] if runs else None),
+        **({"studio_units": studio_status} if (studio_status := studio_unit.projection(document, workspace_id)) else {}),
         "results": results_state(head, runs, document, edits_since, workspace_id),
         "dwsim": dwsim_feedback(runs[0] if runs else None),
         "proposals": [proposal for proposal in list_proposals(workspace_id, draft_id) if proposal["state"] == "pending"
@@ -1562,6 +1677,11 @@ def execute(workspace_id: str, draft_id: str, revision: str, action: str) -> dic
     if blockers:
         raise DraftError("draft_invalid", "Resolve the draft findings before DWSIM can materialize it", 422,
                          findings=blockers)
+    if action == "run":
+        try:
+            studio_unit.preflight(record["document"])
+        except studio_unit.StudioUnitError as exc:
+            raise DraftError(exc.code, exc.message, 503, **(exc.detail or {})) from exc
     try:
         client, mcp_sha256, dwsim_version = editor._client()
     except editor.EditorError as exc:
@@ -1649,4 +1769,6 @@ def run_results(workspace_id: str, draft_id: str, run_id: str) -> dict[str, Any]
     directory = draft_dir(workspace_id, draft_id)
     run = get_run(workspace_id, draft_id, run_id)
     document = load_revision(directory, run["draft_revision"])["document"]
-    return results_view.build(run, document)
+    view = results_view.build(run, document)
+    studio = studio_unit.run_provenance(run, document, workspace_id)
+    return {**view, "studio_units": studio} if studio else view

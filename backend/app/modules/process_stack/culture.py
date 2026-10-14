@@ -6,7 +6,7 @@ import math
 from collections import deque
 from typing import Any
 
-from app.modules.process_stack.draft_models import UNIT_REGISTRY
+from app.modules.process_stack.draft_models import spec_for
 
 PROPAGATION_VERSION = "jarvis_culture_propagation/1"
 RESULT_SCHEMA_VERSION = "jarvis_culture_result/1"
@@ -100,7 +100,7 @@ def known_culture_fields(document: dict[str, Any], feeds: list[dict[str, Any]],
                         updated[output["id"]] = set(previous[side["id"]])
                 continue
             fields = _common_fields([previous[s["id"]] for s in inputs])
-            if UNIT_REGISTRY[unit["type"]].culture_rule == "pbr":
+            if spec_for(unit).culture_rule == "pbr":
                 fields |= {"biomass", "nitrogen", "oxygen"}
             for output in outputs:
                 updated[output["id"]] = set(fields)
@@ -120,7 +120,7 @@ def culture_findings(document: dict[str, Any]) -> list[dict[str, Any]]:
     feeds = [item for item in objects.values() if item["kind"] == "stream" and item["type"] != "EnergyStream"
              and item.get("source") is None and item.get("spec", {}).get("culture") is not None]
     pbr_units = sorted((item for item in objects.values()
-                        if item["kind"] == "unit" and UNIT_REGISTRY[item["type"]].culture_rule == "pbr"),
+                        if item["kind"] == "unit" and spec_for(item).culture_rule == "pbr"),
                        key=lambda item: item["tag"])
     if not feeds and not pbr_units:
         return []
@@ -175,7 +175,7 @@ def culture_findings(document: dict[str, Any]) -> list[dict[str, Any]]:
         if unit is None or unit["id"] in visited_units:
             continue
         visited_units.add(unit["id"])
-        rule = UNIT_REGISTRY[unit["type"]].culture_rule
+        rule = spec_for(unit).culture_rule
         if rule == "refuse":
             _add(findings, "blocker", "CULTURE_UNIT_UNSUPPORTED", unit["tag"], "culture",
                  f"Culture cannot pass through {unit['type']} {unit['tag']} because DWSIM VLE or reactors do not preserve biology.")

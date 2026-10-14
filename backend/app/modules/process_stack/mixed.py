@@ -10,7 +10,7 @@ import math
 from collections import defaultdict
 from typing import Any
 
-from app.modules.process_stack.draft_models import UNIT_REGISTRY
+from app.modules.process_stack.draft_models import spec_for
 
 MIXED_SOLVE_VERSION = 1
 MAX_ITERATIONS = 25
@@ -87,7 +87,7 @@ def partition(document: dict[str, Any]) -> dict[str, Any]:
     sccs = components(set(units), material)
     member_group = {uid: index for index, group in enumerate(sccs) for uid in group}
     consumed = {uid for uid, unit in units.items() if unit["type"] == "Recycle"
-                and any(UNIT_REGISTRY[units[other]["type"]].owner == "jarvis_bio"
+                and any(spec_for(units[other]).owner == "jarvis_bio"
                         for other in sccs[member_group[uid]])
                 and (len(sccs[member_group[uid]]) > 1 or any(a == b == uid for a, b, _ in material))}
     cut = [(a, b, stream) for a, b, stream in edges if a not in consumed]
@@ -107,7 +107,7 @@ def partition(document: dict[str, Any]) -> dict[str, Any]:
     while ready:
         source = ready.pop(0)
         order.append(source)
-        jarvis_count = int(any(UNIT_REGISTRY[units[uid]["type"]].owner == "jarvis_bio"
+        jarvis_count = int(any(spec_for(units[uid]).owner == "jarvis_bio"
                                for uid in native_sccs[source]))
         for target in sorted(dag[source]):
             level[target] = max(level[target], level[source] + jarvis_count)
@@ -118,7 +118,7 @@ def partition(document: dict[str, Any]) -> dict[str, Any]:
     if len(order) != len(native_sccs):
         raise ValueError("partition remains cyclic after consumed tears are cut")
     levels = {uid: level[group_id[uid]] for uid in units}
-    dwsim = {uid for uid, unit in units.items() if UNIT_REGISTRY[unit["type"]].owner == "dwsim" and uid not in consumed}
+    dwsim = {uid for uid, unit in units.items() if spec_for(unit).owner == "dwsim" and uid not in consumed}
     neighbors: dict[str, set[str]] = {uid: set() for uid in dwsim}
     for a, b, stream in cut:
         if a in dwsim and b in dwsim and levels[a] == levels[b]:
@@ -146,12 +146,12 @@ def partition(document: dict[str, Any]) -> dict[str, Any]:
     return {"consumed": sorted(consumed, key=lambda uid: units[uid]["tag"]),
             "segments": segments, "levels": levels,
             "jarvis_units": sorted((uid for uid, unit in units.items()
-                                    if UNIT_REGISTRY[unit["type"]].owner == "jarvis_bio"),
+                                    if spec_for(unit).owner == "jarvis_bio"),
                                    key=lambda uid: units[uid]["tag"])}
 
 
 def has_jarvis_unit(document: dict[str, Any]) -> bool:
-    return any(item["kind"] == "unit" and UNIT_REGISTRY[item["type"]].owner == "jarvis_bio"
+    return any(item["kind"] == "unit" and spec_for(item).owner == "jarvis_bio"
                for item in document["objects"].values())
 
 
@@ -286,6 +286,12 @@ def fingerprint(document: dict[str, Any], partition_value: dict[str, Any], works
 
         payload["evaluators"]["PhotobioreactorT1"] = {"id": pbr_unit.EVALUATOR_ID, "version": pbr_unit.MODEL_VERSION}
         payload["pbr_model_sets"] = {uid: _pbr_set_digest(workspace_id, item) for uid, item in sorted(pbr_units.items())}
+    studio_pins = {uid: item.get("model") for uid, item in meaning["objects"].items()
+                   if item["kind"] == "unit" and item["type"] == "StudioUnit"}
+    if studio_pins:
+        # Spec 190: the pinned version and both hashes are part of the process meaning; flowsheets without one are unchanged.
+        payload["evaluators"]["StudioUnit"] = {"id": "studio_unit_v1", "host_checks": 1}
+        payload["studio_unit_pins"] = dict(sorted(studio_pins.items()))
     raw = json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False)
     return "sha256:" + hashlib.sha256(raw.encode()).hexdigest()
 

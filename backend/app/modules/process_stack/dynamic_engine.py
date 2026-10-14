@@ -627,6 +627,12 @@ def prepare(workspace_id: str, draft_id: str, scenario_id: str) -> Snapshot:
         head = draft._head(directory)
         revision = draft.load_revision(directory, head["revision"])
         document = revision["document"]
+        studio = sorted(item.get("tag", item.get("id")) for item in document["objects"].values()
+                        if item.get("kind") == "unit" and item.get("type") == "StudioUnit")
+        if studio:
+            raise DynamicError("STUDIO_UNIT_STEADY_ONLY",
+                               "Studio process units are steady only and cannot take part in a dynamic run.",
+                               {"units": studio})
         scenario_raw = document.get("scenarios", {}).get(scenario_id)
         if not scenario_raw:
             raise DynamicError("SCENARIO_NOT_FOUND", "Dynamic scenario was not found.")
