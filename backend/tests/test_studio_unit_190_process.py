@@ -371,3 +371,34 @@ def test_flowsheets_without_a_studio_unit_keep_byte_identical_compiled_documents
     assert studio_unit.studio_units(document) == [] and studio_unit.projection(document, "none") == {}
     assert studio_unit.pin_findings(document, None, None) == []
     assert "StudioUnit" not in json.dumps(part)
+
+
+# ---------------------------------------------------------------- criterion 2: participation is real
+
+# Both bodies pass the Test case (culture flow 1.0 kg/s) and misbehave only at the solve's smaller flows, so the unit
+# is publishable and the failure is found by the solve itself.
+_HEAD = '    c, d = inlets["culture"], inlets["dose"]\n'
+RAISING_BODY = GOLDEN_BODY.replace(
+    _HEAD, _HEAD + '    if c["mass_flow_kg_s"] < 0.5:\n        raise RuntimeError("model bug")\n', 1)
+IMBALANCE_BODY = GOLDEN_BODY.replace(
+    'unused = {**d, "mass_flow_kg_s": md - kept}',
+    'unused = {**d, "mass_flow_kg_s": md - kept + (0.001 if mc < 0.5 else 0.0)}')
+
+
+def test_a_unit_whose_evaluate_raises_fails_the_run_with_its_tag_and_a_typed_code(client, dwsim):
+    _, version = _publish(client, RAISING_BODY)
+    run = _run(client.workspace, _draft(client.workspace, golden_ops(version, heater=False)))
+    solve = run["mixed_solve"]
+    assert run["status"] == "segment_failed" and solve["failed_segment"] == "Dosing", run
+    assert solve["errors"]["code"] == "STUDIO_UNIT_FAILED", solve["errors"]
+    assert "Dosing" in solve["errors"]["message"] and solve["errors"]["detail"]["classification"] == "error"
+    assert "Outlet" not in dwsim.flashes and "Unused" not in dwsim.flashes  # never skipped or passed through
+
+
+def test_a_unit_that_breaks_mass_conservation_fails_with_the_mass_imbalance_code(client, dwsim):
+    _, version = _publish(client, IMBALANCE_BODY)
+    run = _run(client.workspace, _draft(client.workspace, golden_ops(version, heater=False)))
+    solve = run["mixed_solve"]
+    assert run["status"] == "segment_failed" and solve["failed_segment"] == "Dosing", run
+    assert solve["errors"]["code"] == "STUDIO_UNIT_MASS_IMBALANCE", solve["errors"]
+    assert "Unused" not in dwsim.flashes

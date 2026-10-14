@@ -186,7 +186,8 @@ def evaluate(unit: dict[str, Any], inlets: dict[str, dict[str, Any]], *, compoun
     key = hashlib.sha256(json.dumps({"source": loaded["source_sha256"], "params": params, "inlets": streams},
                                     sort_keys=True, separators=(",", ":"), allow_nan=False).encode()).hexdigest()
     stats = cache.setdefault("studio_unit_stats", {}).setdefault(unit["tag"], {
-        "call_count": 0, "cache_hits": 0, "runtime_classifications": [], "duration_s": 0.0})
+        "call_count": 0, "cache_hits": 0, "runtime_classifications": [], "duration_s": 0.0,
+        "sandbox_seconds": 0.0})
     memo = cache.setdefault("studio_unit_results", {})
     if key in memo:
         stats["cache_hits"] += 1
@@ -195,6 +196,7 @@ def evaluate(unit: dict[str, Any], inlets: dict[str, dict[str, Any]], *, compoun
         record = runtime.run(runtime.RunRequest(source=loaded["source"], inputs={"inlets": streams, "params": params}))
         stats["call_count"] += 1
         stats["duration_s"] += record.duration_seconds
+        stats["sandbox_seconds"] += record.duration_seconds
         if record.classification not in stats["runtime_classifications"]:
             stats["runtime_classifications"].append(record.classification)
         if record.classification != "ok":
