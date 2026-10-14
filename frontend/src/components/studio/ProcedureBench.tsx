@@ -31,7 +31,7 @@ function Results({ results, workspaceId, draftId }: { results: RunResults; works
     let alive = true; setSeries(null); setProblem(null);
     void getRunManifest(workspaceId, draftId, results.job_id).then((manifest) => {
       if (!alive) return; const names = Object.keys(manifest.channels ?? {}).filter((name) => name !== "t_s"); setChannels(names);
-      const defaults = names.filter((name) => name.endsWith("_V_m3")).slice(0, 2); setPicked(defaults.length ? defaults : names.slice(0, 2));
+      const defaults = [...names.filter((name) => name.endsWith("_X")).slice(0, 2), ...names.filter((name) => name.endsWith("_V_m3")).slice(0, 1)]; setPicked(defaults.length ? defaults : names.slice(0, 2));
     }).catch((cause) => { if (alive) setProblem(failure(cause)); });
     return () => { alive = false; };
   }, [workspaceId, draftId, results.job_id]);
@@ -67,6 +67,7 @@ export default function ProcedureBench({ workspaceId, model }: { workspaceId: st
   const [links, setLinks] = useState<ProcedureLink[]>([]); const [runs, setRuns] = useState<RunRow[]>([]); const [results, setResults] = useState<RunResults | null>(null);
   const [problem, setProblem] = useState<Failure>(null); const [info, setInfo] = useState<string | null>(null); const [busy, setBusy] = useState(false);
   const [newScenario, setNewScenario] = useState({ id: "bench", profile: "", days: 7 });
+  const [circulation, setCirculation] = useState<Record<string, number | undefined>>({}); const [initial, setInitial] = useState<Record<string, Partial<Record<"X" | "N" | "O2", number>>>>({});
   const draft = drafts.find((item) => item.draft_id === draftId) ?? null;
   const ownLinks = useMemo(() => links.filter((link) => link.model_spec_id === model.id), [links, model.id]);
   const activeLink = ownLinks.find((link) => link.schedule_id === scheduleId && link.scenario_id === scenarioId) ?? ownLinks.find((link) => link.schedule_id === scheduleId) ?? null;
@@ -76,6 +77,7 @@ export default function ProcedureBench({ workspaceId, model }: { workspaceId: st
   const reloadDraft = useCallback((id: string) => id ? Promise.all([listProcedureLinks(workspaceId, id), listProcedureRuns(workspaceId, id), reloadDrafts()]).then(([nextLinks, nextRuns]) => { setLinks(nextLinks); setRuns(nextRuns); }) : Promise.resolve(), [workspaceId, reloadDrafts]);
   useEffect(() => { void reloadDrafts().catch((cause) => setProblem(failure(cause))); void listEnvironmentProfiles(workspaceId).then(setProfiles).catch(() => undefined); }, [workspaceId, reloadDrafts]);
   useEffect(() => { setScenarioId((current) => draft?.scenarios.some((item) => item.id === current) ? current : draft?.scenarios[0]?.id ?? ""); void reloadDraft(draftId).catch((cause) => setProblem(failure(cause))); }, [draftId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (activeLink) setValues(Object.fromEntries(parameters.map((item) => [item.name, activeLink.parameter_values[item.name]]))); }, [activeLink?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { setValues((current) => Object.fromEntries(parameters.map((item) => [item.name, current[item.name] ?? (activeLink?.parameter_values[item.name]) ?? (item.min != null && item.max != null ? (item.min + item.max) / 2 : item.min ?? item.max ?? 0)]))); }, [model.id, activeLink?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (!published.some((item) => item.id === versionId)) setVersionId(published[published.length - 1]?.id ?? ""); }, [published, versionId]);
   // Poll while a run is unsettled.
@@ -91,7 +93,10 @@ export default function ProcedureBench({ workspaceId, model }: { workspaceId: st
   const update = (link: ProcedureLink, overwrite: boolean) => void act(async () => { const next = await updateProcedureLink(workspaceId, link.id, { parameter_values: numbers(), overwrite }); await reloadDraft(draftId); setInfo(`Updated to ${next.version_label}.`); });
   const run = (link: ProcedureLink) => void act(async () => { const started = await runProcedureLink(workspaceId, link.id); await reloadDraft(draftId); setResults(null); setInfo(`Run ${started.job_id.slice(0, 8)} ${started.status}.`); });
   const open = (row: RunRow) => void act(async () => { setResults(await getProcedureResults(workspaceId, row.procedure_link.draft_id, row.job.job_id)); });
-  const create = () => void act(async () => { const row = await createBenchScenario(workspaceId, draftId, { scenario_id: newScenario.id, profile_id: newScenario.profile, days: newScenario.days, output_cadence_s: 3600 }); await reloadDraft(draftId); setScenarioId(newScenario.id); setInfo(row.scenario_check && !row.scenario_check.ok ? `Scenario created, but the host check says ${row.scenario_check.code}: ${row.scenario_check.message}` : `Scenario "${newScenario.id}" created.`); });
+  const create = () => void act(async () => { const row = await createBenchScenario(workspaceId, draftId, { scenario_id: newScenario.id, profile_id: newScenario.profile, days: newScenario.days, output_cadence_s: 3600, circulation: Object.fromEntries(Object.entries(circulation).filter(([, value]) => value !== undefined)) as Record<string, number>, initial: initial as Record<string, { X: number; N: number; O2: number }> }); await reloadDraft(draftId); setScenarioId(newScenario.id); setInfo(row.scenario_check && !row.scenario_check.ok ? `Scenario created, but the host check says ${row.scenario_check.code}: ${row.scenario_check.message}` : `Scenario "${newScenario.id}" created.`); });
+  const pumps = (draft?.units ?? []).filter((item) => item.type === "Pump").map((item) => item.tag);
+  const cultureUnits = (draft?.units ?? []).filter((item) => item.type === "PhotobioreactorT1" || item.type === "HoldupTank").map((item) => item.tag);
+  const initialComplete = cultureUnits.every((tag) => (["X", "N", "O2"] as const).every((key) => Number.isFinite(initial[tag]?.[key])));
   const valueIssues = parameterValuesIssues(parameters, values);
   const retryable = problem?.code && OVERWRITE_CODES.has(problem.code);
 
@@ -104,12 +109,14 @@ export default function ProcedureBench({ workspaceId, model }: { workspaceId: st
       <label>Schedule id<input aria-label="Schedule id" value={scheduleId} pattern="[a-z][a-z0-9_-]{0,39}" onChange={(event) => setScheduleId(event.target.value)} /></label>
       <label>Published version<select aria-label="Version to apply" value={versionId} onChange={(event) => setVersionId(event.target.value)}>{published.map((item) => <option key={item.id} value={item.id}>{item.version_label}</option>)}</select></label></div>
     {draft ? <p>Tanks: {draft.tanks.join(", ") || "none"} · Units: {draft.units.map((item) => `${item.tag} (${item.type})`).join(", ") || "none"} · revision {draft.revision.slice(0, 12)}</p> : null}
-    {draft && !draft.scenarios.length ? <fieldset className="studio-case"><legend>Create a minimal scenario</legend>
-      <p>The draft has no scenario. This writes one scenario to the draft; it never overwrites an existing one.</p>
+    {draft ? <details className="studio-case" open={!draft.scenarios.length}><summary>Create a minimal scenario</summary>
+      <p>This writes one new scenario to the draft; it never overwrites an existing one. If the host check refuses the scenario, its code is shown and you can create another with a different id.</p>
       <div className="studio-number-map"><label>Scenario id<input aria-label="New scenario id" value={newScenario.id} onChange={(event) => setNewScenario({ ...newScenario, id: event.target.value })} /></label>
         <label>Environment profile<select aria-label="Environment profile" value={newScenario.profile} onChange={(event) => setNewScenario({ ...newScenario, profile: event.target.value })}><option value="">Choose a profile…</option>{profiles.map((item) => <option key={item.profile_id} value={item.profile_id}>{item.name}</option>)}</select></label>
         <label>Days<input type="number" min="0.01" max="120" step="any" aria-label="Scenario days" value={newScenario.days} onChange={(event) => setNewScenario({ ...newScenario, days: Number(event.target.value) })} /></label></div>
-      <button type="button" disabled={busy || !newScenario.profile} onClick={create}>Create scenario</button>{!profiles.length ? <p className="studio-warning">No environment profile exists. Import one in the Environment panel first.</p> : null}</fieldset> : null}
+      <div className="studio-number-map"><strong>Initial culture state (required for every PBR and tank, kg/m3)</strong>{cultureUnits.flatMap((tag) => (["X", "N", "O2"] as const).map((key) => <label key={`${tag}${key}`}>{tag} {key}<input type="number" step="any" min="0" aria-label={`Initial ${key} of ${tag}`} value={initial[tag]?.[key] ?? ""} onChange={(event) => setInitial({ ...initial, [tag]: { ...initial[tag], [key]: event.target.value === "" ? undefined : Number(event.target.value) } })} /></label>))}</div>
+      {pumps.length ? <div className="studio-number-map"><strong>Pump circulation (m3/s, optional)</strong>{pumps.map((tag) => <label key={tag}>{tag}<input type="number" step="any" min="0" aria-label={`Circulation of ${tag}`} value={circulation[tag] ?? ""} onChange={(event) => setCirculation({ ...circulation, [tag]: event.target.value === "" ? undefined : Number(event.target.value) })} /></label>)}</div> : null}
+      <button type="button" disabled={busy || !newScenario.profile || !initialComplete} onClick={create}>Create scenario</button>{!profiles.length ? <p className="studio-warning">No environment profile exists. Import one in the Environment panel first.</p> : null}</details> : null}
     <fieldset className="studio-case"><legend>Apply</legend><SimulationNotice />
       <div className="studio-number-map"><strong>Parameter values (declared units)</strong>{parameters.map((item) => <label key={item.name}>{item.label || item.name} [{item.unit}]{boundHint(item)}<input type="number" step="any" aria-label={`Apply value of ${item.name}`} value={values[item.name] ?? ""} onChange={(event) => setValues({ ...values, [item.name]: event.target.value === "" ? undefined : Number(event.target.value) })} /></label>)}</div>
       {valueIssues.map((issue) => <p className="studio-warning" key={issue}>{issue}</p>)}

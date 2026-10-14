@@ -120,7 +120,7 @@ export function chartPaths(t: number[], series: ChartSeries[], width: number, he
   if (t.length < 2) return [];
   const lo = Math.min(...series.flatMap((item) => item.values)); const hi = Math.max(...series.flatMap((item) => item.values));
   const span = hi - lo || 1; const t0 = t[0]; const dt = t[t.length - 1] - t0 || 1;
-  return series.map((item) => ({ name: item.name, d: item.values.map((v, i) => `${i ? "L" : "M"}${(((t[i] - t0) / dt) * width).toFixed(1)},${(height - ((v - lo) / span) * height).toFixed(1)}`).join("") }));
+  return series.map((item) => ({ name: item.name, d: item.values.map((v, i) => `${i ? "L" : "M"}${(((t[i] - t0) / dt) * width).toFixed(1)},${(hi === lo ? height / 2 : height - ((v - lo) / span) * height).toFixed(1)}`).join("") }));
 }
 export const KPI_COLUMNS: [string, string][] = [["index", "Cycle"], ["length_s", "Length [s]"], ["harvested_biomass_kg", "Harvest [kg]"], ["harvested_volume_m3", "Harvest vol [m3]"], ["concentrate_biomass_kg_m3", "Concentrate [kg/m3]"], ["purge_volume_m3", "Purge [m3]"], ["medium_volume_m3", "Medium [m3]"], ["nitrogen_added_kg", "N added [kg]"], ["x_mean_before_draw_kg_m3", "X before draw [kg/m3]"], ["net_volumetric_productivity_kg_m3_day", "Productivity [kg/m3/d]"]];
 export const fmt = (value: unknown): string => typeof value === "number" ? String(Number(value.toPrecision(6))) : value === null || value === undefined ? "n/a" : String(value);

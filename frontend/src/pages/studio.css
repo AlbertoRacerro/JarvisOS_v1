@@ -50,3 +50,5 @@
 .studio-chart{margin:0;display:grid;gap:var(--space-1)}.studio-chart svg{width:100%;height:10rem;border:var(--border-width-default) solid var(--color-border-default);background:var(--color-bg-surface-raised)}.studio-chart figcaption{font-size:var(--font-size-caption)}
 .studio-link-provenance{font-family:var(--font-mono);font-size:var(--font-size-caption);overflow-wrap:anywhere}
 .studio-results{overflow-x:auto}
+.studio-numfield{min-width:0}.studio-numfield__row select{min-width:0;max-width:100%}.studio-condition{grid-template-columns:repeat(auto-fit,minmax(16rem,1fr))}
+.studio-action>button,.studio-step>button,.studio-link .studio-actions button{justify-self:start;width:auto}.studio-bench article>button{justify-self:start;width:auto}

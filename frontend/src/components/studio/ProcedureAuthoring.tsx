@@ -15,13 +15,13 @@ export function Refusal({ code, message, detail }: { code: string | null | undef
 function NumField({ label, unit, value, params, onChange, time = false, optional = false }: { label: string; unit: string; value: Num | undefined; params: StudioVariable[]; onChange(value: Num | undefined): void; time?: boolean; optional?: boolean }) {
   const bound = isRef(value) ? value.$param : "";
   const parameter = params.find((item) => item.name === bound);
-  const [timeUnit, setTimeUnit] = useState<TimeUnit>(typeof value === "number" ? fromSeconds(value).unit : "h");
+  const [timeUnit, setTimeUnit] = useState<TimeUnit>(typeof value === "number" && value !== 0 ? fromSeconds(value).unit : "h");
   const size = TIME_UNITS.find(([name]) => name === timeUnit)?.[1] ?? 1;
   const shown = typeof value === "number" ? (time ? Number((value / size).toPrecision(12)) : value) : "";
   return <label className="studio-numfield"><span>{label} [{bound && parameter ? parameter.unit : time ? timeUnit : unit}]{optional ? " (optional)" : ""}</span>
     <span className="studio-numfield__row">
       {bound ? <output>= parameter {bound}</output> : <input type="number" step="any" aria-label={label} value={shown} onChange={(event) => onChange(event.target.value === "" ? undefined : time ? toSeconds(Number(event.target.value), timeUnit) : Number(event.target.value))} />}
-      {time && !bound ? <select aria-label={`${label} unit`} value={timeUnit} onChange={(event) => setTimeUnit(event.target.value as TimeUnit)}>{TIME_UNITS.map(([name]) => <option key={name} value={name}>{name}</option>)}</select> : null}
+      {time && !bound ? <select aria-label={`${label} unit`} value={timeUnit} onChange={(event) => { const next = event.target.value as TimeUnit; setTimeUnit(next); if (typeof shown === "number") onChange(toSeconds(shown, next)); }}>{TIME_UNITS.map(([name]) => <option key={name} value={name}>{name}</option>)}</select> : null}
       {params.length ? <select aria-label={`Bind ${label} to a parameter`} value={bound} onChange={(event) => onChange(event.target.value ? { $param: event.target.value } : undefined)}><option value="">Literal value</option>{params.map((item) => <option key={item.name} value={item.name}>Parameter {item.name} [{item.unit}]</option>)}</select> : null}
     </span></label>;
 }

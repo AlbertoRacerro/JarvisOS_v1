@@ -29,7 +29,7 @@ export type ProcedureLink = {
   state: "applied" | "modified" | "missing"; state_text: string; latest_version_id: string | null; latest_version_label: string | null; update_available: boolean; notice?: string;
 };
 export type BenchDraft = { draft_id: string; name: string; revision: string; units: { tag: string; type: string }[]; tanks: string[]; scenarios: BenchScenario[]; schedules: { id: string; event_count: number; link: ProcedureLink | null }[]; scenario_check?: { ok: boolean; code?: string; message?: string } };
-export type ScenarioRequest = { scenario_id: string; profile_id: string; days: number; output_cadence_s: number };
+export type ScenarioRequest = { scenario_id: string; profile_id: string; days: number; output_cadence_s: number; circulation?: Record<string, number>; initial?: Record<string, { X: number; N: number; O2: number }> };
 export type ApplyRequest = { version_id: string; draft_id: string; scenario_id: string; schedule_id: string; parameter_values: Record<string, number>; overwrite: boolean };
 export type RunJob = { job_id: string; status: string; progress?: number; error?: { code?: string; message?: string } | null; created_at?: string; current?: unknown };
 export type RunRow = { job: RunJob; procedure_link: ProcedureLink };
