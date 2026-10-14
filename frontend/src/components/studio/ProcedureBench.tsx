@@ -106,7 +106,7 @@ export default function ProcedureBench({ workspaceId, model }: { workspaceId: st
     <div className="studio-number-map">
       <label>Process draft<select aria-label="Bench draft" value={draftId} onChange={(event) => setDraftId(event.target.value)}><option value="">Choose a draft…</option>{drafts.map((item) => <option key={item.draft_id} value={item.draft_id}>{item.name}</option>)}</select></label>
       <label>Scenario<select aria-label="Bench scenario" value={scenarioId} onChange={(event) => setScenarioId(event.target.value)}><option value="">{draft?.scenarios.length ? "Choose a scenario…" : "No scenario yet"}</option>{(draft?.scenarios ?? []).map((item) => <option key={item.id} value={item.id}>{item.id}{item.schedule_id ? ` (schedule ${item.schedule_id})` : ""}</option>)}</select></label>
-      <label>Schedule id<input aria-label="Schedule id" value={scheduleId} pattern="[a-z][a-z0-9_-]{0,39}" onChange={(event) => setScheduleId(event.target.value)} /></label>
+      <label>Schedule id<input aria-label="Schedule id" value={scheduleId} pattern="[a-z][a-z0-9_\-]{0,39}" onChange={(event) => setScheduleId(event.target.value)} /></label>
       <label>Published version<select aria-label="Version to apply" value={versionId} onChange={(event) => setVersionId(event.target.value)}>{published.map((item) => <option key={item.id} value={item.id}>{item.version_label}</option>)}</select></label></div>
     {draft ? <p>Tanks: {draft.tanks.join(", ") || "none"} · Units: {draft.units.map((item) => `${item.tag} (${item.type})`).join(", ") || "none"} · revision {draft.revision.slice(0, 12)}</p> : null}
     {draft ? <details className="studio-case" open={!draft.scenarios.length}><summary>Create a minimal scenario</summary>

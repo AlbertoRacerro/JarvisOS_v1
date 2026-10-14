@@ -123,4 +123,9 @@ assert.ok(api.includes("/procedure/apply") === false && api.includes("/apply`"),
 assert.doesNotMatch(read("src/api/studio.ts") + api, /"PATCH"/, "the backend CORS does not allow PATCH");
 assert.doesNotMatch(api + authoring + bench, /dangerouslySetInnerHTML|eval\(/);
 assert.match(read("package.json"), /npm run test:191/);
+// HTML pattern attributes are compiled with the unicode-sets flag: an unescaped "-" in a class is a console error and disables the check.
+for (const file of ["src/components/studio/ProcedureAuthoring.tsx", "src/components/studio/ProcedureBench.tsx"]) {
+  for (const [, pattern] of read(file).matchAll(/pattern="([^"]*)"/g)) assert.doesNotThrow(() => new RegExp(pattern, "v"), `${file} pattern ${pattern}`);
+}
+
 console.log("191 Studio procedure frontend ok");

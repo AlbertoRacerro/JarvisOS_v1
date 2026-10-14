@@ -112,7 +112,7 @@ export function ProcedureCases({ cases, parameters, drafts, onChange }: { cases:
       <label>Target draft<select aria-label="Target draft" value={item.draft_id} onChange={(event) => update(index, { draft_id: event.target.value, scenario_id: drafts.find((entry) => entry.draft_id === event.target.value)?.scenarios[0]?.id ?? "" })}><option value="">Choose a Process draft…</option>{drafts.map((entry) => <option key={entry.draft_id} value={entry.draft_id}>{entry.name}</option>)}</select></label>
       <label>Scenario<select aria-label="Scenario" value={item.scenario_id} onChange={(event) => update(index, { scenario_id: event.target.value })}><option value="">Choose a scenario…</option>{(draft?.scenarios ?? []).map((scenario) => <option key={scenario.id} value={scenario.id}>{scenario.id}</option>)}</select></label>
       {draft && !draft.scenarios.length ? <p className="studio-warning">This draft has no scenario. Create one in the Test bench tab.</p> : null}
-      <label>Schedule id<input value={item.schedule_id} pattern="[a-z][a-z0-9_-]{0,39}" onChange={(event) => update(index, { schedule_id: event.target.value })} /></label>
+      <label>Schedule id<input value={item.schedule_id} pattern="[a-z][a-z0-9_\-]{0,39}" onChange={(event) => update(index, { schedule_id: event.target.value })} /></label>
       <label><input type="checkbox" checked={item.simulate} onChange={(event) => update(index, { simulate: event.target.checked })} /> Also simulate the scenario and check expectations</label>
       {item.simulate ? <ExpectEditor rows={item.expect} onChange={(expect) => update(index, { expect })} /> : null}
       <button type="button" onClick={() => onChange(cases.filter((_, i) => i !== index))}>Remove case</button></fieldset>;
