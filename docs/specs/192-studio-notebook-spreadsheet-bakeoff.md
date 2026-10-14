@@ -29,15 +29,15 @@ State: **accepted and ready**. Written under the maintainer directive of 2026-10
 
 | Id | Criterion | Pass threshold |
 |---|---|---|
-| M1 | Containment | A notebook script runs via 187 with `ok`; network connect and loopback listen fail; no process survives; no marimo server process or open port exists on host at any time |
-| M2 | Input | Snapshot JSON (at most 1 MiB) is the only input; the notebook has no database path, token or project root |
+| M1 | Containment | A notebook script runs via 187 with `ok`; external network connect fails; any sandbox-local loopback listener is unreachable from the host; no process survives; no marimo server process or listener opened by the notebook exists on the host at any time |
+| M2 | Input | Snapshot JSON is the only input and fits within 187's 131,072-byte total request cap together with source and metadata; the notebook has no database path, token or project root |
 | M3 | Export | HTML and `.py` artifacts are byte-stable across two runs of the same source and snapshot, excluding a documented timestamp field |
 | M4 | Footprint | Wheel plus transitive install under 150 MB; cold script start under 5 s on the qualification host |
-| M5 | License | marimo and all transitive runtime dependencies are on the repository's permitted list; none is copyleft-strong, field-of-use restricted or source-available |
+| M5 | License | marimo and all transitive runtime dependencies have permissive terms (MIT, BSD, Apache-2.0, ISC, 0BSD, PSF or public-domain equivalent); any mixed license is resolved against the installed files; none imposes strong copyleft, field-of-use restriction or source-available terms |
 | U1 | License | Univer packages used and all their transitive runtime dependencies are permissive; no Pro or paid package is imported |
 | U2 | Bundle | Added gzip JS for a lazy-loaded chunk under 1.5 MB; zero bytes added to the initial route chunk |
 | U3 | Network | Browser network log of open, edit, save shows no request off the app origin |
-| U4 | Authority | Source scan and a runtime check show the sheet module imports no API client that mutates Parameters, models or runs; the snapshot is passed as a plain object |
+| U4 | Authority | Source scan and a runtime check show the throwaway prototype imports no API client that mutates Parameters, models or runs; the snapshot is passed as a plain object |
 | U5 | Fidelity | A 200-cell sheet with 20 formulas, unit-bearing columns and a CSV and XLSX export round-trips with values preserved; 10,000 rows scroll and edit without a frame above 100 ms |
 
 ## Required evidence
@@ -45,7 +45,7 @@ State: **accepted and ready**. Written under the maintainer directive of 2026-10
 - Recorded in a new `docs/implementation/studio-notebook-spreadsheet-bakeoff-<date>.md` in the PR that closes this spec: one row per criterion with measured value, command or capture, tool versions, hashes, host, and master sha. Raw logs and captures stay outside the repo and are referenced by path and SHA-256.
 - Package versions and license metadata are re-queried on the closing date; a changed license fails M5 or U1 until re-reviewed.
 - Prototype source is deleted or left unmerged. If kept as evidence, it is attached by hash only.
-- Browser evidence for U2, U3 and U5 is from a real browser against a candidate backend serving `frontend/dist` on the same origin.
+- An adoption decision requires real-browser evidence for U2, U3 and U5 against a candidate backend serving `frontend/dist` on the same origin. For a rejection on a decisive measured failure, record the real-browser prototype evidence and the unmet criterion; a product route that this evaluation does not ship is not required solely to repeat that failure.
 
 ## Decision outcomes
 
