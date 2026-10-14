@@ -111,7 +111,8 @@ def test_invalid_unit_documentation_safety_and_categories(client, tmp_path):
     assert client.post("/workspaces/missing/studio/models", json=CONTRACT).status_code == 404
     categories = client.get("/studio/categories").json()
     assert categories[0]["available"] is True
-    assert [item["id"] for item in categories if item["available"]] == ["calculation", "process_unit", "geometry"]
+    assert [item["id"] for item in categories if item["available"]] == [
+        "calculation", "process_unit", "procedure", "geometry"]
     assert all(category["available"] or category["reason"] for category in categories)
 
 
