@@ -20,6 +20,14 @@ assert.deepEqual(L.fromSeconds(172800), { value: 2, unit: "d" });
 assert.deepEqual(L.fromSeconds(5400), { value: 90, unit: "min" });
 assert.deepEqual(L.fromSeconds(7), { value: 7, unit: "s" });
 
+// Changing the display unit must leave the stored seconds untouched for every time field.
+const timeField = read("src/components/studio/ProcedureAuthoring.tsx");
+const unitSelector = timeField.match(/<select aria-label=\{`\$\{label\} unit`\}[^>]*onChange=\{([^}]*)\}/)?.[1];
+assert.ok(unitSelector, "time fields expose a unit selector");
+assert.match(unitSelector, /setTimeUnit/);
+assert.doesNotMatch(unitSelector, /\bonChange\s*\(/, "switching the display unit must not rewrite stored seconds");
+assert.equal(L.toSeconds(48, "h") / 86400, 2, "48 hours displays as 2 days");
+
 // The action forms are exactly the five 185 shapes, with exclusive fields where the contract has them.
 assert.deepEqual(L.ACTION_TYPES, ["draw", "separate", "refill", "dose", "inoculate"]);
 assert.deepEqual(L.ACTIONS.draw.choice.map((x) => x.path[0]), ["volume_m3", "loop_fraction"]);
