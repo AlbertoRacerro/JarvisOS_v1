@@ -48,14 +48,15 @@ No security boundary changes. User code runs only through the 187 runtime with t
 ## Acceptance
 
 1. **Golden workflow 3, real browser.** On the qualification host, with the runtime enabled and real DWSIM, an operator using the GUI only:
-   - creates a custom nutrient dosing unit (inlets `culture` and `dose`, outlet `outlet`, a parameter `dose_split` in percent);
+   - creates a custom nutrient dosing unit: inlets `culture` and `dose`, outlets `outlet` and `unused_dose`, and a parameter `dose_split` in percent. `dose_split` sends that share of the dose stream into `outlet` together with the culture stream, and the rest to `unused_dose`. Both outlets together conserve total mass, every compound and every culture species. A single-outlet dosing unit cannot respond to `dose_split` under these balances;
    - writes `evaluate`, tests it and publishes it;
    - places it from the Process palette;
    - connects a culture feed and a nutrient feed, with a product stream to a downstream Heater;
    - solves.
-   The run shows the unit solved, with the outlet flashed by DWSIM and the Heater solved downstream. Whole-graph mass and culture balances close. The unit's provenance shows version, hashes and call count. Changing `dose_split` and re-solving changes the outlet nitrogen. Publishing v2 leaves the placed unit on v1 until "update to v2" is chosen. The workflow fails if any step needs a backend edit, a new spec, hand-written JSON or a terminal.
+   The run shows the unit solved, with both outlets flashed by DWSIM and the Heater solved downstream of `outlet`. Whole-graph mass and culture balances close. The unit's provenance shows version, hashes and call count. Changing `dose_split` and re-solving changes the nitrogen concentration in `outlet`, while the balances over both outlets still close. Publishing v2 leaves the placed unit on v1 until "update to v2" is chosen. The workflow fails if any step needs a backend edit, a new spec, hand-written JSON or a terminal.
 2. **Participation is real.** A unit whose `evaluate` raises fails the solve with the unit's tag and a typed code. A unit that breaks mass conservation fails with `STUDIO_UNIT_MASS_IMBALANCE`. Neither is skipped.
 3. **Recycle.** A `StudioUnit` inside a recycle loop converges through the 183 tear solver on a case with a closed-form answer, within the wall budget.
+   - **Runtime budget.** A recycle case with at least three sandboxed `StudioUnit`s converges within the default 90 s wall budget. The test records the per-unit call count, cache hits and sandbox time from run provenance. A budget too small for the sandbox calls stops with the typed timeout code, never with a silently truncated solve.
 4. **Execution boundary.** With the runtime disabled, a flowsheet containing a `StudioUnit` is refused before the solve. A tampered artifact hash is refused. The 187 hostile suite passes unchanged.
 5. **Ports.** Connections to undeclared ports, and missing required inlets, are refused at draft validation.
 6. **Existing units unchanged.** The 168, 170, 183, 184 and 185 process suites pass without edits. Flowsheets without a `StudioUnit` keep a byte-identical compiled document and fingerprint.
