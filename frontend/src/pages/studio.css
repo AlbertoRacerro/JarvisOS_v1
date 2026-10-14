@@ -39,3 +39,14 @@
 .studio-geometry-facts{display:flex;flex-wrap:wrap;gap:var(--space-3);margin:0}
 .studio-geometry-facts div{display:grid}
 .studio-geometry-facts dd{margin:0}
+/* Spec 191 procedure authoring and test bench */
+.studio-procedure-notice{font-weight:600}
+.studio-step,.studio-action{display:grid;gap:var(--space-2);min-width:0;margin:0;padding:var(--space-3);border:var(--border-width-default) solid var(--color-border-default);border-radius:var(--radius-sm)}
+.studio-action{background:var(--color-bg-subtle)}
+.studio-step__head{display:flex;align-items:end;gap:var(--space-2);flex-wrap:wrap}.studio-step__head label{flex:1 1 14rem}
+.studio-numfield{display:grid;gap:var(--space-1)}.studio-numfield__row{display:flex;gap:var(--space-2);align-items:center;flex-wrap:wrap}.studio-numfield__row input{flex:1 1 6rem;width:auto}
+.studio-refusal code{font-family:var(--font-mono);font-weight:700}
+.studio-table{width:100%;border-collapse:collapse;font-size:var(--font-size-caption)}.studio-table th,.studio-table td{padding:var(--space-1) var(--space-2);border-bottom:var(--border-width-default) solid var(--color-border-default);text-align:right}.studio-table th:nth-child(-n+3),.studio-table td:nth-child(-n+3){text-align:left}
+.studio-chart{margin:0;display:grid;gap:var(--space-1)}.studio-chart svg{width:100%;height:10rem;border:var(--border-width-default) solid var(--color-border-default);background:var(--color-bg-surface-raised)}.studio-chart figcaption{font-size:var(--font-size-caption)}
+.studio-link-provenance{font-family:var(--font-mono);font-size:var(--font-size-caption);overflow-wrap:anywhere}
+.studio-results{overflow-x:auto}
