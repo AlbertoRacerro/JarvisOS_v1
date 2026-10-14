@@ -1,4 +1,5 @@
 import { API_BASE_URL } from "./client";
+import type { ProcedureCase, ProcedureCreate, ProcedureReport, ProcedureStep } from "./studioProcedure";
 
 export type StudioVariable = { name: string; label: string; unit: string; description: string; min?: number | null; max?: number | null };
 export type StudioCase = { inputs: Record<string, number>; expected_outputs?: Record<string, number>; tolerance?: number };
@@ -28,15 +29,15 @@ export type StudioGeometryCase = { inputs: Record<string, number>; volume_min?: 
 export type StudioGeometryFacts = { valid: boolean; solids: number; volume: number; bbox_min: number[]; bbox_max: number[] };
 export type StudioGeometryArtifact = { name: "model.step" | "model.stl" | "model.glb"; sha256: string; size_bytes: number };
 export type StudioGeometryCaseResult = { passed: boolean; classification: string; facts: StudioGeometryFacts | null; limit: string | null; limit_value: number | null; preview_id: string | null; artifacts: StudioGeometryArtifact[]; duration_seconds?: number; errors: string[] };
-export type StudioCategoryId = "calculation" | "process_unit" | "geometry";
+export type StudioCategoryId = "calculation" | "process_unit" | "procedure" | "geometry";
 export const STUDIO_KINDS = ["studio_calc_v1", "studio_geometry_v1"] as const;
 export const isStudioKind = (kind: string | null | undefined): boolean => (STUDIO_KINDS as readonly string[]).includes(kind ?? "");
 export type StudioModel = {
   id: string; workspace_id: string; name: string; engineering_question: string; category: StudioCategoryId; status: string;
   // A calculation declares inputs/outputs; a process unit (spec 190) declares ports and parameters instead.
   inputs: StudioVariable[]; outputs: StudioVariable[]; source: string;
-  inlets?: StudioPort[]; outlets?: StudioPort[]; parameters?: StudioVariable[]; symbol?: string | null; culture_generation?: string[]; source_sha256: string; contract_sha256: string;
-  annotations: string; assumptions: string; annotations_stale: boolean; test_cases: StudioCase[] | StudioUnitCase[] | StudioGeometryCase[];
+  steps?: ProcedureStep[]; notice?: string; inlets?: StudioPort[]; outlets?: StudioPort[]; parameters?: StudioVariable[]; symbol?: string | null; culture_generation?: string[]; source_sha256: string; contract_sha256: string;
+  annotations: string; assumptions: string; annotations_stale: boolean; test_cases: StudioCase[] | StudioUnitCase[] | StudioGeometryCase[] | ProcedureCase[];
   documentation: { derived: StudioDerived; inputs: StudioVariable[]; outputs: StudioVariable[] } & Partial<StudioUnitContract>;
   last_test_report?: StudioReport | null; versions: StudioVersion[]; created_at: string; updated_at: string;
 };
@@ -48,7 +49,7 @@ export type StudioRuntimeStatus = { enabled: boolean; available: boolean; mechan
 export class StudioApiError extends Error {
   constructor(message: string, readonly code: string | null) { super(message); this.name = "StudioApiError"; }
 }
-async function request<T>(path: string, method = "GET", body?: unknown): Promise<T> {
+export async function request<T>(path: string, method = "GET", body?: unknown): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, { method, headers: body === undefined ? undefined : { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
   if (!response.ok) {
     const data = await response.json().catch(() => null) as { detail?: { message?: string; code?: string } | { loc?: unknown[]; msg?: string }[] | string } | null;
@@ -58,16 +59,16 @@ async function request<T>(path: string, method = "GET", body?: unknown): Promise
   }
   return response.json() as Promise<T>;
 }
-const root = (workspaceId: string) => `/workspaces/${encodeURIComponent(workspaceId)}/studio`;
+export const root = (workspaceId: string) => `/workspaces/${encodeURIComponent(workspaceId)}/studio`;
 const model = (workspaceId: string, id: string) => `${root(workspaceId)}/models/${encodeURIComponent(id)}`;
 export const listStudioCategories = () => request<StudioCategory[]>("/studio/categories");
 export const getStudioRuntimeStatus = () => request<StudioRuntimeStatus>("/studio/runtime/status");
 export const listStudioModels = (workspaceId: string) => request<StudioModel[]>(`${root(workspaceId)}/models`);
 export const getStudioModel = (workspaceId: string, id: string) => request<StudioModel>(model(workspaceId, id));
 export type StudioGeometryCreate = { category: "geometry"; name: string; engineering_question: string; inputs: StudioVariable[] };
-export const createStudioModel = (workspaceId: string, payload: Pick<StudioModel, "name" | "engineering_question" | "inputs" | "outputs"> | StudioUnitCreate | StudioGeometryCreate) => request<StudioModel>(`${root(workspaceId)}/models`, "POST", payload);
-export const saveStudioModel = (workspaceId: string, id: string, payload: Partial<Pick<StudioModel, "name" | "engineering_question" | "inputs" | "outputs" | "source" | "annotations" | "assumptions">> | Partial<StudioUnitContract & Pick<StudioModel, "name" | "engineering_question" | "source" | "annotations" | "assumptions">>) => request<StudioModel>(model(workspaceId, id), "PUT", payload);
-export const testStudioModel = (workspaceId: string, id: string, cases: StudioCase[] | StudioUnitCase[] | StudioGeometryCase[]) => request<StudioReport>(`${model(workspaceId, id)}/test`, "POST", { cases });
+export const createStudioModel = (workspaceId: string, payload: Pick<StudioModel, "name" | "engineering_question" | "inputs" | "outputs"> | StudioUnitCreate | StudioGeometryCreate | ProcedureCreate) => request<StudioModel>(`${root(workspaceId)}/models`, "POST", payload);
+export const saveStudioModel = (workspaceId: string, id: string, payload: Partial<Pick<StudioModel, "name" | "engineering_question" | "inputs" | "outputs" | "source" | "annotations" | "assumptions">> | Partial<StudioUnitContract & Pick<StudioModel, "name" | "engineering_question" | "source" | "annotations" | "assumptions">> | { name?: string; engineering_question?: string; parameters?: StudioVariable[]; steps?: ProcedureStep[]; annotations?: string; assumptions?: string }) => request<StudioModel>(model(workspaceId, id), "PUT", payload);
+export const testStudioModel = (workspaceId: string, id: string, cases: StudioCase[] | StudioUnitCase[] | StudioGeometryCase[] | ProcedureCase[]) => request<StudioReport | ProcedureReport>(`${model(workspaceId, id)}/test`, "POST", { cases });
 export const publishStudioModel = (workspaceId: string, id: string) => request<StudioVersion>(`${model(workspaceId, id)}/publish`, "POST", {});
 export const reviseStudioModel = (workspaceId: string, id: string) => request<StudioModel>(`${model(workspaceId, id)}/revise`, "POST", {});
 export const listStudioLibrary = (workspaceId: string) => request<StudioLibraryEntry[]>(`${root(workspaceId)}/library`);
