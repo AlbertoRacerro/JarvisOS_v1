@@ -111,7 +111,7 @@ Each entry must contain:
 
 ### F18 — Acyclic mixed-solve summary wording — PARK
 
-- **Origin:** spec 190 real-browser acceptance on code HEAD `1120733544fa75236d18b9e2eb73b027b1f34283`, 2026-10-14.
+- **Origin:** spec 190 real-browser acceptance on repaired code HEAD `a4aa37013863ce2e50f09936294dc2ff70b16021`, 2026-10-14.
 - **Observation:** an acyclic StudioUnit → Heater solve converged with closed balances, but its summary called it a “culture-only loop.” The wording misstates the graph shape; the calculation and detailed results were correct.
 - **Disposition:** PARK; a label correction is outside the accepted 190 outcome and does not block its delivery.
 - **Expected benefit:** operators can read the solve summary without inferring a recycle loop that is absent.
