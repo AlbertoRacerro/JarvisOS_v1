@@ -111,7 +111,8 @@ def test_invalid_unit_documentation_safety_and_categories(client, tmp_path):
     assert client.post("/workspaces/missing/studio/models", json=CONTRACT).status_code == 404
     categories = client.get("/studio/categories").json()
     assert categories[0]["available"] is True
-    assert all(not category["available"] and category["reason"] for category in categories[1:])
+    assert [item["id"] for item in categories if item["available"]] == ["calculation", "process_unit"]
+    assert all(category["available"] or category["reason"] for category in categories)
 
 
 def test_report_is_hash_bound_and_outputs_are_checked(client):

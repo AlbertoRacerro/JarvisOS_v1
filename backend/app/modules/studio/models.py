@@ -68,6 +68,12 @@ class StudioUpdate(BaseModel):
     engineering_question: str | None = Field(default=None, min_length=1, max_length=2000)
     inputs: list[Variable] | None = None
     outputs: list[Variable] | None = None
+    # Process-unit contract parts (spec 190); validated by StudioUnitCreate in the service.
+    inlets: list[dict[str, Any]] | None = None
+    outlets: list[dict[str, Any]] | None = None
+    parameters: list[dict[str, Any]] | None = None
+    symbol: str | None = Field(default=None, max_length=32768)
+    culture_generation: list[str] | None = None
     source: str | None = Field(default=None, max_length=65536)
     annotations: str | None = Field(default=None, max_length=20000)
     assumptions: str | None = Field(default=None, max_length=20000)
