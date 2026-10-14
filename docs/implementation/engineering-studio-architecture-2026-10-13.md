@@ -75,7 +75,7 @@ Licence and release data were checked against the registries on 2026-10-13.
 | 187 | Isolated runtime for user-authored Python | ready |
 | 188 | Model authoring vertical slice: wizard, scaffold, editor, derived documentation, test, publish, reuse in a calculation | ready, after 187 |
 | 189 | CAD as code: build123d scripts in the 187 runtime, preview in the BLUECAD viewer, STEP and STL with lineage (golden workflow 2) | planned |
-| 190 | User-defined process unit: declared ports, parameters and a steady contract invoked by the mixed-engine solve, with palette registration and explicit stream bindings (golden workflow 3) | planned |
+| 190 | User-defined process unit: declared ports, parameters and a steady contract invoked by the mixed-engine solve, with palette registration and explicit stream bindings (golden workflow 3) | [ready](../specs/190-studio-process-custom-unit.md) |
 | 191 | Procedure authoring: user-defined temporal procedures over the existing typed actions (golden workflow 4) | planned |
 | 192 | Notebook and spreadsheet bakeoff prototype (marimo, Univer) as exploration surfaces that are not parameter authorities | planned |
 
