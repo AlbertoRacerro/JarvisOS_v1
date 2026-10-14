@@ -29,5 +29,7 @@ for (const text of ["New geometry", "GeometryCases", "GeometryReport", "Geometry
 assert.match(page, /\{ id: "geometry", label: "Geometry", available: true \}/);
 const properties = read("src/components/engineering/EngineeringProperties.tsx");
 assert.ok(!properties.includes('=== "studio_calc_v1"'), "the run surface treats every Studio kind alike");
+const studioCss = read("src/pages/studio.css");
+assert.doesNotMatch(studioCss, /\.studio-geometry-viewer\s*\{[^}]*height\s*:/, "the viewer must size to its content so download links are not overlapped");
 assert.match(read("package.json"), /npm run test:189/);
 console.log("189 Studio geometry frontend ok");
