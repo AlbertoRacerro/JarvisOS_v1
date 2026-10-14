@@ -59,7 +59,7 @@ If a real workload exceeds a limit, the run fails and records which limit it hit
 3. **No host access.** The 187 hostile suite passes unchanged, and its host-access cases also pass under the geometry profile.
 4. **Execution boundary.** Geometry cannot be generated with the runtime disabled or unavailable. A request cannot select the geometry profile for calculation code or exceed a profile ceiling.
 5. **Resource failures are explicit.** Scripts that exceed the wall time, memory, a per-file cap and the combined cap each fail with the named limit and its configured value, and register nothing.
-6. **Typed BLUECAD is unchanged.** Existing candidate build, export and scene-binding tests pass without edits. The 188 and 190 suites pass without edits.
+6. **Typed BLUECAD is unchanged.** Existing candidate build, export and scene-binding tests pass without edits. The 188 and 190 suites pass without edits, except the 188 assertion that lists the available categories, which now includes `geometry`.
 
 ## Required evidence
 

@@ -2,6 +2,7 @@ import hashlib
 import json
 import mimetypes
 import shutil
+from collections.abc import Sequence
 from math import isfinite
 from pathlib import Path
 from uuid import uuid4
@@ -79,6 +80,8 @@ IMPLEMENTATION_KIND = "batch_growth_v0"
 BLUECAD_L2_IMPLEMENTATION_KIND = "bluecad_l2_v0"
 CALC_V0_IMPLEMENTATION_KIND = "calc_v0"
 STUDIO_CALC_IMPLEMENTATION_KIND = "studio_calc_v1"
+STUDIO_GEOMETRY_IMPLEMENTATION_KIND = "studio_geometry_v1"
+STUDIO_IMPLEMENTATION_KINDS = frozenset({STUDIO_CALC_IMPLEMENTATION_KIND, STUDIO_GEOMETRY_IMPLEMENTATION_KIND})
 BUNDLED_BLUEREV_PROCESS0_LABEL = "bluerev-geometry-hydraulics-v0-bundled"
 BUNDLED_BLUEREV_PROCESS0_TITLE = "BlueRev geometry and hydraulics bundled V0"
 BUNDLED_BLUEREV_PROCESS1_LABEL = "bluerev-biomass-nutrients-harvest-v0-bundled"
@@ -559,7 +562,7 @@ def preview_model_bindings(
             contract_sha256=model_version["input_contract_sha256"],
             bindings=payload.bindings,
             load_parameter=load_parameter,
-            studio_pint=model_version["implementation_kind"] == STUDIO_CALC_IMPLEMENTATION_KIND,
+            studio_pint=model_version["implementation_kind"] in STUDIO_IMPLEMENTATION_KINDS,
         )
 
 
@@ -720,7 +723,7 @@ def run_runner_job(runner_job_id: str) -> RunnerJobRunResponse:
             str(job["script_sha256"]),
         )
     try:
-        if implementation_kind != STUDIO_CALC_IMPLEMENTATION_KIND:
+        if implementation_kind not in STUDIO_IMPLEMENTATION_KINDS:
             preflight_script_policy(
                 script_path,
                 ast_policy=(
@@ -782,7 +785,7 @@ def run_runner_job(runner_job_id: str) -> RunnerJobRunResponse:
     output_dir.mkdir(parents=True, exist_ok=True)
     input_file.write_text(_pretty_json(simulation_run.input_payload), encoding="utf-8")
 
-    if implementation_kind == STUDIO_CALC_IMPLEMENTATION_KIND:
+    if implementation_kind in STUDIO_IMPLEMENTATION_KINDS:
         studio = _run_studio_calc_job(
             runner_job_id, workspace_id, simulation_run_id, job, simulation_run, script_path, output_dir
         )
@@ -893,7 +896,7 @@ def run_runner_job(runner_job_id: str) -> RunnerJobRunResponse:
                 )
 
     completed_at = utc_now()
-    if implementation_kind not in {CALC_V0_IMPLEMENTATION_KIND, STUDIO_CALC_IMPLEMENTATION_KIND}:
+    if implementation_kind not in {CALC_V0_IMPLEMENTATION_KIND, *STUDIO_IMPLEMENTATION_KINDS}:
         output_payload = canonical_json(output)
     with open_sqlite_connection() as connection:
         connection.execute(
@@ -942,8 +945,11 @@ def _run_studio_calc_job(
 ) -> RunnerJobRunResponse | tuple[dict[str, object], str, list[str]]:
     """Execute published user code only inside the 187 isolated runtime.
 
+    A geometry version (spec 189) runs under the fixed geometry profile; its verified STEP, STL
+    and GLB are copied into the run directory after sandbox exit and registered with the facts.
     Returns the terminal failure response, or the output for the caller to record as succeeded.
     """
+    geometry = job["implementation_kind"] == STUDIO_GEOMETRY_IMPLEMENTATION_KIND
     try:
         source_bytes = script_path.read_bytes()
         if hashlib.sha256(source_bytes).hexdigest() != job["script_sha256"]:
@@ -958,13 +964,17 @@ def _run_studio_calc_job(
         if published is None or published["source_sha256"] != job["script_sha256"]:
             raise RunnerSafetyError("runner_studio_publication_mismatch", "Studio publication evidence changed.")
         contract = json.loads(published["contract_json"])
-        units = {item["name"]: item["unit"] for item in contract["outputs"]}
+        units = {} if geometry else {item["name"]: item["unit"] for item in contract["outputs"]}
         inputs = {name: item["value"] for name, item in json.loads(simulation_run.input_payload or "{}").items()}
-        record = studio_runtime.run(studio_runtime.RunRequest(
-            source=source,
-            inputs=inputs,
-            limits=studio_runtime.Limits(wall_seconds=min(int(job["timeout_seconds"]), 15)),
-        ))
+        if geometry:
+            record = studio_runtime.run(studio_runtime.RunRequest(source=source, inputs=inputs),
+                                        profile="geometry", artifact_dir=output_dir / "geometry")
+        else:
+            record = studio_runtime.run(studio_runtime.RunRequest(
+                source=source,
+                inputs=inputs,
+                limits=studio_runtime.Limits(wall_seconds=min(int(job["timeout_seconds"]), 15)),
+            ))
         if record.source_sha256 != job["script_sha256"]:
             raise RunnerSafetyError("runner_script_hash_mismatch", "Studio runtime source hash differs.")
         _capture_logs(workspace_id, simulation_run_id, LocalPythonResult(
@@ -990,8 +1000,12 @@ def _run_studio_calc_job(
                 runner_job_id, workspace_id, simulation_run_id,
                 status="timed_out" if record.classification == "timeout" else "failed",
                 code=f"studio_runtime_{record.classification}",
-                message=f"Studio runtime returned {record.classification}.",
+                message=(f"Studio {record.profile} run stopped at the {record.limit} limit ({record.limit_value})."
+                         if record.limit else f"Studio runtime returned {record.classification}"
+                         + (f" ({record.artifact_error})." if record.artifact_error else ".")),
             )
+        if geometry:
+            return _studio_geometry_output(workspace_id, simulation_run_id, output_dir, job, record)
         if not isinstance(record.result, dict) or set(record.result) != set(units):
             raise RunnerSafetyError("runner_result_invalid_json", "Studio result does not match declared outputs.")
         output: dict[str, object] = {"outputs": {
@@ -1020,6 +1034,29 @@ def _run_studio_calc_job(
     return output, output_payload, artifact_ids
 
 
+_GEOMETRY_MIME = {"model.step": "application/step", "model.stl": "model/stl", "model.glb": "model/gltf-binary"}
+
+
+def _studio_geometry_output(
+    workspace_id: str, simulation_run_id: str, output_dir: Path, job, record: studio_runtime.RunRecord,
+) -> tuple[dict[str, object], str, list[str]]:
+    """Register the admitted geometry artifacts and the shape facts as one run output."""
+    facts = record.result
+    if not isinstance(facts, dict) or set(facts) != {"valid", "solids", "volume", "bbox_min", "bbox_max"}:
+        raise RunnerSafetyError("runner_result_invalid_json", "Studio geometry facts are invalid.")
+    output: dict[str, object] = {"geometry": facts, "artifacts": [
+        {"name": item.name, "sha256": item.sha256, "size_bytes": item.size_bytes} for item in record.artifacts]}
+    output_payload = _canonical_result_json(output)
+    (output_dir / "result.json").write_text(output_payload, encoding="utf-8")
+    declared = [{"path": "result.json", "role": "studio_geometry_facts", "artifact_type": "json",
+                 "mime_type": "application/json"}]
+    declared += [{"path": f"geometry/{item.name}", "role": "studio_geometry", "artifact_type": "studio_geometry",
+                  "mime_type": _GEOMETRY_MIME[item.name]} for item in record.artifacts]
+    artifact_ids = _register_declared_artifacts(
+        workspace_id, simulation_run_id, output_dir, declared, int(job["max_artifact_bytes"]))
+    return output, output_payload, artifact_ids
+
+
 def get_runner_job(runner_job_id: str) -> RunnerJobRead:
     with open_sqlite_connection() as connection:
         row = _load_runner_job(connection, runner_job_id)
@@ -1041,7 +1078,7 @@ def get_simulation_run_detail(workspace_id: str, simulation_run_id: str) -> Simu
             ).fetchone()
             stale = False
             superseded = False
-            if version is not None and version["implementation_kind"] == STUDIO_CALC_IMPLEMENTATION_KIND:
+            if version is not None and version["implementation_kind"] in STUDIO_IMPLEMENTATION_KINDS:
                 try:
                     require_linked_parameters_usable(
                         connection, workspace_id, row["input_payload"] or "{}", studio_pint=True
@@ -1163,7 +1200,7 @@ def _claim_and_mark_running(runner_job_id: str, workspace_id: str, simulation_ru
             try:
                 require_linked_parameters_usable(
                     connection, workspace_id, run["input_payload"],
-                    studio_pint=model_version["implementation_kind"] == STUDIO_CALC_IMPLEMENTATION_KIND,
+                    studio_pint=model_version["implementation_kind"] in STUDIO_IMPLEMENTATION_KINDS,
                 )
             except RunnerSafetyError as exc:
                 if exc.code != LINKED_PARAMETER_UNUSABLE_CODE:
@@ -1330,7 +1367,7 @@ def _register_declared_artifacts(
     workspace_id: str,
     simulation_run_id: str,
     output_dir: Path,
-    artifacts: list[object],
+    artifacts: Sequence[object],
     max_artifact_bytes: int,
 ) -> list[str]:
     artifact_ids: list[str] = []

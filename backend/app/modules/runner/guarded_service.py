@@ -38,6 +38,15 @@ from app.modules.studio_runtime import runtime as studio_runtime
 
 RUNNER_SCRIPT_POLICY_VIOLATION = "RUNNER_SCRIPT_POLICY_VIOLATION"
 STUDIO_CALC_KIND = "studio_calc_v1"
+STUDIO_GEOMETRY_KIND = "studio_geometry_v1"
+STUDIO_KINDS = frozenset({STUDIO_CALC_KIND, STUDIO_GEOMETRY_KIND})
+
+
+def _job_timeout(payload: RunnerJobCreate, implementation_kind: str) -> int:
+    # A geometry run always uses the fixed geometry profile wall time (spec 189).
+    if implementation_kind == STUDIO_GEOMETRY_KIND:
+        return studio_runtime.PROFILES["geometry"]["wall_seconds"]
+    return min(payload.timeout_seconds or _base.DEFAULT_TIMEOUT_SECONDS, 60)
 _LEGACY_SANDBOX_VIOLATION = "SANDBOX_VIOLATION"
 BUNDLED_BLUEREV_PROCESS0_SEMANTIC_LABEL = "bluerev-geometry-hydraulics-semantic-v0-bundled"
 
@@ -160,7 +169,7 @@ def create_runner_job(
 
     model_version = _load_model_version(workspace_id, payload.model_version_id)
     _require_permitted_implementation(model_version)
-    if model_version["implementation_kind"] == STUDIO_CALC_KIND:
+    if model_version["implementation_kind"] in STUDIO_KINDS:
         preview = _base.preview_model_bindings(
             workspace_id, payload.model_version_id, BindingPreviewRequest(bindings=payload.input_set)
         )
@@ -215,7 +224,7 @@ def _replay_existing_runner_job(
             input_payload, parameter_payload = _base.validate_bluecad_l2_input(payload.input_set)
         elif existing["implementation_kind"] == _base.CALC_V0_IMPLEMENTATION_KIND:
             input_payload, parameter_payload = _base.validate_calc_v0_input(payload.input_set)
-        elif existing["implementation_kind"] == STUDIO_CALC_KIND:
+        elif existing["implementation_kind"] in STUDIO_KINDS:
             model_version = _load_model_version(workspace_id, payload.model_version_id)
             contract, _ = parse_stored_input_contract(
                 model_version["input_contract_payload"], model_version["input_contract_sha256"]
@@ -248,7 +257,7 @@ def _replay_existing_runner_job(
         and existing["run_label"] == payload.run_label
         and existing["input_payload"] == input_payload
         and existing["parameter_payload"] == parameter_payload
-        and int(existing["timeout_seconds"]) == min(payload.timeout_seconds or _base.DEFAULT_TIMEOUT_SECONDS, 60)
+        and int(existing["timeout_seconds"]) == _job_timeout(payload, existing["implementation_kind"])
     )
     if not same_payload:
         raise RunnerSafetyError(
@@ -266,7 +275,6 @@ def _create_runner_job_idempotent(
     payload: RunnerJobCreate,
 ) -> RunnerJobCreateResponse:
     now = _base.utc_now()
-    timeout_seconds = min(payload.timeout_seconds or _base.DEFAULT_TIMEOUT_SECONDS, 60)
 
     with open_sqlite_connection() as connection:
         _base._require_workspace(connection, workspace_id)
@@ -276,13 +284,14 @@ def _create_runner_job_idempotent(
             payload.model_version_id,
         )
         implementation_kind = model_version["implementation_kind"]
+        timeout_seconds = _job_timeout(payload, implementation_kind)
         if implementation_kind == _base.IMPLEMENTATION_KIND:
             input_payload, parameter_payload = _base.validate_batch_growth_input(payload.input_set)
         elif implementation_kind == _base.BLUECAD_L2_IMPLEMENTATION_KIND:
             input_payload, parameter_payload = _base.validate_bluecad_l2_input(payload.input_set)
         elif implementation_kind == _base.CALC_V0_IMPLEMENTATION_KIND:
             input_payload, parameter_payload = _base.validate_calc_v0_input(payload.input_set)
-        elif implementation_kind == STUDIO_CALC_KIND:
+        elif implementation_kind in STUDIO_KINDS:
             input_payload, parameter_payload = _base.validate_calc_v0_input(payload.input_set)
         else:
             raise RunnerSafetyError("runner_implementation_kind_unsupported", "Unsupported implementation kind.")
@@ -355,7 +364,7 @@ def _create_runner_job_idempotent(
         if _uses_canonical_linked_parameter_contract(model_version):
             require_linked_parameters_usable(
                 connection, workspace_id, input_payload,
-                studio_pint=implementation_kind == STUDIO_CALC_KIND,
+                studio_pint=implementation_kind in STUDIO_KINDS,
             )
 
         simulation_run_id = str(uuid4())
@@ -412,7 +421,8 @@ def _create_runner_job_idempotent(
                 _base.MAX_STDOUT_BYTES,
                 _base.MAX_STDERR_BYTES,
                 _base.MAX_OUTPUT_JSON_BYTES,
-                _base.MAX_ARTIFACT_BYTES,
+                (studio_runtime.PROFILES["geometry"]["file_bytes"] if implementation_kind == STUDIO_GEOMETRY_KIND
+                 else _base.MAX_ARTIFACT_BYTES),
                 payload.request_key,
                 now,
                 now,
@@ -488,7 +498,7 @@ def _require_exact_bundled(model_version: dict[str, Any]) -> None:
 
 
 def _require_permitted_implementation(model_version: dict[str, Any]) -> None:
-    if model_version.get("implementation_kind") != STUDIO_CALC_KIND:
+    if model_version.get("implementation_kind") not in STUDIO_KINDS:
         _require_exact_bundled(model_version)
         return
     if model_version.get("status") != "published":
