@@ -547,3 +547,13 @@
 .draft-solver-diagnostics > div { display: flex; gap: 8px; }
 .draft-solver-diagnostics dt { color: var(--color-text-muted, #687068); min-width: 12em; }
 .draft-solver-diagnostics dd { margin: 0; }
+/* Spec 190 custom Studio units */
+.draft-studio-symbol { pointer-events: none; }
+.draft-port-label { font-size: 6px; fill: #3d4f42; pointer-events: none; }
+.draft-studio-limits-label { font-size: 7px; fill: #7a5a12; pointer-events: none; }
+.draft-studio-limits { padding: 4px 6px; border-left: 3px solid #b8892b; background: #fbf3df; color: #5c4210; }
+.draft-studio-pin { display: grid; gap: 2px; margin: 4px 0; }
+.draft-studio-pin div { display: flex; justify-content: space-between; gap: 6px; }
+.draft-studio-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.draft-studio-provenance { margin-top: 8px; padding: 6px 8px; border: 1px solid #c9d2c7; border-radius: 4px; }
+.draft-studio-provenance .is-superseded { border-left: 3px solid #b8892b; padding-left: 6px; }

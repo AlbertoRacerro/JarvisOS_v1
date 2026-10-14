@@ -19,7 +19,6 @@ from app.modules.process_stack import draft
 from app.modules.process_stack.draft_models import (
     QUANTITY_UNITS,
     STREAM_SPECS,
-    UNIT_REGISTRY,
     AddStream,
     AddUnit,
     Delete,
@@ -35,6 +34,7 @@ from app.modules.process_stack.draft_models import (
     SetStreamSpec,
     SetUnitParams,
     UnitModelPin,
+    spec_for,
 )
 from app.modules.process_stack.draft_models import Connect as DraftConnect
 from app.modules.process_stack.draft_models import (
@@ -150,7 +150,7 @@ def surface_brief(workspace_id: str, ref: SurfaceRef | None) -> SurfaceBrief:
         selected_info = []
         if selected_unit:
             canonical_unit = document["objects"][selected_unit["id"]]
-            declaration = UNIT_REGISTRY[canonical_unit["type"]]
+            declaration = spec_for(canonical_unit)
             selected_info.append(f"Selected unit owner: {declaration.owner}; culture rule: {declaration.culture_rule}.")
             if canonical_unit["type"] == "SpecifiedSeparator":
                 recovery = float(canonical_unit.get("params", {}).get("biomass_recovery", {}).get("si", 0))
@@ -165,7 +165,7 @@ def surface_brief(workspace_id: str, ref: SurfaceRef | None) -> SurfaceBrief:
             selected_info.append(f"Selected feed culture values: {fields}.")
         selected_context = ("\n".join(selected_info) + "\n") if selected_info else ""
         pbr_units = [item for item in objects if item["kind"] == "unit"
-                     and UNIT_REGISTRY[item["type"]].culture_rule == "pbr"]
+                     and spec_for(item).culture_rule == "pbr"]
         run_summary = "No mixed solve recorded."
         last_attempt = projection["results"].get("last_attempt")
         if last_attempt and last_attempt.get("run_id"):
@@ -332,10 +332,10 @@ def _owner_rows(objects: list[dict], *, compact: bool) -> str:
     """Registry-derived calculation owner of every unit (spec 170); grouped counts when space is tight."""
     units = [item for item in objects if item["kind"] == "unit"]
     if not compact:
-        return "; ".join(f"{item['tag']}={UNIT_REGISTRY[item['type']].owner}" for item in units)
+        return "; ".join(f"{item['tag']}={spec_for(item).owner}" for item in units)
     counts: dict[str, int] = {}
     for item in units:
-        owner = UNIT_REGISTRY[item["type"]].owner
+        owner = spec_for(item).owner
         counts[owner] = counts.get(owner, 0) + 1
     return "; ".join(f"{owner}: {count} unit(s)" for owner, count in sorted(counts.items()))
 
@@ -508,12 +508,12 @@ def _process_object_brief(item: dict) -> dict:
             "properties": properties,
             "culture": item.get("spec", {}).get("culture"),
         }
-    unit_spec = UNIT_REGISTRY[item["type"]]
+    unit_spec = spec_for(item)
     properties = {
         param.key: _property_brief(item.get("params", {}).get(param.key), param.kind)
         for param in unit_spec.params_for(item.get("mode"))
     }
-    declaration = UNIT_REGISTRY[item["type"]]
+    declaration = spec_for(item)
     return {
         "kind": item["kind"],
         "type": item["type"],
@@ -1065,7 +1065,7 @@ def _process_ops(document: dict, request: ActionRequest, workspace_id: str | Non
                 before = target.get("spec", {}).get(action.property)
                 after = value.model_dump() if isinstance(value, Quantity) else value
             elif target["kind"] == "unit":
-                supported = {p.key for p in UNIT_REGISTRY[target["type"]].params}
+                supported = {p.key for p in spec_for(target).params}
                 if action.property not in supported:
                     raise ValueError(
                         f"{target['type']} supports parameters: {', '.join(sorted(supported)) or 'none'}; kinetics is unsupported."

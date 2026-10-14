@@ -39,7 +39,31 @@ export type DraftObject = {
   route?: RoutePoint[];
   flip_x?: boolean;
   flip_y?: boolean;
+  // Spec 190: a placed StudioUnit pins a published version (`model` holds StudioPin) and embeds the verified contract.
+  studio?: StudioPlacement;
 };
+/** Spec 190 pin of a placed StudioUnit; both hashes are verified against the published artifact. */
+export type StudioPin = { version_id: string; source_sha256: string; contract_sha256: string };
+export type StudioContractPort = { name: string; label: string };
+export type StudioContractParam = { name: string; label: string; unit: string; description: string; min?: number | null; max?: number | null };
+export type StudioPlacement = {
+  model_spec_id: string; name: string; version_label: string; version_number: number;
+  contract: { inlets: StudioContractPort[]; outlets: StudioContractPort[]; parameters: StudioContractParam[]; symbol: string | null; culture_generation: string[] };
+};
+/** Palette row for a published Studio unit (registry projection `studio_units`). */
+export type StudioPaletteUnit = {
+  type: "StudioUnit"; label: string; owner: string; culture_rule: string; model_spec_id: string; version_id: string; version_label: string; version_number: number;
+  source_sha256: string; contract_sha256: string; inlets: string[]; inlet_labels: string[]; outlets: string[]; outlet_labels: string[]; required_inlets: number;
+  params: { key: string; label: string; unit: string; description: string; minimum: number | null; maximum: number | null }[];
+  symbol: string | null; culture_generation: string[]; limits: string; steady_only: boolean;
+};
+/** Per placed unit pin status (draft projection `studio_units`). */
+export type StudioPinStatus = { tag: string; name: string; version_label: string; version_number: number; version_id: string;
+  latest_version_id: string | null; latest_version_number: number | null; update_available: boolean; limits: string };
+/** Per custom unit provenance of one stored run (results view `studio_units`); cache_hits and sandbox_seconds may be absent. */
+export type StudioRunProvenance = { version_id: string; version_label: string; source_sha256: string; contract_sha256: string; call_count: number;
+  cache_hits?: number; sandbox_seconds?: number; duration_s?: number; runtime_classifications?: string[]; version_number: number | null; name: string | null;
+  superseded: boolean; latest_version_number: number | null; limits: string };
 /** Spec 158 typed kinetic reaction over declared compounds. */
 export type DraftReaction = {
   id?: string;
@@ -165,6 +189,7 @@ export type ResultsView = {
   balances: { mass: BalanceRow; culture: Record<string, BalanceRow> | null; unit_balances: Record<string, Record<string, BalanceRow>> | null };
   findings: Finding[];
   kpis: Kpi[];
+  studio_units?: Record<string, StudioRunProvenance>;
 };
 export type DraftProjection = {
   workspace_id: string;
@@ -180,6 +205,7 @@ export type DraftProjection = {
   reactions?: Record<string, DraftReaction>;
   kinetics_scripts?: Record<string, KineticsScript>;
   findings: Finding[];
+  studio_units?: Record<string, StudioPinStatus>;
   /** Pre-run Q and HRT for a PBR fed directly by a feed stream (backend feed basis); absent otherwise. */
   pbr_feed_basis?: Record<string, PbrFeedBasis>;
   results: ResultsState;
@@ -262,6 +288,8 @@ export type DraftRegistry = {
   quantity_units: Record<string, { si: string; display: string[] }>;
   stream_specs: { key: string; label: string; kind: string }[];
   units: RegistryUnit[];
+  /** Spec 190: latest published process-unit version per Studio model of this workspace. */
+  studio_units?: StudioPaletteUnit[];
   reactions?: RegistryReactions;
   kinetics?: KineticsRegistry;
   unsupported: Record<string, string>;

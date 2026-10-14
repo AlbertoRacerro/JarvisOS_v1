@@ -10,7 +10,7 @@ import math
 from functools import lru_cache
 from typing import Any
 
-from app.modules.process_stack.draft_models import UNIT_REGISTRY, pbr_temperature_invalid
+from app.modules.process_stack.draft_models import pbr_temperature_invalid, spec_for
 
 HRT_MIN_DAYS = 0.1
 HRT_MAX_DAYS = 100.0
@@ -94,7 +94,7 @@ def pbr_feed_basis(document: dict[str, Any]) -> dict[str, dict[str, Any]]:
     objects = document["objects"]
     output: dict[str, dict[str, Any]] = {}
     for unit in objects.values():
-        if unit["kind"] != "unit" or UNIT_REGISTRY[unit["type"]].culture_rule != "pbr":
+        if unit["kind"] != "unit" or spec_for(unit).culture_rule != "pbr":
             continue
         inlet = next((item for item in objects.values() if item["kind"] == "stream" and item["type"] != "EnergyStream"
                       and (item.get("target") or {}).get("unit") == unit["id"]), None)
@@ -110,7 +110,7 @@ def pbr_findings(document: dict[str, Any], workspace_id: str | None = None) -> l
     findings: list[dict[str, Any]] = []
     objects = document["objects"]
     for unit in sorted((item for item in objects.values() if item["kind"] == "unit"
-                        and UNIT_REGISTRY[item["type"]].culture_rule == "pbr"), key=lambda item: item["tag"]):
+                        and spec_for(item).culture_rule == "pbr"), key=lambda item: item["tag"]):
         tag, params = unit["tag"], unit["params"]
         if pbr_temperature_invalid(params):
             findings.append(_finding("blocker", "PBR_TEMPERATURE_INVALID", tag, "temperature_amplitude",

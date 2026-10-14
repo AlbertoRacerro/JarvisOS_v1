@@ -15,8 +15,8 @@ from pathlib import Path
 from typing import Any, cast
 
 # pbr_unit is imported eagerly on purpose (spec 170): an import inside a Run counts against the 168 wall budget.
-from app.modules.process_stack import culture, draft_compiler, mixed, pbr_unit, tear_solver
-from app.modules.process_stack.draft_models import UNIT_REGISTRY
+from app.modules.process_stack import culture, draft_compiler, mixed, pbr_unit, studio_unit, tear_solver
+from app.modules.process_stack.draft_models import spec_for
 from app.modules.process_stack.dwsim_mcp import DwsimMcpClient
 
 
@@ -118,6 +118,9 @@ class JarvisUnitContext:
     cache: dict[str, Any]
     validation: bool = False
     workspace_id: str | None = None
+    # Spec 190: every incoming material stream by port name, and the draft compounds; built-ins use `inlet` only.
+    inlets: dict[str, dict[str, Any]] = dataclass_field(default_factory=dict)
+    compounds: list[str] = dataclass_field(default_factory=list)
 
     def remaining_s(self) -> float:
         return max(0.0, self.deadline - time.monotonic())
@@ -153,14 +156,33 @@ def _evaluate_separator(unit: dict[str, Any], inlet: dict[str, Any],
     )
 
 
-JARVIS_EVALUATORS: dict[str, JarvisEvaluator] = {
-    "SpecifiedSeparator": _evaluate_separator, "PhotobioreactorT1": pbr_unit.evaluate_pbr,
-}
 GENERATION_UNITS = {name: "mol/s" if name == "dic" else "kg/s" for name in mixed.CULTURE_FIELDS}
 
 
+def _evaluate_studio_unit(unit: dict[str, Any], inlet: dict[str, Any],
+                          context: JarvisUnitContext) -> JarvisUnitEvaluation:
+    del inlet
+    evaluation = studio_unit.evaluate(unit, context.inlets, compounds=context.compounds, cache=context.cache,
+                                      workspace_id=context.workspace_id, validation=context.validation)
+    return JarvisUnitEvaluation(
+        outlets=evaluation.outlets, result=evaluation.result, culture_generation=evaluation.culture_generation,
+        culture_generation_units={name: GENERATION_UNITS[name] for name in evaluation.culture_generation})
+
+
+JARVIS_EVALUATORS: dict[str, JarvisEvaluator] = {
+    "SpecifiedSeparator": _evaluate_separator, "PhotobioreactorT1": pbr_unit.evaluate_pbr,
+    "StudioUnit": _evaluate_studio_unit,
+}
+
+
+def _incoming_material(document: dict[str, Any], unit_id: str) -> list[dict[str, Any]]:
+    return sorted((stream for stream in document["objects"].values() if stream["kind"] == "stream"
+                   and stream["type"] != "EnergyStream" and (stream.get("target") or {}).get("unit") == unit_id),
+                  key=lambda stream: stream["target"]["port"])
+
+
 def _check_evaluation(unit: dict[str, Any], evaluation: JarvisUnitEvaluation) -> None:
-    if set(evaluation.outlets) != set(UNIT_REGISTRY[unit["type"]].outlets):
+    if set(evaluation.outlets) != set(spec_for(unit).outlets):
         raise SegmentFailure(unit["tag"], {"code": "JARVIS_OUTLETS_MISMATCH"})
     if (any(name not in mixed.CULTURE_FIELDS or not isinstance(rate, (int, float))
             or not math.isfinite(rate) for name, rate in evaluation.culture_generation.items())
@@ -177,18 +199,21 @@ def _call_evaluator(unit: dict[str, Any], inlet: dict[str, Any],
     evaluator = JARVIS_EVALUATORS.get(unit["type"])
     if evaluator is None:
         raise SegmentFailure(unit["tag"], {"code": "JARVIS_EVALUATOR_MISSING", "type": unit["type"]})
+    timeout_code = "STUDIO_UNIT_TIMEOUT" if unit["type"] == "StudioUnit" else "JARVIS_UNIT_TIMEOUT"
+    if context.remaining_s() <= 0:
+        raise SegmentFailure(unit["tag"], {"code": timeout_code})
     try:
         evaluation = evaluator(unit, inlet, context)
     except Exception as exc:
         if isinstance(exc, SegmentFailure):
             raise
-        code = "JARVIS_UNIT_TIMEOUT" if isinstance(exc, TimeoutError) else str(
+        code = timeout_code if isinstance(exc, TimeoutError) else str(
             getattr(exc, "code", "JARVIS_UNIT_FAILED"))
         detail = getattr(exc, "detail", None)
         raise SegmentFailure(unit["tag"], {"code": code, "error_type": type(exc).__name__,
                                             "message": str(exc)[:600], "detail": detail}) from exc
     if context.remaining_s() <= 0:
-        raise SegmentFailure(unit["tag"], {"code": "JARVIS_UNIT_TIMEOUT"})
+        raise SegmentFailure(unit["tag"], {"code": timeout_code})
     _check_evaluation(unit, evaluation)
     return evaluation
 
@@ -483,15 +508,18 @@ def _validation_states(document: dict[str, Any], part: dict[str, Any], workspace
         incoming = next(stream for stream in document["objects"].values() if stream["kind"] == "stream"
                         and (stream.get("target") or {}).get("unit") == unit_id)
         inlet = known.get(incoming["tag"], copy.deepcopy(reference))
+        ports = spec_for(unit).inlets
+        inlets = {ports[stream["target"]["port"]]: known.get(stream["tag"], copy.deepcopy(reference))
+                  for stream in _incoming_material(document, unit_id)} if unit["type"] == "StudioUnit" else {}
         evaluation = _call_evaluator(unit, inlet, JarvisUnitContext(
             inlet_density_kg_m3=float(inlet.get("density_kg_m3") or 1000.0),
             deadline=time.monotonic() + mixed.WALL_BUDGET_S, cache={}, validation=True,
-            workspace_id=workspace_id))
+            workspace_id=workspace_id, inlets=inlets, compounds=list(compounds)))
         outgoing = sorted((stream for stream in document["objects"].values() if stream["kind"] == "stream"
                            and (stream.get("source") or {}).get("unit") == unit_id),
                           key=lambda stream: stream["source"]["port"])
         for stream in outgoing:
-            port = UNIT_REGISTRY[unit["type"]].outlets[stream["source"]["port"]]
+            port = spec_for(unit).outlets[stream["source"]["port"]]
             known[stream["tag"]] = evaluation.outlets[port]
     return known
 
@@ -944,11 +972,23 @@ def _evaluate(document: dict[str, Any], part: dict[str, Any], tear: dict[str, di
             unit = objects[uid]
             incoming = next(stream for stream in objects.values() if stream["kind"] == "stream"
                             and (stream.get("target") or {}).get("unit") == uid)
+            studio = unit["type"] == "StudioUnit"
+            if studio:
+                # Spec 190: every declared inlet must be known at this level; built-in units keep their one inlet.
+                ports = spec_for(unit).inlets
+                gathered = _incoming_material(document, uid)
+                missing = [stream["tag"] for stream in gathered if stream["tag"] not in known]
+                if missing or len(gathered) != len(ports):
+                    raise SegmentFailure(unit["tag"], {"code": "STUDIO_UNIT_INLET_MISSING",
+                                                       "message": f"Inlet state is not known for {missing or 'a port'}."})
+                incoming = gathered[0]
             if incoming["tag"] not in known:
                 raise SegmentFailure(unit["tag"], "Jarvis inlet has no DWSIM state")
             inlet = known[incoming["tag"]]
             density = inlet.get("density_kg_m3")
-            if density is None and incoming["tag"] in tear:
+            if studio:
+                density = math.nan  # the custom unit sees streams, not DWSIM densities
+            elif density is None and incoming["tag"] in tear:
                 # An unflashed tear iterate has no DWSIM density; evaluators that ignore it
                 # (the separator) get NaN, and one that needs it must fail on the NaN itself.
                 density = math.nan
@@ -960,7 +1000,9 @@ def _evaluate(document: dict[str, Any], part: dict[str, Any], tear: dict[str, di
                     raise SegmentFailure(unit["tag"], "Jarvis inlet has no solved liquid DWSIM density")
             evaluation = _call_evaluator(unit, inlet, JarvisUnitContext(
                 inlet_density_kg_m3=float(density), deadline=deadline,
-                cache=run_cache if run_cache is not None else {}, workspace_id=workspace_id))
+                cache=run_cache if run_cache is not None else {}, workspace_id=workspace_id,
+                inlets={ports[stream["target"]["port"]]: known[stream["tag"]] for stream in gathered}
+                if studio else {}, compounds=list(compounds)))
             culture_generation[unit["tag"]] = evaluation.culture_generation
             culture_generation_allowance[unit["tag"]] = evaluation.culture_generation_allowance
             inlet_biomass = (inlet.get("culture") or {}).get("biomass")
@@ -975,7 +1017,7 @@ def _evaluate(document: dict[str, Any], part: dict[str, Any], tear: dict[str, di
                               and (stream.get("source") or {}).get("unit") == uid),
                              key=lambda item: item["source"]["port"])
             for stream in streams:
-                port = UNIT_REGISTRY[unit["type"]].outlets[stream["source"]["port"]]
+                port = spec_for(unit).outlets[stream["source"]["port"]]
                 state = copy.deepcopy(evaluation.outlets[port])
                 downstream = (stream.get("target") or {}).get("unit")
                 flashed: dict[str, Any] | None = None
@@ -1206,15 +1248,27 @@ def _run(document: dict[str, Any], *, action: str, client: DwsimMcpClient,
                                phase_totals=phase_totals, settings=settings)
     tear = controller["iterate"]
     status, reason, history = controller["status"], controller["reason"], controller["history"]
+    if reason == "wall_budget" and studio_unit.studio_units(document):
+        return _failure_record(
+            document, part, reason=reason, iteration=len(history), segment="mixed", units=None,
+            errors={"code": "STUDIO_UNIT_TIMEOUT", "message": "The Process solve wall budget is insufficient for another sandbox evaluation."},
+            history=history, phase_totals=phase_totals, settings=settings)
     last_iteration = history[-1]["iteration"] if history else None
     last = candidates.get(last_iteration) if last_iteration is not None else None
+    final_remaining_s = min(wall_s - (time.monotonic() - started),
+                            deadline - time.monotonic() if deadline is not None else math.inf)
+    if final_remaining_s <= 0:
+        return _failure_record(
+            document, part, reason="wall_budget", iteration=len(history), segment="mixed", units=None,
+            errors={"code": "STUDIO_UNIT_TIMEOUT" if studio_unit.studio_units(document) else "MIXED_WALL_TIMEOUT",
+                    "message": "The Process solve wall budget expired before the final sweep."},
+            history=history, phase_totals=phase_totals, settings=settings)
     try:
         reserve_s = max(3.0, reserve_builds * max(3.0, 1.5 * t_build))
         final = _evaluate(document, part, tear, client=client, full=True, run_dir=run_dir,
                           iteration=last_iteration or 0, dwsim_version=dwsim_version,
                           mcp_sha256=mcp_sha256,
-                          remaining_s=min(wall_s - (time.monotonic() - started),
-                                          deadline - time.monotonic() if deadline is not None else math.inf),
+                          remaining_s=final_remaining_s,
                           run_cache=run_cache, workspace_id=workspace_id)
     except SegmentFailure as exc:
         detail = exc.detail if isinstance(exc.detail, dict) else {"message": str(exc.detail)}

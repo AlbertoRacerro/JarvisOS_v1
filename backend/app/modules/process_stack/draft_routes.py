@@ -29,7 +29,7 @@ def registry(workspace_id: str) -> dict[str, Any]:
         draft.drafts_root(workspace_id)
     except draft.DraftError as exc:
         raise _error(exc) from exc
-    return draft.registry_projection()
+    return draft.registry_projection(workspace_id)
 
 
 @router.get("")

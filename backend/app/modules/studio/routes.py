@@ -5,12 +5,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.modules.runner.origin import require_runner_origin
 from app.modules.studio import service
 from app.modules.studio.models import StudioCreate, StudioError, StudioUpdate, TestRequest
+from app.modules.studio.unit_models import StudioUnitCreate, UnitTestRequest
 
 router = APIRouter(tags=["studio"])
 
 _CATEGORIES = [
     {"id": "calculation", "label": "Calculation", "available": True, "reason": None},
-    {"id": "steady_unit_operation", "label": "Steady unit operation", "available": False, "reason": "Process Studio flowsheet integration is planned."},
+    {"id": "process_unit", "label": "Process unit", "available": True, "reason": None},
     {"id": "dynamic_model", "label": "Dynamic model", "available": False, "reason": "Time integration is not available in this slice."},
     {"id": "procedure", "label": "Procedure", "available": False, "reason": "Procedure authoring is planned."},
     {"id": "geometry", "label": "Geometry", "available": False, "reason": "CAD-as-code authoring is planned."},
@@ -36,7 +37,7 @@ def categories() -> list[dict]:
 
 
 @router.post("/workspaces/{workspace_id}/studio/models", status_code=201)
-def create_model(workspace_id: str, data: StudioCreate) -> dict:
+def create_model(workspace_id: str, data: StudioUnitCreate | StudioCreate) -> dict:
     return _call(service.create, workspace_id, data)
 
 
@@ -56,7 +57,7 @@ def save_model(workspace_id: str, model_spec_id: str, data: StudioUpdate) -> dic
 
 
 @router.post("/workspaces/{workspace_id}/studio/models/{model_spec_id}/test", dependencies=[Depends(require_runner_origin)])
-def test_model(workspace_id: str, model_spec_id: str, data: TestRequest) -> dict:
+def test_model(workspace_id: str, model_spec_id: str, data: UnitTestRequest | TestRequest) -> dict:
     return _call(service.test, workspace_id, model_spec_id, data)
 
 

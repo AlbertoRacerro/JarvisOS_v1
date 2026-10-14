@@ -180,7 +180,7 @@ function ProcessStage(props: PrimaryStageProps) {
         <details className="process-advanced"><summary>Advanced · Native DWSIM cases</summary>{tabs}</details>
         <div className="process-environment-toolbar"><button type="button" onClick={() => setEnvironmentOpen(true)}>Environment…</button></div>
       </header>
-      {workspaceId ? <ProcessDraftEditor workspaceId={workspaceId} /> : <p>Select a workspace to edit its process draft.</p>}
+      {workspaceId ? <ProcessDraftEditor workspaceId={workspaceId} navigate={navigate} /> : <p>Select a workspace to edit its process draft.</p>}
       {environmentOpen && workspaceId ? <Suspense fallback={<p role="status">Loading environment profiles…</p>}><EnvironmentPanel workspaceId={workspaceId} onClose={() => setEnvironmentOpen(false)} /></Suspense> : null}
     </section>
   );

@@ -8,8 +8,11 @@ from one table. Anything absent here is unsupported and refused, never approxima
 
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 from dataclasses import dataclass, field
+from functools import lru_cache
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -316,6 +319,44 @@ if any((spec.owner == "dwsim") != (spec.dwsim_type is not None and bool(spec.nat
 if any(spec.owner not in {"dwsim", "jarvis_bio"} for spec in UNIT_REGISTRY.values()):
     raise RuntimeError("Process unit registry contains an unsupported owner")
 
+STUDIO_UNIT = "StudioUnit"
+
+
+class StudioPinError(ValueError):
+    """A placed StudioUnit's embedded contract does not match its pinned hash."""
+
+
+def studio_contract_digest(contract: dict[str, Any]) -> str:
+    raw = json.dumps(contract, sort_keys=True, separators=(",", ":"), allow_nan=False)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+@lru_cache(maxsize=256)
+def _studio_spec(raw_contract: str, name: str) -> UnitSpec:
+    contract = json.loads(raw_contract)
+    return UnitSpec(
+        type=STUDIO_UNIT, label=name, dwsim_type=None, native_types=(),
+        inlets=tuple(item["name"] for item in contract["inlets"]),
+        outlets=tuple(item["name"] for item in contract["outlets"]),
+        required_inlets=len(contract["inlets"]), modes={"steady": "steady"}, owner="jarvis_bio",
+        culture_rule="studio",
+        params=tuple(ParamSpec(item["name"], item["label"], "dimensionless", "", ("steady",),
+                               minimum_si=item.get("min"), maximum_si=item.get("max"))
+                     for item in contract["parameters"]))
+
+
+def spec_for(unit: dict[str, Any]) -> UnitSpec:
+    """The UnitSpec of a placed unit; a StudioUnit's ports and parameters come from its verified pinned contract."""
+    if unit["type"] != STUDIO_UNIT:
+        return UNIT_REGISTRY[unit["type"]]
+    contract = (unit.get("studio") or {}).get("contract")
+    pin = unit.get("model") or {}
+    if not isinstance(contract, dict) or studio_contract_digest(contract) != pin.get("contract_sha256"):
+        raise StudioPinError(f"{unit.get('tag')}: the pinned Studio contract does not match its hash")
+    return _studio_spec(json.dumps(contract, sort_keys=True, separators=(",", ":")),
+                        str((unit.get("studio") or {}).get("name") or "Studio unit"))
+
+
 UNSUPPORTED_TYPES: dict[str, str] = {
     "Reactor": ("Generic reactors are not offered: use a PFR or CSTR with typed kinetics; Gibbs, conversion and "
                 "equilibrium reactors are not supported."),
@@ -359,6 +400,16 @@ class AddUnit(_Op):
     tag: str = Field(pattern=TAG_PATTERN)
     x: int = Field(ge=-5000, le=5000)
     y: int = Field(ge=-5000, le=5000)
+    # Spec 190: the published Studio version a "StudioUnit" is placed from.
+    version_id: str | None = Field(default=None, max_length=64)
+
+
+class UpdateStudioUnit(_Op):
+    """Spec 190: explicitly re-pin a placed StudioUnit to a newer published version of the same model."""
+
+    op: Literal["update_studio_unit"]
+    unit: str = Field(pattern=ID_PATTERN)
+    version_id: str = Field(max_length=64)
 
 
 class AddStream(_Op):
@@ -623,7 +674,7 @@ class SetSolver(_Op):
 
 
 DraftOp = Annotated[
-    AddUnit | AddStream | Delete | Move | Rename | Connect | Disconnect | SetRoute | SetOrientation | SetStreamSpec | SetStreamCulture | SetUnitParams | SetUnitModel | SetReactions | SetReactorReaction | SetThermo | SetSchedule | DeleteSchedule | SetController | DeleteController | SetScenario | DeleteScenario | SetSolver,
+    AddUnit | UpdateStudioUnit | AddStream | Delete | Move | Rename | Connect | Disconnect | SetRoute | SetOrientation | SetStreamSpec | SetStreamCulture | SetUnitParams | SetUnitModel | SetReactions | SetReactorReaction | SetThermo | SetSchedule | DeleteSchedule | SetController | DeleteController | SetScenario | DeleteScenario | SetSolver,
     Field(discriminator="op"),
 ]
 

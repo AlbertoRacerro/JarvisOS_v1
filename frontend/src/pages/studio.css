@@ -25,3 +25,12 @@
 .studio-docstring{margin:0;white-space:pre-wrap;font-family:var(--font-mono)}
 .studio-runs-head{display:flex;align-items:center;justify-content:space-between;gap:var(--space-3)}
 .studio .binding-state:empty{display:none}
+/* Spec 190 process-unit authoring */
+.studio-port,.studio-stream{display:grid;gap:var(--space-2);grid-template-columns:repeat(auto-fit,minmax(10rem,1fr));align-items:end;min-width:0;margin:0}
+.studio-stream{padding:var(--space-3);border:var(--border-width-default) solid var(--color-border-default);border-radius:var(--radius-sm)}
+.studio-port>button{justify-self:start}
+.studio-checks{display:flex;flex-wrap:wrap;gap:var(--space-3)}
+.studio-symbol textarea{min-height:6rem;font-family:var(--font-mono)}
+.studio-symbol-preview{display:flex;align-items:center;gap:var(--space-3)}
+.studio-symbol-preview img,.studio-contract-tables img{border:var(--border-width-default) solid var(--color-border-default);background:var(--color-bg-surface-raised)}
+.studio-code code{font-family:var(--font-mono)}
