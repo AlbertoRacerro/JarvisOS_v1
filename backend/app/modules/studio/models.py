@@ -73,6 +73,7 @@ class StudioUpdate(BaseModel):
     outlets: list[dict[str, Any]] | None = None
     parameters: list[dict[str, Any]] | None = None
     symbol: str | None = Field(default=None, max_length=32768)
+    steps: list[dict[str, Any]] | None = Field(default=None, max_length=1000)  # procedure steps (spec 191)
     culture_generation: list[str] | None = None
     source: str | None = Field(default=None, max_length=65536)
     annotations: str | None = Field(default=None, max_length=20000)
@@ -99,9 +100,12 @@ class TestRequest(BaseModel):
 
 
 class StudioError(ValueError):
-    def __init__(self, code: str, message: str) -> None:
+    def __init__(self, code: str, message: str, detail: dict[str, Any] | None = None,
+                 status: int | None = None) -> None:
         self.code = code
         self.message = message
+        self.detail = detail or {}
+        self.status = status
         super().__init__(message)
 
 
