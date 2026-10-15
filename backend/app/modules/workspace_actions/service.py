@@ -12,6 +12,7 @@ from uuid import uuid4
 from pydantic import ValidationError
 
 from app.core.database import open_sqlite_connection
+from app.modules.ai.sensitivity import deterministic_floor_trigger
 from app.modules.bio_models import service as bio_models
 from app.modules.bluecad.ledger import get_candidate
 from app.modules.bluecad.spec import SUPPORTED_PART_KINDS, canonicalize_geometry_spec
@@ -48,6 +49,7 @@ from app.modules.workspace_actions.models import (
     ChangeLine,
     ProcessAction,
     Quantity,
+    StudioDraftAction,
     SurfaceBrief,
     SurfaceRef,
 )
@@ -100,9 +102,53 @@ def _brief_none(workspace_id: str, ref: SurfaceRef | None, summary: str) -> Surf
     )
 
 
+def _studio_brief(workspace_id: str, ref: SurfaceRef) -> SurfaceBrief:
+    from app.modules.studio import service as studio
+
+    model = None
+    if ref.studio_model_id:
+        try:
+            model = studio.get(workspace_id, ref.studio_model_id)
+        except studio.StudioError:
+            return _brief_none(workspace_id, ref, "Selected Studio draft is unavailable in this workspace.")
+        if model["status"] != "draft" or model["category"] not in {"calculation", "geometry", "process_unit"}:
+            return _brief_none(workspace_id, ref, "Select an open calculation, geometry or process-unit draft.")
+    revision = studio.proposal_revision(model) if model else "new"
+    summary = (f"Studio {model['category']} draft: {_safe_surface_label(model['name'], 'model')}"
+               if model else "Studio: new calculation, geometry or steady process unit")
+    text = ("Studio proposals create or update a draft only. The operator must review and click Apply, "
+            "then separately Test and Publish. Python source is inert until Test. "
+            "Use exactly one studio_draft action with mode create or update, category calculation, geometry or "
+            "process_unit, name, engineering_question, contract, source defining main(inputs), and assumptions. "
+            "Calculation contract: inputs and outputs. Geometry: inputs, build123d lengths in mm. "
+            "Steady process unit: inlets, outlets, parameters, symbol, culture_generation; no energy balance.\n")
+    selected: list[dict[str, object]] = []
+    if model:
+        contract = {key: model[key] for key in ("inputs", "outputs", "inlets", "outlets", "parameters",
+                                               "symbol", "culture_generation") if key in model}
+        source = model["source"]
+        safe_source = deterministic_floor_trigger(source)
+        snippet = (source[:2500] if not safe_source or safe_source[0] != "S4" else "[source omitted: secret-like content]")
+        if len(source) > 2500:
+            snippet += "\n[truncated; ask operator to edit large source in Studio]"
+        text += (f"Selected draft id={model['id']} category={model['category']} source_sha256={model['source_sha256']} "
+                 f"contract_sha256={model['contract_sha256']}.\nContract: {_canonical(contract)[:1800]}\n"
+                 f"Source: {snippet}\n")
+        selected = [{"kind": "studio_model", "id": model["id"], "category": model["category"],
+                     "name": model["name"]}]
+    text = text[:6000]
+    payload = {"surface": "studio", "route_id": ref.route_id, "workspace_id": workspace_id,
+               "base_revision": revision, "draft_id": model["id"] if model else None,
+               "candidate_id": None, "selected": selected, "summary": summary, "text": text,
+               "actions": ["studio_draft"], "limits": ["draft only", "explicit Apply", "no Test or Publish"]}
+    return SurfaceBrief(**payload, digest=_digest(payload))
+
+
 def surface_brief(workspace_id: str, ref: SurfaceRef | None) -> SurfaceBrief:
-    if ref is None or ref.route_id not in {"design-process", "design-bluecad"}:
-        return _brief_none(workspace_id, ref, "No Process or BLUECAD surface is active.")
+    if ref is None or ref.route_id not in {"design-process", "design-bluecad", "design-studio"}:
+        return _brief_none(workspace_id, ref, "No engineering workspace surface is active.")
+    if ref.route_id == "design-studio":
+        return _studio_brief(workspace_id, ref)
     if ref.route_id == "design-process":
         from app.modules.bio_models.forms import kinetics_explanation
         found = _find_draft(workspace_id, draft_id=ref.draft_id) if ref.draft_id else None
@@ -705,6 +751,52 @@ def _action_summary(request: ActionRequest, changes: list[ChangeLine]) -> str:
     return "; ".join(summaries)[:400] or "Workspace action"
 
 
+def _studio_proposal(workspace_id: str, request: ActionRequest, origin: ActionOrigin) -> ActionOutcome:
+    from app.modules.studio import service as studio
+    from app.modules.studio.geometry import geometry_scaffold
+    from app.modules.studio.unit_models import unit_scaffold
+
+    action = request.actions[0]
+    assert isinstance(action, StudioDraftAction)
+    if (trigger := deterministic_floor_trigger(_canonical(action.model_dump(mode="json")))) and trigger[0] == "S4":
+        return _outcome(workspace_id, request, origin, "refused", "none", "Studio proposal refused.",
+                        reason="Secret-like content cannot be stored in a proposal.", reason_code="secret_detected")
+    try:
+        contract = studio.validate_proposed_source(action.category, action.name,
+                                                    action.engineering_question, action.contract, action.source)
+        before = None
+        if action.mode == "update":
+            before = studio.get(workspace_id, request.draft_id or "")
+            if (before["status"] != "draft" or before["category"] != action.category
+                    or studio.proposal_revision(before) != request.base_revision):
+                raise studio.StudioError("studio_proposal_stale", "Selected draft changed.")
+        elif request.base_revision != "new" or request.draft_id is not None:
+            raise studio.StudioError("studio_proposal_stale", "Create context changed.")
+    except (studio.StudioError, ValidationError, ValueError) as exc:
+        code = getattr(exc, "code", "studio_proposal_invalid")
+        return _outcome(workspace_id, request, origin, "stale" if code.endswith("stale") else "refused",
+                        "none", "Studio proposal could not be prepared.", reason=str(exc)[:300],
+                        reason_code=code)
+    if before is None:
+        old_source = (unit_scaffold(contract) if action.category == "process_unit" else
+                      geometry_scaffold(contract) if action.category == "geometry" else studio.scaffold(contract))
+        old_contract = "No draft"
+    else:
+        old_source = before["source"]
+        old_contract = _canonical({key: before[key] for key in contract})
+        if (trigger := deterministic_floor_trigger(old_source)) and trigger[0] == "S4":
+            return _outcome(workspace_id, request, origin, "refused", "none", "Studio proposal refused.",
+                            reason="Selected source contains secret-like content.", reason_code="secret_detected")
+    changes = [ChangeLine(label="Model", before=before["name"] if before else None, after=action.name),
+               ChangeLine(label="Contract", before=old_contract, after=_canonical(contract)),
+               ChangeLine(label="Source", before=old_source, after=action.source),
+               ChangeLine(label="Assumptions", before=before["assumptions"] if before else None,
+                          after=action.assumptions)]
+    return _outcome(workspace_id, request, origin, "proposed", "confirm",
+                    f"{('Revise' if before else 'Create')} {action.category} draft {action.name}; review contract, source and assumptions.",
+                    changes=changes, draft_id=request.draft_id)
+
+
 def submit(workspace_id: str, request: ActionRequest, origin: ActionOrigin) -> ActionOutcome:
     request = request.model_copy(update={"actions": _unique_actions(request)})
     digest = _digest(request.model_dump(mode="json"))
@@ -744,6 +836,8 @@ def submit(workspace_id: str, request: ActionRequest, origin: ActionOrigin) -> A
             # One local turn may repeat an identical tool call; it must not
             # create a second card or a second BLUECAD child.
             return previous
+    if request.surface == "studio":
+        return _store(_studio_proposal(workspace_id, request, origin), request, origin)
     if request.surface == "bluecad":
         base_candidate = get_candidate(workspace_id, request.base_revision)
         if base_candidate is None or base_candidate.status != "valid":
@@ -889,9 +983,9 @@ def find_local_duplicate(workspace_id: str, interaction_id: str, request: Action
     return ActionOutcome.model_validate_json(row["outcome_json"]) if row else None
 
 
-def _unique_actions(request: ActionRequest) -> list[ProcessAction | BluecadAction]:
+def _unique_actions(request: ActionRequest) -> list[ProcessAction | BluecadAction | StudioDraftAction]:
     """Drop repeated idempotent assignments, preserving repeated additive actions."""
-    actions: list[ProcessAction | BluecadAction] = []
+    actions: list[ProcessAction | BluecadAction | StudioDraftAction] = []
     seen: set[str] = set()
     for action in request.actions:
         if action.op not in {"set_value", "set_unit_model", "set_part_param"}:
@@ -1258,6 +1352,28 @@ def apply(workspace_id: str, action_id: str) -> ActionOutcome:
         raise ActionError("action_not_proposed", "Action is not proposed or is already being applied.", 409)
     request = ActionRequest.model_validate_json(row["request_json"])
     origin = ActionOrigin.model_validate_json(row["origin_json"])
+    if outcome.surface == "studio":
+        from app.modules.studio import service as studio
+
+        action = request.actions[0]
+        assert isinstance(action, StudioDraftAction)
+        try:
+            result = studio.apply_proposal(
+                workspace_id, model_spec_id=request.draft_id, base_revision=request.base_revision,
+                category=action.category, name=action.name, engineering_question=action.engineering_question,
+                contract=action.contract, source=action.source, assumptions=action.assumptions,
+                actor=_actor(origin), request_digest=outcome.request_digest)
+            outcome.state, outcome.draft_id = "applied", result["id"]
+            outcome.result_revision = studio.proposal_revision(result)
+            outcome.undo_available = False
+        except studio.StudioError as exc:
+            outcome.state = "stale" if exc.code == "studio_proposal_stale" else "refused"
+            outcome.reason_code, outcome.reason = exc.code, exc.message
+        except (ValidationError, ValueError):
+            outcome.state, outcome.reason_code, outcome.reason = (
+                "refused", "studio_proposal_invalid", "Studio proposal did not pass owner validation.")
+        _save_outcome(outcome)
+        return outcome
     if outcome.surface == "bluecad":
         try:
             candidate = get_candidate(workspace_id, request.base_revision)

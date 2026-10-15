@@ -155,8 +155,32 @@ _BLUECAD_ACT_TOOL = {
         "rationale": {"type": "string", "maxLength": 600}},
         "required": ["grant_id", "base_revision", "actions"], "additionalProperties": False},
 }
+_STUDIO_READ_TOOL = {
+    "name": "jarvis_studio_read", "description": "Read the selected Studio draft or new-model context.",
+    "inputSchema": {"type": "object", "properties": {"grant_id": {"type": "string", "maxLength": 128}},
+                    "required": ["grant_id"], "additionalProperties": False},
+}
+_STUDIO_ACT_TOOL = {
+    "name": "jarvis_studio_act",
+    "description": "Propose one inert calculation, geometry, or steady process-unit Studio draft. Operator Apply is required.",
+    "inputSchema": {"type": "object", "properties": {
+        "grant_id": {"type": "string", "maxLength": 128},
+        "base_revision": {"type": "string", "maxLength": 128},
+        "actions": {"type": "array", "minItems": 1, "maxItems": 1, "items": {
+            "type": "object", "properties": {
+                "op": {"const": "studio_draft"}, "mode": {"enum": ["create", "update"]},
+                "category": {"enum": ["calculation", "geometry", "process_unit"]},
+                "name": {"type": "string", "maxLength": 160},
+                "engineering_question": {"type": "string", "maxLength": 2000},
+                "contract": {"type": "object"}, "source": {"type": "string", "maxLength": 65536},
+                "assumptions": {"type": "string", "maxLength": 20000}},
+            "required": ["op", "mode", "category", "name", "engineering_question", "contract", "source"],
+            "additionalProperties": False}},
+        "rationale": {"type": "string", "maxLength": 600}},
+        "required": ["grant_id", "base_revision", "actions"], "additionalProperties": False},
+}
 _TOOLS = [_TOOL, _RETRIEVAL_TOOL, _DECISION_TOOL, _PROCESS_READ_TOOL, _PROCESS_ACT_TOOL,
-          _BLUECAD_READ_TOOL, _BLUECAD_ACT_TOOL]
+          _BLUECAD_READ_TOOL, _BLUECAD_ACT_TOOL, _STUDIO_READ_TOOL, _STUDIO_ACT_TOOL]
 _NAMED = {tool["name"] for tool in _TOOLS if tool is not _TOOL}
 
 

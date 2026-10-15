@@ -5,17 +5,24 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.database import open_sqlite_connection
 from app.modules.runner.origin import require_runner_origin
 from app.modules.runner.safety import run_root
 from app.modules.studio import procedure_service, service
+from app.modules.studio.derive import derive_documentation
 from app.modules.studio.geometry import MEDIA_TYPES, GeometryCreate, GeometryTestRequest
 from app.modules.studio.models import StudioCreate, StudioError, StudioUpdate, TestRequest
 from app.modules.studio.procedure import NOTICE, ProcedureCreate, ProcedureTestRequest
 from app.modules.studio.unit_models import StudioUnitCreate, UnitTestRequest
 
 router = APIRouter(tags=["studio"])
+
+
+class DocumentationPreview(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    source: str = Field(max_length=65536)
 
 _CATEGORIES = [
     {"id": "calculation", "label": "Calculation", "available": True, "reason": None},
@@ -48,6 +55,12 @@ def _call(function, *args):
 @router.get("/studio/categories")
 def categories() -> list[dict]:
     return _CATEGORIES
+
+
+@router.post("/studio/documentation/preview")
+def preview_documentation(data: DocumentationPreview) -> dict:
+    """Parse unsaved source for the editor; no execution or persistence."""
+    return derive_documentation(data.source)
 
 
 @router.post("/workspaces/{workspace_id}/studio/models", status_code=201)

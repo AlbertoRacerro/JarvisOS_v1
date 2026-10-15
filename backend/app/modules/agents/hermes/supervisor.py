@@ -45,6 +45,7 @@ HERMES_TOOL_ALLOWLIST = frozenset({"mcp__jarvis__jarvis_context_preview",
                                   "mcp__jarvis__jarvis_retrieval_query", "mcp__jarvis__jarvis_decide",
                                   "mcp__jarvis__jarvis_process_read", "mcp__jarvis__jarvis_process_act",
                                   "mcp__jarvis__jarvis_bluecad_read", "mcp__jarvis__jarvis_bluecad_act",
+                                  "mcp__jarvis__jarvis_studio_read", "mcp__jarvis__jarvis_studio_act",
                                   "memory", "session_search"})
 _BWRAP_PREFIX = ("bwrap", "--dev-bind", "/", "/", "--unshare-net", "--die-with-parent", "--")
 
@@ -77,6 +78,14 @@ _HERMES_BLUECAD_ACT_CAPABILITY = JarvisCapabilityDescriptor(
     capability_id="jarvis.bluecad_act", route_id="ai-threads", action_class="PROPOSE",
     label="Request a typed BLUECAD action",
 )
+_HERMES_STUDIO_READ_CAPABILITY = JarvisCapabilityDescriptor(
+    capability_id="jarvis.studio_read", route_id="ai-threads", action_class="READ",
+    label="Read the selected Studio draft context",
+)
+_HERMES_STUDIO_ACT_CAPABILITY = JarvisCapabilityDescriptor(
+    capability_id="jarvis.studio_act", route_id="ai-threads", action_class="PROPOSE",
+    label="Propose a Studio draft",
+)
 _TOOL_CAPABILITIES = {
     "jarvis_retrieval_query": "jarvis.retrieval_query",
     "jarvis_decide": "jarvis.decide",
@@ -84,10 +93,13 @@ _TOOL_CAPABILITIES = {
     "jarvis_process_act": "jarvis.process_act",
     "jarvis_bluecad_read": "jarvis.bluecad_read",
     "jarvis_bluecad_act": "jarvis.bluecad_act",
+    "jarvis_studio_read": "jarvis.studio_read",
+    "jarvis_studio_act": "jarvis.studio_act",
 }
 for _descriptor in (_HERMES_PROCESS_READ_CAPABILITY, _HERMES_PROCESS_ACT_CAPABILITY,
                     _HERMES_BLUECAD_READ_CAPABILITY,
-                    _HERMES_BLUECAD_ACT_CAPABILITY):
+                    _HERMES_BLUECAD_ACT_CAPABILITY, _HERMES_STUDIO_READ_CAPABILITY,
+                    _HERMES_STUDIO_ACT_CAPABILITY):
     if _descriptor not in PRODUCTION_CAPABILITY_REGISTRY.for_route("ai-threads"):
         PRODUCTION_CAPABILITY_REGISTRY.register(_descriptor)
 if _HERMES_CONTEXT_CAPABILITY not in PRODUCTION_CAPABILITY_REGISTRY.for_route("ai-threads"):
@@ -371,7 +383,8 @@ def dispatch_tool(
                     except (TypeError, ValueError):
                         error = "invalid_arguments"
                 elif call.capability_id in {"jarvis.process_read", "jarvis.process_act",
-                                            "jarvis.bluecad_read", "jarvis.bluecad_act"}:
+                                            "jarvis.bluecad_read", "jarvis.bluecad_act",
+                                            "jarvis.studio_read", "jarvis.studio_act"}:
                     result, error = _workspace_action_tool(call, scope.workspace_id, error, interaction_id,
                                                            grant.constraints)
     return StructuredToolResult(
@@ -408,11 +421,11 @@ def _workspace_action_tool(call: StructuredToolCall, workspace_id: str, error: s
     from app.modules.workspace_actions.models import ActionOrigin, ActionRequest
 
     try:
-        expected_surface = "process" if call.capability_id.startswith("jarvis.process_") else "bluecad"
+        expected_surface = call.capability_id.split(".", 1)[1].split("_", 1)[0]
         if ((constraints or {}).get("surface") != expected_surface
                 or (constraints or {}).get("route_id") != f"design-{expected_surface}"):
             return None, "surface_scope_denied"
-        if call.capability_id in {"jarvis.process_read", "jarvis.bluecad_read"}:
+        if call.capability_id in {"jarvis.process_read", "jarvis.bluecad_read", "jarvis.studio_read"}:
             brief = service.surface_brief(workspace_id, _surface_ref_from_constraints(constraints or {}))
             if brief.surface != expected_surface or any(
                 brief.model_dump(mode="json").get(key) != expected
@@ -424,8 +437,10 @@ def _workspace_action_tool(call: StructuredToolCall, workspace_id: str, error: s
         # The grant, not the model, names the surface and (for Process) the draft.
         scoped = {**call.arguments, "surface": surface}
         draft_id = (constraints or {}).get("draft_id")
-        if surface == "process" and draft_id:
+        if surface in {"process", "studio"} and draft_id:
             scoped["draft_id"] = draft_id
+        if surface == "studio" and not draft_id:
+            scoped.pop("draft_id", None)
         request = ActionRequest.model_validate(scoped)
         expected_revision = (constraints or {}).get("base_revision")
         if expected_revision is not None and request.base_revision != expected_revision:
@@ -479,6 +494,7 @@ def _surface_ref_from_constraints(constraints: dict[str, Any]) -> Any:
     if any(not isinstance(part_id, str) for part_id in part_ids):
         raise ValueError("invalid BLUECAD selection in grant")
     return SurfaceRef(route_id=route_id, draft_id=constraints.get("draft_id") or None,
+                      studio_model_id=constraints.get("draft_id") if constraints.get("surface") == "studio" else None,
                       candidate_id=constraints.get("candidate_id") or None, process_selection=selection,
                       bluecad_part_ids=part_ids)
 

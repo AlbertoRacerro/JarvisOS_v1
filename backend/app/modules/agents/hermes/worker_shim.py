@@ -159,6 +159,7 @@ ADMITTED_TOOLS = frozenset({"mcp__jarvis__jarvis_context_preview",
                             "mcp__jarvis__jarvis_retrieval_query", "mcp__jarvis__jarvis_decide",
                             "mcp__jarvis__jarvis_process_read", "mcp__jarvis__jarvis_process_act",
                             "mcp__jarvis__jarvis_bluecad_read", "mcp__jarvis__jarvis_bluecad_act",
+                            "mcp__jarvis__jarvis_studio_read", "mcp__jarvis__jarvis_studio_act",
                             "memory", "session_search"})
 
 
@@ -210,7 +211,8 @@ def pinned_config(base_url: str, token: str, python: str | None = None) -> dict[
                     "JARVIS_HERMES_BROKER_TOKEN": token},
             "tools": {"include": ["jarvis_context_preview", "jarvis_retrieval_query", "jarvis_decide",
                                   "jarvis_process_read", "jarvis_process_act",
-                                  "jarvis_bluecad_read", "jarvis_bluecad_act"]},
+                                  "jarvis_bluecad_read", "jarvis_bluecad_act",
+                                  "jarvis_studio_read", "jarvis_studio_act"]},
         }},
         "model_catalog": {"enabled": False}, "updates": {"check": False},
         "telemetry": {"enabled": False, "send": False},
