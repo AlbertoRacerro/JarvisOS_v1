@@ -3,6 +3,7 @@ import { type FormEvent, type ReactNode, useCallback, useEffect, useLayoutEffect
 import type { StageSelection } from "../../app/selection";
 import {
   API_BASE_URL,
+  addBluecadStudioReference,
   archiveBluecadCandidate,
   bluecadArtifactContentUrl,
   createBluecadCandidate,
@@ -11,9 +12,14 @@ import {
   getBluecadCandidateAggregate,
   getBluecadGenerationAvailability,
   listBluecadCandidates,
+  listBluecadStudioReferences,
+  listSimulationRuns,
   listWorkspaces,
   promoteBluecadCandidate,
+  moveBluecadStudioReference,
+  removeBluecadStudioReference,
   type BluecadCandidate,
+  type BluecadStudioReference,
   type BluecadArtifactRefRead,
   type BluecadCandidateAggregateRead,
   type BluecadGenerationAvailability,
@@ -21,6 +27,7 @@ import {
   type BluecadValidationCheck,
   type Workspace
 } from "../../api/client";
+import { listStudioLibrary, type StudioLibraryEntry } from "../../api/studio";
 import type { ShellRegion, ShellRegionContributions } from "../../stages/registry";
 import BluecadGlbViewer, {
   type GeometryInspectionCommand,
@@ -81,6 +88,33 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
   const [showCreate, setShowCreate] = useState(false);
   const [availability, setAvailability] = useState<BluecadGenerationAvailability | null>(null);
   const [availabilityState, setAvailabilityState] = useState<LoadState>("idle");
+  const [studioRefs, setStudioRefs] = useState<BluecadStudioReference[]>([]);
+  const [studioRuns, setStudioRuns] = useState<{ id: string; model_version_id?: string | null; run_label?: string | null }[]>([]);
+  const [studioLibrary, setStudioLibrary] = useState<StudioLibraryEntry[]>([]);
+  const [selectedStudioRun, setSelectedStudioRun] = useState("");
+  const [studioBusy, setStudioBusy] = useState(false);
+  const [studioFinding, setStudioFinding] = useState<string | null>(null);
+
+  const refreshStudioRefs = useCallback(async (ws: string, candidateId: string) => {
+    const next = await listBluecadStudioReferences(ws, candidateId);
+    if (workspaceRef.current === ws && selectedRef.current === candidateId) setStudioRefs(next);
+  }, []);
+
+  useEffect(() => {
+    if (!workspaceId || !selectedId) { setStudioRefs([]); setStudioRuns([]); return; }
+    let cancelled = false;
+    setStudioRefs([]);
+    setSelectedStudioRun("");
+    setStudioFinding(null);
+    void Promise.all([listBluecadStudioReferences(workspaceId, selectedId), listSimulationRuns(workspaceId), listStudioLibrary(workspaceId)])
+      .then(([refs, runs, library]) => {
+        if (cancelled) return;
+        setStudioRefs(refs);
+        setStudioLibrary(library.filter((item) => item.category === "geometry"));
+        setStudioRuns(runs.filter((item) => item.status === "succeeded"));
+      }).catch((error: Error) => { if (!cancelled) setStudioFinding(error.message); });
+    return () => { cancelled = true; };
+  }, [workspaceId, selectedId]);
 
   const listGeneration = useRef(0);
   const detailGeneration = useRef(0);
@@ -708,8 +742,9 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
         : validationState === "error" || validationMessage
           ? <p className="error-banner">Validation report unavailable: {validationMessage ?? "Request failed."}</p>
           : <ReportTable checks={checks} />;
-    return <div className="bluecad-workbench__sidecar">{sceneBindingNotice && <p className={sceneBindingPresentation === "resolving" ? "panel-subtitle" : "warning-banner"} role="status">{sceneBindingNotice}</p>}<h3>Candidate inspector</h3><dl className="details"><div><dt>Lifecycle</dt><dd>{candidate.status}</dd></div><div><dt>Freshness</dt><dd>{aggregate.freshness}</dd></div><div><dt>Promotion</dt><dd>{candidate.promoted_decision_id ?? "Not promoted"}</dd></div></dl>{candidate.parked_reason && <p className="warning-banner">Parked reason: {candidate.parked_reason}</p>}<GeometryInspectionPanel snapshot={inspection} onSelect={requestInspection} /><h3>Validation</h3>{validation}<h3>Artifacts</h3>{aggregate.artifacts.length === 0 ? <p>No aggregate-linked artifacts.</p> : <ul>{aggregate.artifacts.map((artifact) => <li key={artifact.id}><a href={`${API_BASE_URL}${artifact.content_url}`}>{artifact.filename}</a> · {artifact.roles.join(", ")} · {artifact.status}</li>)}</ul>}<h3>Canonical references</h3><p>{aggregate.evidence.length} evidence refs · {aggregate.runs.length} run refs</p>{aggregate.diagnostics.map((diagnostic, index) => <p className="warning-banner" key={`${diagnostic.code}-${index}`}>{diagnostic.message}</p>)}</div>;
-  }, [aggregate, aggregateState, checks, inspection, requestInspection, sceneBindingNotice, sceneBindingPresentation, selectedId, validationMessage, validationState]);
+    const eligibleRuns = studioRuns.filter((run) => studioLibrary.some((entry) => entry.id === run.model_version_id));
+    return <div className="bluecad-workbench__sidecar">{sceneBindingNotice && <p className={sceneBindingPresentation === "resolving" ? "panel-subtitle" : "warning-banner"} role="status">{sceneBindingNotice}</p>}<h3>Candidate inspector</h3><dl className="details"><div><dt>Lifecycle</dt><dd>{candidate.status}</dd></div><div><dt>Freshness</dt><dd>{aggregate.freshness}</dd></div><div><dt>Promotion</dt><dd>{candidate.promoted_decision_id ?? "Not promoted"}</dd></div></dl>{candidate.parked_reason && <p className="warning-banner">Parked reason: {candidate.parked_reason}</p>}<GeometryInspectionPanel snapshot={inspection} onSelect={requestInspection} /><h3>Studio visual components</h3><p>Published geometry generations appear in the assembly view in millimetres. They remain visual only and are excluded from BLUECAD combined STEP/STL, port checks, FEM, CFD, and volume.</p><label>Published geometry generation<select value={selectedStudioRun} onChange={(event) => setSelectedStudioRun(event.target.value)}><option value="">Select a generation</option>{eligibleRuns.map((run) => <option value={run.id} key={run.id}>{studioLibrary.find((entry) => entry.id === run.model_version_id)?.name ?? "Geometry"} · {run.run_label || run.id.slice(0, 8)}</option>)}</select></label><button type="button" disabled={!selectedStudioRun || studioBusy} onClick={() => { if (!selectedStudioRun) return; setStudioBusy(true); void addBluecadStudioReference(candidate.workspace_id, candidate.id, selectedStudioRun).then(() => refreshStudioRefs(candidate.workspace_id, candidate.id)).then(() => { setSelectedStudioRun(""); setStudioFinding(null); }).catch((error: Error) => setStudioFinding(error.message)).finally(() => setStudioBusy(false)); }}>Add to view</button>{studioFinding && <p className="warning-banner" role="status">{studioFinding}</p>}{studioRefs.map((reference) => <StudioReferenceCard key={reference.id} reference={reference} busy={studioBusy} onChanged={() => refreshStudioRefs(candidate.workspace_id, candidate.id)} onBusy={setStudioBusy} onFinding={setStudioFinding} />)}<h3>Validation</h3>{validation}<h3>Artifacts</h3>{aggregate.artifacts.length === 0 ? <p>No aggregate-linked artifacts.</p> : <ul>{aggregate.artifacts.map((artifact) => <li key={artifact.id}><a href={`${API_BASE_URL}${artifact.content_url}`}>{artifact.filename}</a> · {artifact.roles.join(", ")} · {artifact.status}</li>)}</ul>}<h3>Canonical references</h3><p>{aggregate.evidence.length} evidence refs · {aggregate.runs.length} run refs</p>{aggregate.diagnostics.map((diagnostic, index) => <p className="warning-banner" key={`${diagnostic.code}-${index}`}>{diagnostic.message}</p>)}</div>;
+  }, [aggregate, aggregateState, checks, inspection, refreshStudioRefs, requestInspection, sceneBindingNotice, sceneBindingPresentation, selectedId, selectedStudioRun, studioBusy, studioFinding, studioLibrary, studioRefs, studioRuns, validationMessage, validationState]);
 
   const dock = useMemo<ReactNode>(() => {
     const activeAggregate = aggregate?.candidate.id === selectedId ? aggregate : null;
@@ -753,7 +788,7 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
       : showCreate || noCandidates
         ? <div className="bluecad-workbench__empty-viewer">{createPanel}</div>
         : candidate?.glb_artifact_id
-          ? <BluecadGlbViewer artifactUrl={bluecadArtifactContentUrl(candidate.workspace_id, candidate.glb_artifact_id)} inspectionCommand={inspectionCommand} onInspectionChange={handleInspectionChange} />
+          ? <BluecadGlbViewer artifactUrl={bluecadArtifactContentUrl(candidate.workspace_id, candidate.glb_artifact_id)} references={studioRefs.filter((reference) => reference.valid && reference.glb_url).map((reference) => ({ id: reference.id, url: `${API_BASE_URL}${reference.glb_url}`, translation_mm: reference.translation_mm, rotation_deg: reference.rotation_deg }))} inspectionCommand={inspectionCommand} onInspectionChange={handleInspectionChange} />
           : candidate
             ? <div className="bluecad-workbench__empty-viewer"><h2>Geometry unavailable</h2><p>{candidate.parked_reason ? `Generation was parked: ${candidate.parked_reason}` : "No GLB artifact is available for this candidate yet."}</p><p><button type="button" className="secondary-button" onClick={() => setShowCreate(true)}>Create geometry</button></p></div>
             : <div className="bluecad-workbench__empty-viewer"><p>{selectedId && aggregateState === "error" ? "Candidate detail unavailable. Use Refresh to retry." : aggregateState === "loading" || candidateState === "loading" ? "Loading candidate geometry…" : "Select a candidate from the navigator."}</p>{candidateState === "ready" && aggregateState !== "loading" && <p className="button-row"><button type="button" className="secondary-button" onClick={() => requestShellRegionOpen("navigator")}>Open candidate list</button><button type="button" className="secondary-button" onClick={() => setShowCreate(true)}>Create geometry</button></p>}</div>;
@@ -765,6 +800,30 @@ const EXPORT_LABELS: Record<string, [string, string]> = {
   "export.stl": ["STL mesh", "Millimetres · for slicers such as Bambu Studio"],
   "export.step": ["STEP solid", "Exact B-rep · for CAD exchange"]
 };
+
+function StudioReferenceCard({ reference, busy, onChanged, onBusy, onFinding }: {
+  reference: BluecadStudioReference;
+  busy: boolean;
+  onChanged(): Promise<void>;
+  onBusy(value: boolean): void;
+  onFinding(value: string | null): void;
+}) {
+  const [translation, setTranslation] = useState(reference.translation_mm.map(String));
+  const [rotation, setRotation] = useState(reference.rotation_deg.map(String));
+  useEffect(() => { setTranslation(reference.translation_mm.map(String)); setRotation(reference.rotation_deg.map(String)); }, [reference]);
+  const apply = () => {
+    const t = translation.map(Number), r = rotation.map(Number);
+    if (t.some((value) => !Number.isFinite(value)) || r.some((value) => !Number.isFinite(value))) {
+      onFinding("Translation and rotation must be finite numbers.");
+      return;
+    }
+    onBusy(true);
+    void moveBluecadStudioReference(reference, t as [number, number, number], r as [number, number, number])
+      .then(onChanged).then(() => onFinding(null)).catch((error: Error) => onFinding(error.message))
+      .finally(() => onBusy(false));
+  };
+  return <article className="studio-panel" aria-label={`Studio reference ${reference.id}`}><strong>Version {reference.version_label}</strong> · generation {reference.simulation_run_id.slice(0, 8)}{reference.superseded && <span className="warning-banner"> · Superseded; generate and pin a new version explicitly</span>}{reference.stale && <span> · stale</span>}{!reference.valid && <p className="warning-banner" role="status">{reference.finding}</p>}<dl>{Object.entries(reference.inputs).map(([name, input]) => <div key={name}><dt>{name}</dt><dd>{input.value} {input.unit}</dd></div>)}</dl><details><summary>Provenance and downloads</summary><small>Source {reference.source_sha256}<br />Contract {reference.contract_sha256}<br />GLB {reference.glb_sha256}<br />STEP {reference.step_sha256}<br />STL {reference.stl_sha256}</small>{reference.valid && <p><a href={`${API_BASE_URL}/workspaces/${reference.workspace_id}/studio/geometry-runs/${reference.simulation_run_id}/model.step`}>Original Studio STEP</a> · <a href={`${API_BASE_URL}/workspaces/${reference.workspace_id}/studio/geometry-runs/${reference.simulation_run_id}/model.stl`}>Original Studio STL</a></p>}</details><fieldset disabled={busy || !reference.valid}><legend>Place component · millimetres and degrees</legend>{(["X", "Y", "Z"] as const).map((axis, index) => <label key={`t-${axis}`}>Move {axis} mm<input type="number" step="any" value={translation[index]} onChange={(event) => setTranslation((old) => old.map((value, i) => i === index ? event.target.value : value))} /></label>)}{(["X", "Y", "Z"] as const).map((axis, index) => <label key={`r-${axis}`}>Rotate {axis}°<input type="number" step="any" value={rotation[index]} onChange={(event) => setRotation((old) => old.map((value, i) => i === index ? event.target.value : value))} /></label>)}<button type="button" onClick={apply}>Apply placement</button></fieldset><button type="button" className="secondary-button" disabled={busy} onClick={() => { onBusy(true); void removeBluecadStudioReference(reference).then(onChanged).then(() => onFinding(null)).catch((error: Error) => onFinding(error.message)).finally(() => onBusy(false)); }}>Remove reference</button></article>;
+}
 
 function ExportMenu({ exports }: { exports: BluecadArtifactRefRead[] }) {
   const [open, setOpen] = useState(false);
