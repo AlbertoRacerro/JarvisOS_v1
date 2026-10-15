@@ -16,6 +16,8 @@ from app.modules.events.service import utc_now
 from app.modules.runner.linked_parameters import require_linked_parameters_usable
 from app.modules.runner.safety import RunnerSafetyError, model_implementation_root, run_root
 
+FRAME = "mm_z_up_rotation_RxRyRz_deg"
+
 
 class ReferenceError(Exception):
     def __init__(self, code: str, message: str, status_code: int = 409):
@@ -79,8 +81,11 @@ def _generation(connection: sqlite3.Connection, workspace_id: str, run_id: str) 
     if (hashlib.sha256(json.dumps(contract, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
             != row["contract_sha256"] or contract.get("category") != "geometry"):
         raise ReferenceError("studio_contract_invalid", "The published Studio contract is invalid.")
-    names = {item["name"]: item["unit"] for item in contract["inputs"]}
-    if (set(input_payload) != set(names) or any(
+    try:
+        names = {item["name"]: item["unit"] for item in contract["inputs"]}
+    except (KeyError, TypeError) as exc:
+        raise ReferenceError("studio_contract_invalid", "The published Studio contract is invalid.") from exc
+    if (not isinstance(input_payload, dict) or set(input_payload) != set(names) or any(
         not isinstance(input_payload[name], dict) or input_payload[name].get("unit") != unit
         or not isinstance(input_payload[name].get("value"), (int, float))
         or not math.isfinite(input_payload[name]["value"])
@@ -129,6 +134,19 @@ def _present(connection: sqlite3.Connection, row: sqlite3.Row) -> dict:
         result["finding"] = exc.message
         result["glb_url"] = None
     result["inputs"] = json.loads(result.pop("input_payload"))
+    # Deterministic scene identity and placement provenance: the same pin and transform always
+    # produce the same scene_id and placement_sha256. The frame is declared, never inferred.
+    result["scene_id"] = f"studio-reference:{row['id']}"
+    result["visual_only"] = True
+    result["provenance"] = {
+        "reference_id": row["id"], "candidate_id": row["candidate_id"],
+        "simulation_run_id": row["simulation_run_id"], "model_version_id": row["model_version_id"],
+        "source_sha256": row["source_sha256"], "contract_sha256": row["contract_sha256"],
+        "glb_sha256": row["glb_sha256"], "frame": FRAME,
+        "translation_mm": result["translation_mm"], "rotation_deg": result["rotation_deg"],
+    }
+    result["placement_sha256"] = hashlib.sha256(
+        json.dumps(result["provenance"], sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     result["superseded"] = connection.execute("""SELECT 1 FROM studio_published_versions newer
         JOIN studio_published_versions pinned ON pinned.version_id = ?
         WHERE newer.model_spec_id = pinned.model_spec_id AND newer.rowid > pinned.rowid LIMIT 1""",

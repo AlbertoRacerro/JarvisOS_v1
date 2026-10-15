@@ -648,6 +648,8 @@ export type BluecadStudioReference = {
   translation_mm: [number, number, number]; rotation_deg: [number, number, number];
   revision: number; valid: boolean; stale: boolean; superseded: boolean;
   finding: string | null; glb_url: string | null;
+  scene_id: string; visual_only: boolean; placement_sha256: string;
+  provenance: { frame: string };
 };
 
 const studioReferencePath = (workspaceId: string, candidateId: string) =>
@@ -656,8 +658,9 @@ const studioReferencePath = (workspaceId: string, candidateId: string) =>
 export const listBluecadStudioReferences = (workspaceId: string, candidateId: string) =>
   getJson<BluecadStudioReference[]>(studioReferencePath(workspaceId, candidateId));
 
-export const addBluecadStudioReference = (workspaceId: string, candidateId: string, simulationRunId: string) =>
-  postJson<BluecadStudioReference>(studioReferencePath(workspaceId, candidateId), { simulation_run_id: simulationRunId });
+export const addBluecadStudioReference = (workspaceId: string, candidateId: string, simulationRunId: string,
+  placement: { translation_mm: [number, number, number]; rotation_deg: [number, number, number] } | null = null) =>
+  postJson<BluecadStudioReference>(studioReferencePath(workspaceId, candidateId), { simulation_run_id: simulationRunId, ...(placement ?? {}) });
 
 export const moveBluecadStudioReference = (reference: BluecadStudioReference,
   translation_mm: [number, number, number], rotation_deg: [number, number, number]) =>

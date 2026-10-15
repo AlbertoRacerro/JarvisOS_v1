@@ -119,6 +119,8 @@ function meshFact(mesh: THREE.Mesh, ordinal: number, sessionKey: string): Geomet
   };
 }
 
+const MM_TO_GLTF_METRES = 0.001;
+
 function BluecadGlbViewer({ artifactUrl, references = [], inspectionCommand = null, onInspectionChange }: BluecadGlbViewerProps) {
   const referenceSignature = JSON.stringify(references);
   const mountRef = useRef<HTMLDivElement | null>(null);
@@ -248,7 +250,7 @@ function BluecadGlbViewer({ artifactUrl, references = [], inspectionCommand = nu
               return;
             }
             const [x, y, z] = reference.translation_mm;
-            asset.scene.position.set(x, z, -y);
+            asset.scene.position.set(x, z, -y).multiplyScalar(MM_TO_GLTF_METRES);
             const [rx, ry, rz] = reference.rotation_deg.map(THREE.MathUtils.degToRad);
             const cadRotation = new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz, "XYZ"));
             const toGltf = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
