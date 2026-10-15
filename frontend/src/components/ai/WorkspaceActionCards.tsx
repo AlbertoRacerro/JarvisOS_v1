@@ -1,30 +1,19 @@
 import { useState } from "react";
 import type { ActionOutcome } from "../../api/workspaceActions";
 import { actionOriginLabel, actionStatePresentation, actionSummaryText } from "./workspaceActionPresentation";
+import { studioProposalView } from "./studioProposalPresentation";
 
 type Props = { actions: ActionOutcome[]; onApply(actionId: string): Promise<void>; onDismiss(actionId: string): Promise<void>; onUndo(actionId: string): Promise<void>; technicalDetails?: string | null; technicalInfo?: unknown };
 
 function studioProposal(action: ActionOutcome) {
-  if (action.surface !== "studio") return null;
-  const item = Array.isArray(action.request.actions) ? action.request.actions[0] : null;
-  if (!item || typeof item !== "object") return null;
-  const proposal = item as Record<string, unknown>;
-  if (proposal.op !== "studio_draft") return null;
-  const contract = proposal.contract && typeof proposal.contract === "object" ? proposal.contract as Record<string, unknown> : {};
-  const fields = Object.entries(contract).filter(([, value]) => Array.isArray(value));
-  const source = typeof proposal.source === "string" ? proposal.source : "";
-  const assumptions = typeof proposal.assumptions === "string" ? proposal.assumptions : "";
-  const sourceChange = action.changes.find((change) => change.label.toLowerCase().includes("source"));
-  const diff = sourceChange?.before ? `--- Current Python\n+++ Proposed Python\n${sourceChange.before.split("\n").map((line) => `- ${line}`).join("\n")}\n${source.split("\n").map((line) => `+ ${line}`).join("\n")}` : `+++ Proposed Python\n${source.split("\n").map((line) => `+ ${line}`).join("\n")}`;
+  const view = studioProposalView(action);
+  if (!view) return null;
   return <div className="jarvis-studio-proposal">
-    <p><strong>{String(proposal.name ?? "Studio draft")}</strong> · {String(proposal.category ?? "unknown")} · {proposal.mode === "update" ? "update selected draft" : "new draft"}</p>
-    {typeof proposal.engineering_question === "string" ? <p>{proposal.engineering_question}</p> : null}
-    <div><strong>Engineering contract</strong>{fields.length ? fields.map(([title, rows]) => <section key={title}><h4>{title.replace(/_/g, " ")}</h4><ul>{(rows as unknown[]).map((row, index) => {
-      const record = row && typeof row === "object" ? row as Record<string, unknown> : {};
-      return <li key={index}><strong>{String(record.label ?? record.name ?? `Item ${index + 1}`)}</strong>{record.name && record.label ? ` (${String(record.name)})` : ""}{record.unit ? ` [${String(record.unit)}]` : ""}{record.description ? ` — ${String(record.description)}` : ""}{record.min != null || record.max != null ? ` · bounds ${String(record.min ?? "−∞")}…${String(record.max ?? "+∞")}` : ""}</li>;
-    })}</ul></section>) : <p>Review the proposed contract in technical details.</p>}</div>
-    <div><strong>Assumptions and limits</strong><p>{assumptions || "No assumptions supplied. Review the model before testing."}</p><p>Apply creates a draft only. Test and Publish remain separate actions; scientific status is unqualified.</p></div>
-    <details><summary>Python source diff</summary><pre>{diff}</pre></details>
+    <p><strong>{view.title}</strong> · {view.category} · {view.mode === "update" ? "update selected draft" : "new draft"}</p>
+    {view.question ? <p>{view.question}</p> : null}
+    <div><strong>Engineering contract</strong>{view.groups.length ? view.groups.map((group) => <section key={group.title}><h4>{group.title}</h4><ul>{group.rows.map((row, index) => <li key={index}>{row}</li>)}</ul></section>) : <p>Review the proposed contract in technical details.</p>}</div>
+    <div><strong>Assumptions and limits</strong><p>{view.assumptions}</p><p>Apply creates a draft only. Test and Publish remain separate actions; scientific status is unqualified.</p></div>
+    <details><summary>Python source diff</summary><pre>{view.sourceDiff}</pre></details>
   </div>;
 }
 
