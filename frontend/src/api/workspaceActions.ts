@@ -6,10 +6,11 @@ export type SurfaceRef = {
   process_selection?: Array<{ kind: "unit" | "stream"; id?: string | null; tag?: string | null }>;
   candidate_id?: string | null;
   bluecad_part_ids?: string[];
+  studio_model_id?: string | null;
 };
 
 export type SurfaceBrief = {
-  surface: "process" | "bluecad" | "none";
+  surface: "process" | "bluecad" | "studio" | "none";
   route_id: string;
   workspace_id: string;
   base_revision: string | null;
@@ -28,7 +29,7 @@ export type ChangeLine = { label: string; before: string | null; after: string |
 export type ActionOutcome = {
   action_id: string;
   workspace_id: string;
-  surface: "process" | "bluecad";
+  surface: "process" | "bluecad" | "studio";
   state: "applied" | "proposed" | "refused" | "stale" | "dismissed" | "undone";
   tier: "immediate" | "confirm" | "none";
   summary: string;
