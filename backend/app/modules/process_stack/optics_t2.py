@@ -361,7 +361,8 @@ def _hemisphere_rule(lower: bool) -> HemisphereRule:
     psi_x, psi_w = _gauss(_PSI_NODES)
     start = math.pi / 2 if lower else -math.pi / 2
     width = math.pi / _PSI_PANELS
-    psis, psi_weights = [], []
+    psis: list[float] = []
+    psi_weights: list[float] = []
     for panel in range(_PSI_PANELS):
         centre = start + (panel + 0.5) * width
         psis.extend(centre + psi_x * width / 2)
@@ -407,7 +408,7 @@ class ArrayModel:
                 "transmitted": float((w * c * parts["transmitted"]).sum()),
                 "thin": float((w * c * parts["thin"]).sum()),
             }
-        return self._cache[key]  # type: ignore[no-any-return]
+        return self._cache[key]
 
     def _absorption_table(self, name: str) -> tuple[np.ndarray, np.ndarray]:
         key = f"absorption:{name}"
@@ -421,7 +422,7 @@ class ArrayModel:
                 parts = _directions(self.optics, vectors, kappa, True, 512)
                 values[index] = float((rule.weights * parts["c"] * parts["absorbed"]).sum())
             self._cache[key] = (taus, values)
-        return self._cache[key]  # type: ignore[no-any-return]
+        return self._cache[key]
 
     def diffuse_absorption(self, name: str, kappa: np.ndarray) -> np.ndarray:
         """Absorption integral for hemisphere ``name`` at extinction ``kappa`` (interpolated table, ln tau axis)."""
