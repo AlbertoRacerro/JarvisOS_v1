@@ -4,9 +4,9 @@ Test-only. Changes no schema, migration or runtime path. Every test isolates the
 data root under pytest's tmp_path (or uses an in-memory SQLite connection).
 
 Covers:
-  - fresh == upgraded: drop every migration-added column, re-run
+  - fresh == upgraded: drop migration-added columns except the pinned FK case, re-run
     initialize_database(), compare table/column/index shape with the fresh DB;
-  - every migration-added column also appears in its owner's CREATE TABLE;
+  - migration-only drift is exact and no new CREATE-only drift is introduced;
   - additive-only lint over every migration statement list;
   - unique migration ids across every migration record;
   - whole-initializer idempotence;
@@ -15,6 +15,7 @@ Covers:
 
 from __future__ import annotations
 
+import hashlib
 import re
 import sqlite3
 from collections.abc import Iterable
@@ -28,6 +29,12 @@ import pytest
 # and scaleway_tokens_month_to_date were repaired by catch-up migrations in
 # SCHEMA_MIGRATION_STATEMENTS ("Repair (Stage 3-fix)").
 LEGACY_CREATE_ONLY_COLUMNS: dict[tuple[str, str], str] = {}
+
+# Baseline of columns in CREATE statements that predate the additive migrations.
+# Pinning their complete set catches a new CREATE-only column: the synthetic
+# legacy database starts from a fresh schema, so it cannot catch that case.
+# An intentional new table changes this digest too and must be reviewed here.
+BASE_CREATE_ONLY_SHA256 = "81c750a8f3a79851804c7cc771d804f62b9665e176843d61d87e4317c0d82ae2"
 
 # KNOWN DRIFT (spec 028, recorded not fixed): columns added by a migration
 # statement but absent from their owner's CREATE TABLE. A fresh database only has
@@ -232,6 +239,28 @@ def columns_missing_from_create(
         connection.close()
 
 
+def _create_only_columns(create_statements: Iterable[str]) -> set[tuple[str, str]]:
+    connection = sqlite3.connect(":memory:")
+    try:
+        _execute_create_statements(connection, create_statements)
+        migrated = set(_all_added_columns())
+        tables = connection.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
+        ).fetchall()
+        return {
+            (table, row[1])
+            for (table,) in tables
+            for row in connection.execute(f"PRAGMA table_info({table})")
+        } - migrated
+    finally:
+        connection.close()
+
+
+def _column_set_digest(columns: set[tuple[str, str]]) -> str:
+    encoded = "\n".join(f"{table}.{column}" for table, column in sorted(columns)).encode()
+    return hashlib.sha256(encoded).hexdigest()
+
+
 def _schema_shape(connection: sqlite3.Connection) -> dict:
     tables = [
         row[0]
@@ -281,6 +310,7 @@ def test_discovery_finds_every_owner_list() -> None:
     assert len(_migration_lists()) >= 6
     assert len(_create_lists()) >= 10
     assert len(_all_added_columns()) >= 40
+    assert UNDROPPABLE_ADDED_COLUMNS <= set(_all_added_columns())
 
 
 def test_fresh_database_equals_upgraded_database(monkeypatch, tmp_path) -> None:
@@ -302,6 +332,34 @@ def test_fresh_database_equals_upgraded_database(monkeypatch, tmp_path) -> None:
 
     assert upgraded["columns"] == fresh["columns"]
     assert upgraded["indexes"] == fresh["indexes"]
+
+
+def test_fk_constrained_parameter_column_upgrades_from_legacy_table(monkeypatch, tmp_path) -> None:
+    """Exercise the one column that cannot be DROPped from a fresh SQLite table."""
+    _isolate_data_root(monkeypatch, tmp_path)
+    from app.core.database import initialize_database, open_sqlite_connection
+    from app.core.schema import SCHEMA_STATEMENTS
+
+    current = next(s for s in SCHEMA_STATEMENTS if "CREATE TABLE IF NOT EXISTS parameters" in s)
+    legacy = current.replace("        supersedes_parameter_id TEXT,\n", "")
+    legacy = legacy.replace(
+        "FOREIGN KEY (workspace_id) REFERENCES workspaces(id),\n"
+        "        FOREIGN KEY (supersedes_parameter_id) REFERENCES parameters(id)",
+        "FOREIGN KEY (workspace_id) REFERENCES workspaces(id)",
+    )
+    assert legacy != current
+    with open_sqlite_connection() as connection:
+        connection.execute(legacy)
+        assert "supersedes_parameter_id" not in {
+            row["name"] for row in connection.execute("PRAGMA table_info(parameters)")
+        }
+        connection.commit()
+
+    initialize_database()
+    with open_sqlite_connection() as connection:
+        assert "supersedes_parameter_id" in {
+            row["name"] for row in connection.execute("PRAGMA table_info(parameters)")
+        }
 
 
 def test_every_migration_added_column_is_in_owner_create() -> None:
@@ -361,19 +419,14 @@ def test_migration_only_allowlist_is_exact() -> None:
     assert missing == set(MIGRATION_ONLY_COLUMNS)
 
 
-def test_legacy_allowlist_entries_are_real_and_unmigrated() -> None:
+def test_no_new_create_only_columns() -> None:
     create_all = [s for statements in _create_lists().values() for s in statements]
-    migrated = set(_all_added_columns())
-    connection = sqlite3.connect(":memory:")
-    try:
-        _execute_create_statements(connection, create_all)
-        for (table, column), reason in LEGACY_CREATE_ONLY_COLUMNS.items():
-            present = {row[1] for row in connection.execute(f"PRAGMA table_info({table})")}
-            assert column in present, f"stale allowlist entry {table}.{column}"
-            assert (table, column) not in migrated, f"{table}.{column} is now migrated; remove"
-            assert reason
-    finally:
-        connection.close()
+    create_only = _create_only_columns(create_all)
+    assert all(LEGACY_CREATE_ONLY_COLUMNS.values())
+    assert set(LEGACY_CREATE_ONLY_COLUMNS) <= create_only
+    assert _column_set_digest(create_only - set(LEGACY_CREATE_ONLY_COLUMNS)) == (
+        BASE_CREATE_ONLY_SHA256
+    ), "CREATE-only shape changed; add the matching migration or review the new table"
 
 
 # ---------------------------------------------------------------------------
@@ -420,6 +473,22 @@ def test_negative_column_missing_from_create_is_detected(monkeypatch) -> None:
         test_every_migration_added_column_is_in_owner_create()
     with pytest.raises(AssertionError):
         test_migration_only_allowlist_is_exact()
+
+
+def test_negative_column_added_only_to_create_is_detected(monkeypatch) -> None:
+    import app.core.database as database
+
+    mutated = [
+        statement.replace(
+            "policy_mode TEXT NOT NULL DEFAULT 'STRICT_IP',",
+            "policy_mode TEXT NOT NULL DEFAULT 'STRICT_IP', create_only_probe TEXT,",
+        )
+        for statement in database.SCHEMA_STATEMENTS
+    ]
+    assert mutated != list(database.SCHEMA_STATEMENTS), "mutation must hit the CREATE"
+    monkeypatch.setattr(database, "SCHEMA_STATEMENTS", mutated)
+    with pytest.raises(AssertionError, match="CREATE-only shape changed"):
+        test_no_new_create_only_columns()
 
 
 def test_negative_non_reapplicable_migration_breaks_upgrade(monkeypatch, tmp_path) -> None:

@@ -4,6 +4,7 @@ State: **accepted and ready**. Written under the 2026-10-15 maintainer queue dir
 
 - **Hard dependencies:** none.
 - **This is a documentation-and-test slice.** It writes down the migration policy the code already follows and adds tests that hold it. It changes no table, column, index or runtime path, and it is not a migration-framework rewrite.
+- **Bounded correction to the test contract (2026-10-15).** Exact inspection found 38 pre-existing migration-only columns, absent from their owners' `CREATE TABLE` statements. Fresh databases still receive them because the initializer runs migrations after CREATE. The test pins the exact 38 and rejects any new member; this slice does not rewrite those schema declarations. SQLite also refuses `DROP COLUMN` on `parameters.supersedes_parameter_id` because its fresh-table definition names that column in a foreign key. The synthetic legacy copy excludes only that pinned column; a separate test builds its pre-column table and exercises the real upgrade path. Neither exception authorizes new drift.
 
 ## Fresh evidence (master `af053d31`)
 
@@ -21,10 +22,10 @@ State: **accepted and ready**. Written under the 2026-10-15 maintainer queue dir
    - Every change carries a `*_MIGRATION_RECORD` with a unique `migration_id`.
    - Renames, drops and type changes need their own accepted spec with a backup and restore path.
    - The document says where to add each piece and which test enforces it.
-2. **Fresh equals upgraded.** A test builds a fresh database. It makes a legacy copy by dropping every column added by a migration statement (indexes on those columns are dropped first), re-runs `initialize_database()` on it, and asserts both databases have the same tables, columns (name, type, not-null, default) and indexes. A column present in a migration but missing from its owner's `CREATE` fails the test, and so does the reverse case of a migration that cannot be re-applied.
+2. **Fresh equals upgraded.** A test builds a fresh database. It makes a legacy copy by dropping migration-added columns (indexes on those columns are dropped first), except the pinned foreign-key-constrained column above, re-runs `initialize_database()` on it, and asserts both databases have the same tables, columns (name, type, not-null, default) and indexes. The constrained column gets a separate legacy-table upgrade test. A new column present in a migration but missing from its owner's `CREATE` fails the exact drift guard, and so does a migration that cannot be re-applied.
 3. **Additive-only lint.** A test parses every migration statement list. It asserts each statement is `ALTER TABLE <t> ADD COLUMN …` or `CREATE … IF NOT EXISTS`, that none contains `DROP`, `RENAME` or a column type change, and that every `migration_id` across all records is unique.
 4. **Idempotence of the whole initializer.** Two consecutive runs leave identical `sqlite_master` and `schema_migrations` row counts.
-5. **Known debt is recorded, not fixed.** Columns present in a `CREATE` but in no migration (for example `scaleway_token_cap`) are listed in the document as legacy, and an explicit allowlist keeps the test honest. They are not removed.
+5. **Known debt is recorded, not fixed.** The 38 migration-only columns are listed in the document and exact allowlist. The former `CREATE`-only `scaleway_token_cap` pair has catch-up migrations; the legacy allowlist is empty. A frozen digest of the pre-existing `CREATE`-only columns catches any new column added to CREATE without a migration. The test requires review when a new table intentionally changes that baseline.
 
 ## Non-goals
 
@@ -35,5 +36,5 @@ State: **accepted and ready**. Written under the 2026-10-15 maintainer queue dir
 ## Acceptance
 
 - `docs/MIGRATIONS.md` exists and matches the code paths cited above.
-- `backend/tests/test_migration_discipline.py` holds criteria 2–4 and passes on master. Deleting an added column from its owner's `CREATE`, or adding a `DROP` statement to a migration list, makes it fail. Both negative cases are demonstrated in the PR evidence.
+- `backend/tests/test_migration_discipline.py` holds criteria 2–5 and passes on master. Deleting an added column from its owner's `CREATE`, adding one only to CREATE, or adding a `DROP` statement to a migration list makes it fail. These negative cases are demonstrated in the PR evidence.
 - The full backend suite in a clean environment, Ruff, the typecheck ratchet and contract checks pass at the exact head.
