@@ -63,6 +63,8 @@ export const root = (workspaceId: string) => `/workspaces/${encodeURIComponent(w
 const model = (workspaceId: string, id: string) => `${root(workspaceId)}/models/${encodeURIComponent(id)}`;
 export const listStudioCategories = () => request<StudioCategory[]>("/studio/categories");
 export const getStudioRuntimeStatus = () => request<StudioRuntimeStatus>("/studio/runtime/status");
+/** Parse unsaved Python for read-only mathematics; the server must never execute it. */
+export const previewStudioDocumentation = (source: string) => request<StudioDerived>("/studio/documentation/preview", "POST", { source });
 export const listStudioModels = (workspaceId: string) => request<StudioModel[]>(`${root(workspaceId)}/models`);
 export const getStudioModel = (workspaceId: string, id: string) => request<StudioModel>(model(workspaceId, id));
 export type StudioGeometryCreate = { category: "geometry"; name: string; engineering_question: string; inputs: StudioVariable[] };

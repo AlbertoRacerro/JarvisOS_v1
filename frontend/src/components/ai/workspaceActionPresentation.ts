@@ -2,7 +2,8 @@ import type { ActionOutcome, SurfaceRef } from "../../api/workspaceActions";
 import type { StageSelection } from "../../app/selection";
 
 export type ProcessSurface = { draft_id: string | null; process_selection: SurfaceRef["process_selection"] };
-export function buildSurfaceRef(routeId: string, selection: StageSelection | null, process: ProcessSurface): SurfaceRef {
+export function buildSurfaceRef(routeId: string, selection: StageSelection | null, process: ProcessSurface, studioModelId: string | null = null): SurfaceRef {
+  if (routeId === "design-studio") return { route_id: routeId, studio_model_id: studioModelId };
   if (routeId === "design-process") {
     return { route_id: routeId, draft_id: process.draft_id, process_selection: process.process_selection ?? [] };
   }

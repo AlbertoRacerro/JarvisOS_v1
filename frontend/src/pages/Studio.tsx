@@ -15,9 +15,9 @@ import { blankStep, canPublishProcedure, parameterValuesIssues } from "../compon
 import { isProcedureReport, listBenchDrafts, type BenchDraft, type ProcedureCase, type ProcedureStep } from "../api/studioProcedure";
 import { canPublishStudioDraft } from "./studioState";
 import {
-  createStudioModel, getStudioModel, getStudioRuntimeStatus, listStudioCategories, listStudioLibrary, listStudioModels,
+  createStudioModel, getStudioModel, getStudioRuntimeStatus, listStudioCategories, listStudioLibrary, listStudioModels, previewStudioDocumentation,
   publishStudioModel, reviseStudioModel, saveStudioModel, testStudioModel, geometryPreviewUrl, geometryRunArtifactUrl,
-  StudioApiError, type StudioCase, type StudioCategoryId, type StudioGeometryCase, type StudioCategory, type StudioLibraryEntry, type StudioModel, type StudioPort, type StudioRuntimeStatus, type StudioUnitCase, type StudioVariable
+  StudioApiError, type StudioCase, type StudioCategoryId, type StudioDerived, type StudioGeometryCase, type StudioCategory, type StudioLibraryEntry, type StudioModel, type StudioPort, type StudioRuntimeStatus, type StudioUnitCase, type StudioVariable
 } from "../api/studio";
 import "./studio.css";
 
@@ -71,7 +71,7 @@ const runOutputs = (payload: string | null): string => {
     return Object.entries(outputs).map(([name, item]) => `${name} = ${String(item.value)} ${item.unit}`).join(" · ");
   } catch { return ""; }
 };
-export default function Studio({ workspaceId, navigate, engineeringProperties }: { workspaceId: string | null; navigate: Navigate; engineeringProperties: EngineeringPropertiesController }) {
+export default function Studio({ workspaceId, navigate, engineeringProperties, onModelSelectionChange }: { workspaceId: string | null; navigate: Navigate; engineeringProperties: EngineeringPropertiesController; onModelSelectionChange?(id: string | null): void }) {
   const [runs, setRuns] = useState<SimulationRunDetail[]>([]);
   const [models, setModels] = useState<StudioModel[]>([]);
   const [library, setLibrary] = useState<StudioLibraryEntry[]>([]);
@@ -79,6 +79,8 @@ export default function Studio({ workspaceId, navigate, engineeringProperties }:
   const [runtime, setRuntime] = useState<StudioRuntimeStatus | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [model, setModel] = useState<StudioModel | null>(null);
+  const [liveMath, setLiveMath] = useState<StudioDerived | null>(null);
+  const [mathError, setMathError] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("contract");
   const [wizard, setWizard] = useState(false);
   const [custom, setCustom] = useState(false);
@@ -113,6 +115,16 @@ export default function Studio({ workspaceId, navigate, engineeringProperties }:
   const activeCases = isProc ? procCases : isUnit ? unitCases : isGeometry ? geometryCases : cases;
   const issues = isUnit || (wizard && wizardCategory === "process_unit") ? contractIssues({ inlets, outlets, parameters }) : [];
   const newest = useMemo(() => model?.versions[model.versions.length - 1] ?? null, [model]);
+  useEffect(() => { onModelSelectionChange?.(model?.id ?? null); }, [model?.id, onModelSelectionChange]);
+  useEffect(() => {
+    if (!model || model.category !== "calculation" || source === model.source) { setLiveMath(null); setMathError(null); return; }
+    let alive = true;
+    setLiveMath(null); setMathError(null);
+    const timer = window.setTimeout(() => {
+      void previewStudioDocumentation(source).then((derived) => { if (alive) setLiveMath(derived); }).catch((cause: unknown) => { if (alive) setMathError(cause instanceof Error ? cause.message : "Mathematical preview is unavailable."); });
+    }, 350);
+    return () => { alive = false; window.clearTimeout(timer); };
+  }, [model, source]);
 
   const adopt = (next: StudioModel) => { setModel(next); setSelectedId(next.id); setName(next.name); setQuestion(next.engineering_question); setInputs(next.inputs ?? [blankVariable()]); setOutputs(next.outputs ?? [blankVariable()]); setSource(next.source); setAnnotations(next.annotations ?? ""); setAssumptions(next.assumptions ?? "");
     const unit = next.category === "process_unit"; const shape = next.category === "geometry"; const proc = next.category === "procedure";
@@ -123,6 +135,20 @@ export default function Studio({ workspaceId, navigate, engineeringProperties }:
     if (proc) { setParameters(next.parameters ?? []); setSteps(next.steps ?? []); return; }
     if (unit) { setInlets(next.inlets ?? []); setOutlets(next.outlets ?? []); setParameters(next.parameters ?? []); setSymbol(next.symbol ?? ""); setGeneration(next.culture_generation ?? []); setSymbolRefusal(null); } };
   const refreshLists = (ws: string) => Promise.all([listStudioModels(ws), listStudioLibrary(ws)]).then(([nextModels, nextLibrary]) => { setModels(nextModels); setLibrary(nextLibrary); });
+  useEffect(() => {
+    const receive = (event: Event) => {
+      const detail = (event as CustomEvent<{ workspaceId?: string; surface?: string; state?: string; draftId?: string | null }>).detail;
+      if (!workspaceId || detail?.workspaceId !== workspaceId || detail.surface !== "studio" || detail.state !== "applied" || !detail.draftId) return;
+      if (draftDirty) { setNotice("A Studio proposal was applied. Save or discard your unsaved edits, then reopen the draft to see it."); return; }
+      void getStudioModel(workspaceId, detail.draftId).then((next) => {
+        adopt(next); setWizard(false); setTab("code");
+        setNotice("Proposal applied as a draft. Review and edit the source, then Test before Publish.");
+        return refreshLists(workspaceId);
+      }).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "Could not open the applied Studio draft."));
+    };
+    window.addEventListener("jarvis:workspace-action", receive);
+    return () => window.removeEventListener("jarvis:workspace-action", receive);
+  }, [workspaceId, draftDirty]);
   useEffect(() => {
     let alive = true; setModel(null); setSelectedId(null); setError(null);
     void Promise.all([listStudioCategories(), getStudioRuntimeStatus()]).then(([nextCategories, nextRuntime]) => { if (alive) { setCategories(nextCategories); setRuntime(nextRuntime); } }).catch((cause: Error) => { if (alive) setError(cause.message); });
@@ -197,7 +223,7 @@ export default function Studio({ workspaceId, navigate, engineeringProperties }:
           <CultureGenerationField value={generation} onChange={setGeneration} /><SymbolField value={symbol} onChange={setSymbol} refusal={symbolRefusal} />{issues.map((issue) => <p className="studio-warning" key={issue}>{issue}</p>)}<p className="studio-hash">Changing the contract changes the contract hash and invalidates the test report; Save Draft, then Run Test again.</p></>
           : isGeometry ? <VariableForm title="Inputs" rows={inputs} onChange={setInputs} />
           : <><VariableForm title="Inputs" rows={inputs} onChange={setInputs} /><VariableForm title="Outputs" rows={outputs} onChange={setOutputs} /></>}</fieldset> : null}
-        {tab === "code" ? <div className="studio-panel"><p>Python is the executable source. The editor is always available for this draft.</p><PythonEditor value={source} onChange={setSource} disabled={locked} /><small className="studio-hash">Source SHA-256: {model.source_sha256}</small></div> : null}
+        {tab === "code" ? <div className="studio-panel"><p>Python is the executable source. Equations are read-only and derived from that source.</p><div className={model.category === "calculation" ? "studio-math-workspace" : "studio-code-workspace"}><section aria-label="Python source"><h3>Code</h3><PythonEditor value={source} onChange={setSource} disabled={locked} /><small className="studio-hash">Saved source SHA-256: {model.source_sha256}</small></section>{model.category === "calculation" ? <section className="studio-math-pane" aria-label="Derived mathematics"><h3>Derived mathematics</h3>{sourceDirty && !liveMath && !mathError ? <p role="status">Refreshing equations from unsaved source…</p> : null}{sourceDirty && mathError ? <p className="studio-warning" role="alert">{mathError} Saved equations are stale.</p> : null}{sourceDirty && liveMath ? <p className="studio-notice" role="status">Preview from unsaved Python · source {liveMath.source_sha256.slice(0, 12)}. Save Draft before Test.</p> : !sourceDirty ? <p>Derived from saved source {model.documentation.derived.source_sha256.slice(0, 12)}.</p> : null}{liveMath ? <DerivedDocumentation derived={liveMath} /> : !sourceDirty ? <DerivedDocumentation derived={model.documentation.derived} /> : null}<h3>Variables and units</h3><div className="studio-contract-tables"><section><h4>Inputs</h4>{inputs.map((row) => <p key={row.name}>{row.label || row.name} ({row.name}) [{row.unit}]</p>)}</section><section><h4>Outputs</h4>{outputs.map((row) => <p key={row.name}>{row.label || row.name} ({row.name}) [{row.unit}]</p>)}</section></div>{contractDirty ? <p className="studio-warning">Unsaved contract changes; Save Draft before Test.</p> : null}{model.annotations_stale || sourceDirty ? <p className="studio-warning">Annotations refer to an older saved source.</p> : null}{sourceDirty && model.last_test_report ? <p className="studio-warning">The displayed test report refers to an older source. Save Draft and Test again.</p> : null}<label>Annotations<textarea disabled={locked} value={annotations} onChange={(event) => setAnnotations(event.target.value)} /></label><label>Assumptions<textarea disabled={locked} value={assumptions} onChange={(event) => setAssumptions(event.target.value)} /></label></section> : null}</div></div> : null}
         {tab === "documentation" ? <div className="studio-panel"><h3>Derived equations</h3><p>Read-only equations are parsed from saved Python; source is never executed to render them.</p><DerivedDocumentation derived={model.documentation.derived} />
           <h3>Contract tables</h3>{isUnit ? <ContractTables contract={model.documentation} /> : <div className="studio-contract-tables"><section><h4>Inputs</h4>{model.documentation?.inputs.map((row) => <p key={row.name}>{row.label} ({row.name}) [{row.unit}] · {row.description}</p>)}</section><section><h4>Outputs</h4>{(model.documentation?.outputs ?? []).map((row) => <p key={row.name}>{row.label} ({row.name}) [{row.unit}] · {row.description}</p>)}</section></div>}
           {model.annotations_stale || sourceDirty ? <p className="studio-warning">Annotations were written against an older source hash.</p> : null}<label>Annotations<textarea disabled={locked} value={annotations} onChange={(event) => setAnnotations(event.target.value)} /></label><label>Assumptions<textarea disabled={locked} value={assumptions} onChange={(event) => setAssumptions(event.target.value)} /></label></div> : null}
