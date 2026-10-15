@@ -249,6 +249,21 @@ def test_refuses_wrong_type_foreign_workspace_hash_mismatch_and_symlink(client: 
     assert handoff_env["recorder"].calls == [] and _events() == []
 
 
+def test_handoff_does_not_overwrite_a_hard_linked_file(client: TestClient, built: dict, handoff_env: dict) -> None:
+    item = built["exports"]["export.3mf"]
+    sha = _artifact_row(item["id"])["sha256"]
+    target = handoff_env["dir"] / f"{built['candidate']['id'][:8]}-attempt1-{sha[:8]}.3mf"
+    victim = handoff_env["dir"].parent / "victim.txt"
+    victim.write_text("keep", encoding="utf-8")
+    os.link(victim, target)
+
+    response = _open(client, built["workspace_id"], item["id"])
+
+    assert response.status_code == 200
+    assert victim.read_text(encoding="utf-8") == "keep"
+    assert sha256_file(target) == sha
+
+
 def test_wslpath_result_must_be_a_drive_path(client: TestClient, built: dict, handoff_env: dict) -> None:
     handoff_env["monkeypatch"].setattr(print_handoff.subprocess, "run", _Recorder(wsl_stdout="\\\\wsl$\\x\\y.3mf"))
     response = _open(client, built["workspace_id"], built["exports"]["export.3mf"]["id"])

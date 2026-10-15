@@ -10,7 +10,7 @@ function ModelStage({ onSelectionChange, onShellRegionsChange, requestShellRegio
           <div>
             <p className="eyebrow">Design</p>
             <h1 id="bluecad-final-title">BLUECAD workspace</h1>
-            <p className="panel-subtitle">Inspect server-built geometry, create deterministic template parts and hand off STL or STEP files for printing.</p>
+            <p className="panel-subtitle">Inspect server-built geometry, create deterministic template parts and download STL, STEP or 3MF for printing.</p>
           </div>
           <span className="design-stage__truth-state">Geometry · Server-owned</span>
         </div>

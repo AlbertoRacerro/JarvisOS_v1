@@ -888,7 +888,7 @@ function ExportMenu({ exports, workspaceId }: { exports: BluecadArtifactRefRead[
   }}><button ref={buttonRef} type="button" className="secondary-button" aria-expanded={open} aria-controls="bluecad-export-menu" onClick={() => setOpen((value) => !value)}>Export ▾</button>{open && <div ref={menuRef} id="bluecad-export-menu" className={`bluecad-export__menu${flipped ? " bluecad-export__menu--flipped" : ""}`} aria-label="Download exports">{items.map((item) => {
     const [label, detail] = EXPORT_LABELS[item.roles[0]];
     return <a key={item.id} href={`${API_BASE_URL}${item.content_url}`} download onClick={() => setOpen(false)}><strong>{label}</strong><small>{detail}</small></a>;
-  })}{handoffAvailable && threeMf && <button type="button" onClick={openInSlicer}><strong>Open in slicer</strong><small>The Windows default program for .3mf will open this file</small></button>}{handoffStatus && <small role="status">{handoffStatus}</small>}</div>}</div>;
+  })}{handoffAvailable && threeMf && <button type="button" className="bluecad-export__handoff secondary-button" onClick={openInSlicer}><strong>Open in slicer</strong><small>The Windows default program for .3mf will open this file</small></button>}{handoffStatus && <div className="bluecad-export__status" role="status">{handoffStatus}</div>}</div>}</div>;
 }
 
 type TemplateKind = BluecadTemplateCreate["template"];
@@ -957,7 +957,7 @@ function CreateGeometryPanel({ heading, intro, aiBriefState, disabled, pending, 
     <div className="bluecad-create__intro"><h2>{heading}</h2><p>{intro}</p></div>
     <form className="bluecad-create__route" onSubmit={submit} aria-labelledby="bluecad-template-title" noValidate>
       <h3 id="bluecad-template-title">Template part · no AI</h3>
-      <p>Built deterministically on the server from your dimensions, validated, and exported as GLB, STL and STEP.</p>
+      <p>Built deterministically on the server from your dimensions, validated, and exported as GLB, STL, STEP and 3MF.</p>
       <div className="bluecad-create__fields">
         <label>Template<select value={kind} onChange={(event) => { setKind(event.target.value as TemplateKind); setProblem(null); }} disabled={disabled}><option value="tube">Tube</option><option value="manifold">Manifold</option></select></label>
         {TEMPLATE_FIELDS[kind].map((field) => <label key={`${kind}-${field.key}`}>{field.label}<input type="number" inputMode="decimal" min={field.min} max={field.max} step={field.step} value={raw[kind][field.key]} onChange={(event) => setRaw((current) => ({ ...current, [kind]: { ...current[kind], [field.key]: event.target.value } }))} disabled={disabled} required /></label>)}

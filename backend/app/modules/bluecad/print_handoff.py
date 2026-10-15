@@ -13,6 +13,7 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from uuid import uuid4
@@ -197,21 +198,25 @@ def _copy_verified(source: Path, destination: Path, directory: Path, expected_sh
     if destination.is_symlink() or destination.parent != directory:
         raise PrintHandoffError(409, "print_handoff_unsafe_target", "Handoff target is a symlink or outside the directory.")
     digest = hashlib.sha256()
+    temporary: Path | None = None
     try:
-        fd = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o644)
-    except OSError:
-        raise PrintHandoffError(409, "print_handoff_unsafe_target", "Handoff target could not be created safely.") from None
-    try:
-        with os.fdopen(fd, "wb") as out, source.open("rb") as handle:
+        with tempfile.NamedTemporaryFile(mode="wb", prefix=".bluecad-", dir=directory, delete=False) as out, source.open("rb") as handle:
+            temporary = Path(out.name)
             for chunk in iter(lambda: handle.read(_COPY_CHUNK), b""):
                 digest.update(chunk)
                 out.write(chunk)
+        if digest.hexdigest() != expected_sha256:
+            raise PrintHandoffError(409, "print_handoff_hash_mismatch", "Artifact bytes do not match the registered sha256.")
+        if destination.is_symlink():
+            raise PrintHandoffError(409, "print_handoff_unsafe_target", "Handoff target is a symlink or outside the directory.")
+        # Replacing the directory entry leaves even a hard-linked existing file untouched.
+        os.replace(temporary, destination)
+        temporary = None
     except OSError:
-        destination.unlink(missing_ok=True)
         raise PrintHandoffError(409, "print_handoff_copy_failed", "Could not copy the artifact to the handoff directory.") from None
-    if digest.hexdigest() != expected_sha256:
-        destination.unlink(missing_ok=True)
-        raise PrintHandoffError(409, "print_handoff_hash_mismatch", "Artifact bytes do not match the registered sha256.")
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
 
 
 def _to_windows_path(destination: Path) -> str:

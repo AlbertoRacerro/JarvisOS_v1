@@ -102,6 +102,11 @@
 .bluecad-export__menu a:focus-visible,
 .bluecad-export__menu button:focus-visible { background: #eef1e8; }
 .bluecad-export__menu small { color: var(--color-text-muted); font-size: 10px; }
+.bluecad-export__menu button.bluecad-export__handoff,
+.bluecad-export__menu button.bluecad-export__handoff:hover,
+.bluecad-export__menu button.bluecad-export__handoff:focus-visible { background: #eef1e8; color: #1f2933; }
+.bluecad-export__menu button.bluecad-export__handoff small { color: #4a5564; }
+.bluecad-export__status { padding: 5px 8px; overflow-wrap: anywhere; color: #1f2933; font-size: 11px; line-height: 1.35; }
 .bluecad-create {
   width: min(100%, 52rem);
   margin: 0 auto;
