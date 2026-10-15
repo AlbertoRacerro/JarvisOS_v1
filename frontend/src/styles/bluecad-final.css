@@ -82,8 +82,15 @@
   box-shadow: 0 6px 18px rgba(40, 44, 36, 0.14);
 }
 .bluecad-export__menu--flipped { left: auto; right: 0; }
-.bluecad-export__menu a {
+.bluecad-export__menu a,
+.bluecad-export__menu button {
   display: grid;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  width: 100%;
   gap: 1px;
   padding: 6px 8px;
   border-radius: 4px;
@@ -91,7 +98,9 @@
   text-decoration: none;
 }
 .bluecad-export__menu a:hover,
-.bluecad-export__menu a:focus-visible { background: #eef1e8; }
+.bluecad-export__menu button:hover,
+.bluecad-export__menu a:focus-visible,
+.bluecad-export__menu button:focus-visible { background: #eef1e8; }
 .bluecad-export__menu small { color: var(--color-text-muted); font-size: 10px; }
 .bluecad-create {
   width: min(100%, 52rem);

@@ -64,7 +64,7 @@ def test_template_candidate_is_valid_with_glb_stl_step_and_no_ai(client: TestCli
 
     aggregate = client.get(f"/workspaces/{workspace_id}/bluecad/candidates/{candidate['id']}/aggregate").json()
     exports = {item["roles"][0]: item for item in aggregate["exports"]}
-    assert set(exports) == {"export.stl", "export.step"}
+    assert set(exports) == {"export.stl", "export.step", "export.3mf"}
     assert not aggregate["diagnostics"]
 
     glb = client.get(f"/workspaces/{workspace_id}/bluecad/artifacts/{candidate['glb_artifact_id']}/content")

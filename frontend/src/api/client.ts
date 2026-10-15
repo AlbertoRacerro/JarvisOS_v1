@@ -568,7 +568,7 @@ export type BluecadReadDiagnostic = {
 export type BluecadCandidateAggregateRead = {
   candidate: BluecadCandidate;
   artifacts: BluecadArtifactRefRead[];
-  /** STL (mm) and STEP exports built with the candidate's current GLB; roles export.stl / export.step. */
+  /** STL (mm), STEP and 3MF (mm) exports built with the candidate's current GLB; roles export.stl / export.step / export.3mf. */
   exports: BluecadArtifactRefRead[];
   evidence: BluecadEvidenceRefRead[];
   runs: BluecadRunRefRead[];
@@ -633,6 +633,47 @@ export function getBluecadCandidateAggregate(
   return getJson<BluecadCandidateAggregateRead>(
     `/workspaces/${encodedWorkspaceId}/bluecad/candidates/${encodedCandidateId}/aggregate`
   );
+}
+
+export type BluecadPrintHandoffCapability = { available: boolean; code: string | null };
+
+export type BluecadPrintHandoffEvent = {
+  id: string;
+  workspace_id: string;
+  artifact_id: string;
+  sha256: string;
+  handoff_path: string;
+  windows_path: string;
+  outcome: string;
+  created_at: string;
+  message: string;
+};
+
+export function getBluecadPrintHandoffCapability(workspaceId: string): Promise<BluecadPrintHandoffCapability> {
+  return getJson<BluecadPrintHandoffCapability>(
+    `/workspaces/${encodeURIComponent(workspaceId)}/bluecad/print-handoff/capability`
+  );
+}
+
+export async function openBluecadArtifactInSlicer(
+  workspaceId: string,
+  artifactId: string
+): Promise<BluecadPrintHandoffEvent> {
+  const response = await fetch(
+    `${API_BASE_URL}/workspaces/${encodeURIComponent(workspaceId)}/bluecad/artifacts/${encodeURIComponent(artifactId)}/open-in-slicer`,
+    { method: "POST" }
+  );
+  if (!response.ok) {
+    let detail = `Request failed with ${response.status}`;
+    try {
+      const body = (await response.json()) as { detail?: { code?: string; message?: string } };
+      if (body.detail?.message) detail = body.detail.message;
+    } catch {
+      // keep the status-only message
+    }
+    throw new Error(detail);
+  }
+  return response.json() as Promise<BluecadPrintHandoffEvent>;
 }
 
 export function bluecadArtifactContentUrl(workspaceId: string, artifactId: string): string {
