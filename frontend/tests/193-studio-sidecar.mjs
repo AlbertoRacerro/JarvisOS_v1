@@ -21,6 +21,7 @@ assert.equal(view?.groups[1].rows[0], "Dose (dose) [kg/s]");
 assert.equal(view?.assumptions, "Steady flow");
 assert.match(view?.sourceDiff ?? "", /-     return \{'dose': 1\}/);
 assert.match(view?.sourceDiff ?? "", /\+     return \{'dose': 2\}/);
+assert.deepEqual(studioProposalView({ ...proposal, request: { actions: [{ ...proposal.request.actions[0], category: "process_unit", contract: { culture_generation: ["biomass"] } }] } })?.groups[0].rows, ["biomass"]);
 assert.equal(studioProposalView({ ...proposal, surface: "process" }), null);
 assert.equal(studioProposalView({ ...proposal, request: { actions: [{ op: "add_unit" }] } }), null);
 
@@ -36,7 +37,7 @@ assert.match(sidecar, /const applyAction = async \(actionId: string\) => runActi
 assert.match(card, /action\.state === "proposed"[\s\S]*onApply/);
 assert.match(studio, /detail\.surface !== "studio"[\s\S]*getStudioModel\(workspaceId, detail\.draftId\)/);
 assert.match(studio, /<PythonEditor value=\{source\}[\s\S]*<DerivedDocumentation derived=\{liveMath\}/);
-assert.match(studio, /sourceDirty && model\.last_test_report[\s\S]*older source/);
+assert.match(studio, /model\.last_test_report && \(sourceDirty \|\| model\.last_test_report\.source_sha256 !== model\.source_sha256\)[\s\S]*older source/);
 assert.match(studio, /previewStudioDocumentation\(source\)/);
 assert.match(api, /"\/studio\/documentation\/preview", "POST", \{ source \}/);
 assert.match(read("src/components/process/StudioUnitInspector.tsx"), /<AppLink href=\{href\}[^>]*>Open model in Studio<\/AppLink>/);

@@ -43,6 +43,9 @@ def proposal_revision(model: dict) -> str:
 def validate_proposed_source(category: str, name: str, question: str, contract: dict,
                              source: str) -> dict:
     """Validate inert proposal data against the existing category contracts."""
+    if not isinstance(contract, dict) or {"name", "engineering_question", "category"} & set(contract):
+        # Identity and category come from the typed action, never from the free-form contract.
+        raise StudioError("studio_category_mismatch", "The proposed contract may not restate name or category.")
     if category == "calculation":
         validated = StudioCreate.model_validate({"name": name, "engineering_question": question, **contract})
         normalized, _ = _contract(validated)

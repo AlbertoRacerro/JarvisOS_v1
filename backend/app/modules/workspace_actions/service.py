@@ -758,9 +758,6 @@ def _studio_proposal(workspace_id: str, request: ActionRequest, origin: ActionOr
 
     action = request.actions[0]
     assert isinstance(action, StudioDraftAction)
-    if (trigger := deterministic_floor_trigger(_canonical(action.model_dump(mode="json")))) and trigger[0] == "S4":
-        return _outcome(workspace_id, request, origin, "refused", "none", "Studio proposal refused.",
-                        reason="Secret-like content cannot be stored in a proposal.", reason_code="secret_detected")
     try:
         contract = studio.validate_proposed_source(action.category, action.name,
                                                     action.engineering_question, action.contract, action.source)
@@ -837,6 +834,15 @@ def submit(workspace_id: str, request: ActionRequest, origin: ActionOrigin) -> A
             # create a second card or a second BLUECAD child.
             return previous
     if request.surface == "studio":
+        action = request.actions[0]
+        if (trigger := deterministic_floor_trigger(_canonical(action.model_dump(mode="json")))) and trigger[0] == "S4":
+            # Never persist secret-like proposal content, not even inside a refused card.
+            redacted = request.model_copy(update={"actions": [action.model_copy(update={
+                "name": "[redacted]", "engineering_question": "[redacted]", "contract": {},
+                "source": "# [redacted: secret-like content]\n", "assumptions": ""})]})
+            return _store(_outcome(workspace_id, redacted, origin, "refused", "none", "Studio proposal refused.",
+                                   reason="Secret-like content cannot be stored in a proposal.",
+                                   reason_code="secret_detected"), redacted, origin)
         return _store(_studio_proposal(workspace_id, request, origin), request, origin)
     if request.surface == "bluecad":
         base_candidate = get_candidate(workspace_id, request.base_revision)
@@ -1372,6 +1378,8 @@ def apply(workspace_id: str, action_id: str) -> ActionOutcome:
         except (ValidationError, ValueError):
             outcome.state, outcome.reason_code, outcome.reason = (
                 "refused", "studio_proposal_invalid", "Studio proposal did not pass owner validation.")
+        except Exception as exc:  # never leave the claim stuck in 'applying'
+            outcome.state, outcome.reason_code, outcome.reason = "refused", "apply_failed", str(exc)[:500]
         _save_outcome(outcome)
         return outcome
     if outcome.surface == "bluecad":

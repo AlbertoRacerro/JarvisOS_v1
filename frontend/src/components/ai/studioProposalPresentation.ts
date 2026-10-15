@@ -22,6 +22,7 @@ export function studioProposalView(action: ActionOutcome): StudioProposalView | 
   const groups = Object.entries(contract).filter(([, value]) => Array.isArray(value)).map(([title, value]) => ({
     title: title.replace(/_/g, " "),
     rows: (value as unknown[]).map((row, index) => {
+      if (typeof row === "string" || typeof row === "number") return String(row);
       const item = row && typeof row === "object" ? row as Record<string, unknown> : {};
       const label = String(item.label ?? item.name ?? `Item ${index + 1}`);
       const name = item.name && item.label ? ` (${String(item.name)})` : "";
