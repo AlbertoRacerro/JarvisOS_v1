@@ -1,62 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { StudioApiError, type StudioModel } from "../../api/studio";
 import {
-  applyProcedure, createBenchScenario, getProcedureResults, getRunManifest, getRunSeries, listBenchDrafts, listEnvironmentProfiles, listProcedureLinks, listProcedureRuns, runProcedureLink, updateProcedureLink,
-  type BenchDraft, type EnvironmentProfileHead, type ProcedureLink, type RunResults, type RunRow, type SeriesResponse
+  applyProcedure, createBenchScenario, getProcedureResults, listBenchDrafts, listEnvironmentProfiles, listProcedureLinks, listProcedureRuns, runProcedureLink, updateProcedureLink,
+  type BenchDraft, type EnvironmentProfileHead, type ProcedureLink, type RunResults, type RunRow
 } from "../../api/studioProcedure";
 import { Refusal, SimulationNotice } from "./ProcedureAuthoring";
-import { balanceStatus, boundHint, canRun, chartPaths, fmt, KPI_COLUMNS, linkBadges, parameterValuesIssues, updateLabel } from "./procedureLogic";
+import { boundHint, canRun, linkBadges, parameterValuesIssues, updateLabel } from "./procedureLogic";
+import RunResultsView from "../dynamic/RunResultsView";
+import { revisionSeq, type DynRun } from "../dynamic/dynamicLogic";
 
 // Spec 191 minimal test bench: pick a draft and scenario, Apply a published version, Run, read the event log, balances and series.
 type Failure = { code: string | null; message: string } | null;
 const OVERWRITE_CODES = new Set(["studio_procedure_link_modified", "studio_procedure_schedule_exists", "studio_procedure_scenario_schedule_conflict"]);
-const COLORS = ["#246b45", "#24729b", "#c56825", "#7256a3", "#9a4a55"];
 const failure = (cause: unknown): Failure => cause instanceof StudioApiError ? { code: cause.code, message: cause.message } : { code: null, message: cause instanceof Error ? cause.message : "Request failed" };
-
-function SeriesChart({ series, channels }: { series: SeriesResponse; channels: string[] }) {
-  const t = series.channels.t_s ?? [];
-  const paths = chartPaths(t, channels.filter((name) => series.channels[name]).map((name) => ({ name, values: series.channels[name] })), 640, 160);
-  if (!paths.length) return <p>No series points to plot.</p>;
-  return <figure className="studio-chart"><svg viewBox="0 0 640 160" role="img" aria-label={`Series ${channels.join(", ")}`} preserveAspectRatio="none">
-    {paths.map((path, index) => <path key={path.name} d={path.d} fill="none" stroke={COLORS[index % COLORS.length]} strokeWidth="1.5" vectorEffect="non-scaling-stroke" />)}</svg>
-    <figcaption>{paths.map((path, index) => <span key={path.name} style={{ color: COLORS[index % COLORS.length] }}>{path.name} </span>)}· {series.returned_points} of {series.total_points} points, {fmt((t[t.length - 1] ?? 0) / 86400)} days. Each channel is scaled to its own range.</figcaption>
-    <details><summary>Values table</summary><table className="studio-table"><thead><tr><th>t [s]</th>{paths.map((path) => <th key={path.name}>{path.name}</th>)}</tr></thead>
-      <tbody>{t.map((time, row) => row % Math.max(1, Math.ceil(t.length / 40)) === 0 ? <tr key={row}><td>{fmt(time)}</td>{paths.map((path) => <td key={path.name}>{fmt(series.channels[path.name][row])}</td>)}</tr> : null)}</tbody></table></details></figure>;
-}
-
-function Results({ results, workspaceId, draftId }: { results: RunResults; workspaceId: string; draftId: string }) {
-  const [channels, setChannels] = useState<string[]>([]); const [picked, setPicked] = useState<string[]>([]); const [series, setSeries] = useState<SeriesResponse | null>(null); const [problem, setProblem] = useState<Failure>(null);
-  const balance = balanceStatus(results); const link = results.procedure_link;
-  useEffect(() => {
-    let alive = true; setSeries(null); setProblem(null);
-    void getRunManifest(workspaceId, draftId, results.job_id).then((manifest) => {
-      if (!alive) return; const names = Object.keys(manifest.channels ?? {}).filter((name) => name !== "t_s"); setChannels(names);
-      const defaults = [...names.filter((name) => name.endsWith("_X")).slice(0, 2), ...names.filter((name) => name.endsWith("_V_m3")).slice(0, 1)]; setPicked(defaults.length ? defaults : names.slice(0, 2));
-    }).catch((cause) => { if (alive) setProblem(failure(cause)); });
-    return () => { alive = false; };
-  }, [workspaceId, draftId, results.job_id]);
-  useEffect(() => {
-    if (!picked.length) { setSeries(null); return; }
-    let alive = true;
-    void getRunSeries(workspaceId, draftId, results.job_id, picked).then((next) => { if (alive) setSeries(next); }).catch((cause) => { if (alive) setProblem(failure(cause)); });
-    return () => { alive = false; };
-  }, [workspaceId, draftId, results.job_id, picked]);
-  const actionEvents = results.event_log.filter((entry) => entry.type === "actions");
-  return <section className="studio-report studio-results" data-job={results.job_id}><h4>Run {results.job_id.slice(0, 8)} · {results.status}</h4><SimulationNotice />
-    <p className="studio-link-provenance">Procedure {link.version_label} · source {link.source_sha256.slice(0, 12)} · contract {link.contract_sha256.slice(0, 12)} · compiled {link.compiled_sha256.slice(0, 12)} · values {Object.entries(link.parameter_values).map(([key, value]) => `${key} = ${value}`).join(", ") || "none"} · schedule {link.schedule_id}</p>
-    {results.error ? <Refusal code={results.error.code} message={results.error.message} /> : null}
-    <p className={balance.closed ? "studio-notice" : "studio-warning"} data-balance={balance.closed ? "closed" : "open"}>Balances: {balance.text}</p>
-    {problem ? <Refusal code={problem.code} message={problem.message} /> : null}
-    {channels.length ? <label>Series channels<select multiple size={Math.min(6, channels.length)} aria-label="Series channels" value={picked} onChange={(event) => setPicked(Array.from(event.target.selectedOptions, (option) => option.value).slice(0, 5))}>{channels.map((name) => <option key={name} value={name}>{name}</option>)}</select></label> : null}
-    {series ? <SeriesChart series={series} channels={picked} /> : null}
-    <h5>Event log ({actionEvents.length} action events)</h5>
-    <table className="studio-table"><thead><tr><th>#</th><th>Time [s]</th><th>Trigger</th><th>Actions</th><th>Balance</th></tr></thead>
-      <tbody>{actionEvents.map((entry, index) => <tr key={index}><td>{index + 1}</td><td>{fmt(entry.time_s)}</td><td>{entry.trigger ?? "time"}</td><td>{(entry.actions ?? []).map((record) => String(record.type)).join(", ")}</td><td>{entry.balance?.closed === false ? "OPEN" : "closed"}</td></tr>)}</tbody></table>
-    {results.campaign ? Object.entries(results.campaign.loops).map(([loop, data]) => <div key={loop}><h5>Per-cycle KPIs · loop {loop} · {String(data.summary.periodicity ?? "")}</h5>
-      <table className="studio-table"><thead><tr>{KPI_COLUMNS.map(([, title]) => <th key={title}>{title}</th>)}</tr></thead><tbody>{data.cycles.map((cycle, i) => <tr key={i}>{KPI_COLUMNS.map(([key]) => <td key={key}>{fmt(cycle[key])}</td>)}</tr>)}</tbody></table>
-      <p>Draws {fmt(data.summary.draws)} · harvested {fmt(data.summary.harvested_biomass_kg)} kg · mean last-{fmt(data.summary.last_k)} productivity {fmt(data.summary.mean_last_k_net_volumetric_productivity_kg_m3_day)} kg/m3/d</p></div>) : null}
-  </section>;
-}
 
 export default function ProcedureBench({ workspaceId, model }: { workspaceId: string; model: StudioModel }) {
   const parameters = model.parameters ?? [];
@@ -138,6 +94,6 @@ export default function ProcedureBench({ workspaceId, model }: { workspaceId: st
       <span> · {row.procedure_link.version_label} · values {Object.entries(row.procedure_link.parameter_values).map(([key, value]) => `${key} = ${value}`).join(", ") || "none"}</span>
       {row.job.error ? <Refusal code={row.job.error.code} message={row.job.error.message} /> : null}
       <button type="button" disabled={busy || !settled(row.job.status)} onClick={() => open(row)}>View results</button></article>)}
-    {results ? <Results results={results} workspaceId={workspaceId} draftId={results.procedure_link.draft_id} /> : null}
+    {results ? <RunResultsView workspaceId={workspaceId} draftId={results.procedure_link.draft_id} run={{ job_id: results.job_id, status: results.status, error: results.error, scenario_id: results.procedure_link.scenario_id, current: runs.find((row) => row.job.job_id === results.job_id)?.job.current as boolean | null | undefined } satisfies DynRun} headSeq={revisionSeq(draft?.revision) ?? 0} link={results.procedure_link} /> : null}
   </div>;
 }
