@@ -6,7 +6,7 @@ import hashlib
 import json
 import re
 from datetime import UTC, datetime
-from typing import Literal
+from typing import Any, Literal
 from uuid import uuid4
 
 from pydantic import ValidationError
@@ -137,11 +137,11 @@ def _studio_brief(workspace_id: str, ref: SurfaceRef) -> SurfaceBrief:
         selected = [{"kind": "studio_model", "id": model["id"], "category": model["category"],
                      "name": model["name"]}]
     text = text[:6000]
-    payload = {"surface": "studio", "route_id": ref.route_id, "workspace_id": workspace_id,
+    payload: dict[str, Any] = {"surface": "studio", "route_id": ref.route_id, "workspace_id": workspace_id,
                "base_revision": revision, "draft_id": model["id"] if model else None,
                "candidate_id": None, "selected": selected, "summary": summary, "text": text,
                "actions": ["studio_draft"], "limits": ["draft only", "explicit Apply", "no Test or Publish"]}
-    return SurfaceBrief(**payload, digest=_digest(payload))
+    return SurfaceBrief.model_validate({**payload, "digest": _digest(payload)})
 
 
 def surface_brief(workspace_id: str, ref: SurfaceRef | None) -> SurfaceBrief:

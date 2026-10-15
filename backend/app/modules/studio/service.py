@@ -12,7 +12,10 @@ from pydantic import ValidationError
 from app.core.database import open_sqlite_connection
 from app.modules.events.service import log_event, utc_now
 from app.modules.modeling.models import ModelSpecCreate, ModelSpecProjectUpdate
-from app.modules.modeling.project_knowledge_owner import update_model_spec_in_transaction
+from app.modules.modeling.project_knowledge_owner import (
+    create_model_spec_in_transaction,
+    update_model_spec_in_transaction,
+)
 from app.modules.modeling.service import create_model_spec
 from app.modules.process_kernel.units import parse_unit_token, resolve_unit, unit_registry
 from app.modules.runner.input_contracts import canonicalize_input_contract
@@ -51,14 +54,14 @@ def validate_proposed_source(category: str, name: str, question: str, contract: 
         normalized, _ = _contract(validated)
         _input_contract(normalized)
     elif category == "geometry":
-        validated = GeometryCreate.model_validate({"category": category, "name": name,
-                                                   "engineering_question": question, **contract})
-        normalized = geometry.geometry_contract(validated)
+        shape = GeometryCreate.model_validate({"category": category, "name": name,
+                                               "engineering_question": question, **contract})
+        normalized = geometry.geometry_contract(shape)
         _input_contract(normalized)
     elif category == "process_unit":
-        validated = StudioUnitCreate.model_validate({"category": category, "name": name,
-                                                     "engineering_question": question, **contract})
-        normalized = unit_contract(validated)
+        unit = StudioUnitCreate.model_validate({"category": category, "name": name,
+                                                "engineering_question": question, **contract})
+        normalized = unit_contract(unit)
     else:
         raise StudioError("studio_category_mismatch", "Only executable Studio categories may be proposed.")
     if len(source) > 65536 or "\x00" in source:
@@ -86,20 +89,16 @@ def apply_proposal(workspace_id: str, *, model_spec_id: str | None, base_revisio
         if model_spec_id is None:
             if base_revision != "new":
                 raise StudioError("studio_proposal_stale", "Create proposal is stale.", status=409)
-            model_spec_id = str(uuid4())
-            connection.execute("""INSERT INTO model_specs
-                (id,workspace_id,title,engineering_question,status,maturity_status,assumptions_summary,
-                 schema_version,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)""",
-                (model_spec_id, workspace_id, name, engineering_question, "draft", "draft", assumptions,
-                 1, now, now))
+            model_spec_id = create_model_spec_in_transaction(
+                connection, workspace_id,
+                ModelSpecCreate(title=name, engineering_question=engineering_question,
+                                assumptions_summary=assumptions or None),
+                actor=actor, event_payload={"action_request_digest": request_digest})["id"]
             connection.execute("""INSERT INTO studio_drafts
                 (model_spec_id,workspace_id,contract_json,source,source_sha256,contract_sha256,
                  assumption_notes,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)""",
                 (model_spec_id, workspace_id, contract_json, source, source_sha, contract_sha,
                  assumptions, now, now))
-            log_event(connection, event_type="ModelSpecCreated", actor=actor, target_type="ModelSpec",
-                      target_id=model_spec_id, workspace_id=workspace_id,
-                      payload={"title": name, "action_request_digest": request_digest})
         else:
             try:
                 row = _draft_row(connection, workspace_id, model_spec_id)

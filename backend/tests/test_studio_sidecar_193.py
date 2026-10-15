@@ -1,5 +1,5 @@
 """Spec 193: inert Studio proposals through the governed workspace-action owner."""
-
+import json
 from pathlib import Path
 
 import pytest
@@ -243,8 +243,9 @@ def test_one_apply_is_exactly_one_draft_mutation_and_stale_apply_writes_nothing(
     assert _studio_rows() == (before[0] + 1, before[1] + 1)
     with open_sqlite_connection() as connection:
         events = connection.execute(
-            "SELECT event_type FROM events WHERE target_id=? ORDER BY rowid", (model_id,)).fetchall()
+            "SELECT event_type, payload FROM events WHERE target_id=? ORDER BY rowid", (model_id,)).fetchall()
     assert [row[0] for row in events] == ["ModelSpecCreated"]
+    assert json.loads(events[0][1])["action_request_digest"] == proposed.request_digest
     # Repeated Apply and a stale update leave both tables and the source untouched.
     assert client.post(f"/workspaces/bluerev/actions/{proposed.action_id}/apply").status_code == 409
     revision = service.surface_brief("bluerev", SurfaceRef(route_id="design-studio",
