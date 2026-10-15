@@ -2,7 +2,7 @@
 
 Status: canonical intake register; **not implementation authority**  
 Created: 2026-08-19  
-Last audit update: 2026-10-05
+Last audit update: 2026-10-15
 Owner: repository maintainer
 
 This is the compact canonical register for external projects, papers, products, repositories, architectural patterns, engineering ideas, hardware concepts and other material that may be useful to JarvisOS, BLUECAD or BlueRev.
@@ -139,6 +139,8 @@ Value grades: `S`, `A`, `B`, `C`, `D`; grade is reference/integration value, not
 | REF-077 | IChemE PESD + curated engineering-source families | literature / research-source intake | DOCS-FIRST | B+ | CANDIDATE | high-quality process-engineering source families for Literature/research ingestion with provenance/access/licensing preserved and no automatic engineering acceptance |
 | REF-078 | Frozen Jarvis core team + Hermes Profiles/BoardSession direction | multi-agent council / persona orchestration | CONCEPT | S | CANDIDATE | map the existing 11-persona roster onto persistent Hermes profiles plus bounded disposable delegation; persona remains model-independent, Jarvis chairs/authorizes, user can steer debates, and high-value decisions may add model diversity/frontier escalation |
 | REF-079 | Bambu Lab ecosystem (Bambu Studio AGPL slicer, closed networking plugin, Bambu Connect, LAN Developer Mode MQTT/FTPS) | manufacturing preparation / 3D printing | DOCS-FIRST | B | PROMOTED | maintainer-owned printer; audited 2026-10-01 in `docs/implementation/163-bambu-integration-research-2026-10-01.md`: BLUECAD owns design/geometry/units, Bambu Studio owns slicing/presets/printer via plain file handoff (STL/STEP now in 163, core mm 3MF + Windows file-association open in planned 165); REJECTED sub-options: embedding/forking (AGPL + wxWidgets), printer MQTT/FTP control (off-contract Developer Mode, access-code custody, physical risk), cloud APIs, `bambustudio://` schemes (domain allowlist), Bambu settings metadata in 3MF; slicer CLI PARKED (non-deterministic, profile drift) |
+| REF-080 | Aurelius personal organization project | academic planning interoperability | CONCEPT | B | PARKED | founder reports prior university planning use, but current repository/API/ownership is inaccessible in the bounded audit. Reuse Development Roadmap UI/time-zone patterns only after observing the real routine; preserve one personal source of truth. [Feasibility note](implementation/personal-operations-aurelius-feasibility-2026-10-15.md). No implementation authority. |
+| REF-081 | Vercel agent skills, Microsoft Playwright CLI, Anthropic Skill Creator and community CAD skills | Relay development harness | CODE-FIRST | B | PROMOTED | [Pinned six-source audit](agent-skills/AUDIT.md) selected two small, explicitly invoked repo-owned Relay skills; direct installer/global setup and broad CAD skill were declined. Product Hermes remains outside this adoption. |
 
 ---
 
