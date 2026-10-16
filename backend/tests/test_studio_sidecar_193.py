@@ -388,3 +388,22 @@ def test_auto_route_on_studio_surface_never_calls_external_provider(client, monk
     assert job["adapter_invoked"] == 0 and job["execution_class"] == "none"
     assert job["external_dispatch_state"] == "not_applicable"
     assert _studio_rows()[0] == 0
+
+
+def test_studio_tool_schema_spells_out_every_contract_field(client):
+    # Constrained local decoding turns an untyped object into "{}", so every field must be declared.
+    from app.modules.agents.hermes.broker_mcp import _STUDIO_ACT_TOOL
+    from app.modules.studio.geometry import GeometryCreate
+    from app.modules.studio.models import StudioCreate, Variable
+    from app.modules.studio.unit_checks import CULTURE_FIELDS
+    from app.modules.studio.unit_models import Port, StudioUnitCreate
+
+    item = _STUDIO_ACT_TOOL["inputSchema"]["properties"]["actions"]["items"]["properties"]
+    contract = item["contract"]["properties"]
+    identity = {"name", "engineering_question", "category", "symbol"}
+    for model in (StudioCreate, GeometryCreate, StudioUnitCreate):
+        assert set(model.model_fields) - identity <= set(contract)
+    assert set(contract["inputs"]["items"]["properties"]) == set(Variable.model_fields)
+    assert set(contract["inlets"]["items"]["properties"]) == set(Port.model_fields)
+    assert tuple(contract["culture_generation"]["items"]["enum"]) == CULTURE_FIELDS
+    assert submit(action(contract={"inputs": [INPUT], "outputs": [OUTPUT]})).state == "proposed"

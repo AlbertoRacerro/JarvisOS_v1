@@ -160,8 +160,9 @@ def test_mcp_protocol_discloses_only_broker_tool() -> None:
     assert initialized is not None and initialized["result"]["serverInfo"]["name"] == "jarvis"
     assert listed is not None and [tool["name"] for tool in listed["result"]["tools"]] == [
         "jarvis_context_preview", "jarvis_retrieval_query", "jarvis_decide",
-        "jarvis_process_read", "jarvis_process_act", "jarvis_bluecad_read", "jarvis_bluecad_act"]
-    for name in ("jarvis_process_read", "jarvis_bluecad_read"):
+        "jarvis_process_read", "jarvis_process_act", "jarvis_bluecad_read", "jarvis_bluecad_act",
+        "jarvis_studio_read", "jarvis_studio_act"]
+    for name in ("jarvis_process_read", "jarvis_bluecad_read", "jarvis_studio_read"):
         schema = next(tool["inputSchema"] for tool in _TOOLS if tool["name"] == name)
         assert schema["required"] == ["grant_id"]
         assert set(schema["properties"]) == {"grant_id"}
