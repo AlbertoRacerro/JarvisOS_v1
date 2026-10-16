@@ -131,8 +131,9 @@ def _studio_brief(workspace_id: str, ref: SurfaceRef) -> SurfaceBrief:
         snippet = (source[:2500] if not safe_source or safe_source[0] != "S4" else "[source omitted: secret-like content]")
         if len(source) > 2500:
             snippet += "\n[truncated; ask operator to edit large source in Studio]"
-        text += (f"Selected draft id={model['id']} category={model['category']} source_sha256={model['source_sha256']} "
-                 f"contract_sha256={model['contract_sha256']}.\nContract: {_canonical(contract)[:1800]}\n"
+        # Only the proposal revision is shown: a model shown raw content hashes echoes them as base_revision.
+        text += (f"Selected draft id={model['id']} category={model['category']} base_revision={revision} "
+                 f"(copy exactly into jarvis_studio_act).\nContract: {_canonical(contract)[:1800]}\n"
                  f"Source: {snippet}\n")
         selected = [{"kind": "studio_model", "id": model["id"], "category": model["category"],
                      "name": model["name"]}]

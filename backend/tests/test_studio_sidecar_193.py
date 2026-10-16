@@ -79,6 +79,9 @@ def test_update_cas_and_test_evidence_invalidation(client):
         connection.commit()
     selected = service.surface_brief("bluerev", SurfaceRef(route_id="design-studio", studio_model_id=model_id))
     assert selected.base_revision and selected.draft_id == model_id
+    # The model sees the exact revision to echo, never a content hash it could mistake for one.
+    assert f"base_revision={selected.base_revision}" in selected.text
+    assert model["source_sha256"] not in selected.text and model["contract_sha256"] not in selected.text
     changed_source = SOURCE.replace("* 3", "* 4")
     update = action(source=changed_source, mode="update")
     proposed = submit(update, revision=selected.base_revision, draft_id=model_id, interaction="update")
