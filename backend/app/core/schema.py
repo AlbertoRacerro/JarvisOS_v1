@@ -20,8 +20,8 @@ SCHEMA_MODEL_INPUT_CONTRACT_MIGRATION_ID = "0012_model_input_contract"
 SCHEMA_MODEL_INPUT_CONTRACT_MIGRATION_NAME = "Model-version input contracts and scenario DOF metadata"
 SCHEMA_FRESHNESS_INVALIDATION_MIGRATION_ID = "0013_freshness_invalidation"
 SCHEMA_FRESHNESS_INVALIDATION_MIGRATION_NAME = "Parameter replacement and freshness invalidation overlay"
-CURRENT_SCHEMA_MIGRATION_ID = "0023_workspace_actions"
-CURRENT_SCHEMA_MIGRATION_NAME = "Governed workspace action outcomes"
+CURRENT_SCHEMA_MIGRATION_ID = "0024_bluecad_studio_visual_references"
+CURRENT_SCHEMA_MIGRATION_NAME = "BLUECAD Studio visual references"
 
 SCHEMA_MIGRATION_RECORDS = [
     {
