@@ -6,8 +6,8 @@ import re
 import sqlite3
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import FileResponse, Response
 
 from app.core.database import open_sqlite_connection
 from app.core.paths import build_paths
@@ -29,11 +29,71 @@ from app.modules.bluecad.ledger import archive_candidate, get_candidate, list_ca
 from app.modules.bluecad.loop import _external_blocked_reason, create_bluecad_candidate
 from app.modules.bluecad.models import BluecadCandidateCreate, BluecadCandidateRead
 from app.modules.bluecad.read_model import BluecadCandidateAggregateRead, get_bluecad_candidate_aggregate
+from app.modules.bluecad.studio_references import (
+    ReferenceCreate,
+    ReferenceError,
+    ReferenceMove,
+    add_reference,
+    list_references,
+    move_reference,
+    reference_glb,
+    remove_reference,
+)
 from app.modules.bluecad.template import BluecadTemplateCreate, TemplateError, create_template_candidate
 from app.modules.modeling.models import DecisionCreate
 from app.modules.modeling.service import create_decision
 
 router = APIRouter(prefix="/workspaces/{workspace_id}/bluecad", tags=["bluecad"])
+
+
+def _reference_error(exc: ReferenceError) -> HTTPException:
+    return HTTPException(status_code=exc.status_code, detail={"code": exc.code, "message": exc.message})
+
+
+@router.get("/candidates/{candidate_id}/studio-references")
+def list_studio_references_endpoint(workspace_id: str, candidate_id: str) -> list[dict]:
+    try:
+        return list_references(workspace_id, candidate_id)
+    except ReferenceError as exc:
+        raise _reference_error(exc) from exc
+
+
+@router.post("/candidates/{candidate_id}/studio-references", status_code=201)
+def add_studio_reference_endpoint(workspace_id: str, candidate_id: str, data: ReferenceCreate) -> dict:
+    try:
+        return add_reference(workspace_id, candidate_id, data)
+    except ReferenceError as exc:
+        raise _reference_error(exc) from exc
+
+
+@router.put("/candidates/{candidate_id}/studio-references/{reference_id}")
+def move_studio_reference_endpoint(workspace_id: str, candidate_id: str, reference_id: str,
+                                   data: ReferenceMove) -> dict:
+    try:
+        return move_reference(workspace_id, candidate_id, reference_id, data)
+    except ReferenceError as exc:
+        raise _reference_error(exc) from exc
+
+
+@router.get("/candidates/{candidate_id}/studio-references/{reference_id}/model.glb")
+def studio_reference_glb_endpoint(workspace_id: str, candidate_id: str, reference_id: str) -> Response:
+    try:
+        data = reference_glb(workspace_id, candidate_id, reference_id)
+    except ReferenceError as exc:
+        raise _reference_error(exc) from exc
+    # Untrusted geometry bytes: fixed type, never sniffed (as the Studio artifact route).
+    return Response(data, media_type="model/gltf-binary",
+                    headers={"X-Content-Type-Options": "nosniff", "Cache-Control": "no-store",
+                             "Content-Disposition": 'inline; filename="model.glb"'})
+
+
+@router.delete("/candidates/{candidate_id}/studio-references/{reference_id}", status_code=204, response_model=None)
+def remove_studio_reference_endpoint(workspace_id: str, candidate_id: str, reference_id: str,
+                                     expected_revision: int = Query(ge=1)) -> None:
+    try:
+        remove_reference(workspace_id, candidate_id, reference_id, expected_revision)
+    except ReferenceError as exc:
+        raise _reference_error(exc) from exc
 
 _EXPORT_MEDIA_TYPES = {"bluecad_stl": ("model/stl", ".stl"), "bluecad_step": ("model/step", ".step")}
 _CANDIDATE_SOURCE_REF = re.compile(r"^bluecad_candidate:([0-9a-f-]{36}):attempt:(\d+)$")

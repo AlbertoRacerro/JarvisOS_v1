@@ -33,6 +33,11 @@ export type GeometryInspectionCommand = Readonly<{
 
 type BluecadGlbViewerProps = {
   artifactUrl: string;
+  references?: readonly {
+    id: string; url: string;
+    translation_mm: readonly [number, number, number];
+    rotation_deg: readonly [number, number, number];
+  }[];
   inspectionCommand?: GeometryInspectionCommand | null;
   onInspectionChange?(snapshot: GeometryInspectionSnapshot): void;
 };
@@ -114,7 +119,10 @@ function meshFact(mesh: THREE.Mesh, ordinal: number, sessionKey: string): Geomet
   };
 }
 
-function BluecadGlbViewer({ artifactUrl, inspectionCommand = null, onInspectionChange }: BluecadGlbViewerProps) {
+const MM_TO_GLTF_METRES = 0.001;
+
+function BluecadGlbViewer({ artifactUrl, references = [], inspectionCommand = null, onInspectionChange }: BluecadGlbViewerProps) {
+  const referenceSignature = JSON.stringify(references);
   const mountRef = useRef<HTMLDivElement | null>(null);
   const [message, setMessage] = useState("Loading GLB artifact…");
   const generationRef = useRef(0);
@@ -183,6 +191,8 @@ function BluecadGlbViewer({ artifactUrl, inspectionCommand = null, onInspectionC
 
     let disposed = false;
     let loadedScene: THREE.Object3D | null = null;
+    const loadedReferences: THREE.Object3D[] = [];
+    let refit: (() => void) | null = null;
     let meshFacts: GeometryInspectionMesh[] = [];
     const meshByKey = new Map<string, THREE.Mesh>();
     const keyByMesh = new Map<THREE.Mesh, string>();
@@ -232,21 +242,55 @@ function BluecadGlbViewer({ artifactUrl, inspectionCommand = null, onInspectionC
           keyByMesh.set(object, fact.meshKey);
           factByKey.set(fact.meshKey, fact);
         });
+        for (const reference of references) {
+          // Studio/build123d coordinates are millimetres and Z-up. glTF uses Y-up.
+          loader.load(reference.url, (asset) => {
+            if (disposed || generationRef.current !== generation) {
+              disposeOwnedScene(asset.scene);
+              return;
+            }
+            const [x, y, z] = reference.translation_mm;
+            asset.scene.position.set(x, z, -y).multiplyScalar(MM_TO_GLTF_METRES);
+            const [rx, ry, rz] = reference.rotation_deg.map(THREE.MathUtils.degToRad);
+            const cadRotation = new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz, "XYZ"));
+            const toGltf = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
+            asset.scene.quaternion.copy(toGltf).multiply(cadRotation).multiply(toGltf.clone().invert());
+            scene.add(asset.scene);
+            loadedReferences.push(asset.scene);
+            asset.scene.updateMatrixWorld(true);
+            let localOrdinal = 0;
+            asset.scene.traverse((object) => {
+              if (!(object instanceof THREE.Mesh)) return;
+              ordinal += 1;
+              localOrdinal += 1;
+              object.name = `Studio reference ${reference.id.slice(0, 8)} · ${object.name || `mesh ${ordinal}`}`;
+              const fact = { ...meshFact(object, ordinal, currentSessionKey!), meshKey: `studio-${reference.id}-mesh-${localOrdinal}` };
+              meshFacts.push(fact);
+              meshByKey.set(fact.meshKey, object);
+              keyByMesh.set(object, fact.meshKey);
+              factByKey.set(fact.meshKey, fact);
+            });
+            refit?.();
+            emitReady();
+          }, undefined, () => {
+            if (!disposed && generationRef.current === generation) setMessage(`Studio reference ${reference.id.slice(0, 8)} could not be loaded; refresh its provenance.`);
+          });
+        }
         selectedFact = null;
         selectCurrentMeshRef.current = selectMesh;
 
-        const box = new THREE.Box3().setFromObject(gltf.scene);
-        const center = box.getCenter(new THREE.Vector3());
-        const size = box.getSize(new THREE.Vector3());
-        const maxDim = Math.max(size.x, size.y, size.z, Number.EPSILON);
-        // Scale the floor grid to the model and rest it just under the geometry.
-        grid.scale.setScalar((maxDim * 3) / 220);
-        grid.position.set(center.x, box.min.y - maxDim * 0.02, center.z);
-        camera.near = maxDim / 1000;
-        camera.far = maxDim * 100;
-        const radius = size.length() / 2 || maxDim;
         const setView = (view: ViewerViewName) => {
           if (disposed) return;
+          const box = new THREE.Box3().setFromObject(gltf.scene);
+          for (const reference of loadedReferences) box.expandByObject(reference);
+          const center = box.getCenter(new THREE.Vector3());
+          const size = box.getSize(new THREE.Vector3());
+          const maxDim = Math.max(size.x, size.y, size.z, Number.EPSILON);
+          grid.scale.setScalar((maxDim * 3) / 220);
+          grid.position.set(center.x, box.min.y - maxDim * 0.02, center.z);
+          camera.near = maxDim / 1000;
+          camera.far = maxDim * 100;
+          const radius = size.length() / 2 || maxDim;
           const offset = view === "fit"
             ? camera.position.clone().sub(controls.target)
             : new THREE.Vector3(...VIEW_DIRECTIONS[view]);
@@ -259,6 +303,7 @@ function BluecadGlbViewer({ artifactUrl, inspectionCommand = null, onInspectionC
           camera.updateProjectionMatrix();
           controls.update();
         };
+        refit = () => setView("fit");
         setView("iso");
         setViewRef.current = setView;
         setViewReady(true);
@@ -347,6 +392,10 @@ function BluecadGlbViewer({ artifactUrl, inspectionCommand = null, onInspectionC
         disposeOwnedScene(loadedScene);
         loadedScene = null;
       }
+      for (const reference of loadedReferences) {
+        scene.remove(reference);
+        disposeOwnedScene(reference);
+      }
       scene.remove(grid);
       grid.geometry.dispose();
       const gridMaterials = Array.isArray(grid.material) ? grid.material : [grid.material];
@@ -355,7 +404,7 @@ function BluecadGlbViewer({ artifactUrl, inspectionCommand = null, onInspectionC
       renderer.dispose();
       if (renderer.domElement.parentNode === mount) mount.removeChild(renderer.domElement);
     };
-  }, [artifactUrl]);
+  }, [artifactUrl, referenceSignature]);
 
   return (
     <div className="bluecad-viewer-shell">

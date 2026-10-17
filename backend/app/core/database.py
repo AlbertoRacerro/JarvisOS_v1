@@ -9,6 +9,11 @@ from app.core.ai_thread_schema import (
     AI_THREAD_SCHEMA_MIGRATION_RECORD,
     AI_THREAD_SCHEMA_STATEMENTS,
 )
+from app.core.bluecad_studio_schema import (
+    BLUECAD_STUDIO_SCHEMA_INDEX_STATEMENTS,
+    BLUECAD_STUDIO_SCHEMA_MIGRATION_RECORD,
+    BLUECAD_STUDIO_SCHEMA_STATEMENTS,
+)
 from app.core.brainstorm_schema import (
     BRAINSTORM_SCHEMA_INDEX_STATEMENTS,
     BRAINSTORM_SCHEMA_MIGRATION_RECORD,
@@ -159,6 +164,8 @@ def initialize_database() -> DatabaseInfo:
             connection.execute(statement)
         for statement in CAD_LINK_SCHEMA_STATEMENTS:
             connection.execute(statement)
+        for statement in BLUECAD_STUDIO_SCHEMA_STATEMENTS:
+            connection.execute(statement)
         for statement in SENSITIVITY_SCHEMA_STATEMENTS:
             connection.execute(statement)
         for statement in EGRESS_SCHEMA_STATEMENTS:
@@ -200,6 +207,8 @@ def initialize_database() -> DatabaseInfo:
         for statement in SCHEMA_INDEX_STATEMENTS:
             connection.execute(statement)
         for statement in CAD_LINK_SCHEMA_INDEX_STATEMENTS:
+            connection.execute(statement)
+        for statement in BLUECAD_STUDIO_SCHEMA_INDEX_STATEMENTS:
             connection.execute(statement)
         for statement in SENSITIVITY_SCHEMA_INDEX_STATEMENTS:
             connection.execute(statement)
@@ -298,6 +307,7 @@ def is_database_initialized() -> bool:
         "brainstorm_promotions",
         "brainstorm_idempotency",
         "workspace_actions",
+        "bluecad_studio_references",
         "ai_thread_surface_context",
     }
     with open_sqlite_connection() as connection:
@@ -384,6 +394,7 @@ def _record_schema_migrations(connection: sqlite3.Connection) -> None:
         CLOUD_ESCALATION_MIGRATION_RECORD,
         RELAY_GATEWAY_MIGRATION_RECORD,
         WORKSPACE_ACTIONS_MIGRATION_RECORD,
+        BLUECAD_STUDIO_SCHEMA_MIGRATION_RECORD,
     ]
     for record in records:
         connection.execute(
