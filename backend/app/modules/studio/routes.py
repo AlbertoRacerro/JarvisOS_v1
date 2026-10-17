@@ -3,7 +3,7 @@
 import hashlib
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 
 from app.core.database import open_sqlite_connection
@@ -104,15 +104,19 @@ def geometry_preview(workspace_id: str, model_spec_id: str, preview_id: str, nam
 
 
 @router.get("/workspaces/{workspace_id}/studio/geometry-runs/{simulation_run_id}/{name}")
-def geometry_run_artifact(workspace_id: str, simulation_run_id: str, name: str) -> FileResponse:
-    """A registered artifact of a geometry generation, re-verified against its recorded hash."""
+def geometry_run_artifact(workspace_id: str, simulation_run_id: str, name: str,
+                          sha256: str | None = Query(default=None, pattern="^[0-9a-f]{64}$")) -> FileResponse:
+    """A registered artifact of a geometry generation, re-verified against its recorded hash.
+
+    ``sha256`` lets a pinned consumer (a BLUECAD reference) require the exact bytes it pinned."""
     with open_sqlite_connection() as connection:
         row = connection.execute("""SELECT stored_path, sha256 FROM artifacts WHERE workspace_id = ? AND source_ref = ?
             AND filename = ? AND artifact_type = 'studio_geometry'""",
                                  (workspace_id, f"simulation_run:{simulation_run_id}", name)).fetchone()
     path = Path(row["stored_path"]) if row else None
     if (path is None or name not in MEDIA_TYPES or path != run_root(workspace_id, simulation_run_id) / "geometry" / name
-            or path.is_symlink() or not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != row["sha256"]):
+            or path.is_symlink() or not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != row["sha256"]
+            or (sha256 is not None and sha256 != row["sha256"])):
         raise HTTPException(status_code=404, detail={"code": "studio_geometry_artifact_not_found",
                                                      "message": "Geometry artifact not found or invalid."})
     return _untrusted_file(path, name)

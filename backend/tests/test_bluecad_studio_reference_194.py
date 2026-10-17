@@ -87,7 +87,7 @@ def _seed(workspace: str = "bluerev") -> tuple[str, str, dict[str, Path]]:
 def test_pinned_geometry_reference_and_integrity(tmp_path: Path) -> None:
     candidate_id, run_id, paths = _seed()
     created = add_reference("bluerev", candidate_id, ReferenceCreate(simulation_run_id=run_id))
-    assert created["valid"] and created["glb_url"].endswith(f"/{run_id}/model.glb")
+    assert created["valid"] and created["glb_url"].endswith(f"/{run_id}/model.glb?sha256={created['glb_sha256']}")
     assert created["inputs"] == {"radius": {"value": 18, "unit": "mm"}}
     assert created["translation_mm"] == [0, 0, 0]
     with pytest.raises(ReferenceError, match="already referenced"):
@@ -117,6 +117,25 @@ def test_reference_endpoint_rejects_foreign_and_tampered_generation() -> None:
         paths["model.step"].write_bytes(b"changed")
         reference = client.get(base).json()[0]
         assert reference["valid"] is False and reference["glb_url"] is None
+
+
+def test_served_reference_glb_must_match_the_pin() -> None:
+    candidate_id, run_id, paths = _seed()
+    from app.main import create_app
+
+    with TestClient(create_app()) as client:
+        base = f"/workspaces/bluerev/bluecad/candidates/{candidate_id}/studio-references"
+        url = client.post(base, json={"simulation_run_id": run_id}).json()["glb_url"]
+        assert client.get(url).content == b"model.glb"
+        # Replace the bytes and re-register their hash: the generic route would serve them, the pin must not.
+        paths["model.glb"].write_bytes(b"replaced")
+        with open_sqlite_connection() as connection:
+            connection.execute("UPDATE artifacts SET sha256=? WHERE stored_path=?",
+                               (hashlib.sha256(b"replaced").hexdigest(), str(paths["model.glb"])))
+            connection.commit()
+        assert client.get(url).status_code == 404
+        assert client.get(url.split("?")[0]).status_code == 200
+        assert client.get(url.split("?")[0] + "?sha256=nothex").status_code == 422
 
 
 def _second_workspace() -> str:

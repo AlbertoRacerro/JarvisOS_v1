@@ -128,7 +128,7 @@ def _present(connection: sqlite3.Connection, row: sqlite3.Row) -> dict:
         result["valid"] = True
         result["finding"] = None
         result["glb_url"] = (f"/workspaces/{row['workspace_id']}/studio/geometry-runs/"
-                             f"{row['simulation_run_id']}/model.glb")
+                             f"{row['simulation_run_id']}/model.glb?sha256={row['glb_sha256']}")
     except ReferenceError as exc:
         result["valid"] = False
         result["finding"] = exc.message
