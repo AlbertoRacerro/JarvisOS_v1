@@ -475,3 +475,12 @@ def test_secret_like_rationale_is_refused_and_not_stored(client):
         stored = connection.execute("SELECT request_json, outcome_json FROM workspace_actions WHERE id=?",
                                     (outcome.action_id,)).fetchone()
     assert "sk-ant-api03" not in stored["outcome_json"] + stored["request_json"]
+
+
+def test_secret_like_selected_draft_title_never_reaches_brief(client):
+    model_id = _created_draft("secret-title")
+    with open_sqlite_connection() as connection:
+        connection.execute("UPDATE model_specs SET title=? WHERE id=?", (SECRET, model_id))
+        connection.commit()
+    brief = service.surface_brief("bluerev", SurfaceRef(route_id="design-studio", studio_model_id=model_id))
+    assert brief.surface == "none" and "sk-ant-api03" not in brief.model_dump_json()

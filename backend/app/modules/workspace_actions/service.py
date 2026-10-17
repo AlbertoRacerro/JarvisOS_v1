@@ -118,6 +118,9 @@ def _studio_brief(workspace_id: str, ref: SurfaceRef) -> SurfaceBrief:
             return _brief_none(workspace_id, ref, "Selected Studio draft is unavailable in this workspace.")
         if model["status"] != "draft" or model["category"] not in {"calculation", "geometry", "process_unit"}:
             return _brief_none(workspace_id, ref, "Select an open calculation, geometry or process-unit draft.")
+        if _secret_like(model["name"], model["engineering_question"]):
+            # The name also travels in brief.selected and the Hermes read tool response.
+            return _brief_none(workspace_id, ref, "Selected Studio draft contains secret-like content.")
     revision = studio.proposal_revision(model) if model else "new"
     summary = (f"Studio {model['category']} draft: {_safe_surface_label(model['name'], 'model')}"
                if model else "Studio: new calculation, geometry or steady process unit")
