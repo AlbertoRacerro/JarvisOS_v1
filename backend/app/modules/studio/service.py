@@ -39,8 +39,10 @@ UNIT_KIND = "studio_unit_v1"
 
 def proposal_revision(model: dict) -> str:
     """Bind a proposal to the selected Studio draft, including metadata-only edits."""
+    # Title and question live on the canonical model spec, which other owners may edit.
     return "sha256:" + _sha(_json({key: model[key] for key in
-                               ("id", "source_sha256", "contract_sha256", "updated_at")}))
+                               ("id", "name", "engineering_question", "source_sha256", "contract_sha256",
+                                "updated_at")}))
 
 
 def validate_proposed_source(category: str, name: str, question: str, contract: dict,

@@ -102,6 +102,11 @@ def _brief_none(workspace_id: str, ref: SurfaceRef | None, summary: str) -> Surf
     )
 
 
+def _secret_like(*texts: str | None) -> bool:
+    trigger = deterministic_floor_trigger("\n".join(text for text in texts if text))
+    return bool(trigger and trigger[0] == "S4")
+
+
 def _studio_brief(workspace_id: str, ref: SurfaceRef) -> SurfaceBrief:
     from app.modules.studio import service as studio
 
@@ -127,13 +132,16 @@ def _studio_brief(workspace_id: str, ref: SurfaceRef) -> SurfaceBrief:
         contract = {key: model[key] for key in ("inputs", "outputs", "inlets", "outlets", "parameters",
                                                "symbol", "culture_generation") if key in model}
         source = model["source"]
-        safe_source = deterministic_floor_trigger(source)
-        snippet = (source[:2500] if not safe_source or safe_source[0] != "S4" else "[source omitted: secret-like content]")
-        if len(source) > 2500:
-            snippet += "\n[truncated; ask operator to edit large source in Studio]"
+        contract_text = _canonical(contract)
+        if _secret_like(contract_text, source):
+            contract_text, snippet = "[omitted: secret-like content]", "[omitted: secret-like content]"
+        else:
+            snippet = source[:2500]
+            if len(source) > 2500:
+                snippet += "\n[truncated; ask operator to edit large source in Studio]"
         # Only the proposal revision is shown: a model shown raw content hashes echoes them as base_revision.
         text += (f"Selected draft id={model['id']} category={model['category']} base_revision={revision} "
-                 f"(copy exactly into jarvis_studio_act).\nContract: {_canonical(contract)[:1800]}\n"
+                 f"(copy exactly into jarvis_studio_act).\nContract: {contract_text[:1800]}\n"
                  f"Source: {snippet}\n")
         selected = [{"kind": "studio_model", "id": model["id"], "category": model["category"],
                      "name": model["name"]}]
@@ -782,9 +790,9 @@ def _studio_proposal(workspace_id: str, request: ActionRequest, origin: ActionOr
     else:
         old_source = before["source"]
         old_contract = _canonical({key: before[key] for key in contract})
-        if (trigger := deterministic_floor_trigger(old_source)) and trigger[0] == "S4":
+        if _secret_like(before["name"], old_contract, old_source, before["assumptions"]):
             return _outcome(workspace_id, request, origin, "refused", "none", "Studio proposal refused.",
-                            reason="Selected source contains secret-like content.", reason_code="secret_detected")
+                            reason="Selected draft contains secret-like content.", reason_code="secret_detected")
     changes = [ChangeLine(label="Model", before=before["name"] if before else None, after=action.name),
                ChangeLine(label="Contract", before=old_contract, after=_canonical(contract)),
                ChangeLine(label="Source", before=old_source, after=action.source),
@@ -836,9 +844,9 @@ def submit(workspace_id: str, request: ActionRequest, origin: ActionOrigin) -> A
             return previous
     if request.surface == "studio":
         action = request.actions[0]
-        if (trigger := deterministic_floor_trigger(_canonical(action.model_dump(mode="json")))) and trigger[0] == "S4":
+        if _secret_like(_canonical(action.model_dump(mode="json")), request.rationale):
             # Never persist secret-like proposal content, not even inside a refused card.
-            redacted = request.model_copy(update={"actions": [action.model_copy(update={
+            redacted = request.model_copy(update={"rationale": None, "actions": [action.model_copy(update={
                 "name": "[redacted]", "engineering_question": "[redacted]", "contract": {},
                 "source": "# [redacted: secret-like content]\n", "assumptions": ""})]})
             return _store(_outcome(workspace_id, redacted, origin, "refused", "none", "Studio proposal refused.",

@@ -410,3 +410,68 @@ def test_studio_tool_schema_spells_out_every_contract_field(client):
     assert set(contract["inlets"]["items"]["properties"]) == set(Port.model_fields)
     assert tuple(contract["culture_generation"]["items"]["enum"]) == CULTURE_FIELDS
     assert submit(action(contract={"inputs": [INPUT], "outputs": [OUTPUT]})).state == "proposed"
+
+
+SECRET = "api_key = sk-ant-api03-" + "A" * 80
+
+
+def _created_draft(interaction: str) -> str:
+    applied = service.apply("bluerev", submit(action(), interaction=interaction).action_id)
+    assert applied.state == "applied" and applied.draft_id
+    return applied.draft_id
+
+
+def test_canonical_title_edit_makes_pending_update_stale(client):
+    from app.modules.modeling.models import ModelSpecProjectUpdate
+    from app.modules.modeling.project_knowledge_owner import update_model_spec_in_transaction
+
+    model_id = _created_draft("meta-create")
+    brief = service.surface_brief("bluerev", SurfaceRef(route_id="design-studio", studio_model_id=model_id))
+    proposed = submit(action(mode="update", name="Proposal title"), revision=brief.base_revision,
+                      draft_id=model_id, interaction="meta-update")
+    assert proposed.state == "proposed"
+    # Another owner edits only the canonical model spec, not the Studio draft row.
+    with open_sqlite_connection() as connection:
+        spec = connection.execute("SELECT updated_at FROM model_specs WHERE id=?", (model_id,)).fetchone()
+        update_model_spec_in_transaction(connection, model_id, ModelSpecProjectUpdate(
+            workspace_id="bluerev", expected_updated_at=spec["updated_at"], title="Operator title"))
+        connection.commit()
+    response = client.post(f"/workspaces/bluerev/actions/{proposed.action_id}/apply")
+    assert response.status_code == 409, response.text
+    assert client.get(f"/workspaces/bluerev/studio/models/{model_id}").json()["name"] == "Operator title"
+
+
+def test_apply_refuses_cross_site_origin(client):
+    proposed = submit(action(), interaction="origin")
+    refused = client.post(f"/workspaces/bluerev/actions/{proposed.action_id}/apply",
+                          headers={"Origin": "https://attacker.example"})
+    assert refused.status_code == 403
+    assert client.get("/workspaces/bluerev/studio/models").json() == []
+    assert service.get("bluerev", proposed.action_id).state == "proposed"
+
+
+def test_secret_like_selected_draft_never_reaches_brief_or_card(client):
+    model_id = _created_draft("secret-create")
+    with open_sqlite_connection() as connection:
+        contract = json.loads(connection.execute("SELECT contract_json FROM studio_drafts WHERE model_spec_id=?",
+                                                 (model_id,)).fetchone()[0])
+        contract["inputs"][0]["description"] = SECRET
+        connection.execute("UPDATE studio_drafts SET contract_json=?, assumption_notes=? WHERE model_spec_id=?",
+                           (json.dumps(contract), SECRET, model_id))
+        connection.commit()
+    brief = service.surface_brief("bluerev", SurfaceRef(route_id="design-studio", studio_model_id=model_id))
+    assert "sk-ant-api03" not in brief.text
+    outcome = submit(action(mode="update"), revision=brief.base_revision, draft_id=model_id, interaction="secret-upd")
+    assert outcome.state == "refused" and outcome.reason_code == "secret_detected"
+    assert "sk-ant-api03" not in outcome.model_dump_json()
+
+
+def test_secret_like_rationale_is_refused_and_not_stored(client):
+    request = ActionRequest(surface="studio", base_revision="new", actions=[action()], rationale=SECRET)
+    outcome = service.submit("bluerev", request, ActionOrigin(kind="local", thread_id="thread-193",
+                                                               interaction_id="secret-rationale"))
+    assert outcome.state == "refused" and outcome.reason_code == "secret_detected"
+    with open_sqlite_connection() as connection:
+        stored = connection.execute("SELECT request_json, outcome_json FROM workspace_actions WHERE id=?",
+                                    (outcome.action_id,)).fetchone()
+    assert "sk-ant-api03" not in stored["outcome_json"] + stored["request_json"]
