@@ -66,6 +66,7 @@ function App() {
   const [selectedKnowledgeLabel, setSelectedKnowledgeLabel] = useState<string | null>(null);
   const [selectedKnowledgeRef, setSelectedKnowledgeRef] = useState<string | null>(null);
   const [selectedModelVersionId, setSelectedModelVersionId] = useState<string | null>(null);
+  const [studioModelId, setStudioModelId] = useState<string | null>(null);
   const selectKnowledge = useCallback((ref: string | null, label?: string) => {
     setSelectedKnowledgeRef(ref); setSelectedKnowledgeLabel(label ?? null);
   }, []);
@@ -128,6 +129,7 @@ function App() {
     setShellRegions({});
     setShellRegionRequest(null);
     setSelectedModelVersionId(null);
+    setStudioModelId(null);
   }, [route.id]);
 
   useEffect(() => {
@@ -150,7 +152,7 @@ function App() {
     : <>{semanticSelectionContext}<JarvisEngineeringActions controller={engineeringProperties} />{knowledgeActions}</>;
   // 155: pending process proposals stay visible above the composer, not inside the collapsed context.
   const processProposals = route.id === "design-process" && workspaceId ? <ProcessProposals workspaceId={workspaceId} /> : null;
-  const jarvisSidecar = useJarvisSidecar(workspaceId, route.id, selection, jarvisLocalContext, knowledgeContext, processProposals);
+  const jarvisSidecar = useJarvisSidecar(workspaceId, route.id, selection, jarvisLocalContext, knowledgeContext, processProposals, studioModelId);
 
   let content: ReactNode;
   const workspaceRequired = !WORKSPACE_OPTIONAL_ROUTES.has(route.id);
@@ -167,7 +169,7 @@ function App() {
   } else {
     switch (route.id) {
       case "design-studio":
-        content = <Studio workspaceId={workspaceId} navigate={navigate} engineeringProperties={engineeringProperties} />;
+        content = <Studio workspaceId={workspaceId} navigate={navigate} engineeringProperties={engineeringProperties} onModelSelectionChange={setStudioModelId} />;
         break;
       case "memory-project-basis":
         content = <><FinalWorkspaceHeader group="memory" active="project-basis" navigate={navigate} /><FinalOperatorReadSurface kind="project-basis" workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} requestedRecordRef={requestedRecordRef} onRecordSelect={selectKnowledge} jarvis={jarvisSidecar} projectSearch={<ProjectSearchPanel workspaceId={workspaceId} navigate={navigate} />} /></>;
@@ -235,8 +237,6 @@ function App() {
     ...shellRegions,
     sidecar: route.primaryNav === "settings" || route.primaryNav === "coding" || IN_PAGE_JARVIS_ROUTES.has(route.id) || workspaceLoadState !== "ready" || !workspaceId ? undefined : jarvisSidecar,
     ...(route.id === "runs" || route.id === "engineering-data" || route.id === "design-process" ? { dock: <AnalyticsDockContent workspaceId={workspaceId} /> } : {}),
-    // Studio is not a canonical Jarvis context route (spec 188 non-goal: no Sidecar code proposals).
-    ...(route.id === "design-studio" ? { sidecar: undefined } : {})
   };
 
   return <Layout route={route} navigate={navigate} selection={selection} propertiesContent={propertiesContent} shellRegions={effectiveShellRegions} shellRegionRequest={shellRegionRequest}><PageErrorBoundary key={resolved.canonicalPath}>{content}</PageErrorBoundary></Layout>;

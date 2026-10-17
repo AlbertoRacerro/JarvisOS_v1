@@ -52,7 +52,7 @@ export default function StudioUnitInspector({ unit, objects, status, provenance,
         <div><dt>Contract SHA-256</dt><dd title={pin.contract_sha256}>{pin.contract_sha256.slice(0, 12)}</dd></div>
       </dl>
       <div className="draft-studio-actions">
-        {href ? (navigate ? <AppLink href={href} navigate={navigate} className="draft-studio-inspect">Inspect</AppLink> : <a href={href} className="draft-studio-inspect">Inspect</a>) : null}
+        {href ? (navigate ? <AppLink href={href} navigate={navigate} className="draft-studio-inspect">Open model in Studio</AppLink> : <a href={href} className="draft-studio-inspect">Open model in Studio</a>) : null}
         {update ? <button type="button" data-testid="studio-update" onClick={() => void apply([update])}>Update to v{status?.latest_version_number}</button> : null}
       </div>
       {update ? <p className="draft-hint" role="status">v{status?.latest_version_number} of {studio.name} is published. This unit stays on {studio.version_label} until you update it.</p> : null}

@@ -12,6 +12,7 @@ from app.modules.modeling.models import (
     AssumptionProjectUpdate,
     DecisionCreate,
     DecisionProjectUpdate,
+    ModelSpecCreate,
     ModelSpecProjectUpdate,
     RequirementCreate,
     RequirementProjectUpdate,
@@ -300,6 +301,52 @@ def update_assumption_in_transaction(
         expected_updated_at=payload.expected_updated_at,
         updates=updates,
     )
+
+
+def create_model_spec_in_transaction(
+    connection: sqlite3.Connection,
+    workspace_id: str,
+    payload: ModelSpecCreate,
+    *,
+    actor: str = "local-user",
+    event_payload: dict[str, object] | None = None,
+) -> sqlite3.Row:
+    record_id = str(uuid4())
+    now = utc_now()
+    connection.execute(
+        """
+        INSERT INTO model_specs (
+            id, workspace_id, title, engineering_question, scope, status,
+            maturity_status, assumptions_summary, inputs_summary, outputs_summary,
+            raw_payload, schema_version, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+        """,
+        (
+            record_id,
+            workspace_id,
+            payload.title,
+            payload.engineering_question,
+            payload.scope,
+            payload.status,
+            payload.maturity_status,
+            payload.assumptions_summary,
+            payload.inputs_summary,
+            payload.outputs_summary,
+            payload.raw_payload,
+            now,
+            now,
+        ),
+    )
+    log_event(
+        connection,
+        event_type="ModelSpecCreated",
+        actor=actor,
+        target_type="ModelSpec",
+        target_id=record_id,
+        workspace_id=workspace_id,
+        payload={"title": payload.title, **(event_payload or {})},
+    )
+    return _row(connection, "model_specs", workspace_id, record_id)
 
 
 def update_model_spec_in_transaction(

@@ -33,7 +33,7 @@ from app.core.paths import relay_root
 from app.modules.ai import sensitivity
 from app.modules.ai.cloud_escalation import screen_outbound_text, text_digest
 from app.modules.ai.egress_sanitizer import resolve_approved_prompt_derivative
-from app.modules.ai.sensitivity import revalidate_sanitized_derivative
+from app.modules.ai.sensitivity import deterministic_floor_trigger, revalidate_sanitized_derivative
 from app.modules.events.service import utc_now
 from app.modules.relay_gateway import sandbox
 from app.modules.workspace_actions import service as workspace_actions
@@ -46,10 +46,10 @@ CLOUD_READABLE_LEVELS = frozenset({"S0", "S1"})
 _ACTION_BLOCK_OPEN = "```jarvis-actions"
 _ACTION_BLOCK_RE = re.compile(r"(?m)^```jarvis-actions\n(.*?)\n```[ \t]*$", re.DOTALL)
 _ACTION_CONTEXT_RE = re.compile(
-    r"(?m)^Jarvis action target: surface=(process|bluecad); base_revision=([^\s;]{1,64})$"
+    r"(?m)^Jarvis action target: surface=(process|bluecad|studio); base_revision=([^\s;]{1,128})$"
 )
 _ACTION_FAILURE_TEXT = "Relay suggested a change Jarvis could not validate; nothing was proposed."
-_ACTION_BLOCK_MAX_BYTES = 16 * 1024
+_ACTION_BLOCK_MAX_BYTES = 96 * 1024
 MASKED_WORKSPACE_PATHS = (".agent-relay",)
 # Command-line-scope git config for every host-side git run in an agent workspace (Relay's and
 # Jarvis's): it outranks repository config, so a planted fsmonitor or hooks path never executes.
@@ -533,7 +533,7 @@ def draft_relay_escalation(workspace_id: str, thread_id: str, interaction_id: st
             "Never claim the change was applied. If unsupported, say so and include no block."
         )
         target = (f"Jarvis action target: surface={brief.surface}; base_revision={brief.base_revision}\n"
-                  if brief.surface in {"process", "bluecad"} and brief.base_revision else "")
+                  if brief.surface in {"process", "bluecad", "studio"} and brief.base_revision else "")
         action_instruction = (instruction if target else
                               "Answer normally. This route has no supported workspace actions; "
                               "do not include an action block.")
@@ -798,6 +798,9 @@ def _ingest_relay_actions(text: str, *, workspace_id: str, thread_id: str, run_i
         end = opening.end() + closing.end() if closing else len(text)
         raw_blocks.append(text[opening.start():end])
     technical = "\n\n".join(raw_blocks)[:_ACTION_BLOCK_MAX_BYTES]
+    secret_like = deterministic_floor_trigger(technical)
+    if secret_like and secret_like[0] == "S4":
+        technical = "[Action block redacted: secret-like content.]"
     prose = text
     for opening, raw in reversed(list(zip(openings, raw_blocks, strict=True))):
         raw_start = opening.start()
@@ -807,7 +810,7 @@ def _ingest_relay_actions(text: str, *, workspace_id: str, thread_id: str, run_i
         prose = prose[:raw_start] + prose[opening.start() + len(raw):]
     prose = prose.strip()
 
-    invalid_reason = len(openings) != 1 or len(strict_blocks) != 1
+    invalid_reason = bool(secret_like and secret_like[0] == "S4") or len(openings) != 1 or len(strict_blocks) != 1
     request: ActionRequest | None = None
     if not invalid_reason:
         block = strict_blocks[0]

@@ -13,7 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 _STRICT = ConfigDict(extra="forbid", allow_inf_nan=False)
 Tag = Annotated[str, Field(min_length=1, max_length=64)]
-Surface = Literal["process", "bluecad"]
+Surface = Literal["process", "bluecad", "studio"]
 
 
 # ---------------------------------------------------------------- surface context
@@ -33,13 +33,14 @@ class SurfaceRef(BaseModel):
     process_selection: list[ProcessSelection] = Field(default_factory=list, max_length=8)
     candidate_id: str | None = Field(default=None, max_length=64)
     bluecad_part_ids: list[str] = Field(default_factory=list, max_length=8)
+    studio_model_id: str | None = Field(default=None, max_length=64)
 
 
 class SurfaceBrief(BaseModel):
     """Bounded, owner-derived context for one turn. ``text`` is what a model sees."""
 
     model_config = _STRICT
-    surface: Literal["process", "bluecad", "none"]
+    surface: Literal["process", "bluecad", "studio", "none"]
     route_id: str
     workspace_id: str
     base_revision: str | None = None  # draft revision, or candidate id for BLUECAD
@@ -185,22 +186,45 @@ class DeletePart(BaseModel):
 BluecadAction = Annotated[DuplicatePart | SetPartParam | MovePart | DeletePart, Field(discriminator="op")]
 
 
+class StudioDraftAction(BaseModel):
+    """Inert source and contract; only explicit Apply may write a Studio draft."""
+
+    model_config = _STRICT
+    op: Literal["studio_draft"]
+    mode: Literal["create", "update"]
+    category: Literal["calculation", "geometry", "process_unit"]
+    name: str = Field(min_length=1, max_length=160)
+    engineering_question: str = Field(min_length=1, max_length=2000)
+    contract: dict[str, Any]
+    source: str = Field(min_length=1, max_length=65536)
+    assumptions: str = Field(default="", max_length=20000)
+
+
 # ---------------------------------------------------------------- requests and outcomes
 class ActionRequest(BaseModel):
     """One atomic request: all actions apply together at ``base_revision`` or none do."""
 
     model_config = _STRICT
     surface: Surface
-    base_revision: str = Field(min_length=1, max_length=64)  # draft revision or candidate id
+    base_revision: str = Field(min_length=1, max_length=128)  # draft revision or candidate id
     draft_id: str | None = Field(default=None, max_length=64)  # disambiguates identical revision hashes
-    actions: list[ProcessAction | BluecadAction] = Field(min_length=1, max_length=8)
+    actions: list[ProcessAction | BluecadAction | StudioDraftAction] = Field(min_length=1, max_length=8)
     rationale: str | None = Field(default=None, max_length=600)
 
     @model_validator(mode="after")
     def actions_match_surface(self) -> ActionRequest:
         bluecad_ops = {"duplicate_part", "set_part_param", "move_part", "delete_part"}
+        if self.surface == "studio":
+            if len(self.actions) != 1 or not isinstance(self.actions[0], StudioDraftAction):
+                raise ValueError("A Studio proposal contains exactly one studio_draft action.")
+            action = self.actions[0]
+            if (action.mode == "create") != (self.base_revision == "new" and self.draft_id is None):
+                raise ValueError("Studio create needs base_revision=new; update needs a selected draft.")
+            if action.mode == "update" and not self.draft_id:
+                raise ValueError("Studio update needs draft_id.")
+            return self
         expected_bluecad = self.surface == "bluecad"
-        if any((action.op in bluecad_ops) != expected_bluecad for action in self.actions):
+        if any((action.op in bluecad_ops) != expected_bluecad or action.op == "studio_draft" for action in self.actions):
             raise ValueError(f"All actions must match the {self.surface} surface.")
         return self
 

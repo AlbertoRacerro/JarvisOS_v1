@@ -1,5 +1,6 @@
 """Draft authoring and immutable publication for Studio calculations."""
 
+import ast
 import hashlib
 import json
 from math import isfinite
@@ -9,9 +10,12 @@ from uuid import uuid4
 from pydantic import ValidationError
 
 from app.core.database import open_sqlite_connection
-from app.modules.events.service import utc_now
+from app.modules.events.service import log_event, utc_now
 from app.modules.modeling.models import ModelSpecCreate, ModelSpecProjectUpdate
-from app.modules.modeling.project_knowledge_owner import update_model_spec_in_transaction
+from app.modules.modeling.project_knowledge_owner import (
+    create_model_spec_in_transaction,
+    update_model_spec_in_transaction,
+)
 from app.modules.modeling.service import create_model_spec
 from app.modules.process_kernel.units import parse_unit_token, resolve_unit, unit_registry
 from app.modules.runner.input_contracts import canonicalize_input_contract
@@ -31,6 +35,97 @@ from app.modules.studio.unit_models import (
 from app.modules.studio_runtime.runtime import RunRequest, run, status
 
 UNIT_KIND = "studio_unit_v1"
+
+
+def proposal_revision(model: dict) -> str:
+    """Bind a proposal to the selected Studio draft, including metadata-only edits."""
+    # Title and question live on the canonical model spec, which other owners may edit.
+    return "sha256:" + _sha(_json({key: model[key] for key in
+                               ("id", "name", "engineering_question", "source_sha256", "contract_sha256",
+                                "updated_at")}))
+
+
+def validate_proposed_source(category: str, name: str, question: str, contract: dict,
+                             source: str) -> dict:
+    """Validate inert proposal data against the existing category contracts."""
+    if not isinstance(contract, dict) or {"name", "engineering_question", "category"} & set(contract):
+        # Identity and category come from the typed action, never from the free-form contract.
+        raise StudioError("studio_category_mismatch", "The proposed contract may not restate name or category.")
+    if category == "calculation":
+        validated = StudioCreate.model_validate({"name": name, "engineering_question": question, **contract})
+        normalized, _ = _contract(validated)
+        _input_contract(normalized)
+    elif category == "geometry":
+        shape = GeometryCreate.model_validate({"category": category, "name": name,
+                                               "engineering_question": question, **contract})
+        normalized = geometry.geometry_contract(shape)
+        _input_contract(normalized)
+    elif category == "process_unit":
+        unit = StudioUnitCreate.model_validate({"category": category, "name": name,
+                                                "engineering_question": question, **contract})
+        normalized = unit_contract(unit)
+    else:
+        raise StudioError("studio_category_mismatch", "Only executable Studio categories may be proposed.")
+    if len(source) > 65536 or "\x00" in source:
+        raise StudioError("studio_source_invalid", "Proposed Python source is invalid or too large.")
+    try:
+        tree = ast.parse(source)
+    except (SyntaxError, ValueError, RecursionError) as exc:
+        raise StudioError("studio_source_invalid", "Proposed Python source has invalid syntax.") from exc
+    if not any(isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == "main"
+               for node in tree.body):
+        raise StudioError("studio_source_invalid", "Proposed Python source must define main.")
+    return normalized
+
+
+def apply_proposal(workspace_id: str, *, model_spec_id: str | None, base_revision: str,
+                   category: str, name: str, engineering_question: str, contract: dict,
+                   source: str, assumptions: str, actor: str, request_digest: str) -> dict:
+    """One explicit, transactional Studio draft mutation; never runs model code."""
+    normalized = validate_proposed_source(category, name, engineering_question, contract, source)
+    contract_json, source_sha = _json(normalized), _sha(source)
+    contract_sha, now = _sha(contract_json), utc_now()
+    with open_sqlite_connection() as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        _require_workspace(connection, workspace_id)
+        if model_spec_id is None:
+            if base_revision != "new":
+                raise StudioError("studio_proposal_stale", "Create proposal is stale.", status=409)
+            model_spec_id = create_model_spec_in_transaction(
+                connection, workspace_id,
+                ModelSpecCreate(title=name, engineering_question=engineering_question,
+                                assumptions_summary=assumptions or None),
+                actor=actor, event_payload={"action_request_digest": request_digest})["id"]
+            connection.execute("""INSERT INTO studio_drafts
+                (model_spec_id,workspace_id,contract_json,source,source_sha256,contract_sha256,
+                 assumption_notes,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)""",
+                (model_spec_id, workspace_id, contract_json, source, source_sha, contract_sha,
+                 assumptions, now, now))
+        else:
+            try:
+                row = _draft_row(connection, workspace_id, model_spec_id)
+            except StudioError as exc:
+                raise StudioError("studio_proposal_stale", "Selected draft is unavailable.", status=409) from exc
+            current = _read(connection, workspace_id, model_spec_id)
+            if (row["model_status"] != "draft" or proposal_revision(current) != base_revision
+                    or _category(json.loads(row["contract_json"])) != category):
+                raise StudioError("studio_proposal_stale", "Selected draft changed; request a fresh proposal.", status=409)
+            spec_row = connection.execute("SELECT updated_at FROM model_specs WHERE id=? AND workspace_id=?",
+                                          (model_spec_id, workspace_id)).fetchone()
+            update_model_spec_in_transaction(connection, model_spec_id, ModelSpecProjectUpdate(
+                workspace_id=workspace_id, expected_updated_at=spec_row["updated_at"], title=name,
+                engineering_question=engineering_question))
+            changed = source_sha != row["source_sha256"] or contract_sha != row["contract_sha256"]
+            connection.execute("""UPDATE studio_drafts SET contract_json=?,source=?,source_sha256=?,
+                contract_sha256=?,assumption_notes=?,test_report_json=?,updated_at=?
+                WHERE model_spec_id=? AND workspace_id=?""",
+                (contract_json, source, source_sha, contract_sha, assumptions,
+                 None if changed else row["test_report_json"], now, model_spec_id, workspace_id))
+            log_event(connection, event_type="StudioDraftUpdated", actor=actor, target_type="ModelSpec",
+                      target_id=model_spec_id, workspace_id=workspace_id,
+                      payload={"action_request_digest": request_digest})
+        connection.commit()
+        return _read(connection, workspace_id, model_spec_id)
 
 
 def _json(value: object) -> str:

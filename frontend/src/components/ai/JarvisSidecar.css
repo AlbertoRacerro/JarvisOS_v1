@@ -336,3 +336,4 @@
   .jarvis-sidecar .jarvis-sidecar__header button.jarvis-icon-button--new-conversation { width: 30px; justify-content: center; padding-inline: 4px; }
   .jarvis-icon-button--new-conversation span { display: none; }
 }
+.jarvis-studio-proposal{display:grid;gap:.6rem;min-width:0}.jarvis-studio-proposal p{margin:0}.jarvis-studio-proposal section{margin-top:.45rem}.jarvis-studio-proposal h4{margin:.2rem 0;text-transform:capitalize}.jarvis-studio-proposal ul{margin:.25rem 0;padding-left:1.2rem}.jarvis-studio-proposal li{overflow-wrap:anywhere}.jarvis-studio-proposal pre{max-height:19rem;overflow:auto;white-space:pre;font-size:.75rem;background:var(--color-bg-subtle);padding:.6rem;border-radius:var(--radius-sm)}

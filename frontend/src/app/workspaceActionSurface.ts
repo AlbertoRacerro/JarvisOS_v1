@@ -17,7 +17,7 @@ export function listenForProcessSurface(listener: (next: ProcessSurface) => void
 }
 
 export type WorkspaceActionEvent = {
-  workspaceId: string; surface: "process" | "bluecad"; state: "applied" | "undone";
+  workspaceId: string; surface: "process" | "bluecad" | "studio"; state: "applied" | "undone";
   draftId?: string | null; resultRevision?: string | null; candidateId?: string | null; childCandidateId?: string | null;
 };
 
