@@ -127,8 +127,8 @@ def _present(connection: sqlite3.Connection, row: sqlite3.Row) -> dict:
             raise ReferenceError("studio_reference_changed", "Pinned generation identity changed.")
         result["valid"] = True
         result["finding"] = None
-        result["glb_url"] = (f"/workspaces/{row['workspace_id']}/studio/geometry-runs/"
-                             f"{row['simulation_run_id']}/model.glb?sha256={row['glb_sha256']}")
+        result["glb_url"] = (f"/workspaces/{row['workspace_id']}/bluecad/candidates/{row['candidate_id']}"
+                             f"/studio-references/{row['id']}/model.glb")
     except ReferenceError as exc:
         result["valid"] = False
         result["finding"] = exc.message
@@ -157,6 +157,22 @@ def _present(connection: sqlite3.Connection, row: sqlite3.Row) -> dict:
     except RunnerSafetyError:
         result["stale"] = True
     return result
+
+
+def reference_glb(workspace_id: str, candidate_id: str, ref_id: str) -> bytes:
+    """The pinned GLB bytes, served only after the whole pin is re-verified (spec 194: verify when serving)."""
+    with open_sqlite_connection() as connection:
+        _candidate(connection, workspace_id, candidate_id)
+        row = connection.execute("""SELECT * FROM bluecad_studio_references
+            WHERE id = ? AND workspace_id = ? AND candidate_id = ?""",
+            (ref_id, workspace_id, candidate_id)).fetchone()
+        if row is None or not _present(connection, row)["valid"]:
+            raise ReferenceError("studio_reference_invalid", "Studio reference is missing or no longer valid.", 404)
+    # Hash the bytes actually returned, so a swap after validation cannot be served.
+    data = (run_root(workspace_id, row["simulation_run_id"]) / "geometry" / "model.glb").read_bytes()
+    if hashlib.sha256(data).hexdigest() != row["glb_sha256"]:
+        raise ReferenceError("studio_reference_invalid", "Studio reference is missing or no longer valid.", 404)
+    return data
 
 
 def list_references(workspace_id: str, candidate_id: str) -> list[dict]:

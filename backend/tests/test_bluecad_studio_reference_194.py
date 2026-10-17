@@ -87,7 +87,7 @@ def _seed(workspace: str = "bluerev") -> tuple[str, str, dict[str, Path]]:
 def test_pinned_geometry_reference_and_integrity(tmp_path: Path) -> None:
     candidate_id, run_id, paths = _seed()
     created = add_reference("bluerev", candidate_id, ReferenceCreate(simulation_run_id=run_id))
-    assert created["valid"] and created["glb_url"].endswith(f"/{run_id}/model.glb?sha256={created['glb_sha256']}")
+    assert created["valid"] and created["glb_url"].endswith(f"/studio-references/{created['id']}/model.glb")
     assert created["inputs"] == {"radius": {"value": 18, "unit": "mm"}}
     assert created["translation_mm"] == [0, 0, 0]
     with pytest.raises(ReferenceError, match="already referenced"):
@@ -119,23 +119,36 @@ def test_reference_endpoint_rejects_foreign_and_tampered_generation() -> None:
         assert reference["valid"] is False and reference["glb_url"] is None
 
 
-def test_served_reference_glb_must_match_the_pin() -> None:
+def test_served_reference_glb_reverifies_the_whole_pin() -> None:
     candidate_id, run_id, paths = _seed()
     from app.main import create_app
 
     with TestClient(create_app()) as client:
         base = f"/workspaces/bluerev/bluecad/candidates/{candidate_id}/studio-references"
         url = client.post(base, json={"simulation_run_id": run_id}).json()["glb_url"]
-        assert client.get(url).content == b"model.glb"
-        # Replace the bytes and re-register their hash: the generic route would serve them, the pin must not.
+        served = client.get(url)
+        assert served.status_code == 200 and served.content == b"model.glb"
+        assert served.headers["content-type"] == "model/gltf-binary"
+        # Changed generation inputs after the URL was issued: the pin no longer holds.
+        with open_sqlite_connection() as connection:
+            connection.execute("UPDATE simulation_runs SET input_payload=? WHERE id=?",
+                               ('{"radius":{"value":19,"unit":"mm"}}', run_id))
+            connection.commit()
+        assert client.get(url).status_code == 404
+        with open_sqlite_connection() as connection:
+            connection.execute("UPDATE simulation_runs SET input_payload=? WHERE id=?",
+                               ('{"radius":{"value":18,"unit":"mm"}}', run_id))
+            connection.commit()
+        assert client.get(url).status_code == 200
+        # Replaced bytes re-registered under the artifact row: still refused under the pin.
         paths["model.glb"].write_bytes(b"replaced")
         with open_sqlite_connection() as connection:
             connection.execute("UPDATE artifacts SET sha256=? WHERE stored_path=?",
                                (hashlib.sha256(b"replaced").hexdigest(), str(paths["model.glb"])))
             connection.commit()
         assert client.get(url).status_code == 404
-        assert client.get(url.split("?")[0]).status_code == 200
-        assert client.get(url.split("?")[0] + "?sha256=nothex").status_code == 422
+        assert client.get(f"/workspaces/other-ws/bluecad/candidates/{candidate_id}/studio-references/"
+                          f"{url.split('/')[-2]}/model.glb").status_code == 404
 
 
 def _second_workspace() -> str:

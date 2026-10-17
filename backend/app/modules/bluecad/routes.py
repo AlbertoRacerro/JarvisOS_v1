@@ -7,7 +7,7 @@ import sqlite3
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 
 from app.core.database import open_sqlite_connection
 from app.core.paths import build_paths
@@ -36,6 +36,7 @@ from app.modules.bluecad.studio_references import (
     add_reference,
     list_references,
     move_reference,
+    reference_glb,
     remove_reference,
 )
 from app.modules.bluecad.template import BluecadTemplateCreate, TemplateError, create_template_candidate
@@ -72,6 +73,18 @@ def move_studio_reference_endpoint(workspace_id: str, candidate_id: str, referen
         return move_reference(workspace_id, candidate_id, reference_id, data)
     except ReferenceError as exc:
         raise _reference_error(exc) from exc
+
+
+@router.get("/candidates/{candidate_id}/studio-references/{reference_id}/model.glb")
+def studio_reference_glb_endpoint(workspace_id: str, candidate_id: str, reference_id: str) -> Response:
+    try:
+        data = reference_glb(workspace_id, candidate_id, reference_id)
+    except ReferenceError as exc:
+        raise _reference_error(exc) from exc
+    # Untrusted geometry bytes: fixed type, never sniffed (as the Studio artifact route).
+    return Response(data, media_type="model/gltf-binary",
+                    headers={"X-Content-Type-Options": "nosniff", "Cache-Control": "no-store",
+                             "Content-Disposition": 'inline; filename="model.glb"'})
 
 
 @router.delete("/candidates/{candidate_id}/studio-references/{reference_id}", status_code=204, response_model=None)
