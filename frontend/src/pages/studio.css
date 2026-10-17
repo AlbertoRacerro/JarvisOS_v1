@@ -25,6 +25,7 @@
 .studio-docstring{margin:0;white-space:pre-wrap;font-family:var(--font-mono)}
 .studio-runs-head{display:flex;align-items:center;justify-content:space-between;gap:var(--space-3)}
 .studio .binding-state:empty{display:none}
+.studio-math-workspace{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,25rem),1fr));gap:var(--space-4);min-width:0}.studio-math-workspace>section,.studio-code-workspace>section{display:grid;align-content:start;gap:var(--space-3);min-width:0}.studio-math-pane{min-width:0;max-height:70vh;overflow:auto;padding:var(--space-3);border:var(--border-width-default) solid var(--color-border-default);border-radius:var(--radius-sm);background:var(--color-bg-subtle)}.studio-math-pane h3,.studio-math-pane h4{margin:0}.studio-math-pane .studio-equation{overflow-x:auto}
 /* Spec 190 process-unit authoring */
 .studio-port,.studio-stream{display:grid;gap:var(--space-2);grid-template-columns:repeat(auto-fit,minmax(10rem,1fr));align-items:end;min-width:0;margin:0}
 .studio-stream{padding:var(--space-3);border:var(--border-width-default) solid var(--color-border-default);border-radius:var(--radius-sm)}

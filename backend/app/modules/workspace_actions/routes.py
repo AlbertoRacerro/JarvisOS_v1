@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
+from app.modules.runner.origin import require_runner_origin
 from app.modules.workspace_actions import service
 from app.modules.workspace_actions.models import ActionOutcome, SurfaceBrief, SurfaceRef
 from app.modules.workspaces.service import get_workspace
@@ -50,7 +51,8 @@ def get_action(workspace_id: str, action_id: str) -> ActionOutcome:
         raise _error(exc) from exc
 
 
-@router.post("/{action_id}/{operation}", response_model=ActionOutcome)
+# Apply/dismiss/undo take no body, so a cross-site form POST needs no CORS preflight.
+@router.post("/{action_id}/{operation}", response_model=ActionOutcome, dependencies=[Depends(require_runner_origin)])
 def operate(workspace_id: str, action_id: str, operation: str) -> ActionOutcome:
     _workspace(workspace_id)
     operation_fn = {"apply": service.apply, "dismiss": service.dismiss, "undo": service.undo}.get(operation)

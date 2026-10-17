@@ -71,7 +71,7 @@ const editor = read("src/stages/ProcessDraftEditor.tsx");
 for (const text of ["registry.studio_units", "palette-studio-unit", "addStudioUnitOp", "placedSpec(unit) ?? unitSpec(unit.type)", "StudioUnitInspector", "resultsView.studio_units", "steady only"]) assert.ok(editor.includes(text), text);
 assert.doesNotMatch(editor, /unitSpec\(\w+\.type\)\?\./, "unit ports must come from specOf, never from the type alone");
 const inspector = read("src/components/process/StudioUnitInspector.tsx");
-for (const text of ["Update to v", "Inspect", "studio-failure", "studio-limits", "studio-superseded", "Apply inputs"]) assert.ok(inspector.includes(text), text);
+for (const text of ["Update to v", "Open model in Studio", "studio-failure", "studio-limits", "studio-superseded", "Apply inputs"]) assert.ok(inspector.includes(text), text);
 const page = read("src/pages/Studio.tsx");
 for (const text of ["PortForm", "SymbolField", "UnitCases", "UnitReport", "studio_symbol_invalid", "Symbol refused"]) assert.ok(page.includes(text) || read("src/components/studio/UnitAuthoring.tsx").includes(text), text);
 assert.match(read("src/api/studio.ts"), /"PUT"/);

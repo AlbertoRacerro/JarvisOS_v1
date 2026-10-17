@@ -155,8 +155,56 @@ _BLUECAD_ACT_TOOL = {
         "rationale": {"type": "string", "maxLength": 600}},
         "required": ["grant_id", "base_revision", "actions"], "additionalProperties": False},
 }
+_STUDIO_READ_TOOL = {
+    "name": "jarvis_studio_read", "description": "Read the selected Studio draft or new-model context.",
+    "inputSchema": {"type": "object", "properties": {"grant_id": {"type": "string", "maxLength": 128}},
+                    "required": ["grant_id"], "additionalProperties": False},
+}
+# An untyped object becomes an empty-object grammar under constrained local decoding, so the
+# contract shape is spelled out. The Studio owner still validates it per category.
+_STUDIO_VARIABLE = {"type": "object", "properties": {
+    "name": {"type": "string", "maxLength": 64}, "label": {"type": "string", "maxLength": 120},
+    "unit": {"type": "string", "maxLength": 64}, "description": {"type": "string", "maxLength": 500},
+    "min": {"type": "number"}, "max": {"type": "number"}},
+    "required": ["name", "label", "unit", "description"], "additionalProperties": False}
+_STUDIO_PORT = {"type": "object", "properties": {
+    "name": {"type": "string", "maxLength": 64}, "label": {"type": "string", "maxLength": 120}},
+    "required": ["name", "label"], "additionalProperties": False}
+_STUDIO_CONTRACT = {
+    "type": "object",
+    "description": ("calculation: inputs and outputs; geometry: inputs (lengths in mm); "
+                    "process_unit: inlets, outlets, parameters, culture_generation."),
+    "properties": {
+        "inputs": {"type": "array", "maxItems": 64, "items": _STUDIO_VARIABLE},
+        "outputs": {"type": "array", "maxItems": 64, "items": _STUDIO_VARIABLE},
+        "inlets": {"type": "array", "maxItems": 4, "items": _STUDIO_PORT},
+        "outlets": {"type": "array", "maxItems": 4, "items": _STUDIO_PORT},
+        "parameters": {"type": "array", "maxItems": 32, "items": _STUDIO_VARIABLE},
+        "culture_generation": {"type": "array", "maxItems": 6, "items": {"enum": [
+            "biomass", "nitrogen", "phosphorus", "oxygen", "dic", "salinity"]}}},
+    "additionalProperties": False,
+}
+_STUDIO_ACT_TOOL = {
+    "name": "jarvis_studio_act",
+    "description": "Propose one inert calculation, geometry, or steady process-unit Studio draft. Operator Apply is required.",
+    "inputSchema": {"type": "object", "properties": {
+        "grant_id": {"type": "string", "maxLength": 128},
+        "base_revision": {"type": "string", "maxLength": 128},
+        "actions": {"type": "array", "minItems": 1, "maxItems": 1, "items": {
+            "type": "object", "properties": {
+                "op": {"const": "studio_draft"}, "mode": {"enum": ["create", "update"]},
+                "category": {"enum": ["calculation", "geometry", "process_unit"]},
+                "name": {"type": "string", "maxLength": 160},
+                "engineering_question": {"type": "string", "maxLength": 2000},
+                "contract": _STUDIO_CONTRACT, "source": {"type": "string", "maxLength": 65536},
+                "assumptions": {"type": "string", "maxLength": 20000}},
+            "required": ["op", "mode", "category", "name", "engineering_question", "contract", "source"],
+            "additionalProperties": False}},
+        "rationale": {"type": "string", "maxLength": 600}},
+        "required": ["grant_id", "base_revision", "actions"], "additionalProperties": False},
+}
 _TOOLS = [_TOOL, _RETRIEVAL_TOOL, _DECISION_TOOL, _PROCESS_READ_TOOL, _PROCESS_ACT_TOOL,
-          _BLUECAD_READ_TOOL, _BLUECAD_ACT_TOOL]
+          _BLUECAD_READ_TOOL, _BLUECAD_ACT_TOOL, _STUDIO_READ_TOOL, _STUDIO_ACT_TOOL]
 _NAMED = {tool["name"] for tool in _TOOLS if tool is not _TOOL}
 
 

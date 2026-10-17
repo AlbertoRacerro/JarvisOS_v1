@@ -273,7 +273,7 @@ def submit_interaction(
     direct_workspace_turn = (
         isinstance(payload.route_class, str)
         and payload.route_class.startswith("local:")
-        and surface_brief.surface in {"process", "bluecad"}
+        and surface_brief.surface in {"process", "bluecad", "studio"}
     )
     if direct_workspace_turn:
         context_blocks.append({
@@ -531,11 +531,11 @@ def _install_surface_grants(worker: HermesSupervisor, workspace_id: str, thread_
     from datetime import timedelta
 
     from app.modules.ai.agent_contracts import CapabilityGrantRef, CapabilityScope
-    if brief.surface not in {"process", "bluecad"}:
+    if brief.surface not in {"process", "bluecad", "studio"}:
         return ""
     from datetime import UTC, datetime
     now = datetime.now(UTC)
-    prefix = "process" if brief.surface == "process" else "bluecad"
+    prefix = brief.surface
     capability_ids = (f"jarvis.{prefix}_read", f"jarvis.{prefix}_act")
     grant_ids: dict[str, str] = {}
     constraints: dict[str, str | int | float | bool] = _surface_grant_constraints(surface_ref, brief)
@@ -555,8 +555,10 @@ def _install_surface_grants(worker: HermesSupervisor, workspace_id: str, thread_
         unsupported = (f"{kinetics_explanation()} A typed DWSIM reactor reaction can be proposed with set_reaction "
                        "at confirm tier. Thermo stays in the editor. Never invent literature provenance or "
                        "substitute an unsupported rate law. ")
-    else:
+    elif brief.surface == "bluecad":
         unsupported = "State unsupported geometry requests plainly. "
+    else:
+        unsupported = "Studio proposals are inert drafts. Never claim Test or Publish happened. "
     lines = [f"Current surface: {brief.summary}",
              f"{read_name} grant_id={grant_ids[capability_ids[0]]};",
              f"{act_name} grant_id={grant_ids[capability_ids[1]]}.",
@@ -606,11 +608,21 @@ def _surface_action_example(surface: str, tool_name: str, grant_id: str, base_re
         target = target or "<stream tag from read>"
         action = {"op": "set_value", "target": target, "property": "pressure",
                   "value": {"value": 2, "unit": "bar"}}
-    else:
+    elif surface == "bluecad":
         selected = brief.selected[0] if brief.selected else None
         target = selected.get("part_id") if selected else _first_brief_bluecad_part(brief.text)
         target = target or "<part id from read>"
         action = {"op": "duplicate_part", "part": target, "placement": "beside"}
+    else:
+        action = {"op": "studio_draft", "mode": "update" if brief.draft_id else "create",
+                  "category": "calculation", "name": "Example model",
+                  "engineering_question": "Evaluate the declared quantity",
+                  "contract": {"inputs": [{"name": "x", "label": "Input", "unit": "dimensionless",
+                                          "description": "Declared input"}],
+                               "outputs": [{"name": "y", "label": "Output", "unit": "dimensionless",
+                                            "description": "Declared output"}]},
+                  "source": "def main(inputs: dict) -> dict:\n    return {'y': inputs['x']}\n",
+                  "assumptions": "Illustrative only; replace with the requested engineering model."}
     call = {"name": tool_name, "arguments": {
         "grant_id": grant_id, "base_revision": base_revision or "<revision from read>", "actions": [action]}}
     return "Example action call: " + json.dumps(call, separators=(",", ":"))
@@ -650,7 +662,7 @@ def _first_brief_bluecad_part(text: str) -> str | None:
 def _turn_tools(surface: str) -> list[str]:
     general = ["mcp__jarvis__jarvis_context_preview", "mcp__jarvis__jarvis_retrieval_query",
                "mcp__jarvis__jarvis_decide", "memory", "session_search"]
-    if surface in {"process", "bluecad"}:
+    if surface in {"process", "bluecad", "studio"}:
         general.extend([f"mcp__jarvis__jarvis_{surface}_read", f"mcp__jarvis__jarvis_{surface}_act"])
     return general
 
@@ -663,7 +675,7 @@ def _derive_surface_brief(workspace_id: str, ref: Any) -> Any:
         return service.surface_brief(workspace_id, ref)
     except (NotImplementedError, service.ActionError) as exc:
         reason = str(exc)[:300] or type(exc).__name__
-        text = f"No Process or BLUECAD surface context is available. Reason: {reason}"
+        text = f"No engineering surface context is available. Reason: {reason}"
         digest = canonical_digest({"workspace_id": workspace_id, "reason": reason})
         return SurfaceBrief(surface="none", route_id=ref.route_id if ref else "none",
                             workspace_id=workspace_id, summary="No active workspace surface",
@@ -692,7 +704,7 @@ def _guard_tool_shaped_output(text: str) -> tuple[str, str | None]:
     shaped = False
     action_ops = {
         "set_value", "set_unit_model", "set_reaction", "add_unit", "insert_unit_after", "connect", "disconnect", "mirror", "move",
-        "rename", "delete", "duplicate_part", "set_part_param", "move_part", "delete_part",
+        "rename", "delete", "duplicate_part", "set_part_param", "move_part", "delete_part", "studio_draft",
     }
 
     def is_workspace_action(value: object) -> bool:
@@ -734,7 +746,7 @@ def _guard_tool_shaped_output(text: str) -> tuple[str, str | None]:
             break
         if ("<|tool_call>call:" in candidate and "<tool_call|>" in candidate) or re.search(
             r"<\s*function(?:=|\s)|<\|im_start\|>\s*(?:tool_call|function_call)\b|"
-            r"<start_function_call>|assistant\s+to=|(?:mcp__jarvis__)?jarvis_(?:process|bluecad)_(?:act|read)\s*[({]",
+            r"<start_function_call>|assistant\s+to=|(?:mcp__jarvis__)?jarvis_(?:process|bluecad|studio)_(?:act|read)\s*[({]",
             candidate,
             re.IGNORECASE,
         ):
@@ -768,7 +780,7 @@ def _finalize_direct_workspace_answer(
 ) -> tuple[str, str | None]:
     visible, details = _guard_tool_shaped_output(answer)
     if (isinstance(route_class, str) and route_class.startswith("local:")
-            and surface in {"process", "bluecad"} and _workspace_change_requested(prompt)):
+            and surface in {"process", "bluecad", "studio"} and _workspace_change_requested(prompt)):
         visible = "This responder can't change the workspace. Switch to Jarvis agent, or use Escalate."
     return visible, details
 
@@ -1034,6 +1046,8 @@ _TOOL_ACTIVITY = {
     "jarvis_process_act": "Applying change…",
     "jarvis_bluecad_read": "Reading model…",
     "jarvis_bluecad_act": "Preparing proposal…",
+    "jarvis_studio_read": "Reading Studio draft…",
+    "jarvis_studio_act": "Preparing Studio proposal…",
     "jarvis_retrieval_query": "Searching knowledge…",
     "jarvis_context_preview": "Searching knowledge…",
     "jarvis_decide": "Deciding route…",

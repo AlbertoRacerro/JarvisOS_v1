@@ -212,7 +212,8 @@ export function useJarvisSidecar(
   selection: StageSelection | null,
   contextualContent?: ReactNode,
   knowledgeContext?: KnowledgeContextPreview | null,
-  pinnedContent?: ReactNode
+  pinnedContent?: ReactNode,
+  studioModelId: string | null = null
 ): ReactNode {
   const [threads, setThreads] = useState<ThreadSummary[]>([]);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
@@ -292,7 +293,7 @@ export function useJarvisSidecar(
   const emittedActionIds = useRef(new Set<string>());
   const transcriptRef = useRef<HTMLOListElement | null>(null);
   const selectionKey = useMemo(() => selectionIdentity(selection), [selection]);
-  const surfaceContext: SurfaceRef = useMemo(() => buildSurfaceRef(routeId, selection, processSurface), [routeId, selection, processSurface]);
+  const surfaceContext: SurfaceRef = useMemo(() => buildSurfaceRef(routeId, selection, processSurface, studioModelId), [routeId, selection, processSurface, studioModelId]);
   const surfaceContextKey = JSON.stringify(surfaceContext);
   selectedThreadRef.current = selectedThreadId;
 
@@ -350,7 +351,7 @@ export function useJarvisSidecar(
   useEffect(() => {
     const refreshBrief = (event: Event) => {
       const detail = (event as CustomEvent<{ workspaceId?: string; surface?: string; draftId?: string | null }>).detail;
-      const surface = routeId === "design-process" ? "process" : routeId === "design-bluecad" ? "bluecad" : null;
+      const surface = routeId === "design-process" ? "process" : routeId === "design-bluecad" ? "bluecad" : routeId === "design-studio" ? "studio" : null;
       if (detail?.workspaceId !== workspaceId || detail.surface !== surface) return;
       if (detail.draftId && surfaceContext.draft_id && detail.draftId !== surfaceContext.draft_id) return;
       setSurfaceBriefRefresh(current => current + 1);
@@ -960,7 +961,7 @@ export function useJarvisSidecar(
 
     <form onSubmit={(event) => void submit(event)} className="jarvis-sidecar__composer">
       <div className="jarvis-surface-chip" aria-live="polite">
-        <span>{surfaceBrief?.summary ?? (routeId === "design-process" || routeId === "design-bluecad" ? "Reading workspace context…" : "No workspace context on this page")}</span>
+        <span>{surfaceBrief?.summary ?? (routeId === "design-process" || routeId === "design-bluecad" || routeId === "design-studio" ? "Reading workspace context…" : "No workspace context on this page")}</span>
         {surfaceBrief?.text ? <details><summary>Workspace context</summary><p>{surfaceBrief.text}</p></details> : null}
       </div>
       {composerTarget === "relay" && relayStatus?.enabled ? <div className="jarvis-sidecar__relay-target">
