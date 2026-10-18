@@ -323,14 +323,20 @@ def sed_executes(script: str) -> bool:
         elif cmd in "rRbtTvy:#":
             nl = script.find("\n", i)
             if cmd == "y":
-                i += 1
-                delim = script[i] if i < n else ""
-                count = 0
-                while i < n and count < 3:
-                    i += 1
-                    if i < n and script[i] == delim:
-                        count += 1
-                i += 1
+                # y/src/dst/: the opening delimiter, then exactly two more
+                if i + 1 >= n:
+                    return True
+                delim, j, parts = script[i + 1], i + 2, 0
+                while j < n and parts < 2:
+                    if script[j] == "\\":
+                        j += 2
+                        continue
+                    if script[j] == delim:
+                        parts += 1
+                    j += 1
+                if parts < 2:
+                    return True
+                i = j
             elif cmd in "rR":
                 return True  # reads a file: harmless, but its argument runs to end of line; stay conservative
             else:
@@ -617,7 +623,13 @@ def classify_command(command: str, _depth: int = 0) -> tuple[str, str]:
         results.append((kind, label))
     if not results:
         return "read_only", "(empty)"
-    return max(results, key=lambda r: _rank(r[0]))
+    kind, label = max(results, key=lambda r: _rank(r[0]))
+    detached = [r for r in results if r[1].endswith(" &")]
+    if detached:
+        # Any detached segment makes the whole call a background launch, whichever segment is the worst; the
+        # label names the worst detached job, since that is what may still be running.
+        label = max(detached, key=lambda r: _rank(r[0]))[1]
+    return kind, label
 
 
 TASK_DONE = ("completed", "failed", "killed", "stopped")

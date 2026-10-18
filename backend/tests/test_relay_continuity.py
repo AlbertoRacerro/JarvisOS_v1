@@ -1465,3 +1465,22 @@ def test_same_agent_wait_ignores_other_agents_expired_cooldowns(tmp_path: Path) 
     # No one-second wake/save spin on Claude's long-expired cooldown while Codex stays capped.
     assert sum(1 for seconds in env.clock.slept if seconds <= 1.0) <= 1
     assert env.relay.launches[0]["at"] >= codex_reset
+
+
+
+# ---------------------------------------------------------------------------
+# Regressions from the fourth independent review
+
+
+def test_sed_transliteration_does_not_hide_a_following_command() -> None:
+    assert rc.classify_command("sed 'y/a/b/;e git push' f")[0] != "read_only"
+    assert rc.classify_command("sed 'y/a\\/b/xy/;p' f")[0] == "read_only"
+
+
+def test_detached_job_in_a_compound_command_stays_in_flight(tmp_path: Path) -> None:
+    command = "gh pr comment 5 --body started; nohup git push origin HEAD >/dev/null 2>&1 &"
+    assert rc.classify_command(command) == ("external", "git push &")
+    turn = write_turn(tmp_path / "s", [tool_use("x", "Bash", command=command), tool_result("x"), *QUOTA])
+    report = rc.classify_turn(turn)
+    assert [c.label for c in report.in_flight] == ["git push &"]
+    assert rc.gate(report, fingerprint_changed=None) == "effects_uncertain"
