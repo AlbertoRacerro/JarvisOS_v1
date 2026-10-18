@@ -72,7 +72,7 @@ python3 scripts/relay_continuity.py release --note "push landed on origin; safe 
 python3 scripts/relay_continuity.py run --session $S
 ```
 
-A release is recorded in the attempt journal and the control ledger. It waives only the review it answers: the released turn is not re-gated, and an `auth_failure`/`unknown_failure` turn is retried once on the same agent. Provider cooldowns, failover confirmation and circuit bounds still apply, and a new failure is gated again. Releasing `permissions_changed` accepts the new settings as the pinned authority.
+A release is recorded in the attempt journal and the control ledger. Every hold names the turn it is about (`status` shows `hold.turn`). A release acknowledges exactly that turn: a later turn on the same session (for example, one you ran by hand in the REPL) is gated afresh. If one turn holds for two reasons in sequence (say `auth_failure`, then `effects_uncertain`), each release adds to the acknowledgement for that turn. A release waives only the review it answers: the released turn is not re-gated, and an `auth_failure`/`unknown_failure` turn is retried once on the same agent. Provider cooldowns, failover confirmation and circuit bounds still apply, and a new failure is gated again. Releasing `permissions_changed` accepts the new settings as the pinned authority.
 
 ## Behaviour notes
 
