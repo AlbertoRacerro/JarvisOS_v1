@@ -818,6 +818,136 @@ def test_released_turn_is_continued_not_regated(tmp_path: Path, monkeypatch: pyt
 
 
 # ---------------------------------------------------------------------------
+# Live work: detached jobs that outlive the call that launched them
+
+
+def test_live_work_in_a_checkout_holds_a_quota_failure_without_relaunch(tmp_path: Path) -> None:
+    env = Env(tmp_path, [("codex", CODEX_SUCCESS)])
+    seen: list[datetime] = []
+    env.host.live_work = lambda since: seen.append(since) or ["process node"]
+    env.head(QUOTA)
+    result, sup = env.run()
+    assert result == "held" and sup.state["hold"]["reason"] == "live_work"
+    assert env.relay.launches == [] and seen
+    assert any("live work in the checkout: process node" in line for line in env.logs)
+
+
+def test_live_work_holds_a_new_task_after_a_successful_turn(tmp_path: Path) -> None:
+    env = Env(tmp_path, [("claude", SUCCESS)])
+    env.host.live_work = lambda since: ["docker container 0123456789ab"]
+    env.head(SUCCESS)
+    result, sup = env.run(task="Next step")
+    assert result == "held" and sup.state["hold"]["reason"] == "live_work" and env.relay.launches == []
+
+
+def test_failing_live_work_check_holds(tmp_path: Path) -> None:
+    def boom(since: datetime) -> list[str]:
+        raise PermissionError("proc")
+    env = Env(tmp_path, [("codex", CODEX_SUCCESS)])
+    env.host.live_work = boom
+    env.head(QUOTA)
+    assert env.run()[0] == "held" and env.relay.launches == []
+
+
+def test_no_live_work_lets_the_chain_continue(tmp_path: Path) -> None:
+    env = Env(tmp_path, [("codex", CODEX_SUCCESS)])
+    env.host.live_work = lambda since: []
+    env.head(QUOTA)
+    assert env.run()[0] == "idle" and len(env.relay.launches) == 1
+
+
+def test_work_window_starts_at_the_chain_and_moves_to_the_latest_release(tmp_path: Path) -> None:
+    env = Env(tmp_path)
+    env.head(SUCCESS)
+    session = env.relay.sessions_dir() / HEAD
+    created = T0 - timedelta(days=2)
+    (session / "session.json").write_text(json.dumps({"created_at": rc.iso(created)}))
+    sup = env.supervisor()
+    sup.state["head_session"] = HEAD
+    assert sup.work_window() == created
+    env.store.root.mkdir(parents=True, exist_ok=True)
+    released = T0 - timedelta(hours=1)
+    env.store.journal({"event": "release", "at": rc.iso(released)})
+    env.store.journal({"event": "release", "at": rc.iso(created - timedelta(days=1))})  # older: ignored
+    assert sup.work_window() == released
+    (session / "session.json").write_text("not json")
+    env.store.journal_path.unlink()
+    assert sup.work_window() == datetime.min.replace(tzinfo=UTC)  # unknown chain start: the widest window
+
+
+def fake_proc(root: Path, btime: int = 1_000_000) -> Path:
+    proc = root / "proc"
+    proc.mkdir()
+    (proc / "stat").write_text(f"cpu  1 2 3\nbtime {btime}\n")
+    return proc
+
+
+def add_proc(proc: Path, pid: int, *, argv: list[str], cwd: Path, started: datetime, btime: int = 1_000_000,
+             ppid: int = 1, state: str = "S", comm: str | None = None) -> None:
+    entry = proc / str(pid)
+    entry.mkdir()
+    ticks = int((started.timestamp() - btime) * os.sysconf("SC_CLK_TCK"))
+    rest = [state, str(ppid)] + ["0"] * 17 + [str(ticks)]
+    (entry / "stat").write_text(f"{pid} ({comm or Path(argv[0]).name}) {' '.join(rest)} 0 0\n")
+    (entry / "status").write_text(f"Name:\t{Path(argv[0]).name}\nPPid:\t{ppid}\n")
+    (entry / "cmdline").write_bytes(b"\0".join(a.encode() for a in argv) + b"\0")
+    os.symlink(cwd, entry / "cwd")
+
+
+def test_live_processes_reports_new_work_in_any_checkout_only(tmp_path: Path) -> None:
+    proc = fake_proc(tmp_path)
+    repo, worktree, elsewhere = tmp_path / "repo", tmp_path / "wt", tmp_path / "home"
+    for d in (repo / "frontend", worktree, elsewhere):
+        d.mkdir(parents=True)
+    since = T0
+    add_proc(proc, 10, argv=["node", "vite"], cwd=repo / "frontend", started=T0 + timedelta(minutes=5))
+    add_proc(proc, 11, argv=["python", "-m", "pytest"], cwd=worktree, started=T0 + timedelta(minutes=6),
+             comm="py test$(x)")
+    add_proc(proc, 12, argv=["node", "old-server"], cwd=repo, started=T0 - timedelta(hours=1))
+    add_proc(proc, 13, argv=["node", "elsewhere"], cwd=elsewhere, started=T0 + timedelta(minutes=5))
+    add_proc(proc, 14, argv=["bash"], cwd=repo, started=T0 + timedelta(minutes=5))
+    add_proc(proc, 15, argv=["bash", "-c", "while true; do pytest; done"], cwd=repo, started=T0 + timedelta(minutes=5))
+    add_proc(proc, 16, argv=["python", "x.py"], cwd=repo, started=T0 + timedelta(minutes=5), state="Z", comm="zombie")
+    add_proc(proc, 17, argv=["tmux", "new-session"], cwd=repo, started=T0 + timedelta(minutes=5))
+    add_proc(proc, 18, argv=["python3", "scripts/relay_continuity.py", "watch"], cwd=repo, started=T0 + timedelta(minutes=5),
+             comm="watcher")
+    # The supervisor (20) and its ancestors (19: the pane shell running it) are never reported.
+    add_proc(proc, 19, argv=["bash", "-c", "python3 scripts/relay_continuity.py run"], cwd=repo,
+             started=T0 + timedelta(minutes=1), comm="pane")
+    add_proc(proc, 20, argv=["python3", "scripts/relay_continuity.py", "run"], cwd=repo,
+             started=T0 + timedelta(minutes=1), ppid=19, comm="supervisor")
+    found = rc.live_processes([repo, worktree], since, {20}, proc_root=proc)
+    assert found == ["process bash", "process node", "process py_test__x_"]
+    assert rc.live_processes([repo, worktree], T0 + timedelta(hours=1), {20}, proc_root=proc) == []
+
+
+def test_unreadable_process_table_counts_as_live_work(tmp_path: Path) -> None:
+    proc = tmp_path / "proc"
+    proc.mkdir()
+    assert rc.live_processes([tmp_path], T0, set(), proc_root=proc) == ["process_table_unreadable"]
+
+
+def test_live_containers_dates_running_containers(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(rc.shutil, "which", lambda tool: f"/usr/bin/{tool}" if tool == "docker" else None)
+
+    def runner(ps: Any, inspect: Any) -> Any:
+        def run(cmd: list[str], **_kwargs: Any) -> Any:
+            out = ps if cmd[1] == "ps" else inspect
+            if isinstance(out, BaseException):
+                raise out
+            return subprocess.CompletedProcess(cmd, out[0], out[1], "")
+        return run
+    new, old = "2026-10-18T08:05:00.123456789Z", "2026-10-17T08:05:00.1Z"
+    assert rc.live_containers(T0, run=runner((1, ""), None)) == []  # daemon unreachable
+    assert rc.live_containers(T0, run=runner((0, ""), None)) == []
+    assert rc.live_containers(T0, run=runner((0, "aaa\nbbb\n"), (0, f"aaa{'1' * 20} {new}\nbbb {old}\n"))) == [
+        "docker container aaa111111111"]
+    assert rc.live_containers(T0, run=runner((0, "aaa\n"), (1, ""))) == ["docker check failed"]
+    timeout = subprocess.TimeoutExpired("docker", 15)
+    assert rc.live_containers(T0, run=runner(timeout, None)) == ["docker check timed out"]
+
+
+# ---------------------------------------------------------------------------
 # Slack outbound (Phase 2)
 
 
@@ -1586,4 +1716,28 @@ def test_downloads_to_files_are_local_writes(command: str, kind: str) -> None:
     ("xxd -l 16 file.bin", "read_only"), ("xxd -r -p in.hex", "read_only"),
 ])
 def test_other_file_writing_forms(command: str, kind: str) -> None:
+    assert rc.classify_command(command)[0] == kind
+
+
+@pytest.mark.parametrize(("command", "kind"), [
+    ('case "$suite" in backend) python -m pytest -q backend/tests ;; esac', "unknown"),
+    ('case "$x" in a) echo hi ;; esac', "read_only"),
+    ("git diff 1>/tmp/review.patch", "local_write"), ("git status 2>/tmp/status.err", "local_write"),
+    ("gh pr checks 831 &>/tmp/checks.log", "local_write"), ("git status 2>>/tmp/err", "local_write"),
+    ("git status 2>/dev/null", "read_only"), ("ls 2>&1", "read_only"), ("git log >&2", "read_only"),
+    ("sed ':join;N;$!b join;w /tmp/joined.txt' input.txt", "unknown"), (r"sed ':a;N;$!ba;s/\n/ /g' f", "read_only"),
+    ("git branch --set-upstream-to=origin/master", "local_write"), ("git branch --unset-upstream", "local_write"),
+    ("git branch newfeature", "local_write"), ("git branch -a", "read_only"), ("git branch -vv", "read_only"),
+    ("git branch --merged master", "read_only"), ("git reflog expire --expire=now --all", "local_write"),
+    ("git reflog", "read_only"), ("git remote -v set-url origin https://example.invalid/r.git", "local_write"),
+    ("git remote -v", "read_only"), ("git remote get-url origin", "read_only"),
+    ("curl --config /tmp/backend-smoke.curl", "unknown"), ("curl -sK cfg", "unknown"),
+    ("curl -s http://127.0.0.1:8000/health", "read_only"),
+    ("wget -qO- -o /tmp/health.log http://127.0.0.1:8000/health", "local_write"), ("wget -qO- http://x", "read_only"),
+    (r"tmux has-session -t dev \; send-keys -t dev 'python -m pytest -q' Enter", "unknown"),
+    ("tmux source-file /tmp/dev.tmux", "unknown"), ("tmux new-s -d -s web 'npm run dev'", "unknown"),
+    ("tmux ls", "read_only"), ("tmux list-windows -t dev", "read_only"),
+    ("screen -S dev -X screen python -m pytest -q", "unknown"),
+])
+def test_review_10_write_and_launch_forms(command: str, kind: str) -> None:
     assert rc.classify_command(command)[0] == kind

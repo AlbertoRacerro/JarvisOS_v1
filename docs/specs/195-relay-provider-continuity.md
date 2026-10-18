@@ -69,6 +69,7 @@ Each tool call in the failed turn's raw output is paired with its result and cla
 Automatic continuation is refused, and the chain enters a **manual hold** with an alert, when any of these hold:
 
 - any non-`read_only` call has no paired result (it was in flight at interruption, so whether it took effect is unknown). A background launch (a `run_in_background` tool, a detached `&`/`nohup` command) counts as in flight until its completion notification is seen, because its result is only the launch acknowledgement. A subagent's calls settle only when the subagent itself finished;
+- **live work**: before any automatic continuation, and before handing a successful chain a new task, the supervisor checks what is actually running. A live process whose working directory is the repository or one of its worktrees, or a running docker/podman container, holds (`live_work`) if it started inside the chain's window. The window opens at the chain's first session or the latest maintainer release, whichever is later. Bare interactive shells, multiplexer servers, the supervisor and its own ancestors are skipped; an unreadable process table or an undatable container counts as live. Detached work (`&`, tmux/screen, nohup, daemons, containers) outlives the call that launched it, and no shell classifier can recognize every way to start it, so this check is the backstop for detachment across calls, notifications and turns. Only process names are logged, never arguments;
 - the output has unparseable lines;
 - the outcome is `crash` and the repository fingerprint changed during the attempt;
 - the attempt journal shows a launched attempt whose outcome cannot be established. This includes an attempt that left no identifiable Relay session even when the repository looks unchanged, because remote effects such as a merge or a PR comment leave no local trace. It also includes a journal launch that the state does not account for. A session is identified only by its own first attempt-marker line, and only when exactly one session carries it.
@@ -144,6 +145,7 @@ Deterministic offline tests run with injected clock, Relay runner, limits reader
 2. Restart during failover (intent written, supervisor killed, Relay still running or finished), stale or past reset timestamps, unavailable fallback provider, concurrent supervisor start, repeated crash loop (circuit opens), transient backoff bound, and oscillation bound.
 3. Ambiguous side effects:
    - an in-flight `git push`, `gh pr merge`, Write or subagent call → hold;
+   - live work in a checkout or a container started inside the chain's window → `live_work` hold; work older than the latest release → no hold;
    - completed effects listed in the recovery prompt;
    - **a test proving that no Relay invocation is issued** for any held attempt, including after restart.
 4. Interrupted state writes: a crash between temp write and rename leaves the previous state valid; a corrupt state file holds.

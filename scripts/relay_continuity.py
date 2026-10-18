@@ -21,6 +21,7 @@ import os
 import re
 import secrets
 import shlex
+import shutil
 import signal
 import subprocess
 import sys
@@ -55,7 +56,7 @@ HOLD_REASONS = (
     "effects_uncertain", "output_unparseable", "output_missing", "attempt_unresolved", "auth_failure", "unknown_failure",
     "crash_repeated", "circuit_failures", "circuit_switches", "circuit_attempts", "circuit_transient",
     "no_provider_available", "wait_exceeded", "permissions_changed", "state_corrupt", "repl_active",
-    "relay_invocation_failed",
+    "relay_invocation_failed", "live_work",
 )
 STOP_REASONS = ("stop_requested", "signal", "idle", "held", "legacy_autopilot", "lock_busy", "error")
 DEFAULT_CONTROL = Path.home() / "jarvis-control" / "work" / "continuity"
@@ -346,13 +347,16 @@ def sed_executes(script: str) -> bool:
                 i = j
             elif cmd in "rR":
                 return True  # reads a file: harmless, but its argument runs to end of line; stay conservative
-            else:
+            elif cmd == "#":
                 i = n if nl == -1 else nl + 1
+            else:  # b/t/T/v/: take a label that ends at `;` or a newline (GNU); later commands still count
+                ends = [k for k in (script.find(";", i), nl) if k != -1]
+                i = min(ends) + 1 if ends else n
         else:
             i += 1
     return False
 
-REDIRECT = re.compile(r"(?<![0-9&<>])>{1,2}\s*(?!&|/dev/null)(\S+)")
+REDIRECT = re.compile(r"(?<![<>])(?:[0-9]*|&)>{1,2}(?!&)\s*(?!/dev/(?:null|stdout|stderr)\b)(\S+)")
 
 
 def _rank(kind: str) -> int:
@@ -375,6 +379,30 @@ def _operands(args: list[str], value_opts: set[str]) -> list[str]:
         else:
             out.append(a)
     return out
+
+
+TMUX_READ = {"ls", "list-sessions", "has-session", "has", "capture-pane", "capturep", "list-windows", "lsw",
+             "list-panes", "lsp", "display-message", "display", "show-options", "show"}
+
+
+def _tmux_commands(args: list[str]) -> list[str]:
+    """The command name of every entry in a tmux command list (`a \\; b`, a `;` word after shlex), after the
+    global options."""
+    groups: list[list[str]] = [[]]
+    for a in args:
+        if a in (";", "\\;"):
+            groups.append([])
+        else:
+            groups[-1].append(a)
+    first = next(iter(_operands(groups[0], TMUX_GLOBAL_VALUE_OPTS)), "")
+    return [c for c in [first, *(g[0] for g in groups[1:] if g)] if c]
+
+
+def _tmux_launches(command: str) -> bool:
+    if command in TMUX_LAUNCH or command in ("source-file", "source"):
+        return True
+    # tmux accepts any unambiguous prefix (`new-s`); a prefix of a launch command counts as one
+    return len(command) >= 3 and any(c.startswith(command) for c in TMUX_LAUNCH | {"source-file"} if "-" in c)
 
 
 def _screen_detached(args: list[str]) -> bool:
@@ -403,6 +431,23 @@ def _container_detached(args: list[str]) -> bool:
             and "-a" not in args and "--attach" not in args)
 
 
+GIT_BRANCH_READ_OPTS = {"-a", "--all", "-r", "--remotes", "-v", "-vv", "--verbose", "-l", "--list", "--show-current",
+                        "--merged", "--no-merged", "--contains", "--no-contains", "--points-at", "--color",
+                        "--no-color", "--column", "--no-column", "-i", "--ignore-case", "--omit-empty"}
+GIT_BRANCH_FILTERS = {"-l", "--list", "--merged", "--no-merged", "--contains", "--no-contains", "--points-at"}
+
+
+def _git_branch_lists(rest: list[str]) -> bool:
+    """`git branch` only lists when every option is a listing option; a bare name creates a branch."""
+    for a in rest:
+        if a.startswith("-") and a not in GIT_BRANCH_READ_OPTS and not a.startswith(
+                ("--format=", "--sort=", "--color=", "--column=", "--merged=", "--no-merged=", "--contains=",
+                 "--no-contains=", "--points-at=")):
+            return False
+    names = [a for a in rest if not a.startswith("-")]
+    return not names or any(a in GIT_BRANCH_FILTERS for a in rest)
+
+
 def _git_kind(args: list[str]) -> tuple[str, str]:
     i = 0
     while i < len(args) and args[i].startswith("-"):
@@ -415,11 +460,13 @@ def _git_kind(args: list[str]) -> tuple[str, str]:
     if sub in GIT_READ:
         if any(a == "--output" or a.startswith("--output=") for a in rest):
             return "local_write", f"{label} --output"  # diff-family `--output` creates or truncates a file
-        if sub == "remote" and rest and rest[0] not in ("-v", "show", "get-url"):
+        if sub == "remote":
+            ops = [a for a in rest if a not in ("-v", "--verbose")]
+            return ("read_only" if not ops or ops[0] in ("show", "get-url") else "local_write"), label
+        if sub == "reflog" and any(a in ("expire", "delete", "drop") for a in rest):
             return "local_write", label
         return "read_only", label
-    if sub == "branch" and not any(a in rest for a in ("-d", "-D", "-m", "-M", "-c", "-C", "--delete", "--move")) \
-            and (not rest or all(a.startswith("-") for a in rest)):
+    if sub == "branch" and _git_branch_lists(rest):
         return "read_only", label
     if sub == "worktree" and rest[:1] == ["list"]:
         return "read_only", "git worktree list"
@@ -457,6 +504,9 @@ def _gh_kind(args: list[str]) -> tuple[str, str]:
 
 
 def _curl_kind(word: str, args: list[str]) -> tuple[str, str]:
+    if word == "curl" and any(a == "--config" or a.startswith("--config=")
+                              or (a.startswith("-") and not a.startswith("--") and "K" in a[1:]) for a in args):
+        return "unknown", "curl --config"  # a config file can set any method, body or output
     writes = _download_writes(word, args)
     for i, a in enumerate(args):
         nxt = args[i + 1] if i + 1 < len(args) else ""
@@ -487,6 +537,9 @@ def _download_writes(word: str, args: list[str]) -> bool:
         return value not in ("-", "/dev/null", "/dev/stdout", "/dev/stderr", "")
     if word == "wget":
         # wget saves to a file unless the output document is stdout or /dev/null, or it only checks (--spider).
+        if any(a in ("--output-file", "--append-output", "--background") or a.startswith(("--output-file=", "--append-output="))
+               or (a.startswith("-") and not a.startswith("--") and set(a[1:]) & set("oab")) for a in args):
+            return True  # -o/-a log files, and -b writes wget-log
         if "--spider" in args:
             return False
         for i, a in enumerate(args):
@@ -662,12 +715,19 @@ def classify_command(command: str, _depth: int = 0) -> tuple[str, str]:
             words = shlex.split(seg, comments=True)
         except ValueError:
             words = seg.split()
+        if words and words[0] == "case":
+            # `case WORD in PATTERN) BODY`: the arm body runs, so it is classified; a bare header is skipped.
+            arm = next((k for k in range(2, len(words)) if ")" in words[k] and "in" in words[1:k]), None)
+            if arm is None:
+                continue
+            tail = words[arm].split(")", 1)[1]
+            words = ([tail] if tail else []) + words[arm + 1:]
         # Subshell parentheses are grouping, not part of a command word.
         words = [w.rstrip(")") if w.count(")") > w.count("(") else w for w in words]
         while words and words[0].startswith("(") and not words[0].startswith("(("):
             words = ([words[0][1:]] if words[0][1:] else []) + words[1:]
-        if words and words[0] in ("for", "select", "case"):
-            continue  # loop/case headers bind variables; their bodies are separate segments
+        if words and words[0] in ("for", "select"):
+            continue  # loop headers bind variables; their bodies are separate segments
         while words and (re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", words[0]) or words[0] in SHELL_KEYWORDS
                          or re.fullmatch(r"\d*[<>]{1,2}&?\S*", words[0])):
             bare_redirect = bool(re.fullmatch(r"\d*[<>]{1,2}", words[0]))
@@ -710,13 +770,13 @@ def classify_command(command: str, _depth: int = 0) -> tuple[str, str]:
             else:
                 kind, label = "read_only", "find"
         elif word == "tmux":
-            sub = next(iter(_operands(args, TMUX_GLOBAL_VALUE_OPTS)), "")  # global options such as `-L dev` come first
-            if sub in TMUX_LAUNCH:
+            subs = _tmux_commands(args)
+            if launched := next((c for c in subs if _tmux_launches(c)), None):
                 # The command keeps running in the tmux server; the tool result only acknowledges the launch.
-                kind, label, background = "unknown", f"tmux {sub}", True
+                kind, label, background = "unknown", f"tmux {launched}", True
             else:
-                kind, label = ("read_only" if sub in ("ls", "list-sessions", "has-session", "capture-pane") else "local_write"), "tmux"
-        elif word == "screen" and _screen_detached(args):
+                kind, label = ("read_only" if subs and all(c in TMUX_READ for c in subs) else "local_write"), "tmux"
+        elif word == "screen" and (_screen_detached(args) or "-X" in args):
             kind, label, background = "unknown", "screen -dm", True
         elif word == "xxd" and len(_operands(args, XXD_VALUE_OPTS)) >= 2:
             kind, label = "local_write", "xxd > file"  # `xxd IN OUT` (and `xxd -r IN OUT`) writes OUT
@@ -1444,6 +1504,117 @@ def live_conflicts(repo: Path, own_pids: set[int]) -> list[str]:
     return sorted(set(found))
 
 
+INTERACTIVE_SHELLS = {"bash", "-bash", "sh", "-sh", "zsh", "-zsh", "fish", "-fish", "dash"}
+MULTIPLEXER_SERVERS = {"tmux", "screen", "SCREEN"}
+
+
+def worktree_roots(repo: Path) -> list[Path]:
+    roots = [repo]
+    for line in (devctx.run(["git", "worktree", "list", "--porcelain"], cwd=repo)[1] or "").splitlines():
+        if line.startswith("worktree "):
+            roots.append(Path(line[9:]))
+    return roots
+
+
+def _ancestors(pid: int, proc_root: Path) -> set[int]:
+    seen: set[int] = set()
+    while pid > 1 and pid not in seen:
+        seen.add(pid)
+        try:
+            status = (proc_root / str(pid) / "status").read_text()
+            pid = int(next(line.split()[1] for line in status.splitlines() if line.startswith("PPid:")))
+        except (OSError, ValueError, StopIteration):
+            break
+    return seen
+
+
+def _ignorable(argv: list[str]) -> bool:
+    """Processes that do no work themselves: their children are checked on their own."""
+    if not argv:
+        return True
+    name = Path(argv[0]).name
+    if name in INTERACTIVE_SHELLS:
+        return all(a in ("-l", "-i", "--login", "--interactive") for a in argv[1:])  # no -c, no script
+    if name in MULTIPLEXER_SERVERS or name.startswith("tmux:"):
+        return True
+    if name in ("relay", "agent-relay") and any(a in ("daemon", "hook") for a in argv[1:3]):
+        return True
+    return any(Path(a).name == "relay_continuity.py" for a in argv[1:3])  # this supervisor or its notify-only watch
+
+
+def live_processes(roots: list[Path], since: datetime, own_pids: set[int], *,
+                   proc_root: Path = Path("/proc")) -> list[str]:
+    """Live processes working in the repository or a worktree, started at or after `since`.
+
+    Detached work (a `&` job, tmux/screen, nohup, a daemon) outlives the tool call that launched it, and no
+    shell classifier can recognize every way to start it. This check looks at what is actually running instead.
+    """
+    try:
+        btime = int(next(line.split()[1] for line in (proc_root / "stat").read_text().splitlines()
+                         if line.startswith("btime ")))
+    except (OSError, ValueError, StopIteration):
+        return ["process_table_unreadable"]
+    ticks = os.sysconf("SC_CLK_TCK")
+    exclude: set[int] = set()
+    for pid in own_pids:
+        exclude |= _ancestors(pid, proc_root)
+    resolved = [r.resolve() for r in roots]
+    found: set[str] = set()
+    for entry in proc_root.iterdir():
+        if not entry.name.isdigit() or int(entry.name) in exclude:
+            continue
+        try:
+            cwd = Path(os.readlink(entry / "cwd")).resolve()
+            stat = (entry / "stat").read_text()
+            argv = [a.decode(errors="replace") for a in (entry / "cmdline").read_bytes().split(b"\0") if a]
+        except OSError:
+            continue
+        if not any(cwd == r or r in cwd.parents for r in resolved) or _ignorable(argv):
+            continue
+        fields = stat.rsplit(")", 1)[1].split()
+        try:
+            started = datetime.fromtimestamp(btime + int(fields[19]) / ticks, UTC)
+        except (ValueError, IndexError):
+            continue
+        if fields[0] in ("Z", "X") or started < since:
+            continue
+        comm = re.sub(r"[^A-Za-z0-9_.:-]", "_", stat[stat.find("(") + 1:stat.rfind(")")])[:32]
+        found.add(f"process {comm}")  # the name only: arguments may carry secrets
+    return sorted(found)
+
+
+def live_containers(since: datetime, *, run: Callable[..., subprocess.CompletedProcess] = subprocess.run) -> list[str]:
+    """Containers (docker/podman) started at or after `since`; they may bind-mount a checkout."""
+    found: list[str] = []
+    for tool in ("docker", "podman"):
+        exe = shutil.which(tool)
+        if not exe:
+            continue
+        try:
+            listed = run([exe, "ps", "-q", "--no-trunc"], capture_output=True, text=True, timeout=15)
+            if listed.returncode != 0:
+                continue  # no reachable daemon: nothing can be running under it
+            ids = listed.stdout.split()
+            if not ids:
+                continue
+            inspected = run([exe, "inspect", "--format", "{{.Id}} {{.State.StartedAt}}", *ids],
+                            capture_output=True, text=True, timeout=15)
+        except subprocess.TimeoutExpired:
+            found.append(f"{tool} check timed out")
+            continue
+        except OSError:
+            continue
+        if inspected.returncode != 0:
+            found.append(f"{tool} check failed")  # containers exist but cannot be dated: assume new
+            continue
+        for line in inspected.stdout.splitlines():
+            cid, _, started = line.partition(" ")
+            ts = parse_ts(started[:19] + "Z") if len(started) >= 19 else None
+            if ts is None or ts >= since:
+                found.append(f"{tool} container {cid[:12]}")
+    return found
+
+
 # ---------------------------------------------------------------------------
 # Supervisor
 
@@ -1467,6 +1638,7 @@ class Host:
     ledger: Callable[[str, str], None] = lambda kind, text: None
     permissions_digest: Callable[[], str | None] = lambda: None
     log: Callable[[str], None] = lambda msg: print(msg, file=sys.stderr, flush=True)
+    live_work: Callable[[datetime], list[str]] = lambda since: []
 
 
 class Supervisor:
@@ -1714,6 +1886,8 @@ class Supervisor:
                 self.notify("turn_completed", dedupe_key=f"done|{self.state['head_session']}",
                             session=self.state["head_session"], agent=failed_agent)
                 return "idle"
+            if (held := self._live_work_hold(report)) is not None:
+                return held
             agent = self._choose(failed_agent, mode="prefer")
             if agent is None:
                 return self._wait_or_hold("prefer", lambda _agent: f"[relay-continuity attempt {{nonce}}]\n{task}")
@@ -1737,6 +1911,8 @@ class Supervisor:
             self.notify("turn_failed", session=self.state["head_session"], agent=failed_agent,
                         outcome=report.outcome, action="hold")
             return self.hold(reason, self.attempts or None, report.turn_id)
+        if (held := self._live_work_hold(report)) is not None:
+            return held
 
         if report.outcome in ("quota", "spend_limit") and failed_agent in cleared:
             # The maintainer cleared this agent's cap/cooldown on release: the old turn does not reinstate it.
@@ -1784,6 +1960,39 @@ class Supervisor:
         self.notify("turn_failed", session=self.state["head_session"], agent=failed_agent,
                     outcome=report.outcome, action=action)
         return agent, make_prompt(agent)
+
+    def work_window(self) -> datetime:
+        """Start of the period whose launched work may still be running: the chain's first session, or the
+        latest maintainer release (which reviewed whatever was live then), whichever is later."""
+        starts = []
+        for sid in {*(self.state.get("chain") or []), self.state.get("head_session")} - {None}:
+            try:
+                created = json.loads((self.host.relay.sessions_dir() / sid / "session.json").read_text()).get("created_at")
+            except (OSError, ValueError, AttributeError):
+                created = None
+            starts.append(parse_ts(created) or datetime.min.replace(tzinfo=UTC))  # unknown: the widest window
+        since = min(starts) if starts else datetime.min.replace(tzinfo=UTC)
+        try:
+            for line in self.store.journal_path.read_text().splitlines():
+                record = json.loads(line)
+                if record.get("event") == "release" and (at := parse_ts(record.get("at"))) and at > since:
+                    since = at
+        except (OSError, ValueError):
+            pass
+        return since
+
+    def _live_work_hold(self, report: TurnReport) -> str | None:
+        """Hold while work launched in this chain is still running in a checkout: continuing would overlap it."""
+        try:
+            live = self.host.live_work(self.work_window())
+        except Exception as exc:  # noqa: BLE001 - an unreadable process table is not evidence of no work
+            live = [f"check failed ({type(exc).__name__})"]
+        if not live:
+            return None
+        self.host.log(f"live work in the checkout: {', '.join(live[:10])}")
+        self.notify("turn_failed", session=self.state["head_session"], agent=report.agent or self.state.get("agent") or PREFERRED,
+                    outcome=report.outcome, action="hold")
+        return self.hold("live_work", self.attempts or None, report.turn_id)
 
     def _choose(self, current: str, *, mode: str) -> str | None:
         """`same`: retry the current agent only (transient, crash). `switch`: another agent only (quota).
@@ -2043,8 +2252,12 @@ def make_host(repo: Path) -> Host:
     def permissions() -> str | None:
         return permissions_digest(repo / ".agent-relay" / "permissions.toml")
 
+    def live_work(since: datetime) -> list[str]:
+        return live_processes(worktree_roots(repo), since, {os.getpid()}) + live_containers(since)
+
     return Host(relay=RelayAdapter(repo), fingerprint=lambda: fingerprint(repo),
-                conflicts=lambda own: live_conflicts(repo, own), ledger=ledger, permissions_digest=permissions)
+                conflicts=lambda own: live_conflicts(repo, own), ledger=ledger, permissions_digest=permissions,
+                live_work=live_work)
 
 
 def webhook_sender() -> Callable[[str], str | None] | None:
