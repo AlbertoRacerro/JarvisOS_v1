@@ -928,6 +928,7 @@ def add_proc(proc: Path, pid: int, *, argv: list[str], cwd: Path | None, started
     ticks = int((started.timestamp() - btime) * os.sysconf("SC_CLK_TCK"))
     rest = [state, str(ppid)] + ["0"] * 17 + [str(ticks)]
     (entry / "stat").write_text(f"{pid} ({comm or Path(argv[0]).name}) {' '.join(rest)} 0 0\n")
+    (entry / "comm").write_text(f"{(comm or Path(argv[0]).name)[:15]}\n")
     (entry / "status").write_text(f"Name:\t{Path(argv[0]).name}\nPPid:\t{ppid}\n")
     (entry / "cmdline").write_bytes(b"\0".join(a.encode() for a in argv) + b"\0")
     (entry / "fd").mkdir()
@@ -951,7 +952,9 @@ def proc_tree(tmp_path: Path) -> tuple[Path, Path, Path]:
     add_proc(proc, 14, argv=["bash"], cwd=repo, started=new)                          # idle prompt on a terminal
     add_proc(proc, 15, argv=["bash"], cwd=repo, started=new, stdin="pipe:[4242]", comm="stdin-sh")  # fed a script
     add_proc(proc, 16, argv=["python", "x.py"], cwd=repo, started=new, state="Z", comm="zombie")
-    add_proc(proc, 17, argv=["tmux", "new-session"], cwd=repo, started=old)
+    add_proc(proc, 17, argv=["tmux", "new-session"], cwd=repo, started=old, comm="tmux: server")
+    add_proc(proc, 23, argv=["tmux: server"], cwd=repo, started=old, comm="tmux: server")  # rewritten title
+    add_proc(proc, 24, argv=["python", "-m", "http.server"], cwd=repo, started=old, ppid=23, comm="pane-exec2")
     add_proc(proc, 18, argv=["python", "-m", "pytest", "-q"], cwd=repo, started=old, ppid=17, comm="pane-exec")
     add_proc(proc, 21, argv=["python3", "scripts/relay_continuity.py", "watch"], cwd=repo, started=new, comm="watcher")
     add_proc(proc, 22, argv=["python3", "scripts/relay_continuity.py", "--help"], cwd=repo, started=new, comm="rc-other")
@@ -966,7 +969,8 @@ def test_live_processes_reports_work_in_any_checkout_with_age_and_inheritance(tm
     proc, repo, worktree = proc_tree(tmp_path)
     found = {w.label: w for w in rc.live_processes([repo, worktree], T0, {20}, proc_root=proc)}
     assert set(found) == {"process node", "process py_test__x_", "process stdin-sh", "process pane-exec",
-                          "process rc-other"}
+                          "process pane-exec2", "process rc-other"}
+    assert found["process pane-exec2"].inherited  # a server that rewrote its argv to `tmux: server`
     assert found["process py_test__x_"].recent and not found["process py_test__x_"].inherited
     assert not found["process pane-exec"].recent and found["process pane-exec"].inherited  # exec in an old pane
     old = [w for w in rc.live_processes([repo, worktree], T0, {20}, proc_root=proc) if w.label == "process node"]
@@ -1013,7 +1017,9 @@ def test_live_containers_fail_closed_except_for_an_absent_daemon(monkeypatch: py
     def labels(run: Any) -> list[tuple[str, bool, bool, bool]]:
         return [(w.label, w.identity is None, w.recent, w.inherited) for w in rc.live_containers(T0, run=run)]
     down = "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?"
-    assert labels(runner((1, "", down))) == []
+    assert [w.label for w in rc.live_containers(T0, run=runner((1, "", down)), shims=lambda: False)] == []
+    # Live restore: the daemon is down but a container shim still runs, so containers may be running.
+    assert [w.label for w in rc.live_containers(T0, run=runner((1, "", down)), shims=lambda: True)] == ["docker check failed"]
     assert labels(runner((1, "", "permission denied while trying to connect"))) == [("docker check failed", True, True, False)]
     assert labels(runner((0, ""))) == []
     rows = (f"aaa{'1' * 20} 2026-10-18T08:05:00.123456789Z null\n"
@@ -1028,6 +1034,15 @@ def test_live_containers_fail_closed_except_for_an_absent_daemon(monkeypatch: py
     assert labels(runner((0, "aaa\n"), (1, ""))) == [("docker check failed", True, True, False)]
     assert labels(runner(subprocess.TimeoutExpired("docker", 15))) == [("docker check timed out", True, True, False)]
     assert labels(runner(OSError("exec format error"))) == [("docker check failed", True, True, False)]
+
+
+def test_container_shims_are_detected_for_any_user(tmp_path: Path) -> None:
+    proc = fake_proc(tmp_path)
+    add_proc(proc, 40, argv=["sleep"], cwd=tmp_path, started=T0)
+    assert rc.container_shims(proc) is False
+    add_proc(proc, 41, argv=["/usr/bin/containerd-shim-runc-v2"], cwd=tmp_path, started=T0)
+    (proc / "41" / "comm").write_text("containerd-shim\n")
+    assert rc.container_shims(proc) is True
 
 
 def test_container_timestamps_keep_fractions_and_offsets() -> None:

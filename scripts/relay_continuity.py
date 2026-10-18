@@ -1510,6 +1510,12 @@ def live_conflicts(repo: Path, own_pids: set[int]) -> list[str]:
 
 INTERACTIVE_SHELLS = {"bash", "-bash", "sh", "-sh", "zsh", "-zsh", "fish", "-fish", "dash"}
 MULTIPLEXER_SERVERS = {"tmux", "screen", "SCREEN"}
+CONTAINER_SHIMS = ("containerd-shim", "conmon")  # one per running container, whatever its daemon's state
+
+
+def _multiplexer(name: str) -> bool:
+    """tmux/screen under any title: `tmux`, or the server's rewritten `tmux: server`."""
+    return name in MULTIPLEXER_SERVERS or name.startswith(("tmux:", "tmux "))
 DAEMON_UNREACHABLE = ("cannot connect to the docker daemon", "is the docker daemon running", "unable to connect to podman",
                       "cannot connect to podman", "no such file or directory")
 
@@ -1563,7 +1569,7 @@ def _ignorable(argv: list[str], entry: Path) -> bool:
             return os.readlink(entry / "fd" / "0").startswith(("/dev/pts/", "/dev/tty"))
         except OSError:
             return False
-    if name in MULTIPLEXER_SERVERS:
+    if _multiplexer(name):
         return True
     if name in ("relay", "agent-relay") and any(a in ("daemon", "hook") for a in argv[1:3]):
         return True
@@ -1615,7 +1621,7 @@ def live_processes(roots: list[Path], since: datetime, own_pids: set[int], *,
             if _ignorable(argv, entry):
                 continue
             try:
-                parent = _argv(proc_root / fields[1])
+                parent = [*_argv(proc_root / fields[1])[:1], (proc_root / fields[1] / "comm").read_text().strip()]
             except OSError:
                 parent = []
         except (FileNotFoundError, ProcessLookupError):
@@ -1628,7 +1634,7 @@ def live_processes(roots: list[Path], since: datetime, own_pids: set[int], *,
             continue
         comm = re.sub(r"[^A-Za-z0-9_.:-]", "_", stat[stat.find("(") + 1:stat.rfind(")")])[:32]
         identity = f"proc:{entry.name}:{fields[19]}:{hashlib.sha256(chr(0).join(argv).encode()).hexdigest()[:16]}"
-        pane = bool(parent) and Path(parent[0]).name in MULTIPLEXER_SERVERS
+        pane = any(_multiplexer(Path(name).name) or _multiplexer(name) for name in parent)
         found[identity] = Work(identity, f"process {comm}", recent=started >= since, inherited=pane)  # names only
     return sorted(found.values(), key=lambda w: (w.label, w.identity or ""))
 
@@ -1642,9 +1648,23 @@ def _container_ts(value: str) -> datetime | None:
     return parse_ts(f"{match.group(1)}.{frac}{zone}")
 
 
-def live_containers(since: datetime, *, run: Callable[..., subprocess.CompletedProcess] = subprocess.run) -> list[Work]:
-    """Running docker/podman containers; they may bind-mount a checkout. A daemon that is not running has no
-    containers; any other failure to list or date them counts as live work."""
+def container_shims(proc_root: Path = Path("/proc")) -> bool:
+    """Whether any container runtime shim is running (readable for every user's processes)."""
+    for entry in proc_root.iterdir() if proc_root.exists() else []:
+        if entry.name.isdigit():
+            try:
+                if (entry / "comm").read_text().strip().startswith(CONTAINER_SHIMS):
+                    return True
+            except OSError:
+                continue
+    return False
+
+
+def live_containers(since: datetime, *, run: Callable[..., subprocess.CompletedProcess] = subprocess.run,
+                    shims: Callable[[], bool] = container_shims) -> list[Work]:
+    """Running docker/podman containers; they may bind-mount a checkout. An unreachable daemon proves nothing
+    (live restore keeps containers running), so it is clear only when no container shim runs; any other failure
+    to list or date them counts as live work."""
     found: list[Work] = []
     for tool in ("docker", "podman"):
         exe = shutil.which(tool)
@@ -1653,7 +1673,7 @@ def live_containers(since: datetime, *, run: Callable[..., subprocess.CompletedP
         try:
             listed = run([exe, "ps", "-q", "--no-trunc"], capture_output=True, text=True, timeout=15)
             if listed.returncode != 0:
-                if not any(m in (listed.stderr or "").lower() for m in DAEMON_UNREACHABLE):
+                if not any(m in (listed.stderr or "").lower() for m in DAEMON_UNREACHABLE) or shims():
                     found.append(inspection_failed(f"{tool} check failed"))
                 continue
             ids = listed.stdout.split()
