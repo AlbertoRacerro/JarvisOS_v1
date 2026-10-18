@@ -408,6 +408,7 @@ def _gh_kind(args: list[str]) -> tuple[str, str]:
 
 
 def _curl_kind(word: str, args: list[str]) -> tuple[str, str]:
+    writes = _download_writes(word, args)
     for i, a in enumerate(args):
         nxt = args[i + 1] if i + 1 < len(args) else ""
         if a.startswith(("--request", "--method")):
@@ -428,7 +429,47 @@ def _curl_kind(word: str, args: list[str]) -> tuple[str, str]:
                     return "external", f"{word} POST"
                 if ch in "oOHuAeEbcKw":  # options whose value follows; stop scanning the cluster
                     break
-    return "read_only", f"{word} GET"
+    return ("local_write", f"{word} > file") if writes else ("read_only", f"{word} GET")
+
+
+def _download_writes(word: str, args: list[str]) -> bool:
+    """Whether curl/wget writes the response (or headers/cookies) to a file rather than stdout."""
+    def to_file(value: str) -> bool:
+        return value not in ("-", "/dev/null", "/dev/stdout", "/dev/stderr", "")
+    if word == "wget":
+        # wget saves to a file unless the output document is stdout or /dev/null, or it only checks (--spider).
+        if "--spider" in args:
+            return False
+        for i, a in enumerate(args):
+            if a in ("-O", "--output-document") and i + 1 < len(args):
+                return to_file(args[i + 1])
+            if a.startswith("--output-document="):
+                return to_file(a.split("=", 1)[1])
+            if a.startswith("-O") and len(a) > 2:
+                return to_file(a[2:])
+            if a.startswith("-") and not a.startswith("--") and "O" in a[1:]:
+                rest = a[a.index("O") + 1:]
+                return to_file(rest or (args[i + 1] if i + 1 < len(args) else ""))
+        return True
+    for i, a in enumerate(args):
+        nxt = args[i + 1] if i + 1 < len(args) else ""
+        if a in ("--remote-name", "--remote-name-all", "--output-dir", "--create-dirs"):
+            return True
+        if a.startswith(("--output", "--dump-header", "--cookie-jar", "--trace", "--stderr")):
+            value = a.split("=", 1)[1] if "=" in a else nxt
+            if to_file(value):
+                return True
+        elif a.startswith("-") and not a.startswith("--"):
+            for j, ch in enumerate(a[1:], 1):
+                if ch == "O":
+                    return True
+                if ch in "oDc":
+                    if to_file(a[j + 1:] or nxt):
+                        return True
+                    break
+                if ch in "XdFTHuAeEbKw":
+                    break
+    return False
 
 
 def strip_heredocs(command: str) -> str:
@@ -499,6 +540,20 @@ def split_segments(command: str) -> list[str]:
     return [seg for seg in segments if seg.strip()]
 
 
+def split_first_word(text: str) -> tuple[str | None, str]:
+    """The first shell word of `text` (quotes removed) and the raw text after it, or (None, text)."""
+    lexer = shlex.shlex(text, posix=True)
+    lexer.whitespace_split = True
+    lexer.commenters = ""
+    try:
+        first = lexer.get_token()
+    except ValueError:
+        return None, text
+    if not first:
+        return None, text
+    return first, text[lexer.instream.tell():]
+
+
 def substitutions(command: str) -> tuple[list[str], str]:
     """Bodies of $(...), <(...), >(...) and backtick substitutions (they run as commands), and the
     command text with each substitution replaced by a placeholder word."""
@@ -531,12 +586,18 @@ def classify_command(command: str, _depth: int = 0) -> tuple[str, str]:
         return "unknown", "nested substitution"
     for prefix in ("bash -lc ", "bash -c ", "/bin/bash -lc ", "/bin/bash -c ", "sh -c ", "/bin/sh -c "):
         if command.startswith(prefix):
-            try:
-                inner = shlex.split(command[len(prefix):])
-                if inner:
-                    command = inner[0]
-            except ValueError:
-                pass
+            program, rest = split_first_word(command[len(prefix):])
+            if program is not None:
+                # The wrapped program is classified as a command; whatever follows it in the outer shell
+                # (redirections, `&`, `; more`) is classified too, with the program as a neutral placeholder.
+                inner_kind, inner_label = classify_command(program, _depth + 1)
+                outer_kind, outer_label = classify_command(f"true {rest}", _depth + 1) if rest.strip() else ("read_only", "")
+                outer_label = outer_label.replace("true", prefix.split()[0], 1)
+                kind = max((inner_kind, outer_kind), key=_rank)
+                label = inner_label if _rank(inner_kind) >= _rank(outer_kind) else outer_label
+                if outer_label.endswith(" &") and not label.endswith(" &"):
+                    label = f"{label} &"
+                return kind, label
             break
     bodies, outer = substitutions(strip_heredocs(command))
     results: list[tuple[str, str]] = [classify_command(body, _depth + 1) for body in bodies]
@@ -567,6 +628,8 @@ def classify_command(command: str, _depth: int = 0) -> tuple[str, str]:
                              or re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", words[0])):
                 words = words[1:]
         if not words:
+            if REDIRECT.search(seg):
+                results.append(("local_write", "> file"))  # a bare redirection truncates or creates a file
             continue
         word = Path(words[0]).name
         args = words[1:]
@@ -607,6 +670,10 @@ def classify_command(command: str, _depth: int = 0) -> tuple[str, str]:
             kind, label = "external", f"{word} push"
         elif word in ("npm", "pnpm", "yarn") and args[:1] == ["publish"]:
             kind, label = "external", f"{word} publish"
+        elif word == "sort" and any(a in ("-o", "--output") or a.startswith(("--output=", "-o")) for a in args):
+            kind, label = "local_write", "sort -o"
+        elif word == "uniq" and len([a for a in args if not a.startswith("-")]) >= 2:
+            kind, label = "local_write", "uniq > file"  # `uniq IN OUT` writes OUT
         elif word in READ_ONLY_CMDS:
             kind, label = "read_only", word
         elif word in LOCAL_WRITE_CMDS:

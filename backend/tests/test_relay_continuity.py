@@ -1484,3 +1484,44 @@ def test_detached_job_in_a_compound_command_stays_in_flight(tmp_path: Path) -> N
     report = rc.classify_turn(turn)
     assert [c.label for c in report.in_flight] == ["git push &"]
     assert rc.gate(report, fingerprint_changed=None) == "effects_uncertain"
+
+
+
+# ---------------------------------------------------------------------------
+# Regressions from the fifth independent review
+
+
+@pytest.mark.parametrize(("command", "expected"), [
+    ("bash -lc 'git push origin HEAD' >/tmp/push.log 2>&1 &", ("external", "git push &")),
+    ("bash -lc 'echo hi' > out.txt", ("local_write", "bash > file")),
+    ("bash -c 'ls; git push'", ("external", "git push")),
+    ("bash -lc 'git status'", ("read_only", "git status")),
+])
+def test_shell_wrappers_keep_the_outer_commands_effects(command: str, expected: tuple[str, str]) -> None:
+    assert rc.classify_command(command) == expected
+
+
+def test_detached_wrapped_push_stays_in_flight(tmp_path: Path) -> None:
+    command = "bash -lc 'git push origin HEAD' >/tmp/push.log 2>&1 &"
+    turn = write_turn(tmp_path / "s", [tool_use("x", "Bash", command=command), tool_result("x"), *QUOTA])
+    assert [c.label for c in rc.classify_turn(turn).in_flight] == ["git push &"]
+
+
+@pytest.mark.parametrize(("command", "kind"), [
+    ('curl -fsSL "$SCHEMA_URL" -o frontend/openapi.json', "local_write"), ("curl -O https://example.invalid/f", "local_write"),
+    ("curl --output=x https://example.invalid", "local_write"), ("wget https://example.invalid/f", "local_write"),
+    ("curl -sS https://example.invalid", "read_only"), ("curl -sSo /dev/null https://example.invalid", "read_only"),
+    ("wget -qO- https://example.invalid", "read_only"), ("wget --spider https://example.invalid", "read_only"),
+    ("curl -XPOST -o out https://example.invalid", "external"),
+])
+def test_downloads_to_files_are_local_writes(command: str, kind: str) -> None:
+    assert rc.classify_command(command)[0] == kind
+
+
+
+@pytest.mark.parametrize(("command", "kind"), [
+    ("> build.log", "local_write"), ("sort -o out.txt in.txt", "local_write"), ("uniq in.txt out.txt", "local_write"),
+    ("sort in.txt", "read_only"), ("uniq -c in.txt", "read_only"),
+])
+def test_other_file_writing_forms(command: str, kind: str) -> None:
+    assert rc.classify_command(command)[0] == kind
