@@ -877,17 +877,45 @@ def test_post_webhook_never_exposes_the_url(tmp_path: Path, monkeypatch: pytest.
 
     def boom(*_args: Any, **_kwargs: Any) -> Any:
         raise urllib.error.URLError(f"failed to reach {SECRET_URL}")
-    monkeypatch.setattr(rc.urllib.request, "urlopen", boom)
+    monkeypatch.setattr(rc._WEBHOOK_OPENER, "open", boom)
     error = rc.post_webhook("hello", webhook_file=hook)
     assert error == "URLError" and SECRET_URL not in error
 
     def http_error(*_args: Any, **_kwargs: Any) -> Any:
         raise urllib.error.HTTPError(SECRET_URL, 404, "no_service", {}, None)  # type: ignore[arg-type]
-    monkeypatch.setattr(rc.urllib.request, "urlopen", http_error)
+    monkeypatch.setattr(rc._WEBHOOK_OPENER, "open", http_error)
     assert rc.post_webhook("hello", webhook_file=hook) == "http_404"
     hook.write_text("https://evil.example/collect")
     assert rc.post_webhook("hello", webhook_file=hook) == "webhook_invalid"
     assert rc.post_webhook("hello", webhook_file=tmp_path / "missing") == "webhook_missing"
+
+
+@pytest.mark.parametrize(("url", "valid"), [
+    (SECRET_URL, True), ("http://hooks.slack.com/services/T/B/x", False),
+    ("https://hooks.slack.com.evil.example/services/T/B/x", False), ("https://hooks.slack.com:8443/services/T/B/x", False),
+    ("https://u:p@hooks.slack.com/services/T/B/x", False), ("https://hooks.slack.com/@evil.example/services/x", False),
+    ("https://hooks.slack.com/services/T/B/x?redirect=1", False), ("https://hooks.slack.com:bad/services/x", False),
+])
+def test_webhook_url_is_strictly_validated(url: str, valid: bool) -> None:
+    assert rc._valid_webhook_url(url) is valid
+
+
+def test_webhook_transport_rejects_redirects_and_ignores_proxies(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    handlers = {type(h) for h in rc._WEBHOOK_OPENER.handlers}
+    assert rc._RejectRedirects in handlers and urllib.request.HTTPRedirectHandler not in handlers
+    # The explicit empty ProxyHandler replaces the default environment-proxy handler and installs no proxy route.
+    assert not any(isinstance(h, urllib.request.ProxyHandler) for h in rc._WEBHOOK_OPENER.handlers)
+    request = urllib.request.Request(SECRET_URL, data=b"{}", method="POST")
+    with pytest.raises(urllib.error.HTTPError) as excinfo:
+        rc._RejectRedirects().redirect_request(request, None, 302, "Found", {}, "https://evil.example/x")
+    assert excinfo.value.code == 302
+
+    def redirected(*_args: Any, **_kwargs: Any) -> Any:
+        raise urllib.error.HTTPError(SECRET_URL, 302, "redirect rejected", {}, None)  # type: ignore[arg-type]
+    hook = tmp_path / "hook"
+    hook.write_text(SECRET_URL)
+    monkeypatch.setattr(rc._WEBHOOK_OPENER, "open", redirected)
+    assert rc.post_webhook("hello", webhook_file=hook) == "http_302"
 
 
 def test_world_readable_webhook_file_is_refused(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1496,9 +1524,16 @@ def test_detached_job_in_a_compound_command_stays_in_flight(tmp_path: Path) -> N
     ("bash -lc 'echo hi' > out.txt", ("local_write", "bash > file")),
     ("bash -c 'ls; git push'", ("external", "git push")),
     ("bash -lc 'git status'", ("read_only", "git status")),
+    ("bash -lc 'npm run dev >/tmp/dev.log 2>&1 &' ; python scripts/smoke_test.py", ("unknown", "npm &")),
 ])
 def test_shell_wrappers_keep_the_outer_commands_effects(command: str, expected: tuple[str, str]) -> None:
     assert rc.classify_command(command) == expected
+
+
+def test_inner_detachment_survives_a_worse_outer_command(tmp_path: Path) -> None:
+    command = "bash -lc 'npm run dev >/tmp/dev.log 2>&1 &' ; python scripts/smoke_test.py"
+    turn = write_turn(tmp_path / "s", [tool_use("x", "Bash", command=command), tool_result("x"), *QUOTA])
+    assert [(c.label, c.detached) for c in rc.classify_turn(turn).in_flight] == [("npm &", True)]
 
 
 def test_detached_wrapped_push_stays_in_flight(tmp_path: Path) -> None:
@@ -1522,6 +1557,9 @@ def test_downloads_to_files_are_local_writes(command: str, kind: str) -> None:
 @pytest.mark.parametrize(("command", "kind"), [
     ("> build.log", "local_write"), ("sort -o out.txt in.txt", "local_write"), ("uniq in.txt out.txt", "local_write"),
     ("sort in.txt", "read_only"), ("uniq -c in.txt", "read_only"),
+    ("sort -uo names.txt names.txt", "local_write"), ("sort --output names.txt in.txt", "local_write"),
+    ("sort -u in.txt", "read_only"), ("git diff --output=/tmp/review.patch HEAD~1 HEAD", "local_write"),
+    ("git log -p --output /tmp/log.txt", "local_write"), ("git diff HEAD~1 HEAD", "read_only"),
 ])
 def test_other_file_writing_forms(command: str, kind: str) -> None:
     assert rc.classify_command(command)[0] == kind

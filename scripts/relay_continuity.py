@@ -27,6 +27,7 @@ import sys
 import time
 import tomllib
 import urllib.error
+import urllib.parse
 import urllib.request
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
@@ -366,6 +367,8 @@ def _git_kind(args: list[str]) -> tuple[str, str]:
     if sub == "push":
         return "external", label
     if sub in GIT_READ:
+        if any(a == "--output" or a.startswith("--output=") for a in rest):
+            return "local_write", f"{label} --output"  # diff-family `--output` creates or truncates a file
         if sub == "remote" and rest and rest[0] not in ("-v", "show", "get-url"):
             return "local_write", label
         return "read_only", label
@@ -590,14 +593,16 @@ def classify_command(command: str, _depth: int = 0) -> tuple[str, str]:
             if program is not None:
                 # The wrapped program is classified as a command; whatever follows it in the outer shell
                 # (redirections, `&`, `; more`) is classified too, with the program as a neutral placeholder.
-                inner_kind, inner_label = classify_command(program, _depth + 1)
-                outer_kind, outer_label = classify_command(f"true {rest}", _depth + 1) if rest.strip() else ("read_only", "")
-                outer_label = outer_label.replace("true", prefix.split()[0], 1)
-                kind = max((inner_kind, outer_kind), key=_rank)
-                label = inner_label if _rank(inner_kind) >= _rank(outer_kind) else outer_label
-                if outer_label.endswith(" &") and not label.endswith(" &"):
-                    label = f"{label} &"
-                return kind, label
+                wrapper = prefix.split()[0]
+                parts = [classify_command(program, _depth + 1)]
+                if rest.strip():
+                    outer_kind, outer_label = classify_command(f"true {rest}", _depth + 1)
+                    outer_label = outer_label.replace("true", wrapper, 1)
+                    if outer_label.startswith(wrapper) and outer_label.endswith(" &") and not parts[0][1].endswith(" &"):
+                        parts[0] = (parts[0][0], f"{parts[0][1]} &")  # an outer `&` detaches the wrapped program
+                    parts.append((outer_kind, outer_label))
+                # Detachment from either side survives, independently of which side has the worse effect.
+                return _combine(parts)
             break
     bodies, outer = substitutions(strip_heredocs(command))
     results: list[tuple[str, str]] = [classify_command(body, _depth + 1) for body in bodies]
@@ -670,7 +675,8 @@ def classify_command(command: str, _depth: int = 0) -> tuple[str, str]:
             kind, label = "external", f"{word} push"
         elif word in ("npm", "pnpm", "yarn") and args[:1] == ["publish"]:
             kind, label = "external", f"{word} publish"
-        elif word == "sort" and any(a in ("-o", "--output") or a.startswith(("--output=", "-o")) for a in args):
+        elif word == "sort" and any(a == "--output" or a.startswith("--output=")
+                                    or (a.startswith("-") and not a.startswith("--") and "o" in a[1:]) for a in args):
             kind, label = "local_write", "sort -o"
         elif word == "uniq" and len([a for a in args if not a.startswith("-")]) >= 2:
             kind, label = "local_write", "uniq > file"  # `uniq IN OUT` writes OUT
@@ -690,6 +696,10 @@ def classify_command(command: str, _depth: int = 0) -> tuple[str, str]:
         results.append((kind, label))
     if not results:
         return "read_only", "(empty)"
+    return _combine(results)
+
+
+def _combine(results: list[tuple[str, str]]) -> tuple[str, str]:
     kind, label = max(results, key=lambda r: _rank(r[0]))
     detached = [r for r in results if r[1].endswith(" &")]
     if detached:
@@ -1155,18 +1165,38 @@ def render(event: str, fields: dict[str, Any]) -> str | None:
     return None if devctx.find_secret(text) else text
 
 
+class _RejectRedirects(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: ANN001, ANN201 - stdlib signature
+        raise urllib.error.HTTPError(req.full_url, code, "redirect rejected", headers, fp)
+
+
+# Proxies disabled and redirects rejected: the webhook body only ever reaches hooks.slack.com directly.
+_WEBHOOK_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}), _RejectRedirects())
+
+
+def _valid_webhook_url(url: str) -> bool:
+    try:
+        parts = urllib.parse.urlsplit(url)
+        port = parts.port
+    except ValueError:
+        return False
+    return (parts.scheme == "https" and parts.hostname == "hooks.slack.com" and port is None
+            and parts.username is None and parts.password is None and parts.path.startswith("/services/")
+            and not parts.query and not parts.fragment)
+
+
 def post_webhook(text: str, *, webhook_file: Path = WEBHOOK_FILE, timeout: float = 10.0) -> str | None:
     """POST to the incoming webhook. Returns None on success, else an error class (never the URL)."""
     try:
         url = webhook_file.read_text().strip()
     except OSError:
         return "webhook_missing"
-    if not url.startswith("https://hooks.slack.com/"):
+    if not _valid_webhook_url(url):
         return "webhook_invalid"
     request = urllib.request.Request(url, data=json.dumps({"text": text}).encode(), method="POST",
                                      headers={"Content-Type": "application/json"})
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310 - fixed https host
+        with _WEBHOOK_OPENER.open(request, timeout=timeout) as response:
             response.read(256)
         return None
     except urllib.error.HTTPError as exc:

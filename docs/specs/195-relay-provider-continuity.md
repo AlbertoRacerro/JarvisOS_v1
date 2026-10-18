@@ -124,6 +124,7 @@ Completed `local_write`/`external`/`background` calls with results are listed in
 ## File boundaries
 
 - **New:** `scripts/relay_continuity.py`; tests `backend/tests/test_relay_continuity.py`; trimmed and sanitized real-turn fixtures under `backend/tests/fixtures/relay_continuity/`; this spec; a runbook section in `docs/implementation/relay-continuity-runbook.md`.
+- **Architecture enforcement:** one `accepted_owner` AE002 entry in `configs/architecture_enforcement.json` for `scripts/relay_continuity.py::post_webhook`, the only external dispatch. It is bound to a strictly validated `https://hooks.slack.com/services/` URL, with redirects rejected and proxies disabled.
 - **Unchanged:**
   - Relay binary and session format;
   - product backend/frontend/schema;
