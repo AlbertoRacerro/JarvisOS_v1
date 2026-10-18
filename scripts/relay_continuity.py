@@ -394,11 +394,13 @@ def _screen_detached(args: list[str]) -> bool:
 
 def _container_detached(args: list[str]) -> bool:
     """`run -d`, `exec -d`, `compose up -d`, `start`/`restart`: containers keep running after the CLI returns."""
-    if any(a in ("-d", "--detach", "--wait") or a.startswith("--detach=") for a in args):  # `up --wait` implies -d
+    # Token-based on purpose: option values (`-f compose.dev.yml`, `-p name`) make positional subcommand parsing
+    # fragile, and an extra hold on a coincidental token is acceptable where a missed detachment is not.
+    if any(a in ("--detach", "--wait") or a.startswith("--detach=")  # `up --wait` implies -d
+           or (a.startswith("-") and not a.startswith("--") and "d" in a[1:]) for a in args):  # -d, -dt, -itd
         return True
-    ops = [a for a in args if not a.startswith("-")]
-    sub = ops[1] if ops[:1] == ["compose"] and len(ops) > 1 else (ops[0] if ops else "")
-    return sub in ("start", "restart", "unpause") and "-a" not in args and "--attach" not in args
+    return (any(a in ("start", "restart", "unpause") for a in args if not a.startswith("-"))
+            and "-a" not in args and "--attach" not in args)
 
 
 def _git_kind(args: list[str]) -> tuple[str, str]:
