@@ -56,6 +56,12 @@ def write_turn(session_dir: Path, events: list[dict[str, Any]], *, agent: str = 
     return turn
 
 
+def relay_prompt(task: str) -> str:
+    """Relay's real prompt layout (v0.7.7): rules, then the task, then continuation context."""
+    return (f"You are participating in a Relay-managed single-agent session.\n\n## Rules\n- Focus on the task.\n\n"
+            f"## Task\n\n{task}\n\n\n## Continuation Context\n\n- This run continues prior relay session: x\n")
+
+
 def copy_fixture(name: str, session_dir: Path) -> Path:
     turn = session_dir / "turns" / "turn-001"
     shutil.copytree(FIXTURES / name, turn)
@@ -118,7 +124,7 @@ class FakeRelay(rc.RelayAdapter):
             return rc.RunResult(None, 1, False)
         _, events = step
         sid = f"20261018-{len(self.launches):06d}-{'b' * 6}"
-        write_turn(self.sessions_dir() / sid, events, agent=agent, prompt=task)
+        write_turn(self.sessions_dir() / sid, events, agent=agent, prompt=relay_prompt(task))
         return rc.RunResult(sid, 0, True)
 
 
@@ -630,7 +636,7 @@ def test_restart_during_failover_adopts_running_attempt_without_relaunch(tmp_pat
 
     def finish_pending() -> None:
         write_turn(env.relay.sessions_dir() / "20261018-080100-cccccc", CODEX_SUCCESS, agent="codex",
-                   prompt=f"[relay-continuity attempt {nonce}]")
+                   prompt=relay_prompt(f"[relay-continuity attempt {nonce}]"))
     env.relay.finish_pending = finish_pending  # type: ignore[attr-defined]
     result, sup = env.run()
     assert result == "idle"
@@ -655,7 +661,7 @@ def test_restart_with_dead_attempt_found_by_nonce_settles(tmp_path: Path) -> Non
     _pending(env, nonce, pid=None)
     write_turn(env.relay.sessions_dir() / "20261018-080030-dddddd",
                [tool_use("x", "Bash", command="git push"), *CODEX_QUOTA], agent="codex",
-               prompt=f"[relay-continuity attempt {nonce}]")
+               prompt=relay_prompt(f"[relay-continuity attempt {nonce}]"))
     result, sup = env.run()
     assert result == "held" and sup.state["hold"]["reason"] == "effects_uncertain"
     assert env.relay.launches == []
@@ -946,10 +952,10 @@ def test_nonce_lookup_ignores_sessions_that_merely_quote_it(tmp_path: Path) -> N
     # The real attempt pushed and was cut off; a later session's prompt quotes the nonce and failed harmlessly.
     write_turn(env.relay.sessions_dir() / "20261018-080030-ffffff",
                [tool_use("x", "Bash", command="git push"), *CODEX_QUOTA], agent="codex",
-               prompt=f"[relay-continuity attempt {nonce}]\ntask")
+               prompt=relay_prompt(f"[relay-continuity attempt {nonce}]\ntask"))
     write_turn(env.relay.sessions_dir() / "20261018-080500-aaaaab", EAI,
-               prompt=f"[relay-continuity attempt rc-20261018T080500Z-12345678]\nAudit of {nonce}:\n"
-                      f"[relay-continuity attempt {nonce}]")
+               prompt=relay_prompt(f"[relay-continuity attempt rc-20261018T080500Z-12345678]\nAudit of {nonce}:\n"
+                                   f"[relay-continuity attempt {nonce}]"))
     assert env.relay.find_by_nonce(nonce, T0) == "20261018-080030-ffffff"
     result, sup = env.run()
     assert result == "held" and sup.state["hold"]["reason"] == "effects_uncertain"
@@ -960,7 +966,7 @@ def test_nonce_lookup_refuses_ambiguous_matches(tmp_path: Path) -> None:
     env = Env(tmp_path)
     nonce = "rc-20261018T080000Z-abad1dea"
     for sid in ("20261018-080030-aaaaaa", "20261018-080040-bbbbbb"):
-        write_turn(env.relay.sessions_dir() / sid, SUCCESS, prompt=f"[relay-continuity attempt {nonce}]")
+        write_turn(env.relay.sessions_dir() / sid, SUCCESS, prompt=relay_prompt(f"[relay-continuity attempt {nonce}]"))
     assert env.relay.find_by_nonce(nonce, T0) is None
 
 
@@ -1208,3 +1214,151 @@ def test_empty_reasonless_result_never_overrides_a_real_terminal(tmp_path: Path)
     assert rc.classify_turn(write_turn(tmp_path / "b", [*QUOTA, artifact])).outcome == "quota"
     # Alone, it is still not success.
     assert rc.classify_turn(write_turn(tmp_path / "c", [artifact])).outcome == "unknown"
+
+
+
+# ---------------------------------------------------------------------------
+# Regressions from the second independent review
+
+
+def test_unresolved_hold_is_durable_before_the_attempt_is_journalled_settled(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    env = Env(tmp_path, [None])
+    env.head(EAI)
+    real = env.store.journal
+
+    def dies_on_settle(record: dict[str, Any]) -> None:
+        if record.get("event") == "settle":
+            raise SystemExit("killed between the hold and its settle record")
+        real(record)
+    monkeypatch.setattr(env.store, "journal", dies_on_settle)
+    with pytest.raises(SystemExit):
+        env.run()
+    state = env.store.load()
+    assert state["phase"] == "held" and state["hold"]["reason"] == "attempt_unresolved" and state["pending"] is None
+    monkeypatch.setattr(env.store, "journal", real)
+    assert env.run()[0] == "held" and len(env.relay.launches) == 1
+
+
+def test_marker_quoted_later_in_another_task_is_not_the_attempt(tmp_path: Path) -> None:
+    env = Env(tmp_path)
+    env.head(QUOTA)
+    nonce = "rc-20261018T080000Z-5eedf00d"
+    _pending(env, nonce, pid=None)
+    # The original session is gone; a maintainer audit prompt quotes the marker on a later line.
+    write_turn(env.relay.sessions_dir() / "20261018-080500-aaaaab", SUCCESS,
+               prompt=relay_prompt(f"Audit the earlier attempt.\n[relay-continuity attempt {nonce}]"))
+    assert env.relay.find_by_nonce(nonce, T0) is None
+    result, sup = env.run()
+    assert result == "held" and sup.state["hold"]["reason"] == "attempt_unresolved"
+
+
+@pytest.mark.parametrize("command", [
+    "sed -e's/.*/git push/e' input", "sed --expression='s/.*/git push/e' input", "sed -ne 's/x/y/w out' f",
+    "sed -f prog.sed f", "awk -f deploy.awk", "gawk -i inplace '{print}' f", "awk --file=deploy.awk",
+])
+def test_program_text_in_options_or_files_is_not_read_only(command: str) -> None:
+    assert rc.classify_command(command)[0] != "read_only"
+
+
+def test_killed_background_subagent_leaves_its_unanswered_calls_in_flight(tmp_path: Path) -> None:
+    parent = tool_use("a", "Agent", subagent_type="general-purpose", run_in_background=True)
+    child = tool_use("c", "Bash", command="git push")
+    child["parent_tool_use_id"] = "a"
+    turn = write_turn(tmp_path / "s", [
+        parent, tool_result("a"),
+        {"type": "system", "subtype": "task_started", "task_id": "t", "tool_use_id": "a", "is_backgrounded": True},
+        child, {"type": "system", "subtype": "task_notification", "task_id": "t", "tool_use_id": "a", "status": "killed"},
+        *QUOTA])
+    report = rc.classify_turn(turn)
+    assert [c.label for c in report.in_flight] == ["git push"]
+    assert rc.gate(report, fingerprint_changed=None) == "effects_uncertain"
+
+
+@pytest.mark.parametrize("windows", [None, [], [{}], [{"id": "s", "used_percent": "100"}], [{"id": "s", "used_percent": True}]])
+def test_unusable_usage_windows_are_not_evidence_of_room(tmp_path: Path, windows: Any) -> None:
+    env = Env(tmp_path, [("claude", SUCCESS)])
+    env.relay.readings = lambda: {"codex": {"agent_key": "codex", "status": "ok", "as_of": rc.iso(env.clock.now()),
+                                            "windows": windows}}
+    env.head(QUOTA)
+    result, _ = env.run()
+    assert result == "idle" and [launch["agent"] for launch in env.relay.launches] == ["claude"]
+
+
+def test_same_agent_retry_waits_for_that_agent(tmp_path: Path) -> None:
+    # Codex hits a transient; a fresh reading then shows Codex briefly capped. The retry waits for Codex.
+    codex_reset = T0 + timedelta(minutes=12)
+    env = Env(tmp_path, [("codex", CODEX_SUCCESS)])
+    env.relay.readings = room(env, "claude", exhausted={"codex": codex_reset})
+    state = rc.default_state()
+    state.update({"head_session": HEAD, "chain": [HEAD], "agent": "codex", "permissions_digest": "perm0",
+                  "permissions_pinned": True, "last_switch_at": rc.iso(T0 - timedelta(hours=2))})
+    env.store.save(state, T0)
+    env.head(EAI, agent="codex")
+    assert env.run()[0] == "idle"
+    assert [launch["agent"] for launch in env.relay.launches] == ["codex"]
+    assert env.relay.launches[0]["at"] >= codex_reset
+
+
+SPEND_WITH_RESET = [claude_result("You've hit your monthly spend limit · your session limit resets 11:50pm (Europe/Rome)",
+                                  error=True, status=429)]
+
+
+def test_restart_does_not_escalate_the_same_spend_cap_turn(tmp_path: Path) -> None:
+    env = Env(tmp_path)  # any Relay invocation fails the test
+    env.head(SPEND_WITH_RESET)
+    env.store.root.mkdir(parents=True, exist_ok=True)
+
+    def stop_while_waiting(seconds: float) -> None:
+        env.store.stop_path.write_text("now")  # the maintainer stops the supervisor during the wait
+        env.clock.sleep(seconds)
+    env.host.sleep = stop_while_waiting
+    for _ in range(2):  # run, stop while waiting, restart on the same head turn, stop again
+        assert env.run()[0] == "stopped"
+        env.store.stop_path.unlink()
+        cooldown = env.store.load()["cooldowns"]["claude"]
+        assert cooldown["reason"] == "quota" and cooldown["until"] is not None
+    assert env.relay.launches == []
+
+
+def test_release_clearing_a_spend_cap_retries_the_agent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    spend = [claude_result("You've hit your monthly spend limit", error=True, status=429)]
+    env = Env(tmp_path, [("claude", SUCCESS)])
+    env.head(spend)
+    result, sup = env.run()
+    assert result == "held" and sup.state["hold"]["reason"] == "no_provider_available"
+    monkeypatch.setenv("RELAY_CONTINUITY_DIR", str(env.store.root))
+    monkeypatch.setattr(rc, "make_host", lambda repo: env.host)
+    monkeypatch.setattr(rc, "repo_root", lambda: env.repo)
+    assert rc.main(["release", "--clear-cooldown", "claude", "--note", "spend cap raised"]) == 0
+    result, sup = env.run()
+    assert result == "idle" and [launch["agent"] for launch in env.relay.launches] == ["claude"]
+    assert "claude" not in sup.state["cooldowns"]
+
+
+def test_releasing_a_permissions_hold_does_not_waive_the_side_effect_gate(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    env = Env(tmp_path)  # any Relay invocation fails the test
+    env.relay.readings = room(env, "codex")
+    env.head(SUCCESS)
+    assert env.run()[0] == "idle"
+    env.perm["v"] = "perm-widened"
+    sid = "20261018-090000-eeeeee"
+    env.head([tool_use("x", "Bash", command="git push origin HEAD"), *QUOTA], sid=sid)
+    result, sup = env.run(sid)
+    assert result == "held" and sup.state["hold"]["reason"] == "permissions_changed"
+    monkeypatch.setenv("RELAY_CONTINUITY_DIR", str(env.store.root))
+    monkeypatch.setattr(rc, "make_host", lambda repo: env.host)
+    monkeypatch.setattr(rc, "repo_root", lambda: env.repo)
+    assert rc.main(["release", "--note", "reviewed the permissions change only"]) == 0
+    result, sup = env.run(sid)
+    assert result == "held" and sup.state["hold"]["reason"] == "effects_uncertain"
+    assert env.relay.launches == []
+
+
+def test_spend_cap_reported_after_its_printed_reset_is_a_spend_limit(tmp_path: Path) -> None:
+    # Corpus 20260924-083444-1d5541/turn-004: still capped at 14:27 Rome with "resets 12:40pm".
+    late = datetime(2026, 9, 24, 12, 27, 7, tzinfo=UTC)
+    turn = write_turn(tmp_path / "s", [claude_result(
+        "You've hit your monthly spend limit · raise it at claude.ai/settings/usage · your session limit resets "
+        "12:40pm (Europe/Rome)", error=True, status=429)])
+    assert rc.classify_turn(turn, ref=late).outcome == "spend_limit"
+    assert rc.classify_turn(turn, ref=datetime(2026, 9, 24, 9, 28, tzinfo=UTC)).outcome == "quota"

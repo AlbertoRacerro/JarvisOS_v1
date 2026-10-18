@@ -114,6 +114,7 @@ class ToolCall:
     background_closed: bool = False
     parent: str | None = None
     detached: bool = False
+    ended_abnormally: bool = False  # killed/failed/stopped task, or an error tool result
 
     @property
     def pending(self) -> bool:
@@ -133,6 +134,7 @@ class TurnReport:
     terminal: bool = False
     relay_status: str | None = None
     no_evidence: bool = False  # the turn left no output of its own: nothing shows what it did
+    turn_id: str | None = None  # "<session>/<turn>" of the classified turn
     spend_cap: bool = False  # the provider message named a spend/credit cap (even if it also printed a reset)
 
     @property
@@ -247,6 +249,37 @@ AWK_EXEC = re.compile(r"system\s*\(|\|\s*getline|\|\s*\"|\"\s*\|\s*getline|print
 # sed `e`/`w` commands, and `s///e` / `s///w` flags, execute commands or write files.
 SED_CMD_EXEC = re.compile(r"(?:^|[;\n{}])\s*(?:[0-9$,]+|/[^/\n]*/)?\s*!?\s*[ewW](?:\s|$)")
 SED_SUBST = re.compile(r"(?:^|[;\n{}]|\s)s([^\w\s\\])(?:\\.|(?!\1).)*\1(?:\\.|(?!\1).)*\1([a-zA-Z0-9]*)")
+
+
+def sed_scripts(args: list[str]) -> tuple[list[str], bool]:
+    """Every sed program text (`-e S`, `-eS`, `--expression=S`, bare S), and whether one is read from a file."""
+    scripts, from_file, i = [], False, 0
+    while i < len(args):
+        a = args[i]
+        if a in ("-f", "--file") or a.startswith("--file="):
+            from_file = True
+        elif a.startswith("--expression="):
+            scripts.append(a.split("=", 1)[1])
+        elif a in ("-e", "--expression") and i + 1 < len(args):
+            scripts.append(args[i + 1])
+            i += 1
+        elif a.startswith("-") and not a.startswith("--"):
+            cluster = a[1:]
+            for j, ch in enumerate(cluster):
+                if ch == "f":
+                    from_file = True
+                    break
+                if ch == "e":
+                    if cluster[j + 1:]:
+                        scripts.append(cluster[j + 1:])
+                    elif i + 1 < len(args):
+                        scripts.append(args[i + 1])
+                        i += 1
+                    break
+        elif not a.startswith("-"):
+            scripts.append(a)
+        i += 1
+    return scripts, from_file
 
 
 def sed_executes(script: str) -> bool:
@@ -483,12 +516,15 @@ def classify_command(command: str, _depth: int = 0) -> tuple[str, str]:
         elif word in ("curl", "wget"):
             kind, label = _curl_kind(word, args)
         elif word == "sed":
-            if any(sed_executes(a) for a in args if not a.startswith("-")):
+            scripts, from_file = sed_scripts(args)
+            if from_file or any(sed_executes(a) for a in scripts):
                 kind, label = "unknown", "sed e/w"  # GNU sed can execute commands and write files
             else:
                 kind, label = ("local_write" if any(a.startswith("-i") or a == "--in-place" for a in args) else "read_only"), "sed"
         elif word in ("awk", "gawk", "mawk", "nawk"):
-            kind, label = ("unknown" if any(AWK_EXEC.search(a) for a in args) else "read_only"), word
+            from_file = any(a in ("-f", "--file", "-i", "--include", "-l", "--load") or a.startswith(("-f", "--file=", "-i", "--include="))
+                            for a in args)
+            kind, label = ("unknown" if from_file or any(AWK_EXEC.search(a) for a in args) else "read_only"), word
         elif word == "find":
             if any(a in ("-delete", "-fprint", "-fprint0", "-fprintf", "-fls") for a in args):
                 kind, label = "local_write", "find (writes)"
@@ -613,7 +649,7 @@ def classify_turn(turn_dir: Path, *, ref: datetime | None = None, local_tz: Any 
     calls: dict[str, ToolCall] = {}
     task_calls: dict[str, str] = {}
     report = TurnReport(outcome="crash", agent=agent, detail="no terminal event", bad_lines=bad,
-                        relay_status=state.get("status"))
+                        relay_status=state.get("status"), turn_id=f"{turn_dir.parent.parent.name}/{turn_dir.name}")
     if not events:
         report.detail = "output missing" if not output.exists() else ("output unparseable" if bad else "output empty")
         report.no_evidence = not bad
@@ -638,6 +674,8 @@ def classify_turn(turn_dir: Path, *, ref: datetime | None = None, local_tz: Any 
             for block in content if isinstance(content, list) else []:
                 if isinstance(block, dict) and block.get("type") == "tool_result" and block.get("tool_use_id") in calls:
                     calls[block["tool_use_id"]].done = True
+                    if block.get("is_error") is True:
+                        calls[block["tool_use_id"]].ended_abnormally = True
         elif typ == "system" and e.get("subtype") in ("task_started", "task_notification", "task_updated"):
             # Claude reports every tool task (foreground ones too). A task is open only once backgrounded,
             # and closes on a terminal status; updates and some notifications carry only the task id.
@@ -647,8 +685,9 @@ def classify_turn(turn_dir: Path, *, ref: datetime | None = None, local_tz: Any 
             call = calls.get(e.get("tool_use_id") or task_calls.get(str(e.get("task_id"))))
             if call is None:
                 pass
-            elif (sub == "task_notification" and e.get("status") in TASK_DONE) or patch.get("status") in TASK_DONE:
+            elif (status := e.get("status") if sub == "task_notification" else patch.get("status")) in TASK_DONE:
                 call.background_open, call.background_closed = False, True
+                call.ended_abnormally = call.ended_abnormally or status != "completed"
             elif e.get("is_backgrounded") is True or patch.get("is_backgrounded") is True:
                 call.background_open = True
         elif typ in ("item.started", "item.completed"):
@@ -667,7 +706,7 @@ def classify_turn(turn_dir: Path, *, ref: datetime | None = None, local_tz: Any 
         # A subagent's calls are settled by its parent call (results inside a subagent are not always streamed),
         # but only when the parent truly finished: a background subagent's acknowledgement settles nothing.
         parent = calls.get(call.parent) if call.parent else None
-        if parent is not None and not parent.pending:
+        if parent is not None and not parent.pending and not parent.ended_abnormally:
             call.done = True
     report.calls = list(calls.values())
     if terminal is None:
@@ -739,6 +778,10 @@ def settle_limit(report: TurnReport, text: str, ref: datetime, local_tz: Any) ->
     reset = parse_reset(text, ref, local_tz)
     report.reset_at = iso(reset)
     report.spend_cap = report.outcome == "spend_limit"
+    if report.spend_cap and reset is not None and reset <= ref:
+        # The cap is still reported after the session reset it prints: this turn alone shows a real spend cap.
+        report.detail += " (spend cap outlived its printed session reset)"
+        return
     if report.outcome == "spend_limit" and reset is not None:
         report.outcome = "quota"
         report.detail += " (spend cap with timed session reset)"
@@ -788,9 +831,19 @@ STATE_TYPES: dict[str, tuple[type, ...]] = {
     "cooldowns": (dict,), "switches": (list,), "last_switch_at": (str, type(None)), "counters": (dict,),
     "permissions_digest": (str, type(None)), "permissions_pinned": (bool,), "pending": (dict, type(None)),
     "waiting_since": (str, type(None)), "last_outcome": (str, type(None)), "notify": (dict,), "watch": (dict,),
-    "acknowledged": (str, type(None)), "spend_caps": (dict,), "updated_at": (str, type(None)),
+    "acknowledged": (dict, type(None)), "spend_caps": (dict,), "updated_at": (str, type(None)),
 }
 PENDING_KEYS = ("nonce", "agent", "parent", "started_at", "pid", "pid_start", "fingerprint", "attempt")
+
+
+GATE_HOLDS = ("effects_uncertain", "output_unparseable", "output_missing")
+FAILURE_HOLDS = ("auth_failure", "unknown_failure")
+
+
+def waivers(ack: dict[str, Any] | None) -> frozenset[str]:
+    """What a release of a held turn reviewed, and so may waive when that turn is continued."""
+    reason = (ack or {}).get("reason")
+    return frozenset({"gate"} if reason in GATE_HOLDS else {"failure"} if reason in FAILURE_HOLDS else set())
 
 
 def validate_state(data: dict[str, Any]) -> str | None:
@@ -1102,20 +1155,30 @@ class RelayAdapter:
     def find_by_nonce(self, nonce: str, since: datetime) -> str | None:
         root = self.sessions_dir()
         floor = (since - timedelta(minutes=2)).strftime("%Y%m%d-%H%M%S")
-        marker = re.compile(r"^\[relay-continuity attempt (rc-[0-9TZ]+-[0-9a-f]+)\]$", re.M)
+        marker = re.compile(r"\[relay-continuity attempt (rc-[0-9TZ]+-[0-9a-f]+)\]")
         found = []
         for session in sorted(root.glob("*-*-*"), reverse=True):
             if session.name[:15] < floor:
                 break
             prompt = session / "turns" / "turn-001" / "prompt.md"
             try:
-                first = marker.search(prompt.read_text(encoding="utf-8", errors="replace"))
+                own = task_marker(prompt.read_text(encoding="utf-8", errors="replace"), marker)
             except OSError:
                 continue
-            # Only the session's own (first) attempt marker counts; a later prompt quoting a nonce does not.
-            if first and first.group(1) == nonce:
+            # Only the marker that opens the session's own task counts; a prompt quoting a nonce does not.
+            if own == nonce:
                 found.append(session.name)
         return found[0] if len(found) == 1 else None
+
+
+def task_marker(prompt: str, marker: re.Pattern[str]) -> str | None:
+    """Nonce of the attempt marker that is the first line of the prompt's `## Task` section, if any."""
+    head, sep, rest = prompt.partition("\n## Task\n")
+    if not sep:
+        return None
+    first = next((line for line in rest.splitlines() if line.strip()), "")
+    match = marker.fullmatch(first.strip())
+    return match.group(1) if match else None
 
 
 def fingerprint(repo: Path) -> str:
@@ -1247,10 +1310,15 @@ class Supervisor:
             return None
         now = self.host.now()
         resets = []
-        for window in entry.get("windows") or []:
-            used = window.get("used_percent")
+        windows = entry.get("windows")
+        if not isinstance(windows, list) or not windows:
+            return None  # no usage windows: no evidence either way
+        for window in windows:
+            used = window.get("used_percent") if isinstance(window, dict) else None
+            if isinstance(used, bool) or not isinstance(used, (int, float)):
+                return None  # an unusable window is not evidence of room
             reset = parse_ts(window.get("resets_at"))
-            if isinstance(used, (int, float)) and used >= 99.5:
+            if used >= 99.5:
                 if reset and now < reset <= now + self.limits.max_reset_ahead:
                     resets.append(reset)
                 else:
@@ -1284,11 +1352,13 @@ class Supervisor:
     def set_cooldown(self, agent: str, report: TurnReport) -> None:
         now = self.host.now()
         caps = self.state["spend_caps"]
-        if report.spend_cap and report.outcome == "quota" and agent in caps:
-            # The spend cap outlived the session reset it printed (no success since): it is a real cap.
+        earlier = caps.get(agent)
+        if report.spend_cap and report.outcome == "quota" and isinstance(earlier, dict) \
+                and earlier.get("turn") != report.turn_id:
+            # A second turn hit the spend cap after the session reset it printed (no success since): a real cap.
             report.outcome = "spend_limit"
         if report.spend_cap:
-            caps[agent] = iso(now)
+            caps[agent] = {"turn": report.turn_id, "at": iso(now)}
         if report.outcome == "spend_limit":
             until, source = None, "manual"
         else:
@@ -1357,7 +1427,7 @@ class Supervisor:
 
     def _loop(self, task: str | None) -> str:
         report = self._resolve_pending()
-        acknowledged = False
+        acknowledged: dict[str, Any] | None = None
         if report == "held":
             return "held"
         if report is None:
@@ -1367,8 +1437,9 @@ class Supervisor:
                 return self.hold("attempt_unresolved")
             report = classify_turn(turn)
             report.agent = report.agent or self.state.get("agent")
-            # A turn the maintainer reviewed and released is continued past, never re-gated.
-            acknowledged = self.state.get("acknowledged") == f"{self.state['head_session']}/{turn.name}"
+            ack = self.state.get("acknowledged") or {}
+            if ack.get("turn") == f"{self.state['head_session']}/{turn.name}":
+                acknowledged = ack
         self.state["acknowledged"] = None
         while True:
             if self.stop_requested():
@@ -1376,8 +1447,8 @@ class Supervisor:
                 return "signal" if self.signalled else "stopped"
             self.state["last_outcome"] = report.outcome
             self.state["agent"] = report.agent or self.state.get("agent") or PREFERRED
-            decision = self._decide(report, task, released=acknowledged)
-            acknowledged = False
+            decision = self._decide(report, task, waive=waivers(acknowledged), cleared=tuple((acknowledged or {}).get("cleared") or ()))
+            acknowledged = None
             if decision in ("held", "idle", "stopped", "signal"):
                 return decision
             agent, prompt = decision
@@ -1387,10 +1458,12 @@ class Supervisor:
                 return new_report
             report = new_report
 
-    def _decide(self, report: TurnReport, task: str | None, *, released: bool = False) -> tuple[str, str] | str:
-        """Next (agent, prompt) or a terminal result. `released`: the maintainer reviewed and released this
-        turn's hold, which waives only that review (the side-effect gate, or an auth/unknown hold, retried on
-        the same agent); every other policy, cooldown and bound still applies."""
+    def _decide(self, report: TurnReport, task: str | None, *, waive: frozenset[str] = frozenset(),
+                cleared: tuple[str, ...] = ()) -> tuple[str, str] | str:
+        """Next (agent, prompt) or a terminal result. `waive` holds what a maintainer release of this turn
+        actually reviewed ("gate": its side-effect evidence; "failure": an auth/unknown failure, retried on the
+        same agent). `cleared`: agents whose cooldown the release cleared. Everything else still applies."""
+        released = bool(waive or cleared)
         counters = self.state["counters"]
         failed_agent = report.agent or self.state.get("agent") or PREFERRED
         if report.outcome == "success":
@@ -1413,7 +1486,7 @@ class Supervisor:
             return self.hold("circuit_failures")
         if self.attempts >= self.limits.max_attempts_per_run:
             return self.hold("circuit_attempts")
-        if report.outcome in ("auth", "unknown") and not released:
+        if report.outcome in ("auth", "unknown") and "failure" not in waive:
             self.notify("turn_failed", session=self.state["head_session"], agent=failed_agent,
                         outcome=report.outcome, action="hold")
             return self.hold("auth_failure" if report.outcome == "auth" else "unknown_failure", self.attempts or None)
@@ -1421,15 +1494,21 @@ class Supervisor:
         pending_fp = (self.state.get("last_attempt") or {}).get("fingerprint")
         if not report.terminal and pending_fp:
             changed = self.host.fingerprint() != pending_fp
-        if not released and (reason := gate(report, fingerprint_changed=changed)) is not None:
+        if "gate" not in waive and (reason := gate(report, fingerprint_changed=changed)) is not None:
             self.notify("turn_failed", session=self.state["head_session"], agent=failed_agent,
                         outcome=report.outcome, action="hold")
             return self.hold(reason, self.attempts or None)
 
-        if report.outcome in ("quota", "spend_limit"):
+        if report.outcome in ("quota", "spend_limit") and failed_agent in cleared:
+            # The maintainer cleared this agent's cap/cooldown on release: the old turn does not reinstate it.
+            counters["transient_streak"] = 0
+            mode = "same"
+            agent = self._choose(failed_agent, mode=mode)
+        elif report.outcome in ("quota", "spend_limit"):
             self.set_cooldown(failed_agent, report)
             counters["transient_streak"] = 0
-            agent = self._choose(failed_agent, mode="switch")
+            mode = "switch"
+            agent = self._choose(failed_agent, mode=mode)
         elif report.outcome == "transient":
             counters["transient_streak"] += 1
             if counters["transient_streak"] > self.limits.max_transient_streak:
@@ -1438,20 +1517,23 @@ class Supervisor:
             self.save()
             if self._sleep(delay):
                 return "signal" if self.signalled else "stopped"
-            agent = self._choose(failed_agent, mode="same")
+            mode = "same"
+            agent = self._choose(failed_agent, mode=mode)
         elif report.outcome in ("auth", "unknown"):  # released by the maintainer: one same-agent retry
-            agent = self._choose(failed_agent, mode="same")
+            mode = "same"
+            agent = self._choose(failed_agent, mode=mode)
         else:  # crash
             counters["crash_retries"] += 1
             if counters["crash_retries"] > self.limits.crash_retries:
                 return self.hold("crash_repeated")
-            agent = self._choose(failed_agent, mode="same")
+            mode = "same"
+            agent = self._choose(failed_agent, mode=mode)
         if agent is None:
-            return self._wait_or_hold()
+            return self._wait_or_hold(mode)
         action = "switch" if agent != failed_agent else "retry"
         self.notify("turn_failed", session=self.state["head_session"], agent=failed_agent,
                     outcome=report.outcome, action=action)
-        listed = report.effects + (report.in_flight if released else [])
+        listed = report.effects + (report.in_flight if "gate" in waive else [])
         effects = "\n".join(f"- [{c.kind}] {c.label}" for c in listed) or "- none recorded"
         if released:
             effects += "\n(The maintainer reviewed and released this turn.)"
@@ -1493,7 +1575,7 @@ class Supervisor:
                 return agent
         return None
 
-    def _wait_or_hold(self) -> tuple[str, str] | str:
+    def _wait_or_hold(self, mode: str = "prefer") -> tuple[str, str] | str:
         """Both agents unavailable: sleep to the earliest validated reset (rechecking periodically), bounded."""
         while True:
             if self.state["phase"] == "held":
@@ -1517,7 +1599,8 @@ class Supervisor:
             self.state["phase"] = "running"
             self._reading = None
             previous = self.state.get("agent") or PREFERRED
-            agent = self._choose(previous, mode="prefer")
+            # A same-agent retry stays on that agent; a failover wait takes whichever agent becomes usable.
+            agent = self._choose(previous, mode="same" if mode == "same" else "prefer")
             if agent is not None:
                 self.state["waiting_since"] = None
                 return agent, RECOVERY_PROMPT.format(
@@ -1571,10 +1654,11 @@ class Supervisor:
         self.state["pending"] = None
         if session_id is None:
             # Remote effects (a merge, a PR comment) leave no local trace, so an unchanged fingerprint proves
-            # nothing: the attempt's outcome is unknown and only the maintainer can resolve it.
+            # nothing: the attempt's outcome is unknown and only the maintainer can resolve it. The hold is
+            # saved together with the cleared pending record, and only then is the attempt journalled settled.
+            result = self.hold("attempt_unresolved", pending.get("attempt"))
             self.store.journal({"event": "settle", "nonce": pending["nonce"], "session": None, "outcome": "unresolved"})
-            self.save()
-            return self.hold("attempt_unresolved", pending.get("attempt"))
+            return result
         turn = last_turn_dir(self.host.relay.sessions_dir() / session_id)
         report = classify_turn(turn, diagnostics=diagnostics) if turn else TurnReport(outcome="crash", agent=pending["agent"],
                                                              detail="session without turns")
@@ -1799,7 +1883,8 @@ def command_release(args: argparse.Namespace) -> int:
         released = state.get("hold")
         head = state.get("head_session")
         turn = last_turn_dir(repo_root() / ".agent-relay" / "sessions" / head) if head else None
-        state["acknowledged"] = f"{head}/{turn.name}" if turn else None
+        state["acknowledged"] = ({"turn": f"{head}/{turn.name}", "reason": (released or {}).get("reason"),
+                                  "cleared": list(args.clear_cooldown or [])} if turn else None)
         state["hold"] = None
         state["phase"] = "idle"
         state["counters"] = {"consecutive_failures": 0, "transient_streak": 0, "crash_retries": 0}
