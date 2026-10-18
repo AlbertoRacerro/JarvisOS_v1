@@ -1362,3 +1362,106 @@ def test_spend_cap_reported_after_its_printed_reset_is_a_spend_limit(tmp_path: P
         "12:40pm (Europe/Rome)", error=True, status=429)])
     assert rc.classify_turn(turn, ref=late).outcome == "spend_limit"
     assert rc.classify_turn(turn, ref=datetime(2026, 9, 24, 9, 28, tzinfo=UTC)).outcome == "quota"
+
+
+# ---------------------------------------------------------------------------
+# Regressions from the third independent review
+
+
+@pytest.mark.parametrize(("command", "read_only"), [
+    ("sed '1s/.*/git push/e' input", False), ("sed '/x/,/y/s/a/b/w out' f", False), ("sed '$e date' f", False),
+    ("sed '2!s/a/b/e' f", False), ("awk 'BEGIN {cmd=\"git push\"; print \"\" | cmd}'", False),
+    ("sed 's|a|b|g;s/c/d/' f", True), ("sed '2!d' f", True), ("sed 'y/abc/xyz/' f", True), ("sed '1a hello' f", True),
+])
+def test_sed_addresses_and_awk_pipes(command: str, read_only: bool) -> None:
+    assert (rc.classify_command(command)[0] == "read_only") is read_only
+
+
+def test_release_acknowledges_only_the_held_turn(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    env = Env(tmp_path)  # any Relay invocation fails the test
+    session = env.relay.sessions_dir() / HEAD
+    write_turn(session, [tool_use("p", "Bash", command="git push origin HEAD"), *QUOTA], number=1)
+    result, sup = env.run()
+    assert result == "held" and sup.state["hold"]["turn"] == f"{HEAD}/turn-001"
+    # Meanwhile a manual REPL turn on the same session leaves an unanswered merge.
+    write_turn(session, [tool_use("m", "Bash", command="gh pr merge 9 --merge"), *QUOTA], number=2)
+    monkeypatch.setenv("RELAY_CONTINUITY_DIR", str(env.store.root))
+    monkeypatch.setattr(rc, "make_host", lambda repo: env.host)
+    monkeypatch.setattr(rc, "repo_root", lambda: env.repo)
+    assert rc.main(["release", "--note", "the push from turn 1 landed"]) == 0
+    result, sup = env.run()
+    assert result == "held" and sup.state["hold"]["reason"] == "effects_uncertain"
+    assert sup.state["hold"]["turn"] == f"{HEAD}/turn-002" and env.relay.launches == []
+
+
+def test_waiting_keeps_the_completed_effects_record(tmp_path: Path) -> None:
+    env = Env(tmp_path, [("claude", SUCCESS)])
+    env.head([tool_use("c", "Bash", command="gh pr comment 5 --body done"), tool_result("c"), *QUOTA])
+    assert env.run()[0] == "idle"
+    task = env.relay.launches[0]["task"]
+    assert "[external] gh pr comment" in task and "do not repeat them blindly" in task
+
+
+def test_returned_session_without_turn_files_holds(tmp_path: Path) -> None:
+    class NoTurns(FakeRelay):
+        def finish(self, proc: FakeProc) -> Any:
+            sid = "20261018-090909-ffffff"
+            (self.sessions_dir() / sid).mkdir(parents=True)
+            return rc.RunResult(sid, 0, True)
+    env = Env(tmp_path)
+    env.relay = NoTurns(env.repo, [("claude", SUCCESS)])
+    env.relay.clock = env.clock
+    env.host.relay = env.relay
+    env.head(EAI)
+    result, sup = env.run()
+    assert result == "held" and sup.state["hold"]["reason"] == "output_missing"
+    assert len(env.relay.launches) == 1
+
+
+def test_manual_spend_cap_survives_restart_on_the_same_turn(tmp_path: Path) -> None:
+    env = Env(tmp_path)  # any Relay invocation fails the test
+    env.head(SPEND_WITH_RESET)
+    state = rc.default_state()
+    state.update({"head_session": HEAD, "chain": [HEAD], "agent": "claude", "permissions_digest": "perm0",
+                  "permissions_pinned": True,
+                  "cooldowns": {"claude": {"until": None, "source": "manual", "reason": "spend_limit", "since": rc.iso(T0)}},
+                  "spend_caps": {"claude": {"turn": f"{HEAD}/turn-001", "at": rc.iso(T0)}}})
+    env.store.save(state, T0)
+    result, sup = env.run()
+    assert result == "held" and sup.state["cooldowns"]["claude"]["until"] is None
+    assert env.relay.launches == []
+
+
+def test_releases_of_one_turn_accumulate(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    env = Env(tmp_path, [("claude", SUCCESS)])
+    env.head([tool_use("p", "Bash", command="git push origin HEAD"),
+              claude_result("Invalid API key · Please run /login", error=True, status=401)])
+    monkeypatch.setenv("RELAY_CONTINUITY_DIR", str(env.store.root))
+    monkeypatch.setattr(rc, "make_host", lambda repo: env.host)
+    monkeypatch.setattr(rc, "repo_root", lambda: env.repo)
+    result, sup = env.run()
+    assert result == "held" and sup.state["hold"]["reason"] == "auth_failure"
+    assert rc.main(["release", "--note", "logged in again"]) == 0
+    result, sup = env.run()
+    assert result == "held" and sup.state["hold"]["reason"] == "effects_uncertain"
+    assert rc.main(["release", "--note", "the push landed"]) == 0
+    result, sup = env.run()
+    assert result == "idle" and [launch["agent"] for launch in env.relay.launches] == ["claude"]
+
+
+def test_same_agent_wait_ignores_other_agents_expired_cooldowns(tmp_path: Path) -> None:
+    codex_reset = T0 + timedelta(minutes=12)
+    env = Env(tmp_path, [("codex", CODEX_SUCCESS)])
+    env.relay.readings = room(env, "claude", exhausted={"codex": codex_reset})
+    state = rc.default_state()
+    state.update({"head_session": HEAD, "chain": [HEAD], "agent": "codex", "permissions_digest": "perm0",
+                  "permissions_pinned": True, "last_switch_at": rc.iso(T0 - timedelta(hours=2)),
+                  "cooldowns": {"claude": {"until": rc.iso(T0 - timedelta(hours=1)), "source": "message",
+                                           "reason": "quota", "since": rc.iso(T0 - timedelta(hours=6))}}})
+    env.store.save(state, T0)
+    env.head(EAI, agent="codex")
+    assert env.run()[0] == "idle"
+    assert env.relay.launches[0]["agent"] == "codex"
+    # No one-second wake/save spin on Claude's long-expired cooldown while Codex stays capped.
+    assert sum(1 for seconds in env.clock.slept if seconds <= 1.0) <= 1
+    assert env.relay.launches[0]["at"] >= codex_reset

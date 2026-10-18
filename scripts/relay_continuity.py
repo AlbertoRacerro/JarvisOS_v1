@@ -245,10 +245,11 @@ GH_READ = {("pr", "view"), ("pr", "list"), ("pr", "checks"), ("pr", "diff"), ("p
            ("release", "view"), ("release", "list"), ("auth", "status"), ("search", "prs"), ("search", "issues"),
            ("search", "code"), ("workflow", "list"), ("workflow", "view"), ("cache", "list")}
 # awk programs that run commands (system(), pipes to/from commands) or print into files.
-AWK_EXEC = re.compile(r"system\s*\(|\|\s*getline|\|\s*\"|\"\s*\|\s*getline|print[f]?\b[^;}]*>")
-# sed `e`/`w` commands, and `s///e` / `s///w` flags, execute commands or write files.
-SED_CMD_EXEC = re.compile(r"(?:^|[;\n{}])\s*(?:[0-9$,]+|/[^/\n]*/)?\s*!?\s*[ewW](?:\s|$)")
-SED_SUBST = re.compile(r"(?:^|[;\n{}]|\s)s([^\w\s\\])(?:\\.|(?!\1).)*\1(?:\\.|(?!\1).)*\1([a-zA-Z0-9]*)")
+# awk runs commands through system(), getline from a pipe, or print/printf into a pipe; it writes with
+# `print > file`. Any pipe or output redirection in the program is treated as execution (`||` included).
+AWK_EXEC = re.compile(r"system\s*\(|\||print[f]?\b[^;}]*>")
+SED_ADDRESS = re.compile(r"\s*(?:(?:\d+(?:~\d+)?|\$|/(?:\\.|[^/\\])*/[IM]*|\\(.)(?:\\.|(?!\1).)*\1[IM]*)"
+                         r"(?:\s*,\s*(?:[+~]?\d+|\$|/(?:\\.|[^/\\])*/[IM]*))?)?\s*!?\s*")
 
 
 def sed_scripts(args: list[str]) -> tuple[list[str], bool]:
@@ -283,7 +284,61 @@ def sed_scripts(args: list[str]) -> tuple[list[str], bool]:
 
 
 def sed_executes(script: str) -> bool:
-    return bool(SED_CMD_EXEC.search(script)) or any(set(m.group(2)) & set("ewW") for m in SED_SUBST.finditer(script))
+    """Whether a sed program can run commands or write files: an `e`, `w` or `W` command, or an `s` command
+    with an `e`/`w` flag, after any address. Unparseable programs count as executing."""
+    i, n = 0, len(script)
+    while i < n:
+        while i < n and script[i] in " \t\n;{}":
+            i += 1
+        if i >= n:
+            return False
+        match = SED_ADDRESS.match(script, i)
+        i = match.end() if match else i
+        if i >= n:
+            return False
+        cmd = script[i]
+        if cmd in "ewW":
+            return True
+        if cmd == "s":
+            if i + 1 >= n:
+                return True
+            delim, j, parts = script[i + 1], i + 2, 0
+            while j < n and parts < 2:
+                if script[j] == "\\":
+                    j += 2
+                    continue
+                if script[j] == delim:
+                    parts += 1
+                j += 1
+            if parts < 2:
+                return True  # unterminated substitution: cannot tell
+            flags = re.match(r"[A-Za-z0-9]*", script[j:]).group(0)
+            if set(flags) & set("ewW"):
+                return True
+            i = j + len(flags)
+        elif cmd in "aic":
+            # text commands consume the rest of the line
+            nl = script.find("\n", i)
+            i = n if nl == -1 else nl + 1
+        elif cmd in "rRbtTvy:#":
+            nl = script.find("\n", i)
+            if cmd == "y":
+                i += 1
+                delim = script[i] if i < n else ""
+                count = 0
+                while i < n and count < 3:
+                    i += 1
+                    if i < n and script[i] == delim:
+                        count += 1
+                i += 1
+            elif cmd in "rR":
+                return True  # reads a file: harmless, but its argument runs to end of line; stay conservative
+            else:
+                i = n if nl == -1 else nl + 1
+        else:
+            i += 1
+    return False
+
 REDIRECT = re.compile(r"(?<![0-9&<>])>{1,2}\s*(?!&|/dev/null)(\S+)")
 
 
@@ -841,9 +896,9 @@ FAILURE_HOLDS = ("auth_failure", "unknown_failure")
 
 
 def waivers(ack: dict[str, Any] | None) -> frozenset[str]:
-    """What a release of a held turn reviewed, and so may waive when that turn is continued."""
-    reason = (ack or {}).get("reason")
-    return frozenset({"gate"} if reason in GATE_HOLDS else {"failure"} if reason in FAILURE_HOLDS else set())
+    """What the maintainer's releases of a held turn reviewed, and so may waive when that turn is continued."""
+    reasons = set((ack or {}).get("reasons") or [])
+    return frozenset(({"gate"} if reasons & set(GATE_HOLDS) else set()) | ({"failure"} if reasons & set(FAILURE_HOLDS) else set()))
 
 
 def validate_state(data: dict[str, Any]) -> str | None:
@@ -1250,6 +1305,7 @@ class Supervisor:
         self.notifier = Notifier(self.state, sender=sender, log=host.log)
         self.signalled = False
         self.attempts = 0
+        self.deciding: str | None = None
         self._reading: dict[str, Any] | None = None
         self._reading_at: datetime | None = None
 
@@ -1272,11 +1328,14 @@ class Supervisor:
     def stop_requested(self) -> bool:
         return self.signalled or self.store.stop_path.exists()
 
-    def hold(self, reason: str, attempt: int | None = None) -> str:
+    def hold(self, reason: str, attempt: int | None = None, turn: str | None = None) -> str:
+        """Refuse automatic continuation. `turn` names the turn whose evidence the maintainer must review; a
+        release acknowledges exactly that turn and nothing later."""
         assert reason in HOLD_REASONS
+        turn = turn or self.deciding  # holds raised while deciding a turn (waits, circuits) name that turn
         now = self.host.now()
         self.state["phase"] = "held"
-        self.state["hold"] = {"reason": reason, "at": iso(now), "attempt": attempt}
+        self.state["hold"] = {"reason": reason, "at": iso(now), "attempt": attempt, "turn": turn}
         self.save()
         self.store.journal({"event": "hold", "at": iso(now), "reason": reason, "session": self.state["head_session"]})
         event = "circuit_open" if reason.startswith("circuit_") else "hold"
@@ -1351,6 +1410,9 @@ class Supervisor:
 
     def set_cooldown(self, agent: str, report: TurnReport) -> None:
         now = self.host.now()
+        existing = self.state["cooldowns"].get(agent)
+        if isinstance(existing, dict) and existing.get("until") is None:
+            return  # a manual cap stays until `release --clear-cooldown`; no reclassification shortens it
         caps = self.state["spend_caps"]
         earlier = caps.get(agent)
         if report.spend_cap and report.outcome == "quota" and isinstance(earlier, dict) \
@@ -1438,15 +1500,15 @@ class Supervisor:
             report = classify_turn(turn)
             report.agent = report.agent or self.state.get("agent")
             ack = self.state.get("acknowledged") or {}
-            if ack.get("turn") == f"{self.state['head_session']}/{turn.name}":
+            if ack.get("turn") and ack.get("turn") == report.turn_id:
                 acknowledged = ack
-        self.state["acknowledged"] = None
         while True:
             if self.stop_requested():
                 self.state["phase"] = "stopped"
                 return "signal" if self.signalled else "stopped"
             self.state["last_outcome"] = report.outcome
             self.state["agent"] = report.agent or self.state.get("agent") or PREFERRED
+            self.deciding = report.turn_id
             decision = self._decide(report, task, waive=waivers(acknowledged), cleared=tuple((acknowledged or {}).get("cleared") or ()))
             acknowledged = None
             if decision in ("held", "idle", "stopped", "signal"):
@@ -1478,7 +1540,7 @@ class Supervisor:
                 return "idle"
             agent = self._choose(failed_agent, mode="prefer")
             if agent is None:
-                return self._wait_or_hold()
+                return self._wait_or_hold("prefer", lambda _agent: f"[relay-continuity attempt {{nonce}}]\n{task}")
             return agent, f"[relay-continuity attempt {{nonce}}]\n{task}"
 
         counters["consecutive_failures"] += 1
@@ -1489,7 +1551,8 @@ class Supervisor:
         if report.outcome in ("auth", "unknown") and "failure" not in waive:
             self.notify("turn_failed", session=self.state["head_session"], agent=failed_agent,
                         outcome=report.outcome, action="hold")
-            return self.hold("auth_failure" if report.outcome == "auth" else "unknown_failure", self.attempts or None)
+            return self.hold("auth_failure" if report.outcome == "auth" else "unknown_failure", self.attempts or None,
+                             report.turn_id)
         changed = None
         pending_fp = (self.state.get("last_attempt") or {}).get("fingerprint")
         if not report.terminal and pending_fp:
@@ -1497,7 +1560,7 @@ class Supervisor:
         if "gate" not in waive and (reason := gate(report, fingerprint_changed=changed)) is not None:
             self.notify("turn_failed", session=self.state["head_session"], agent=failed_agent,
                         outcome=report.outcome, action="hold")
-            return self.hold(reason, self.attempts or None)
+            return self.hold(reason, self.attempts or None, report.turn_id)
 
         if report.outcome in ("quota", "spend_limit") and failed_agent in cleared:
             # The maintainer cleared this agent's cap/cooldown on release: the old turn does not reinstate it.
@@ -1528,20 +1591,23 @@ class Supervisor:
                 return self.hold("crash_repeated")
             mode = "same"
             agent = self._choose(failed_agent, mode=mode)
-        if agent is None:
-            return self._wait_or_hold(mode)
-        action = "switch" if agent != failed_agent else "retry"
-        self.notify("turn_failed", session=self.state["head_session"], agent=failed_agent,
-                    outcome=report.outcome, action=action)
         listed = report.effects + (report.in_flight if "gate" in waive else [])
         effects = "\n".join(f"- [{c.kind}] {c.label}" for c in listed) or "- none recorded"
         if released:
             effects += "\n(The maintainer reviewed and released this turn.)"
-        if released and task is not None:
-            return agent, f"[relay-continuity attempt {{nonce}}]\n{task}"
-        prompt = RECOVERY_PROMPT.format(nonce="{nonce}", prev_agent=failed_agent, outcome=report.outcome,
-                                        agent=agent, effects=effects)
-        return agent, prompt
+
+        def make_prompt(chosen: str) -> str:
+            if released and task is not None:
+                return f"[relay-continuity attempt {{nonce}}]\n{task}"
+            return RECOVERY_PROMPT.format(nonce="{nonce}", prev_agent=failed_agent, outcome=report.outcome,
+                                          agent=chosen, effects=effects)
+
+        if agent is None:
+            return self._wait_or_hold(mode, make_prompt)
+        action = "switch" if agent != failed_agent else "retry"
+        self.notify("turn_failed", session=self.state["head_session"], agent=failed_agent,
+                    outcome=report.outcome, action=action)
+        return agent, make_prompt(agent)
 
     def _choose(self, current: str, *, mode: str) -> str | None:
         """`same`: retry the current agent only (transient, crash). `switch`: another agent only (quota).
@@ -1575,14 +1641,19 @@ class Supervisor:
                 return agent
         return None
 
-    def _wait_or_hold(self, mode: str = "prefer") -> tuple[str, str] | str:
-        """Both agents unavailable: sleep to the earliest validated reset (rechecking periodically), bounded."""
+    def _wait_or_hold(self, mode: str = "prefer", make_prompt: Callable[[str], str] | None = None
+                      ) -> tuple[str, str] | str:
+        """No usable agent: sleep to the earliest validated reset that matters (rechecking periodically), bounded.
+        `mode` "same" waits for the current agent only. `make_prompt(agent)` builds the eventual prompt, so the
+        failed turn's effects record (or the maintainer's task) survives the wait."""
+        current = self.state.get("agent") or PREFERRED
         while True:
             if self.state["phase"] == "held":
                 return "held"
             now = self.host.now()
             # Only a real reset is worth waiting for; an agent that merely lacks a fresh reading is not one.
-            known = [u for c in self.state["cooldowns"].values()
+            relevant = {a: c for a, c in self.state["cooldowns"].items() if mode != "same" or a == current}
+            known = [u for c in relevant.values()
                      if c.get("reason") != "unconfirmed" and (u := parse_ts(c.get("until"))) is not None]
             if not known:
                 return self.hold("no_provider_available")
@@ -1590,7 +1661,10 @@ class Supervisor:
             self.state["waiting_since"] = iso(since)
             if now - since > self.limits.max_wait:
                 return self.hold("wait_exceeded")
-            wake = max(min(min(known), now + self.limits.recheck), now + timedelta(seconds=1))
+            # This is entered only after a choice just failed, so an already-passed reset is not worth an
+            # immediate retry: wait for the next future reset, at most one recheck interval.
+            future = [u for u in known if u > now]
+            wake = min(min(future), now + self.limits.recheck) if future else now + self.limits.recheck
             self.state["phase"] = "waiting"
             self.save()
             self.notify("all_exhausted", dedupe_key=f"all|{iso(min(known))}", next_check_at=iso(wake))
@@ -1598,13 +1672,14 @@ class Supervisor:
                 return "signal" if self.signalled else "stopped"
             self.state["phase"] = "running"
             self._reading = None
-            previous = self.state.get("agent") or PREFERRED
             # A same-agent retry stays on that agent; a failover wait takes whichever agent becomes usable.
-            agent = self._choose(previous, mode="same" if mode == "same" else "prefer")
+            agent = self._choose(current, mode="same" if mode == "same" else "prefer")
             if agent is not None:
                 self.state["waiting_since"] = None
+                if make_prompt is not None:
+                    return agent, make_prompt(agent)
                 return agent, RECOVERY_PROMPT.format(
-                    nonce="{nonce}", prev_agent=previous, outcome=self.state.get("last_outcome") or "quota",
+                    nonce="{nonce}", prev_agent=current, outcome=self.state.get("last_outcome") or "quota",
                     agent=agent, effects="- see the previous attempt record; nothing new since it was gated")
 
     def _sleep(self, seconds: float) -> bool:
@@ -1632,6 +1707,7 @@ class Supervisor:
         pending = {"nonce": nonce, "agent": agent, "parent": self.state["head_session"], "started_at": iso(now),
                    "pid": None, "pid_start": None, "fingerprint": self.host.fingerprint(), "attempt": self.attempts}
         self.state["pending"] = pending  # intent is durable before anything is launched
+        self.state["acknowledged"] = None  # the reviewed turn is now behind the chain
         self.state["agent"] = agent
         self.save()
         self.store.journal({"event": "launch", **{k: v for k, v in pending.items() if k != "fingerprint"}})
@@ -1660,8 +1736,9 @@ class Supervisor:
             self.store.journal({"event": "settle", "nonce": pending["nonce"], "session": None, "outcome": "unresolved"})
             return result
         turn = last_turn_dir(self.host.relay.sessions_dir() / session_id)
-        report = classify_turn(turn, diagnostics=diagnostics) if turn else TurnReport(outcome="crash", agent=pending["agent"],
-                                                             detail="session without turns")
+        report = classify_turn(turn, diagnostics=diagnostics) if turn else TurnReport(
+            outcome="crash", agent=pending["agent"], detail="session without turns", no_evidence=True,
+            turn_id=f"{session_id}/none")
         report.agent = pending["agent"]
         self.state["head_session"] = session_id
         self.state["chain"] = (self.state.get("chain") or []) + [session_id]
@@ -1881,10 +1958,17 @@ def command_release(args: argparse.Namespace) -> int:
         store = Store(root)
         state = store.load()
         released = state.get("hold")
-        head = state.get("head_session")
-        turn = last_turn_dir(repo_root() / ".agent-relay" / "sessions" / head) if head else None
-        state["acknowledged"] = ({"turn": f"{head}/{turn.name}", "reason": (released or {}).get("reason"),
-                                  "cleared": list(args.clear_cooldown or [])} if turn else None)
+        held_turn = (released or {}).get("turn")
+        previous = state.get("acknowledged") or {}
+        if held_turn:
+            same = previous.get("turn") == held_turn
+            state["acknowledged"] = {
+                "turn": held_turn,
+                "reasons": sorted(set(previous.get("reasons") or [] if same else []) | {released["reason"]}),
+                "cleared": sorted(set(previous.get("cleared") or [] if same else []) | set(args.clear_cooldown or [])),
+            }
+        elif args.clear_cooldown and previous.get("turn"):
+            previous["cleared"] = sorted(set(previous.get("cleared") or []) | set(args.clear_cooldown))
         state["hold"] = None
         state["phase"] = "idle"
         state["counters"] = {"consecutive_failures": 0, "transient_streak": 0, "crash_retries": 0}
