@@ -987,14 +987,33 @@ def test_background_acknowledgement_is_not_completion(tmp_path: Path) -> None:
     bg_agent = tool_use("a", "Agent", subagent_type="general-purpose", run_in_background=True)
     child = tool_use("c", "Bash", command="git push")
     child["parent_tool_use_id"] = "a"
-    started = {"type": "system", "subtype": "task_started", "tool_use_id": "a"}
+    # Real Claude stream-json shapes: tasks are keyed by task_id; only backgrounded ones stay open.
+    started = {"type": "system", "subtype": "task_started", "task_id": "t-a", "tool_use_id": "a",
+               "is_backgrounded": True, "task_type": "local_agent"}
     turn = write_turn(tmp_path / "s", [bg_agent, tool_result("a"), started, child, *QUOTA])
     report = rc.classify_turn(turn)
     assert {c.label for c in report.in_flight} == {"Agent &", "git push"}
     assert rc.gate(report, fingerprint_changed=None) == "effects_uncertain"
     done = write_turn(tmp_path / "t", [bg_agent, tool_result("a"), started,
-                                       {"type": "system", "subtype": "task_notification", "tool_use_id": "a"}, *QUOTA])
+                                       {"type": "system", "subtype": "task_notification", "task_id": "t-a",
+                                        "tool_use_id": "a", "status": "completed"}, *QUOTA])
     assert rc.classify_turn(done).in_flight == []
+    updated = write_turn(tmp_path / "v", [bg_agent, tool_result("a"), started,
+                                          {"type": "system", "subtype": "task_updated", "task_id": "t-a",
+                                           "patch": {"status": "killed"}}, *QUOTA])
+    assert rc.classify_turn(updated).in_flight == []
+    # A foreground task reports task_started too; its tool result completes it.
+    fg = write_turn(tmp_path / "w", [tool_use("f", "Bash", command="./build.sh"),
+                                     {"type": "system", "subtype": "task_started", "task_id": "t-f", "tool_use_id": "f",
+                                      "is_backgrounded": False}, tool_result("f"), *QUOTA])
+    assert rc.classify_turn(fg).in_flight == []
+    # ... unless it was moved to the background while running.
+    moved = write_turn(tmp_path / "x", [tool_use("f", "Bash", command="./build.sh"),
+                                        {"type": "system", "subtype": "task_started", "task_id": "t-f", "tool_use_id": "f",
+                                         "is_backgrounded": False},
+                                        {"type": "system", "subtype": "task_updated", "task_id": "t-f",
+                                         "patch": {"is_backgrounded": True}}, tool_result("f"), *QUOTA])
+    assert [c.label for c in rc.classify_turn(moved).in_flight] == ["build.sh"]
     # A background shell job that was never reported finished is still running.
     shell = write_turn(tmp_path / "u", [tool_use("b", "Bash", command="./deploy.sh", run_in_background=True),
                                         tool_result("b"), *QUOTA])
@@ -1123,3 +1142,69 @@ def test_fixtures_carry_no_coordinator_narrative() -> None:
     for path in FIXTURES.glob("*/state.json"):
         summary = json.loads(path.read_text()).get("summary") or ""
         assert summary == placeholder or rc.classify_text(summary, None) != "unknown" or len(summary) < 40, path
+
+
+# ---------------------------------------------------------------------------
+# Regressions from the independent Gemini audit of the historical corpus
+
+
+def test_turn_that_kept_the_previous_output_has_no_evidence_and_holds(tmp_path: Path) -> None:
+    # Relay's "No response captured" turn keeps a byte-identical copy of the previous turn's output, while
+    # the agent may have worked (and merged) for hours. It must never inherit the previous outcome.
+    env = Env(tmp_path)
+    session = env.relay.sessions_dir() / HEAD
+    write_turn(session, QUOTA, number=1)
+    second = write_turn(session, QUOTA, number=2)
+    report = rc.classify_turn(second)
+    assert (report.outcome, report.no_evidence, report.calls) == ("crash", True, [])
+    assert rc.gate(report, fingerprint_changed=None) == "output_missing"
+    result, sup = env.run()
+    assert result == "held" and sup.state["hold"]["reason"] == "output_missing"
+    assert env.relay.launches == []
+
+
+@pytest.mark.parametrize("content", [None, ""])
+def test_missing_or_empty_output_holds(tmp_path: Path, content: str | None) -> None:
+    env = Env(tmp_path)
+    turn = write_turn(env.relay.sessions_dir() / HEAD, [])
+    if content is None:
+        (turn / "output.jsonl").unlink()
+    result, sup = env.run()
+    assert result == "held" and sup.state["hold"]["reason"] == "output_missing"
+    assert env.relay.launches == []
+
+
+def test_spend_cap_that_survives_its_session_reset_becomes_a_manual_cap(tmp_path: Path) -> None:
+    capped = [claude_result("You've hit your monthly spend limit · raise it at claude.ai/settings/usage · "
+                            "your session limit resets 11:50pm (Europe/Rome)", error=True, status=429)]
+    # Codex has no fresh reading, so the chain waits for Claude's printed reset and retries Claude, which
+    # hits the same spend cap again (as in the 2026-09-24 corpus): that is a real cap, held for the maintainer.
+    env = Env(tmp_path, [("claude", capped)])
+    env.head(capped)
+    result, sup = env.run()
+    assert [launch["agent"] for launch in env.relay.launches] == ["claude"]
+    assert result == "held" and sup.state["hold"]["reason"] == "no_provider_available"
+    assert sup.state["cooldowns"]["claude"]["until"] is None
+    assert sup.state["cooldowns"]["claude"]["reason"] == "spend_limit"
+
+
+def test_success_clears_the_spend_cap_memory(tmp_path: Path) -> None:
+    capped = [claude_result("You've hit your monthly spend limit · your session limit resets 11:50pm (Europe/Rome)",
+                            error=True, status=429)]
+    env = Env(tmp_path, [("claude", SUCCESS)])
+    env.head(capped)
+    result, sup = env.run()
+    assert result == "idle" and sup.state["spend_caps"] == {}
+
+
+def test_real_corpus_no_response_turn_shape() -> None:
+    # The fixture pair is synthetic, but the rule mirrors corpus turns d31beb/turn-013 and bb14c2/turn-012.
+    assert rc.same_output_as_previous_turn(FIXTURES / "claude_success") is False
+
+
+def test_empty_reasonless_result_never_overrides_a_real_terminal(tmp_path: Path) -> None:
+    artifact = {"type": "result", "subtype": "success", "is_error": False, "result": "", "terminal_reason": None}
+    assert rc.classify_turn(write_turn(tmp_path / "a", [*EAI, artifact])).outcome == "transient"
+    assert rc.classify_turn(write_turn(tmp_path / "b", [*QUOTA, artifact])).outcome == "quota"
+    # Alone, it is still not success.
+    assert rc.classify_turn(write_turn(tmp_path / "c", [artifact])).outcome == "unknown"

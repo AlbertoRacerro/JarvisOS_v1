@@ -51,7 +51,7 @@ FAILURES = tuple(o for o in OUTCOMES if o != "success")
 EFFECT_ORDER = ("read_only", "local_write", "background", "external", "unknown")
 PHASES = ("idle", "running", "waiting", "held", "stopped")
 HOLD_REASONS = (
-    "effects_uncertain", "output_unparseable", "attempt_unresolved", "auth_failure", "unknown_failure",
+    "effects_uncertain", "output_unparseable", "output_missing", "attempt_unresolved", "auth_failure", "unknown_failure",
     "crash_repeated", "circuit_failures", "circuit_switches", "circuit_attempts", "circuit_transient",
     "no_provider_available", "wait_exceeded", "permissions_changed", "state_corrupt", "repl_active",
     "relay_invocation_failed",
@@ -132,6 +132,8 @@ class TurnReport:
     bad_lines: int = 0
     terminal: bool = False
     relay_status: str | None = None
+    no_evidence: bool = False  # the turn left no output of its own: nothing shows what it did
+    spend_cap: bool = False  # the provider message named a spend/credit cap (even if it also printed a reset)
 
     @property
     def in_flight(self) -> list[ToolCall]:
@@ -527,6 +529,7 @@ def classify_command(command: str, _depth: int = 0) -> tuple[str, str]:
     return max(results, key=lambda r: _rank(r[0]))
 
 
+TASK_DONE = ("completed", "failed", "killed", "stopped")
 CLAUDE_TOOL_KINDS = {
     **{t: "read_only" for t in ("Read", "Grep", "Glob", "LS", "ToolSearch", "WebSearch", "WebFetch", "BashOutput",
                                 "TaskOutput", "ListAgents", "NotebookRead", "TodoWrite", "Skill", "Monitor",
@@ -608,10 +611,17 @@ def classify_turn(turn_dir: Path, *, ref: datetime | None = None, local_tz: Any 
         except OSError:
             ref = now_utc()
     calls: dict[str, ToolCall] = {}
+    task_calls: dict[str, str] = {}
     report = TurnReport(outcome="crash", agent=agent, detail="no terminal event", bad_lines=bad,
                         relay_status=state.get("status"))
     if not events:
-        report.detail = "output missing" if not output.exists() else "output empty"
+        report.detail = "output missing" if not output.exists() else ("output unparseable" if bad else "output empty")
+        report.no_evidence = not bad
+        return no_terminal_evidence(report, turn_dir, diagnostics)
+    if same_output_as_previous_turn(turn_dir):
+        # Relay keeps the previous turn's output when it captures nothing ("No response captured"); the agent
+        # may still have worked for hours. Those events are not this turn's evidence.
+        report.detail, report.no_evidence = "no output of its own (previous turn's output kept)", True
         return no_terminal_evidence(report, turn_dir, diagnostics)
     terminal: dict[str, Any] | None = None
     terminal_index = -1
@@ -629,12 +639,18 @@ def classify_turn(turn_dir: Path, *, ref: datetime | None = None, local_tz: Any 
                 if isinstance(block, dict) and block.get("type") == "tool_result" and block.get("tool_use_id") in calls:
                     calls[block["tool_use_id"]].done = True
         elif typ == "system" and e.get("subtype") in ("task_started", "task_notification", "task_updated"):
-            tool_id = e.get("tool_use_id")
-            if tool_id in calls and e.get("subtype") == "task_started":
-                calls[tool_id].background_open = True
-            elif tool_id in calls and e.get("subtype") == "task_notification":
-                calls[tool_id].background_open = False
-                calls[tool_id].background_closed = True
+            # Claude reports every tool task (foreground ones too). A task is open only once backgrounded,
+            # and closes on a terminal status; updates and some notifications carry only the task id.
+            sub, patch = e.get("subtype"), e.get("patch") if isinstance(e.get("patch"), dict) else {}
+            if sub == "task_started" and e.get("task_id") and e.get("tool_use_id"):
+                task_calls[str(e["task_id"])] = str(e["tool_use_id"])
+            call = calls.get(e.get("tool_use_id") or task_calls.get(str(e.get("task_id"))))
+            if call is None:
+                pass
+            elif (sub == "task_notification" and e.get("status") in TASK_DONE) or patch.get("status") in TASK_DONE:
+                call.background_open, call.background_closed = False, True
+            elif e.get("is_backgrounded") is True or patch.get("is_backgrounded") is True:
+                call.background_open = True
         elif typ in ("item.started", "item.completed"):
             item = e.get("item") or {}
             if (call := _codex_call(item)) is not None:
@@ -643,7 +659,10 @@ def classify_turn(turn_dir: Path, *, ref: datetime | None = None, local_tz: Any 
                     existing.done = True
         if typ in ("result", "turn.completed", "turn.failed", "error") and not e.get("parent_tool_use_id"):
             # A subagent's own result never decides the coordinator turn; the last top-level terminal does.
-            terminal, terminal_index = e, idx
+            # An empty, reason-less result is an internal restart artifact: it never overrides a real terminal.
+            artifact = typ == "result" and not e.get("result") and e.get("terminal_reason") is None
+            if not (artifact and terminal is not None):
+                terminal, terminal_index = e, idx
     for call in calls.values():
         # A subagent's calls are settled by its parent call (results inside a subagent are not always streamed),
         # but only when the parent truly finished: a background subagent's acknowledgement settles nothing.
@@ -684,6 +703,20 @@ def classify_turn(turn_dir: Path, *, ref: datetime | None = None, local_tz: Any 
     return report
 
 
+def same_output_as_previous_turn(turn_dir: Path) -> bool:
+    number = turn_dir.name.split("-")[-1]
+    if not number.isdigit() or int(number) <= 1:
+        return False
+    previous = turn_dir.with_name(f"turn-{int(number) - 1:0{len(number)}d}") / "output.jsonl"
+    current = turn_dir / "output.jsonl"
+    try:
+        if previous.stat().st_size != current.stat().st_size:
+            return False
+        return hashlib.sha256(previous.read_bytes()).digest() == hashlib.sha256(current.read_bytes()).digest()
+    except OSError:
+        return False
+
+
 def no_terminal_evidence(report: TurnReport, turn_dir: Path, diagnostics: str) -> TurnReport:
     """Without a terminal event, an authentication diagnostic (runner stderr/run JSON, or a turn stderr.log)
     makes the turn `auth` (held), never a retryable crash. Nothing here can ever yield success."""
@@ -705,6 +738,7 @@ def settle_limit(report: TurnReport, text: str, ref: datetime, local_tz: Any) ->
         return
     reset = parse_reset(text, ref, local_tz)
     report.reset_at = iso(reset)
+    report.spend_cap = report.outcome == "spend_limit"
     if report.outcome == "spend_limit" and reset is not None:
         report.outcome = "quota"
         report.detail += " (spend cap with timed session reset)"
@@ -714,6 +748,8 @@ def gate(report: TurnReport, *, fingerprint_changed: bool | None) -> str | None:
     """Hold reason when automatic continuation could duplicate a non-idempotent operation."""
     if report.bad_lines:
         return "output_unparseable"
+    if report.no_evidence:
+        return "output_missing"
     if report.in_flight:
         return "effects_uncertain"
     if not report.terminal and fingerprint_changed:
@@ -743,7 +779,7 @@ def default_state() -> dict[str, Any]:
         "counters": {"consecutive_failures": 0, "transient_streak": 0, "crash_retries": 0},
         "permissions_digest": None, "permissions_pinned": False, "pending": None, "waiting_since": None, "last_outcome": None,
         "notify": {"sent": {}, "window": [], "last_digest": None, "failures": 0, "retry": None, "dropped": 0},
-        "watch": {"seen": {}, "master": None}, "acknowledged": None, "updated_at": None,
+        "watch": {"seen": {}, "master": None}, "acknowledged": None, "spend_caps": {}, "updated_at": None,
     }
 
 
@@ -752,7 +788,7 @@ STATE_TYPES: dict[str, tuple[type, ...]] = {
     "cooldowns": (dict,), "switches": (list,), "last_switch_at": (str, type(None)), "counters": (dict,),
     "permissions_digest": (str, type(None)), "permissions_pinned": (bool,), "pending": (dict, type(None)),
     "waiting_since": (str, type(None)), "last_outcome": (str, type(None)), "notify": (dict,), "watch": (dict,),
-    "acknowledged": (str, type(None)), "updated_at": (str, type(None)),
+    "acknowledged": (str, type(None)), "spend_caps": (dict,), "updated_at": (str, type(None)),
 }
 PENDING_KEYS = ("nonce", "agent", "parent", "started_at", "pid", "pid_start", "fingerprint", "attempt")
 
@@ -1247,6 +1283,12 @@ class Supervisor:
 
     def set_cooldown(self, agent: str, report: TurnReport) -> None:
         now = self.host.now()
+        caps = self.state["spend_caps"]
+        if report.spend_cap and report.outcome == "quota" and agent in caps:
+            # The spend cap outlived the session reset it printed (no success since): it is a real cap.
+            report.outcome = "spend_limit"
+        if report.spend_cap:
+            caps[agent] = iso(now)
         if report.outcome == "spend_limit":
             until, source = None, "manual"
         else:
@@ -1353,6 +1395,7 @@ class Supervisor:
         failed_agent = report.agent or self.state.get("agent") or PREFERRED
         if report.outcome == "success":
             counters.update({"consecutive_failures": 0, "transient_streak": 0, "crash_retries": 0})
+            self.state["spend_caps"].pop(failed_agent, None)
             self.state["waiting_since"] = None
             if task is None:
                 self.state["phase"] = "idle"
@@ -1762,6 +1805,7 @@ def command_release(args: argparse.Namespace) -> int:
         state["counters"] = {"consecutive_failures": 0, "transient_streak": 0, "crash_retries": 0}
         for agent in args.clear_cooldown or []:
             state["cooldowns"].pop(agent, None)
+            state["spend_caps"].pop(agent, None)  # e.g. the maintainer raised a spend cap
         dropped = []
         if args.drop_pending:
             dropped = unsettled_nonces(store.journal_path)

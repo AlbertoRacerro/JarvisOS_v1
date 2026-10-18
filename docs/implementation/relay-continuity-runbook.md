@@ -54,6 +54,7 @@ A hold means automatic continuation was refused and needs your review. Slack sho
 | --- | --- |
 | `effects_uncertain` | The failed turn was interrupted during a non-read-only operation (push, merge, PR comment, file write, subagent, script), or while a background job it launched (a worker lane, a queue) was still running. Background jobs are the commonest cause: check the lane with `devctx.py lanes`. Check whether it took effect with `git log`/`gh pr view`/`python3 scripts/devctx.py recover`. |
 | `output_unparseable` | The turn transcript is corrupt or torn. |
+| `output_missing` | The turn left no output of its own: Relay's "No response captured" turns keep a copy of the previous turn's output, and the agent may still have worked. Check `git log`, `gh pr list`, `devctx.py recover` for what it did. |
 | `attempt_unresolved` | A launched attempt left no identifiable Relay session, even if the repository looks unchanged (a merge or a PR comment leaves no local trace). Or a restart could not find it, or the journal records a launch the state does not account for. Establish what happened, then use `release --drop-pending`. |
 | `auth_failure`, `unknown_failure` | Log in again, or fix the configuration (for example an invalid model). These never switch provider. |
 | `crash_repeated`, `circuit_*` | Bounded retries, switches or attempts were exhausted. |
