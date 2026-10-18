@@ -52,9 +52,9 @@ A hold means automatic continuation was refused and needs your review. Slack sho
 
 | Reason | Meaning and what to check |
 | --- | --- |
-| `effects_uncertain` | The failed turn was interrupted during a non-read-only operation (push, merge, PR comment, file write, subagent, script). Check whether it took effect with `git log`/`gh pr view`/`python3 scripts/devctx.py recover`. |
+| `effects_uncertain` | The failed turn was interrupted during a non-read-only operation (push, merge, PR comment, file write, subagent, script), or while a background job it launched (a worker lane, a queue) was still running. Background jobs are the commonest cause: check the lane with `devctx.py lanes`. Check whether it took effect with `git log`/`gh pr view`/`python3 scripts/devctx.py recover`. |
 | `output_unparseable` | The turn transcript is corrupt or torn. |
-| `attempt_unresolved` | A launched attempt left no Relay session while the repository changed, or a restart could not find it. |
+| `attempt_unresolved` | A launched attempt left no identifiable Relay session, even if the repository looks unchanged (a merge or a PR comment leaves no local trace). Or a restart could not find it, or the journal records a launch the state does not account for. Establish what happened, then use `release --drop-pending`. |
 | `auth_failure`, `unknown_failure` | Log in again, or fix the configuration (for example an invalid model). These never switch provider. |
 | `crash_repeated`, `circuit_*` | Bounded retries, switches or attempts were exhausted. |
 | `no_provider_available`, `wait_exceeded` | Both agents are capped without a known reset, or the wait exceeded 8 days. |
@@ -71,10 +71,11 @@ python3 scripts/relay_continuity.py release --note "push landed on origin; safe 
 python3 scripts/relay_continuity.py run --session $S
 ```
 
-A release is recorded in the attempt journal and the control ledger. The released turn is continued past, not re-gated. A new failure is gated again.
+A release is recorded in the attempt journal and the control ledger. It waives only the review it answers: the released turn is not re-gated, and an `auth_failure`/`unknown_failure` turn is retried once on the same agent. Provider cooldowns, failover confirmation and circuit bounds still apply, and a new failure is gated again. Releasing `permissions_changed` accepts the new settings as the pinned authority.
 
 ## Behaviour notes
 
+- **Failover needs evidence.** The supervisor switches to the other agent only when a fresh `limits` reading shows that agent has room. Without one, it waits for the failed agent's own reset. Transient and crash retries never switch agent.
 - **Provider resets.** Reset times come from `agent-relay --json limits --refresh` when the reading is fresh and plausible. Otherwise they come from the provider's own message ("resets 4:20pm (Europe/Rome)", "try again at 11:38 PM"). If neither is usable, the supervisor rechecks after 30 minutes. A Claude "monthly spend limit" message that prints a session reset is treated as a session quota. A spend cap without a reset needs `release --clear-cooldown`.
 - **Headless authority is narrower than the REPL's.** Relay applies `permissions.toml` backend modes only in the REPL. Headless continuations run Claude in `--permission-mode default` with Relay's approval hook, so tool calls that need approval are refused, and the agent will report itself blocked. Codex runs with Relay's headless default, which allows workspace writes. The supervisor never widens this.
 - **Restart safety.** Every launch writes an intent record with a nonce before Relay starts. If the supervisor dies, the Relay turn keeps running in its own session. On restart the supervisor waits for that process (it never relaunches it), then finds the session by nonce and classifies it.

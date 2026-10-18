@@ -68,19 +68,23 @@ Each tool call in the failed turn's raw output is paired with its result and cla
 
 Automatic continuation is refused, and the chain enters a **manual hold** with an alert, when any of these hold:
 
-- any non-`read_only` call has no paired result (it was in flight at interruption, so whether it took effect is unknown);
+- any non-`read_only` call has no paired result (it was in flight at interruption, so whether it took effect is unknown). A background launch (a `run_in_background` tool, a detached `&`/`nohup` command) counts as in flight until its completion notification is seen, because its result is only the launch acknowledgement. A subagent's calls settle only when the subagent itself finished;
 - the output has unparseable lines;
 - the outcome is `crash` and the repository fingerprint changed during the attempt;
-- the attempt journal shows a launched attempt whose outcome cannot be established.
+- the attempt journal shows a launched attempt whose outcome cannot be established. This includes an attempt that left no identifiable Relay session even when the repository looks unchanged, because remote effects such as a merge or a PR comment leave no local trace. It also includes a journal launch that the state does not account for. A session is identified only by its own first attempt-marker line, and only when exactly one session carries it.
 
-The repository fingerprint covers refs, worktrees, the main checkout's status and HEAD. Only `release` leaves a hold.
+The repository fingerprint covers refs, worktrees, the main checkout's status and HEAD. Only `release` leaves a hold. A release waives only the review it answers: the released turn is not re-gated, and an `auth`/`unknown` hold is retried once on the same agent. Cooldowns, failover confirmation and every bound still apply.
+
+Command classification accounts for execution-capable arguments. Examples are `env`/`timeout`/`nohup` wrappers, `awk` `system()` and pipes, `sed` `e`/`w`, `find -fprint`, attached `curl -XPOST`/`-d` and `gh api -f` forms, and `$(...)` inside unquoted heredocs. Anything not recognized is `unknown`.
+
+Terminal evidence: only the last top-level terminal decides (subagent results never do). Claude success requires `is_error` exactly `false` with `terminal_reason` `completed`. Without a terminal event, an authentication diagnostic in Relay's stderr or run JSON yields `auth`, which is held, never a retryable crash.
 
 Completed `local_write`/`external`/`background` calls with results are listed in the recovery prompt as already done and must not be repeated. Their effects are inspectable through Git, GitHub and `devctx` recover.
 
 ### Continuation policy
 
 - **Preferred and fallback.** Claude is the preferred coordinator and Codex is the only fallback; no other agent is ever selected. Per-agent model and permission settings stay exactly as Relay's existing configuration defines them. The supervisor passes no permission, sandbox or model flags.
-- **Permission pinning.** It records the digest of `.agent-relay/permissions.toml` at start and holds if the digest changes.
+- **Permission pinning.** It pins the digest of the authority-bearing settings in `.agent-relay/permissions.toml` on first run, including the file's absence, and holds if the digest changes. Creating the file later is a change. Releasing a `permissions_changed` hold re-pins the reviewed settings.
 - **Approval gates.** A failover turn never has more authority than the turn it replaces. It cannot approve, merge or bypass a gate the original could not.
 - **Headless authority is narrower than the REPL's.** Relay applies the configured `permissions.toml` backend modes (`bypassPermissions`, Codex sandbox and approval policy) only in its interactive REPL. Headless `run` starts Claude with `--permission-mode default` plus Relay's approval hook, so unapproved tool calls are refused. Codex runs with Relay's headless default, which allows workspace writes. The supervisor does not change this. Making headless continuations match REPL authority (for example through Relay's `[agent.allow]` patterns) is a maintainer authority decision outside this spec.
 - **`quota`.** The agent goes into a persistent cooldown, and the chain switches to the other agent only when that agent's fresh limits reading shows quota available. The cooldown ends at the provider-reported reset: a fresh `limits` reading with a future `resets_at`, else the provider's own message, else a conservative recheck interval labelled estimated. Readings with an `as_of` older than the freshness bound, or a `resets_at` in the past, are refreshed and otherwise discarded. A reset is accepted only if it is no more than 8 days ahead.
@@ -89,6 +93,7 @@ Completed `local_write`/`external`/`background` calls with results are listed in
 - **`transient`.** Retry the same agent with bounded exponential backoff and no switch.
 - **`crash`.** One same-agent retry, subject to the side-effect gate, then hold.
 - **`auth`, `unknown`.** Hold with an alert. These never cause a switch.
+- **Same-agent retries.** `transient` and `crash` retries never switch provider, even when Claude is preferred and available.
 - **Return to Claude.** Only at a turn boundary, after Claude's cooldown has passed, a fresh reading confirms availability, and a minimum dwell since the last switch has elapsed.
 - **Both agents unavailable.** Wait until the earliest validated reset, recheck, and keep waiting with bounded waits without busy looping.
 - **Circuit breaker.** Bounded consecutive failures, bounded switches per window, and a maximum total attempts per run. Exceeding any bound opens the circuit: hold plus alert. This prevents infinite loops and oscillation.
@@ -97,7 +102,7 @@ Completed `local_write`/`external`/`background` calls with results are listed in
 ### Process safety
 
 - **Single instance.** Exclusive `flock` on the state directory, plus a refusal to start when legacy autopilot processes or another live supervisor exist.
-- **Atomic, validated state.** Writes go to a temp file, then fsync, then rename. A corrupt or unknown-version state file causes a hold, never a reset.
+- **Atomic, validated state.** Writes go to a temp file, then fsync, then rename. A corrupt, unknown-version or structurally incomplete state file (any missing or mistyped field) causes a hold, never a reset or a silent repair from defaults.
 - **Restart safety.** Each launch first writes an intent record with a unique attempt nonce, embedded in the recovery prompt. On restart, a launched attempt without an outcome is resolved as follows: if its Relay process is still alive (pid plus start time), the supervisor waits for it. Otherwise it locates the Relay session by nonce and classifies it. If neither is possible, it holds.
 - **Graceful shutdown.** SIGTERM/SIGINT and `stop` finish or leave the running turn intact and record the state; they never kill an agent.
 

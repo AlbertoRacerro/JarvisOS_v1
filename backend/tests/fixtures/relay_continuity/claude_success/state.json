@@ -3,5 +3,5 @@
  "status": "completed",
  "turn_number": 10,
  "kind": "relay_resumable_state",
- "summary": "Running `git fetch -q 2>&1 | tail -2; python3 scripts/devctx.py recover 2>&1 | head -200` Running `python3 scripts/devctx.py show L20261017150304-aba3 2>&1 | head -40; cat /hom...` Running `python3 scripts/devctx.py claim --help 2>&1 | h..."
+ "summary": "<coordinator narrative removed from fixture>"
 }

@@ -181,6 +181,17 @@ def reading(agent: str, used: float, resets_at: datetime, as_of: datetime) -> di
             "windows": [{"id": "session", "used_percent": used, "resets_at": rc.iso(resets_at)}]}
 
 
+def room(env: Env, *agents: str, exhausted: dict[str, datetime] | None = None) -> Any:
+    """Fresh limits readings at the env clock: listed agents have room, `exhausted` agents are capped until a time."""
+    def readings() -> dict[str, Any]:
+        now = env.clock.now()
+        out = {a: reading(a, 5, now + timedelta(hours=5), now) for a in agents}
+        for agent, until in (exhausted or {}).items():
+            out[agent] = reading(agent, 100, until, now) if now < until else reading(agent, 5, now + timedelta(hours=5), now)
+        return out
+    return readings
+
+
 # ---------------------------------------------------------------------------
 # Classification from real recorded turns
 
@@ -310,6 +321,7 @@ def test_subagent_calls_settle_with_their_parent(tmp_path: Path) -> None:
 
 def test_claude_quota_switches_to_codex_and_goes_idle(tmp_path: Path) -> None:
     env = Env(tmp_path, [("codex", CODEX_SUCCESS)])
+    env.relay.readings = room(env, "codex")
     env.head(fixture="claude_session_limit")
     result, sup = env.run()
     assert result == "idle"
@@ -338,7 +350,9 @@ def test_provider_reported_reset_is_preferred_and_validated(tmp_path: Path) -> N
 def test_stale_limit_readings_are_discarded(tmp_path: Path, stale: str) -> None:
     as_of = T0 - timedelta(hours=3) if stale == "old_as_of" else T0
     reset = T0 + timedelta(hours=2) if stale == "old_as_of" else T0 - timedelta(hours=5)
-    env = Env(tmp_path, [("codex", CODEX_SUCCESS)], readings={"claude": reading("claude", 100, reset, as_of)})
+    env = Env(tmp_path, [("codex", CODEX_SUCCESS)])
+    env.relay.readings = lambda: {"claude": reading("claude", 100, reset, as_of),
+                                  "codex": reading("codex", 5, T0 + timedelta(hours=5), env.clock.now())}
     env.head(QUOTA)
     _, sup = env.run()
     cooldown = sup.state["cooldowns"]["claude"]
@@ -348,9 +362,27 @@ def test_stale_limit_readings_are_discarded(tmp_path: Path, stale: str) -> None:
 
 def test_codex_quota_returns_to_preferred_claude(tmp_path: Path) -> None:
     env = Env(tmp_path, [("claude", SUCCESS)])
+    env.relay.readings = room(env, "claude")
     env.head(fixture="codex_usage_limit")
     result, _ = env.run()
     assert result == "idle" and env.relay.launches[0]["agent"] == "claude"
+
+
+@pytest.mark.parametrize("readings", ["none", "failed", "stale", "implausible"])
+def test_quota_never_fails_over_without_fresh_confirmed_room(tmp_path: Path, readings: str) -> None:
+    env = Env(tmp_path, [("claude", SUCCESS)])
+    entry = {"none": None,
+             "failed": {"codex": {"agent_key": "codex", "status": "error"}},
+             "stale": {"codex": reading("codex", 5, T0 + timedelta(hours=5), T0 - timedelta(hours=2))},
+             "implausible": {"codex": reading("codex", 100, T0 + timedelta(days=30), T0)}}[readings]
+    env.relay.readings = entry
+    env.head(QUOTA)
+    result, sup = env.run()
+    # Codex is never launched on missing evidence; the chain waits for Claude's own printed reset
+    # (11:50pm Rome = 21:50Z) and continues on Claude.
+    assert result == "idle"
+    assert [launch["agent"] for launch in env.relay.launches] == ["claude"]
+    assert env.relay.launches[0]["at"] >= datetime(2026, 10, 18, 21, 50, tzinfo=UTC)
 
 
 def test_transient_retries_same_agent_with_bounded_backoff(tmp_path: Path) -> None:
@@ -413,10 +445,12 @@ def test_spend_limits_on_both_agents_hold(tmp_path: Path) -> None:
     codex_spend = [{"type": "thread.started"},
                    {"type": "turn.failed", "error": {"message": "purchase more credits to continue"}}]
     env = Env(tmp_path, [("codex", codex_spend)])
+    env.relay.readings = room(env, "codex")
     env.head(spend)
     result, sup = env.run()
     assert result == "held" and sup.state["hold"]["reason"] == "no_provider_available"
-    assert sup.state["cooldowns"]["claude"]["until"] is None
+    assert [launch["agent"] for launch in env.relay.launches] == ["codex"]
+    assert sup.state["cooldowns"]["claude"]["until"] is None and sup.state["cooldowns"]["codex"]["until"] is None
 
 
 def test_switch_oscillation_is_bounded(tmp_path: Path) -> None:
@@ -440,18 +474,34 @@ def test_switch_oscillation_is_bounded(tmp_path: Path) -> None:
     assert env.clock.now() >= claude_reset
 
 
-def test_return_to_claude_waits_for_dwell_after_a_switch(tmp_path: Path) -> None:
-    env = Env(tmp_path, [("codex", EAI), ("claude", SUCCESS)], limits=rc.Limits(min_dwell=timedelta(minutes=2)))
+def test_transient_and_crash_retries_never_switch_provider(tmp_path: Path) -> None:
+    # Codex is the current agent after a switch; Claude has room and the dwell has long passed.
+    env = Env(tmp_path, [("codex", EAI), ("codex", [tool_use("r", "Read", file_path="/x"), tool_result("r")]),
+                         ("codex", CODEX_SUCCESS)], limits=rc.Limits(min_dwell=timedelta(minutes=2)))
+    env.relay.readings = room(env, "claude", "codex")
     state = rc.default_state()
-    state.update({"head_session": HEAD, "chain": [HEAD], "permissions_digest": "perm0",
-                  "last_switch_at": rc.iso(T0), "agent": "codex"})
+    state.update({"head_session": HEAD, "chain": [HEAD], "permissions_digest": "perm0", "permissions_pinned": True,
+                  "last_switch_at": rc.iso(T0 - timedelta(hours=1)), "agent": "codex"})
     env.store.save(state, T0)
     env.head(EAI, agent="codex")
-    env.head(EAI, agent="codex")
     result, _ = env.run()
-    # The first retry (one minute after the switch) stays on Codex; the next turn boundary, three minutes
-    # after the switch, is past the dwell and returns to Claude.
     assert result == "idle"
+    assert [launch["agent"] for launch in env.relay.launches] == ["codex", "codex", "codex"]
+
+
+def test_return_to_claude_only_at_a_turn_boundary_after_dwell(tmp_path: Path) -> None:
+    env = Env(tmp_path, [("codex", CODEX_SUCCESS), ("claude", SUCCESS)], limits=rc.Limits(min_dwell=timedelta(minutes=30)))
+    env.relay.readings = room(env, "claude", "codex")
+    state = rc.default_state()
+    state.update({"head_session": HEAD, "chain": [HEAD], "permissions_digest": "perm0", "permissions_pinned": True,
+                  "last_switch_at": rc.iso(T0 - timedelta(minutes=10)), "agent": "codex"})
+    env.store.save(state, T0)
+    env.head(CODEX_SUCCESS, agent="codex")
+    # Ten minutes after the switch the next maintainer task stays on Codex ...
+    assert env.run(task="step one")[0] == "idle"
+    env.clock.t += timedelta(minutes=30)
+    # ... and past the dwell the next turn boundary returns to the preferred Claude.
+    assert env.run(task="step two")[0] == "idle"
     assert [launch["agent"] for launch in env.relay.launches] == ["codex", "claude"]
 
 
@@ -466,6 +516,7 @@ def test_consecutive_failure_circuit(tmp_path: Path) -> None:
 
 def test_maintainer_task_runs_on_preferred_agent_when_idle(tmp_path: Path) -> None:
     env = Env(tmp_path, [("claude", SUCCESS)])
+    env.relay.readings = room(env, "claude")
     env.head(CODEX_SUCCESS, agent="codex")
     result, _ = env.run(task="Next step: reconcile STATUS")
     assert result == "idle"
@@ -516,6 +567,7 @@ def test_in_flight_read_only_call_does_not_block(tmp_path: Path) -> None:
 
 def test_completed_effects_are_reported_to_the_successor_not_replayed(tmp_path: Path) -> None:
     env = Env(tmp_path, [("codex", CODEX_SUCCESS)])
+    env.relay.readings = room(env, "codex")
     env.head([tool_use("p", "Bash", command="git push origin HEAD"), tool_result("p"),
               tool_use("m", "Bash", command="gh pr merge 5 --merge"), tool_result("m"), *QUOTA])
     assert env.run()[0] == "idle"
@@ -536,11 +588,24 @@ def test_crash_without_output_holds_when_repository_changed(tmp_path: Path) -> N
     assert len(env.relay.launches) == 1
 
 
-def test_crash_without_output_and_unchanged_repository_retries_once(tmp_path: Path) -> None:
-    env = Env(tmp_path, [None, ("claude", SUCCESS)])
+def test_attempt_without_session_holds_even_when_repository_unchanged(tmp_path: Path) -> None:
+    # A remote effect (a merge, a PR comment) leaves the local fingerprint unchanged: no proof of no effect.
+    env = Env(tmp_path, [None])
     env.head(EAI)
-    result, _ = env.run()
-    assert result == "idle" and len(env.relay.launches) == 2
+    result, sup = env.run()
+    assert result == "held" and sup.state["hold"]["reason"] == "attempt_unresolved"
+    assert len(env.relay.launches) == 1
+    assert env.run()[0] == "held" and len(env.relay.launches) == 1
+
+
+def test_crash_with_recorded_calls_holds_when_repository_changed(tmp_path: Path) -> None:
+    # The retry records only a Read, but the repository moved: an unrecorded write may have happened.
+    env = Env(tmp_path, [("claude", [tool_use("r", "Read", file_path="/x"), tool_result("r")])])
+    env.head(EAI)
+    env.host.fingerprint = lambda: "fp-after" if env.relay.launches else "fp0"
+    result, sup = env.run()
+    assert result == "held" and sup.state["hold"]["reason"] == "effects_uncertain"
+    assert len(env.relay.launches) == 1
 
 
 # ---------------------------------------------------------------------------
@@ -858,3 +923,203 @@ def test_watch_notifies_repl_failures_once_and_master_merges(tmp_path: Path) -> 
     assert len(failed) == 1 and HEAD in failed[0]
     merged = [t for t in sent if "master advanced" in t]
     assert len(merged) == 1 and "pr: 830" in merged[0]
+
+
+# ---------------------------------------------------------------------------
+# Regressions from the independent review of the first implementation head
+
+
+def test_restart_with_dead_unfound_attempt_holds_even_when_repository_unchanged(tmp_path: Path) -> None:
+    env = Env(tmp_path)
+    env.head(QUOTA)
+    _pending(env, "rc-20261018T080000Z-0badf00d", pid=4244)
+    result, sup = env.run()
+    assert result == "held" and sup.state["hold"]["reason"] == "attempt_unresolved"
+    assert env.relay.launches == []
+
+
+def test_nonce_lookup_ignores_sessions_that_merely_quote_it(tmp_path: Path) -> None:
+    env = Env(tmp_path)
+    env.head(QUOTA)
+    nonce = "rc-20261018T080000Z-0ddba11e"
+    _pending(env, nonce, pid=None)
+    # The real attempt pushed and was cut off; a later session's prompt quotes the nonce and failed harmlessly.
+    write_turn(env.relay.sessions_dir() / "20261018-080030-ffffff",
+               [tool_use("x", "Bash", command="git push"), *CODEX_QUOTA], agent="codex",
+               prompt=f"[relay-continuity attempt {nonce}]\ntask")
+    write_turn(env.relay.sessions_dir() / "20261018-080500-aaaaab", EAI,
+               prompt=f"[relay-continuity attempt rc-20261018T080500Z-12345678]\nAudit of {nonce}:\n"
+                      f"[relay-continuity attempt {nonce}]")
+    assert env.relay.find_by_nonce(nonce, T0) == "20261018-080030-ffffff"
+    result, sup = env.run()
+    assert result == "held" and sup.state["hold"]["reason"] == "effects_uncertain"
+    assert env.relay.launches == []
+
+
+def test_nonce_lookup_refuses_ambiguous_matches(tmp_path: Path) -> None:
+    env = Env(tmp_path)
+    nonce = "rc-20261018T080000Z-abad1dea"
+    for sid in ("20261018-080030-aaaaaa", "20261018-080040-bbbbbb"):
+        write_turn(env.relay.sessions_dir() / sid, SUCCESS, prompt=f"[relay-continuity attempt {nonce}]")
+    assert env.relay.find_by_nonce(nonce, T0) is None
+
+
+@pytest.mark.parametrize("command", [
+    "env git push origin HEAD", "env -i PATH=/bin git push", "awk 'BEGIN {system(\"git push\")}'",
+    "awk '{print > \"out\"}' f", "curl -XPOST https://example.invalid", "curl -sSd@body https://example.invalid",
+    "curl --request=DELETE https://example.invalid", "gh api repos/o/r/issues -ftitle=hello",
+    "gh api -XPATCH repos/o/r", "gh api graphql -f query=q", "cat <<EOF > notes\n$(git push)\nEOF",
+    "cat <<<x\ngh pr merge 1", "sed 's/a/b/e' f", "sed -n '/x/w out' f", "find . -fprint list",
+])
+def test_execution_capable_arguments_are_not_read_only(command: str) -> None:
+    assert rc.classify_command(command)[0] != "read_only"
+
+
+@pytest.mark.parametrize("command", [
+    "env", "awk '{print $1}' f", "curl -sSL -o /dev/null https://example.invalid", "gh api repos/o/r",
+    "cat <<'EOF'\n$(git push)\nEOF", "sed 's/x/error/' f", "sed -n 1,5p f",
+])
+def test_plain_reads_stay_read_only(command: str) -> None:
+    assert rc.classify_command(command)[0] == "read_only"
+
+
+def test_background_acknowledgement_is_not_completion(tmp_path: Path) -> None:
+    bg_agent = tool_use("a", "Agent", subagent_type="general-purpose", run_in_background=True)
+    child = tool_use("c", "Bash", command="git push")
+    child["parent_tool_use_id"] = "a"
+    started = {"type": "system", "subtype": "task_started", "tool_use_id": "a"}
+    turn = write_turn(tmp_path / "s", [bg_agent, tool_result("a"), started, child, *QUOTA])
+    report = rc.classify_turn(turn)
+    assert {c.label for c in report.in_flight} == {"Agent &", "git push"}
+    assert rc.gate(report, fingerprint_changed=None) == "effects_uncertain"
+    done = write_turn(tmp_path / "t", [bg_agent, tool_result("a"), started,
+                                       {"type": "system", "subtype": "task_notification", "tool_use_id": "a"}, *QUOTA])
+    assert rc.classify_turn(done).in_flight == []
+    # A background shell job that was never reported finished is still running.
+    shell = write_turn(tmp_path / "u", [tool_use("b", "Bash", command="./deploy.sh", run_in_background=True),
+                                        tool_result("b"), *QUOTA])
+    assert [c.label for c in rc.classify_turn(shell).in_flight] == ["deploy.sh &"]
+
+
+def test_creating_permissions_after_an_absent_pin_holds(tmp_path: Path) -> None:
+    env = Env(tmp_path, [("codex", CODEX_SUCCESS)])
+    env.perm["v"] = None
+    env.head(SUCCESS)
+    assert env.run()[0] == "idle"
+    env.perm["v"] = "perm-created"
+    env.head(QUOTA, sid="20261018-090000-eeeeee")
+    result, sup = env.run("20261018-090000-eeeeee")
+    assert result == "held" and sup.state["hold"]["reason"] == "permissions_changed"
+    assert env.relay.launches == []
+
+
+def test_released_permission_hold_repins_the_reviewed_authority(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    env = Env(tmp_path, [("codex", CODEX_SUCCESS)])
+    env.relay.readings = room(env, "codex")
+    env.head(SUCCESS)
+    assert env.run()[0] == "idle"
+    env.perm["v"] = "perm-widened"
+    env.head(QUOTA, sid="20261018-090000-eeeeee")
+    assert env.run("20261018-090000-eeeeee")[0] == "held"
+    monkeypatch.setenv("RELAY_CONTINUITY_DIR", str(env.store.root))
+    monkeypatch.setattr(rc, "make_host", lambda repo: env.host)
+    monkeypatch.setattr(rc, "repo_root", lambda: env.repo)
+    assert rc.main(["release", "--note", "reviewed the new permissions"]) == 0
+    assert env.run("20261018-090000-eeeeee")[0] == "idle"
+    assert env.store.load()["permissions_digest"] == "perm-widened"
+
+
+@pytest.mark.parametrize("events", [
+    # A subagent's successful result after the coordinator's own failure decides nothing.
+    [*QUOTA, {**claude_result("child ok"), "parent_tool_use_id": "p1"}],
+    # Missing or null is_error is not success.
+    [{"type": "result", "subtype": "success", "result": "x", "terminal_reason": "completed"}],
+    [{"type": "result", "subtype": "success", "is_error": None, "result": "x", "terminal_reason": "completed"}],
+    # An empty result without a completed reason is not success.
+    [{"type": "result", "subtype": "success", "is_error": False, "result": "", "terminal_reason": None}],
+])
+def test_ambiguous_terminal_evidence_is_never_success(tmp_path: Path, events: list[Any]) -> None:
+    assert rc.classify_turn(write_turn(tmp_path / "s", events)).outcome != "success"
+
+
+def test_auth_diagnostics_without_terminal_hold_instead_of_retrying(tmp_path: Path) -> None:
+    turn = write_turn(tmp_path / "s", [{"type": "system", "subtype": "init"}])
+    assert rc.classify_turn(turn).outcome == "crash"
+    assert rc.classify_turn(turn, diagnostics="Error: Invalid API key · Please run /login").outcome == "auth"
+    (turn / "stderr.log").write_text("OAuth token has expired")
+    assert rc.classify_turn(turn).outcome == "auth"
+
+    class AuthRelay(FakeRelay):
+        def finish(self, proc: FakeProc) -> Any:
+            result = super().finish(proc)
+            return rc.RunResult(result.session_id, 1, True, "401 Unauthorized: please run /login")
+    env = Env(tmp_path / "e")
+    env.relay = AuthRelay(env.repo, [("claude", [{"type": "system", "subtype": "init"}])])
+    env.relay.clock = env.clock
+    env.host.relay = env.relay
+    env.head(EAI)
+    result, sup = env.run()
+    assert result == "held" and sup.state["hold"]["reason"] == "auth_failure"
+    assert len(env.relay.launches) == 1
+
+
+@pytest.mark.parametrize("drop", ["pending", "counters", "permissions_pinned"])
+def test_structurally_incomplete_state_is_corrupt_not_repaired(tmp_path: Path, drop: str) -> None:
+    env = Env(tmp_path, [("codex", CODEX_SUCCESS)])
+    env.head(QUOTA)
+    state = rc.default_state()
+    state.update({"phase": "running", "head_session": HEAD, "chain": [HEAD]})
+    del state[drop]
+    env.store.root.mkdir(parents=True, exist_ok=True)
+    env.store.state_path.write_text(json.dumps(state))
+    result, _ = env.run()
+    assert result == "held" and env.relay.launches == []
+    assert any("state_corrupt" in text for text in env.sent)
+
+
+def test_journal_launch_missing_from_state_holds(tmp_path: Path) -> None:
+    env = Env(tmp_path, [("codex", CODEX_SUCCESS)])
+    env.relay.readings = room(env, "codex")
+    env.head(QUOTA)
+    env.store.journal({"event": "launch", "nonce": "rc-20261018T075900Z-feedface", "agent": "codex"})
+    result, sup = env.run()
+    assert result == "held" and sup.state["hold"]["reason"] == "attempt_unresolved"
+    assert env.relay.launches == []
+    assert rc.unsettled_nonces(env.store.journal_path) == ["rc-20261018T075900Z-feedface"]
+
+
+def test_release_with_drop_pending_settles_unaccounted_journal_attempts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    env = Env(tmp_path, [("codex", CODEX_SUCCESS)])
+    env.relay.readings = room(env, "codex")
+    env.head(QUOTA)
+    env.store.journal({"event": "launch", "nonce": "rc-20261018T075900Z-feedface", "agent": "codex"})
+    assert env.run()[0] == "held"
+    monkeypatch.setenv("RELAY_CONTINUITY_DIR", str(env.store.root))
+    monkeypatch.setattr(rc, "make_host", lambda repo: env.host)
+    monkeypatch.setattr(rc, "repo_root", lambda: env.repo)
+    assert rc.main(["release", "--drop-pending", "--note", "checked: that attempt never ran"]) == 0
+    assert rc.unsettled_nonces(env.store.journal_path) == []
+    assert env.run()[0] == "idle" and [launch["agent"] for launch in env.relay.launches] == ["codex"]
+
+
+def test_retried_delivery_counts_against_the_hourly_limit() -> None:
+    state = rc.default_state()
+    calls: list[str] = []
+    outcomes = iter(["http_500", None, None])
+    notifier = rc.Notifier(state, sender=lambda t: calls.append(t) or next(outcomes), log=lambda m: None, max_per_hour=1)
+    notifier.send("turn_completed", T0, session=HEAD, agent="claude")  # fails, queued for one retry
+    notifier.send("master_advanced", T0 + timedelta(minutes=1), sha="abcdef1")  # fills the hour
+    notifier.retry_pending(T0 + timedelta(minutes=2))
+    assert len(calls) == 2 and state["notify"]["dropped"] >= 1
+
+
+def test_fixtures_carry_no_coordinator_narrative() -> None:
+    placeholder = "<coordinator narrative removed from fixture>"
+    for path in FIXTURES.glob("*/output.jsonl"):
+        for line in path.read_text().splitlines():
+            event = json.loads(line)
+            if event.get("type") == "result" and event.get("is_error") is False:
+                assert event.get("result") in (placeholder, ""), path
+    for path in FIXTURES.glob("*/state.json"):
+        summary = json.loads(path.read_text()).get("summary") or ""
+        assert summary == placeholder or rc.classify_text(summary, None) != "unknown" or len(summary) < 40, path

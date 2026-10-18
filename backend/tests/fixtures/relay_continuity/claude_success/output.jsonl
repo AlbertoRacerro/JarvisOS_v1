@@ -7,4 +7,4 @@
 {"subtype": "task_started", "task_id": "bxmx1qlap", "tool_use_id": "toolu_01TFABMp9ftCXuTMGgEP6NUQ", "type": "system"}
 {"status": "completed", "subtype": "task_notification", "task_id": "bxmx1qlap", "tool_use_id": "toolu_01TFABMp9ftCXuTMGgEP6NUQ", "type": "system"}
 {"message": {"content": [{"is_error": false, "tool_use_id": "toolu_01TFABMp9ftCXuTMGgEP6NUQ", "type": "tool_result"}]}, "type": "user"}
-{"api_error_status": null, "is_error": false, "num_turns": 27, "result": "Specs 193 and 194 are both merged into master, and STATUS.md shows both as `merged`.\n\n- **193 (Studio Sidecar authoring), PR #827:** merged at its exact head `f25ab4fd` once every CI check passed. That head differs from `670d699f`, the commit all the earlier evidence was gathered on, only by one STA", "stop_reason": "end_turn", "subtype": "success", "terminal_reason": "completed", "type": "result"}
+{"api_error_status": null, "is_error": false, "num_turns": 27, "result": "<coordinator narrative removed from fixture>", "stop_reason": "end_turn", "subtype": "success", "terminal_reason": "completed", "type": "result"}

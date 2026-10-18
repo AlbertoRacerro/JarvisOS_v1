@@ -3,5 +3,5 @@
  "status": "completed",
  "turn_number": 1,
  "kind": "relay_resumable_state",
- "summary": "I'll start by recovering fresh state as the governance requires. Running `git fetch -q origin && git status -sb | head -3 && git log --oneline -3 origi...` Running `wc -l AGENTS.md docs/AGENT_EXECUTION_AND_AUTOMATION_PROTOCOL.md docs/spe..."
+ "summary": "<coordinator narrative removed from fixture>"
 }

@@ -111,7 +111,15 @@ class ToolCall:
     label: str
     done: bool
     background_open: bool = False
+    background_closed: bool = False
     parent: str | None = None
+    detached: bool = False
+
+    @property
+    def pending(self) -> bool:
+        """Still possibly executing: no result yet, or a background launch whose completion was never seen
+        (its tool result is only the launch acknowledgement)."""
+        return not self.done or self.background_open or (self.detached and not self.background_closed)
 
 
 @dataclass
@@ -127,11 +135,11 @@ class TurnReport:
 
     @property
     def in_flight(self) -> list[ToolCall]:
-        return [c for c in self.calls if not c.done and c.kind != "read_only"]
+        return [c for c in self.calls if c.pending and c.kind != "read_only"]
 
     @property
     def effects(self) -> list[ToolCall]:
-        return [c for c in self.calls if c.done and c.kind != "read_only"]
+        return [c for c in self.calls if not c.pending and c.kind != "read_only"]
 
     def to_json(self) -> dict[str, Any]:
         data = asdict(self)
@@ -210,7 +218,7 @@ READ_ONLY_CMDS = {
     "test", "[", "diff", "cmp", "sha256sum", "sha1sum", "md5sum", "jq", "column", "basename", "dirname", "realpath",
     "readlink", "id", "whoami", "uname", "hostname", "nproc", "free", "uptime", "tree", "less", "more", "strings",
     "xxd", "od", "hexdump", "nvidia-smi", "comm", "paste", "join", "seq", "cd", "export", "set", "exit", "wait",
-    "nl", "fold", "rev", "tac", "zcat", "lsof", "ss", "getent", "env", "printenv", "locale", "tput", ":",
+    "nl", "fold", "rev", "tac", "zcat", "lsof", "ss", "getent", "printenv", "locale", "tput", ":",
     "read", "mapfile", "readarray", "SUBST", "let", "shopt", "ulimit", "umask", "hash", "alias",
 }
 SHELL_KEYWORDS = {"for", "do", "done", "while", "until", "if", "then", "elif", "else", "fi", "case", "esac", "in",
@@ -223,7 +231,7 @@ LOCAL_WRITE_CMDS = {
     "eslint", "tsc", "vite", "vitest", "playwright",
 }
 EXTERNAL_CMDS = {"ssh", "scp", "sftp", "nc", "ncat", "telnet", "sendmail", "mail", "twine", "notify-slack.sh"}
-WRAPPERS = {"timeout", "nice", "ionice", "stdbuf", "command", "builtin", "exec", "xvfb-run"}
+WRAPPERS = {"timeout", "nice", "ionice", "stdbuf", "command", "builtin", "exec", "xvfb-run", "env"}
 BACKGROUND_WRAPPERS = {"nohup", "setsid", "disown"}
 GIT_READ = {"status", "log", "diff", "show", "fetch", "rev-parse", "ls-files", "ls-tree", "cat-file", "merge-base",
             "merge-tree", "describe", "blame", "grep", "for-each-ref", "rev-list", "shortlog", "remote", "reflog",
@@ -232,6 +240,15 @@ GH_READ = {("pr", "view"), ("pr", "list"), ("pr", "checks"), ("pr", "diff"), ("p
            ("run", "list"), ("run", "watch"), ("repo", "view"), ("issue", "view"), ("issue", "list"),
            ("release", "view"), ("release", "list"), ("auth", "status"), ("search", "prs"), ("search", "issues"),
            ("search", "code"), ("workflow", "list"), ("workflow", "view"), ("cache", "list")}
+# awk programs that run commands (system(), pipes to/from commands) or print into files.
+AWK_EXEC = re.compile(r"system\s*\(|\|\s*getline|\|\s*\"|\"\s*\|\s*getline|print[f]?\b[^;}]*>")
+# sed `e`/`w` commands, and `s///e` / `s///w` flags, execute commands or write files.
+SED_CMD_EXEC = re.compile(r"(?:^|[;\n{}])\s*(?:[0-9$,]+|/[^/\n]*/)?\s*!?\s*[ewW](?:\s|$)")
+SED_SUBST = re.compile(r"(?:^|[;\n{}]|\s)s([^\w\s\\])(?:\\.|(?!\1).)*\1(?:\\.|(?!\1).)*\1([a-zA-Z0-9]*)")
+
+
+def sed_executes(script: str) -> bool:
+    return bool(SED_CMD_EXEC.search(script)) or any(set(m.group(2)) & set("ewW") for m in SED_SUBST.finditer(script))
 REDIRECT = re.compile(r"(?<![0-9&<>])>{1,2}\s*(?!&|/dev/null)(\S+)")
 
 
@@ -275,14 +292,19 @@ def _gh_kind(args: list[str]) -> tuple[str, str]:
     pair = tuple(words[:2])
     label = "gh " + " ".join(words[:2])
     if words[:1] == ["api"]:
-        method = "GET"
+        method, fields = None, False
         for i, a in enumerate(args):
             if a in ("-X", "--method") and i + 1 < len(args):
                 method = args[i + 1].upper()
             elif a.startswith("--method="):
                 method = a.split("=", 1)[1].upper()
-            elif a in ("-f", "-F", "--field", "--raw-field", "--input") or a.startswith(("--field=", "--raw-field=")):
-                method = "POST" if method == "GET" else method
+            elif a.startswith("-X") and len(a) > 2:
+                method = a[2:].upper()
+            elif a.startswith(("-f", "-F", "--field", "--raw-field", "--input")):
+                fields = True  # `-f k=v`, attached `-fk=v`, `--field=k=v`: gh switches to POST
+        if "graphql" in words[1:2]:
+            method = method or "POST"
+        method = method or ("POST" if fields else "GET")
         return ("read_only" if method in ("GET", "HEAD") else "external"), f"gh api {method}"
     if pair in GH_READ:
         return "read_only", label
@@ -291,25 +313,45 @@ def _gh_kind(args: list[str]) -> tuple[str, str]:
 
 def _curl_kind(word: str, args: list[str]) -> tuple[str, str]:
     for i, a in enumerate(args):
-        if a in ("-X", "--request") and i + 1 < len(args) and args[i + 1].upper() not in ("GET", "HEAD"):
-            return "external", f"{word} {args[i + 1].upper()}"
-        if a.startswith(("-d", "--data", "-F", "--form", "-T", "--upload-file", "--json", "--post")):
+        nxt = args[i + 1] if i + 1 < len(args) else ""
+        if a.startswith(("--request", "--method")):
+            method = (a.split("=", 1)[1] if "=" in a else nxt).upper()
+            if method not in ("GET", "HEAD"):
+                return "external", f"{word} {method or '?'}"
+        elif a.startswith(("--data", "--form", "--upload-file", "--json", "--post", "--body", "--put")):
             return "external", f"{word} POST"
+        elif a.startswith("-") and not a.startswith("--"):
+            # Short-option cluster (`-sXPOST`, `-sd@f`): X/d/F/T take the rest of the cluster or the next word.
+            for j, ch in enumerate(a[1:], 1):
+                if ch == "X":
+                    method = (a[j + 1:] or nxt).upper()
+                    if method not in ("GET", "HEAD"):
+                        return "external", f"{word} {method or '?'}"
+                    break
+                if ch in "dFT":
+                    return "external", f"{word} POST"
+                if ch in "oOHuAeEbcKw":  # options whose value follows; stop scanning the cluster
+                    break
     return "read_only", f"{word} GET"
 
 
 def strip_heredocs(command: str) -> str:
-    """Remove heredoc bodies: they are data written somewhere, not commands."""
+    """Remove heredoc bodies: they are data written somewhere, not commands. An unquoted delimiter's body
+    still expands $(...) and backticks, so those substitutions are kept as commands."""
     lines, out, i = command.split("\n"), [], 0
     while i < len(lines):
         line = lines[i]
         out.append(line)
-        delims = re.findall(r"<<-?\s*['\"]?([A-Za-z_][A-Za-z0-9_]*)['\"]?", line)
+        delims = re.findall(r"(?<!<)<<(?!<)-?\s*(['\"\\]?)([A-Za-z_][A-Za-z0-9_]*)['\"]?", line)
         i += 1
-        for delim in delims:
+        for quote, delim in delims:
+            body = []
             while i < len(lines) and lines[i].strip() != delim:
+                body.append(lines[i])
                 i += 1
             i += 1
+            if not quote:
+                out.extend(f"$({sub})" for sub in substitutions("\n".join(body))[0])
     return "\n".join(out)
 
 
@@ -425,7 +467,8 @@ def classify_command(command: str, _depth: int = 0) -> tuple[str, str]:
         while words and (words[0] in WRAPPERS or words[0] in BACKGROUND_WRAPPERS):
             background = background or words[0] in BACKGROUND_WRAPPERS
             words = words[1:]
-            while words and (words[0].startswith("-") or re.fullmatch(r"[0-9.]+[smhd]?", words[0])):
+            while words and (words[0].startswith("-") or re.fullmatch(r"[0-9.]+[smhd]?", words[0])
+                             or re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", words[0])):
                 words = words[1:]
         if not words:
             continue
@@ -438,10 +481,15 @@ def classify_command(command: str, _depth: int = 0) -> tuple[str, str]:
         elif word in ("curl", "wget"):
             kind, label = _curl_kind(word, args)
         elif word == "sed":
-            kind, label = ("local_write" if any(a.startswith("-i") or a == "--in-place" for a in args) else "read_only"), "sed"
+            if any(sed_executes(a) for a in args if not a.startswith("-")):
+                kind, label = "unknown", "sed e/w"  # GNU sed can execute commands and write files
+            else:
+                kind, label = ("local_write" if any(a.startswith("-i") or a == "--in-place" for a in args) else "read_only"), "sed"
+        elif word in ("awk", "gawk", "mawk", "nawk"):
+            kind, label = ("unknown" if any(AWK_EXEC.search(a) for a in args) else "read_only"), word
         elif word == "find":
-            if "-delete" in args:
-                kind, label = "local_write", "find -delete"
+            if any(a in ("-delete", "-fprint", "-fprint0", "-fprintf", "-fls") for a in args):
+                kind, label = "local_write", "find (writes)"
             elif any(a in ("-exec", "-execdir", "-ok", "-okdir") for a in args):
                 kind, label = "unknown", "find -exec"
             else:
@@ -470,8 +518,9 @@ def classify_command(command: str, _depth: int = 0) -> tuple[str, str]:
             kind, label = "unknown", word[:40]
         if REDIRECT.search(seg) and kind == "read_only":
             kind, label = "local_write", f"{label} > file"
-        if background and _rank(kind) < _rank("background"):
-            kind, label = "background", f"{label} &"
+        if background:
+            # The label keeps the detach marker whatever the kind: its tool result is only a launch.
+            kind, label = (kind if _rank(kind) > _rank("background") else "background"), f"{label} &"
         results.append((kind, label))
     if not results:
         return "read_only", "(empty)"
@@ -494,12 +543,15 @@ def _claude_call(block: dict[str, Any]) -> ToolCall:
     inp = block.get("input") or {}
     if name == "Bash":
         kind, label = classify_command(str(inp.get("command") or ""))
-        if inp.get("run_in_background") and _rank(kind) < _rank("background"):
-            kind, label = "background", f"{label} &"
     else:
         kind = CLAUDE_TOOL_KINDS.get(name, "unknown")
         label = name if not inp.get("file_path") else f"{name} {Path(str(inp['file_path'])).name}"
-    return ToolCall(id=str(block.get("id")), tool=name, kind=kind, label=label[:80], done=False)
+    detached = bool(inp.get("run_in_background")) or label.endswith(" &")
+    if inp.get("run_in_background"):
+        # e.g. a background Agent or shell job: its tool result is a launch acknowledgement, not completion
+        kind = kind if _rank(kind) > _rank("background") else "background"
+        label = label if label.endswith(" &") else f"{label} &"
+    return ToolCall(id=str(block.get("id")), tool=name, kind=kind, label=label[:80], done=False, detached=detached)
 
 
 def _codex_call(item: dict[str, Any]) -> ToolCall | None:
@@ -514,7 +566,8 @@ def _codex_call(item: dict[str, Any]) -> ToolCall | None:
         kind, label = "read_only", "web_search"
     else:
         return None
-    return ToolCall(id=str(item.get("id")), tool=str(typ), kind=kind, label=str(label)[:80], done=False)
+    return ToolCall(id=str(item.get("id")), tool=str(typ), kind=kind, label=str(label)[:80], done=False,
+                    detached=str(label).endswith(" &"))
 
 
 def read_events(path: Path) -> tuple[list[dict[str, Any]], int]:
@@ -536,7 +589,8 @@ def read_events(path: Path) -> tuple[list[dict[str, Any]], int]:
     return events, bad
 
 
-def classify_turn(turn_dir: Path, *, ref: datetime | None = None, local_tz: Any = None) -> TurnReport:
+def classify_turn(turn_dir: Path, *, ref: datetime | None = None, local_tz: Any = None,
+                  diagnostics: str = "") -> TurnReport:
     state: dict[str, Any] = {}
     try:
         state = json.loads((turn_dir / "state.json").read_text())
@@ -558,7 +612,7 @@ def classify_turn(turn_dir: Path, *, ref: datetime | None = None, local_tz: Any 
                         relay_status=state.get("status"))
     if not events:
         report.detail = "output missing" if not output.exists() else "output empty"
-        return report
+        return no_terminal_evidence(report, turn_dir, diagnostics)
     terminal: dict[str, Any] | None = None
     terminal_index = -1
     for idx, e in enumerate(events):
@@ -580,27 +634,33 @@ def classify_turn(turn_dir: Path, *, ref: datetime | None = None, local_tz: Any 
                 calls[tool_id].background_open = True
             elif tool_id in calls and e.get("subtype") == "task_notification":
                 calls[tool_id].background_open = False
+                calls[tool_id].background_closed = True
         elif typ in ("item.started", "item.completed"):
             item = e.get("item") or {}
             if (call := _codex_call(item)) is not None:
                 existing = calls.setdefault(call.id, call)
                 if typ == "item.completed":
                     existing.done = True
-        if typ in ("result", "turn.completed", "turn.failed", "error"):
+        if typ in ("result", "turn.completed", "turn.failed", "error") and not e.get("parent_tool_use_id"):
+            # A subagent's own result never decides the coordinator turn; the last top-level terminal does.
             terminal, terminal_index = e, idx
     for call in calls.values():
-        # A subagent's calls are settled by its parent call: results inside a subagent are not always streamed.
+        # A subagent's calls are settled by its parent call (results inside a subagent are not always streamed),
+        # but only when the parent truly finished: a background subagent's acknowledgement settles nothing.
         parent = calls.get(call.parent) if call.parent else None
-        if parent is not None and parent.done:
+        if parent is not None and not parent.pending:
             call.done = True
     report.calls = list(calls.values())
     if terminal is None:
-        return report
+        return no_terminal_evidence(report, turn_dir, diagnostics)
     report.terminal = True
     typ = terminal.get("type")
     if typ == "result":
-        if not terminal.get("is_error"):
+        if terminal.get("is_error") is False and terminal.get("terminal_reason") == "completed":
             report.outcome, report.detail = "success", "result ok"
+        elif terminal.get("is_error") is not True:
+            # Missing/null is_error, or an empty result without a completed reason, is not evidence of success.
+            report.outcome, report.detail = "unknown", f"result without completion (reason={terminal.get('terminal_reason')})"
         else:
             text = str(terminal.get("result") or terminal.get("terminal_reason") or "")
             status = terminal.get("api_error_status")
@@ -624,6 +684,20 @@ def classify_turn(turn_dir: Path, *, ref: datetime | None = None, local_tz: Any 
     return report
 
 
+def no_terminal_evidence(report: TurnReport, turn_dir: Path, diagnostics: str) -> TurnReport:
+    """Without a terminal event, an authentication diagnostic (runner stderr/run JSON, or a turn stderr.log)
+    makes the turn `auth` (held), never a retryable crash. Nothing here can ever yield success."""
+    texts = [diagnostics]
+    try:
+        texts.append((turn_dir / "stderr.log").read_text(encoding="utf-8", errors="replace")[-8192:])
+    except OSError:
+        pass
+    text = "\n".join(t for t in texts if t)
+    if text and classify_text(text, None) == "auth":
+        report.outcome, report.detail = "auth", f"{report.detail}; runner reported an authentication failure"
+    return report
+
+
 def settle_limit(report: TurnReport, text: str, ref: datetime, local_tz: Any) -> None:
     """Attach the provider-printed reset. A spend-limit message that also prints a timed reset (Claude's
     "monthly spend limit · your session limit resets 4pm") is a session quota with that reset."""
@@ -642,7 +716,8 @@ def gate(report: TurnReport, *, fingerprint_changed: bool | None) -> str | None:
         return "output_unparseable"
     if report.in_flight:
         return "effects_uncertain"
-    if not report.calls and not report.terminal and fingerprint_changed:
+    if not report.terminal and fingerprint_changed:
+        # The stream ended early and the repository moved: recorded calls may not explain the change.
         return "effects_uncertain"
     return None
 
@@ -666,10 +741,58 @@ def default_state() -> dict[str, Any]:
         "schema": SCHEMA, "phase": "idle", "head_session": None, "chain": [], "agent": None,
         "hold": None, "cooldowns": {}, "switches": [], "last_switch_at": None,
         "counters": {"consecutive_failures": 0, "transient_streak": 0, "crash_retries": 0},
-        "permissions_digest": None, "pending": None, "waiting_since": None, "last_outcome": None,
+        "permissions_digest": None, "permissions_pinned": False, "pending": None, "waiting_since": None, "last_outcome": None,
         "notify": {"sent": {}, "window": [], "last_digest": None, "failures": 0, "retry": None, "dropped": 0},
         "watch": {"seen": {}, "master": None}, "acknowledged": None, "updated_at": None,
     }
+
+
+STATE_TYPES: dict[str, tuple[type, ...]] = {
+    "head_session": (str, type(None)), "chain": (list,), "agent": (str, type(None)), "hold": (dict, type(None)),
+    "cooldowns": (dict,), "switches": (list,), "last_switch_at": (str, type(None)), "counters": (dict,),
+    "permissions_digest": (str, type(None)), "permissions_pinned": (bool,), "pending": (dict, type(None)),
+    "waiting_since": (str, type(None)), "last_outcome": (str, type(None)), "notify": (dict,), "watch": (dict,),
+    "acknowledged": (str, type(None)), "updated_at": (str, type(None)),
+}
+PENDING_KEYS = ("nonce", "agent", "parent", "started_at", "pid", "pid_start", "fingerprint", "attempt")
+
+
+def validate_state(data: dict[str, Any]) -> str | None:
+    for key, types in STATE_TYPES.items():
+        if key not in data:
+            return f"missing {key}"
+        if not isinstance(data[key], types):
+            return f"bad type for {key}"
+    if not all(isinstance(data["counters"].get(k), int) for k in ("consecutive_failures", "transient_streak", "crash_retries")):
+        return "bad counters"
+    pending = data["pending"]
+    if pending is not None and (any(k not in pending for k in PENDING_KEYS) or not isinstance(pending["nonce"], str)):
+        return "bad pending attempt"
+    return None
+
+
+def unsettled_nonces(journal: Path) -> list[str]:
+    """Launched attempts with no settle record and not dropped by a maintainer release, oldest first."""
+    launched: dict[str, None] = {}
+    try:
+        lines = journal.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return []
+    for line in lines:
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            continue  # a torn final line is the only kind a crash can leave; the state's pending covers it
+        if not isinstance(record, dict):
+            continue
+        if record.get("event") == "launch" and isinstance(record.get("nonce"), str):
+            launched[record["nonce"]] = None
+        elif record.get("event") == "settle":
+            launched.pop(record.get("nonce"), None)
+        elif record.get("event") == "release":
+            for nonce in record.get("dropped") or []:
+                launched.pop(nonce, None)
+    return list(launched)
 
 
 class Store:
@@ -688,9 +811,9 @@ class Store:
             raise StateCorrupt(f"state file unreadable: {type(exc).__name__}") from exc
         if not isinstance(data, dict) or data.get("schema") != SCHEMA or data.get("phase") not in PHASES:
             raise StateCorrupt("state file has an unknown schema or phase")
-        merged = default_state()
-        merged.update(data)
-        return merged
+        if problem := validate_state(data):
+            raise StateCorrupt(f"state file is structurally invalid: {problem}")
+        return data
 
     def save(self, state: dict[str, Any], now: datetime) -> None:
         state["updated_at"] = iso(now)
@@ -876,9 +999,16 @@ class Notifier:
         if not pending or self.sender is None:
             return
         notify["retry"] = None  # at most one retry; dropped afterwards whatever happens
+        window = [t for t in notify["window"] if (ts := parse_ts(t)) and now - ts < timedelta(hours=1)]
+        if len(window) >= self.max_per_hour:
+            notify["window"] = window
+            notify["dropped"] = notify.get("dropped", 0) + 1
+            self.log(f"notify: rate-limited retry of {pending['event']}")
+            return
         text = render(pending["event"], pending["fields"])
         if text and not self._deliver(text):
             notify["sent"][pending["key"]] = iso(now)
+            notify["window"] = window + [iso(now)]
 
     def _deliver(self, text: str) -> str | None:
         try:
@@ -896,6 +1026,7 @@ class RunResult:
     session_id: str | None
     exit_code: int | None
     raw_ok: bool
+    diagnostics: str = ""
 
 
 class RelayAdapter:
@@ -915,17 +1046,19 @@ class RelayAdapter:
     def start(self, agent: str, parent: str, task: str, turns: int) -> subprocess.Popen:
         args = [self.binary, "--json", "run", agent, "--continue", parent, "-t", task, "-n", str(turns), "-y",
                 "--repo", str(self.repo)]
-        return subprocess.Popen(args, cwd=self.repo, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
+        return subprocess.Popen(args, cwd=self.repo, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
                                 start_new_session=True)
 
     @staticmethod
     def finish(proc: subprocess.Popen) -> RunResult:
-        out, _ = proc.communicate()
+        out, err = proc.communicate()
+        diagnostics = (err or "")[-8192:]
         try:
             data = json.loads(out)
-            return RunResult(data.get("session_id"), proc.returncode, True)
-        except (json.JSONDecodeError, TypeError):
-            return RunResult(None, proc.returncode, False)
+            errors = [str(data.get(k)) for k in ("run_error", "error", "stop_reason") if data.get(k)]
+            return RunResult(data.get("session_id"), proc.returncode, True, "\n".join([diagnostics, *errors]))
+        except (json.JSONDecodeError, TypeError, AttributeError):
+            return RunResult(None, proc.returncode, False, diagnostics)
 
     def sessions_dir(self) -> Path:
         return self.repo / ".agent-relay" / "sessions"
@@ -933,16 +1066,20 @@ class RelayAdapter:
     def find_by_nonce(self, nonce: str, since: datetime) -> str | None:
         root = self.sessions_dir()
         floor = (since - timedelta(minutes=2)).strftime("%Y%m%d-%H%M%S")
+        marker = re.compile(r"^\[relay-continuity attempt (rc-[0-9TZ]+-[0-9a-f]+)\]$", re.M)
+        found = []
         for session in sorted(root.glob("*-*-*"), reverse=True):
             if session.name[:15] < floor:
                 break
             prompt = session / "turns" / "turn-001" / "prompt.md"
             try:
-                if nonce in prompt.read_text(encoding="utf-8", errors="replace"):
-                    return session.name
+                first = marker.search(prompt.read_text(encoding="utf-8", errors="replace"))
             except OSError:
                 continue
-        return None
+            # Only the session's own (first) attempt marker counts; a later prompt quoting a nonce does not.
+            if first and first.group(1) == nonce:
+                found.append(session.name)
+        return found[0] if len(found) == 1 else None
 
 
 def fingerprint(repo: Path) -> str:
@@ -1084,7 +1221,10 @@ class Supervisor:
                     return None  # exhausted but the reset time is stale or implausible: not evidence
         return max(resets) if resets else False
 
-    def available(self, agent: str) -> bool:
+    def available(self, agent: str, *, confirm: bool) -> bool:
+        """Whether `agent` may run now. A cooldown ends at its reset. With `confirm` (switching to `agent`) a
+        fresh, plausible limits reading must also positively show room: missing, stale or failed readings are
+        not evidence, and the unconfirmed agent gets a short recheck cooldown so waits stay bounded."""
         now = self.host.now()
         cooldown = self.state["cooldowns"].get(agent)
         if cooldown:
@@ -1095,6 +1235,11 @@ class Supervisor:
         if isinstance(reading, datetime):
             self.state["cooldowns"][agent] = {"until": iso(reading), "source": "limits", "reason": "quota",
                                               "since": iso(now)}
+            return False
+        if reading is None and confirm:
+            self.state["cooldowns"][agent] = {"until": iso(now + self.limits.recheck), "source": "estimate",
+                                              "reason": (cooldown or {}).get("reason") or "unconfirmed",
+                                              "since": (cooldown or {}).get("since") or iso(now)}
             return False
         if cooldown:
             self.state["cooldowns"].pop(agent, None)
@@ -1142,10 +1287,16 @@ class Supervisor:
             self.state.update({"head_session": session, "chain": [session], "agent": None, "switches": [],
                                "last_switch_at": None, "waiting_since": None, "last_attempt": None,
                                "counters": {"consecutive_failures": 0, "transient_streak": 0, "crash_retries": 0}})
+        if (unsettled := [n for n in unsettled_nonces(self.store.journal_path)
+                          if n != (self.state.get("pending") or {}).get("nonce")]):
+            # The journal records a launch that the state does not account for: never assume it did not run.
+            self.host.log(f"journal has unsettled attempts not in state: {', '.join(unsettled)}")
+            return self.hold("attempt_unresolved")
         digest = self.host.permissions_digest()
-        if self.state.get("permissions_digest") and digest != self.state["permissions_digest"]:
+        if self.state.get("permissions_pinned") and digest != self.state["permissions_digest"]:
             return self.hold("permissions_changed")
         self.state["permissions_digest"] = digest
+        self.state["permissions_pinned"] = True
         self.state["phase"] = "running"
         self.save()
         self.notify("supervisor_started", dedupe_key=f"start|{self.state['head_session']}|{iso(now)[:13]}",
@@ -1183,7 +1334,7 @@ class Supervisor:
                 return "signal" if self.signalled else "stopped"
             self.state["last_outcome"] = report.outcome
             self.state["agent"] = report.agent or self.state.get("agent") or PREFERRED
-            decision = self._resume_acknowledged(report, task) if acknowledged else self._decide(report, task)
+            decision = self._decide(report, task, released=acknowledged)
             acknowledged = False
             if decision in ("held", "idle", "stopped", "signal"):
                 return decision
@@ -1194,21 +1345,10 @@ class Supervisor:
                 return new_report
             report = new_report
 
-    def _resume_acknowledged(self, report: TurnReport, task: str | None) -> tuple[str, str] | str:
-        failed_agent = report.agent or self.state.get("agent") or PREFERRED
-        if report.outcome == "success":
-            return self._decide(report, task)
-        self.state["counters"] = {"consecutive_failures": 0, "transient_streak": 0, "crash_retries": 0}
-        agent = self._choose(failed_agent, retry_same=True)
-        if agent is None:
-            return self._wait_or_hold()
-        if task is not None:
-            return agent, f"[relay-continuity attempt {{nonce}}]\n{task}"
-        effects = "\n".join(f"- [{c.kind}] {c.label}" for c in report.effects + report.in_flight) or "- none recorded"
-        return agent, RECOVERY_PROMPT.format(nonce="{nonce}", prev_agent=failed_agent, outcome=report.outcome,
-                                             agent=agent, effects=effects + "\n(The maintainer reviewed and released this turn.)")
-
-    def _decide(self, report: TurnReport, task: str | None) -> tuple[str, str] | str:
+    def _decide(self, report: TurnReport, task: str | None, *, released: bool = False) -> tuple[str, str] | str:
+        """Next (agent, prompt) or a terminal result. `released`: the maintainer reviewed and released this
+        turn's hold, which waives only that review (the side-effect gate, or an auth/unknown hold, retried on
+        the same agent); every other policy, cooldown and bound still applies."""
         counters = self.state["counters"]
         failed_agent = report.agent or self.state.get("agent") or PREFERRED
         if report.outcome == "success":
@@ -1220,7 +1360,7 @@ class Supervisor:
                 self.notify("turn_completed", dedupe_key=f"done|{self.state['head_session']}",
                             session=self.state["head_session"], agent=failed_agent)
                 return "idle"
-            agent = self._choose(failed_agent, retry_same=True)
+            agent = self._choose(failed_agent, mode="prefer")
             if agent is None:
                 return self._wait_or_hold()
             return agent, f"[relay-continuity attempt {{nonce}}]\n{task}"
@@ -1230,15 +1370,15 @@ class Supervisor:
             return self.hold("circuit_failures")
         if self.attempts >= self.limits.max_attempts_per_run:
             return self.hold("circuit_attempts")
-        if report.outcome in ("auth", "unknown"):
+        if report.outcome in ("auth", "unknown") and not released:
             self.notify("turn_failed", session=self.state["head_session"], agent=failed_agent,
                         outcome=report.outcome, action="hold")
             return self.hold("auth_failure" if report.outcome == "auth" else "unknown_failure", self.attempts or None)
         changed = None
         pending_fp = (self.state.get("last_attempt") or {}).get("fingerprint")
-        if not report.calls and not report.terminal and pending_fp:
+        if not report.terminal and pending_fp:
             changed = self.host.fingerprint() != pending_fp
-        if (reason := gate(report, fingerprint_changed=changed)) is not None:
+        if not released and (reason := gate(report, fingerprint_changed=changed)) is not None:
             self.notify("turn_failed", session=self.state["head_session"], agent=failed_agent,
                         outcome=report.outcome, action="hold")
             return self.hold(reason, self.attempts or None)
@@ -1246,7 +1386,7 @@ class Supervisor:
         if report.outcome in ("quota", "spend_limit"):
             self.set_cooldown(failed_agent, report)
             counters["transient_streak"] = 0
-            agent = self._choose(failed_agent, retry_same=False)
+            agent = self._choose(failed_agent, mode="switch")
         elif report.outcome == "transient":
             counters["transient_streak"] += 1
             if counters["transient_streak"] > self.limits.max_transient_streak:
@@ -1255,34 +1395,46 @@ class Supervisor:
             self.save()
             if self._sleep(delay):
                 return "signal" if self.signalled else "stopped"
-            agent = self._choose(failed_agent, retry_same=True)
+            agent = self._choose(failed_agent, mode="same")
+        elif report.outcome in ("auth", "unknown"):  # released by the maintainer: one same-agent retry
+            agent = self._choose(failed_agent, mode="same")
         else:  # crash
             counters["crash_retries"] += 1
             if counters["crash_retries"] > self.limits.crash_retries:
                 return self.hold("crash_repeated")
-            agent = self._choose(failed_agent, retry_same=True)
+            agent = self._choose(failed_agent, mode="same")
         if agent is None:
             return self._wait_or_hold()
         action = "switch" if agent != failed_agent else "retry"
         self.notify("turn_failed", session=self.state["head_session"], agent=failed_agent,
                     outcome=report.outcome, action=action)
-        effects = "\n".join(f"- [{c.kind}] {c.label}" for c in report.effects) or "- none recorded"
+        listed = report.effects + (report.in_flight if released else [])
+        effects = "\n".join(f"- [{c.kind}] {c.label}" for c in listed) or "- none recorded"
+        if released:
+            effects += "\n(The maintainer reviewed and released this turn.)"
+        if released and task is not None:
+            return agent, f"[relay-continuity attempt {{nonce}}]\n{task}"
         prompt = RECOVERY_PROMPT.format(nonce="{nonce}", prev_agent=failed_agent, outcome=report.outcome,
                                         agent=agent, effects=effects)
         return agent, prompt
 
-    def _choose(self, current: str, *, retry_same: bool) -> str | None:
-        """Preferred agent first; switching away from the current agent is bounded and dwell-limited."""
+    def _choose(self, current: str, *, mode: str) -> str | None:
+        """`same`: retry the current agent only (transient, crash). `switch`: another agent only (quota).
+        `prefer`: at a turn boundary, the preferred agent first, returning to it only after the dwell time.
+        Every switch is bounded and needs fresh confirmation that the target has quota."""
         now = self.host.now()
         last_switch = parse_ts(self.state.get("last_switch_at"))
         dwell_ok = last_switch is None or now - last_switch >= self.limits.min_dwell
-        order = [PREFERRED] + [a for a in AGENTS if a != PREFERRED]
-        if retry_same and current != PREFERRED and not dwell_ok and self.available(current):
-            order = [current]  # too soon after a switch to return; stay while the current agent is usable
+        if mode == "same":
+            order = [current]
+        elif mode == "switch":
+            order = [a for a in [PREFERRED] + [a for a in AGENTS if a != PREFERRED] if a != current]
+        else:
+            order = [PREFERRED] + [a for a in AGENTS if a != PREFERRED]
+            if current != PREFERRED and not dwell_ok and self.available(current, confirm=False):
+                order = [current]  # too soon after a switch to return; stay while the current agent is usable
         for agent in order:
-            if not retry_same and agent == current:
-                continue
-            if self.available(agent):
+            if self.available(agent, confirm=agent != current):
                 if agent != current:
                     recent = [t for t in self.state["switches"] if (ts := parse_ts(t)) and now - ts < self.limits.switch_window]
                     if len(recent) >= self.limits.max_switches:
@@ -1304,7 +1456,9 @@ class Supervisor:
             if self.state["phase"] == "held":
                 return "held"
             now = self.host.now()
-            known = [u for c in self.state["cooldowns"].values() if (u := parse_ts(c.get("until"))) is not None]
+            # Only a real reset is worth waiting for; an agent that merely lacks a fresh reading is not one.
+            known = [u for c in self.state["cooldowns"].values()
+                     if c.get("reason") != "unconfirmed" and (u := parse_ts(c.get("until"))) is not None]
             if not known:
                 return self.hold("no_provider_available")
             since = parse_ts(self.state.get("waiting_since")) or now
@@ -1320,7 +1474,7 @@ class Supervisor:
             self.state["phase"] = "running"
             self._reading = None
             previous = self.state.get("agent") or PREFERRED
-            agent = self._choose(previous, retry_same=True)
+            agent = self._choose(previous, mode="prefer")
             if agent is not None:
                 self.state["waiting_since"] = None
                 return agent, RECOVERY_PROMPT.format(
@@ -1358,27 +1512,28 @@ class Supervisor:
         try:
             proc = self.host.relay.start(agent, self.state["head_session"], text, self.turns)
         except OSError:
+            # Relay could not be executed at all: nothing started, so the attempt settles as not started.
             self.state["pending"] = None
+            self.store.journal({"event": "settle", "nonce": nonce, "session": None, "outcome": "not_started"})
             return self.hold("relay_invocation_failed", self.attempts)
         pending["pid"] = getattr(proc, "pid", None)
         pending["pid_start"] = devctx.pid_start(pending["pid"]) if pending["pid"] else None
         self.save()
         result = self.host.relay.finish(proc)
-        return self._settle(pending, result.session_id)
+        return self._settle(pending, result.session_id, result.diagnostics)
 
-    def _settle(self, pending: dict[str, Any], session_id: str | None) -> TurnReport | str:
+    def _settle(self, pending: dict[str, Any], session_id: str | None, diagnostics: str = "") -> TurnReport | str:
         session_id = session_id or self.host.relay.find_by_nonce(pending["nonce"], parse_ts(pending["started_at"]) or self.host.now())
         self.state["last_attempt"] = {k: pending[k] for k in ("nonce", "agent", "attempt", "fingerprint")}
         self.state["pending"] = None
         if session_id is None:
-            unchanged = self.host.fingerprint() == pending["fingerprint"]
-            self.store.journal({"event": "settle", "nonce": pending["nonce"], "session": None, "unchanged": unchanged})
+            # Remote effects (a merge, a PR comment) leave no local trace, so an unchanged fingerprint proves
+            # nothing: the attempt's outcome is unknown and only the maintainer can resolve it.
+            self.store.journal({"event": "settle", "nonce": pending["nonce"], "session": None, "outcome": "unresolved"})
             self.save()
-            if not unchanged:
-                return self.hold("attempt_unresolved", pending.get("attempt"))
-            return TurnReport(outcome="crash", agent=pending["agent"], detail="relay produced no session")
+            return self.hold("attempt_unresolved", pending.get("attempt"))
         turn = last_turn_dir(self.host.relay.sessions_dir() / session_id)
-        report = classify_turn(turn) if turn else TurnReport(outcome="crash", agent=pending["agent"],
+        report = classify_turn(turn, diagnostics=diagnostics) if turn else TurnReport(outcome="crash", agent=pending["agent"],
                                                              detail="session without turns")
         report.agent = pending["agent"]
         self.state["head_session"] = session_id
@@ -1401,10 +1556,6 @@ class Supervisor:
                 if self._sleep(30.0):
                     return "signal" if self.signalled else "stopped"
         session_id = self.host.relay.find_by_nonce(pending["nonce"], parse_ts(pending["started_at"]) or self.host.now())
-        if session_id is None and self.host.fingerprint() != pending.get("fingerprint"):
-            self.state["pending"] = None
-            self.state["last_attempt"] = {k: pending.get(k) for k in ("nonce", "agent", "attempt", "fingerprint")}
-            return self.hold("attempt_unresolved", pending.get("attempt"))
         return self._settle(pending, session_id)
 
 
@@ -1611,11 +1762,17 @@ def command_release(args: argparse.Namespace) -> int:
         state["counters"] = {"consecutive_failures": 0, "transient_streak": 0, "crash_retries": 0}
         for agent in args.clear_cooldown or []:
             state["cooldowns"].pop(agent, None)
+        dropped = []
         if args.drop_pending:
+            dropped = unsettled_nonces(store.journal_path)
             state["pending"] = None
+        if (released or {}).get("reason") == "permissions_changed":
+            # The maintainer reviewed the new authority; the next run pins it.
+            state["permissions_pinned"] = False
         store.save(state, now_utc())
         store.journal({"event": "release", "at": iso(now_utc()), "hold": released, "note": args.note[:500],
-                       "cleared": args.clear_cooldown or [], "dropped_pending": bool(args.drop_pending)})
+                       "cleared": args.clear_cooldown or [], "dropped_pending": bool(args.drop_pending),
+                       "dropped": dropped})
         try:
             make_host(repo_root()).ledger("decision", f"relay-continuity hold released ({(released or {}).get('reason')}): "
                                                        f"{args.note[:400]}")

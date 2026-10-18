@@ -3,5 +3,5 @@
  "status": "completed",
  "turn_number": 2,
  "kind": "relay_resumable_state",
- "summary": "Running `git fetch origin -q && git rev-parse origin/master && gh pr list --state open...` Running `git show origin/master:AGENTS.md` Running `git show origin/master:docs/AGENT_EXECUTION_AND_AUTOMATION_PROTOCOL.md` Running `git show orig..."
+ "summary": "<coordinator narrative removed from fixture>"
 }
