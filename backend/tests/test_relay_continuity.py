@@ -1536,6 +1536,13 @@ def test_inner_detachment_survives_a_worse_outer_command(tmp_path: Path) -> None
     assert [(c.label, c.detached) for c in rc.classify_turn(turn).in_flight] == [("npm &", True)]
 
 
+@pytest.mark.parametrize("command", ["tmux new-session -d -s dev 'npm run dev'", "tmux send-keys -t dev 'make' Enter",
+                                     "screen -dmS dev npm run dev"])
+def test_terminal_multiplexer_launches_stay_in_flight(tmp_path: Path, command: str) -> None:
+    turn = write_turn(tmp_path / "s", [tool_use("x", "Bash", command=command), tool_result("x"), *QUOTA])
+    assert [c.detached for c in rc.classify_turn(turn).in_flight] == [True]
+
+
 def test_detached_wrapped_push_stays_in_flight(tmp_path: Path) -> None:
     command = "bash -lc 'git push origin HEAD' >/tmp/push.log 2>&1 &"
     turn = write_turn(tmp_path / "s", [tool_use("x", "Bash", command=command), tool_result("x"), *QUOTA])
@@ -1560,6 +1567,9 @@ def test_downloads_to_files_are_local_writes(command: str, kind: str) -> None:
     ("sort -uo names.txt names.txt", "local_write"), ("sort --output names.txt in.txt", "local_write"),
     ("sort -u in.txt", "read_only"), ("git diff --output=/tmp/review.patch HEAD~1 HEAD", "local_write"),
     ("git log -p --output /tmp/log.txt", "local_write"), ("git diff HEAD~1 HEAD", "read_only"),
+    ("sed --in-place=.bak 's/old/new/g' config.txt", "local_write"), ("sed -Ei 's/old/new/g' config.txt", "local_write"),
+    ("sed -E 's/old/new/' config.txt", "read_only"), ("xxd -r fixture.hex fixture.bin", "local_write"),
+    ("xxd -l 16 file.bin", "read_only"), ("xxd -r -p in.hex", "read_only"),
 ])
 def test_other_file_writing_forms(command: str, kind: str) -> None:
     assert rc.classify_command(command)[0] == kind

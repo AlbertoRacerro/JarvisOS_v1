@@ -238,6 +238,9 @@ LOCAL_WRITE_CMDS = {
 EXTERNAL_CMDS = {"ssh", "scp", "sftp", "nc", "ncat", "telnet", "sendmail", "mail", "twine", "notify-slack.sh"}
 WRAPPERS = {"timeout", "nice", "ionice", "stdbuf", "command", "builtin", "exec", "xvfb-run", "env"}
 BACKGROUND_WRAPPERS = {"nohup", "setsid", "disown"}
+XXD_VALUE_OPTS = {"-c", "-cols", "-g", "-groupsize", "-l", "-len", "-o", "-s", "-seek", "-n", "-name"}
+TMUX_LAUNCH = {"new-session", "new", "new-window", "neww", "split-window", "splitw", "send-keys", "send",
+               "run-shell", "run", "respawn-pane", "respawnp", "respawn-window", "respawnw"}
 GIT_READ = {"status", "log", "diff", "show", "fetch", "rev-parse", "ls-files", "ls-tree", "cat-file", "merge-base",
             "merge-tree", "describe", "blame", "grep", "for-each-ref", "rev-list", "shortlog", "remote", "reflog",
             "show-ref", "name-rev", "check-ignore", "count-objects", "verify-commit", "range-diff", "whatchanged"}
@@ -355,6 +358,20 @@ def _rank(kind: str) -> int:
 
 def _worst(kinds: list[str]) -> str:
     return max(kinds, key=_rank) if kinds else "read_only"
+
+
+def _operands(args: list[str], value_opts: set[str]) -> list[str]:
+    """Non-option arguments, skipping the separate value of each option in `value_opts`."""
+    out: list[str] = []
+    skip = False
+    for a in args:
+        if skip:
+            skip = False
+        elif a.startswith("-") and a != "-":
+            skip = a in value_opts
+        else:
+            out.append(a)
+    return out
 
 
 def _git_kind(args: list[str]) -> tuple[str, str]:
@@ -649,7 +666,9 @@ def classify_command(command: str, _depth: int = 0) -> tuple[str, str]:
             if from_file or any(sed_executes(a) for a in scripts):
                 kind, label = "unknown", "sed e/w"  # GNU sed can execute commands and write files
             else:
-                kind, label = ("local_write" if any(a.startswith("-i") or a == "--in-place" for a in args) else "read_only"), "sed"
+                in_place = any(a == "--in-place" or a.startswith("--in-place=")
+                               or (a.startswith("-") and not a.startswith("--") and "i" in a[1:]) for a in args)
+                kind, label = ("local_write" if in_place else "read_only"), "sed"
         elif word in ("awk", "gawk", "mawk", "nawk"):
             from_file = any(a in ("-f", "--file", "-i", "--include", "-l", "--load") or a.startswith(("-f", "--file=", "-i", "--include="))
                             for a in args)
@@ -662,7 +681,17 @@ def classify_command(command: str, _depth: int = 0) -> tuple[str, str]:
             else:
                 kind, label = "read_only", "find"
         elif word == "tmux":
-            kind, label = ("read_only" if args[:1] in (["ls"], ["list-sessions"], ["has-session"], ["capture-pane"]) else "local_write"), "tmux"
+            sub = args[0] if args else ""
+            if sub in TMUX_LAUNCH:
+                # The command keeps running in the tmux server; the tool result only acknowledges the launch.
+                kind, label, background = "unknown", f"tmux {sub}", True
+            else:
+                kind, label = ("read_only" if sub in ("ls", "list-sessions", "has-session", "capture-pane") else "local_write"), "tmux"
+        elif word == "screen" and any(a.startswith("-") and not a.startswith("--") and "d" in a[1:] and "m" in a[1:]
+                                      for a in args):
+            kind, label, background = "unknown", "screen -dm", True
+        elif word == "xxd" and len(_operands(args, XXD_VALUE_OPTS)) >= 2:
+            kind, label = "local_write", "xxd > file"  # `xxd IN OUT` (and `xxd -r IN OUT`) writes OUT
         elif word in ("python", "python3") and args[:1] and args[0].endswith("devctx.py"):
             kind = "read_only" if args[1:2] in (["recover"], ["show"], ["search"], ["lanes"]) else "local_write"
             label = "devctx " + (args[1] if len(args) > 1 else "")
