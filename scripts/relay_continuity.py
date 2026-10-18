@@ -1,0 +1,1669 @@
+#!/usr/bin/env python3
+"""Relay provider continuity supervisor and Slack outbound monitor (spec 195).
+
+Agent Relay owns sessions, transcripts and execution; this tool only reads its turn artifacts and
+invokes its headless runner. It adds what Relay does not do reliably: deterministic classification
+of a turn from raw evidence, a side-effect gate that refuses automatic continuation when an
+interrupted turn may have left a non-idempotent operation in an unknown state, durable retry and
+cooldown policy between Claude (preferred) and Codex (fallback), and sanitized outbound notices.
+
+Standard library only. Never modifies the repository, Relay's configuration, permissions or
+session journals. Durable state lives under ~/jarvis-control/work/continuity/.
+"""
+from __future__ import annotations
+
+import argparse
+import fcntl
+import hashlib
+import importlib.util
+import json
+import os
+import re
+import secrets
+import shlex
+import signal
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.request
+from collections.abc import Callable
+from dataclasses import asdict, dataclass, field
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+_DEVCTX_PATH = Path(__file__).resolve().parent / "devctx.py"
+_spec = importlib.util.spec_from_file_location("devctx", _DEVCTX_PATH)
+assert _spec and _spec.loader
+devctx = sys.modules.get("devctx") or importlib.util.module_from_spec(_spec)
+if "devctx" not in sys.modules:
+    sys.modules["devctx"] = devctx
+    _spec.loader.exec_module(devctx)
+
+SCHEMA = "relay-continuity.v1"
+AGENTS = ("claude", "codex")
+PREFERRED = "claude"
+OUTCOMES = ("success", "quota", "spend_limit", "transient", "auth", "crash", "unknown")
+FAILURES = tuple(o for o in OUTCOMES if o != "success")
+EFFECT_ORDER = ("read_only", "local_write", "background", "external", "unknown")
+PHASES = ("idle", "running", "waiting", "held", "stopped")
+HOLD_REASONS = (
+    "effects_uncertain", "output_unparseable", "attempt_unresolved", "auth_failure", "unknown_failure",
+    "crash_repeated", "circuit_failures", "circuit_switches", "circuit_attempts", "circuit_transient",
+    "no_provider_available", "wait_exceeded", "permissions_changed", "state_corrupt", "repl_active",
+    "relay_invocation_failed",
+)
+STOP_REASONS = ("stop_requested", "signal", "idle", "held", "legacy_autopilot", "lock_busy", "error")
+DEFAULT_CONTROL = Path.home() / "jarvis-control" / "work" / "continuity"
+WEBHOOK_FILE = Path.home() / ".config" / "jarvis" / "slack_webhook_url"
+LEGACY_MARKERS = ("jarvis-control/autopilot/run.sh", "jarvis-control/autopilot/watchdog.sh",
+                  "jarvis-control/autopilot/resume-after-reset.sh", "jarvis-control/autopilot/drain-guard.sh")
+
+
+@dataclass
+class Limits:
+    """Bounds that make every loop finite and prevent provider oscillation."""
+    max_consecutive_failures: int = 8
+    max_attempts_per_run: int = 40
+    max_switches: int = 4
+    switch_window: timedelta = timedelta(hours=6)
+    min_dwell: timedelta = timedelta(minutes=20)
+    max_transient_streak: int = 6
+    transient_base: float = 60.0
+    transient_cap: float = 1_800.0
+    crash_retries: int = 1
+    recheck: timedelta = timedelta(minutes=30)
+    max_wait: timedelta = timedelta(days=8)
+    reading_freshness: timedelta = timedelta(minutes=15)
+    max_reset_ahead: timedelta = timedelta(days=8)
+
+
+def now_utc() -> datetime:
+    return datetime.now(UTC)
+
+
+def iso(ts: datetime | None) -> str | None:
+    return None if ts is None else ts.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def parse_ts(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        ts = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return ts if ts.tzinfo else ts.replace(tzinfo=UTC)
+
+
+# ---------------------------------------------------------------------------
+# Turn classification (raw evidence only; Relay's status/run_error never decide)
+
+
+@dataclass
+class ToolCall:
+    id: str
+    tool: str
+    kind: str
+    label: str
+    done: bool
+    background_open: bool = False
+    parent: str | None = None
+
+
+@dataclass
+class TurnReport:
+    outcome: str
+    agent: str | None
+    detail: str
+    reset_at: str | None = None
+    calls: list[ToolCall] = field(default_factory=list)
+    bad_lines: int = 0
+    terminal: bool = False
+    relay_status: str | None = None
+
+    @property
+    def in_flight(self) -> list[ToolCall]:
+        return [c for c in self.calls if not c.done and c.kind != "read_only"]
+
+    @property
+    def effects(self) -> list[ToolCall]:
+        return [c for c in self.calls if c.done and c.kind != "read_only"]
+
+    def to_json(self) -> dict[str, Any]:
+        data = asdict(self)
+        data["in_flight"] = [c.label for c in self.in_flight]
+        return data
+
+
+SPEND_RE = re.compile(r"(?i)monthly spend limit|spend limit|credit balance is too low|purchase more credits to continue")
+QUOTA_RE = re.compile(r"(?i)hit your (session|weekly|usage|daily|5-hour|five-hour) limit|usage limit|rate[ _-]?limit|"
+                      r"limit reached|too many requests|quota")
+AUTH_RE = re.compile(r"(?i)invalid api key|please run /login|/login|oauth token (has )?expired|not logged in|"
+                     r"unauthori[sz]ed|authentication (failed|error|required)|log ?in again|credentials? (expired|invalid)")
+TRANSIENT_RE = re.compile(r"(?i)EAI_AGAIN|ENOTFOUND|ECONNRESET|ECONNREFUSED|ETIMEDOUT|EPIPE|can'?t reach the api|"
+                          r"couldn'?t reach|unable to connect|network error|socket hang up|stream disconnected|"
+                          r"error sending request|connection (reset|refused|closed|error)|overloaded|"
+                          r"internal server error|bad gateway|service unavailable|gateway timeout|timed? ?out")
+CLAUDE_RESET_RE = re.compile(
+    r"(?i)resets\s+(?:(?P<mon>[A-Z][a-z]{2})\s+(?P<day>\d{1,2}),?\s+(?:at\s+)?)?"
+    r"(?P<h>\d{1,2})(?::(?P<m>\d{2}))?\s*(?P<ap>am|pm)\s*\((?P<tz>[A-Za-z_]+(?:/[A-Za-z_+-]+)+)\)")
+CODEX_RESET_RE = re.compile(
+    r"(?i)try again (?:at|after)\s+(?:(?P<mon>[A-Z][a-z]{2})[a-z]*\s+(?P<day>\d{1,2})(?:st|nd|rd|th)?,?\s+(?:\d{4}\s+)?)?"
+    r"(?P<h>\d{1,2})(?::(?P<m>\d{2}))?\s*(?P<ap>am|pm)")
+MONTHS = {m: i for i, m in enumerate(("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"), 1)}
+
+
+def classify_text(text: str, status: int | None) -> str:
+    if SPEND_RE.search(text):
+        return "spend_limit"
+    if status == 429 or QUOTA_RE.search(text):
+        return "quota"
+    if status in (401, 403) or AUTH_RE.search(text):
+        return "auth"
+    if (status is not None and (500 <= status <= 599)) or TRANSIENT_RE.search(text):
+        return "transient"
+    return "unknown"
+
+
+def parse_reset(text: str, ref: datetime, local_tz: Any = None) -> datetime | None:
+    """Next occurrence after `ref` of a provider-printed reset time, or None."""
+    if match := CLAUDE_RESET_RE.search(text):
+        try:
+            tz: Any = ZoneInfo(match["tz"])
+        except (ZoneInfoNotFoundError, ValueError):
+            return None
+    elif match := CODEX_RESET_RE.search(text):
+        tz = local_tz or datetime.now().astimezone().tzinfo
+    else:
+        return None
+    hour = int(match["h"]) % 12 + (12 if match["ap"].lower() == "pm" else 0)
+    minute = int(match["m"] or 0)
+    local_ref = ref.astimezone(tz)
+    if match["mon"] and match["mon"][:3].lower() in MONTHS:
+        month, day = MONTHS[match["mon"][:3].lower()], int(match["day"])
+        for year in (local_ref.year, local_ref.year + 1):
+            try:
+                cand = datetime(year, month, day, hour, minute, tzinfo=tz)
+            except ValueError:
+                return None
+            if cand > local_ref - timedelta(minutes=1):
+                return cand.astimezone(UTC)
+        return None
+    cand = local_ref.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    if cand <= local_ref - timedelta(minutes=1):
+        cand += timedelta(days=1)
+    return cand.astimezone(UTC)
+
+
+READ_ONLY_CMDS = {
+    "ls", "cat", "head", "tail", "grep", "rg", "egrep", "fgrep", "wc", "sort", "uniq", "cut", "tr", "awk", "echo",
+    "printf", "pwd", "which", "type", "file", "stat", "du", "df", "ps", "pgrep", "date", "sleep", "true", "false",
+    "test", "[", "diff", "cmp", "sha256sum", "sha1sum", "md5sum", "jq", "column", "basename", "dirname", "realpath",
+    "readlink", "id", "whoami", "uname", "hostname", "nproc", "free", "uptime", "tree", "less", "more", "strings",
+    "xxd", "od", "hexdump", "nvidia-smi", "comm", "paste", "join", "seq", "cd", "export", "set", "exit", "wait",
+    "nl", "fold", "rev", "tac", "zcat", "lsof", "ss", "getent", "env", "printenv", "locale", "tput", ":",
+    "read", "mapfile", "readarray", "SUBST", "let", "shopt", "ulimit", "umask", "hash", "alias",
+}
+SHELL_KEYWORDS = {"for", "do", "done", "while", "until", "if", "then", "elif", "else", "fi", "case", "esac", "in",
+                  "{", "}", "(", ")", "!", "function", "select", "time", "local", "declare", "return", "break",
+                  "continue", "shift", "unset", "trap"}
+LOCAL_WRITE_CMDS = {
+    "rm", "mv", "cp", "mkdir", "rmdir", "touch", "chmod", "chown", "ln", "tee", "truncate", "dd", "tar", "unzip",
+    "zip", "gzip", "gunzip", "patch", "install", "pip", "pip3", "npm", "pnpm", "yarn", "uv", "make", "pytest",
+    "kill", "pkill", "killall", "systemctl", "crontab", "sqlite3", "alembic", "ruff", "mypy", "black", "prettier",
+    "eslint", "tsc", "vite", "vitest", "playwright",
+}
+EXTERNAL_CMDS = {"ssh", "scp", "sftp", "nc", "ncat", "telnet", "sendmail", "mail", "twine", "notify-slack.sh"}
+WRAPPERS = {"timeout", "nice", "ionice", "stdbuf", "command", "builtin", "exec", "xvfb-run"}
+BACKGROUND_WRAPPERS = {"nohup", "setsid", "disown"}
+GIT_READ = {"status", "log", "diff", "show", "fetch", "rev-parse", "ls-files", "ls-tree", "cat-file", "merge-base",
+            "merge-tree", "describe", "blame", "grep", "for-each-ref", "rev-list", "shortlog", "remote", "reflog",
+            "show-ref", "name-rev", "check-ignore", "count-objects", "verify-commit", "range-diff", "whatchanged"}
+GH_READ = {("pr", "view"), ("pr", "list"), ("pr", "checks"), ("pr", "diff"), ("pr", "status"), ("run", "view"),
+           ("run", "list"), ("run", "watch"), ("repo", "view"), ("issue", "view"), ("issue", "list"),
+           ("release", "view"), ("release", "list"), ("auth", "status"), ("search", "prs"), ("search", "issues"),
+           ("search", "code"), ("workflow", "list"), ("workflow", "view"), ("cache", "list")}
+REDIRECT = re.compile(r"(?<![0-9&<>])>{1,2}\s*(?!&|/dev/null)(\S+)")
+
+
+def _rank(kind: str) -> int:
+    return EFFECT_ORDER.index(kind)
+
+
+def _worst(kinds: list[str]) -> str:
+    return max(kinds, key=_rank) if kinds else "read_only"
+
+
+def _git_kind(args: list[str]) -> tuple[str, str]:
+    i = 0
+    while i < len(args) and args[i].startswith("-"):
+        i += 2 if args[i] in ("-C", "-c", "--git-dir", "--work-tree") else 1
+    sub = args[i] if i < len(args) else ""
+    rest = args[i + 1:]
+    label = f"git {sub}".strip()
+    if sub == "push":
+        return "external", label
+    if sub in GIT_READ:
+        if sub == "remote" and rest and rest[0] not in ("-v", "show", "get-url"):
+            return "local_write", label
+        return "read_only", label
+    if sub == "branch" and not any(a in rest for a in ("-d", "-D", "-m", "-M", "-c", "-C", "--delete", "--move")) \
+            and (not rest or all(a.startswith("-") for a in rest)):
+        return "read_only", label
+    if sub == "worktree" and rest[:1] == ["list"]:
+        return "read_only", "git worktree list"
+    if sub == "stash" and rest[:1] in (["list"], ["show"]):
+        return "read_only", label
+    if sub == "tag" and (not rest or rest[0] in ("-l", "--list")):
+        return "read_only", label
+    if sub == "config" and rest[:1] in (["--get"], ["--list"], ["-l"], ["--get-all"]):
+        return "read_only", label
+    return "local_write", label
+
+
+def _gh_kind(args: list[str]) -> tuple[str, str]:
+    words = [a for a in args if not a.startswith("-")]
+    pair = tuple(words[:2])
+    label = "gh " + " ".join(words[:2])
+    if words[:1] == ["api"]:
+        method = "GET"
+        for i, a in enumerate(args):
+            if a in ("-X", "--method") and i + 1 < len(args):
+                method = args[i + 1].upper()
+            elif a.startswith("--method="):
+                method = a.split("=", 1)[1].upper()
+            elif a in ("-f", "-F", "--field", "--raw-field", "--input") or a.startswith(("--field=", "--raw-field=")):
+                method = "POST" if method == "GET" else method
+        return ("read_only" if method in ("GET", "HEAD") else "external"), f"gh api {method}"
+    if pair in GH_READ:
+        return "read_only", label
+    return "external", label
+
+
+def _curl_kind(word: str, args: list[str]) -> tuple[str, str]:
+    for i, a in enumerate(args):
+        if a in ("-X", "--request") and i + 1 < len(args) and args[i + 1].upper() not in ("GET", "HEAD"):
+            return "external", f"{word} {args[i + 1].upper()}"
+        if a.startswith(("-d", "--data", "-F", "--form", "-T", "--upload-file", "--json", "--post")):
+            return "external", f"{word} POST"
+    return "read_only", f"{word} GET"
+
+
+def strip_heredocs(command: str) -> str:
+    """Remove heredoc bodies: they are data written somewhere, not commands."""
+    lines, out, i = command.split("\n"), [], 0
+    while i < len(lines):
+        line = lines[i]
+        out.append(line)
+        delims = re.findall(r"<<-?\s*['\"]?([A-Za-z_][A-Za-z0-9_]*)['\"]?", line)
+        i += 1
+        for delim in delims:
+            while i < len(lines) and lines[i].strip() != delim:
+                i += 1
+            i += 1
+    return "\n".join(out)
+
+
+def split_segments(command: str) -> list[str]:
+    """Split on ; & | && || and newlines outside quotes, $(...) and backslash escapes."""
+    segments, current, quote, depth, i = [], [], None, 0, 0
+    while i < len(command):
+        ch = command[i]
+        if quote:
+            current.append(ch)
+            if ch == "\\" and quote == '"' and i + 1 < len(command):
+                current.append(command[i + 1])
+                i += 1
+            elif ch == quote:
+                quote = None
+        elif ch == "\\" and i + 1 < len(command):
+            current.append(command[i:i + 2])
+            i += 1
+        elif ch in ("'", '"'):
+            quote = ch
+            current.append(ch)
+        elif command.startswith("$(", i):
+            depth += 1
+            current.append("$(")
+            i += 1
+        elif ch == ")" and depth:
+            depth -= 1
+            current.append(ch)
+        elif depth == 0 and ch in ";|\n":
+            segments.append("".join(current))
+            current = []
+            if command.startswith(("||", "|&"), i):
+                i += 1
+        elif depth == 0 and ch == "&":
+            if command.startswith("&&", i):
+                segments.append("".join(current))
+                current = []
+                i += 1
+            elif i > 0 and command[i - 1] in "<>" or command.startswith("&>", i) or command.startswith("&1", i) or command.startswith("&2", i):
+                current.append(ch)
+            else:
+                current.append(ch)
+                segments.append("".join(current))
+                current = []
+        else:
+            current.append(ch)
+        i += 1
+    segments.append("".join(current))
+    return [seg for seg in segments if seg.strip()]
+
+
+def substitutions(command: str) -> tuple[list[str], str]:
+    """Bodies of $(...), <(...), >(...) and backtick substitutions (they run as commands), and the
+    command text with each substitution replaced by a placeholder word."""
+    bodies, outer, i = [], [], 0
+    while i < len(command):
+        if command.startswith(("$(", "<(", ">("), i) and not command.startswith("$((", i):
+            depth, j = 1, i + 2
+            while j < len(command) and depth:
+                depth += {"(": 1, ")": -1}.get(command[j], 0)
+                j += 1
+            bodies.append(command[i + 2:j - 1])
+            outer.append("SUBST")
+            i = j
+        elif command[i] == "`":
+            j = command.find("`", i + 1)
+            end = len(command) if j == -1 else j
+            bodies.append(command[i + 1:end])
+            outer.append("SUBST")
+            i = end + 1
+        else:
+            outer.append(command[i])
+            i += 1
+    return [b for b in bodies if b.strip()], "".join(outer)
+
+
+def classify_command(command: str, _depth: int = 0) -> tuple[str, str]:
+    """Worst effect class over every shell segment, with a short label of the worst segment."""
+    command = command.strip()
+    if _depth > 4:
+        return "unknown", "nested substitution"
+    for prefix in ("bash -lc ", "bash -c ", "/bin/bash -lc ", "/bin/bash -c ", "sh -c ", "/bin/sh -c "):
+        if command.startswith(prefix):
+            try:
+                inner = shlex.split(command[len(prefix):])
+                if inner:
+                    command = inner[0]
+            except ValueError:
+                pass
+            break
+    bodies, outer = substitutions(strip_heredocs(command))
+    results: list[tuple[str, str]] = [classify_command(body, _depth + 1) for body in bodies]
+    for raw in split_segments(outer):
+        seg = raw.strip()
+        if not seg:
+            continue
+        background = seg.endswith("&") and not seg.endswith("&&")
+        seg = seg.rstrip("&").strip()
+        try:
+            words = shlex.split(seg, comments=True)
+        except ValueError:
+            words = seg.split()
+        # Subshell parentheses are grouping, not part of a command word.
+        words = [w.rstrip(")") if w.count(")") > w.count("(") else w for w in words]
+        while words and words[0].startswith("(") and not words[0].startswith("(("):
+            words = ([words[0][1:]] if words[0][1:] else []) + words[1:]
+        if words and words[0] in ("for", "select", "case"):
+            continue  # loop/case headers bind variables; their bodies are separate segments
+        while words and (re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", words[0]) or words[0] in SHELL_KEYWORDS
+                         or re.fullmatch(r"\d*[<>]{1,2}&?\S*", words[0])):
+            bare_redirect = bool(re.fullmatch(r"\d*[<>]{1,2}", words[0]))
+            words = words[2:] if bare_redirect else words[1:]
+        while words and (words[0] in WRAPPERS or words[0] in BACKGROUND_WRAPPERS):
+            background = background or words[0] in BACKGROUND_WRAPPERS
+            words = words[1:]
+            while words and (words[0].startswith("-") or re.fullmatch(r"[0-9.]+[smhd]?", words[0])):
+                words = words[1:]
+        if not words:
+            continue
+        word = Path(words[0]).name
+        args = words[1:]
+        if word == "git":
+            kind, label = _git_kind(args)
+        elif word == "gh":
+            kind, label = _gh_kind(args)
+        elif word in ("curl", "wget"):
+            kind, label = _curl_kind(word, args)
+        elif word == "sed":
+            kind, label = ("local_write" if any(a.startswith("-i") or a == "--in-place" for a in args) else "read_only"), "sed"
+        elif word == "find":
+            if "-delete" in args:
+                kind, label = "local_write", "find -delete"
+            elif any(a in ("-exec", "-execdir", "-ok", "-okdir") for a in args):
+                kind, label = "unknown", "find -exec"
+            else:
+                kind, label = "read_only", "find"
+        elif word == "tmux":
+            kind, label = ("read_only" if args[:1] in (["ls"], ["list-sessions"], ["has-session"], ["capture-pane"]) else "local_write"), "tmux"
+        elif word in ("python", "python3") and args[:1] and args[0].endswith("devctx.py"):
+            kind = "read_only" if args[1:2] in (["recover"], ["show"], ["search"], ["lanes"]) else "local_write"
+            label = "devctx " + (args[1] if len(args) > 1 else "")
+        elif word in ("python", "python3") and args[:1] and args[0].endswith("relay_continuity.py"):
+            kind = "read_only" if args[1:2] in (["status"], ["classify"]) else "unknown"
+            label = "relay_continuity " + (args[1] if len(args) > 1 else "")
+        elif word == "rsync":
+            kind, label = ("external" if any(":" in a and not a.startswith("-") for a in args) else "local_write"), "rsync"
+        elif word in ("docker", "podman") and args[:1] == ["push"]:
+            kind, label = "external", f"{word} push"
+        elif word in ("npm", "pnpm", "yarn") and args[:1] == ["publish"]:
+            kind, label = "external", f"{word} publish"
+        elif word in READ_ONLY_CMDS:
+            kind, label = "read_only", word
+        elif word in LOCAL_WRITE_CMDS:
+            kind, label = "local_write", word
+        elif word in EXTERNAL_CMDS:
+            kind, label = "external", word
+        else:
+            kind, label = "unknown", word[:40]
+        if REDIRECT.search(seg) and kind == "read_only":
+            kind, label = "local_write", f"{label} > file"
+        if background and _rank(kind) < _rank("background"):
+            kind, label = "background", f"{label} &"
+        results.append((kind, label))
+    if not results:
+        return "read_only", "(empty)"
+    return max(results, key=lambda r: _rank(r[0]))
+
+
+CLAUDE_TOOL_KINDS = {
+    **{t: "read_only" for t in ("Read", "Grep", "Glob", "LS", "ToolSearch", "WebSearch", "WebFetch", "BashOutput",
+                                "TaskOutput", "ListAgents", "NotebookRead", "TodoWrite", "Skill", "Monitor",
+                                "ReportFindings", "ExitPlanMode")},
+    **{t: "local_write" for t in ("Edit", "Write", "MultiEdit", "NotebookEdit", "EnterWorktree", "ExitWorktree",
+                                  "TaskStop", "KillShell", "KillBash")},
+    **{t: "external" for t in ("PushNotification", "SendMessage", "RemoteTrigger", "CronCreate", "CronDelete",
+                               "ScheduleWakeup")},
+}
+
+
+def _claude_call(block: dict[str, Any]) -> ToolCall:
+    name = str(block.get("name") or "?")
+    inp = block.get("input") or {}
+    if name == "Bash":
+        kind, label = classify_command(str(inp.get("command") or ""))
+        if inp.get("run_in_background") and _rank(kind) < _rank("background"):
+            kind, label = "background", f"{label} &"
+    else:
+        kind = CLAUDE_TOOL_KINDS.get(name, "unknown")
+        label = name if not inp.get("file_path") else f"{name} {Path(str(inp['file_path'])).name}"
+    return ToolCall(id=str(block.get("id")), tool=name, kind=kind, label=label[:80], done=False)
+
+
+def _codex_call(item: dict[str, Any]) -> ToolCall | None:
+    typ = item.get("type")
+    if typ == "command_execution":
+        kind, label = classify_command(str(item.get("command") or ""))
+    elif typ == "file_change":
+        kind, label = "local_write", "file_change"
+    elif typ == "mcp_tool_call":
+        kind, label = "unknown", f"mcp {item.get('server', '?')}.{item.get('tool', '?')}"
+    elif typ == "web_search":
+        kind, label = "read_only", "web_search"
+    else:
+        return None
+    return ToolCall(id=str(item.get("id")), tool=str(typ), kind=kind, label=str(label)[:80], done=False)
+
+
+def read_events(path: Path) -> tuple[list[dict[str, Any]], int]:
+    events, bad = [], 0
+    if not path.exists():
+        return events, 0
+    lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    for line in lines:
+        if not line.strip():
+            continue
+        try:
+            item = json.loads(line)
+        except json.JSONDecodeError:
+            # Unparseable lines, including a torn final line from an interrupted writer, make effects uncertain.
+            bad += 1
+            continue
+        if isinstance(item, dict):
+            events.append(item)
+    return events, bad
+
+
+def classify_turn(turn_dir: Path, *, ref: datetime | None = None, local_tz: Any = None) -> TurnReport:
+    state: dict[str, Any] = {}
+    try:
+        state = json.loads((turn_dir / "state.json").read_text())
+    except (OSError, json.JSONDecodeError):
+        pass
+    output = turn_dir / "output.jsonl"
+    events, bad = read_events(output)
+    agent = state.get("agent_key")
+    if agent not in AGENTS:
+        agent = "codex" if any(e.get("type") == "thread.started" for e in events) else (
+            "claude" if any(e.get("type") in ("result", "system") for e in events) else None)
+    if ref is None:
+        try:
+            ref = datetime.fromtimestamp(output.stat().st_mtime, UTC)
+        except OSError:
+            ref = now_utc()
+    calls: dict[str, ToolCall] = {}
+    report = TurnReport(outcome="crash", agent=agent, detail="no terminal event", bad_lines=bad,
+                        relay_status=state.get("status"))
+    if not events:
+        report.detail = "output missing" if not output.exists() else "output empty"
+        return report
+    terminal: dict[str, Any] | None = None
+    terminal_index = -1
+    for idx, e in enumerate(events):
+        typ = e.get("type")
+        if typ == "assistant":
+            for block in (e.get("message") or {}).get("content") or []:
+                if isinstance(block, dict) and block.get("type") == "tool_use":
+                    call = _claude_call(block)
+                    call.parent = e.get("parent_tool_use_id")
+                    calls[call.id] = call
+        elif typ == "user":
+            content = (e.get("message") or {}).get("content")
+            for block in content if isinstance(content, list) else []:
+                if isinstance(block, dict) and block.get("type") == "tool_result" and block.get("tool_use_id") in calls:
+                    calls[block["tool_use_id"]].done = True
+        elif typ == "system" and e.get("subtype") in ("task_started", "task_notification", "task_updated"):
+            tool_id = e.get("tool_use_id")
+            if tool_id in calls and e.get("subtype") == "task_started":
+                calls[tool_id].background_open = True
+            elif tool_id in calls and e.get("subtype") == "task_notification":
+                calls[tool_id].background_open = False
+        elif typ in ("item.started", "item.completed"):
+            item = e.get("item") or {}
+            if (call := _codex_call(item)) is not None:
+                existing = calls.setdefault(call.id, call)
+                if typ == "item.completed":
+                    existing.done = True
+        if typ in ("result", "turn.completed", "turn.failed", "error"):
+            terminal, terminal_index = e, idx
+    for call in calls.values():
+        # A subagent's calls are settled by its parent call: results inside a subagent are not always streamed.
+        parent = calls.get(call.parent) if call.parent else None
+        if parent is not None and parent.done:
+            call.done = True
+    report.calls = list(calls.values())
+    if terminal is None:
+        return report
+    report.terminal = True
+    typ = terminal.get("type")
+    if typ == "result":
+        if not terminal.get("is_error"):
+            report.outcome, report.detail = "success", "result ok"
+        else:
+            text = str(terminal.get("result") or terminal.get("terminal_reason") or "")
+            status = terminal.get("api_error_status")
+            report.outcome = classify_text(text, status if isinstance(status, int) else None)
+            report.detail = f"{terminal.get('terminal_reason') or 'error'} status={status}"
+            if report.outcome in ("quota", "spend_limit"):
+                report.reset_at = iso(parse_reset(text, ref, local_tz))
+    elif typ == "turn.completed":
+        report.outcome, report.detail = "success", "turn.completed"
+    else:
+        # Codex reports failure as `error` then `turn.failed`; take the latest message.
+        text = str(terminal.get("message") or (terminal.get("error") or {}).get("message") or "")
+        for e in events[terminal_index::-1]:
+            if e.get("type") == "turn.completed":
+                break
+            if e.get("type") in ("error", "turn.failed"):
+                text = str(e.get("message") or (e.get("error") or {}).get("message") or text)
+                break
+        report.outcome = classify_text(text, None)
+        report.detail = f"codex {typ}"
+        if report.outcome in ("quota", "spend_limit"):
+            report.reset_at = iso(parse_reset(text, ref, local_tz))
+    return report
+
+
+def gate(report: TurnReport, *, fingerprint_changed: bool | None) -> str | None:
+    """Hold reason when automatic continuation could duplicate a non-idempotent operation."""
+    if report.bad_lines:
+        return "output_unparseable"
+    if report.in_flight:
+        return "effects_uncertain"
+    if not report.calls and not report.terminal and fingerprint_changed:
+        return "effects_uncertain"
+    return None
+
+
+def last_turn_dir(session_dir: Path) -> Path | None:
+    turns = sorted((p for p in (session_dir / "turns").glob("turn-*") if p.is_dir()),
+                   key=lambda p: int(p.name.split("-")[-1]) if p.name.split("-")[-1].isdigit() else -1)
+    return turns[-1] if turns else None
+
+
+# ---------------------------------------------------------------------------
+# Durable state
+
+
+class StateCorrupt(Exception):
+    pass
+
+
+def default_state() -> dict[str, Any]:
+    return {
+        "schema": SCHEMA, "phase": "idle", "head_session": None, "chain": [], "agent": None,
+        "hold": None, "cooldowns": {}, "switches": [], "last_switch_at": None,
+        "counters": {"consecutive_failures": 0, "transient_streak": 0, "crash_retries": 0},
+        "permissions_digest": None, "pending": None, "waiting_since": None, "last_outcome": None,
+        "notify": {"sent": {}, "window": [], "last_digest": None, "failures": 0, "retry": None, "dropped": 0},
+        "watch": {"seen": {}, "master": None}, "updated_at": None,
+    }
+
+
+class Store:
+    def __init__(self, root: Path):
+        self.root = root
+        self.state_path = root / "state.json"
+        self.journal_path = root / "attempts.jsonl"
+        self.stop_path = root / "STOP"
+
+    def load(self) -> dict[str, Any]:
+        if not self.state_path.exists():
+            return default_state()
+        try:
+            data = json.loads(self.state_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise StateCorrupt(f"state file unreadable: {type(exc).__name__}") from exc
+        if not isinstance(data, dict) or data.get("schema") != SCHEMA or data.get("phase") not in PHASES:
+            raise StateCorrupt("state file has an unknown schema or phase")
+        merged = default_state()
+        merged.update(data)
+        return merged
+
+    def save(self, state: dict[str, Any], now: datetime) -> None:
+        state["updated_at"] = iso(now)
+        self.root.mkdir(parents=True, exist_ok=True)
+        tmp = self.state_path.with_name(f".state.{os.getpid()}.tmp")
+        with open(tmp, "w", encoding="utf-8") as handle:
+            json.dump(state, handle, indent=1, sort_keys=True)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp, self.state_path)
+        dir_fd = os.open(self.root, os.O_RDONLY)
+        try:
+            os.fsync(dir_fd)
+        finally:
+            os.close(dir_fd)
+
+    def journal(self, record: dict[str, Any]) -> None:
+        self.root.mkdir(parents=True, exist_ok=True)
+        with open(self.journal_path, "a", encoding="utf-8") as handle:
+            fcntl.flock(handle, fcntl.LOCK_EX)
+            handle.write(json.dumps(record, sort_keys=True) + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+            fcntl.flock(handle, fcntl.LOCK_UN)
+
+
+class Lock:
+    """Exclusive non-blocking flock; released by the kernel if the holder dies."""
+
+    def __init__(self, path: Path):
+        self.path = path
+        self.handle: Any = None
+
+    def acquire(self) -> bool:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.handle = open(self.path, "a+")
+        try:
+            fcntl.flock(self.handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            self.handle.close()
+            self.handle = None
+            return False
+        self.handle.seek(0)
+        self.handle.truncate()
+        self.handle.write(str(os.getpid()))
+        self.handle.flush()
+        return True
+
+    def release(self) -> None:
+        if self.handle:
+            fcntl.flock(self.handle, fcntl.LOCK_UN)
+            self.handle.close()
+            self.handle = None
+
+
+# ---------------------------------------------------------------------------
+# Outbound notification (Phase 2): fixed templates, allowlisted structured fields only
+
+ISO_RE = r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$"
+FIELD_RULES: dict[str, Callable[[str], bool]] = {
+    "session": lambda v: v == "none" or bool(re.fullmatch(r"\d{8}-\d{6}-[0-9a-f]{6}", v)),
+    "agent": lambda v: v in AGENTS,
+    "from_agent": lambda v: v in AGENTS,
+    "outcome": lambda v: v in OUTCOMES,
+    "action": lambda v: v in ("switch", "retry", "wait", "hold", "idle", "notify"),
+    "reason": lambda v: v in HOLD_REASONS + STOP_REASONS,
+    "reset_at": lambda v: v in ("none", "manual") or bool(re.fullmatch(ISO_RE, v)),
+    "next_check_at": lambda v: bool(re.fullmatch(ISO_RE, v)),
+    "claude_until": lambda v: v in ("none", "manual") or bool(re.fullmatch(ISO_RE, v)),
+    "codex_until": lambda v: v in ("none", "manual") or bool(re.fullmatch(ISO_RE, v)),
+    "reset_source": lambda v: v in ("limits", "message", "estimate", "manual"),
+    "attempt": lambda v: bool(re.fullmatch(r"\d{1,4}", v)),
+    "attempts": lambda v: bool(re.fullmatch(r"\d{1,6}", v)),
+    "holds": lambda v: bool(re.fullmatch(r"\d{1,6}", v)),
+    "sha": lambda v: bool(re.fullmatch(r"[0-9a-f]{7,40}", v)),
+    "pr": lambda v: v == "none" or bool(re.fullmatch(r"\d{1,6}", v)),
+    "phase": lambda v: v in PHASES,
+}
+OPTIONAL_FIELDS = ("reset_at", "claude_until", "codex_until", "pr")
+EVENTS: dict[str, tuple[str, tuple[str, ...]]] = {
+    "supervisor_started": (":large_green_circle: JarvisOS continuity supervisor started", ("session", "agent")),
+    "supervisor_stopped": (":white_circle: JarvisOS continuity supervisor stopped", ("session", "reason", "phase")),
+    "provider_switched": (":repeat: JarvisOS coordinator provider switched", ("session", "from_agent", "agent", "outcome")),
+    "provider_exhausted": (":large_orange_circle: JarvisOS provider limit", ("agent", "outcome", "reset_at", "reset_source")),
+    "all_exhausted": (":large_orange_circle: JarvisOS: no coordinator provider available; waiting", ("next_check_at",)),
+    "turn_failed": (":large_orange_circle: JarvisOS coordinator turn failed", ("session", "agent", "outcome", "action")),
+    "hold": (":red_circle: JarvisOS continuity HOLD: maintainer review needed", ("session", "reason", "attempt")),
+    "circuit_open": (":red_circle: JarvisOS continuity circuit open", ("session", "reason")),
+    "turn_completed": (":large_green_circle: JarvisOS coordinator turn completed; awaiting maintainer", ("session", "agent")),
+    "master_advanced": (":large_green_circle: JarvisOS master advanced", ("sha", "pr")),
+    "repl_turn_failed": (":large_orange_circle: JarvisOS REPL turn failed (notify-only)", ("session", "agent", "outcome", "reset_at")),
+    "digest": (":clipboard: JarvisOS continuity digest", ("phase", "session", "agent", "attempts", "holds", "claude_until", "codex_until")),
+    "test": (":white_check_mark: JarvisOS continuity notification test", ()),
+}
+
+
+def render(event: str, fields: dict[str, Any]) -> str | None:
+    """Fixed template text, or None when any field is missing, unexpected or fails its validator."""
+    if event not in EVENTS:
+        return None
+    title, allowed = EVENTS[event]
+    if set(fields) - set(allowed):
+        return None
+    lines = [f"*{title}*"]
+    for key in allowed:
+        value = fields.get(key)
+        if value is None and key in OPTIONAL_FIELDS:
+            value = "none"
+        if value is None:
+            return None
+        value = str(value)
+        if not FIELD_RULES[key](value):
+            return None
+        lines.append(f"{key.replace('_', ' ')}: {value}")
+    text = "\n".join(lines)
+    return None if devctx.find_secret(text) else text
+
+
+def post_webhook(text: str, *, webhook_file: Path = WEBHOOK_FILE, timeout: float = 10.0) -> str | None:
+    """POST to the incoming webhook. Returns None on success, else an error class (never the URL)."""
+    try:
+        url = webhook_file.read_text().strip()
+    except OSError:
+        return "webhook_missing"
+    if not url.startswith("https://hooks.slack.com/"):
+        return "webhook_invalid"
+    request = urllib.request.Request(url, data=json.dumps({"text": text}).encode(), method="POST",
+                                     headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310 - fixed https host
+            response.read(256)
+        return None
+    except urllib.error.HTTPError as exc:
+        return f"http_{exc.code}"
+    except Exception as exc:  # noqa: BLE001 - delivery must never raise into the supervisor
+        return type(exc).__name__
+
+
+class Notifier:
+    def __init__(self, state: dict[str, Any], *, sender: Callable[[str], str | None] | None,
+                 log: Callable[[str], None], max_per_hour: int = 12,
+                 dedupe: timedelta = timedelta(hours=6)):
+        self.state = state
+        self.sender = sender
+        self.log = log
+        self.max_per_hour = max_per_hour
+        self.dedupe = dedupe
+
+    def send(self, event: str, now: datetime, *, dedupe_key: str | None = None, **fields: Any) -> bool:
+        if self.sender is None:
+            return False
+        notify = self.state["notify"]
+        text = render(event, fields)
+        if text is None:
+            notify["dropped"] = notify.get("dropped", 0) + 1
+            self.log(f"notify: dropped {event} (field validation)")
+            return False
+        key = hashlib.sha256((dedupe_key or f"{event}|{json.dumps(fields, sort_keys=True)}").encode()).hexdigest()[:20]
+        last = parse_ts(notify["sent"].get(key))
+        if last and now - last < self.dedupe:
+            return False
+        window = [t for t in notify["window"] if (ts := parse_ts(t)) and now - ts < timedelta(hours=1)]
+        if len(window) >= self.max_per_hour:
+            notify["window"] = window
+            notify["dropped"] = notify.get("dropped", 0) + 1
+            self.log(f"notify: rate-limited {event}")
+            return False
+        error = self._deliver(text)
+        if error:
+            notify["failures"] = notify.get("failures", 0) + 1
+            notify["retry"] = {"event": event, "fields": fields, "key": key} if notify.get("retry") is None else notify["retry"]
+            self.log(f"notify: delivery failed ({error})")
+            return False
+        window.append(iso(now))
+        notify["window"] = window
+        notify["sent"][key] = iso(now)
+        notify["sent"] = {k: v for k, v in notify["sent"].items() if (ts := parse_ts(v)) and now - ts < timedelta(days=8)}
+        return True
+
+    def retry_pending(self, now: datetime) -> None:
+        notify = self.state["notify"]
+        pending = notify.get("retry")
+        if not pending or self.sender is None:
+            return
+        notify["retry"] = None  # at most one retry; dropped afterwards whatever happens
+        text = render(pending["event"], pending["fields"])
+        if text and not self._deliver(text):
+            notify["sent"][pending["key"]] = iso(now)
+
+    def _deliver(self, text: str) -> str | None:
+        try:
+            return self.sender(text) if self.sender else "no_sender"
+        except Exception as exc:  # noqa: BLE001
+            return type(exc).__name__
+
+
+# ---------------------------------------------------------------------------
+# Relay and host adapters (injectable for tests)
+
+
+@dataclass
+class RunResult:
+    session_id: str | None
+    exit_code: int | None
+    raw_ok: bool
+
+
+class RelayAdapter:
+    def __init__(self, repo: Path, binary: str = "agent-relay"):
+        self.repo = repo
+        self.binary = binary
+
+    def limits(self) -> dict[str, Any] | None:
+        try:
+            proc = subprocess.run([self.binary, "--json", "limits", "--refresh"], capture_output=True, text=True,
+                                  timeout=90, check=False, cwd="/tmp")
+            data = json.loads(proc.stdout)
+        except (OSError, subprocess.TimeoutExpired, json.JSONDecodeError):
+            return None
+        return {a.get("agent_key"): a for a in data.get("agents", []) if isinstance(a, dict)}
+
+    def start(self, agent: str, parent: str, task: str, turns: int) -> subprocess.Popen:
+        args = [self.binary, "--json", "run", agent, "--continue", parent, "-t", task, "-n", str(turns), "-y",
+                "--repo", str(self.repo)]
+        return subprocess.Popen(args, cwd=self.repo, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
+                                start_new_session=True)
+
+    @staticmethod
+    def finish(proc: subprocess.Popen) -> RunResult:
+        out, _ = proc.communicate()
+        try:
+            data = json.loads(out)
+            return RunResult(data.get("session_id"), proc.returncode, True)
+        except (json.JSONDecodeError, TypeError):
+            return RunResult(None, proc.returncode, False)
+
+    def sessions_dir(self) -> Path:
+        return self.repo / ".agent-relay" / "sessions"
+
+    def find_by_nonce(self, nonce: str, since: datetime) -> str | None:
+        root = self.sessions_dir()
+        floor = (since - timedelta(minutes=2)).strftime("%Y%m%d-%H%M%S")
+        for session in sorted(root.glob("*-*-*"), reverse=True):
+            if session.name[:15] < floor:
+                break
+            prompt = session / "turns" / "turn-001" / "prompt.md"
+            try:
+                if nonce in prompt.read_text(encoding="utf-8", errors="replace"):
+                    return session.name
+            except OSError:
+                continue
+        return None
+
+
+def fingerprint(repo: Path) -> str:
+    digest = hashlib.sha256()
+    for args in (["for-each-ref", "--format=%(refname) %(objectname)"], ["worktree", "list", "--porcelain"]):
+        digest.update((devctx.run(["git", *args], cwd=repo)[1] or "").encode())
+    for line in (devctx.run(["git", "worktree", "list", "--porcelain"], cwd=repo)[1] or "").splitlines():
+        if line.startswith("worktree ") and Path(line[9:]).is_dir():
+            digest.update(line.encode())
+            digest.update((devctx.run(["git", "status", "--porcelain=v1"], cwd=Path(line[9:]))[1] or "").encode())
+    return digest.hexdigest()
+
+
+def live_conflicts(repo: Path, own_pids: set[int]) -> list[str]:
+    """Reasons another coordinator/supervisor may be acting: legacy autopilot or a live Relay REPL/run."""
+    found = []
+    proc_root = Path("/proc")
+    for entry in proc_root.iterdir() if proc_root.exists() else []:
+        if not entry.name.isdigit() or int(entry.name) in own_pids:
+            continue
+        try:
+            argv = [a.decode(errors="replace") for a in (entry / "cmdline").read_bytes().split(b"\0") if a]
+            cwd = os.readlink(entry / "cwd")
+        except OSError:
+            continue
+        joined = " ".join(argv)
+        if any(marker in joined for marker in LEGACY_MARKERS):
+            found.append("legacy_autopilot")
+        elif argv and Path(argv[0]).name in ("relay", "agent-relay") and "daemon" not in argv[1:3] \
+                and "hook" not in argv[1:3] and Path(cwd).resolve() == repo.resolve():
+            found.append("repl_active")
+    return sorted(set(found))
+
+
+# ---------------------------------------------------------------------------
+# Supervisor
+
+RECOVERY_PROMPT = """[relay-continuity attempt {nonce}]
+Automatic continuation by the spec 195 continuity supervisor. The previous coordinator turn ({prev_agent}) ended with outcome `{outcome}`; you are now running as {agent}.
+This message is not a new maintainer instruction and grants no new authority: approval gates, review requirements and authority boundaries are exactly as before.
+Before acting, run `python3 scripts/devctx.py recover` and verify fresh Git/GitHub state, then continue the interrupted work from where it actually stands.
+Operations the interrupted turn completed (they already happened; verify their effect, do not repeat them blindly):
+{effects}
+If the work now needs a maintainer decision, stop and report instead of continuing."""
+
+
+@dataclass
+class Host:
+    relay: Any
+    now: Callable[[], datetime] = now_utc
+    sleep: Callable[[float], None] = time.sleep
+    fingerprint: Callable[[], str] = lambda: ""
+    conflicts: Callable[[set[int]], list[str]] = lambda own: []
+    pid_alive: Callable[[int, int | None], bool] = lambda pid, start: devctx.pid_start(pid) == start and start is not None
+    ledger: Callable[[str, str], None] = lambda kind, text: None
+    permissions_digest: Callable[[], str | None] = lambda: None
+    log: Callable[[str], None] = lambda msg: print(msg, file=sys.stderr, flush=True)
+
+
+class Supervisor:
+    def __init__(self, store: Store, host: Host, limits: Limits | None = None, *, turns: int = 1,
+                 sender: Callable[[str], str | None] | None = None):
+        self.store = store
+        self.host = host
+        self.limits = limits or Limits()
+        self.turns = turns
+        self.sender = sender
+        self.state: dict[str, Any] = default_state()
+        self.notifier = Notifier(self.state, sender=sender, log=host.log)
+        self.signalled = False
+        self.attempts = 0
+        self._reading: dict[str, Any] | None = None
+        self._reading_at: datetime | None = None
+
+    # -- persistence helpers
+    def save(self) -> None:
+        self.store.save(self.state, self.host.now())
+
+    def notify(self, event: str, **fields: Any) -> None:
+        try:
+            self.notifier.send(event, self.host.now(), **fields)
+        except Exception as exc:  # noqa: BLE001 - notification can never interrupt supervision
+            self.host.log(f"notify: internal error {type(exc).__name__}")
+
+    def record(self, kind: str, text: str) -> None:
+        try:
+            self.host.ledger(kind, text)
+        except Exception as exc:  # noqa: BLE001
+            self.host.log(f"ledger: append failed {type(exc).__name__}")
+
+    def stop_requested(self) -> bool:
+        return self.signalled or self.store.stop_path.exists()
+
+    def hold(self, reason: str, attempt: int | None = None) -> str:
+        assert reason in HOLD_REASONS
+        now = self.host.now()
+        self.state["phase"] = "held"
+        self.state["hold"] = {"reason": reason, "at": iso(now), "attempt": attempt}
+        self.save()
+        self.store.journal({"event": "hold", "at": iso(now), "reason": reason, "session": self.state["head_session"]})
+        event = "circuit_open" if reason.startswith("circuit_") else "hold"
+        fields = {"session": self.state["head_session"], "reason": reason}
+        if event == "hold":
+            fields["attempt"] = str(attempt or 0)
+        self.notify(event, **fields)
+        self.record("blocker", f"relay-continuity HOLD ({reason}) on session {self.state['head_session']}; "
+                               f"automatic continuation refused until `relay_continuity.py release`.")
+        self.host.log(f"hold: {reason}")
+        return "held"
+
+    # -- provider availability
+    def reading(self, agent: str) -> dict[str, Any] | None:
+        now = self.host.now()
+        if self._reading is None or self._reading_at is None or now - self._reading_at > timedelta(minutes=2):
+            self._reading = self.host.relay.limits() or {}
+            self._reading_at = now
+        entry = self._reading.get(agent)
+        if not isinstance(entry, dict) or entry.get("status") not in (None, "ok"):
+            return None
+        as_of = parse_ts(entry.get("as_of"))
+        if as_of is None or abs(now - as_of) > self.limits.reading_freshness:
+            return None
+        return entry
+
+    def exhausted_until(self, agent: str) -> datetime | None | bool:
+        """Validated reset time when a fresh reading shows the agent out of quota; False when it shows room."""
+        entry = self.reading(agent)
+        if entry is None:
+            return None
+        now = self.host.now()
+        resets = []
+        for window in entry.get("windows") or []:
+            used = window.get("used_percent")
+            reset = parse_ts(window.get("resets_at"))
+            if isinstance(used, (int, float)) and used >= 99.5:
+                if reset and now < reset <= now + self.limits.max_reset_ahead:
+                    resets.append(reset)
+                else:
+                    return None  # exhausted but the reset time is stale or implausible: not evidence
+        return max(resets) if resets else False
+
+    def available(self, agent: str) -> bool:
+        now = self.host.now()
+        cooldown = self.state["cooldowns"].get(agent)
+        if cooldown:
+            until = parse_ts(cooldown.get("until"))
+            if until is None or now < until:
+                return False
+        reading = self.exhausted_until(agent)
+        if isinstance(reading, datetime):
+            self.state["cooldowns"][agent] = {"until": iso(reading), "source": "limits", "reason": "quota",
+                                              "since": iso(now)}
+            return False
+        if cooldown:
+            self.state["cooldowns"].pop(agent, None)
+        return True
+
+    def set_cooldown(self, agent: str, report: TurnReport) -> None:
+        now = self.host.now()
+        if report.outcome == "spend_limit":
+            until, source = None, "manual"
+        else:
+            reading = self.exhausted_until(agent)
+            message = parse_ts(report.reset_at)
+            if isinstance(reading, datetime):
+                until, source = reading, "limits"
+            elif message and now < message <= now + self.limits.max_reset_ahead:
+                until, source = message, "message"
+            else:
+                until, source = now + self.limits.recheck, "estimate"
+        self.state["cooldowns"][agent] = {"until": iso(until), "source": source, "reason": report.outcome,
+                                          "since": iso(now)}
+        self.notify("provider_exhausted", dedupe_key=f"exhausted|{agent}|{iso(until)}", agent=agent,
+                    outcome=report.outcome, reset_at=iso(until) or "manual", reset_source=source)
+        self.record("finding", f"relay-continuity: {agent} {report.outcome}; cooldown until "
+                               f"{iso(until) or 'maintainer release'} (source {source}).")
+
+    # -- main loop
+    def run(self, session: str, *, task: str | None = None) -> str:
+        now = self.host.now()
+        try:
+            self.state = self.store.load()
+        except StateCorrupt:
+            self.host.log("state file corrupt; refusing to act (hold). Inspect and move it aside to reset.")
+            Notifier(default_state(), sender=self.sender, log=self.host.log).send(
+                "hold", now, session=session, reason="state_corrupt", attempt="0")
+            return "held"
+        self.notifier = Notifier(self.state, sender=self.sender, log=self.host.log)
+        if self.state["phase"] == "held":
+            self.host.log(f"chain is held ({self.state['hold']}); run `release` after review")
+            return "held"
+        head = self.state.get("head_session")
+        if self.state.get("pending") and head and head != session:
+            self.host.log(f"a launched attempt from chain {head} is unresolved; resume that chain first")
+            return "held"
+        if head != session and session not in self.state.get("chain", []):
+            self.state.update({"head_session": session, "chain": [session], "agent": None, "switches": [],
+                               "last_switch_at": None, "waiting_since": None, "last_attempt": None,
+                               "counters": {"consecutive_failures": 0, "transient_streak": 0, "crash_retries": 0}})
+        digest = self.host.permissions_digest()
+        if self.state.get("permissions_digest") and digest != self.state["permissions_digest"]:
+            return self.hold("permissions_changed")
+        self.state["permissions_digest"] = digest
+        self.state["phase"] = "running"
+        self.save()
+        self.notify("supervisor_started", dedupe_key=f"start|{self.state['head_session']}|{iso(now)[:13]}",
+                    session=self.state["head_session"], agent=self.state.get("agent") or PREFERRED)
+        self.notifier.retry_pending(now)
+        try:
+            result = self._loop(task)
+        finally:
+            if self.state["phase"] == "running":
+                self.state["phase"] = "stopped"
+            self.save()
+        reason = {"held": "held", "idle": "idle", "stopped": "stop_requested", "signal": "signal"}.get(result, "error")
+        self.notify("supervisor_stopped", dedupe_key=f"stop|{self.state['head_session']}|{result}|{iso(self.host.now())[:13]}",
+                    session=self.state["head_session"], reason=reason, phase=self.state["phase"])
+        return result
+
+    def _loop(self, task: str | None) -> str:
+        report = self._resolve_pending()
+        if report == "held":
+            return "held"
+        if report is None:
+            turn = last_turn_dir(self.host.relay.sessions_dir() / self.state["head_session"])
+            if turn is None:
+                self.host.log("head session has no turns")
+                return self.hold("attempt_unresolved")
+            report = classify_turn(turn)
+            report.agent = report.agent or self.state.get("agent")
+        while True:
+            if self.stop_requested():
+                self.state["phase"] = "stopped"
+                return "signal" if self.signalled else "stopped"
+            self.state["last_outcome"] = report.outcome
+            self.state["agent"] = report.agent or self.state.get("agent") or PREFERRED
+            decision = self._decide(report, task)
+            if decision in ("held", "idle", "stopped", "signal"):
+                return decision
+            agent, prompt = decision
+            task = None
+            new_report = self._launch(agent, prompt, report)
+            if isinstance(new_report, str):
+                return new_report
+            report = new_report
+
+    def _decide(self, report: TurnReport, task: str | None) -> tuple[str, str] | str:
+        counters = self.state["counters"]
+        failed_agent = report.agent or self.state.get("agent") or PREFERRED
+        if report.outcome == "success":
+            counters.update({"consecutive_failures": 0, "transient_streak": 0, "crash_retries": 0})
+            self.state["waiting_since"] = None
+            if task is None:
+                self.state["phase"] = "idle"
+                self.save()
+                self.notify("turn_completed", dedupe_key=f"done|{self.state['head_session']}",
+                            session=self.state["head_session"], agent=failed_agent)
+                return "idle"
+            agent = self._choose(failed_agent, retry_same=True)
+            if agent is None:
+                return self._wait_or_hold()
+            return agent, f"[relay-continuity attempt {{nonce}}]\n{task}"
+
+        counters["consecutive_failures"] += 1
+        if counters["consecutive_failures"] > self.limits.max_consecutive_failures:
+            return self.hold("circuit_failures")
+        if self.attempts >= self.limits.max_attempts_per_run:
+            return self.hold("circuit_attempts")
+        if report.outcome in ("auth", "unknown"):
+            self.notify("turn_failed", session=self.state["head_session"], agent=failed_agent,
+                        outcome=report.outcome, action="hold")
+            return self.hold("auth_failure" if report.outcome == "auth" else "unknown_failure")
+        changed = None
+        pending_fp = (self.state.get("last_attempt") or {}).get("fingerprint")
+        if not report.calls and not report.terminal and pending_fp:
+            changed = self.host.fingerprint() != pending_fp
+        if (reason := gate(report, fingerprint_changed=changed)) is not None:
+            self.notify("turn_failed", session=self.state["head_session"], agent=failed_agent,
+                        outcome=report.outcome, action="hold")
+            return self.hold(reason)
+
+        if report.outcome in ("quota", "spend_limit"):
+            self.set_cooldown(failed_agent, report)
+            counters["transient_streak"] = 0
+            agent = self._choose(failed_agent, retry_same=False)
+        elif report.outcome == "transient":
+            counters["transient_streak"] += 1
+            if counters["transient_streak"] > self.limits.max_transient_streak:
+                return self.hold("circuit_transient")
+            delay = min(self.limits.transient_base * 2 ** (counters["transient_streak"] - 1), self.limits.transient_cap)
+            self.save()
+            if self._sleep(delay):
+                return "signal" if self.signalled else "stopped"
+            agent = self._choose(failed_agent, retry_same=True)
+        else:  # crash
+            counters["crash_retries"] += 1
+            if counters["crash_retries"] > self.limits.crash_retries:
+                return self.hold("crash_repeated")
+            agent = self._choose(failed_agent, retry_same=True)
+        if agent is None:
+            return self._wait_or_hold()
+        action = "switch" if agent != failed_agent else "retry"
+        self.notify("turn_failed", session=self.state["head_session"], agent=failed_agent,
+                    outcome=report.outcome, action=action)
+        effects = "\n".join(f"- [{c.kind}] {c.label}" for c in report.effects) or "- none recorded"
+        prompt = RECOVERY_PROMPT.format(nonce="{nonce}", prev_agent=failed_agent, outcome=report.outcome,
+                                        agent=agent, effects=effects)
+        return agent, prompt
+
+    def _choose(self, current: str, *, retry_same: bool) -> str | None:
+        """Preferred agent first; switching away from the current agent is bounded and dwell-limited."""
+        now = self.host.now()
+        last_switch = parse_ts(self.state.get("last_switch_at"))
+        dwell_ok = last_switch is None or now - last_switch >= self.limits.min_dwell
+        order = [PREFERRED] + [a for a in AGENTS if a != PREFERRED]
+        if retry_same and current != PREFERRED and not dwell_ok and self.available(current):
+            order = [current]  # too soon after a switch to return; stay while the current agent is usable
+        for agent in order:
+            if not retry_same and agent == current:
+                continue
+            if self.available(agent):
+                if agent != current:
+                    recent = [t for t in self.state["switches"] if (ts := parse_ts(t)) and now - ts < self.limits.switch_window]
+                    if len(recent) >= self.limits.max_switches:
+                        self.hold("circuit_switches")
+                        return None
+                    recent.append(iso(now))
+                    self.state["switches"] = recent
+                    self.state["last_switch_at"] = iso(now)
+                    self.notify("provider_switched", session=self.state["head_session"], from_agent=current,
+                                agent=agent, outcome=self.state.get("last_outcome") or "success")
+                    self.record("decision", f"relay-continuity: switched coordinator {current} -> {agent} "
+                                            f"after {self.state.get('last_outcome')} on {self.state['head_session']}.")
+                return agent
+        return None
+
+    def _wait_or_hold(self) -> tuple[str, str] | str:
+        """Both agents unavailable: sleep to the earliest validated reset (rechecking periodically), bounded."""
+        while True:
+            if self.state["phase"] == "held":
+                return "held"
+            now = self.host.now()
+            known = [u for c in self.state["cooldowns"].values() if (u := parse_ts(c.get("until"))) is not None]
+            if not known:
+                return self.hold("no_provider_available")
+            since = parse_ts(self.state.get("waiting_since")) or now
+            self.state["waiting_since"] = iso(since)
+            if now - since > self.limits.max_wait:
+                return self.hold("wait_exceeded")
+            wake = max(min(min(known), now + self.limits.recheck), now + timedelta(seconds=1))
+            self.state["phase"] = "waiting"
+            self.save()
+            self.notify("all_exhausted", dedupe_key=f"all|{iso(min(known))}", next_check_at=iso(wake))
+            if self._sleep((wake - now).total_seconds()):
+                return "signal" if self.signalled else "stopped"
+            self.state["phase"] = "running"
+            self._reading = None
+            previous = self.state.get("agent") or PREFERRED
+            agent = self._choose(previous, retry_same=True)
+            if agent is not None:
+                self.state["waiting_since"] = None
+                return agent, RECOVERY_PROMPT.format(
+                    nonce="{nonce}", prev_agent=previous, outcome=self.state.get("last_outcome") or "quota",
+                    agent=agent, effects="- see the previous attempt record; nothing new since it was gated")
+
+    def _sleep(self, seconds: float) -> bool:
+        """Interruptible sleep in short chunks against the host clock; True when a stop was requested."""
+        deadline = self.host.now() + timedelta(seconds=seconds)
+        while True:
+            if self.stop_requested():
+                return True
+            remaining = (deadline - self.host.now()).total_seconds()
+            if remaining <= 0:
+                return False
+            self.host.sleep(min(5.0, remaining))
+
+    def _launch(self, agent: str, prompt: str, previous: TurnReport) -> TurnReport | str:
+        # Only this process is excluded: a Relay REPL that is our ancestor is still a live coordinator.
+        if conflicts := self.host.conflicts({os.getpid()}):
+            return self.hold("repl_active" if "repl_active" in conflicts else "attempt_unresolved")
+        digest = self.host.permissions_digest()
+        if digest != self.state.get("permissions_digest"):
+            return self.hold("permissions_changed")
+        now = self.host.now()
+        self.attempts += 1
+        nonce = f"rc-{now.strftime('%Y%m%dT%H%M%SZ')}-{secrets.token_hex(4)}"
+        text = prompt.replace("{nonce}", nonce)
+        pending = {"nonce": nonce, "agent": agent, "parent": self.state["head_session"], "started_at": iso(now),
+                   "pid": None, "pid_start": None, "fingerprint": self.host.fingerprint(), "attempt": self.attempts}
+        self.state["pending"] = pending  # intent is durable before anything is launched
+        self.state["agent"] = agent
+        self.save()
+        self.store.journal({"event": "launch", **{k: v for k, v in pending.items() if k != "fingerprint"}})
+        try:
+            proc = self.host.relay.start(agent, self.state["head_session"], text, self.turns)
+        except OSError:
+            self.state["pending"] = None
+            return self.hold("relay_invocation_failed", self.attempts)
+        pending["pid"] = getattr(proc, "pid", None)
+        pending["pid_start"] = devctx.pid_start(pending["pid"]) if pending["pid"] else None
+        self.save()
+        result = self.host.relay.finish(proc)
+        return self._settle(pending, result.session_id)
+
+    def _settle(self, pending: dict[str, Any], session_id: str | None) -> TurnReport | str:
+        session_id = session_id or self.host.relay.find_by_nonce(pending["nonce"], parse_ts(pending["started_at"]) or self.host.now())
+        self.state["last_attempt"] = {k: pending[k] for k in ("nonce", "agent", "attempt", "fingerprint")}
+        self.state["pending"] = None
+        if session_id is None:
+            unchanged = self.host.fingerprint() == pending["fingerprint"]
+            self.store.journal({"event": "settle", "nonce": pending["nonce"], "session": None, "unchanged": unchanged})
+            self.save()
+            if not unchanged:
+                return self.hold("attempt_unresolved", pending.get("attempt"))
+            return TurnReport(outcome="crash", agent=pending["agent"], detail="relay produced no session")
+        turn = last_turn_dir(self.host.relay.sessions_dir() / session_id)
+        report = classify_turn(turn) if turn else TurnReport(outcome="crash", agent=pending["agent"],
+                                                             detail="session without turns")
+        report.agent = pending["agent"]
+        self.state["head_session"] = session_id
+        self.state["chain"] = (self.state.get("chain") or []) + [session_id]
+        self.store.journal({"event": "settle", "nonce": pending["nonce"], "session": session_id,
+                            "outcome": report.outcome, "agent": report.agent,
+                            "effects": [c.label for c in report.effects], "in_flight": [c.label for c in report.in_flight]})
+        self.save()
+        return report
+
+    def _resolve_pending(self) -> TurnReport | str | None:
+        """Restart recovery: settle a launched attempt whose outcome was never recorded."""
+        pending = self.state.get("pending")
+        if not pending:
+            return None
+        self.host.log(f"resolving unsettled attempt {pending['nonce']}")
+        if pending.get("pid") and self.host.pid_alive(pending["pid"], pending.get("pid_start")):
+            self.host.log(f"attempt still running as pid {pending['pid']}; waiting for it (never relaunched)")
+            while self.host.pid_alive(pending["pid"], pending.get("pid_start")):
+                if self._sleep(30.0):
+                    return "signal" if self.signalled else "stopped"
+        session_id = self.host.relay.find_by_nonce(pending["nonce"], parse_ts(pending["started_at"]) or self.host.now())
+        if session_id is None and self.host.fingerprint() != pending.get("fingerprint"):
+            self.state["pending"] = None
+            self.state["last_attempt"] = {k: pending.get(k) for k in ("nonce", "agent", "attempt", "fingerprint")}
+            return self.hold("attempt_unresolved", pending.get("attempt"))
+        return self._settle(pending, session_id)
+
+
+# ---------------------------------------------------------------------------
+# Notify-only watch (REPL sessions and integration events)
+
+
+def watch_once(state: dict[str, Any], notifier: Notifier, repo: Path, now: datetime, *,
+               supervised: set[str], master: Callable[[], tuple[str | None, str | None]],
+               horizon: timedelta = timedelta(hours=24)) -> None:
+    seen = state["watch"]["seen"]
+    sessions = repo / ".agent-relay" / "sessions"
+    floor = (now - horizon).strftime("%Y%m%d-%H%M%S")
+    for session in sorted(sessions.glob("*-*-*")) if sessions.is_dir() else []:
+        turn = last_turn_dir(session)
+        if turn is None:
+            continue
+        if session.name in supervised:
+            seen[f"{session.name}/{turn.name}"] = "supervised"  # the supervisor reports its own chain
+            continue
+        try:
+            mtime = (turn / "state.json").stat().st_mtime
+        except OSError:
+            continue  # a turn without state.json is still running
+        if datetime.fromtimestamp(mtime, UTC) < now - horizon and session.name < floor:
+            continue
+        key = f"{session.name}/{turn.name}"
+        if seen.get(key):
+            continue
+        report = classify_turn(turn)
+        seen[key] = report.outcome
+        if report.outcome != "success" and report.agent in AGENTS:
+            notifier.send("repl_turn_failed", now, session=session.name, agent=report.agent,
+                          outcome=report.outcome, reset_at=report.reset_at or "none")
+    state["watch"]["seen"] = dict(list(seen.items())[-500:])
+    sha, pr = master()
+    previous = state["watch"].get("master")
+    if sha and previous and sha != previous:
+        fields = {"sha": sha[:12]}
+        if pr:
+            fields["pr"] = pr
+        notifier.send("master_advanced", now, **fields)
+    if sha:
+        state["watch"]["master"] = sha
+
+
+def real_master(repo: Path) -> tuple[str | None, str | None]:
+    devctx.run(["git", "fetch", "-q", "origin", "master"], cwd=repo, timeout=60)
+    code, sha = devctx.run(["git", "rev-parse", "origin/master"], cwd=repo)
+    if code != 0:
+        return None, None
+    _, subject = devctx.run(["git", "log", "-1", "--format=%s", "origin/master"], cwd=repo)
+    match = re.match(r"Merge pull request #(\d+)", subject or "")
+    return sha.strip(), match.group(1) if match else None
+
+
+def digest_fields(state: dict[str, Any], holds: int) -> dict[str, Any]:
+    cooldowns = state.get("cooldowns") or {}
+
+    def until(agent: str) -> str:
+        cd = cooldowns.get(agent)
+        return "none" if not cd else (cd.get("until") or "manual")
+    fields: dict[str, Any] = {"phase": state.get("phase") or "idle", "agent": state.get("agent") or PREFERRED,
+                              "attempts": str(len(state.get("chain") or [])), "holds": str(holds),
+                              "claude_until": until("claude"), "codex_until": until("codex")}
+    fields["session"] = state.get("head_session") or "none"
+    return fields
+
+
+# ---------------------------------------------------------------------------
+# CLI
+
+
+def control_root() -> Path:
+    return Path(os.environ.get("RELAY_CONTINUITY_DIR", DEFAULT_CONTROL)).expanduser()
+
+
+def repo_root() -> Path:
+    code, out = devctx.run(["git", "rev-parse", "--path-format=absolute", "--git-common-dir"])
+    return Path(out.strip()).parent if code == 0 and out.strip() else Path.cwd()
+
+
+def make_host(repo: Path) -> Host:
+    env = devctx.default_env(repo)
+    author = f"relay-continuity pid {os.getpid()}"
+
+    def ledger(kind: str, text: str) -> None:
+        devctx.append_entry(env, devctx.make_entry(env, kind, text, refs={"spec": "195"}, author=author))
+
+    def permissions() -> str | None:
+        path = repo / ".agent-relay" / "permissions.toml"
+        return hashlib.sha256(path.read_bytes()).hexdigest() if path.exists() else None
+
+    return Host(relay=RelayAdapter(repo), fingerprint=lambda: fingerprint(repo),
+                conflicts=lambda own: live_conflicts(repo, own), ledger=ledger, permissions_digest=permissions)
+
+
+def webhook_sender() -> Callable[[str], str | None] | None:
+    if not WEBHOOK_FILE.exists():
+        return None
+    mode = WEBHOOK_FILE.stat().st_mode & 0o077
+    if mode:
+        print("refusing to use the webhook file: it must not be group/world readable (chmod 600)", file=sys.stderr)
+        return None
+    return lambda text: post_webhook(text)
+
+
+def command_run(args: argparse.Namespace) -> int:
+    root = control_root()
+    lock = Lock(root / "supervisor.lock")
+    if not lock.acquire():
+        print("another continuity supervisor holds the lock; refusing to start", file=sys.stderr)
+        return 3
+    repo = repo_root()
+    try:
+        conflicts = live_conflicts(repo, {os.getpid()})
+        if "legacy_autopilot" in conflicts:
+            print("legacy autopilot scripts are running; stop them first (no concurrent supervisors)", file=sys.stderr)
+            return 3
+        task = None
+        if args.task_file:
+            task = Path(args.task_file).read_text(encoding="utf-8")
+            if devctx.find_secret(task):
+                print("task file matches a secret pattern; refusing", file=sys.stderr)
+                return 2
+        store = Store(root)
+        store.stop_path.unlink(missing_ok=True)
+        supervisor = Supervisor(store, make_host(repo), turns=args.turns,
+                                sender=None if args.no_notify else webhook_sender())
+
+        def on_signal(signum: int, _frame: Any) -> None:
+            supervisor.signalled = True
+        signal.signal(signal.SIGTERM, on_signal)
+        signal.signal(signal.SIGINT, on_signal)
+        result = supervisor.run(args.session, task=task)
+        print(json.dumps({"result": result, "head_session": supervisor.state.get("head_session"),
+                          "phase": supervisor.state.get("phase"), "hold": supervisor.state.get("hold")}))
+        return {"idle": 0, "stopped": 0, "signal": 0, "held": 4}.get(result, 1)
+    finally:
+        lock.release()
+
+
+def command_classify(args: argparse.Namespace) -> int:
+    print(json.dumps(classify_turn(Path(args.turn_dir)).to_json(), indent=1))
+    return 0
+
+
+def command_status(args: argparse.Namespace) -> int:
+    store = Store(control_root())
+    try:
+        state = store.load()
+    except StateCorrupt as exc:
+        print(f"state corrupt: {exc}")
+        return 4
+    view = {k: state.get(k) for k in ("phase", "head_session", "agent", "hold", "cooldowns", "counters",
+                                      "pending", "last_outcome", "switches", "updated_at")}
+    view["chain_length"] = len(state.get("chain") or [])
+    view["stop_requested"] = store.stop_path.exists()
+    view["notify"] = {k: state["notify"].get(k) for k in ("failures", "dropped", "last_digest")}
+    print(json.dumps(view, indent=1))
+    return 0
+
+
+def command_stop(args: argparse.Namespace) -> int:
+    store = Store(control_root())
+    store.root.mkdir(parents=True, exist_ok=True)
+    store.stop_path.write_text(iso(now_utc()) or "")
+    print("stop requested; the supervisor exits at its next safe point and never kills a running turn")
+    return 0
+
+
+def command_release(args: argparse.Namespace) -> int:
+    root = control_root()
+    lock = Lock(root / "supervisor.lock")
+    if not lock.acquire():
+        print("a supervisor is running; stop it before releasing", file=sys.stderr)
+        return 3
+    try:
+        if devctx.find_secret(args.note):
+            print("note matches a secret pattern; refusing", file=sys.stderr)
+            return 2
+        store = Store(root)
+        state = store.load()
+        released = state.get("hold")
+        state["hold"] = None
+        state["phase"] = "idle"
+        state["counters"] = {"consecutive_failures": 0, "transient_streak": 0, "crash_retries": 0}
+        for agent in args.clear_cooldown or []:
+            state["cooldowns"].pop(agent, None)
+        if args.drop_pending:
+            state["pending"] = None
+        store.save(state, now_utc())
+        store.journal({"event": "release", "at": iso(now_utc()), "hold": released, "note": args.note[:500],
+                       "cleared": args.clear_cooldown or [], "dropped_pending": bool(args.drop_pending)})
+        try:
+            make_host(repo_root()).ledger("decision", f"relay-continuity hold released ({(released or {}).get('reason')}): "
+                                                       f"{args.note[:400]}")
+        except Exception as exc:  # noqa: BLE001
+            print(f"ledger append failed: {type(exc).__name__}", file=sys.stderr)
+        print(json.dumps({"released": released, "cleared": args.clear_cooldown or []}))
+        return 0
+    finally:
+        lock.release()
+
+
+def command_notify_test(args: argparse.Namespace) -> int:
+    sender = webhook_sender()
+    if sender is None:
+        print("no usable webhook configured")
+        return 2
+    error = sender(render("test", {}) or "")
+    print("sent" if error is None else f"failed: {error}")
+    return 0 if error is None else 1
+
+
+def command_watch(args: argparse.Namespace) -> int:
+    root = control_root()
+    lock = Lock(root / "watch.lock")
+    if not lock.acquire():
+        print("another watch instance is running", file=sys.stderr)
+        return 3
+    repo = repo_root()
+    store = Store(root / "watch")
+    stop = {"flag": False}
+    signal.signal(signal.SIGTERM, lambda *_: stop.update(flag=True))
+    signal.signal(signal.SIGINT, lambda *_: stop.update(flag=True))
+    try:
+        while not stop["flag"]:
+            now = now_utc()
+            try:
+                state = store.load()
+            except StateCorrupt:
+                state = default_state()
+            notifier = Notifier(state, sender=None if args.no_notify else webhook_sender(), log=lambda m: print(m, file=sys.stderr))
+            try:
+                supervised_state = Store(root).load()
+            except StateCorrupt:
+                supervised_state = default_state()
+            supervised = set(supervised_state.get("chain") or [])
+            first = not state["watch"].get("seen")
+            if first:
+                # Baseline: never alert on history that predates this watch.
+                watch_once(state, Notifier(state, sender=None, log=lambda m: None), repo, now, supervised=supervised,
+                           master=lambda: real_master(repo))
+            else:
+                notifier.retry_pending(now)
+                watch_once(state, notifier, repo, now, supervised=supervised, master=lambda: real_master(repo))
+            last = parse_ts(state["notify"].get("last_digest"))
+            if not first and (last is None or now - last >= timedelta(hours=args.digest_hours)):
+                journal = root / "attempts.jsonl"
+                holds = sum('"event": "hold"' in line for line in journal.read_text().splitlines()) if journal.exists() else 0
+                notifier.send("digest", now, dedupe_key=f"digest|{iso(now)}", **digest_fields(supervised_state, holds))
+                state["notify"]["last_digest"] = iso(now)
+            store.save(state, now)
+            if args.once:
+                break
+            for _ in range(int(args.interval)):
+                if stop["flag"]:
+                    break
+                time.sleep(1)
+        return 0
+    finally:
+        lock.release()
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="relay_continuity.py", description=__doc__.splitlines()[0])
+    sub = parser.add_subparsers(dest="action", required=True)
+    p = sub.add_parser("run", help="supervise continuation of one Relay session chain")
+    p.add_argument("--session", required=True)
+    p.add_argument("--task-file", help="maintainer task for the next turn (when the chain is idle)")
+    p.add_argument("--turns", type=int, default=1, help="Relay turns per invocation (default 1)")
+    p.add_argument("--no-notify", action="store_true")
+    p.set_defaults(func=command_run)
+    p = sub.add_parser("classify", help="classify one Relay turn directory")
+    p.add_argument("turn_dir")
+    p.set_defaults(func=command_classify)
+    sub.add_parser("status", help="show durable supervisor state").set_defaults(func=command_status)
+    sub.add_parser("stop", help="request a graceful stop").set_defaults(func=command_stop)
+    p = sub.add_parser("release", help="clear a manual hold after maintainer review")
+    p.add_argument("--note", required=True, help="why it is safe to continue (recorded)")
+    p.add_argument("--clear-cooldown", action="append", choices=AGENTS)
+    p.add_argument("--drop-pending", action="store_true", help="forget an unresolved launched attempt")
+    p.set_defaults(func=command_release)
+    sub.add_parser("notify-test", help="send one fixed test notification").set_defaults(func=command_notify_test)
+    p = sub.add_parser("watch", help="notify-only monitor of REPL sessions and master")
+    p.add_argument("--interval", type=float, default=60.0)
+    p.add_argument("--digest-hours", type=float, default=6.0)
+    p.add_argument("--once", action="store_true")
+    p.add_argument("--no-notify", action="store_true")
+    p.set_defaults(func=command_watch)
+    args = parser.parse_args(argv)
+    return int(args.func(args) or 0)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

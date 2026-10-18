@@ -68,9 +68,8 @@ Each tool call in the failed turn's raw output is paired with its result and cla
 
 Automatic continuation is refused, and the chain enters a **manual hold** with an alert, when any of these hold:
 
-- any non-`read_only` call has no result (in flight at interruption);
-- any `external` or `unknown` call completed in the failed turn without an observable effect record;
-- the output is truncated or unparseable;
+- any non-`read_only` call has no paired result (it was in flight at interruption, so whether it took effect is unknown);
+- the output has unparseable lines;
 - the outcome is `crash` and the repository fingerprint changed during the attempt;
 - the attempt journal shows a launched attempt whose outcome cannot be established.
 
@@ -84,7 +83,7 @@ Completed `local_write`/`external`/`background` calls with results are listed in
 - **Permission pinning.** It records the digest of `.agent-relay/permissions.toml` at start and holds if the digest changes.
 - **Approval gates.** A failover turn has the same authority as the turn it replaces. It cannot approve, merge or bypass a gate the original could not.
 - **`quota`.** The agent goes into a persistent cooldown, and the chain switches to the other agent only when that agent's fresh limits reading shows quota available. The cooldown ends at the provider-reported reset: a fresh `limits` reading with a future `resets_at`, else the provider's own message, else a conservative recheck interval labelled estimated. Readings with an `as_of` older than the freshness bound, or a `resets_at` in the past, are refreshed and otherwise discarded. A reset is accepted only if it is no more than 8 days ahead.
-- **`spend_limit`.** As `quota`, but the cooldown never expires by time. Only `release` or a fresh `limits` reading showing availability ends it.
+- **`spend_limit`.** As `quota`, but the cooldown never expires by time. Spend limits do not appear in the `limits` usage windows, so only `release` ends it.
 - **`transient`.** Retry the same agent with bounded exponential backoff and no switch.
 - **`crash`.** One same-agent retry, subject to the side-effect gate, then hold.
 - **`auth`, `unknown`.** Hold with an alert. These never cause a switch.
