@@ -117,12 +117,14 @@ class ToolCall:
     parent: str | None = None
     detached: bool = False
     ended_abnormally: bool = False  # killed/failed/stopped task, or an error tool result
+    command_detached: bool = False  # the command itself detaches (`&`, nohup, tmux, a daemon): no event proves it ended
 
     @property
     def pending(self) -> bool:
         """Still possibly executing: no result yet, or a background launch whose completion was never seen
         (its tool result is only the launch acknowledgement)."""
-        return not self.done or self.background_open or (self.detached and not self.background_closed)
+        return (not self.done or self.background_open or (self.detached and not self.background_closed)
+                or self.command_detached)
 
 
 @dataclass
@@ -856,12 +858,14 @@ def _claude_call(block: dict[str, Any]) -> ToolCall:
     else:
         kind = CLAUDE_TOOL_KINDS.get(name, "unknown")
         label = name if not inp.get("file_path") else f"{name} {Path(str(inp['file_path'])).name}"
-    detached = bool(inp.get("run_in_background")) or label.endswith(" &")
+    command_detached = label.endswith(" &")
+    detached = bool(inp.get("run_in_background")) or command_detached
     if inp.get("run_in_background"):
         # e.g. a background Agent or shell job: its tool result is a launch acknowledgement, not completion
         kind = kind if _rank(kind) > _rank("background") else "background"
         label = label if label.endswith(" &") else f"{label} &"
-    return ToolCall(id=str(block.get("id")), tool=name, kind=kind, label=label[:80], done=False, detached=detached)
+    return ToolCall(id=str(block.get("id")), tool=name, kind=kind, label=label[:80], done=False, detached=detached,
+                    command_detached=command_detached)
 
 
 def _codex_call(item: dict[str, Any]) -> ToolCall | None:
@@ -877,7 +881,7 @@ def _codex_call(item: dict[str, Any]) -> ToolCall | None:
     else:
         return None
     return ToolCall(id=str(item.get("id")), tool=str(typ), kind=kind, label=str(label)[:80], done=False,
-                    detached=str(label).endswith(" &"))
+                    detached=str(label).endswith(" &"), command_detached=str(label).endswith(" &"))
 
 
 def read_events(path: Path) -> tuple[list[dict[str, Any]], int]:
@@ -1506,14 +1510,31 @@ def live_conflicts(repo: Path, own_pids: set[int]) -> list[str]:
 
 INTERACTIVE_SHELLS = {"bash", "-bash", "sh", "-sh", "zsh", "-zsh", "fish", "-fish", "dash"}
 MULTIPLEXER_SERVERS = {"tmux", "screen", "SCREEN"}
+DAEMON_UNREACHABLE = ("cannot connect to the docker daemon", "is the docker daemon running", "unable to connect to podman",
+                      "cannot connect to podman", "no such file or directory")
+
+
+@dataclass(frozen=True)
+class Work:
+    """Something running that may belong to this chain. `identity` is what a maintainer release acknowledges
+    (None: an inspection failure, never acknowledgeable). `recent`: started inside the chain window.
+    `inherited`: may run work newer than its own start (a multiplexer pane's program, a container with exec
+    sessions), so it counts unless this exact identity was acknowledged."""
+    identity: str | None
+    label: str
+    recent: bool = True
+    inherited: bool = False
+
+
+def inspection_failed(label: str) -> Work:
+    return Work(None, label)
 
 
 def worktree_roots(repo: Path) -> list[Path]:
-    roots = [repo]
-    for line in (devctx.run(["git", "worktree", "list", "--porcelain"], cwd=repo)[1] or "").splitlines():
-        if line.startswith("worktree "):
-            roots.append(Path(line[9:]))
-    return roots
+    code, out = devctx.run(["git", "worktree", "list", "--porcelain"], cwd=repo)
+    if code != 0:
+        raise RuntimeError("git worktree list failed")  # partial coverage would read as "no live work"
+    return [repo] + [Path(line[9:]) for line in out.splitlines() if line.startswith("worktree ")]
 
 
 def _ancestors(pid: int, proc_root: Path) -> set[int]:
@@ -1528,64 +1549,103 @@ def _ancestors(pid: int, proc_root: Path) -> set[int]:
     return seen
 
 
-def _ignorable(argv: list[str]) -> bool:
+def _argv(entry: Path) -> list[str]:
+    return [a.decode(errors="replace") for a in (entry / "cmdline").read_bytes().split(b"\0") if a]
+
+
+def _ignorable(argv: list[str], entry: Path) -> bool:
     """Processes that do no work themselves: their children are checked on their own."""
     if not argv:
-        return True
+        return False
     name = Path(argv[0]).name
-    if name in INTERACTIVE_SHELLS:
-        return all(a in ("-l", "-i", "--login", "--interactive") for a in argv[1:])  # no -c, no script
-    if name in MULTIPLEXER_SERVERS or name.startswith("tmux:"):
+    if name in INTERACTIVE_SHELLS and all(a in ("-l", "-i", "--login", "--interactive") for a in argv[1:]):
+        try:  # an idle prompt reads a terminal; a shell fed a script on stdin or a pipe is working
+            return os.readlink(entry / "fd" / "0").startswith(("/dev/pts/", "/dev/tty"))
+        except OSError:
+            return False
+    if name in MULTIPLEXER_SERVERS:
         return True
     if name in ("relay", "agent-relay") and any(a in ("daemon", "hook") for a in argv[1:3]):
         return True
-    return any(Path(a).name == "relay_continuity.py" for a in argv[1:3])  # this supervisor or its notify-only watch
+    # this supervisor or its notify-only watch
+    return name.startswith("python") and len(argv) > 2 and Path(argv[1]).name == "relay_continuity.py" \
+        and argv[2] in ("run", "watch")
 
 
 def live_processes(roots: list[Path], since: datetime, own_pids: set[int], *,
-                   proc_root: Path = Path("/proc")) -> list[str]:
-    """Live processes working in the repository or a worktree, started at or after `since`.
+                   proc_root: Path = Path("/proc")) -> list[Work]:
+    """This user's live processes working in the repository or a worktree.
 
     Detached work (a `&` job, tmux/screen, nohup, a daemon) outlives the tool call that launched it, and no
     shell classifier can recognize every way to start it. This check looks at what is actually running instead.
+    A process that vanishes while being read is gone; one that cannot be read is assumed to be working.
     """
     try:
         btime = int(next(line.split()[1] for line in (proc_root / "stat").read_text().splitlines()
                          if line.startswith("btime ")))
     except (OSError, ValueError, StopIteration):
-        return ["process_table_unreadable"]
-    ticks = os.sysconf("SC_CLK_TCK")
+        return [inspection_failed("process table unreadable")]
+    ticks, uid = os.sysconf("SC_CLK_TCK"), os.getuid()
     exclude: set[int] = set()
     for pid in own_pids:
         exclude |= _ancestors(pid, proc_root)
     resolved = [r.resolve() for r in roots]
-    found: set[str] = set()
+    found: dict[str | None, Work] = {}
     for entry in proc_root.iterdir():
         if not entry.name.isdigit() or int(entry.name) in exclude:
             continue
         try:
-            cwd = Path(os.readlink(entry / "cwd")).resolve()
+            if entry.stat().st_uid != uid:
+                continue  # another user's process cannot be this chain's work
             stat = (entry / "stat").read_text()
-            argv = [a.decode(errors="replace") for a in (entry / "cmdline").read_bytes().split(b"\0") if a]
-        except OSError:
-            continue
-        if not any(cwd == r or r in cwd.parents for r in resolved) or _ignorable(argv):
-            continue
-        fields = stat.rsplit(")", 1)[1].split()
-        try:
+            fields = stat.rsplit(")", 1)[1].split()
+            if fields[0] in ("Z", "X"):
+                continue
             started = datetime.fromtimestamp(btime + int(fields[19]) / ticks, UTC)
-        except (ValueError, IndexError):
+        except (FileNotFoundError, ProcessLookupError):
             continue
-        if fields[0] in ("Z", "X") or started < since:
+        except (OSError, ValueError, IndexError):
+            found[None] = inspection_failed("process unreadable")
+            continue
+        try:
+            cwd = Path(os.readlink(entry / "cwd")).resolve()
+            if not any(cwd == r or r in cwd.parents for r in resolved):
+                continue
+            argv = _argv(entry)
+            if _ignorable(argv, entry):
+                continue
+            try:
+                parent = _argv(proc_root / fields[1])
+            except OSError:
+                parent = []
+        except (FileNotFoundError, ProcessLookupError):
+            continue
+        except OSError:
+            # Its working directory cannot be read (a non-dumpable process such as `(sd-pam)`): it might be in a
+            # checkout. Its start time is known, so it is judged like any process and a release can acknowledge it.
+            unreadable = f"proc:{entry.name}:{fields[19]}:unreadable"
+            found[unreadable] = Work(unreadable, "process unreadable", recent=started >= since)
             continue
         comm = re.sub(r"[^A-Za-z0-9_.:-]", "_", stat[stat.find("(") + 1:stat.rfind(")")])[:32]
-        found.add(f"process {comm}")  # the name only: arguments may carry secrets
-    return sorted(found)
+        identity = f"proc:{entry.name}:{fields[19]}:{hashlib.sha256(chr(0).join(argv).encode()).hexdigest()[:16]}"
+        pane = bool(parent) and Path(parent[0]).name in MULTIPLEXER_SERVERS
+        found[identity] = Work(identity, f"process {comm}", recent=started >= since, inherited=pane)  # names only
+    return sorted(found.values(), key=lambda w: (w.label, w.identity or ""))
 
 
-def live_containers(since: datetime, *, run: Callable[..., subprocess.CompletedProcess] = subprocess.run) -> list[str]:
-    """Containers (docker/podman) started at or after `since`; they may bind-mount a checkout."""
-    found: list[str] = []
+def _container_ts(value: str) -> datetime | None:
+    match = re.fullmatch(r"(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(?:\.(\d+))?(Z|[+-]\d\d:\d\d)", value.strip())
+    if not match:
+        return None
+    frac = (match.group(2) or "0")[:6].ljust(6, "0")
+    zone = "+00:00" if match.group(3) == "Z" else match.group(3)
+    return parse_ts(f"{match.group(1)}.{frac}{zone}")
+
+
+def live_containers(since: datetime, *, run: Callable[..., subprocess.CompletedProcess] = subprocess.run) -> list[Work]:
+    """Running docker/podman containers; they may bind-mount a checkout. A daemon that is not running has no
+    containers; any other failure to list or date them counts as live work."""
+    found: list[Work] = []
     for tool in ("docker", "podman"):
         exe = shutil.which(tool)
         if not exe:
@@ -1593,25 +1653,36 @@ def live_containers(since: datetime, *, run: Callable[..., subprocess.CompletedP
         try:
             listed = run([exe, "ps", "-q", "--no-trunc"], capture_output=True, text=True, timeout=15)
             if listed.returncode != 0:
-                continue  # no reachable daemon: nothing can be running under it
+                if not any(m in (listed.stderr or "").lower() for m in DAEMON_UNREACHABLE):
+                    found.append(inspection_failed(f"{tool} check failed"))
+                continue
             ids = listed.stdout.split()
             if not ids:
                 continue
-            inspected = run([exe, "inspect", "--format", "{{.Id}} {{.State.StartedAt}}", *ids],
+            inspected = run([exe, "inspect", "--format", "{{.Id}} {{.State.StartedAt}} {{json .ExecIDs}}", *ids],
                             capture_output=True, text=True, timeout=15)
         except subprocess.TimeoutExpired:
-            found.append(f"{tool} check timed out")
+            found.append(inspection_failed(f"{tool} check timed out"))
             continue
         except OSError:
+            found.append(inspection_failed(f"{tool} check failed"))
             continue
         if inspected.returncode != 0:
-            found.append(f"{tool} check failed")  # containers exist but cannot be dated: assume new
+            found.append(inspection_failed(f"{tool} check failed"))
             continue
         for line in inspected.stdout.splitlines():
-            cid, _, started = line.partition(" ")
-            ts = parse_ts(started[:19] + "Z") if len(started) >= 19 else None
-            if ts is None or ts >= since:
-                found.append(f"{tool} container {cid[:12]}")
+            parts = line.split(" ", 2)
+            ts = _container_ts(parts[1]) if len(parts) > 1 else None
+            try:
+                execs = sorted(json.loads(parts[2]) or []) if len(parts) > 2 else []
+            except ValueError:
+                execs = ["?"]
+            if ts is None:
+                found.append(inspection_failed(f"{tool} container undatable"))
+                continue
+            identity = f"ctr:{parts[0]}:{parts[1]}:{hashlib.sha256(','.join(execs).encode()).hexdigest()[:16]}"
+            # `docker exec` starts work without restarting the container: exec sessions keep it counted.
+            found.append(Work(identity, f"{tool} container {parts[0][:12]}", recent=ts >= since, inherited=bool(execs)))
     return found
 
 
@@ -1638,7 +1709,7 @@ class Host:
     ledger: Callable[[str, str], None] = lambda kind, text: None
     permissions_digest: Callable[[], str | None] = lambda: None
     log: Callable[[str], None] = lambda msg: print(msg, file=sys.stderr, flush=True)
-    live_work: Callable[[datetime], list[str]] = lambda since: []
+    live_work: Callable[[datetime], list[Any]] = lambda since: []
 
 
 class Supervisor:
@@ -1961,6 +2032,18 @@ class Supervisor:
                     outcome=report.outcome, action=action)
         return agent, make_prompt(agent)
 
+    def last_release(self) -> tuple[datetime | None, frozenset[str]]:
+        """The latest maintainer release in the journal, and the live-work identities it acknowledged."""
+        at, acknowledged = None, frozenset()
+        try:
+            for line in self.store.journal_path.read_text().splitlines():
+                record = json.loads(line)
+                if record.get("event") == "release" and (ts := parse_ts(record.get("at"))) and (at is None or ts > at):
+                    at, acknowledged = ts, frozenset(record.get("acknowledged_work") or [])
+        except (OSError, ValueError, AttributeError):
+            pass
+        return at, acknowledged
+
     def work_window(self) -> datetime:
         """Start of the period whose launched work may still be running: the chain's first session, or the
         latest maintainer release (which reviewed whatever was live then), whichever is later."""
@@ -1972,24 +2055,21 @@ class Supervisor:
                 created = None
             starts.append(parse_ts(created) or datetime.min.replace(tzinfo=UTC))  # unknown: the widest window
         since = min(starts) if starts else datetime.min.replace(tzinfo=UTC)
-        try:
-            for line in self.store.journal_path.read_text().splitlines():
-                record = json.loads(line)
-                if record.get("event") == "release" and (at := parse_ts(record.get("at"))) and at > since:
-                    since = at
-        except (OSError, ValueError):
-            pass
-        return since
+        released, _ = self.last_release()
+        return max(since, released) if released else since
 
     def _live_work_hold(self, report: TurnReport) -> str | None:
         """Hold while work launched in this chain is still running in a checkout: continuing would overlap it."""
+        _, acknowledged = self.last_release()
         try:
-            live = self.host.live_work(self.work_window())
+            works = self.host.live_work(self.work_window())
         except Exception as exc:  # noqa: BLE001 - an unreadable process table is not evidence of no work
-            live = [f"check failed ({type(exc).__name__})"]
+            works = [inspection_failed(f"check failed ({type(exc).__name__})")]
+        live = [w for w in works if w.identity is None
+                or (w.identity not in acknowledged and (w.recent or w.inherited))]
         if not live:
             return None
-        self.host.log(f"live work in the checkout: {', '.join(live[:10])}")
+        self.host.log(f"live work in the checkout: {', '.join(sorted({w.label for w in live})[:10])}")
         self.notify("turn_failed", session=self.state["head_session"], agent=report.agent or self.state.get("agent") or PREFERRED,
                     outcome=report.outcome, action="hold")
         return self.hold("live_work", self.attempts or None, report.turn_id)
@@ -2372,9 +2452,15 @@ def command_release(args: argparse.Namespace) -> int:
             # The maintainer reviewed the new authority; the next run pins it.
             state["permissions_pinned"] = False
         store.save(state, now_utc())
+        try:
+            acknowledged = sorted({w.identity for w in make_host(repo_root()).live_work(datetime.min.replace(tzinfo=UTC))
+                                   if w.identity})
+        except Exception as exc:  # noqa: BLE001 - nothing acknowledged: live work still holds
+            print(f"live-work snapshot failed: {type(exc).__name__}", file=sys.stderr)
+            acknowledged = []
         store.journal({"event": "release", "at": iso(now_utc()), "hold": released, "note": args.note[:500],
                        "cleared": args.clear_cooldown or [], "dropped_pending": bool(args.drop_pending),
-                       "dropped": dropped})
+                       "dropped": dropped, "acknowledged_work": acknowledged})
         try:
             make_host(repo_root()).ledger("decision", f"relay-continuity hold released ({(released or {}).get('reason')}): "
                                                        f"{args.note[:400]}")

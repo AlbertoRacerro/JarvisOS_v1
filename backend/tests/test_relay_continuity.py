@@ -821,10 +821,15 @@ def test_released_turn_is_continued_not_regated(tmp_path: Path, monkeypatch: pyt
 # Live work: detached jobs that outlive the call that launched them
 
 
+def work(identity: str | None = "proc:1:1:x", label: str = "process node", *, recent: bool = True,
+         inherited: bool = False) -> Any:
+    return rc.Work(identity, label, recent=recent, inherited=inherited)
+
+
 def test_live_work_in_a_checkout_holds_a_quota_failure_without_relaunch(tmp_path: Path) -> None:
     env = Env(tmp_path, [("codex", CODEX_SUCCESS)])
     seen: list[datetime] = []
-    env.host.live_work = lambda since: seen.append(since) or ["process node"]
+    env.host.live_work = lambda since: seen.append(since) or [work()]
     env.head(QUOTA)
     result, sup = env.run()
     assert result == "held" and sup.state["hold"]["reason"] == "live_work"
@@ -834,25 +839,53 @@ def test_live_work_in_a_checkout_holds_a_quota_failure_without_relaunch(tmp_path
 
 def test_live_work_holds_a_new_task_after_a_successful_turn(tmp_path: Path) -> None:
     env = Env(tmp_path, [("claude", SUCCESS)])
-    env.host.live_work = lambda since: ["docker container 0123456789ab"]
+    env.host.live_work = lambda since: [work("ctr:abc:t:e", "docker container abc")]
     env.head(SUCCESS)
     result, sup = env.run(task="Next step")
     assert result == "held" and sup.state["hold"]["reason"] == "live_work" and env.relay.launches == []
 
 
 def test_failing_live_work_check_holds(tmp_path: Path) -> None:
-    def boom(since: datetime) -> list[str]:
-        raise PermissionError("proc")
+    def boom(since: datetime) -> list[Any]:
+        raise RuntimeError("git worktree list failed")
     env = Env(tmp_path, [("codex", CODEX_SUCCESS)])
     env.host.live_work = boom
     env.head(QUOTA)
     assert env.run()[0] == "held" and env.relay.launches == []
 
 
-def test_no_live_work_lets_the_chain_continue(tmp_path: Path) -> None:
+@pytest.mark.parametrize(("works", "acknowledged", "held"), [
+    ([], [], False),
+    ([work(recent=False)], [], False),                        # older than the window, a plain process
+    ([work(recent=False, inherited=True)], [], True),         # a pane program or a container with exec sessions
+    ([work(recent=False, inherited=True)], ["proc:1:1:x"], False),  # exactly what the release acknowledged
+    ([work(recent=True)], ["proc:1:1:x"], False),
+    ([work("proc:1:1:y", recent=False, inherited=True)], ["proc:1:1:x"], True),  # same pid, new program (exec)
+    ([work(None, "process unreadable")], [], True),           # an inspection failure is never acknowledged
+])
+def test_live_work_gate_respects_window_inheritance_and_acknowledgement(
+        tmp_path: Path, works: list[Any], acknowledged: list[str], held: bool) -> None:
     env = Env(tmp_path, [("codex", CODEX_SUCCESS)])
-    env.host.live_work = lambda since: []
+    env.host.live_work = lambda since: works
+    env.store.root.mkdir(parents=True, exist_ok=True)
+    env.store.journal({"event": "release", "at": rc.iso(T0 - timedelta(days=30)), "acknowledged_work": acknowledged})
     env.head(QUOTA)
+    assert (env.run()[0] == "held") is held
+    assert (env.relay.launches == []) is held
+
+
+def test_release_acknowledges_the_work_live_at_that_moment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    env = Env(tmp_path, [("codex", CODEX_SUCCESS)])
+    live = [work("proc:7:9:a", recent=False, inherited=True), work(None, "process unreadable")]
+    env.host.live_work = lambda since: live[:1]
+    env.head(QUOTA)
+    assert env.run()[0] == "held"
+    monkeypatch.setenv("RELAY_CONTINUITY_DIR", str(env.store.root))
+    monkeypatch.setattr(rc, "make_host", lambda repo: rc.Host(relay=env.relay, live_work=lambda since: live))
+    monkeypatch.setattr(rc, "repo_root", lambda: env.repo)
+    assert rc.main(["release", "--note", "the pane dev server is meant to keep running"]) == 0
+    record = json.loads(env.store.journal_path.read_text().splitlines()[-1])
+    assert record["event"] == "release" and record["acknowledged_work"] == ["proc:7:9:a"]
     assert env.run()[0] == "idle" and len(env.relay.launches) == 1
 
 
@@ -867,12 +900,18 @@ def test_work_window_starts_at_the_chain_and_moves_to_the_latest_release(tmp_pat
     assert sup.work_window() == created
     env.store.root.mkdir(parents=True, exist_ok=True)
     released = T0 - timedelta(hours=1)
-    env.store.journal({"event": "release", "at": rc.iso(released)})
-    env.store.journal({"event": "release", "at": rc.iso(created - timedelta(days=1))})  # older: ignored
-    assert sup.work_window() == released
+    env.store.journal({"event": "release", "at": rc.iso(released), "acknowledged_work": ["a"]})
+    env.store.journal({"event": "release", "at": rc.iso(created - timedelta(days=1)), "acknowledged_work": ["b"]})
+    assert sup.work_window() == released and sup.last_release() == (released, frozenset({"a"}))
     (session / "session.json").write_text("not json")
     env.store.journal_path.unlink()
     assert sup.work_window() == datetime.min.replace(tzinfo=UTC)  # unknown chain start: the widest window
+
+
+def test_worktree_listing_failure_raises(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(rc.devctx, "run", lambda *a, **k: (128, ""))
+    with pytest.raises(RuntimeError):
+        rc.worktree_roots(tmp_path)
 
 
 def fake_proc(root: Path, btime: int = 1_000_000) -> Path:
@@ -882,8 +921,8 @@ def fake_proc(root: Path, btime: int = 1_000_000) -> Path:
     return proc
 
 
-def add_proc(proc: Path, pid: int, *, argv: list[str], cwd: Path, started: datetime, btime: int = 1_000_000,
-             ppid: int = 1, state: str = "S", comm: str | None = None) -> None:
+def add_proc(proc: Path, pid: int, *, argv: list[str], cwd: Path | None, started: datetime, btime: int = 1_000_000,
+             ppid: int = 1, state: str = "S", comm: str | None = None, stdin: str = "/dev/pts/3") -> None:
     entry = proc / str(pid)
     entry.mkdir()
     ticks = int((started.timestamp() - btime) * os.sysconf("SC_CLK_TCK"))
@@ -891,60 +930,126 @@ def add_proc(proc: Path, pid: int, *, argv: list[str], cwd: Path, started: datet
     (entry / "stat").write_text(f"{pid} ({comm or Path(argv[0]).name}) {' '.join(rest)} 0 0\n")
     (entry / "status").write_text(f"Name:\t{Path(argv[0]).name}\nPPid:\t{ppid}\n")
     (entry / "cmdline").write_bytes(b"\0".join(a.encode() for a in argv) + b"\0")
-    os.symlink(cwd, entry / "cwd")
+    (entry / "fd").mkdir()
+    os.symlink(stdin, entry / "fd" / "0")
+    if cwd is None:
+        (entry / "cwd").mkdir()  # readlink fails with EINVAL: unreadable, not gone
+    else:
+        os.symlink(cwd, entry / "cwd")
 
 
-def test_live_processes_reports_new_work_in_any_checkout_only(tmp_path: Path) -> None:
+def proc_tree(tmp_path: Path) -> tuple[Path, Path, Path]:
     proc = fake_proc(tmp_path)
     repo, worktree, elsewhere = tmp_path / "repo", tmp_path / "wt", tmp_path / "home"
     for d in (repo / "frontend", worktree, elsewhere):
         d.mkdir(parents=True)
-    since = T0
-    add_proc(proc, 10, argv=["node", "vite"], cwd=repo / "frontend", started=T0 + timedelta(minutes=5))
-    add_proc(proc, 11, argv=["python", "-m", "pytest"], cwd=worktree, started=T0 + timedelta(minutes=6),
-             comm="py test$(x)")
-    add_proc(proc, 12, argv=["node", "old-server"], cwd=repo, started=T0 - timedelta(hours=1))
-    add_proc(proc, 13, argv=["node", "elsewhere"], cwd=elsewhere, started=T0 + timedelta(minutes=5))
-    add_proc(proc, 14, argv=["bash"], cwd=repo, started=T0 + timedelta(minutes=5))
-    add_proc(proc, 15, argv=["bash", "-c", "while true; do pytest; done"], cwd=repo, started=T0 + timedelta(minutes=5))
-    add_proc(proc, 16, argv=["python", "x.py"], cwd=repo, started=T0 + timedelta(minutes=5), state="Z", comm="zombie")
-    add_proc(proc, 17, argv=["tmux", "new-session"], cwd=repo, started=T0 + timedelta(minutes=5))
-    add_proc(proc, 18, argv=["python3", "scripts/relay_continuity.py", "watch"], cwd=repo, started=T0 + timedelta(minutes=5),
-             comm="watcher")
+    new, old = T0 + timedelta(minutes=5), T0 - timedelta(hours=1)
+    add_proc(proc, 10, argv=["node", "vite"], cwd=repo / "frontend", started=new)
+    add_proc(proc, 11, argv=["python", "-m", "pytest"], cwd=worktree, started=new, comm="py test$(x)")
+    add_proc(proc, 12, argv=["node", "old-server"], cwd=repo, started=old)
+    add_proc(proc, 13, argv=["node", "elsewhere"], cwd=elsewhere, started=new)
+    add_proc(proc, 14, argv=["bash"], cwd=repo, started=new)                          # idle prompt on a terminal
+    add_proc(proc, 15, argv=["bash"], cwd=repo, started=new, stdin="pipe:[4242]", comm="stdin-sh")  # fed a script
+    add_proc(proc, 16, argv=["python", "x.py"], cwd=repo, started=new, state="Z", comm="zombie")
+    add_proc(proc, 17, argv=["tmux", "new-session"], cwd=repo, started=old)
+    add_proc(proc, 18, argv=["python", "-m", "pytest", "-q"], cwd=repo, started=old, ppid=17, comm="pane-exec")
+    add_proc(proc, 21, argv=["python3", "scripts/relay_continuity.py", "watch"], cwd=repo, started=new, comm="watcher")
+    add_proc(proc, 22, argv=["python3", "scripts/relay_continuity.py", "--help"], cwd=repo, started=new, comm="rc-other")
     # The supervisor (20) and its ancestors (19: the pane shell running it) are never reported.
-    add_proc(proc, 19, argv=["bash", "-c", "python3 scripts/relay_continuity.py run"], cwd=repo,
-             started=T0 + timedelta(minutes=1), comm="pane")
-    add_proc(proc, 20, argv=["python3", "scripts/relay_continuity.py", "run"], cwd=repo,
-             started=T0 + timedelta(minutes=1), ppid=19, comm="supervisor")
-    found = rc.live_processes([repo, worktree], since, {20}, proc_root=proc)
-    assert found == ["process bash", "process node", "process py_test__x_"]
-    assert rc.live_processes([repo, worktree], T0 + timedelta(hours=1), {20}, proc_root=proc) == []
+    add_proc(proc, 19, argv=["bash", "-c", "python3 scripts/relay_continuity.py run"], cwd=repo, started=new, comm="pane")
+    add_proc(proc, 20, argv=["python3", "scripts/relay_continuity.py", "run"], cwd=repo, started=new, ppid=19,
+             comm="supervisor")
+    return proc, repo, worktree
 
 
-def test_unreadable_process_table_counts_as_live_work(tmp_path: Path) -> None:
-    proc = tmp_path / "proc"
-    proc.mkdir()
-    assert rc.live_processes([tmp_path], T0, set(), proc_root=proc) == ["process_table_unreadable"]
+def test_live_processes_reports_work_in_any_checkout_with_age_and_inheritance(tmp_path: Path) -> None:
+    proc, repo, worktree = proc_tree(tmp_path)
+    found = {w.label: w for w in rc.live_processes([repo, worktree], T0, {20}, proc_root=proc)}
+    assert set(found) == {"process node", "process py_test__x_", "process stdin-sh", "process pane-exec",
+                          "process rc-other"}
+    assert found["process py_test__x_"].recent and not found["process py_test__x_"].inherited
+    assert not found["process pane-exec"].recent and found["process pane-exec"].inherited  # exec in an old pane
+    old = [w for w in rc.live_processes([repo, worktree], T0, {20}, proc_root=proc) if w.label == "process node"]
+    assert sorted(w.recent for w in old) == [False, True]  # vite (new) and old-server (old)
+    assert all(w.identity and w.identity.startswith("proc:") for w in found.values())
 
 
-def test_live_containers_dates_running_containers(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_pane_exec_changes_the_identity(tmp_path: Path) -> None:
+    proc, repo, worktree = proc_tree(tmp_path)
+    before = {w.identity for w in rc.live_processes([repo], T0, {20}, proc_root=proc) if w.label == "process pane-exec"}
+    (proc / "18" / "cmdline").write_bytes(b"python\0-m\0http.server\0")
+    after = {w.identity for w in rc.live_processes([repo], T0, {20}, proc_root=proc) if w.label == "process pane-exec"}
+    assert before and after and before != after
+
+
+def test_unreadable_processes_and_tables_count_as_live_work(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    proc, repo, _ = proc_tree(tmp_path)
+    add_proc(proc, 30, argv=["python"], cwd=None, started=T0)
+    add_proc(proc, 31, argv=["(sd-pam)"], cwd=None, started=T0 - timedelta(days=3), comm="(sd-pam)")
+    unreadable = [w for w in rc.live_processes([repo], T0, {20}, proc_root=proc) if w.label == "process unreadable"]
+    assert sorted(w.recent for w in unreadable) == [False, True]  # judged by start time; acknowledgeable
+    assert all(w.identity and w.identity.endswith(":unreadable") for w in unreadable)
+    (proc / "32").mkdir()  # a process whose stat cannot be read at all
+    (proc / "32" / "stat").mkdir()
+    assert any(w.identity is None for w in rc.live_processes([repo], T0, {20}, proc_root=proc))
+    empty = tmp_path / "noproc"
+    empty.mkdir()
+    assert [w.label for w in rc.live_processes([repo], T0, set(), proc_root=empty)] == ["process table unreadable"]
+    monkeypatch.setattr(rc.os, "getuid", lambda: 4242)  # every process belongs to another user
+    assert rc.live_processes([repo], T0, set(), proc_root=proc) == []
+
+
+def test_live_containers_fail_closed_except_for_an_absent_daemon(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(rc.shutil, "which", lambda tool: f"/usr/bin/{tool}" if tool == "docker" else None)
 
-    def runner(ps: Any, inspect: Any) -> Any:
+    def runner(ps: Any, inspect: Any = None) -> Any:
         def run(cmd: list[str], **_kwargs: Any) -> Any:
             out = ps if cmd[1] == "ps" else inspect
             if isinstance(out, BaseException):
                 raise out
-            return subprocess.CompletedProcess(cmd, out[0], out[1], "")
+            return subprocess.CompletedProcess(cmd, out[0], out[1], out[2] if len(out) > 2 else "")
         return run
-    new, old = "2026-10-18T08:05:00.123456789Z", "2026-10-17T08:05:00.1Z"
-    assert rc.live_containers(T0, run=runner((1, ""), None)) == []  # daemon unreachable
-    assert rc.live_containers(T0, run=runner((0, ""), None)) == []
-    assert rc.live_containers(T0, run=runner((0, "aaa\nbbb\n"), (0, f"aaa{'1' * 20} {new}\nbbb {old}\n"))) == [
-        "docker container aaa111111111"]
-    assert rc.live_containers(T0, run=runner((0, "aaa\n"), (1, ""))) == ["docker check failed"]
-    timeout = subprocess.TimeoutExpired("docker", 15)
-    assert rc.live_containers(T0, run=runner(timeout, None)) == ["docker check timed out"]
+
+    def labels(run: Any) -> list[tuple[str, bool, bool, bool]]:
+        return [(w.label, w.identity is None, w.recent, w.inherited) for w in rc.live_containers(T0, run=run)]
+    down = "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?"
+    assert labels(runner((1, "", down))) == []
+    assert labels(runner((1, "", "permission denied while trying to connect"))) == [("docker check failed", True, True, False)]
+    assert labels(runner((0, ""))) == []
+    rows = (f"aaa{'1' * 20} 2026-10-18T08:05:00.123456789Z null\n"
+            "bbb 2026-10-17T08:05:00.1Z [\"e1\"]\n"
+            "ccc 2026-10-18T09:59:59.5+02:00 []\n"
+            "ddd 0001-garbage null\n")
+    assert labels(runner((0, "aaa\nbbb\nccc\nddd\n"), (0, rows))) == [
+        ("docker container aaa111111111", False, True, False),
+        ("docker container bbb", False, False, True),        # an old container with an exec session
+        ("docker container ccc", False, False, False),        # 07:59:59.5Z: half a second before the window
+        ("docker container undatable", True, True, False)]
+    assert labels(runner((0, "aaa\n"), (1, ""))) == [("docker check failed", True, True, False)]
+    assert labels(runner(subprocess.TimeoutExpired("docker", 15))) == [("docker check timed out", True, True, False)]
+    assert labels(runner(OSError("exec format error"))) == [("docker check failed", True, True, False)]
+
+
+def test_container_timestamps_keep_fractions_and_offsets() -> None:
+    assert rc._container_ts("2026-10-18T08:00:00.999999999Z") == T0 + timedelta(microseconds=999999)
+    assert rc._container_ts("2026-10-18T10:00:00+02:00") == T0
+    assert rc._container_ts("garbage") is None
+
+
+def test_task_notification_never_closes_command_level_detachment(tmp_path: Path) -> None:
+    """A notification proves the launching shell ended, not the job it detached."""
+    events = [tool_use("x", "Bash", command="npm run dev >/tmp/dev.log 2>&1 &", run_in_background=True),
+              tool_result("x"),
+              {"type": "system", "subtype": "task_started", "task_id": "t1", "tool_use_id": "x"},
+              {"type": "system", "subtype": "task_notification", "task_id": "t1", "tool_use_id": "x",
+               "status": "completed"}, *QUOTA]
+    turn = write_turn(tmp_path / "s", events)
+    assert [c.label for c in rc.classify_turn(turn).in_flight] == ["npm &"]
+    plain = [tool_use("y", "Bash", command="python -m pytest -q", run_in_background=True), tool_result("y"),
+             {"type": "system", "subtype": "task_started", "task_id": "t2", "tool_use_id": "y"},
+             {"type": "system", "subtype": "task_notification", "task_id": "t2", "tool_use_id": "y",
+              "status": "completed"}, *QUOTA]
+    assert rc.classify_turn(write_turn(tmp_path / "s2", plain)).in_flight == []
 
 
 # ---------------------------------------------------------------------------
