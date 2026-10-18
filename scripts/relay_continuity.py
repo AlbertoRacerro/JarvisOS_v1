@@ -25,6 +25,7 @@ import signal
 import subprocess
 import sys
 import time
+import tomllib
 import urllib.error
 import urllib.request
 from collections.abc import Callable
@@ -153,6 +154,7 @@ CLAUDE_RESET_RE = re.compile(
 CODEX_RESET_RE = re.compile(
     r"(?i)try again (?:at|after)\s+(?:(?P<mon>[A-Z][a-z]{2})[a-z]*\s+(?P<day>\d{1,2})(?:st|nd|rd|th)?,?\s+(?:\d{4}\s+)?)?"
     r"(?P<h>\d{1,2})(?::(?P<m>\d{2}))?\s*(?P<ap>am|pm)")
+STALE_RESET_WINDOW = timedelta(hours=6)
 MONTHS = {m: i for i, m in enumerate(("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"), 1)}
 
 
@@ -194,6 +196,10 @@ def parse_reset(text: str, ref: datetime, local_tz: Any = None) -> datetime | No
         return None
     cand = local_ref.replace(hour=hour, minute=minute, second=0, microsecond=0)
     if cand <= local_ref - timedelta(minutes=1):
+        if local_ref - cand < STALE_RESET_WINDOW:
+            # A time-only reset just behind the turn's end is a stale message, not tomorrow's reset;
+            # report it as due now so the cooldown falls back to a short recheck instead of a day's stall.
+            return ref.astimezone(UTC)
         cand += timedelta(days=1)
     return cand.astimezone(UTC)
 
@@ -600,8 +606,7 @@ def classify_turn(turn_dir: Path, *, ref: datetime | None = None, local_tz: Any 
             status = terminal.get("api_error_status")
             report.outcome = classify_text(text, status if isinstance(status, int) else None)
             report.detail = f"{terminal.get('terminal_reason') or 'error'} status={status}"
-            if report.outcome in ("quota", "spend_limit"):
-                report.reset_at = iso(parse_reset(text, ref, local_tz))
+            settle_limit(report, text, ref, local_tz)
     elif typ == "turn.completed":
         report.outcome, report.detail = "success", "turn.completed"
     else:
@@ -615,9 +620,20 @@ def classify_turn(turn_dir: Path, *, ref: datetime | None = None, local_tz: Any 
                 break
         report.outcome = classify_text(text, None)
         report.detail = f"codex {typ}"
-        if report.outcome in ("quota", "spend_limit"):
-            report.reset_at = iso(parse_reset(text, ref, local_tz))
+        settle_limit(report, text, ref, local_tz)
     return report
+
+
+def settle_limit(report: TurnReport, text: str, ref: datetime, local_tz: Any) -> None:
+    """Attach the provider-printed reset. A spend-limit message that also prints a timed reset (Claude's
+    "monthly spend limit · your session limit resets 4pm") is a session quota with that reset."""
+    if report.outcome not in ("quota", "spend_limit"):
+        return
+    reset = parse_reset(text, ref, local_tz)
+    report.reset_at = iso(reset)
+    if report.outcome == "spend_limit" and reset is not None:
+        report.outcome = "quota"
+        report.detail += " (spend cap with timed session reset)"
 
 
 def gate(report: TurnReport, *, fingerprint_changed: bool | None) -> str | None:
@@ -652,7 +668,7 @@ def default_state() -> dict[str, Any]:
         "counters": {"consecutive_failures": 0, "transient_streak": 0, "crash_retries": 0},
         "permissions_digest": None, "pending": None, "waiting_since": None, "last_outcome": None,
         "notify": {"sent": {}, "window": [], "last_digest": None, "failures": 0, "retry": None, "dropped": 0},
-        "watch": {"seen": {}, "master": None}, "updated_at": None,
+        "watch": {"seen": {}, "master": None}, "acknowledged": None, "updated_at": None,
     }
 
 
@@ -1148,6 +1164,7 @@ class Supervisor:
 
     def _loop(self, task: str | None) -> str:
         report = self._resolve_pending()
+        acknowledged = False
         if report == "held":
             return "held"
         if report is None:
@@ -1157,13 +1174,17 @@ class Supervisor:
                 return self.hold("attempt_unresolved")
             report = classify_turn(turn)
             report.agent = report.agent or self.state.get("agent")
+            # A turn the maintainer reviewed and released is continued past, never re-gated.
+            acknowledged = self.state.get("acknowledged") == f"{self.state['head_session']}/{turn.name}"
+        self.state["acknowledged"] = None
         while True:
             if self.stop_requested():
                 self.state["phase"] = "stopped"
                 return "signal" if self.signalled else "stopped"
             self.state["last_outcome"] = report.outcome
             self.state["agent"] = report.agent or self.state.get("agent") or PREFERRED
-            decision = self._decide(report, task)
+            decision = self._resume_acknowledged(report, task) if acknowledged else self._decide(report, task)
+            acknowledged = False
             if decision in ("held", "idle", "stopped", "signal"):
                 return decision
             agent, prompt = decision
@@ -1172,6 +1193,20 @@ class Supervisor:
             if isinstance(new_report, str):
                 return new_report
             report = new_report
+
+    def _resume_acknowledged(self, report: TurnReport, task: str | None) -> tuple[str, str] | str:
+        failed_agent = report.agent or self.state.get("agent") or PREFERRED
+        if report.outcome == "success":
+            return self._decide(report, task)
+        self.state["counters"] = {"consecutive_failures": 0, "transient_streak": 0, "crash_retries": 0}
+        agent = self._choose(failed_agent, retry_same=True)
+        if agent is None:
+            return self._wait_or_hold()
+        if task is not None:
+            return agent, f"[relay-continuity attempt {{nonce}}]\n{task}"
+        effects = "\n".join(f"- [{c.kind}] {c.label}" for c in report.effects + report.in_flight) or "- none recorded"
+        return agent, RECOVERY_PROMPT.format(nonce="{nonce}", prev_agent=failed_agent, outcome=report.outcome,
+                                             agent=agent, effects=effects + "\n(The maintainer reviewed and released this turn.)")
 
     def _decide(self, report: TurnReport, task: str | None) -> tuple[str, str] | str:
         counters = self.state["counters"]
@@ -1198,7 +1233,7 @@ class Supervisor:
         if report.outcome in ("auth", "unknown"):
             self.notify("turn_failed", session=self.state["head_session"], agent=failed_agent,
                         outcome=report.outcome, action="hold")
-            return self.hold("auth_failure" if report.outcome == "auth" else "unknown_failure")
+            return self.hold("auth_failure" if report.outcome == "auth" else "unknown_failure", self.attempts or None)
         changed = None
         pending_fp = (self.state.get("last_attempt") or {}).get("fingerprint")
         if not report.calls and not report.terminal and pending_fp:
@@ -1206,7 +1241,7 @@ class Supervisor:
         if (reason := gate(report, fingerprint_changed=changed)) is not None:
             self.notify("turn_failed", session=self.state["head_session"], agent=failed_agent,
                         outcome=report.outcome, action="hold")
-            return self.hold(reason)
+            return self.hold(reason, self.attempts or None)
 
         if report.outcome in ("quota", "spend_limit"):
             self.set_cooldown(failed_agent, report)
@@ -1452,6 +1487,21 @@ def repo_root() -> Path:
     return Path(out.strip()).parent if code == 0 and out.strip() else Path.cwd()
 
 
+def permissions_digest(path: Path) -> str | None:
+    """Digest of the authority-bearing Relay permission settings. Relay rewrites `model` whenever `--model`
+    is passed; a model choice grants no authority, so it is excluded. An unreadable file digests as such."""
+    if not path.exists():
+        return None
+    try:
+        data = tomllib.loads(path.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError):
+        return "unreadable"
+    for section in data.values():
+        if isinstance(section, dict) and isinstance(section.get("backend"), dict):
+            section["backend"].pop("model", None)
+    return hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()
+
+
 def make_host(repo: Path) -> Host:
     env = devctx.default_env(repo)
     author = f"relay-continuity pid {os.getpid()}"
@@ -1460,8 +1510,7 @@ def make_host(repo: Path) -> Host:
         devctx.append_entry(env, devctx.make_entry(env, kind, text, refs={"spec": "195"}, author=author))
 
     def permissions() -> str | None:
-        path = repo / ".agent-relay" / "permissions.toml"
-        return hashlib.sha256(path.read_bytes()).hexdigest() if path.exists() else None
+        return permissions_digest(repo / ".agent-relay" / "permissions.toml")
 
     return Host(relay=RelayAdapter(repo), fingerprint=lambda: fingerprint(repo),
                 conflicts=lambda own: live_conflicts(repo, own), ledger=ledger, permissions_digest=permissions)
@@ -1554,6 +1603,9 @@ def command_release(args: argparse.Namespace) -> int:
         store = Store(root)
         state = store.load()
         released = state.get("hold")
+        head = state.get("head_session")
+        turn = last_turn_dir(repo_root() / ".agent-relay" / "sessions" / head) if head else None
+        state["acknowledged"] = f"{head}/{turn.name}" if turn else None
         state["hold"] = None
         state["phase"] = "idle"
         state["counters"] = {"consecutive_failures": 0, "transient_streak": 0, "crash_retries": 0}

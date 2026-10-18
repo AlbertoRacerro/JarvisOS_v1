@@ -190,7 +190,7 @@ def reading(agent: str, used: float, resets_at: datetime, as_of: datetime) -> di
     ("claude_eai_again", "transient", "claude", "completed"),
     ("claude_session_limit", "quota", "claude", "completed"),
     ("claude_session_limit_bg_killed", "quota", "claude", "completed"),
-    ("claude_spend_limit", "spend_limit", "claude", "completed"),
+    ("claude_spend_limit", "quota", "claude", "completed"),
     ("claude_crash_no_terminal", "crash", "claude", None),
     ("claude_success", "success", "claude", "completed"),
     ("codex_success_misreported", "success", "codex", "continue"),
@@ -204,9 +204,8 @@ def test_real_turns_classify_from_raw_evidence(fixture: str, outcome: str, agent
 
 
 def test_relay_completed_status_never_means_success() -> None:
-    failed = [f for f in ("codex_usage_limit", "claude_eai_again", "claude_session_limit", "claude_spend_limit",
-                          "claude_session_limit_bg_killed")]
-    for name in failed:
+    for name in ("codex_usage_limit", "claude_eai_again", "claude_session_limit", "claude_spend_limit",
+                 "claude_session_limit_bg_killed"):
         state = json.loads((FIXTURES / name / "state.json").read_text())
         assert state["status"] == "completed"
         assert rc.classify_turn(FIXTURES / name, ref=T0).outcome != "success"
@@ -248,11 +247,23 @@ def test_text_classification(text: str, status: int | None, expected: str) -> No
 def test_reset_times_are_parsed_as_next_occurrence() -> None:
     ref = datetime(2026, 10, 18, 20, 0, tzinfo=UTC)  # 22:00 in Rome
     assert rc.parse_reset("resets 11:50pm (Europe/Rome)", ref) == datetime(2026, 10, 18, 21, 50, tzinfo=UTC)
-    assert rc.parse_reset("resets 4:20pm (Europe/Rome)", ref) == datetime(2026, 10, 19, 14, 20, tzinfo=UTC)
+    assert rc.parse_reset("resets 4:20pm (Europe/Rome)", ref) == ref  # 5h40m behind: stale, due now
+    assert rc.parse_reset("resets 1am (Europe/Rome)", ref) == datetime(2026, 10, 18, 23, 0, tzinfo=UTC)
     assert rc.parse_reset("resets Oct 20, 9am (Europe/Rome)", ref) == datetime(2026, 10, 20, 7, 0, tzinfo=UTC)
     rome = ZoneInfo("Europe/Rome")
     assert rc.parse_reset("try again at 11:38 PM.", ref, rome) == datetime(2026, 10, 18, 21, 38, tzinfo=UTC)
     assert rc.parse_reset("no time here", ref) is None
+    # A time-only reset slightly behind the turn's end is stale: due now, not tomorrow.
+    late = datetime(2026, 10, 18, 10, 45, tzinfo=UTC)  # 12:45 in Rome
+    assert rc.parse_reset("resets 12:40pm (Europe/Rome)", late) == late
+    assert rc.parse_reset("resets 4:20am (Europe/Rome)", late) == datetime(2026, 10, 19, 2, 20, tzinfo=UTC)
+
+
+def test_spend_cap_with_timed_reset_is_a_session_quota(tmp_path: Path) -> None:
+    report = rc.classify_turn(FIXTURES / "claude_spend_limit", ref=datetime(2026, 9, 24, 9, 0, tzinfo=UTC))
+    assert report.outcome == "quota" and report.reset_at == "2026-09-24T10:40:00Z"
+    turn = write_turn(tmp_path / "s", [claude_result("You've hit your monthly spend limit", error=True, status=429)])
+    assert rc.classify_turn(turn).outcome == "spend_limit"
 
 
 @pytest.mark.parametrize(("command", "kind"), [
@@ -644,6 +655,21 @@ def test_permission_change_holds(tmp_path: Path) -> None:
     assert env.relay.launches == []
 
 
+def test_permission_digest_ignores_model_but_not_authority(tmp_path: Path) -> None:
+    path = tmp_path / "permissions.toml"
+    base = '[claude.allow]\npatterns = []\n\n[claude.backend]\nmode = "default"\nmodel = "opus"\n'
+    path.write_text(base)
+    digest = rc.permissions_digest(path)
+    path.write_text(base.replace('"opus"', '"haiku"'))
+    assert rc.permissions_digest(path) == digest
+    path.write_text(base.replace('"default"', '"bypassPermissions"'))
+    assert rc.permissions_digest(path) != digest
+    path.write_text(base.replace("patterns = []", 'patterns = ["Bash(*)"]'))
+    assert rc.permissions_digest(path) != digest
+    path.write_text("not = [valid")
+    assert rc.permissions_digest(path) == "unreadable"
+
+
 def test_interrupted_state_write_keeps_previous_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store = rc.Store(tmp_path)
     good = rc.default_state()
@@ -693,12 +719,31 @@ def test_release_clears_hold_and_records_it(tmp_path: Path, monkeypatch: pytest.
     assert env.run()[0] == "held"
     monkeypatch.setenv("RELAY_CONTINUITY_DIR", str(env.store.root))
     monkeypatch.setattr(rc, "make_host", lambda repo: env.host)
+    monkeypatch.setattr(rc, "repo_root", lambda: env.repo)
     assert rc.main(["release", "--note", "verified push landed on origin; safe to continue"]) == 0
     state = env.store.load()
     assert state["hold"] is None and state["phase"] == "idle"
     assert "release" in env.store.journal_path.read_text()
     assert any(kind == "decision" for kind, _ in env.ledger)
     assert rc.main(["release", "--note", "token ghp_abcdefghijklmnopqrstuvwxyz0123"]) == 2
+
+
+def test_released_turn_is_continued_not_regated(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    env = Env(tmp_path, [("claude", SUCCESS)])
+    env.head([claude_result("There's an issue with the selected model", error=True, status=404)])
+    assert env.run()[0] == "held"
+    monkeypatch.setenv("RELAY_CONTINUITY_DIR", str(env.store.root))
+    monkeypatch.setattr(rc, "make_host", lambda repo: env.host)
+    monkeypatch.setattr(rc, "repo_root", lambda: env.repo)
+    assert rc.main(["release", "--note", "model fixed in permissions; continue"]) == 0
+    result, sup = env.run(task="Retry the step")
+    assert result == "idle"
+    assert [launch["agent"] for launch in env.relay.launches] == ["claude"]
+    assert env.relay.launches[0]["task"].endswith("Retry the step")
+    assert sup.state["acknowledged"] is None
+    # The acknowledgement covers only that turn: a new failure on the chain is gated again.
+    env.relay.script = [("claude", [claude_result("bad", error=True, status=404)])]
+    assert env.run(task="again")[0] == "held"
 
 
 # ---------------------------------------------------------------------------

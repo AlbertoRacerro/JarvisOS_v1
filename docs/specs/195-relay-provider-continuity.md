@@ -54,7 +54,7 @@ Classification reads `output.jsonl` first. It uses `stderr.log` and Relay's run 
 | --- | --- |
 | `success` | Claude `result` event with `is_error=false`. Codex `turn.completed` with no later `error`/`turn.failed`. |
 | `quota` | Claude `is_error` + `api_error_status=429` + session/weekly limit text. Codex `error`/`turn.failed` usage-limit text. Carries a provider-message reset time when present. |
-| `spend_limit` | Claude 429 monthly spend limit. There is no timed reset, and raising spend is a maintainer decision. |
+| `spend_limit` | A spend/credit cap with no printed reset. Raising spend is a maintainer decision. A spend-cap message that also prints a timed session reset (Claude's "monthly spend limit · your session limit resets 4pm") is a `quota` with that reset: the corpus shows work resuming after it. |
 | `transient` | DNS/connection failures (`EAI_AGAIN`, unreachable API server), HTTP 5xx, overloaded/529. |
 | `auth` | HTTP 401/403, login-required or expired-credential text. |
 | `crash` | No terminal event (missing, empty or truncated output). |
@@ -81,9 +81,11 @@ Completed `local_write`/`external`/`background` calls with results are listed in
 
 - **Preferred and fallback.** Claude is the preferred coordinator and Codex is the only fallback; no other agent is ever selected. Per-agent model and permission settings stay exactly as Relay's existing configuration defines them. The supervisor passes no permission, sandbox or model flags.
 - **Permission pinning.** It records the digest of `.agent-relay/permissions.toml` at start and holds if the digest changes.
-- **Approval gates.** A failover turn has the same authority as the turn it replaces. It cannot approve, merge or bypass a gate the original could not.
+- **Approval gates.** A failover turn never has more authority than the turn it replaces. It cannot approve, merge or bypass a gate the original could not.
+- **Headless authority is narrower than the REPL's.** Relay applies the configured `permissions.toml` backend modes (`bypassPermissions`, Codex sandbox and approval policy) only in its interactive REPL. Headless `run` starts Claude with `--permission-mode default` plus Relay's approval hook, so unapproved tool calls are refused. Codex runs with Relay's headless default, which allows workspace writes. The supervisor does not change this. Making headless continuations match REPL authority (for example through Relay's `[agent.allow]` patterns) is a maintainer authority decision outside this spec.
 - **`quota`.** The agent goes into a persistent cooldown, and the chain switches to the other agent only when that agent's fresh limits reading shows quota available. The cooldown ends at the provider-reported reset: a fresh `limits` reading with a future `resets_at`, else the provider's own message, else a conservative recheck interval labelled estimated. Readings with an `as_of` older than the freshness bound, or a `resets_at` in the past, are refreshed and otherwise discarded. A reset is accepted only if it is no more than 8 days ahead.
-- **`spend_limit`.** As `quota`, but the cooldown never expires by time. Spend limits do not appear in the `limits` usage windows, so only `release` ends it.
+- **`spend_limit`.** As `quota`, but the cooldown never expires by time. Spend caps do not appear in the `limits` usage windows, so only `release` ends it.
+- **Stale printed resets.** A time-only reset less than 6 hours behind the turn's end is a stale message, not tomorrow's reset. It falls back to a short recheck.
 - **`transient`.** Retry the same agent with bounded exponential backoff and no switch.
 - **`crash`.** One same-agent retry, subject to the side-effect gate, then hold.
 - **`auth`, `unknown`.** Hold with an alert. These never cause a switch.
