@@ -237,7 +237,10 @@ LOCAL_WRITE_CMDS = {
 }
 EXTERNAL_CMDS = {"ssh", "scp", "sftp", "nc", "ncat", "telnet", "sendmail", "mail", "twine", "notify-slack.sh"}
 WRAPPERS = {"timeout", "nice", "ionice", "stdbuf", "command", "builtin", "exec", "xvfb-run", "env"}
-BACKGROUND_WRAPPERS = {"nohup", "setsid", "disown"}
+BACKGROUND_WRAPPERS = {"nohup", "setsid", "disown", "systemd-run", "daemonize"}
+DETACH_FLAGS = {"--detach", "--daemon", "--daemonize", "--background"}
+TMUX_GLOBAL_VALUE_OPTS = {"-L", "-S", "-f", "-c", "-T"}
+SCREEN_VALUE_OPTS = {"-S", "-c", "-e", "-h", "-p", "-s", "-t", "-T", "-Logfile"}
 XXD_VALUE_OPTS = {"-c", "-cols", "-g", "-groupsize", "-l", "-len", "-o", "-s", "-seek", "-n", "-name"}
 TMUX_LAUNCH = {"new-session", "new", "new-window", "neww", "split-window", "splitw", "send-keys", "send",
                "run-shell", "run", "respawn-pane", "respawnp", "respawn-window", "respawnw"}
@@ -372,6 +375,30 @@ def _operands(args: list[str], value_opts: set[str]) -> list[str]:
         else:
             out.append(a)
     return out
+
+
+def _screen_detached(args: list[str]) -> bool:
+    """`screen -dm`, `screen -d -m`, `screen -DmS name`: the session runs on after screen returns."""
+    letters: set[str] = set()
+    skip = False
+    for a in args:
+        if skip:
+            skip = False
+        elif a.startswith("-") and not a.startswith("--"):
+            letters.update(a[1:])
+            skip = a in SCREEN_VALUE_OPTS
+        else:
+            break  # the program and its own arguments
+    return bool(letters & {"d", "D"}) and "m" in letters
+
+
+def _container_detached(args: list[str]) -> bool:
+    """`run -d`, `exec -d`, `compose up -d`, `start`/`restart`: containers keep running after the CLI returns."""
+    if any(a in ("-d", "--detach", "--wait") or a.startswith("--detach=") for a in args):  # `up --wait` implies -d
+        return True
+    ops = [a for a in args if not a.startswith("-")]
+    sub = ops[1] if ops[:1] == ["compose"] and len(ops) > 1 else (ops[0] if ops else "")
+    return sub in ("start", "restart", "unpause") and "-a" not in args and "--attach" not in args
 
 
 def _git_kind(args: list[str]) -> tuple[str, str]:
@@ -681,14 +708,13 @@ def classify_command(command: str, _depth: int = 0) -> tuple[str, str]:
             else:
                 kind, label = "read_only", "find"
         elif word == "tmux":
-            sub = args[0] if args else ""
+            sub = next(iter(_operands(args, TMUX_GLOBAL_VALUE_OPTS)), "")  # global options such as `-L dev` come first
             if sub in TMUX_LAUNCH:
                 # The command keeps running in the tmux server; the tool result only acknowledges the launch.
                 kind, label, background = "unknown", f"tmux {sub}", True
             else:
                 kind, label = ("read_only" if sub in ("ls", "list-sessions", "has-session", "capture-pane") else "local_write"), "tmux"
-        elif word == "screen" and any(a.startswith("-") and not a.startswith("--") and "d" in a[1:] and "m" in a[1:]
-                                      for a in args):
+        elif word == "screen" and _screen_detached(args):
             kind, label, background = "unknown", "screen -dm", True
         elif word == "xxd" and len(_operands(args, XXD_VALUE_OPTS)) >= 2:
             kind, label = "local_write", "xxd > file"  # `xxd IN OUT` (and `xxd -r IN OUT`) writes OUT
@@ -702,6 +728,13 @@ def classify_command(command: str, _depth: int = 0) -> tuple[str, str]:
             kind, label = ("external" if any(":" in a and not a.startswith("-") for a in args) else "local_write"), "rsync"
         elif word in ("docker", "podman") and args[:1] == ["push"]:
             kind, label = "external", f"{word} push"
+        elif word == "pm2" and args[:1] and args[0] in ("start", "restart", "reload", "resurrect"):
+            kind, label, background = "unknown", f"pm2 {args[0]}", True  # pm2 runs the process under its daemon
+        elif word == "gunicorn" and any(a == "-D" or (a.startswith("-") and not a.startswith("--") and "D" in a[1:])
+                                        for a in args):
+            kind, label, background = "unknown", "gunicorn -D", True
+        elif word in ("docker", "podman", "docker-compose", "podman-compose") and _container_detached(args):
+            kind, label, background = "unknown", f"{word} detached", True
         elif word in ("npm", "pnpm", "yarn") and args[:1] == ["publish"]:
             kind, label = "external", f"{word} publish"
         elif word == "sort" and any(a == "--output" or a.startswith("--output=")
@@ -719,6 +752,9 @@ def classify_command(command: str, _depth: int = 0) -> tuple[str, str]:
             kind, label = "unknown", word[:40]
         if REDIRECT.search(seg) and kind == "read_only":
             kind, label = "local_write", f"{label} > file"
+        if any(a.split("=", 1)[0] in DETACH_FLAGS for a in args):
+            # Any command asked to detach or daemonize outlives its tool result, whatever its kind.
+            kind, background = (kind if _rank(kind) > _rank("unknown") else "unknown"), True
         if background:
             # The label keeps the detach marker whatever the kind: its tool result is only a launch.
             kind, label = (kind if _rank(kind) > _rank("background") else "background"), f"{label} &"

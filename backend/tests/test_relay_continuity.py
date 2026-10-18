@@ -1537,10 +1537,20 @@ def test_inner_detachment_survives_a_worse_outer_command(tmp_path: Path) -> None
 
 
 @pytest.mark.parametrize("command", ["tmux new-session -d -s dev 'npm run dev'", "tmux send-keys -t dev 'make' Enter",
-                                     "screen -dmS dev npm run dev"])
+                                     "screen -dmS dev npm run dev", "tmux -L dev new-session -d -s web 'npm run dev'",
+                                     "screen -d -m -S web npm run dev", "docker compose up -d", "docker run -d nginx",
+                                     "docker start web", "podman-compose up --detach", "systemd-run --user npm run dev",
+                                     "vite preview --background", "docker compose up --wait", "pm2 start server.js",
+                                     "gunicorn -D app:app", "redis-server --daemonize yes"])
 def test_terminal_multiplexer_launches_stay_in_flight(tmp_path: Path, command: str) -> None:
     turn = write_turn(tmp_path / "s", [tool_use("x", "Bash", command=command), tool_result("x"), *QUOTA])
     assert [c.detached for c in rc.classify_turn(turn).in_flight] == [True]
+
+
+@pytest.mark.parametrize("command", ["tmux -L dev ls", "docker compose up", "docker run --rm img pytest",
+                                     "docker compose logs -f"])
+def test_attached_multiplexer_and_container_commands_are_not_detached(command: str) -> None:
+    assert not rc.classify_command(command)[1].endswith(" &")
 
 
 def test_detached_wrapped_push_stays_in_flight(tmp_path: Path) -> None:
