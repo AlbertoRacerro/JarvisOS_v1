@@ -2138,6 +2138,16 @@ def test_a_stale_codex_reading_does_not_block_the_diagnosis(tmp_path: Path) -> N
     assert [r["result"] for r in journal(env) if r.get("event") == "reconcile"] == ["settled"]
 
 
+def test_the_diagnosis_prompt_names_the_verifiable_commands_and_forbids_inline_interpreters() -> None:
+    # Commissioning 2026-10-19: Codex parsed the transcript with `python3 -` heredocs, which the classifier
+    # cannot verify as read-only, voiding an otherwise sound diagnosis. The prompt now says so up front.
+    report = rc.TurnReport(outcome="quota", agent="claude", detail="")
+    text = rc.diagnostic_prompt(report, [], "")
+    assert "Use only these commands" in text and "`jq`" in text
+    assert "Do not run any other interpreter or script" in text and "`python3 -`" in text
+    assert "run.log" in text  # where a background launch leaves its traces
+
+
 def test_an_unconfirmed_codex_that_keeps_losing_to_quota_is_bounded_then_held(tmp_path: Path) -> None:
     env = reconciling(tmp_path, [], diag=[CODEX_QUOTA] * 7)
     env.relay.readings = None  # never a fresh reading: each try is lost to quota and waits for the reported reset
