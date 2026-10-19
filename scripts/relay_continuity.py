@@ -2720,7 +2720,9 @@ class Supervisor:
         self.state["phase"] = "waiting"
         self.save()
         self.host.log(f"waiting for codex to run the diagnosis; next check {iso(wake)}")
-        self.notify("all_exhausted", dedupe_key=f"diagnosis|{iso(wake)}", next_check_at=iso(wake))
+        # Keyed on what is awaited, not on each recheck's wake time, so a long unconfirmed wait alerts once.
+        awaited = iso(min(t for t in reliable if t)) if any(reliable) else "unconfirmed"
+        self.notify("all_exhausted", dedupe_key=f"diagnosis|{rec['turn']}|{awaited}", next_check_at=iso(wake))
         if self._sleep((wake - now).total_seconds()):
             return "signal" if self.signalled else "stopped"
         self.state["phase"] = "running"

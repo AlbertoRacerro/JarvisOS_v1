@@ -2128,6 +2128,7 @@ def test_unconfirmed_codex_is_rechecked_with_bounded_waits_then_held(tmp_path: P
     assert env.diag.launches == [] and env.relay.launches == []
     assert timedelta(hours=2) <= env.clock.t - T0 <= timedelta(hours=2, minutes=31)
     assert max(env.clock.slept) <= 5.0  # interruptible sleeps against the clock, rechecked each 30 min
+    assert sum("no coordinator provider available" in e for e in env.events()) == 1  # one notice, not one per recheck
 
 
 def test_a_held_uncertain_turn_is_reexamined_from_evidence_on_the_next_run(tmp_path: Path) -> None:
