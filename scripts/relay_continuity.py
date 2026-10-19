@@ -1294,6 +1294,7 @@ EVENTS: dict[str, tuple[str, tuple[str, ...]]] = {
     "turn_completed": (":large_green_circle: JarvisOS coordinator turn completed; awaiting maintainer", ("session", "agent")),
     "master_advanced": (":large_green_circle: JarvisOS master advanced", ("sha", "pr")),
     "repl_turn_failed": (":large_orange_circle: JarvisOS REPL turn failed (notify-only)", ("session", "agent", "outcome", "reset_at")),
+    "repl_claude_dont_ask": (":red_circle: JarvisOS Claude REPL launched in dontAsk; Bash may be denied", ("session",)),
     "digest": (":clipboard: JarvisOS continuity digest", ("phase", "session", "agent", "attempts", "holds", "claude_until", "codex_until")),
     "test": (":white_check_mark: JarvisOS continuity notification test", ()),
     "reconciled": (":white_check_mark: JarvisOS continuity: uncertain operations settled from evidence",
@@ -3065,6 +3066,22 @@ class Supervisor:
 # Notify-only watch (REPL sessions and integration events)
 
 
+def claude_permission_mode(output: Path) -> str | None:
+    """Read the provider's effective launch mode from its first init event."""
+    try:
+        with output.open(encoding="utf-8", errors="replace") as stream:
+            for line in stream:
+                try:
+                    event = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if event.get("type") == "system" and event.get("subtype") == "init":
+                    return event.get("permissionMode")
+    except OSError:
+        pass
+    return None
+
+
 def watch_once(state: dict[str, Any], notifier: Notifier, repo: Path, now: datetime, *,
                supervised: set[str], master: Callable[[], tuple[str | None, str | None]],
                horizon: timedelta = timedelta(hours=24)) -> None:
@@ -3089,6 +3106,8 @@ def watch_once(state: dict[str, Any], notifier: Notifier, repo: Path, now: datet
             continue
         report = classify_turn(turn)
         seen[key] = report.outcome
+        if report.agent == "claude" and claude_permission_mode(turn / "output.jsonl") == "dontAsk":
+            notifier.send("repl_claude_dont_ask", now, session=session.name)
         if report.outcome != "success" and report.agent in AGENTS:
             notifier.send("repl_turn_failed", now, session=session.name, agent=report.agent,
                           outcome=report.outcome, reset_at=report.reset_at or "none")
