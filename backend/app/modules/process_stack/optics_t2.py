@@ -419,6 +419,16 @@ class ArrayModel:
                 chords.append(chord)
                 indices.append(tube)
             weight, chord, tube = np.concatenate(weights), np.concatenate(chords), np.concatenate(indices)
+            # Many angular rays have exactly the same refracted chord on the same tube.
+            # Combine their weights once; the Beer-Lambert factor then needs one
+            # evaluation per distinct (tube, chord) rather than per angular ray.
+            pairs: np.ndarray = np.empty(len(tube), dtype=[("tube", np.int64), ("chord", np.float64)])
+            pairs["tube"] = tube
+            pairs["chord"] = chord
+            distinct, inverse = np.unique(pairs, return_inverse=True)
+            weight = np.bincount(inverse, weights=weight)
+            chord = distinct["chord"]
+            tube = distinct["tube"]
             self._cache[name] = {
                 "intercept": intercept, "weight": weight, "chord": chord, "tube": tube,
                 "transmitted": np.bincount(tube, weights=weight, minlength=self.module_tubes),

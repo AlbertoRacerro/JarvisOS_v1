@@ -10,8 +10,8 @@ import pytest
 
 from app.modules.environment import profiles
 from app.modules.process_stack import draft, dynamic_engine
-from app.modules.process_stack.draft_models import SetScenario, SetUnitParams
-from tests.plumbing_170_support import new_workspace
+from app.modules.process_stack.draft_models import DraftQuantity, SetScenario, SetUnitParams
+from tests.plumbing_170_support import new_workspace, pbr_document
 from tests.test_process_dynamic_engine import _real_scenario
 
 
@@ -85,3 +85,21 @@ def test_t2_hourly_profile_is_typed_refusal() -> None:
     with pytest.raises(dynamic_engine.DynamicError) as exc:
         dynamic_engine.prepare(workspace_id, state["draft_id"], "run")
     assert exc.value.code == "OPTICS_RESOLUTION"
+
+
+def test_switching_back_to_t1_restores_legacy_unit_payload() -> None:
+    original = pbr_document(model=True)
+    entered = draft.apply_ops(original, [SetUnitParams(
+        op="set_unit_params", unit="pbr", options={"optics_model": "t2"},
+        values={"n_wall": DraftQuantity(value=1.5, unit="dimensionless")},
+    )])
+    restored = draft.apply_ops(entered, [SetUnitParams(
+        op="set_unit_params", unit="pbr", options={"optics_model": "t1"},
+    )])
+    assert restored["objects"]["pbr"] == original["objects"]["pbr"]
+    with pytest.raises(draft.DraftError) as exc:
+        draft.apply_ops(restored, [SetUnitParams(
+            op="set_unit_params", unit="pbr",
+            values={"n_wall": DraftQuantity(value=1.5, unit="dimensionless")},
+        )])
+    assert exc.value.code == "param_inactive"

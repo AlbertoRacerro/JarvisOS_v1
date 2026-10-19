@@ -541,6 +541,10 @@ def apply_op(document: dict[str, Any], op: Any, resolve: studio_unit.Resolver | 
                 if param_spec.key not in unit["params"] and param_spec.default is not None:
                     unit["params"][param_spec.key] = _default_param(param_spec)
         for key, quantity in op.values.items():
+            if (unit["type"] == "PhotobioreactorT1" and key in {item.key for item in PBR_T2_SPECS}
+                    and (unit.get("options") or {}).get("optics_model") != "t2"
+                    and op.options.get("optics_model") != "t2"):
+                raise DraftError("param_inactive", "T2 optics inputs require the T2 optics model.", field=key)
             param = next((item for item in (*spec.params, *(PBR_T2_SPECS if unit["type"] == "PhotobioreactorT1" else ()))
                           if item.key == key), None)
             if param is None:
@@ -568,6 +572,8 @@ def apply_op(document: dict[str, Any], op: Any, resolve: studio_unit.Resolver | 
             if unit["type"] == "PhotobioreactorT1" and set(op.options) == {"optics_model"} and op.options["optics_model"] in {"t1", "t2"}:
                 if op.options["optics_model"] == "t1":
                     unit["options"].pop("optics_model", None)
+                    for t2_param in PBR_T2_SPECS:
+                        unit["params"].pop(t2_param.key, None)
                 else:
                     unit["options"]["optics_model"] = "t2"
             else:
