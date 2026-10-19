@@ -8,13 +8,13 @@ import json
 import math
 import time
 from collections.abc import Callable
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
 from typing import Any, Literal
 
 import numpy as np
 
-from app.modules.process_stack import draft, pbr_unit
+from app.modules.process_stack import draft, optics_t2, pbr_unit
 from app.modules.process_stack.dynamic_models import (
     MAX_CONTROLLERS,
     MAX_DURATION_S,
@@ -71,6 +71,88 @@ def _growth_for_unit(item: dict[str, Any], *, dark: bool = False) -> Any:
                    temperature_mean=params["temperature"], temperature_amplitude=0.0,
                    kla_h=3600.0 * params.get("oxygen_kla", 0.0),
                    oxygen_saturation=params.get("oxygen_saturation", growth.oxygen_saturation))
+
+
+def _prepare_t2_optics(workspace_id: str, units: list[dict[str, Any]],
+                       profile: dict[str, Any], scenario: Scenario) -> None:
+    """Freeze profile-interval optics for T2 PBRs before the ODE worker starts."""
+    selected = [item for item in units if (item["unit"].get("options") or {}).get("optics_model", "t1") == "t2"]
+    if not selected:
+        return
+    import pvlib
+
+    from app.modules.environment import profiles
+
+    source = profile["profile"]
+    channels = source["channels"]
+    if not {"dni", "dhi"} <= channels.keys():
+        raise DynamicError("OPTICS_CHANNELS_MISSING", "T2 optics requires DNI and DHI profile channels.")
+    resolution = source.get("resolution_minutes")
+    if not isinstance(resolution, (int, float)) or resolution > optics_t2.OPTICS_RESOLUTION_MAX_MIN or resolution <= 0:
+        raise DynamicError("OPTICS_RESOLUTION", "T2 optics requires a profile resolution of at most "
+                           f"{optics_t2.OPTICS_RESOLUTION_MAX_MIN} minutes.")
+    provenance = source.get("provenance") or {}
+    site = provenance.get("site_snapshot") or profiles.get_site(workspace_id)
+    if not isinstance(site, dict) or not {"latitude", "longitude", "elevation_m"} <= site.keys():
+        raise DynamicError("OPTICS_SITE_MISSING", "T2 optics requires a profile site snapshot or workspace site.")
+    factor = (provenance.get("factor_umol_per_j") if profile["par_name"] == "par"
+              else scenario.par_from_ghi_factor)
+    if factor is None:
+        factor = scenario.par_from_ghi_factor
+    if not isinstance(factor, (int, float)) or not math.isfinite(factor) or factor <= 0:
+        raise DynamicError("OPTICS_PAR_CONVERSION_MISSING", "T2 optics needs a declared GHI-to-PAR conversion factor.")
+    scale = float(factor) * scenario.par_scale
+    times = np.asarray(profile["times"], dtype=np.float64)
+    steps = np.diff(times)
+    if len(steps) == 0 or np.any(steps <= 0) or np.any(steps / 60 > optics_t2.OPTICS_RESOLUTION_MAX_MIN + 1e-9):
+        raise DynamicError("OPTICS_RESOLUTION", "T2 optics profile intervals exceed the midpoint-sun limit.")
+    midpoints = times - np.r_[steps[0], steps] / 2
+    dni = np.asarray([float("nan") if v is None else v for v in channels["dni"]], dtype=np.float64) * scale
+    dhi = np.asarray([float("nan") if v is None else v for v in channels["dhi"]], dtype=np.float64) * scale
+    first = max(0, bisect.bisect_left(profile["times"], _stamp(scenario.start_utc)))
+    last = min(len(times), bisect.bisect_left(profile["times"], _stamp(scenario.end_utc)) + 1)
+    if (not np.all(np.isfinite(dni[first:last])) or not np.all(np.isfinite(dhi[first:last]))
+            or np.any(dni[first:last] < 0) or np.any(dhi[first:last] < 0)):
+        raise DynamicError("OPTICS_CHANNELS_MISSING", "Consumed DNI and DHI intervals must be finite and nonnegative.")
+    dni = np.where(np.isfinite(dni) & (dni >= 0), dni, 0.0)
+    dhi = np.where(np.isfinite(dhi) & (dhi >= 0), dhi, 0.0)
+    params = provenance.get("parameters") or {}
+    conditions = {
+        "pressure_pa": float(params.get("pressure_pa", pvlib.atmosphere.alt2pres(float(site["elevation_m"])))),
+        "temperature_c": float(params.get("temperature_c", 12.0)),
+        "delta_t": float(params.get("delta_t", 67.0)),
+    }
+    for item in selected:
+        raw = item["unit"].get("params") or {}
+        names = ("tubes_across", "layers", "pitch_h", "pitch_v", "stagger_offset", "axis_azimuth",
+                 "centre_height_above_sea", "n_wall", "n_water", "sea_albedo")
+        missing = [name for name in names if (raw.get(name) or {}).get("si") is None]
+        if missing:
+            raise DynamicError("OPTICS_LAYOUT_INVALID", "T2 optics layout is incomplete.",
+                               {"unit": item["tag"], "fields": missing})
+        values = {name: raw[name]["si"] for name in names}
+        for name in ("tubes_across", "layers"):
+            if isinstance(values[name], bool) or not isinstance(values[name], (int, float)) or not math.isfinite(values[name]) or int(values[name]) != values[name]:
+                raise DynamicError("OPTICS_LAYOUT_INVALID", f"{name} must be a whole number.")
+        optics = optics_t2.Optics(
+            diameter=item["params"]["tube_inner_diameter"], tubes_across=int(values["tubes_across"]),
+            layers=int(values["layers"]), pitch_h=float(values["pitch_h"]), pitch_v=float(values["pitch_v"]),
+            stagger=float(values["stagger_offset"]), axis_azimuth=math.radians(float(values["axis_azimuth"])),
+            centre_height=float(values["centre_height_above_sea"]), n_wall=float(values["n_wall"]),
+            n_water=float(values["n_water"]), lower_albedo=float(values["sea_albedo"]),
+        )
+        if optics.module_tubes > item["params"]["tube_count"]:
+            raise DynamicError("OPTICS_LAYOUT_INVALID", "The representative module exceeds the unit tube count.",
+                               {"unit": item["tag"], "module_tubes": optics.module_tubes})
+        handoff = optics_t2.build_handoff(optics, midpoints, site, conditions, dni, dhi)
+        item["optics_t2"] = {
+            "layout": asdict(optics),
+            "intervals": {name: values.tolist() for name, values in handoff.items()},
+            "dni_par": dni.tolist(), "dhi_par": dhi.tolist(),
+            "provenance": {"model": "t2", "version": optics_t2.VERSION, "parameter_digest": optics.digest(),
+                           "pvlib_version": pvlib.__version__,
+                           "site_digest": hashlib.sha256(_canonical(site)).hexdigest()},
+        }
 
 
 def _validate_downstream_boundary_specs(
@@ -975,6 +1057,7 @@ def prepare(workspace_id: str, draft_id: str, scenario_id: str) -> Snapshot:
                 {"ref": ref, "profile": profile, "times": times, "par_name": par_name, "temp_name": temp_name}
             )
         resolved_profiles.sort(key=lambda item: item["ref"]["profile_id"] != forcing_profile_id)
+        _prepare_t2_optics(workspace_id, units, resolved_profiles[0], scenario)
         payload: dict[str, Any] = {
             "workspace_id": workspace_id,
             "draft_id": draft_id,
@@ -1019,6 +1102,11 @@ def _profile_par(snapshot: Snapshot, elapsed_s: float) -> float:
                            {"channel": item["par_name"], "time_utc": datetime.fromtimestamp(item["times"][par_ix], UTC).isoformat()})
     factor = snapshot.payload["scenario"].get("par_from_ghi_factor") if item["par_name"] == "ghi" else 1.0
     return float(raw_par) * float(factor or 1.0) * snapshot.payload["scenario"].get("par_scale", 1.0)
+
+
+def _optics_index(snapshot: Snapshot, elapsed_s: float) -> int:
+    times = snapshot.payload["profiles"][0]["times"]
+    return max(0, min(len(times) - 1, bisect.bisect_left(times, snapshot.payload["start_epoch"] + elapsed_s)))
 
 
 def _profile_temperature(snapshot: Snapshot, elapsed_s: float, unit_index: int = 0) -> float:
@@ -1162,6 +1250,25 @@ def _result_series(snapshot: Snapshot, times: list[float], rows: list[np.ndarray
             [_profile_temperature(snapshot, float(t), i) for t in elapsed]
         )
         result[f"{unit['tag']}_harvest_X_kg"] = matrix[:, _slot(i, 6)]
+        if "optics_t2" in unit:
+            optics = unit["optics_t2"]
+            optics_indices = np.asarray([_optics_index(snapshot, float(t)) for t in elapsed], dtype=np.int64)
+            handoff = {name: np.asarray(values, dtype=np.float64)
+                       for name, values in optics["intervals"].items()}
+            tag = unit["tag"]
+            result[f"{tag}_par_intercepted_umol_s_m"] = handoff["intercepted"][optics_indices]
+            result[f"{tag}_par_eq_umol_m2_s"] = handoff["i0_eq"][optics_indices]
+            result[f"{tag}_beam_unshaded_fraction"] = np.nan_to_num(
+                handoff["beam_unshaded_fraction"][optics_indices], nan=0.0
+            )
+            growth = _growth_for_unit(unit)
+            absorbed = optics_t2.array_model(optics_t2.Optics(**optics["layout"])).evaluate(
+                handoff["elevation_rad"][optics_indices], handoff["azimuth_rad"][optics_indices],
+                np.asarray(optics["dni_par"], dtype=np.float64)[optics_indices],
+                np.asarray(optics["dhi_par"], dtype=np.float64)[optics_indices],
+                np.maximum(0.0, matrix[:, _slot(i)] * growth.extinction),
+            )["absorbed"]
+            result[f"{tag}_par_absorbed_umol_s_m"] = absorbed
         if _unit_type(unit) == "HoldupTank":
             result[f"{unit['tag']}_V_m3"] = volumes[:, i]
     result["harvest_X_kg"] = matrix[:, _slot(len(units), 3)] + sum(
@@ -1417,6 +1524,9 @@ def run(
                 return diagnostic("cancelled", {"code": "CANCELLED", "message": "Run cancelled.", "detail": {}})
 
             par_segment = _profile_par(snapshot, (left + right) / 2.0)
+            optics_index = _optics_index(snapshot, (left + right) / 2.0) if any(
+                "optics_t2" in item for item in units
+            ) else 0
             t0, restarts = left, 0
             while True:
                 restarts += 1
@@ -1436,7 +1546,7 @@ def run(
                 network = _network_runtime(topology, flows, units)
 
                 def rhs(elapsed: float, state: tuple[float, ...], network_state: dict[str, Any] = network,
-                        par_value: float = par_segment) -> list[float]:
+                        par_value: float = par_segment, optics_step: int = optics_index) -> list[float]:
                     result = [0.0] * len(state)
                     concentrations = _network_concentrations(topology, network_state, state, units, flows)
                     for i, item in enumerate(units):
@@ -1445,9 +1555,16 @@ def run(
                         growth = growths[i]
                         temperature = _profile_temperature(snapshot, elapsed, i)
                         is_tank = _unit_type(item) == "HoldupTank"
-                        mu, loss = growth.rates_at(0.0 if is_tank else par_value,
-                                                   item["params"]["temperature"] if is_tank else temperature,
-                                                   x, nitrogen)
+                        if "optics_t2" in item:
+                            handoff = item["optics_t2"]["intervals"]
+                            mu, loss = growth.rates_at(
+                                float(handoff["i0_eq"][optics_step]), temperature, x, nitrogen,
+                                float(handoff["diffuse_fraction"][optics_step]),
+                            )
+                        else:
+                            mu, loss = growth.rates_at(0.0 if is_tank else par_value,
+                                                       item["params"]["temperature"] if is_tank else temperature,
+                                                       x, nitrogen)
                         rx = (mu - loss) * x / 3600.0
                         transfer = growth.kla_h * (growth.oxygen_saturation - oxygen) / 3600.0
                         inlet = np.zeros(3, dtype=np.float64)
@@ -2340,7 +2457,7 @@ def _manifest(
     downstream: list[dict[str, Any]],
 ) -> dict[str, Any]:
     p = snapshot.payload
-    return {
+    result = {
         "fidelity": "T1",
         "evaluator_version": EVALUATOR_VERSION,
         "snapshot_digest": snapshot.digest,
@@ -2383,6 +2500,19 @@ def _manifest(
         "diagnostics": {"wall_time_s": time.perf_counter() - started},
         "downstream_outcomes": downstream,
     }
+    if any("optics_t2" in item for item in p["units"]):
+        result["fidelity"] = "T2"
+        result["profiles"][0]["consumed_channels"].extend(["dni", "dhi"])
+        for source, unit in zip(p["units"], result["units"], strict=True):
+            if "optics_t2" in source:
+                unit["optics"] = source["optics_t2"]["provenance"]
+                unit["fidelity"] = "T2 - unqualified - profile-driven tube/array interception, Fresnel wall, opaque shading, no energy balance"
+                unit["optics_caveats"] = [
+                    "Representative cross-section module: edge effects are represented only at module scale.",
+                    "Opaque upstream tubes give a lower bound; transmitted light is not traced into downstream tubes.",
+                    "No wall absorption, internal re-reflection, sea glint, anisotropic sky or energy balance.",
+                ]
+    return result
 
 
 def _add_diagnostic_evidence(
@@ -2399,6 +2529,12 @@ def _channel_units(series: dict[str, np.ndarray], controllers: list[dict[str, An
             unit = "s"
         elif name == "par":
             unit = "umol/(m2*s)"
+        elif name.endswith("_par_eq_umol_m2_s"):
+            unit = "umol/(m2*s)"
+        elif name.endswith(("_par_intercepted_umol_s_m", "_par_absorbed_umol_s_m")):
+            unit = "umol/(s*m)"
+        elif name.endswith("_beam_unshaded_fraction"):
+            unit = "1"
         elif name == "temperature" or name.endswith("_temperature"):
             unit = "K"
         elif name == "harvest_X_kg" or name.endswith("_harvest_X_kg"):

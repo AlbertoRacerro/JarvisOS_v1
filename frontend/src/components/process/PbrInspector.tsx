@@ -3,10 +3,11 @@ import type { KeyboardEvent } from "react";
 import { createBioCard, listBioCards, listBioForms, listBioSets, type BioCard, type BioForm, type BioSet } from "../../api/bioModels";
 import type { DraftObject, DraftOp, DraftRegistry, DraftRun, Finding, PbrFeedBasis, RegistryParam, RegistryUnit, ResultsState } from "../../api/processDraft";
 import PbrModelPicker from "./PbrModelPicker";
+import PbrDynamicRuns from "./PbrDynamicRuns";
 import PbrResults, { type PbrFailure } from "./PbrResults";
 import QuantityInput from "./QuantityInput";
 import { ownerLabel } from "./processOwners";
-import { cardOnLatestSet, entrySi, formatReported, formatSig, liquidVolumeM3, pbrFieldError, revisionLabel, type PbrFormValues } from "./pbrLogic";
+import { T2_OPTICS_KEYS, cardOnLatestSet, entrySi, formatReported, formatSig, liquidVolumeM3, pbrFieldError, revisionLabel, type PbrFormValues } from "./pbrLogic";
 import "./PbrInspector.css";
 
 const TABS = ["Overview", "Geometry", "Biology", "Operation", "Light & environment", "Results"] as const;
@@ -14,8 +15,8 @@ type Tab = (typeof TABS)[number];
 const PARAM_TABS = new Set<Tab>(["Geometry", "Operation", "Light & environment"]);
 
 /** Typed jarvis-unit run with the matching registry/segment context; see ProcessDraftEditor. */
-export default function PbrInspector({ workspaceId, unit, spec, registry, result, results, lastRun, failure, feedBasis, findings, apply, libraryOpen, openLibrary, showError }: {
-  workspaceId: string; unit: DraftObject; spec: RegistryUnit; registry: DraftRegistry;
+export default function PbrInspector({ workspaceId, draftId, revision, unit, spec, registry, result, results, lastRun, failure, feedBasis, findings, apply, libraryOpen, openLibrary, showError }: {
+  workspaceId: string; draftId: string; revision: string; unit: DraftObject; spec: RegistryUnit; registry: DraftRegistry;
   result?: NonNullable<DraftRun["units"]>[string]; results: ResultsState; lastRun: DraftRun | null; failure: PbrFailure | null;
   feedBasis?: PbrFeedBasis;
   findings: Finding[]; apply(ops: DraftOp[]): Promise<unknown>; libraryOpen: boolean; openLibrary(): void; showError(message: string): void;
@@ -58,15 +59,20 @@ export default function PbrInspector({ workspaceId, unit, spec, registry, result
 
   const stored = (key: string) => unit.params?.[key];
   const currentSi = (key: string): number | null => {
-    const param = spec.params.find((item) => item.key === key);
+    const param = [...spec.params, ...(registry.pbr_t2_params ?? [])].find((item) => item.key === key);
     const typed = param ? entrySi(param.kind, form[key]) : null;
     return typed ?? stored(key)?.si ?? null;
   };
-  const paramsFor = (name: Tab): RegistryParam[] => spec.params.filter((param) => (param.classification ?? "input") === "input" && param.group === name);
-  const errors = Object.fromEntries(spec.params.map((param) => [param.key, pbrFieldError(param.key, form[param.key], currentSi)]));
+  const paramsFor = (name: Tab): RegistryParam[] => spec.params.filter((param) => (param.classification ?? "input") === "input" && param.group === name && !T2_OPTICS_KEYS.has(param.key));
+  const opticsParams = registry.pbr_t2_params ?? [];
+  const opticsModel = unit.options?.optics_model === "t2" ? "t2" : "t1";
+  const tierLabel = opticsModel === "t2"
+    ? "Tier 2 · unqualified · profile-driven tube/array optics"
+    : "Tier 1 · unqualified · screening estimate";
+  const errors = Object.fromEntries([...spec.params, ...opticsParams].map((param) => [param.key, pbrFieldError(param.key, form[param.key], currentSi)]));
   const invalid = Object.entries(form).some(([key, entry]) => entry && (errors[key] || !entry.text.trim()));
-  const saveGroup = (name: Tab) => {
-    const keys = paramsFor(name).map((param) => param.key).filter((key) => form[key]);
+  const saveParams = (items: RegistryParam[]) => {
+    const keys = items.map((param) => param.key).filter((key) => form[key]);
     if (!keys.length) return;
     if (keys.some((key) => errors[key] || !form[key]!.text.trim())) return showError("Correct the highlighted photobioreactor inputs before applying them.");
     void apply([{ op: "set_unit_params", unit: unit.id, values: Object.fromEntries(keys.map((key) => [key, { value: Number(form[key]!.text), unit: form[key]!.unit }])) }]);
@@ -94,7 +100,8 @@ export default function PbrInspector({ workspaceId, unit, spec, registry, result
   const overview = <>
     <dl className="pbr-rows">
       <div><dt>Owner</dt><dd>{ownerLabel(spec.owner)}</dd></div>
-      <div><dt>Fidelity</dt><dd>{result?.fidelity ?? "Tier 1 · unqualified · screening estimate"}</dd></div>
+      <div><dt>Selected optics</dt><dd>{tierLabel}</dd></div>
+      {result?.fidelity && <div><dt>Last run fidelity</dt><dd>{result.fidelity}{staleNote}</dd></div>}
       <div><dt>Liquid volume V = n·π/4·D²·L</dt><dd>{volume === null ? "Enter diameter, length and tube count" : `${formatSig(volume)} m³ (${formatSig(volume * 1000)} L)`}</dd></div>
       <div><dt>Inlet flow Q</dt><dd>{result?.reported.volumetric_flow_m3_h ? `${formatReported("volumetric_flow_m3_h", result.reported.volumetric_flow_m3_h)}${staleNote}`
         : feedBasis ? `${formatSig(feedBasis.volume_flow_m3_h)} m³ h⁻¹ (feed basis)` : "available after Run"}</dd></div>
@@ -115,12 +122,28 @@ export default function PbrInspector({ workspaceId, unit, spec, registry, result
         stored={stored(param.key)} units={registry.quantity_units[param.kind]?.display ?? []} value={form[param.key]} error={errors[param.key]}
         onChange={(next) => setForm((old) => ({ ...old, [param.key]: next }))} />)}</div>
       {name === "Light & environment" && <p className="draft-hint">Temperature amplitude is a difference, so °C and K are the same size.</p>}
-      <button type="button" disabled={!items.some((param) => form[param.key]) || invalid} onClick={() => saveGroup(name)}>Apply {name.toLowerCase()} inputs</button>
+      <button type="button" disabled={!items.some((param) => form[param.key]) || invalid} onClick={() => saveParams(items)}>Apply {name.toLowerCase()} inputs</button>
+      {name === "Light & environment" && <details className="pbr-optics" open={opticsModel === "t2"}>
+        <summary>Optics · {opticsModel.toUpperCase()}</summary>
+        <label className="pbr-optics__selector">Optics model
+          <select value={opticsModel} onChange={(event) => void apply([{ op: "set_unit_params", unit: unit.id, options: { optics_model: event.target.value } }])}>
+            <option value="t1">T1 · cylindrical screening</option>
+            <option value="t2">T2 · profile-driven tube array</option>
+          </select>
+        </label>
+        {opticsModel === "t2" && <>
+          <p className="draft-hint">Dynamic profile only. Enter the module layout, wall and water refractive indices, and sea albedo. All ten optics values are required for T2.</p>
+          <div className="pbr-parameters">{opticsParams.map((param) => <QuantityInput key={param.key} label={param.label} kind={param.kind}
+            stored={stored(param.key)} units={registry.quantity_units[param.kind]?.display ?? []} value={form[param.key]} error={errors[param.key]}
+            onChange={(next) => setForm((old) => ({ ...old, [param.key]: next }))} />)}</div>
+          <button type="button" disabled={!opticsParams.some((param) => form[param.key]) || invalid} onClick={() => saveParams(opticsParams)}>Apply optics inputs</button>
+        </>}
+      </details>}
     </>;
   };
 
   return <section className="pbr-inspector" aria-label="Photobioreactor inspector">
-    <p className="draft-owner-line"><span className="draft-owner-badge-label">{ownerLabel(spec.owner)}</span> · Tier 1 · periodic steady state</p>
+    <p className="draft-owner-line"><span className="draft-owner-badge-label">{ownerLabel(spec.owner)}</span> · {tierLabel}</p>
     <div className="pbr-tabs" role="tablist" aria-label="Photobioreactor sections">
       {TABS.map((name, index) => <button key={name} ref={(node) => { tabRefs.current[index] = node; }} type="button" role="tab" id={`${base}-tab-${index}`}
         aria-selected={tab === name} aria-controls={`${base}-panel-${index}`} tabIndex={tab === name ? 0 : -1}
@@ -131,7 +154,8 @@ export default function PbrInspector({ workspaceId, unit, spec, registry, result
         : PARAM_TABS.has(name) ? paramPanel(name)
         : name === "Biology" ? <PbrModelPicker cards={cards} sets={sets} forms={forms} pin={unit.model} unitTag={unit.tag} findings={unitFindings}
             loadError={loadError} adopting={adopting} onPin={pin} onAdoptSet={adoptSet} openLibrary={openLibrary} onReload={reload} />
-        : <PbrResults result={result} results={results} failure={failure} />)}
+        : <><PbrResults result={result} results={results} failure={failure} />
+          <PbrDynamicRuns workspaceId={workspaceId} draftId={draftId} revision={revision} tag={unit.tag} apply={apply} /></>)}
     </div>)}
   </section>;
 }

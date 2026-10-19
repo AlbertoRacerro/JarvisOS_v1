@@ -1072,7 +1072,7 @@ export default function ProcessDraftEditor({ workspaceId, navigate }: Readonly<{
     if (isStudioUnit(unit)) return <StudioUnitInspector key={`${unit.id}:${draft.revision}`} unit={unit} objects={objects} status={draft.studio_units?.[unit.id]}
       provenance={resultsView?.studio_units?.[unit.tag]} failure={unitFailure(unit.tag)} resultsState={results.state} apply={apply} navigate={navigate}
       showError={(message) => setNotice({ tone: "danger", text: message })} />;
-    if (unit.type === "PhotobioreactorT1") return <PbrInspector workspaceId={workspaceId} unit={unit} spec={spec} registry={registry}
+    if (unit.type === "PhotobioreactorT1") return <PbrInspector workspaceId={workspaceId} draftId={draft.draft_id} revision={draft.revision} unit={unit} spec={spec} registry={registry}
       result={solvedRun?.units?.[unit.tag]} results={results} lastRun={lastRun} failure={unitFailure(unit.tag)} feedBasis={draft.pbr_feed_basis?.[unit.tag]}
       findings={draft.findings} apply={apply} libraryOpen={biologyOpen} openLibrary={() => setBiologyOpen(true)}
       showError={(message) => setNotice({ tone: "danger", text: message })} />;

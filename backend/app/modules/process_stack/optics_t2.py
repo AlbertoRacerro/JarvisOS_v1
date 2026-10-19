@@ -3,8 +3,8 @@
 One pure, deterministic numpy kernel. It performs no I/O, keeps no global mutable state and imports nothing
 from the dynamic engine. Inputs are sun elevation/azimuth, DNI and DHI already converted to PAR, the tube
 diameter D, a representative cross-section module of identical horizontal tubes, the wall and water indices,
-the sea albedo and (optionally) the culture extinction kappa. Everything is per metre of tube length and
-averaged over the module's tubes, so intensity units are those of the supplied DNI/DHI times metres.
+the lower-hemisphere albedo (sea or ground) and (optionally) the culture extinction kappa. Everything is per metre of tube length with per-tube and module-mean results. DNI/DHI are in umol m^-2 s^-1; intercepted, transmitted
+and absorbed outputs are in umol s^-1 m^-1. All angles are radians, all lengths metres.
 
 Geometry (decisions 2-6 of the spec)
 ------------------------------------
@@ -19,12 +19,12 @@ Geometry (decisions 2-6 of the spec)
   The local incidence angle at silhouette offset s = R sin(u) satisfies cos(theta) = c cos(u).
 * Culture: Beer-Lambert along the refracted straight chord l = D cos(phi_w)/cos(gamma_w); internal
   re-reflection is ignored. Absorbed = sum of T (1 - exp(-kappa l)).
-* Sources: beam (DNI), isotropic sky (radiance DHI/pi, upper hemisphere) and isotropic sea reflection
+* Sources: beam (DNI), isotropic sky (radiance DHI/pi, upper hemisphere) and isotropic lower-hemisphere reflection
   (radiance rho*GHI/pi, lower hemisphere). The diffuse integrals depend only on the layout and axis, so they
   are integrated once per layout.
 
 Integration variable. Silhouette offsets are integrated in u = asin(s/R), which removes the square-root edge
-singularity of the wall transmission; thin-limit/transmission quantities use one 10-point Gauss-Legendre
+singularity of the wall transmission; thin-limit/transmission beam quantities use one 10-point Gauss-Legendre
 panel per unshadowed interval and absorption uses a fixed graded panel set that resolves optical depths to 1000.
 """
 from __future__ import annotations
@@ -33,7 +33,6 @@ import hashlib
 import json
 import math
 from dataclasses import dataclass
-from functools import cache
 from typing import Any, Final
 
 import numpy as np
@@ -41,25 +40,19 @@ from numpy.polynomial.legendre import leggauss
 
 VERSION: Final = "optics_t2.v1"
 MAX_MODULE_TUBES: Final = 64
-# Frozen from the midpoint-sun bias table of the evidence file (docs/implementation/174-optics-evidence-*.md).
+# Maximum midpoint interval supported by the current T2 hand-off evidence.
 OPTICS_RESOLUTION_MAX_MIN: Final = 15
-# Tolerance frozen from the refracted-versus-T1-shape residual table of the same evidence file.
-SHAPE_RESIDUAL_TOLERANCE: Final = 0.15
-TAU_MAX: Final = 1000.0
-
 _GAP_NODES: Final = 10  # thin / transmission panel (smooth integrand)
-_FINE_NODES: Final = 6  # per graded panel for kappa-dependent absorption
+_FINE_NODES: Final = 10  # per graded panel for kappa-dependent absorption
 _FINE_DELTAS: Final = (0.0, 1e-3, 4e-3, 1.6e-2, 6.4e-2, 0.25, 0.7)
 _EPS_NODES: Final = 12  # axial-angle Gauss-Legendre nodes of the hemisphere rules
 _PSI_PANELS: Final = 36
 _PSI_NODES: Final = 4
-_TAU_GRID_POINTS: Final = 33
-_TAU_GRID_MIN: Final = 1e-4
-_C_MIN: Final = 1e-9
+_C_MIN: Final = 1e-14
 
 
 class OpticsError(ValueError):
-    """Typed T2 optics failure; the engine maps ``code`` and ``detail`` to a DynamicError."""
+    """Typed kernel input failure with a stable code and optional parameter detail."""
 
     def __init__(self, code: str, message: str, detail: dict[str, Any] | None = None) -> None:
         super().__init__(message[:600])
@@ -72,7 +65,11 @@ class OpticsError(ValueError):
 
 @dataclass(frozen=True)
 class Optics:
-    """Layout, wall and sea inputs. All lengths in metres, angles in radians; validated at construction."""
+    """Validated layout: lengths in m, angles in radians, lower_albedo for sea or ground.
+
+    centre_height is the lowest row centre; stagger shifts alternating rows horizontally.
+    Indices are explicit PAR-mean refractive indices. No finite-end/support shading.
+    """
 
     diameter: float
     tubes_across: int
@@ -84,11 +81,12 @@ class Optics:
     centre_height: float
     n_wall: float
     n_water: float
-    sea_albedo: float
+    lower_albedo: float
+    tube_count: int | None = None
 
     def __post_init__(self) -> None:
         numbers = (self.diameter, self.pitch_h, self.pitch_v, self.stagger, self.axis_azimuth, self.centre_height,
-                   self.n_wall, self.n_water, self.sea_albedo)
+                   self.n_wall, self.n_water, self.lower_albedo)
         if not all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) for v in numbers):
             raise OpticsError("OPTICS_PARAMETER_INVALID", "Optics inputs must be finite numbers.")
         for name in ("tubes_across", "layers"):
@@ -96,28 +94,27 @@ class Optics:
             if isinstance(value, bool) or not isinstance(value, int) or value < 1:
                 raise OpticsError("OPTICS_LAYOUT_INVALID", f"{name} must be a whole number of at least 1.",
                                   {"field": name})
-        if not 0.0 < self.diameter <= 0.5:
-            raise OpticsError("OPTICS_PARAMETER_INVALID", "Tube diameter must be in (0, 0.5] m.", {"field": "diameter"})
+        if not 0.0 < self.diameter:
+            raise OpticsError("OPTICS_PARAMETER_INVALID", "Tube diameter must be positive in m.", {"field": "diameter"})
         if self.tubes_across * self.layers > MAX_MODULE_TUBES:
             raise OpticsError("OPTICS_LAYOUT_INVALID",
                               f"The cross-section module has {self.tubes_across * self.layers} tubes; the limit is "
                               f"{MAX_MODULE_TUBES}.", {"module_tubes": self.tubes_across * self.layers})
-        tolerance = 1e-12 * self.diameter
-        if self.pitch_h < self.diameter - tolerance or self.pitch_v < self.diameter - tolerance:
+        if self.tube_count is not None and (isinstance(self.tube_count, bool)
+                or not isinstance(self.tube_count, int) or self.tube_count < self.module_tubes):
+            raise OpticsError("OPTICS_LAYOUT_INVALID", "tube_count must be an integer >= module size.")
+        if self.pitch_h < self.diameter or self.pitch_v < self.diameter:
             raise OpticsError("OPTICS_LAYOUT_INVALID", "Tube pitch must be at least the tube diameter.",
                               {"pitch_h": self.pitch_h, "pitch_v": self.pitch_v, "diameter": self.diameter})
-        if abs(self.stagger) > self.pitch_h:
-            raise OpticsError("OPTICS_LAYOUT_INVALID", "The stagger offset must not exceed the horizontal pitch.",
-                              {"field": "stagger_offset"})
-        if self.centre_height < self.diameter / 2.0 - tolerance:
+        if self.centre_height < self.diameter / 2.0:
             raise OpticsError("OPTICS_LAYOUT_INVALID", "The lowest tube centre must be at least one tube radius "
-                              "above the sea.", {"field": "centre_height_above_sea"})
-        if not (1.0 <= self.n_wall <= 5.0 and 1.0 <= self.n_water <= 5.0):
-            raise OpticsError("OPTICS_PARAMETER_INVALID", "Refractive indices must lie in [1, 5].",
+                              "above the sea or ground.", {"field": "centre_height_above_sea"})
+        if not (1.0 <= self.n_wall and 1.0 <= self.n_water):
+            raise OpticsError("OPTICS_PARAMETER_INVALID", "Refractive indices must be >= 1.",
                               {"n_wall": self.n_wall, "n_water": self.n_water})
-        if not 0.0 <= self.sea_albedo <= 1.0:
-            raise OpticsError("OPTICS_PARAMETER_INVALID", "Sea albedo must lie in [0, 1].",
-                              {"field": "sea_albedo"})
+        if not 0.0 <= self.lower_albedo <= 1.0:
+            raise OpticsError("OPTICS_PARAMETER_INVALID", "Lower-hemisphere albedo must lie in [0, 1].",
+                              {"field": "lower_albedo"})
         centres = self.centres()
         if len(centres) > 1:
             offsets = centres[:, None, :] - centres[None, :, :]
@@ -142,7 +139,7 @@ class Optics:
     def digest(self) -> str:
         payload = json.dumps([VERSION, self.diameter, self.tubes_across, self.layers, self.pitch_h, self.pitch_v,
                               self.stagger, self.axis_azimuth, self.centre_height, self.n_wall, self.n_water,
-                              self.sea_albedo], separators=(",", ":"))
+                              self.lower_albedo], separators=(",", ":"))
         return hashlib.sha256(payload.encode()).hexdigest()
 
 
@@ -168,16 +165,17 @@ def fresnel_interface(cos_i: np.ndarray | float, n1: float, n2: float) -> tuple[
     Transmittance is computed independently from the amplitude coefficient (T = n2 cos_t/(n1 cos_i) t^2) so
     R + T = 1 is a genuine energy-conservation check. Total internal reflection returns R = 1, T = 0.
     """
-    cos_i = np.clip(np.asarray(cos_i, dtype=np.float64), 0.0, 1.0)
-    sin2_t = (n1 / n2) ** 2 * (1.0 - cos_i**2)
-    total = sin2_t >= 1.0
+    cos_i_arr = np.clip(np.asarray(cos_i, dtype=np.float64), 0.0, 1.0)
+    sin2_t = (n1 / n2) ** 2 * (1.0 - cos_i_arr**2)
+    total = (sin2_t >= 1.0) & (n1 != n2)
     cos_t = np.sqrt(np.maximum(0.0, 1.0 - sin2_t))
-    rs, rp, ts, tp = _fresnel_amplitudes(n1, n2, cos_i, cos_t)
+    rs, rp, ts, tp = _fresnel_amplitudes(n1, n2, cos_i_arr, cos_t)
     with np.errstate(divide="ignore", invalid="ignore"):
-        ratio = np.where(cos_i > 0.0, n2 * cos_t / (n1 * np.where(cos_i > 0.0, cos_i, 1.0)), 0.0)
-    r_s, r_p = rs**2, rp**2
-    t_s = np.where(cos_i > 0.0, ratio * ts**2, np.where(n1 == n2, 1.0, 0.0))
-    t_p = np.where(cos_i > 0.0, ratio * tp**2, np.where(n1 == n2, 1.0, 0.0))
+        ratio = np.where(cos_i_arr > 0.0, n2 * cos_t / (n1 * np.where(cos_i_arr > 0.0, cos_i_arr, 1.0)), 0.0)
+    r_s: np.ndarray = rs**2
+    r_p: np.ndarray = rp**2
+    t_s = np.where(cos_i_arr > 0.0, ratio * ts**2, np.where(n1 == n2, 1.0, 0.0))
+    t_p = np.where(cos_i_arr > 0.0, ratio * tp**2, np.where(n1 == n2, 1.0, 0.0))
     r_s = np.where(total, 1.0, r_s)
     r_p = np.where(total, 1.0, r_p)
     t_s = np.where(total, 0.0, t_s)
@@ -211,9 +209,9 @@ def fresnel_slab(cos_theta: np.ndarray | float, n_wall: float, n_water: float) -
 # ------------------------------------------------------------------------------------------ geometry
 
 
-def sun_unit_vector(elevation_deg: np.ndarray, azimuth_deg: np.ndarray) -> np.ndarray:
-    """Unit vectors towards the sun in (east, north, up); azimuth clockwise from north."""
-    el, az = np.radians(np.asarray(elevation_deg, float)), np.radians(np.asarray(azimuth_deg, float))
+def sun_unit_vector(elevation: np.ndarray, azimuth: np.ndarray) -> np.ndarray:
+    """Unit vectors towards source (east, north, up); angles in radians, azimuth clockwise from north."""
+    el, az = np.broadcast_arrays(np.asarray(elevation, float), np.asarray(azimuth, float))
     return np.stack([np.cos(el) * np.sin(az), np.cos(el) * np.cos(az), np.sin(el)], axis=-1)
 
 
@@ -226,6 +224,16 @@ def decompose(vectors: np.ndarray, axis_azimuth: float) -> tuple[np.ndarray, np.
     up = vectors[..., 2]
     c = np.hypot(horizontal, up)
     return a, c, np.arctan2(horizontal, up)
+
+
+def source_geometry(elevation: np.ndarray, azimuth: np.ndarray,
+                    axis_azimuth: float) -> tuple[np.ndarray, np.ndarray]:
+    """Return cos(gamma), in-plane psi from source/axis angles (radians, azimuth from north)."""
+    el, az = _sun_inputs(elevation, azimuth)
+    if not math.isfinite(axis_azimuth):
+        raise OpticsError("OPTICS_INPUT_INVALID", "Axis azimuth must be finite in radians.")
+    _, cosine, psi = decompose(sun_unit_vector(el, az), axis_azimuth)
+    return cosine, psi
 
 
 def lit_gaps(centres: np.ndarray, diameter: float, psi: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -260,7 +268,6 @@ def lit_gaps(centres: np.ndarray, diameter: float, psi: np.ndarray) -> tuple[np.
     return gap_low - shift, gap_high - shift
 
 
-@cache
 def _gauss(n: int) -> tuple[np.ndarray, np.ndarray]:
     nodes, weights = leggauss(n)
     return nodes, weights
@@ -288,42 +295,41 @@ def _node_terms(c: np.ndarray, a: np.ndarray, u: np.ndarray, optics: Optics) -> 
     return transmittance, chord
 
 
+def _rays(optics: Optics, gap_low: np.ndarray, gap_high: np.ndarray,
+          c: np.ndarray, a: np.ndarray, fine: bool) -> tuple[np.ndarray, ...]:
+    """Flattened direction/tube indices, projected weights (m), transmission and chords (m)."""
+    radius = optics.diameter / 2
+    mask = gap_high > gap_low
+    m, tube, _ = np.nonzero(mask)
+    u0 = np.arcsin(np.clip(gap_low[mask] / radius, -1, 1))
+    u1 = np.arcsin(np.clip(gap_high[mask] / radius, -1, 1))
+    edges = (np.clip(_panel_edges(True)[None, :], u0[:, None], u1[:, None]) if fine
+             else np.stack([u0, u1], axis=1))
+    x, w = _gauss(_FINE_NODES if fine else _GAP_NODES)
+    half = (edges[:, 1:] - edges[:, :-1]) / 2
+    u = (edges[:, 1:] + edges[:, :-1])[..., None] / 2 + half[..., None] * x
+    weight = half[..., None] * w * radius * np.cos(u)
+    trans, chord = _node_terms(c[m, None, None], a[m, None, None], u, optics)
+    valid = weight > 0
+    mi = np.broadcast_to(m[:, None, None], weight.shape)[valid]
+    ti = np.broadcast_to(tube[:, None, None], weight.shape)[valid]
+    return mi, ti, weight[valid], trans[valid], chord[valid]
+
+
 def _integrate(optics: Optics, gap_low: np.ndarray, gap_high: np.ndarray, c: np.ndarray, a: np.ndarray,
                kappa: np.ndarray | None, fine: bool) -> dict[str, np.ndarray]:
-    """Per-direction module sums over unshadowed intervals: width W, transmitted Tw, thin T.l, absorbed A(kappa)."""
-    radius = optics.diameter / 2.0
-    steps = gap_low.shape[0]
-    width = gap_high - gap_low
-    total_width = width.sum(axis=(1, 2))
-    m_idx, _, _ = np.nonzero(width > 1e-14 * optics.diameter)
-    lows = gap_low[width > 1e-14 * optics.diameter]
-    highs = gap_high[width > 1e-14 * optics.diameter]
-    result = {"width": total_width, "transmitted": np.zeros(steps), "thin": np.zeros(steps),
-              "absorbed": np.zeros(steps)}
-    if not len(m_idx):
-        return result
-    u0 = np.arcsin(np.clip(lows / radius, -1.0, 1.0))
-    u1 = np.arcsin(np.clip(highs / radius, -1.0, 1.0))
-    if fine:
-        base = _panel_edges(True)
-        edges = np.clip(base[None, :], u0[:, None], u1[:, None])
-        nodes_x, nodes_w = _gauss(_FINE_NODES)
-    else:
-        edges = np.stack([u0, u1], axis=1)
-        nodes_x, nodes_w = _gauss(_GAP_NODES)
-    mid = 0.5 * (edges[:, 1:] + edges[:, :-1])
-    half = 0.5 * (edges[:, 1:] - edges[:, :-1])
-    u = mid[..., None] + half[..., None] * nodes_x
-    weight = half[..., None] * nodes_w * radius * np.cos(u)
-    cc, aa = c[m_idx][:, None, None], a[m_idx][:, None, None]
-    transmittance, chord = _node_terms(cc, aa, u, optics)
-    result["transmitted"] = np.bincount(m_idx, weights=(weight * transmittance).sum(axis=(1, 2)), minlength=steps)
-    result["thin"] = np.bincount(m_idx, weights=(weight * transmittance * chord).sum(axis=(1, 2)), minlength=steps)
-    if kappa is not None:
-        k = kappa[m_idx][:, None, None]
-        absorbed = weight * transmittance * -np.expm1(-k * chord)
-        result["absorbed"] = np.bincount(m_idx, weights=absorbed.sum(axis=(1, 2)), minlength=steps)
-    return result
+    """Per-direction, per-tube integrals over visible intervals (before axial projection)."""
+    steps, tubes = gap_low.shape[:2]
+    m, tube, weight, trans, chord = _rays(optics, gap_low, gap_high, c, a, fine)
+    index = m * tubes + tube
+
+    def reduce(value: np.ndarray) -> np.ndarray:
+        return np.bincount(index, weights=value, minlength=steps * tubes).reshape(steps, tubes)
+
+    return {"width": (gap_high - gap_low).sum(axis=2),
+            "transmitted": reduce(weight * trans), "thin": reduce(weight * trans * chord),
+            "absorbed": (reduce(weight * trans * -np.expm1(-kappa[m] * chord))
+                         if kappa is not None else np.zeros((steps, tubes)))}
 
 
 def _directions(optics: Optics, vectors: np.ndarray, kappa: np.ndarray | None, fine: bool,
@@ -331,7 +337,7 @@ def _directions(optics: Optics, vectors: np.ndarray, kappa: np.ndarray | None, f
     a, c, psi = decompose(vectors, optics.axis_azimuth)
     centres = optics.centres()
     count = len(a)
-    out = {key: np.zeros(count) for key in ("width", "transmitted", "thin", "absorbed")}
+    out = {key: np.zeros((count, optics.module_tubes)) for key in ("width", "transmitted", "thin", "absorbed")}
     for start in range(0, count, chunk):
         sl = slice(start, min(count, start + chunk))
         gap_low, gap_high = lit_gaps(centres, optics.diameter, psi[sl])
@@ -385,7 +391,7 @@ class ArrayModel:
     def __init__(self, optics: Optics) -> None:
         self.optics = optics
         self.module_tubes = optics.module_tubes
-        self._rules = {name: _hemisphere_rule(lower) for name, lower in (("sky", False), ("sea", True))}
+        self._rules = {name: _hemisphere_rule(lower) for name, lower in (("sky", False), ("lower", True))}
         self._cache: dict[str, Any] = {}
 
     # -- frame handling
@@ -397,124 +403,148 @@ class ArrayModel:
         east_north = frame[:, 0:1] * axis[None, :2] + frame[:, 1:2] * normal[None, :2]
         return np.concatenate([east_north, frame[:, 2:3]], axis=1)
 
-    def _hemisphere(self, name: str) -> dict[str, float]:
-        key = f"hemisphere:{name}"
-        if key not in self._cache:
+    def _hemisphere(self, name: str) -> dict[str, np.ndarray]:
+        """Prepare fixed projected rays once; caller-owned instance, no global cache."""
+        if name not in self._cache:
             rule = self._rules[name]
-            parts = _directions(self.optics, self._world_vectors(rule.vectors), None, False, 4096)
-            c, w = parts["c"], rule.weights
-            self._cache[key] = {
-                "intercept": float((w * c * parts["width"]).sum()),
-                "transmitted": float((w * c * parts["transmitted"]).sum()),
-                "thin": float((w * c * parts["thin"]).sum()),
+            a, c, psi = decompose(self._world_vectors(rule.vectors), self.optics.axis_azimuth)
+            weights, chords, indices = [], [], []
+            intercept = np.zeros(self.module_tubes)
+            for start in range(0, len(a), 64):
+                sl = slice(start, start + 64)
+                low, high = lit_gaps(self.optics.centres(), self.optics.diameter, psi[sl])
+                intercept += ((high - low).sum(axis=2) * (rule.weights[sl] * c[sl])[:, None]).sum(axis=0)
+                m, tube, w, t, chord = _rays(self.optics, low, high, c[sl], a[sl], True)
+                weights.append(w * t * c[sl][m] * rule.weights[sl][m])
+                chords.append(chord)
+                indices.append(tube)
+            weight, chord, tube = np.concatenate(weights), np.concatenate(chords), np.concatenate(indices)
+            self._cache[name] = {
+                "intercept": intercept, "weight": weight, "chord": chord, "tube": tube,
+                "transmitted": np.bincount(tube, weights=weight, minlength=self.module_tubes),
+                "thin": np.bincount(tube, weights=weight * chord, minlength=self.module_tubes),
             }
-        return self._cache[key]
-
-    def _absorption_table(self, name: str) -> tuple[np.ndarray, np.ndarray]:
-        key = f"absorption:{name}"
-        if key not in self._cache:
-            rule = self._rules[name]
-            vectors = self._world_vectors(rule.vectors)
-            taus = np.concatenate([[0.0], np.geomspace(_TAU_GRID_MIN, TAU_MAX, _TAU_GRID_POINTS - 1)])
-            values = np.zeros(len(taus))
-            for index, tau in enumerate(taus[1:], start=1):
-                kappa = np.full(len(vectors), tau / self.optics.diameter)
-                parts = _directions(self.optics, vectors, kappa, True, 512)
-                values[index] = float((rule.weights * parts["c"] * parts["absorbed"]).sum())
-            self._cache[key] = (taus, values)
-        return self._cache[key]
+        return self._cache[name]
 
     def diffuse_absorption(self, name: str, kappa: np.ndarray) -> np.ndarray:
-        """Absorption integral for hemisphere ``name`` at extinction ``kappa`` (interpolated table, ln tau axis)."""
-        taus, values = self._absorption_table(name)
-        thin = self._hemisphere(name)["thin"]
-        tau = np.asarray(kappa, dtype=np.float64) * self.optics.diameter
-        if np.any(tau > TAU_MAX * (1 + 1e-9)):
-            raise OpticsError("OPTICS_TAU_RANGE", f"Optical depth exceeds the supported limit {TAU_MAX:g}.")
-        low = tau <= taus[1]
-        from scipy.interpolate import PchipInterpolator
+        """Fixed hemisphere ray integral at extinction kappa (m^-1), shape (steps, tubes)."""
+        kappa = _extinction(kappa)
+        rays = self._hemisphere(name)
+        unique, inverse = np.unique(kappa, return_inverse=True)
+        values = np.array([np.bincount(rays["tube"],
+                           weights=rays["weight"] * -np.expm1(-k * rays["chord"]),
+                           minlength=self.module_tubes) for k in unique])
+        return values[inverse]
 
-        spline = PchipInterpolator(np.log(taus[1:]), values[1:], extrapolate=False)
-        interpolated = spline(np.log(np.maximum(tau, taus[1])))
-        return np.where(low, thin * np.asarray(kappa, dtype=np.float64), np.nan_to_num(interpolated))
-
-    # -- public evaluation
-    def beam(self, elevation_deg: np.ndarray, azimuth_deg: np.ndarray, kappa: np.ndarray | None = None,
+    def beam(self, elevation: np.ndarray, azimuth: np.ndarray, kappa: np.ndarray | None = None,
              *, fine: bool | None = None) -> dict[str, np.ndarray]:
-        """Beam geometry integrals per direction, in metres (multiply by c * DNI for power per tube length)."""
-        el = np.atleast_1d(np.asarray(elevation_deg, dtype=np.float64))
-        az = np.atleast_1d(np.asarray(azimuth_deg, dtype=np.float64))
-        if el.shape != az.shape or not (np.all(np.isfinite(el)) and np.all(np.isfinite(az))):
-            raise OpticsError("OPTICS_INPUT_INVALID", "Sun elevation and azimuth must be finite arrays of equal length.")
-        use_fine = kappa is not None if fine is None else fine
-        if kappa is not None:
-            kappa = np.broadcast_to(np.asarray(kappa, dtype=np.float64), el.shape)
-        vectors = sun_unit_vector(el, az)
-        parts = _directions(self.optics, vectors, kappa, use_fine, 128 if use_fine else 512)
-        up = (el > 0.0) & (parts["c"] > _C_MIN)
-        for key in ("width", "transmitted", "thin", "absorbed"):
-            parts[key] = np.where(up, parts[key], 0.0)
-        return parts
+        """Beam integrals (steps, tubes), before c*DNI; angles radians, extinction m^-1.
 
-    def evaluate(self, elevation_deg: np.ndarray, azimuth_deg: np.ndarray, dni: np.ndarray, dhi: np.ndarray,
-                 kappa: np.ndarray | None = None) -> dict[str, np.ndarray]:
-        """Per-step module-mean quantities for DNI/DHI (already PAR), per metre of tube length.
-
-        Keys: intercepted, transmitted, thin (coefficient: thin-limit absorbed = kappa * thin), i0_eq, diffuse_share,
-        beam_unshaded_fraction, and absorbed when ``kappa`` is given.
+        c and a are one-dimensional direction cosines. Below-horizon and axial beams are zero.
         """
-        el = np.atleast_1d(np.asarray(elevation_deg, dtype=np.float64))
-        dni = np.atleast_1d(np.asarray(dni, dtype=np.float64))
-        dhi = np.atleast_1d(np.asarray(dhi, dtype=np.float64))
+        el, az = _sun_inputs(elevation, azimuth)
+        k = None if kappa is None else _extinction(kappa, el.shape)
+        vectors = sun_unit_vector(el, az)
+        a, c, _ = decompose(vectors, self.optics.axis_azimuth)
+        up = (el >= 0) & (c > _C_MIN)
+        result = {key: np.zeros((len(el), self.module_tubes))
+                  for key in ("width", "transmitted", "thin", "absorbed")}
+        if np.any(up):
+            active = _directions(self.optics, vectors[up], None if k is None else k[up],
+                                 k is not None if fine is None else fine, 128)
+            for key in result:
+                result[key][up] = active[key]
+        result["c"] = c
+        result["a"] = a
+        return result
+
+    def evaluate_per_tube(self, elevation: np.ndarray, azimuth: np.ndarray, dni: np.ndarray, dhi: np.ndarray,
+                          kappa: np.ndarray | None = None) -> dict[str, np.ndarray]:
+        """Per-tube arrays (steps, tubes), angles radians; DNI/DHI in umol m^-2 s^-1.
+
+        intercepted/transmitted/reflected/absorbed are umol s^-1 m^-1; i0_eq is umol m^-2 s^-1.
+        thin is absorbed/kappa at kappa->0; diffuse_share includes sky and sea or ground reflection.
+        Beam unshaded fraction is zero below horizon/axial incidence, geometrical even when DNI=0.
+        Absorbed is returned only when extinction kappa (m^-1) is supplied.
+        """
+        el, az = _sun_inputs(elevation, azimuth)
+        dni, dhi = np.atleast_1d(np.asarray(dni, float)), np.atleast_1d(np.asarray(dhi, float))
         if dni.shape != el.shape or dhi.shape != el.shape:
             raise OpticsError("OPTICS_INPUT_INVALID", "Sun and irradiance arrays must have equal length.")
-        if not (np.all(np.isfinite(dni)) and np.all(np.isfinite(dhi))) or np.any(dni < 0.0) or np.any(dhi < 0.0):
+        if not (np.all(np.isfinite(dni)) and np.all(np.isfinite(dhi))) or np.any(dni < 0) or np.any(dhi < 0):
             raise OpticsError("OPTICS_INPUT_INVALID", "DNI and DHI must be finite and nonnegative.")
-        n = float(self.module_tubes)
-        beam_active = dni > 0.0
-        parts = self.beam(np.where(beam_active, el, -1.0), np.atleast_1d(azimuth_deg), kappa)
-        c = parts["c"]
-        sin_el = np.sin(np.radians(np.maximum(el, 0.0)))
-        ghi = dni * sin_el + dhi
-        sky, sea = self._hemisphere("sky"), self._hemisphere("sea")
-        sky_scale, sea_scale = dhi / math.pi, self.optics.sea_albedo * ghi / math.pi
-        beam_scale = dni * c
-        out: dict[str, np.ndarray] = {
-            "beam_intercepted": beam_scale * parts["width"] / n,
-            "sky_intercepted": sky_scale * sky["intercept"] / n,
-            "sea_intercepted": sea_scale * sea["intercept"] / n,
-        }
-        out["intercepted"] = out["beam_intercepted"] + out["sky_intercepted"] + out["sea_intercepted"]
+        k = None if kappa is None else _extinction(kappa, el.shape)
+        parts = self.beam(el, az, k)
+        ghi = dni * np.maximum(np.sin(el), 0) + dhi
+        sky, lower = self._hemisphere("sky"), self._hemisphere("lower")
+        sky_scale = dhi[:, None] / math.pi
+        lower_scale = self.optics.lower_albedo * ghi[:, None] / math.pi
+        beam_scale = (dni * parts["c"])[:, None]
+        out = {"beam_intercepted": beam_scale * parts["width"],
+               "sky_intercepted": sky_scale * sky["intercept"],
+               "lower_intercepted": lower_scale * lower["intercept"]}
+        out["intercepted"] = out["beam_intercepted"] + out["sky_intercepted"] + out["lower_intercepted"]
         out["transmitted"] = (beam_scale * parts["transmitted"] + sky_scale * sky["transmitted"]
-                              + sea_scale * sea["transmitted"]) / n
-        beam_thin = beam_scale * parts["thin"] / n
-        diffuse_thin = (sky_scale * sky["thin"] + sea_scale * sea["thin"]) / n
-        out["thin"] = beam_thin + diffuse_thin
-        area = math.pi * (self.optics.diameter / 2.0) ** 2
-        out["i0_eq"] = out["thin"] / area
-        with np.errstate(divide="ignore", invalid="ignore"):
-            out["diffuse_share"] = np.where(out["thin"] > 0.0, diffuse_thin / np.where(out["thin"] > 0.0, out["thin"], 1.0), 0.0)
-        lit = np.where(beam_active & (parts["width"] > 0.0) | beam_active, parts["width"] / (n * self.optics.diameter), 0.0)
-        out["beam_unshaded_fraction"] = np.where(beam_active & (el > 0.0) & (c > _C_MIN), lit, np.nan)
-        if kappa is not None:
-            kappa_arr = np.broadcast_to(np.asarray(kappa, dtype=np.float64), el.shape)
-            sky_abs = self.diffuse_absorption("sky", kappa_arr) if np.any(dhi > 0.0) else np.zeros(el.shape)
-            sea_abs = (self.diffuse_absorption("sea", kappa_arr)
-                       if np.any(sea_scale > 0.0) else np.zeros(el.shape))
-            out["absorbed"] = (beam_scale * parts["absorbed"] + sky_scale * sky_abs + sea_scale * sea_abs) / n
+                              + lower_scale * lower["transmitted"])
+        out["reflected"] = out["intercepted"] - out["transmitted"]
+        diffuse_thin = sky_scale * sky["thin"] + lower_scale * lower["thin"]
+        out["thin"] = beam_scale * parts["thin"] + diffuse_thin
+        out["i0_eq"] = out["thin"] / (math.pi * (self.optics.diameter / 2)**2)
+        out["diffuse_share"] = np.divide(diffuse_thin, out["thin"], out=np.zeros_like(diffuse_thin),
+                                         where=out["thin"] > 0)
+        out["beam_unshaded_fraction"] = parts["width"] / self.optics.diameter
+        if k is not None:
+            out["absorbed"] = beam_scale * parts["absorbed"]
+            if np.any(dhi):
+                out["absorbed"] += sky_scale * self.diffuse_absorption("sky", k)
+            if np.any(lower_scale):
+                out["absorbed"] += lower_scale * self.diffuse_absorption("lower", k)
         return out
 
+    def evaluate(self, elevation: np.ndarray, azimuth: np.ndarray, dni: np.ndarray, dhi: np.ndarray,
+                 kappa: np.ndarray | None = None) -> dict[str, np.ndarray]:
+        """Module means of evaluate_per_tube; diffuse_share is the ratio of mean thin contributions."""
+        parts = self.evaluate_per_tube(elevation, azimuth, dni, dhi, kappa)
+        result = {key: value.mean(axis=1) for key, value in parts.items()}
+        diffuse = (parts["thin"] * parts["diffuse_share"]).mean(axis=1)
+        result["diffuse_share"] = np.divide(diffuse, result["thin"], out=np.zeros_like(diffuse),
+                                             where=result["thin"] > 0)
+        return result
 
-@cache
+
+def _sun_inputs(elevation: np.ndarray, azimuth: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    el, az = np.atleast_1d(np.asarray(elevation, float)), np.atleast_1d(np.asarray(azimuth, float))
+    if (el.ndim != 1 or el.shape != az.shape or not np.all(np.isfinite(el))
+            or not np.all(np.isfinite(az)) or np.any(np.abs(el) > math.pi / 2)):
+        raise OpticsError("OPTICS_INPUT_INVALID", "Sun angles must be finite matching 1D arrays; elevation in [-pi/2,pi/2].")
+    return el, az
+
+
+def _extinction(kappa: np.ndarray, shape: tuple[int, ...] | None = None) -> np.ndarray:
+    k = np.atleast_1d(np.asarray(kappa, float))
+    if not np.all(np.isfinite(k)) or np.any(k < 0):
+        raise OpticsError("OPTICS_INPUT_INVALID", "Extinction must be finite and nonnegative in m^-1.")
+    try:
+        return k if shape is None else np.broadcast_to(k, shape)
+    except ValueError as exc:
+        raise OpticsError("OPTICS_INPUT_INVALID", "Extinction must be scalar or match sun arrays.") from exc
+
+
+def build_layout(*, diameter: float, tubes_across: int, layers: int, pitch_h: float, pitch_v: float,
+                 axis_azimuth: float, centre_height: float, n_wall: float, n_water: float,
+                 lower_albedo: float, stagger: float = 0.0, tube_count: int | None = None) -> Optics:
+    """Build a validated module; lengths m, angles radians, lower_albedo for sea or ground."""
+    return Optics(diameter, tubes_across, layers, pitch_h, pitch_v, stagger, axis_azimuth,
+                  centre_height, n_wall, n_water, lower_albedo, tube_count)
+
+
 def array_model(optics: Optics) -> ArrayModel:
+    """Construct a run-owned array model; its hemisphere cache stays local to the caller."""
     return ArrayModel(optics)
 
 
-# ------------------------------------------------------------------------------------- engine hand-off
-
-
 def sun_position(epochs: np.ndarray, site: dict[str, Any], conditions: dict[str, float]) -> tuple[np.ndarray, np.ndarray]:
-    """Apparent solar elevation and azimuth (degrees) at UTC epochs, pvlib SPA with the profile's conditions."""
+    """Apparent solar elevation and azimuth in radians at UTC epoch midpoints."""
     import pandas as pd
     import pvlib
 
@@ -522,17 +552,17 @@ def sun_position(epochs: np.ndarray, site: dict[str, Any], conditions: dict[str,
     frame = pvlib.solarposition.spa_python(
         index, float(site["latitude"]), float(site["longitude"]), altitude=float(site["elevation_m"]),
         pressure=float(conditions["pressure_pa"]), temperature=float(conditions["temperature_c"]),
-        delta_t=float(conditions["delta_t"]))
-    return frame["apparent_elevation"].to_numpy(dtype=np.float64), frame["azimuth"].to_numpy(dtype=np.float64)
+        delta_t=float(conditions["delta_t"]),
+    )
+    return (np.deg2rad(frame["apparent_elevation"].to_numpy(dtype=np.float64)),
+            np.deg2rad(frame["azimuth"].to_numpy(dtype=np.float64)))
 
 
 def build_handoff(optics: Optics, epochs_mid: np.ndarray, site: dict[str, Any], conditions: dict[str, float],
                   dni_par: np.ndarray, dhi_par: np.ndarray) -> dict[str, np.ndarray]:
-    """Per-interval arrays the engine indexes in its right-hand side (sun at each interval midpoint)."""
+    """Freeze interval optics for the dynamic engine without sharing a global kernel cache."""
     elevation, azimuth = sun_position(epochs_mid, site, conditions)
-    if not (np.all(np.isfinite(elevation)) and np.all(np.isfinite(azimuth))):
-        raise OpticsError("OPTICS_INPUT_INVALID", "The solar position is not finite for the profile times.")
     values = array_model(optics).evaluate(elevation, azimuth, dni_par, dhi_par)
-    return {"elevation_deg": elevation, "azimuth_deg": azimuth, "i0_eq": values["i0_eq"],
+    return {"elevation_rad": elevation, "azimuth_rad": azimuth, "i0_eq": values["i0_eq"],
             "diffuse_fraction": np.clip(values["diffuse_share"], 0.0, 1.0),
             "intercepted": values["intercepted"], "beam_unshaded_fraction": values["beam_unshaded_fraction"]}

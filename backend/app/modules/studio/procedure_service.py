@@ -1,5 +1,7 @@
 """Test, Apply, link, run and bench support for Studio procedures (spec 191). Simulation only; no runtime call."""
 
+from __future__ import annotations
+
 import json
 import shutil
 from collections.abc import Iterator

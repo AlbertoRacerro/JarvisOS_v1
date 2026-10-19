@@ -19,7 +19,7 @@ def _optics(*, across: int = 1, layers: int = 1, pitch: float = 0.09) -> Optics:
 
 def test_isolated_tube_beam_and_isotropic_sky_have_analytic_intercepts() -> None:
     model = ArrayModel(_optics())
-    result = model.evaluate(np.array([90.0]), np.array([0.0]), np.array([1000.0]), np.array([500.0]))
+    result = model.evaluate(np.array([math.pi / 2]), np.array([0.0]), np.array([1000.0]), np.array([500.0]))
     assert result["beam_intercepted"][0] == pytest.approx(60.0, rel=1e-12)
     assert result["sky_intercepted"][0] == pytest.approx(math.pi * 0.06 * 500.0 / 2.0, rel=1e-12)
     assert result["transmitted"][0] == pytest.approx(result["intercepted"][0], rel=1e-12)
@@ -27,7 +27,7 @@ def test_isolated_tube_beam_and_isotropic_sky_have_analytic_intercepts() -> None
 
 def test_zero_extinction_equivalent_irradiance_matches_normal_beam() -> None:
     model = ArrayModel(_optics())
-    result = model.evaluate(np.array([90.0]), np.array([0.0]), np.array([750.0]), np.array([0.0]))
+    result = model.evaluate(np.array([math.pi / 2]), np.array([0.0]), np.array([750.0]), np.array([0.0]))
     assert result["i0_eq"][0] == pytest.approx(750.0, rel=1e-8)
     assert result["diffuse_share"][0] == 0.0
 
@@ -35,7 +35,7 @@ def test_zero_extinction_equivalent_irradiance_matches_normal_beam() -> None:
 def test_shadow_widths_sum_to_projected_silhouette_union() -> None:
     optics = _optics(across=4, layers=3)
     centres = optics.centres()
-    directions = np.linspace(-math.pi, math.pi, 2001)
+    directions = np.random.default_rng(174).uniform(-math.pi, math.pi, 10_000)
     low, high = lit_gaps(centres, optics.diameter, directions)
     assert np.all(high >= low)
     assert np.all(low >= -optics.diameter / 2 - 1e-12)

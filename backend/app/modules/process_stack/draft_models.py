@@ -140,7 +140,35 @@ def _heat(label: str, dwsim_type: str) -> UnitSpec:
 
 
 _PBR_MODE = ("periodic_steady",)
+PBR_T2_PARAMETERS = frozenset({
+    "tubes_across", "layers", "pitch_h", "pitch_v", "stagger_offset", "axis_azimuth",
+    "centre_height_above_sea", "n_wall", "n_water", "sea_albedo",
+})
 PBR_MAX_PHOTOPERIOD_S = 24.0 * 3600.0
+
+# Dynamic-only optics inputs stay outside the periodic-steady T1 registry contract.
+PBR_T2_SPECS: tuple[ParamSpec, ...] = (
+    ParamSpec("tubes_across", "Tubes across module", "dimensionless", "", _PBR_MODE,
+              minimum_si=1.0, maximum_si=64.0, group="Light & environment"),
+    ParamSpec("layers", "Tube layers", "dimensionless", "", _PBR_MODE,
+              minimum_si=1.0, maximum_si=64.0, group="Light & environment"),
+    ParamSpec("pitch_h", "Horizontal tube pitch", "length", "", _PBR_MODE,
+              minimum_si=0.0, exclusive_minimum=True, group="Light & environment"),
+    ParamSpec("pitch_v", "Vertical tube pitch", "length", "", _PBR_MODE,
+              minimum_si=0.0, exclusive_minimum=True, group="Light & environment"),
+    ParamSpec("stagger_offset", "Alternate layer stagger", "length", "", _PBR_MODE,
+              group="Light & environment"),
+    ParamSpec("axis_azimuth", "Tube axis azimuth (degrees)", "dimensionless", "", _PBR_MODE,
+              minimum_si=0.0, maximum_si=360.0, group="Light & environment"),
+    ParamSpec("centre_height_above_sea", "Lowest tube centre above sea", "length", "", _PBR_MODE,
+              minimum_si=0.0, group="Light & environment"),
+    ParamSpec("n_wall", "Wall refractive index", "dimensionless", "", _PBR_MODE,
+              minimum_si=1.0, maximum_si=5.0, group="Light & environment"),
+    ParamSpec("n_water", "Water refractive index", "dimensionless", "", _PBR_MODE,
+              minimum_si=1.0, maximum_si=5.0, group="Light & environment"),
+    ParamSpec("sea_albedo", "Sea albedo", "dimensionless", "", _PBR_MODE,
+              minimum_si=0.0, maximum_si=1.0, group="Light & environment"),
+)
 
 UNIT_REGISTRY: dict[str, UnitSpec] = {
     "Heater": _heat("Heater", "Heater"),
