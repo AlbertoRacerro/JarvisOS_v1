@@ -2175,22 +2175,36 @@ def bash(command: str) -> Any:
 
 
 @pytest.mark.parametrize(("command", "responses", "expected"), [
-    ("cd /r && git push origin feat", {"rev-parse --verify": (0, "a" * 40 + "\n"),
+    ("cd /r && git push origin feat", {"show-ref": (0, ""), "rev-parse --verify": (0, "a" * 40 + "\n"),
                                        "ls-remote": (0, f"{'a' * 40}\trefs/heads/feat\n")}, "completed"),
-    ("git push -u origin HEAD:feat 2>&1", {"rev-parse --verify": (0, "a" * 40), "ls-remote": (0, "")}, "not_started"),
-    ("git push origin feat", {"rev-parse --verify": (0, "a" * 40), "ls-remote": (0, f"{'b' * 40}\trefs/heads/feat"),
-                              "merge-base": (0, "")}, "not_started"),
-    ("git push origin feat", {"rev-parse --verify": (0, "a" * 40), "ls-remote": (0, f"{'b' * 40}\trefs/heads/feat"),
-                              "merge-base": (1, "")}, None),
-    ("git push --force origin feat", {"rev-parse --verify": (0, "a" * 40), "ls-remote": (0, "")}, None),
-    ("git push origin feat", {"rev-parse --verify": (0, "a" * 40), "ls-remote": (128, "fatal: Authentication failed")},
-     "insufficient_permissions"),
+    ("cd /wt && git push -u origin HEAD:feat 2>&1", {"abbrev-ref HEAD": (0, "feat"), "rev-parse --verify": (0, "a" * 40),
+                                                     "ls-remote": (0, "")}, "not_started"),
+    ("git push origin feat", {"show-ref": (0, ""), "rev-parse --verify": (0, "a" * 40),
+                              "ls-remote": (0, f"{'b' * 40}\trefs/heads/feat"), "merge-base": (0, "")}, "not_started"),
+    ("git push origin feat", {"show-ref": (0, ""), "rev-parse --verify": (0, "a" * 40),
+                              "ls-remote": (0, f"{'b' * 40}\trefs/heads/feat"), "merge-base": (1, "")}, None),
+    ("git push --force origin feat", {"show-ref": (0, ""), "rev-parse --verify": (0, "a" * 40), "ls-remote": (0, "")}, None),
+    ("git push origin feat", {"show-ref": (0, ""), "rev-parse --verify": (0, "a" * 40),
+                              "ls-remote": (128, "fatal: Authentication failed")}, "insufficient_permissions"),
+    # Review 1: the agent's working directory persists across calls, so HEAD/upstream are unknown without a cd.
+    ("git push", {"abbrev-ref": (0, "origin/master"), "rev-parse --verify": (0, "a" * 40),
+                  "ls-remote": (0, f"{'a' * 40}\trefs/heads/master")}, None),
+    ("git push origin HEAD", {"abbrev-ref HEAD": (0, "master"), "rev-parse --verify": (0, "a" * 40),
+                              "ls-remote": (0, f"{'a' * 40}\trefs/heads/master")}, None),
+    ("cd wt && git push origin feat", {}, None),
+    # Review 2: a tag (or any non-branch) push is never probed as a branch.
+    ("git push origin v1", {"show-ref": (1, ""), "rev-parse --verify": (0, "a" * 40), "ls-remote": (0, "")}, None),
+    ("git push origin refs/tags/v1", {}, None),
     ("git push --tags origin", {}, None),
     ("git push origin feat && gh pr create --fill", {}, None),  # two effectful steps: only a diagnosis can tell
     ("git push origin $BRANCH", {}, None),
     ("gh pr merge 12 --squash", {"pr view 12": (0, '{"number": 12, "state": "MERGED"}')}, "completed"),
     ("gh pr merge 12 --squash", {"pr view 12": (0, '{"number": 12, "state": "OPEN"}')}, "not_started"),
     ("gh pr merge 12 --auto --squash", {}, None),
+    ("gh pr merge -m 42", {"pr view 42": (0, '{"number": 42, "state": "MERGED"}')}, "completed"),  # -m is --merge
+    ("gh pr merge -r --delete-branch", {"pr view": (0, '{"number": 7, "state": "MERGED"}')}, None),  # target unknown
+    ("gh pr create --head feat --fill", {"pr list": (0, '[{"number": 2, "state": "MERGED"}]')}, None),
+    ("gh pr create --fill", {}, None),
     ("gh pr merge 12", {"pr view 12": (1, "HTTP 401: Bad credentials (gh auth login)")}, "insufficient_permissions"),
     ("gh pr create --head feat --fill", {"pr list": (0, '[{"number": 3, "state": "OPEN"}]')}, "completed"),
     ("gh pr create --head feat --fill", {"pr list": (0, "[]")}, "not_started"),
@@ -2203,7 +2217,7 @@ def test_deterministic_probes(command: str, responses: dict[str, tuple[int, str]
     assert (probed[0] if probed else None) == expected
     for args in run.calls:  # probes only read
         assert (args[3] if args[:2] == ["git", "-C"] else " ".join(args[1:3])) in (
-            "rev-parse", "ls-remote", "merge-base", "pr view", "pr list")
+            "rev-parse", "ls-remote", "merge-base", "show-ref", "pr view", "pr list")
 
 
 def test_file_probes(tmp_path: Path) -> None:
@@ -2242,3 +2256,68 @@ def test_running_then_completed_continues_once(tmp_path: Path) -> None:
                                  ("codex", CODEX_SUCCESS)])
     env.head([IN_FLIGHT["subagent"], *QUOTA])
     assert env.run()[0] == "idle" and len(env.relay.launches) == 3
+
+
+def test_reexamination_never_rewrites_a_held_chain_for_another_session(tmp_path: Path) -> None:
+    env = Env(tmp_path, [])
+    env.head([IN_FLIGHT["git push"], *QUOTA])
+    assert env.run()[0] == "held"
+    before = env.store.load()
+    env.reconcile = True
+    env.host.probe = lambda call: ("completed", "x")
+    env.head(SUCCESS, sid="20261018-090000-ffffff")
+    result, sup = env.run("20261018-090000-ffffff")
+    assert result == "held" and env.relay.launches == []
+    after = env.store.load()
+    assert after["hold"] == before["hold"] and after["chain"] == before["chain"] == [HEAD]
+
+
+def test_repeated_reexamination_is_quiet_and_not_a_new_failure(tmp_path: Path) -> None:
+    env = reconciling(tmp_path, [])
+    env.relay.readings = None  # no provider can diagnose: the hold stays, re-examined each run
+    env.head([IN_FLIGHT["subagent"], *QUOTA])
+    assert env.run()[0] == "held"
+    sent, failures = len(env.sent), env.store.load()["counters"]["consecutive_failures"]
+    for _ in range(3):
+        assert env.run()[0] == "held"
+    state = env.store.load()
+    assert state["hold"]["reason"] == "effects_uncertain" and env.relay.launches == []
+    assert state["counters"]["consecutive_failures"] == failures
+    assert not any("HOLD" in text for text in env.sent[sent:])
+
+
+def test_moved_chain_hold_is_not_reexamined_again(tmp_path: Path) -> None:
+    env = reconciling(tmp_path, [], probe=lambda call: ("completed", "x"))
+    env.head([IN_FLIGHT["git push"], *QUOTA])
+    state = rc.default_state()
+    state.update({"phase": "held", "head_session": HEAD, "chain": [HEAD], "permissions_digest": "perm0",
+                  "permissions_pinned": True,
+                  "hold": {"reason": "effects_uncertain", "at": rc.iso(T0), "attempt": None, "turn": f"{HEAD}/turn-000"}})
+    env.store.save(state, T0)
+    assert env.run()[0] == "held" and env.store.load()["hold"]["resumable"] is False
+    resumes = sum(r.get("event") == "reconcile_resume" for r in journal(env))
+    assert env.run()[0] == "held" and sum(r.get("event") == "reconcile_resume" for r in journal(env)) == resumes
+
+
+def test_claude_is_never_the_diagnostic_agent(tmp_path: Path) -> None:
+    env = reconciling(tmp_path, [])
+    env.relay.readings = room(env, "claude")  # only Claude has room; Codex is unconfirmed
+    env.head([IN_FLIGHT["subagent"], *EAI])
+    result, sup = env.run()
+    assert result == "held" and sup.state["hold"]["reason"] == "effects_uncertain" and env.relay.launches == []
+
+
+def test_waived_gate_settles_an_abandoned_diagnosis(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    env = reconciling(tmp_path, [("codex", CODEX_SUCCESS)])
+    _diag_pending(env, "rc-20261018T080000Z-0d1a9003", pid=None)
+    state = env.store.load()
+    state.update({"phase": "held", "hold": {"reason": "reconcile_failed", "at": rc.iso(T0), "attempt": 1,
+                                            "turn": f"{HEAD}/turn-001"}})
+    env.store.save(state, T0)
+    monkeypatch.setenv("RELAY_CONTINUITY_DIR", str(env.store.root))
+    monkeypatch.setattr(rc, "make_host", lambda repo: env.host)
+    monkeypatch.setattr(rc, "repo_root", lambda: env.repo)
+    assert rc.main(["release", "--note", "checked the diagnosis session by hand; nothing ran"]) == 0
+    assert env.run()[0] == "idle" and len(env.relay.launches) == 1
+    assert rc.unsettled_nonces(env.store.journal_path) == []
+    assert env.run()[0] == "idle"

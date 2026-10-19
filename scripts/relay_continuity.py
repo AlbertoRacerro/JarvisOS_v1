@@ -1762,9 +1762,13 @@ PERMISSION_RE = re.compile(r"(?i)permission denied|could not read username|authe
                            r"not logged in|requires authentication|resource not accessible|HTTP 40[13]\b")
 PUSH_FLAGS = {"-u", "--set-upstream", "-q", "--quiet", "-v", "--verbose", "--no-verify", "--porcelain", "--atomic",
               "--progress", "--no-progress", "-f", "--force", "--force-if-includes"}
-GH_VALUE_OPTS = {"-b", "--body", "-F", "--body-file", "-t", "--subject", "--title", "-A", "--author-email",
-                 "--match-head-commit", "-R", "--repo", "-H", "--head", "-B", "--base", "-T", "--template", "-a",
-                 "--assignee", "-l", "--label", "-m", "--milestone", "-p", "--project", "-r", "--reviewer"}
+GH_VALUE_OPTS = {  # per subcommand: `gh pr merge -m` is --merge, `gh pr create -m` takes a milestone
+    "merge": {"-b", "--body", "-F", "--body-file", "-t", "--subject", "-A", "--author-email", "--match-head-commit",
+              "-R", "--repo"},
+    "create": {"-b", "--body", "-F", "--body-file", "-t", "--title", "-R", "--repo", "-H", "--head", "-B", "--base",
+               "-T", "--template", "-a", "--assignee", "-l", "--label", "-m", "--milestone", "-p", "--project",
+               "-r", "--reviewer"},
+}
 Runner = Callable[..., tuple[int | None, str]]
 
 DIAGNOSTIC_PROMPT = """[relay-continuity attempt {nonce}]
@@ -1872,6 +1876,8 @@ def _simple_commands(command: str) -> list[tuple[Path | None, list[str]]] | None
             return None
         if words[:1] == ["cd"] and len(words) == 2:
             cwd = Path(words[1]) if cwd is None or Path(words[1]).is_absolute() else cwd / words[1]
+            if not cwd.is_absolute():
+                return None  # relative to an unknown working directory
         elif words:
             out.append((cwd, words))
     return out
@@ -1881,7 +1887,9 @@ def _denied(text: str) -> bool:
     return bool(PERMISSION_RE.search(text or ""))
 
 
-def _probe_push(cwd: Path, args: list[str], run: Runner) -> tuple[str, str] | None:
+def _probe_push(cwd: Path | None, args: list[str], run: Runner, repo: Path) -> tuple[str, str] | None:
+    """One branch update only. HEAD, the upstream and the current branch are resolved only in a directory the
+    command itself named (`cwd`); a named local branch is the same in every worktree."""
     force, positional = False, []
     for a in args:
         if a.startswith("--force-with-lease"):
@@ -1902,17 +1910,26 @@ def _probe_push(cwd: Path, args: list[str], run: Runner) -> tuple[str, str] | No
         if not src:
             return None  # `:branch` deletes it
     else:
+        if cwd is None:
+            return None
         code, upstream = run(["git", "-C", str(cwd), "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"])
         if code != 0 or "/" not in upstream.strip():
             return None
         up_remote, _, up_branch = upstream.strip().partition("/")
         remote, src, dst = (positional[0] if positional else up_remote), "HEAD", up_branch
-    if dst == "HEAD":
+    if src == "HEAD" or dst == "HEAD":
+        if cwd is None:
+            return None
         code, branch = run(["git", "-C", str(cwd), "rev-parse", "--abbrev-ref", "HEAD"])
         if code != 0 or branch.strip() in ("", "HEAD"):
             return None
-        dst = branch.strip()
-    dst = dst.removeprefix("refs/heads/")
+        dst = branch.strip() if dst == "HEAD" else dst
+    src, dst = src.removeprefix("refs/heads/"), dst.removeprefix("refs/heads/")
+    if dst.startswith("refs/") or src.startswith("refs/"):
+        return None  # tags, notes and other refs are not probed
+    cwd = cwd or repo
+    if src != "HEAD" and run(["git", "-C", str(cwd), "show-ref", "--verify", "--quiet", f"refs/heads/{src}"])[0] != 0:
+        return None  # not a local branch (a tag, a SHA): not a branch update
     code, local = run(["git", "-C", str(cwd), "rev-parse", "--verify", f"{src}^{{commit}}"])
     if code != 0:
         return None
@@ -1933,14 +1950,14 @@ def _probe_push(cwd: Path, args: list[str], run: Runner) -> tuple[str, str] | No
     return None
 
 
-def _gh_parse(args: list[str]) -> tuple[list[str], dict[str, str], set[str]]:
+def _gh_parse(args: list[str], value_opts: set[str]) -> tuple[list[str], dict[str, str], set[str]]:
     positional, values, flags, i = [], {}, set(), 0
     while i < len(args):
         a = args[i]
         if a.startswith("--") and "=" in a:
             key, value = a.split("=", 1)
             values[key] = value
-        elif a in GH_VALUE_OPTS and i + 1 < len(args):
+        elif a in value_opts and i + 1 < len(args):
             values[a] = args[i + 1]
             i += 1
         elif a.startswith("-"):
@@ -1951,13 +1968,17 @@ def _gh_parse(args: list[str]) -> tuple[list[str], dict[str, str], set[str]]:
     return positional, values, flags
 
 
-def _probe_gh(cwd: Path, args: list[str], run: Runner) -> tuple[str, str] | None:
-    positional, values, flags = _gh_parse(args)
+def _probe_gh(cwd: Path | None, args: list[str], run: Runner) -> tuple[str, str] | None:
+    """`cwd` is set only when the command itself named an absolute directory; otherwise the agent's working
+    directory is unknown (it persists across calls), so nothing branch-relative is resolved."""
+    sub = args[1] if len(args) > 1 and args[0] == "pr" else ""
+    positional, values, flags = _gh_parse(args, GH_VALUE_OPTS.get(sub, set()))
     repo = values.get("-R") or values.get("--repo")
     repo_args = ["--repo", repo] if repo else []
     if positional[:2] == ["pr", "merge"]:
-        if flags & {"--auto", "--disable-auto"} or len(positional) > 3:
-            return None  # auto-merge is armed, not performed: an open PR proves nothing
+        if flags & {"--auto", "--disable-auto"} or len(positional) != 3 \
+                or not re.fullmatch(r"\d+|https://github\.com/[^/\s]+/[^/\s]+/pull/\d+", positional[2]):
+            return None  # auto-merge is armed, not performed; without an explicit PR the target is unknown
         target = positional[2:3]
         code, out = run(["gh", "pr", "view", *target, *repo_args, "--json", "number,state"], cwd=cwd, timeout=60)
         if code != 0:
@@ -1974,6 +1995,8 @@ def _probe_gh(cwd: Path, args: list[str], run: Runner) -> tuple[str, str] | None
     if positional[:2] == ["pr", "create"] and len(positional) == 2:
         head = values.get("-H") or values.get("--head")
         if head is None:
+            if cwd is None:
+                return None
             code, branch = run(["git", "-C", str(cwd), "rev-parse", "--abbrev-ref", "HEAD"])
             if code != 0 or branch.strip() in ("", "HEAD"):
                 return None
@@ -1986,9 +2009,9 @@ def _probe_gh(cwd: Path, args: list[str], run: Runner) -> tuple[str, str] | None
             prs = [p for p in json.loads(out) if isinstance(p, dict)]
         except (ValueError, TypeError):
             return None
-        live = [p for p in prs if p.get("state") in ("OPEN", "MERGED")]
+        live = [p for p in prs if p.get("state") == "OPEN"]  # a merged one may be an older PR from a reused name
         if live:
-            return "completed", f"PR #{live[0].get('number')} exists for branch {head}"
+            return "completed", f"open PR #{live[0].get('number')} exists for branch {head}"
         if not prs:
             return "not_started", f"no PR exists for branch {head}: the creation did not take effect"
         return None
@@ -2031,12 +2054,14 @@ def probe_call(call: ToolCall, repo: Path, run: Runner = devctx.run) -> tuple[st
     if len(effectful) != 1:
         return None
     cd, words = effectful[0]
-    cwd = repo if cd is None else (cd if cd.is_absolute() else repo / cd)
+    # The agent's working directory persists across calls: only an absolute directory named here is known.
+    cwd = cd if cd is not None and cd.is_absolute() else None
     if Path(words[0]).name == "git":
         args = words[1:]
         while args[:1] == ["-C"] and len(args) > 1:
-            cwd, args = cwd / args[1], args[2:]
-        return _probe_push(cwd, args[1:], run) if args[:1] == ["push"] else None
+            cwd = Path(args[1]) if Path(args[1]).is_absolute() else (cwd / args[1] if cwd else None)
+            args = args[2:]
+        return _probe_push(cwd, args[1:], run, repo) if args[:1] == ["push"] else None
     if Path(words[0]).name == "gh":
         return _probe_gh(cwd, words[1:], run)
     return None
@@ -2101,6 +2126,7 @@ class Supervisor:
         self.store = store
         self.reconcile = reconcile  # spec 197: settle uncertain operations from evidence before holding
         self.resume_turn: str | None = None
+        self.resumed_hold: dict[str, Any] | None = None
         self.host = host
         self.limits = limits or Limits()
         self.turns = turns
@@ -2142,6 +2168,10 @@ class Supervisor:
         self.state["hold"] = {"reason": reason, "at": iso(now), "attempt": attempt, "turn": turn}
         self.save()
         self.store.journal({"event": "hold", "at": iso(now), "reason": reason, "session": self.state["head_session"]})
+        previous = self.resumed_hold or {}
+        if previous.get("reason") == reason and previous.get("turn") == turn:
+            self.host.log(f"hold: {reason} (unchanged since the re-examined hold; not re-announced)")
+            return "held"
         event = "circuit_open" if reason.startswith("circuit_") else "hold"
         fields = {"session": self.state["head_session"], "reason": reason}
         if event == "hold":
@@ -2256,12 +2286,14 @@ class Supervisor:
         self.notifier = Notifier(self.state, sender=self.sender, log=self.host.log)
         if self.state["phase"] == "held":
             hold = self.state.get("hold") or {}
-            if not (self.reconcile and hold.get("reason") == "effects_uncertain" and hold.get("turn")):
+            if not (self.reconcile and hold.get("reason") == "effects_uncertain" and hold.get("turn")
+                    and hold.get("resumable", True) and session == self.state.get("head_session")):
                 self.host.log(f"chain is held ({self.state['hold']}); run `release` after review")
                 return "held"
             # Spec 197: an uncertain-effects hold is re-examined from evidence, for that exact turn only. Every
             # other hold, and every hold the reconciliation itself reaches, still needs `release`.
             self.resume_turn = hold["turn"]
+            self.resumed_hold = hold
             self.store.journal({"event": "reconcile_resume", "at": iso(now), "hold": hold})
             self.host.log(f"re-examining held turn {hold['turn']} from read-only evidence")
             self.state["hold"] = None
@@ -2315,8 +2347,11 @@ class Supervisor:
             if ack.get("turn") and ack.get("turn") == report.turn_id:
                 acknowledged = ack
         if self.resume_turn and report.turn_id != self.resume_turn:
-            self.host.log("the chain moved since the held turn; keeping the hold")
-            return self.hold("effects_uncertain", turn=self.resume_turn)
+            self.host.log("the chain moved since the held turn; keeping the hold (not re-examined again)")
+            result = self.hold("effects_uncertain", turn=self.resume_turn)
+            self.state["hold"]["resumable"] = False
+            self.save()
+            return result
         while True:
             if self.stop_requested():
                 self.state["phase"] = "stopped"
@@ -2360,7 +2395,8 @@ class Supervisor:
                 return self._wait_or_hold("prefer", lambda _agent: f"[relay-continuity attempt {{nonce}}]\n{task}")
             return agent, f"[relay-continuity attempt {{nonce}}]\n{task}"
 
-        counters["consecutive_failures"] += 1
+        if report.turn_id != self.resume_turn:  # re-examining a held turn is not a new failure
+            counters["consecutive_failures"] += 1
         if counters["consecutive_failures"] > self.limits.max_consecutive_failures:
             return self.hold("circuit_failures")
         if self.attempts >= self.limits.max_attempts_per_run:
@@ -2544,19 +2580,19 @@ class Supervisor:
                 return held
 
     def _diagnostic_agent(self, failed_agent: str, report: TurnReport) -> str | None:
-        """Codex when a fresh reading confirms it has room, else the failed agent unless it is out of quota or
-        cooling down. Choosing a diagnostic agent records no switch: the continuation is chosen afterwards."""
+        """Codex only, when it is not cooling down and (unless it is the failed agent itself, retried after a
+        transient or crash) a fresh reading confirms room. Its headless sandbox normally has no network, which
+        makes a remote repeat by the diagnosis itself unlikely; Claude headless may carry `[agent.allow]` grants.
+        Choosing a diagnostic agent records no switch: the continuation is chosen afterwards."""
         now = self.host.now()
-        for agent in dict.fromkeys(("codex", failed_agent)):
-            if agent == failed_agent and report.outcome in ("quota", "spend_limit"):
-                continue
-            cooldown = self.state["cooldowns"].get(agent)
-            if cooldown and ((until := parse_ts(cooldown.get("until"))) is None or now < until):
-                continue
-            if agent != failed_agent and self.exhausted_until(agent) is not False:
-                continue  # no fresh positive evidence of room
-            return agent
-        return None
+        if failed_agent == "codex" and report.outcome in ("quota", "spend_limit"):
+            return None
+        cooldown = self.state["cooldowns"].get("codex")
+        if cooldown and ((until := parse_ts(cooldown.get("until"))) is None or now < until):
+            return None
+        if failed_agent != "codex" and self.exhausted_until("codex") is not False:
+            return None  # no fresh positive evidence of room
+        return "codex"
 
     def _await_work(self, rec: dict[str, Any], report: TurnReport) -> str | None:
         """Running work of this chain (a background worker, a detached job): adopt it by waiting for it to end,
@@ -2801,6 +2837,10 @@ class Supervisor:
                    "pid": None, "pid_start": None, "fingerprint": self.host.fingerprint(), "attempt": self.attempts}
         self.state["pending"] = pending  # intent is durable before anything is launched
         self.state["acknowledged"] = None  # the reviewed turn is now behind the chain
+        if ((self.state.get("reconcile") or {}).get("diag") or {}).get("nonce"):
+            # A release waived the gate while a diagnosis was unsettled: it is abandoned, never adopted again.
+            self.store.journal({"event": "settle", "purpose": "diagnostic", "outcome": "abandoned",
+                                "nonce": self.state["reconcile"]["diag"]["nonce"], "session": None})
         self.state["reconcile"] = None  # so is the reconciled one
         self.state["agent"] = agent
         self.save()

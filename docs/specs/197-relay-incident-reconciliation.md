@@ -21,10 +21,10 @@ Reconciliation runs only where spec 195 would hold with `effects_uncertain` for 
 2. **Deterministic probes.** The supervisor itself runs read-only checks:
    - `git push` of one branch: `rev-parse`, `ls-remote`, `merge-base --is-ancestor`. If the remote is at the local commit, the push is `completed`. If the remote is absent or behind, it is `not_started` (a push is idempotent). A forced, multi-ref or dynamic push is not probed.
    - `gh pr merge`: `gh pr view`. `MERGED` is `completed`; `OPEN` is `not_started`, unless `--auto` was used.
-   - `gh pr create`: `gh pr list --head`.
+   - `gh pr create`: `gh pr list --head`. Only an open PR counts, since a merged one may be an older PR from a reused branch name.
    - `Edit`/`Write`: the file content.
-   A command is probed only when its single effectful step is the probed operation.
-3. **Bounded diagnostic run.** For what the probes cannot settle, the supervisor dispatches a read-only diagnostic through Relay's headless runner (`run --continue <head> -n 1`). Codex runs it when a fresh limits reading confirms room. Otherwise the failed agent runs it, unless that agent is out of quota or cooling down. The prompt carries a nonce, the operations by tool-call id, and a sanitized evidence bundle the supervisor collected read-only: worktrees, status, branches with upstream tracking, recent commits, remote heads, recent PRs and worker lanes. The diagnostic session never becomes the chain head. There are at most `reconcile_attempts` (2) runs per turn, each bounded by `reconcile_timeout` (45 min), after which its process group is terminated.
+   A command is probed only when its single effectful step is the probed operation. The agent's working directory persists across calls, so `HEAD`, the upstream and the current branch are resolved only in an absolute directory the command itself names (`cd /abs`, `git -C /abs`). A named local branch is the same in every worktree. Tags and other non-branch refs, and `gh pr merge` without an explicit PR, are not probed.
+3. **Bounded diagnostic run.** For what the probes cannot settle, the supervisor dispatches a read-only diagnostic through Relay's headless runner (`run --continue <head> -n 1`). Only Codex runs it, when it is not cooling down and, unless it is the failed agent itself retried after a transient failure or crash, a fresh limits reading confirms room. Claude is never the diagnostic agent, because Claude headless may carry `[agent.allow]` grants. The prompt carries a nonce, the operations by tool-call id, and a sanitized evidence bundle the supervisor collected read-only: worktrees, status, branches with upstream tracking, recent commits, remote heads, recent PRs and worker lanes. The diagnostic session never becomes the chain head. There are at most `reconcile_attempts` (2) runs per turn, each bounded by `reconcile_timeout` (45 min), after which its process group is terminated.
 4. **Deterministic promotion.** A diagnosis counts only when all of the following hold:
    - the run is a `success`;
    - every tool call it made classifies `read_only` under the spec 195 classifier;
@@ -39,9 +39,17 @@ Reconciliation runs only where spec 195 would hold with `effects_uncertain` for 
 ### Safety and restart
 
 - The diagnostic's intent (nonce, agent, operations, fingerprint) is written to `state.reconcile.diag` and the attempt journal before launch. On restart, a live diagnostic (pid plus start time) is waited for and adopted, and a dead one is located by nonce. If its session cannot be identified, the hold is `attempt_unresolved`: without a transcript nothing shows it stayed read-only. A second diagnostic is never launched while one is unsettled. The spec 195 single-instance lock still applies.
-- An existing `effects_uncertain` hold is re-examined on the next `run`, for exactly the held turn. If the chain has moved, the hold stays. No other hold reason is ever cleared automatically, and holds reached by reconciliation are not re-examined.
+- An existing `effects_uncertain` hold is re-examined on the next `run` of the held chain's own head session, for exactly the held turn. If the chain has moved, the hold stays and is marked not re-examinable. Re-examining a hold that remains unchanged is neither re-announced nor counted as a new failure. No other hold reason is ever cleared automatically, and holds reached by reconciliation are not re-examined.
 - The state additions (`reconcile`, `diagnostics`) are optional, so state written by spec 195 still loads. Malformed additions are `state_corrupt`.
 - `run --no-reconcile` restores the spec 195 behaviour. `Supervisor(reconcile=False)` is the library default, so spec 195 tests keep their exact semantics.
+
+### Residual risk
+
+Read-only is enforced after the fact. The diagnosis runs with Relay's unchanged headless authority, so a diagnostic agent that ignored its instructions could act before its run is voided. The mitigations:
+- Only Codex diagnoses. Its headless sandbox normally has no network, so a remote repeat (a push, merge or comment) is unlikely.
+- Remote state comes from the supervisor's own probes and evidence bundle, so the diagnosis rarely needs network access.
+- Any non-read-only call, or any repository change, voids the diagnosis and holds the chain.
+Tightening this further, for example with a read-only Relay profile for diagnoses, is a maintainer authority decision outside this spec.
 
 ### Authority
 
