@@ -54,10 +54,10 @@ Classification reads `output.jsonl` first. It uses `stderr.log` and Relay's run 
 | --- | --- |
 | `success` | Claude `result` event with `is_error=false`. Codex `turn.completed` with no later `error`/`turn.failed`. |
 | `quota` | Claude `is_error` + `api_error_status=429` + session/weekly limit text. Codex `error`/`turn.failed` usage-limit text. Carries a provider-message reset time when present. |
-| `spend_limit` | Claude 429 monthly spend limit. There is no timed reset, and raising spend is a maintainer decision. |
+| `spend_limit` | A spend/credit cap with no printed reset. Raising spend is a maintainer decision. A spend-cap message that also prints a timed session reset (Claude's "monthly spend limit · your session limit resets 4pm") is a `quota` with that reset: the corpus shows work resuming after it. |
 | `transient` | DNS/connection failures (`EAI_AGAIN`, unreachable API server), HTTP 5xx, overloaded/529. |
 | `auth` | HTTP 401/403, login-required or expired-credential text. |
-| `crash` | No terminal event (missing, empty or truncated output). |
+| `crash` | No terminal event (missing, empty or truncated output). A turn with no output of its own (missing, empty, or a byte-identical copy of the previous turn's output, which Relay leaves when it captures nothing) has no evidence and is always held as `output_missing`. Only a truncated stream with recorded events gets the crash retry. |
 | `unknown` | Any other error terminal. |
 
 ### Side-effect gate (duplicate-execution safety)
@@ -68,26 +68,34 @@ Each tool call in the failed turn's raw output is paired with its result and cla
 
 Automatic continuation is refused, and the chain enters a **manual hold** with an alert, when any of these hold:
 
-- any non-`read_only` call has no result (in flight at interruption);
-- any `external` or `unknown` call completed in the failed turn without an observable effect record;
-- the output is truncated or unparseable;
+- any non-`read_only` call has no paired result (it was in flight at interruption, so whether it took effect is unknown). A background launch (a `run_in_background` tool, a detached `&`/`nohup` command) counts as in flight until its completion notification is seen, because its result is only the launch acknowledgement. A subagent's calls settle only when the subagent itself finished;
+- **live work**: before any automatic continuation, and before handing a successful chain a new task, the supervisor checks what is actually running. It looks at this user's live processes whose working directory is the repository or one of its worktrees, and at running docker/podman containers. Such work holds (`live_work`) when it started inside the chain's window, which opens at the chain's first session or the latest maintainer release, whichever is later. A multiplexer pane's program and a container with exec sessions also hold however old they are, because an `exec` starts new work without a new start time. They stop holding only when a release acknowledged that exact identity: pid, start time and argv digest, or container id, start and exec sessions. A release records the identities live at that moment. Bare interactive shells reading a terminal, multiplexer servers, the supervisor and its own ancestors are skipped. Inspection fails closed: an unreadable process table, a failed worktree listing, a container daemon that is reachable but cannot be listed or inspected, or an undatable container counts as live; an unreachable daemon means no containers only when no container shim (`containerd-shim*`, `conmon`) is running, because live restore keeps containers alive without their daemon. Detached work (`&`, tmux/screen, nohup, daemons, containers) outlives the call that launched it, and no shell classifier can recognize every way to start it, so this check is the backstop for detachment across calls, notifications and turns. A task notification closes only tool-managed backgrounding, never a command that detached itself. Only process names are logged, never arguments;
+- the output has unparseable lines;
 - the outcome is `crash` and the repository fingerprint changed during the attempt;
-- the attempt journal shows a launched attempt whose outcome cannot be established.
+- the attempt journal shows a launched attempt whose outcome cannot be established. This includes an attempt that left no identifiable Relay session even when the repository looks unchanged, because remote effects such as a merge or a PR comment leave no local trace. It also includes a journal launch that the state does not account for. A session is identified only by its own first attempt-marker line, and only when exactly one session carries it.
 
-The repository fingerprint covers refs, worktrees, the main checkout's status and HEAD. Only `release` leaves a hold.
+The repository fingerprint covers refs, worktrees, the main checkout's status and HEAD. Only `release` leaves a hold. A release waives only the review it answers: the released turn is not re-gated, and an `auth`/`unknown` hold is retried once on the same agent. Cooldowns, failover confirmation and every bound still apply.
+
+Command classification accounts for execution-capable arguments. Examples are `env`/`timeout`/`nohup` wrappers, `awk` `system()` and pipes, `sed` `e`/`w`, `find -fprint`, attached `curl -XPOST`/`-d` and `gh api -f` forms, and `$(...)` inside unquoted heredocs. Anything not recognized is `unknown`.
+
+Terminal evidence: only the last top-level terminal decides (subagent results never do). Claude success requires `is_error` exactly `false` with `terminal_reason` `completed`. Without a terminal event, an authentication diagnostic in Relay's stderr or run JSON yields `auth`, which is held, never a retryable crash.
 
 Completed `local_write`/`external`/`background` calls with results are listed in the recovery prompt as already done and must not be repeated. Their effects are inspectable through Git, GitHub and `devctx` recover.
 
 ### Continuation policy
 
 - **Preferred and fallback.** Claude is the preferred coordinator and Codex is the only fallback; no other agent is ever selected. Per-agent model and permission settings stay exactly as Relay's existing configuration defines them. The supervisor passes no permission, sandbox or model flags.
-- **Permission pinning.** It records the digest of `.agent-relay/permissions.toml` at start and holds if the digest changes.
-- **Approval gates.** A failover turn has the same authority as the turn it replaces. It cannot approve, merge or bypass a gate the original could not.
+- **Permission pinning.** It pins the digest of the authority-bearing settings in `.agent-relay/permissions.toml` on first run, including the file's absence, and holds if the digest changes. Creating the file later is a change. Releasing a `permissions_changed` hold re-pins the reviewed settings.
+- **Approval gates.** A failover turn never has more authority than the turn it replaces. It cannot approve, merge or bypass a gate the original could not.
+- **Headless authority is narrower than the REPL's.** Relay applies the configured `permissions.toml` backend modes (`bypassPermissions`, Codex sandbox and approval policy) only in its interactive REPL. Headless `run` starts Claude with `--permission-mode default` plus Relay's approval hook, so unapproved tool calls are refused. Codex runs with Relay's headless default, which allows workspace writes. The supervisor does not change this. Making headless continuations match REPL authority (for example through Relay's `[agent.allow]` patterns) is a maintainer authority decision outside this spec.
 - **`quota`.** The agent goes into a persistent cooldown, and the chain switches to the other agent only when that agent's fresh limits reading shows quota available. The cooldown ends at the provider-reported reset: a fresh `limits` reading with a future `resets_at`, else the provider's own message, else a conservative recheck interval labelled estimated. Readings with an `as_of` older than the freshness bound, or a `resets_at` in the past, are refreshed and otherwise discarded. A reset is accepted only if it is no more than 8 days ahead.
-- **`spend_limit`.** As `quota`, but the cooldown never expires by time. Only `release` or a fresh `limits` reading showing availability ends it.
+- **Spend cap outliving its reset.** A second spend-cap failure on the same agent (a distinct turn, with no success in between) is a `spend_limit`, even when it prints a session reset. So is a single spend-cap turn whose printed reset is already behind the turn's end. The 2026-09-24 corpus shows Claude repeating the cap after its printed reset passed.
+- **`spend_limit`.** As `quota`, but the cooldown never expires by time. Spend caps do not appear in the `limits` usage windows, so only `release` ends it.
+- **Stale printed resets.** A time-only reset less than 6 hours behind the turn's end is a stale message, not tomorrow's reset. It falls back to a short recheck.
 - **`transient`.** Retry the same agent with bounded exponential backoff and no switch.
 - **`crash`.** One same-agent retry, subject to the side-effect gate, then hold.
 - **`auth`, `unknown`.** Hold with an alert. These never cause a switch.
+- **Same-agent retries.** `transient` and `crash` retries never switch provider, even when Claude is preferred and available.
 - **Return to Claude.** Only at a turn boundary, after Claude's cooldown has passed, a fresh reading confirms availability, and a minimum dwell since the last switch has elapsed.
 - **Both agents unavailable.** Wait until the earliest validated reset, recheck, and keep waiting with bounded waits without busy looping.
 - **Circuit breaker.** Bounded consecutive failures, bounded switches per window, and a maximum total attempts per run. Exceeding any bound opens the circuit: hold plus alert. This prevents infinite loops and oscillation.
@@ -96,7 +104,7 @@ Completed `local_write`/`external`/`background` calls with results are listed in
 ### Process safety
 
 - **Single instance.** Exclusive `flock` on the state directory, plus a refusal to start when legacy autopilot processes or another live supervisor exist.
-- **Atomic, validated state.** Writes go to a temp file, then fsync, then rename. A corrupt or unknown-version state file causes a hold, never a reset.
+- **Atomic, validated state.** Writes go to a temp file, then fsync, then rename. A corrupt, unknown-version or structurally incomplete state file (any missing or mistyped field) causes a hold, never a reset or a silent repair from defaults.
 - **Restart safety.** Each launch first writes an intent record with a unique attempt nonce, embedded in the recovery prompt. On restart, a launched attempt without an outcome is resolved as follows: if its Relay process is still alive (pid plus start time), the supervisor waits for it. Otherwise it locates the Relay session by nonce and classifies it. If neither is possible, it holds.
 - **Graceful shutdown.** SIGTERM/SIGINT and `stop` finish or leave the running turn intact and record the state; they never kill an agent.
 
@@ -117,6 +125,7 @@ Completed `local_write`/`external`/`background` calls with results are listed in
 ## File boundaries
 
 - **New:** `scripts/relay_continuity.py`; tests `backend/tests/test_relay_continuity.py`; trimmed and sanitized real-turn fixtures under `backend/tests/fixtures/relay_continuity/`; this spec; a runbook section in `docs/implementation/relay-continuity-runbook.md`.
+- **Architecture enforcement:** one `accepted_owner` AE002 entry in `configs/architecture_enforcement.json` for `scripts/relay_continuity.py::post_webhook`, the only external dispatch. It is bound to a strictly validated `https://hooks.slack.com/services/` URL, with redirects rejected and proxies disabled.
 - **Unchanged:**
   - Relay binary and session format;
   - product backend/frontend/schema;
@@ -136,6 +145,7 @@ Deterministic offline tests run with injected clock, Relay runner, limits reader
 2. Restart during failover (intent written, supervisor killed, Relay still running or finished), stale or past reset timestamps, unavailable fallback provider, concurrent supervisor start, repeated crash loop (circuit opens), transient backoff bound, and oscillation bound.
 3. Ambiguous side effects:
    - an in-flight `git push`, `gh pr merge`, Write or subagent call → hold;
+   - live work in a checkout or a container started inside the chain's window → `live_work` hold; work older than the latest release → no hold;
    - completed effects listed in the recovery prompt;
    - **a test proving that no Relay invocation is issued** for any held attempt, including after restart.
 4. Interrupted state writes: a crash between temp write and rename leaves the previous state valid; a corrupt state file holds.

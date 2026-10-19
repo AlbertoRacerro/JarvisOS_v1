@@ -200,6 +200,7 @@ jobs:
           ../scripts/classify_ci_scope.py
           ../scripts/check_typecheck_ratchet.py
           ../scripts/generate_frontend_contracts.py
+          ../scripts/relay_continuity.py
 
   backend-core-tests:
     name: backend-tests (${{ matrix.group }})
