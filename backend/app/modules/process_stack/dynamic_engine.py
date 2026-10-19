@@ -1182,7 +1182,7 @@ def _network_concentrations(topology: dict[str, Any], runtime: dict[str, Any], s
         total = sum(flows.get(stream["id"], 0.0) for stream in inlet)
         if total <= 0:
             raise DynamicError("ZERO_THROUGHFLOW", "Algebraic unit has zero throughflow.", {"unit_id": key})
-        mixed = np.zeros(4, dtype=np.float64)
+        mixed: np.ndarray = np.zeros(4, dtype=np.float64)
         for stream in inlet:
             source = (stream.get("source") or {}).get("unit")
             value = topology["feeds"].get(stream["id"]) if source is None else concentrations.get(
@@ -1385,7 +1385,7 @@ def run(
         item["initial_volume_m3"] = item["volume_m3"]
     # Per unit: X,N,O2 plus integrated generation, transfer and discrete harvest.
     # Global states: boundary X/N/O2 balance and continuous harvested biomass mass.
-    initial = np.zeros(_slot(n) + 4, dtype=np.float64)
+    initial: np.ndarray = np.zeros(_slot(n) + 4, dtype=np.float64)
     for i, unit in enumerate(units):
         initial[_slot(i) : _slot(i, 3)] = unit["state"]
     rows: list[np.ndarray] = [initial.copy()]
@@ -1567,7 +1567,7 @@ def run(
                                                        x, nitrogen)
                         rx = (mu - loss) * x / 3600.0
                         transfer = growth.kla_h * (growth.oxygen_saturation - oxygen) / 3600.0
-                        inlet = np.zeros(3, dtype=np.float64)
+                        inlet: np.ndarray = np.zeros(3, dtype=np.float64)
                         qin = 0.0
                         for stream, weight in network_state["incoming"][item["unit"]["id"]]:
                             flow = flows.get(stream["id"], 0.0)
@@ -1699,8 +1699,8 @@ def run(
         manifest["channels"] = _channel_units(series, controllers)
         manifest["diagnostics"]["roundoff_clips"] = roundoff_clips
         net_boundary = current[_slot(n):_slot(n, 3)]
-        initial_inventory = np.zeros(3, dtype=np.float64)
-        final_inventory = np.zeros(3, dtype=np.float64)
+        initial_inventory: np.ndarray = np.zeros(3, dtype=np.float64)
+        final_inventory: np.ndarray = np.zeros(3, dtype=np.float64)
         for i, unit in enumerate(units):
             growth = growths[i]
             initial_inventory += unit["initial_volume_m3"] * np.asarray(
@@ -1712,7 +1712,7 @@ def run(
             0.0,
             sum(growths[i].oxygen_yield * current[_slot(i, 3)] + current[_slot(i, 5)] for i in range(n)),
         ])
-        impulses = np.zeros(3, dtype=np.float64)
+        impulses: np.ndarray = np.zeros(3, dtype=np.float64)
         for entry in event_log:
             if entry.get("impulse_inventory"):
                 impulses += np.asarray(entry["impulse_inventory"], dtype=np.float64)
@@ -2584,8 +2584,8 @@ def _partial_balances(
 ) -> dict[str, Any]:
     n = len(units)
     boundary = state[_slot(n):_slot(n, 3)]
-    initial = np.zeros(3, dtype=np.float64)
-    final = np.zeros(3, dtype=np.float64)
+    initial: np.ndarray = np.zeros(3, dtype=np.float64)
+    final: np.ndarray = np.zeros(3, dtype=np.float64)
     for index, unit in enumerate(units):
         quota = growths[index].nitrogen_quota
         initial += unit.get("initial_volume_m3", unit["volume_m3"]) * np.asarray([
@@ -2599,7 +2599,7 @@ def _partial_balances(
         0.0,
         sum(growths[index].oxygen_yield * state[_slot(index, 3)] + state[_slot(index, 5)] for index in range(n)),
     ])
-    impulses = np.zeros(3, dtype=np.float64)
+    impulses: np.ndarray = np.zeros(3, dtype=np.float64)
     for event in events:
         if event.get("impulse_inventory"):
             impulses += np.asarray(event["impulse_inventory"], dtype=np.float64)
