@@ -6,5 +6,6 @@ These repository-owned skills are optional instructions for Relay engineering wo
 | --- | --- |
 | React Engineering Studio UI work | `Read docs/agent-skills/relay-studio-react/SKILL.md and apply it to this UI task.` |
 | Exact-head browser acceptance | `Read docs/agent-skills/relay-browser-proof/SKILL.md and use it for this acceptance workflow.` |
+| Engineering Studio visual design (draft, issue #834; style only, needs a `ready` spec and a maintainer-chosen direction) | `Read docs/agent-skills/jarvis-studio-visual-design/SKILL.md and apply it to this visual task.` |
 
 The [audit](AUDIT.md) records pinned upstream sources, dispositions, and the bounded comparison. Pin updates require a fresh source audit. Repository authority remains in `AGENTS.md`, the accepted spec, and current code.
