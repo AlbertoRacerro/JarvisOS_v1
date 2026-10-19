@@ -154,3 +154,41 @@ def test_self_update_continues_on_the_updated_launcher(monkeypatch, tmp_path):
     argv = exc.value.args[0]
     assert argv[1] == str(launcher.REPO / "scripts" / "jarvisos_launcher.py")
     assert argv[2:] == ["start", "--pause-on-error", "--no-update"]
+
+
+@pytest.mark.parametrize(
+    ("ui_response", "can_open"),
+    [(200, True), (503, False)],
+)
+def test_degraded_local_ai_does_not_block_healthy_frontend(monkeypatch, tmp_path, ui_response, can_open):
+    """A local llama-server 401 is a feature outage, not a reason to lock out Studio."""
+    head = "a" * 40
+    opened = []
+    logged = []
+    monkeypatch.setattr(launcher, "CANONICAL_REPO", launcher.REPO)
+    monkeypatch.setattr(launcher, "STATE_DIR", tmp_path)
+    monkeypatch.setattr(launcher, "say", logged.append)
+    monkeypatch.setattr(launcher, "load_config", lambda: {})
+    monkeypatch.setattr(launcher, "read_git_state", lambda fetch: state(head=head))
+    monkeypatch.setattr(launcher, "update_checkout", lambda no_update: state(head=head))
+    monkeypatch.setattr(launcher, "ensure_backend_env", lambda: None)
+    monkeypatch.setattr(launcher, "ensure_frontend_deps", lambda config: None)
+    monkeypatch.setattr(launcher, "ensure_frontend_build", lambda config: False)
+    monkeypatch.setattr(launcher, "read_owned", lambda: {"pid": 123, "head": head})
+    monkeypatch.setattr(launcher, "wait_ready", lambda port, timeout: (
+        "degraded", "Local model unavailable: llama-server requires an API key."
+    ))
+    monkeypatch.setattr(launcher, "http_text", lambda url: (
+        ui_response, '<div id="root"></div>' if ui_response == 200 else "unavailable"
+    ))
+    monkeypatch.setattr(launcher, "open_browser", opened.append)
+
+    args = SimpleNamespace(no_update=False, no_browser=False)
+    if can_open:
+        assert launcher.start(args) == 0
+        assert opened == ["http://127.0.0.1:8000/"]
+        assert any("local AI is degraded" in msg for msg in logged)
+    else:
+        with pytest.raises(launcher.LaunchError, match="interface is unavailable"):
+            launcher.start(args)
+        assert not opened
