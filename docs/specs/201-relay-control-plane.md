@@ -35,3 +35,50 @@ This direction reuses 195/197 classification, locks, side-effect reconciliation,
 ## Readiness work
 
 Before changing the product or service path, resolve and record: the exact task-submission and owner-transition protocol; a bounded headless Claude/Codex authorization profile verified with real tool calls; the actual host restart mechanism and `Linger=no` implications; and a non-destructive way to fault-inject quota and restart against isolated state. These are authority and environment boundaries, so a staged readiness decision is warranted. The coordinator chooses the smallest implementation that passes them; no general queue bus, REPL automation, new provider credentials or repository-administration authority is implied.
+
+## Readiness findings (2026-10-19, workstation, real tool calls)
+
+All probes ran in isolated scratch repositories under `~/jarvis-control/work/` (no remote, nothing pushed). Transcripts and settings are in `~/jarvis-control/work/evidence/201/`. Stray files that the probes created outside their scratch roots were removed.
+
+### Headless Claude through `relay run`
+
+- Relay launches Claude in `default` mode and honours the scratch project's `.claude/settings.local.json` (session `20261019-201929-374a91`).
+- A bare `Write` allow rule let Claude write outside the project and outside `additionalDirectories` (`/home/thera/p201-outside.txt`). An unscoped `Edit`/`Write` grant is therefore unacceptable.
+- With path-scoped rules (`Edit(/**)`, `Write(/**)` relative to the project, plus `//abs/**` for an extra root), writes inside both roots succeeded. A write to `$HOME` was refused as ungranted, a `~/.claude/**` deny was enforced, and a shell redirection outside the working directories was refused (`20261019-202029-3313c1`). `Bash(git commit:*)` matched `git commit -m`, but not `git -c … commit`, because rules match by literal prefix. `gh pr merge` under a deny rule and unlisted `curl` were both refused.
+- An allowed interpreter is an escape hatch. With `Bash(python3:*)` allowed, `python3 -c "open('/home/thera/…','w')"` wrote outside every granted root. Permission rules are guardrails, not containment.
+- With Claude's own `sandbox.enabled: true` (Linux bubblewrap), Bash was **not** confined in a headless `relay run`. The Python write outside the project still succeeded, and `git ls-remote` still required approval. `bwrap` is installed, but `socat` is not. This setting is not a usable boundary on this host as installed.
+
+### Headless Codex
+
+- Relay launches Codex with `-a never -s workspace-write`. The OS sandbox refuses writes outside the writable roots (earlier proof `L20261019191627-0fbf`).
+- A project-scoped `.codex/config.toml` in a **trusted** project is honoured. `[sandbox_workspace_write] writable_roots` and `network_access = true` showed up in the session header (`workspace-write [workdir, /tmp, $TMPDIR, /tmp/p201-extra] (network access enabled)`). The extra-root write and `git ls-remote https://github.com/…` both succeeded. Without such a file, a Codex fallback could not write the sibling implementation worktrees under `~/src/worktrees/`, commit into the main checkout's `.git`, or reach GitHub. That makes a Codex takeover able to analyse but unable to deliver.
+
+### OS boundary candidate
+
+- Unprivileged `bwrap --ro-bind / / --bind <root> <root>` works on this host: a write inside the bound root succeeded and a write elsewhere failed with `Read-only file system`. A supervisor that wraps its own `relay run` invocation in such a namespace would give both providers one deterministic filesystem boundary that the model cannot negotiate. The interpreter escape above would then be contained. The coordinator session's auto-mode classifier refused to launch a Relay turn under `bwrap` (`[Auto-Mode Bypass]`). That attempt is not proven and needs explicit maintainer authorisation before any probe or use.
+
+### Service lifecycle
+
+- After the 2026-10-19 reboot, `agent-relay.service` (user unit) was active again. The tmux `relay-watch` notifier did **not** survive: there was no tmux server. A process held by tmux is therefore not a restart owner.
+- The user manager needs `XDG_RUNTIME_DIR=/run/user/1000`, and `Linger=no`. Without lingering, user units run only while a user session exists. Under WSL, that is while the distribution is started by a login. The proposed owner is a `systemd --user` unit with `Restart=on-failure`. Starting it without an interactive login requires `loginctl enable-linger thera`, a host change reserved to the maintainer.
+
+### Fault injection without touching real state
+
+The supervisor already takes its control root and repository from `control_root()` and `repo_root()`. The spec 197 commissioning ran against an exact no-remote copy. Quota can be injected in a real distinct process by prepending a fixture directory to the supervisor's `PATH` only in the acceptance harness. That directory holds a `claude` shim that emits a recorded quota-limit stream and exits; Codex stays real, under the bounded profile. Restart is injected by killing the supervisor process group mid-turn and restarting the unit. No production state, credential or the held session `20261018-215555-4f193a` is used.
+
+## Proposed protocol (for the readiness decision)
+
+1. **Submission.** `relay_continuity.py submit --mission-file M` validates a mission and writes it atomically to `<control>/missions/<id>.json`, with a `mission_submitted` journal record, before anything launches. A mission has an id, its authority (directive ledger id), the repository, and an ordered list of explicit tasks. Free text is screened for secrets as `--task-file` is today. Only one mission is active; the others wait in FIFO order, visibly.
+2. **Single owner.** A `serve` loop under the existing `supervisor.lock` (kernel flock, released on death) is the only executor. It reuses the spec 195/197 state, journal, pending-attempt adoption, side-effect gate, reconciliation, provider choice, limits and notifier unchanged. Each task launch records `mission`, `task` and the attempt nonce.
+3. **Advancement.** A task completes only on a deterministic `success` turn outcome and its optional declared read-only check, such as `gh pr view N` state or file presence. A model's claim that work remains or is done is advisory. Success with tasks left launches the next task. The last task's success completes the mission. Wait, hold, active and complete are distinct states, shown by `status` and sent to Slack as fixed fields (owner, provider, mission, task index, reason, reset).
+4. **REPL independence.** The supervisor never types into, attaches to or adopts a live REPL. `submit --continue-session S` binds a mission to an existing chain only when that chain's last turn is terminal and the spec 195 live-work check finds no running coordinator or worker for the repository. Otherwise it waits (`repl_active`/`live_work`). The `effects_uncertain` hold on `20261018-215555-4f193a` stays untouched.
+5. **Execution profile.** It is applied by the supervisor and project files, not requested from the model. The profile is:
+   - Codex: a project `.codex/config.toml` with the repository, `~/src/worktrees` and `~/jarvis-control/work` as writable roots, plus network.
+   - Claude: project rules with path-scoped `Edit`/`Write` for the same roots and a bounded Bash list. That list covers git except push to `master` or force, `gh pr create|view|checks|list`, tests, build, lint and `devctx`. Denies cover `gh pr merge`, branch-protection or admin API calls, force pushes, and edits to `~/.claude`, `~/.codex`, `~/.relay` and credentials. Optionally, the `bwrap` wrapper above contains the interpreter escape.
+   Merging, credentials and host changes stay with the maintainer.
+
+## Decisions requested from the maintainer
+
+- **D1 (security):** approve the bounded headless execution profile in protocol item 5: Codex project config plus scoped Claude rules. State whether the supervisor may also wrap its Relay launches in `bwrap`. That is recommended, because Claude rules alone do not contain an allowed interpreter.
+- **D2 (host):** approve `loginctl enable-linger thera` and a `jarvis-control-plane` user unit as the restart owner, or name another start owner.
+- **D3:** approve this protocol as the readiness for an implementation slice (`ready`). The real-workstation acceptance in boundary item 7 then runs under the approved profile.
