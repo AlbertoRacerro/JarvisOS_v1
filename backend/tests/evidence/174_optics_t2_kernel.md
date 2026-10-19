@@ -1,6 +1,6 @@
-# Slice 174a: isolated optics kernel evidence
+# Spec 174: optics kernel measurements
 
-The branch already contained a tracked kernel scaffold; this slice revises that kernel and its tests within the requested file boundary. Scope: spec 174 Decisions 1–6 only. Measurements below concern the pure kernel; they do not establish engine integration, browser behavior, profile-resolution limits, or biological qualification. `cylinder.py` is used only as an independent T1 field reference in the evidence calculation, not imported by the kernel.
+Measurements below concern the pure kernel; they do not by themselves establish engine integration, browser behavior, or biological qualification. Integration is checked by `test_optics_t2_dynamic_174.py`, and the same-origin Chromium run is recorded separately under `/home/thera/jarvis-control/work/evidence/174/`. `cylinder.py` is used only as an independent T1 field reference in the evidence calculation, not imported by the kernel.
 
 ## Reproduction inputs and units
 
@@ -94,7 +94,7 @@ T2 is the directly integrated refracted-chord absorption. The T1 surrogate uses 
 | 100 | 55.732136 | +14.770122% | 21.326682 | -0.007506% | 43.010461 | +26.173651% |
 | 1000 | 55.732136 | +14.781488% | 21.326682 | -0.000080% | 43.010461 | +26.185656% |
 
-Absorption columns are µmol s⁻¹ m⁻¹. The largest absolute residual on this declared grid is **26.1857%**, in the oblique mixed case at tau=1000. This is a measured limitation of preserving the T1 field shape, not a numerical integration error. A universal 15% bound would not be supported. No residual tolerance or profile-resolution policy is imposed in this kernel slice; acceptance of an engine surrogate tolerance remains an explicit later-slice decision. The refracted kernel absorption remains bounded by transmitted light; the surrogate is not asserted to obey that bound.
+Absorption columns are µmol s⁻¹ m⁻¹. The largest absolute residual on this declared grid is **26.1857%**, in the oblique mixed case at tau=1000. This is a measured limitation of preserving the T1 field shape, not a numerical integration error. A universal 15% bound would not be supported. The observed maximum absolute residual on this grid is the frozen surrogate comparison for this implementation. The 15-minute profile-resolution cap is justified by the midpoint bias table above. The refracted kernel absorption remains bounded by transmitted light; the surrogate is not asserted to obey that bound.
 
 ## Timings and validation
 

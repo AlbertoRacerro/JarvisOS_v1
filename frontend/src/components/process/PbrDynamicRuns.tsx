@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { request } from "../../api/studio";
+import { request, StudioApiError } from "../../api/studio";
 import { listEnvironmentProfiles, type EnvironmentProfileHead, type SeriesResponse } from "../../api/studioProcedure";
 import type { DraftOp } from "../../api/processDraft";
 import { formatSig } from "./pbrLogic";
@@ -109,7 +109,10 @@ export default function PbrDynamicRuns({ workspaceId, draftId, revision, tag, ap
       if (saved !== true) return;
       const run = await request<Job>(runsPath, "POST", { scenario_id: scenarioId });
       await refresh(); setSelectedId(run.job_id);
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Dynamic run could not start."); }
+    } catch (cause) {
+      setError(cause instanceof StudioApiError && cause.code ? `${cause.code}: ${cause.message}`
+        : cause instanceof Error ? cause.message : "Dynamic run could not start.");
+    }
     finally { setBusy(false); }
   };
   const unitRuns = jobs.filter((job) => job.scenario_id.startsWith(scenarioPrefix));
