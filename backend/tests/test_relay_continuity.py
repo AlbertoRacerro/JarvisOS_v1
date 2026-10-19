@@ -1213,6 +1213,25 @@ def test_watch_notifies_repl_failures_once_and_master_merges(tmp_path: Path) -> 
     assert len(merged) == 1 and "pr: 830" in merged[0]
 
 
+def test_watch_alerts_when_claude_repl_effective_mode_is_dont_ask(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    sessions = repo / ".agent-relay" / "sessions"
+    write_turn(sessions / HEAD, [
+        {"type": "system", "subtype": "init", "permissionMode": "dontAsk"}, *SUCCESS,
+    ])
+    write_turn(sessions / "20261018-070000-ababab", [
+        {"type": "system", "subtype": "init", "permissionMode": "default"}, *SUCCESS,
+    ])
+    state = rc.default_state()
+    sent: list[str] = []
+    notifier = rc.Notifier(state, sender=lambda text: sent.append(text), log=lambda message: None)
+    now = datetime.now(UTC)
+    for _ in range(2):
+        rc.watch_once(state, notifier, repo, now, supervised=set(), master=lambda: (None, None))
+    alerts = [text for text in sent if "launched in dontAsk" in text]
+    assert len(alerts) == 1 and HEAD in alerts[0]
+
+
 # ---------------------------------------------------------------------------
 # Regressions from the independent review of the first implementation head
 
