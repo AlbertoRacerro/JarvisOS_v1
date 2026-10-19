@@ -57,7 +57,7 @@ HOLD_REASONS = (
     "crash_repeated", "circuit_failures", "circuit_switches", "circuit_attempts", "circuit_transient",
     "no_provider_available", "wait_exceeded", "permissions_changed", "state_corrupt", "repl_active",
     "relay_invocation_failed", "live_work", "reconcile_unresolved", "reconcile_insufficient_permissions",
-    "reconcile_failed",
+    "reconcile_failed", "reconcile_no_sandbox",
 )
 STOP_REASONS = ("stop_requested", "signal", "idle", "held", "legacy_autopilot", "lock_busy", "error")
 DEFAULT_CONTROL = Path.home() / "jarvis-control" / "work" / "continuity"
@@ -86,6 +86,7 @@ class Limits:
     reconcile_timeout: timedelta = timedelta(minutes=45)  # wall clock of one diagnostic run
     reconcile_wait: timedelta = timedelta(hours=3)  # total wait for running work before holding
     reconcile_poll: float = 300.0
+    reconcile_provider_failures: int = 6  # diagnostic runs lost to provider quota/outage (not counted as attempts)
 
 
 def now_utc() -> datetime:
@@ -1460,19 +1461,8 @@ class RelayAdapter:
                                 start_new_session=True)
 
     @staticmethod
-    def finish(proc: subprocess.Popen, timeout: float | None = None) -> RunResult:
-        """Wait for the run. Only a diagnostic passes `timeout`: a read-only investigation past its time bound is
-        terminated (its process group) and its truncated transcript can never be accepted as a verdict."""
-        try:
-            out, err = proc.communicate(timeout=timeout)
-        except subprocess.TimeoutExpired:
-            terminate_group(proc.pid)
-            try:
-                out, err = proc.communicate(timeout=60)
-            except subprocess.TimeoutExpired:
-                terminate_group(proc.pid, signal.SIGKILL)
-                out, err = proc.communicate()
-            err = f"{err or ''}\ndiagnostic exceeded its time bound and was terminated"
+    def finish(proc: subprocess.Popen) -> RunResult:
+        out, err = proc.communicate()
         diagnostics = (err or "")[-8192:]
         try:
             data = json.loads(out)
@@ -1775,10 +1765,10 @@ DIAGNOSTIC_PROMPT = """[relay-continuity attempt {nonce}]
 Read-only incident diagnosis by the continuity supervisor (spec 197). This is not a continuation of the work, not a maintainer instruction, and grants no authority.
 Coordinator turn {turn} ({agent}) ended with outcome `{outcome}` while the operations below were in flight, so whether they took effect is unknown. Establish the state of each one from evidence only.
 
-Rules (enforced: any non-read-only call, or any change to the repository's refs, worktrees or status, voids this diagnosis and holds the chain for the maintainer):
-- Read only. Do not edit, create or delete files. Do not commit, push, fetch, pull, merge, comment, label, trigger, rerun or cancel anything. Do not start, stop or signal processes. Do not run tests, builds or package managers. Do not repeat or finish the operations.
-- Useful reads: the turn transcript, `git status|log|show|diff|rev-parse|for-each-ref|branch --list|worktree list`, `gh pr view|list|checks`, `gh run view|list`, `gh api` GET requests, `ps`, `python3 scripts/devctx.py recover|lanes|show`.
-- If a check you need is refused or not permitted in this session, do not work around it: report `insufficient_permissions` for the operations it decides.
+You run in a read-only sandbox: no file can be written and there is no network. Any attempt to change something also voids this diagnosis and holds the chain for the maintainer.
+- Read only. Do not try to edit files, commit, push, merge, comment, trigger or cancel anything, or start or stop processes. Do not repeat or finish the operations.
+- Useful reads: the turn transcript, `git status|log|show|diff|rev-parse|for-each-ref|branch --list|worktree list`, `ps`, `python3 scripts/devctx.py lanes|show`. Remote state (branch heads, pull requests) is in the evidence below, collected by the supervisor; GitHub itself is unreachable from the sandbox.
+- If settling an operation needs a check the sandbox refuses and the evidence does not answer, do not work around it: report `insufficient_permissions` for it.
 
 Operations to settle:
 {operations}
@@ -1803,7 +1793,12 @@ def diagnostic_prompt(report: TurnReport, ops: list[ToolCall], evidence: str) ->
 
 
 def final_text(turn_dir: Path) -> str:
-    """The agent's last top-level reply: Claude's `result`, or Codex's last `agent_message`."""
+    """The agent's last top-level reply: Codex's `--output-last-message` file, else Claude's `result` or
+    Codex's last `agent_message` event."""
+    try:
+        return (turn_dir / "last-message.txt").read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        pass
     events, _ = read_events(turn_dir / "output.jsonl")
     text = ""
     for e in events:
@@ -2091,6 +2086,104 @@ def collect_evidence(repo: Path, report: TurnReport, run: Runner = devctx.run, l
     return "\n\n".join(sections)[:limit]
 
 
+
+# The diagnosis runs on Codex's own read-only sandbox, enforced by the operating system before any command runs:
+# no writes anywhere (bubblewrap/Landlock read-only mounts) and no network. Relay's headless runner cannot select
+# a sandbox, so the diagnosis does not go through it. User config, execpolicy rules and MCP servers (which run
+# outside the sandbox) are not loaded; approvals are never granted, so nothing is escalated out of the sandbox.
+CODEX_READ_ONLY = ("exec", "--sandbox", "read-only", "--ignore-user-config", "--ignore-rules", "--ephemeral",
+                   "--json", "--color", "never", "-c", 'approval_policy="never"', "-c", "mcp_servers={}")
+CODEX_REQUIRED_FLAGS = ("--sandbox", "read-only", "--ignore-user-config", "--ignore-rules", "--ephemeral",
+                        "--output-last-message")
+
+
+class ReadOnlyCodex:
+    """Diagnostic runs under `codex exec --sandbox read-only`. Each run's transcript lives in its own directory
+    named by the attempt nonce, in Relay's turn layout, so the spec 195 classifier reads it unchanged."""
+
+    def __init__(self, repo: Path, root: Path, binary: str | None = None):
+        self.repo = repo
+        self.root = root / "diagnostics"
+        self.binary = binary or os.environ.get("RELAY_CONTINUITY_CODEX") or "codex"
+
+    def turn_dir(self, nonce: str) -> Path:
+        return self.root / nonce / "turns" / "turn-001"
+
+    def preflight(self) -> str | None:
+        """None when this host's Codex demonstrably refuses a write under its read-only sandbox (a canary file
+        outside and a positive read inside); otherwise why read-only execution cannot be guaranteed."""
+        exe = shutil.which(self.binary)
+        if not exe:
+            return "codex is not installed"
+        self.root.mkdir(parents=True, exist_ok=True)
+        canary = self.root / f".canary-{secrets.token_hex(6)}"
+        script = 'test -r "$1" && ! ( : > "$2" ) 2>/dev/null && echo READONLY-OK'
+        try:
+            usage = subprocess.run([exe, "exec", "--help"], capture_output=True, text=True, timeout=60).stdout
+            missing = [flag for flag in CODEX_REQUIRED_FLAGS if flag not in usage]
+            if missing:
+                return f"codex lacks {missing[0]}"
+            probe = subprocess.run([exe, "sandbox", "-c", 'sandbox_mode="read-only"', "--",
+                                    "sh", "-c", script, "sh", str(self.repo / ".git"), str(canary)],
+                                   capture_output=True, text=True, timeout=60, cwd=self.repo)
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            return f"codex sandbox check failed ({type(exc).__name__})"
+        if canary.exists():
+            canary.unlink(missing_ok=True)
+            return "codex read-only sandbox did not block a write"
+        if "READONLY-OK" not in probe.stdout:
+            return "codex sandbox cannot run a read-only command"
+        return None
+
+    def start(self, nonce: str, prompt: str) -> subprocess.Popen:
+        turn = self.turn_dir(nonce)
+        turn.mkdir(parents=True)  # the nonce is unique: an existing directory means a duplicate launch
+        (turn / "prompt.md").write_text(prompt, encoding="utf-8")
+        (turn / "state.json").write_text(json.dumps({"agent_key": "codex", "status": "running"}))
+        with open(turn / "output.jsonl", "wb") as out, open(turn / "stderr.log", "wb") as err:
+            # The transcript goes straight to files: a supervisor restart can still read a run it did not see end.
+            proc = subprocess.Popen([shutil.which(self.binary) or self.binary, *CODEX_READ_ONLY, "-C", str(self.repo),
+                                     "-o", str(turn / "last-message.txt"), "-"],
+                                    cwd=self.repo, stdin=subprocess.PIPE, stdout=out, stderr=err, start_new_session=True)
+        assert proc.stdin is not None
+        proc.stdin.write(prompt.encode())
+        proc.stdin.close()
+        return proc
+
+    def finish(self, proc: subprocess.Popen, nonce: str, timeout: float) -> str:
+        """Wait for the run; past its time bound its process group is terminated. Returns diagnostics text."""
+        note = ""
+        try:
+            proc.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            terminate_group(proc.pid)
+            try:
+                proc.wait(timeout=60)
+            except subprocess.TimeoutExpired:
+                terminate_group(proc.pid, signal.SIGKILL)
+                proc.wait()
+            note = "\ndiagnostic exceeded its time bound and was terminated"
+        try:
+            return (self.turn_dir(nonce) / "stderr.log").read_text(errors="replace")[-8192:] + note
+        except OSError:
+            return note
+
+    def locate(self, nonce: str) -> Path | None:
+        turn = self.turn_dir(nonce)
+        return turn if turn.is_dir() else None
+
+    def find_pid(self, nonce: str, proc_root: Path = Path("/proc")) -> int | None:
+        """The run's pid by its nonce (its `-o` path names it), for a restart before the pid was recorded."""
+        needle = str(self.turn_dir(nonce)).encode()
+        for entry in proc_root.iterdir() if proc_root.exists() else []:
+            try:
+                if entry.name.isdigit() and needle in (entry / "cmdline").read_bytes():
+                    return int(entry.name)
+            except OSError:
+                continue
+        return None
+
+
 # ---------------------------------------------------------------------------
 # Supervisor
 
@@ -2118,6 +2211,7 @@ class Host:
     probe: Callable[[ToolCall], tuple[str, str] | None] = lambda call: None
     evidence: Callable[[TurnReport], str] = lambda report: ""
     terminate: Callable[[int], None] = terminate_group
+    diagnostic: Any = None  # ReadOnlyCodex (spec 197); None: no read-only diagnosis is possible
 
 
 class Supervisor:
@@ -2127,6 +2221,7 @@ class Supervisor:
         self.reconcile = reconcile  # spec 197: settle uncertain operations from evidence before holding
         self.resume_turn: str | None = None
         self.resumed_hold: dict[str, Any] | None = None
+        self._cooled_turn: str | None = None
         self.host = host
         self.limits = limits or Limits()
         self.turns = turns
@@ -2429,7 +2524,8 @@ class Supervisor:
             mode = "same"
             agent = self._choose(failed_agent, mode=mode)
         elif report.outcome in ("quota", "spend_limit"):
-            self.set_cooldown(failed_agent, report)
+            if self._cooled_turn != report.turn_id:  # reconciliation already recorded this turn's cooldown
+                self.set_cooldown(failed_agent, report)
             counters["transient_streak"] = 0
             mode = "switch"
             agent = self._choose(failed_agent, mode=mode)
@@ -2529,6 +2625,9 @@ class Supervisor:
         if not isinstance(rec, dict) or rec.get("turn") != report.turn_id:
             rec = {"turn": report.turn_id, "since": iso(self.host.now()), "attempts": 0, "diag": None, "verdicts": {}}
             self.state["reconcile"] = rec
+            if report.outcome in ("quota", "spend_limit"):
+                self.set_cooldown(failed_agent, report)  # the failed agent is out for the diagnosis too
+                self._cooled_turn = report.turn_id
             self.save()
             self.record("finding", f"relay-continuity: reconciling {len(ops)} uncertain operation(s) of turn "
                                    f"{report.turn_id} from read-only evidence (spec 197).")
@@ -2572,27 +2671,61 @@ class Supervisor:
                 self.state["phase"] = "running"
                 for op in open_ops:
                     rec["verdicts"].pop(op.id, None)
-            agent = self._diagnostic_agent(failed_agent, report)
-            if agent is None:
-                self.host.log("no provider is available for a diagnostic run; the hold is re-examined on the next run")
-                return self._reconcile_hold("effects_uncertain", report, verdicts)
-            if (held := self._diagnose(rec, agent, report, open_ops)) is not None:
+            if self.host.diagnostic is None:
+                self.host.log("no read-only diagnostic runner is configured")
+                return self._reconcile_hold("reconcile_no_sandbox", report, verdicts)
+            if not self._diagnostic_ready(rec):
+                # Codex is out of quota, cooling down or unconfirmed: wait for it durably, then look again.
+                if (held := self._wait_for_diagnosis(rec, report)) is not None:
+                    return held
+                continue
+            if (held := self._diagnose(rec, "codex", report, open_ops)) is not None:
                 return held
 
-    def _diagnostic_agent(self, failed_agent: str, report: TurnReport) -> str | None:
-        """Codex only, when it is not cooling down and (unless it is the failed agent itself, retried after a
-        transient or crash) a fresh reading confirms room. Its headless sandbox normally has no network, which
-        makes a remote repeat by the diagnosis itself unlikely; Claude headless may carry `[agent.allow]` grants.
-        Choosing a diagnostic agent records no switch: the continuation is chosen afterwards."""
+    def _diagnostic_ready(self, rec: dict[str, Any]) -> bool:
+        """Codex (the only diagnostic agent: it alone has an enforced read-only sandbox) may run a diagnosis now:
+        no cooldown, no pending retry, and a fresh reading positively shows room. This records no switch; the
+        continuation is chosen afterwards."""
         now = self.host.now()
-        if failed_agent == "codex" and report.outcome in ("quota", "spend_limit"):
-            return None
         cooldown = self.state["cooldowns"].get("codex")
         if cooldown and ((until := parse_ts(cooldown.get("until"))) is None or now < until):
-            return None
-        if failed_agent != "codex" and self.exhausted_until("codex") is not False:
-            return None  # no fresh positive evidence of room
-        return "codex"
+            return False
+        if (retry := parse_ts(rec.get("retry_at"))) and now < retry:
+            return False
+        return self.exhausted_until("codex") is False
+
+    def _wait_for_diagnosis(self, rec: dict[str, Any], report: TurnReport) -> str | None:
+        """Sleep until Codex can be expected back: its provider-reported reset when one is reliable (a fresh
+        limits reading, or the provider's own message), else a bounded recheck. The wait is durable (counted
+        from its first start across restarts), bounded by `max_wait`, and launches nothing."""
+        now = self.host.now()
+        since = parse_ts(rec.get("waiting_since")) or now
+        rec["waiting_since"] = iso(since)
+        cooldown = self.state["cooldowns"].get("codex") or {}
+        if cooldown and cooldown.get("until") is None:
+            self.host.log("codex has a spend cap with no reset; raising it is a maintainer decision")
+            return self._reconcile_hold("no_provider_available", report, {})
+        if now - since > self.limits.max_wait:
+            return self._reconcile_hold("wait_exceeded", report, {})
+        reading = self.exhausted_until("codex")
+        if isinstance(reading, datetime):
+            self.state["cooldowns"]["codex"] = {"until": iso(reading), "source": "limits", "reason": "quota",
+                                                "since": cooldown.get("since") or iso(now)}
+        reliable = [parse_ts(c.get("until")) for c in (self.state["cooldowns"].get("codex") or {},)
+                    if c.get("source") in ("limits", "message")]
+        wakes = [t for t in (*reliable, parse_ts(rec.get("retry_at"))) if t and t > now]
+        wake = min(wakes) if wakes else now + self.limits.recheck
+        wake = min(wake, since + self.limits.max_wait + timedelta(seconds=1))
+        rec["wake_at"] = iso(wake)
+        self.state["phase"] = "waiting"
+        self.save()
+        self.host.log(f"waiting for codex to run the diagnosis; next check {iso(wake)}")
+        self.notify("all_exhausted", dedupe_key=f"diagnosis|{iso(wake)}", next_check_at=iso(wake))
+        if self._sleep((wake - now).total_seconds()):
+            return "signal" if self.signalled else "stopped"
+        self.state["phase"] = "running"
+        self._reading = None
+        return None
 
     def _await_work(self, rec: dict[str, Any], report: TurnReport) -> str | None:
         """Running work of this chain (a background worker, a detached job): adopt it by waiting for it to end,
@@ -2621,6 +2754,14 @@ class Supervisor:
         if self.host.permissions_digest() != self.state.get("permissions_digest"):
             return self.hold("permissions_changed")
         try:
+            problem = self.host.diagnostic.preflight()
+        except Exception as exc:  # noqa: BLE001 - an unverified sandbox is no sandbox
+            problem = f"sandbox check failed ({type(exc).__name__})"
+        if problem:
+            # Read-only execution cannot be guaranteed on this host: no diagnosis runs at all.
+            self.host.log(f"read-only diagnosis unavailable: {problem}")
+            return self._reconcile_hold("reconcile_no_sandbox", report, rec["verdicts"])
+        try:
             evidence = self.host.evidence(report)
         except Exception as exc:  # noqa: BLE001 - the agent can still gather its own evidence
             evidence = f"(evidence collection failed: {type(exc).__name__})"
@@ -2639,7 +2780,7 @@ class Supervisor:
         self.host.log(f"diagnostic run {rec['attempts']}/{self.limits.reconcile_attempts} on {agent} for "
                       f"{len(ops)} operation(s)")
         try:
-            proc = self.host.relay.start(agent, self.state["head_session"], prompt, 1)
+            proc = self.host.diagnostic.start(nonce, prompt)
         except OSError:
             rec["diag"] = None
             self.store.journal({"event": "settle", "purpose": "diagnostic", "nonce": nonce, "session": None,
@@ -2648,13 +2789,18 @@ class Supervisor:
         diag["pid"] = getattr(proc, "pid", None)
         diag["pid_start"] = devctx.pid_start(diag["pid"]) if diag["pid"] else None
         self.save()
-        result = self.host.relay.finish(proc, timeout=self.limits.reconcile_timeout.total_seconds())
-        return self._settle_diagnostic(rec, ops, result.session_id, result.diagnostics)
+        diagnostics = self.host.diagnostic.finish(proc, nonce, self.limits.reconcile_timeout.total_seconds())
+        return self._settle_diagnostic(rec, ops, diagnostics)
 
     def _adopt_diagnostic(self, rec: dict[str, Any], ops: list[ToolCall]) -> str | None:
         diag = rec["diag"]
         deadline = (parse_ts(diag["started_at"]) or self.host.now()) + self.limits.reconcile_timeout
         terminated = False
+        if not diag.get("pid") and self.host.diagnostic is not None:
+            # Killed between launch and recording the pid: find the run by its nonce.
+            if (pid := self.host.diagnostic.find_pid(diag["nonce"])) is not None:
+                diag["pid"], diag["pid_start"] = pid, devctx.pid_start(pid)
+                self.save()
         if diag.get("pid") and self.host.pid_alive(diag["pid"], diag.get("pid_start")):
             self.host.log(f"diagnostic {diag['nonce']} still running as pid {diag['pid']}; waiting (never relaunched)")
             while self.host.pid_alive(diag["pid"], diag.get("pid_start")):
@@ -2667,12 +2813,12 @@ class Supervisor:
                     return "signal" if self.signalled else "stopped"
         return self._settle_diagnostic(rec, [op for op in ops if op.id in set(diag.get("ops") or [o.id for o in ops])])
 
-    def _settle_diagnostic(self, rec: dict[str, Any], ops: list[ToolCall], session_id: str | None = None,
-                           diagnostics: str = "") -> str | None:
+    def _settle_diagnostic(self, rec: dict[str, Any], ops: list[ToolCall], diagnostics: str = "") -> str | None:
         """Admit a finished diagnostic's verdicts under the deterministic policy, or hold. None: continue
         reconciling (verdicts recorded, or the run produced none and the attempt bound decides)."""
         diag = rec["diag"]
-        session_id = session_id or self.host.relay.find_by_nonce(diag["nonce"], parse_ts(diag["started_at"]) or self.host.now())
+        turn = self.host.diagnostic.locate(diag["nonce"]) if self.host.diagnostic is not None else None
+        session_id = diag["nonce"] if turn is not None else None
         rec["diag"] = None
         if session_id is None:
             # Without its transcript nothing shows the diagnostic stayed read-only.
@@ -2681,9 +2827,7 @@ class Supervisor:
                                 "outcome": "unresolved"})
             return result
         self.state["diagnostics"] = (self.state.get("diagnostics") or [])[-49:] + [session_id]
-        turn = last_turn_dir(self.host.relay.sessions_dir() / session_id)
-        dreport = classify_turn(turn, diagnostics=diagnostics) if turn else TurnReport(
-            outcome="crash", agent=diag["agent"], detail="session without turns", no_evidence=True)
+        dreport = classify_turn(turn, diagnostics=diagnostics)
         dreport.agent = diag["agent"]
         acted = sorted({c.label for c in dreport.calls if c.kind != "read_only"})
         self.store.journal({"event": "settle", "purpose": "diagnostic", "nonce": diag["nonce"], "session": session_id,
@@ -2694,11 +2838,25 @@ class Supervisor:
                           "its findings are void")
             rec["last_error"] = "not_read_only"
             return self.hold("reconcile_failed", diag.get("attempt"))
-        if dreport.outcome != "success" or turn is None:
+        if dreport.outcome == "auth":
+            return self.hold("auth_failure", diag.get("attempt"))  # Codex credentials: the operator's to renew
+        if dreport.outcome in ("quota", "spend_limit", "transient"):
+            # The provider failed, not the diagnosis: it does not use up an attempt, but is bounded on its own.
+            rec["attempts"] -= 1
+            rec["provider_failures"] = rec.get("provider_failures", 0) + 1
+            self.host.log(f"diagnostic {session_id} lost to codex {dreport.outcome}; it will be retried")
+            if rec["provider_failures"] > self.limits.reconcile_provider_failures:
+                return self.hold("reconcile_failed", diag.get("attempt"))
+            if dreport.outcome == "transient":
+                delay = min(self.limits.transient_base * 2 ** (rec["provider_failures"] - 1), self.limits.transient_cap)
+                rec["retry_at"] = iso(self.host.now() + timedelta(seconds=delay))
+            else:
+                self.set_cooldown("codex", dreport)
+            self.save()
+            return None
+        if dreport.outcome != "success":
             rec["last_error"] = f"diagnostic_{dreport.outcome}"
             self.host.log(f"diagnostic {session_id} ended with {dreport.outcome}; no verdicts")
-            if dreport.outcome in ("quota", "spend_limit"):
-                self.set_cooldown(diag["agent"], dreport)
             self.save()
             return None
         parsed = parse_verdicts(final_text(turn), diag["nonce"], ops)
@@ -3007,7 +3165,7 @@ def make_host(repo: Path) -> Host:
     return Host(relay=RelayAdapter(repo), fingerprint=lambda: fingerprint(repo),
                 conflicts=lambda own: live_conflicts(repo, own), ledger=ledger, permissions_digest=permissions,
                 live_work=live_work, probe=lambda call: probe_call(call, repo),
-                evidence=lambda report: collect_evidence(repo, report))
+                evidence=lambda report: collect_evidence(repo, report), diagnostic=ReadOnlyCodex(repo, control_root()))
 
 
 def webhook_sender() -> Callable[[str], str | None] | None:
@@ -3177,7 +3335,7 @@ def command_watch(args: argparse.Namespace) -> int:
                 supervised_state = Store(root).load()
             except StateCorrupt:
                 supervised_state = default_state()
-            supervised = set(supervised_state.get("chain") or []) | set(supervised_state.get("diagnostics") or [])
+            supervised = set(supervised_state.get("chain") or [])
             first = not state["watch"].get("seen")
             if first:
                 # Baseline: never alert on history that predates this watch.

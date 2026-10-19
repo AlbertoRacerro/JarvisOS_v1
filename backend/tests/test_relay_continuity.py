@@ -1891,12 +1891,50 @@ def diag_reply(*entries: tuple[str, str], commands: tuple[str, ...] = ("git log 
     return events
 
 
-def reconciling(tmp_path: Path, script: list[Any], *, probe: Any = None) -> Env:
+class FakeDiagnostic:
+    """Read-only Codex runner double: each launch consumes one scripted reply and writes its transcript where
+    the real runner would (`<control>/diagnostics/<nonce>/turns/turn-001`)."""
+
+    def __init__(self, env: Env, script: list[Any]):
+        self.env = env
+        self.script = list(script)
+        self.launches: list[dict[str, Any]] = []
+        self.problem: str | None = None
+        self.layout = rc.ReadOnlyCodex(env.repo, env.store.root)
+
+    def preflight(self) -> str | None:
+        return self.problem
+
+    def start(self, nonce: str, prompt: str) -> FakeProc:
+        if not self.script:
+            raise AssertionError("unexpected diagnostic launch")
+        self.launches.append({"nonce": nonce, "task": prompt, "at": self.env.clock.now()})
+        self._current = (nonce, prompt, self.script.pop(0))
+        return FakeProc(None)
+
+    def finish(self, proc: FakeProc, nonce: str, timeout: float) -> str:
+        _, prompt, events = self._current
+        self.write(nonce, events(prompt) if callable(events) else events, prompt)
+        return ""
+
+    def write(self, nonce: str, events: list[dict[str, Any]], prompt: str = "diagnosis") -> None:
+        write_turn(self.layout.root / nonce, events, agent="codex", prompt=prompt)
+
+    def locate(self, nonce: str) -> Path | None:
+        return self.layout.locate(nonce)
+
+    def find_pid(self, nonce: str) -> int | None:
+        return None
+
+
+def reconciling(tmp_path: Path, script: list[Any], *, diag: list[Any] | None = None, probe: Any = None) -> Env:
     env = Env(tmp_path, script)
     env.reconcile = True
     env.relay.readings = room(env, "codex")
     env.host.probe = probe or (lambda call: None)
     env.host.evidence = lambda report: "### Worktrees\nworktree /r"
+    env.diag = FakeDiagnostic(env, diag or [])  # type: ignore[attr-defined]
+    env.host.diagnostic = env.diag  # type: ignore[attr-defined]
     return env
 
 
@@ -1921,39 +1959,38 @@ def test_quota_with_a_probed_completed_push_hands_off_to_codex_without_repeating
 
 
 def test_interrupted_completed_subagent_is_settled_by_a_codex_diagnosis_not_repeated(tmp_path: Path) -> None:
-    env = reconciling(tmp_path, [("codex", diag_reply(("x", "completed"))), ("codex", CODEX_SUCCESS)])
+    env = reconciling(tmp_path, [("codex", CODEX_SUCCESS)], diag=[diag_reply(("x", "completed"))])
     env.head([IN_FLIGHT["subagent"], *QUOTA])
     result, sup = env.run()
     assert result == "idle"
-    diag, cont = env.relay.launches
-    assert diag["agent"] == "codex" and "Read-only incident diagnosis" in diag["task"] and diag["turns"] == 1
+    (diag,), (cont,) = env.diag.launches, env.relay.launches
+    assert "Read-only incident diagnosis" in diag["task"] and "read-only sandbox" in diag["task"]
     assert "id `x`: [unknown] Agent" in diag["task"] and "### Worktrees" in diag["task"]
-    assert diag["parent"] == HEAD and cont["parent"] == HEAD  # the diagnosis never becomes the chain head
+    assert cont["agent"] == "codex" and cont["parent"] == HEAD  # the diagnosis never becomes the chain head
     assert "Agent: COMPLETED" in cont["task"] and "diagnostic codex" in cont["task"]
-    assert sup.state["diagnostics"] == ["20261018-000001-bbbbbb"]
-    assert sup.state["chain"] == [HEAD, "20261018-000002-bbbbbb"]
+    assert sup.state["diagnostics"] == [diag["nonce"]]
+    assert sup.state["chain"] == [HEAD, "20261018-000001-bbbbbb"]
     events = [(r.get("event"), r.get("purpose")) for r in journal(env)]
     assert events.count(("launch", "diagnostic")) == 1 and events.count(("settle", "diagnostic")) == 1
 
 
 def test_running_background_worker_is_awaited_and_never_duplicated(tmp_path: Path) -> None:
     worker = tool_use("x", "Bash", command="nohup ./scripts/lane.sh > lane.log &")
-    env = reconciling(tmp_path, [("codex", diag_reply(("x", "completed"))), ("codex", CODEX_SUCCESS)])
+    env = reconciling(tmp_path, [("codex", CODEX_SUCCESS)], diag=[diag_reply(("x", "completed"))])
     env.head([worker, tool_result("x"), *QUOTA])
     checks = {"n": 0}
 
     def live_work(since: datetime) -> list[Any]:
         checks["n"] += 1
         running = checks["n"] <= 3
-        launched_while_running.append(running and bool(env.relay.launches))
+        launched_while_running.append(running and bool(env.relay.launches or env.diag.launches))
         return [work("proc:9:9:w", "process lane.sh")] if running else []
     launched_while_running: list[bool] = []
     env.host.live_work = live_work
     result, _ = env.run()
     assert result == "idle" and not any(launched_while_running)
     assert sum(env.clock.slept) >= 3 * env.limits.reconcile_poll  # waited for the worker to end
-    assert [launch["agent"] for launch in env.relay.launches] == ["codex", "codex"]
-    assert "Read-only incident diagnosis" in env.relay.launches[0]["task"]
+    assert len(env.diag.launches) == 1 and [launch["agent"] for launch in env.relay.launches] == ["codex"]
 
 
 def test_worker_outliving_the_reconcile_bound_holds_without_launching(tmp_path: Path) -> None:
@@ -1979,23 +2016,23 @@ def test_definitely_unstarted_merge_is_resumed_safely(tmp_path: Path) -> None:
 @pytest.mark.parametrize("verdict", ["not_started", "unresolved"])
 def test_genuinely_ambiguous_external_effect_remains_held(tmp_path: Path, verdict: str) -> None:
     # A model alone can never establish that a PR comment was not posted.
-    env = reconciling(tmp_path, [("codex", diag_reply(("x", verdict)))])
+    env = reconciling(tmp_path, [], diag=[diag_reply(("x", verdict))])
     env.head([tool_use("x", "Bash", command="gh pr comment 7 --body done"), *QUOTA])
     result, sup = env.run()
     assert result == "held" and sup.state["hold"]["reason"] == "reconcile_unresolved"
-    assert len(env.relay.launches) == 1  # the diagnosis only: no continuation
+    assert len(env.diag.launches) == 1 and env.relay.launches == []  # no continuation
     assert sup.state["hold"]["turn"] == f"{HEAD}/turn-001"
     record = [r for r in journal(env) if r.get("event") == "reconcile"][-1]
     assert record["verdicts"][0]["verdict"] == "unresolved"
     result, _ = env.run()  # a reconciliation hold is never re-examined automatically
-    assert result == "held" and len(env.relay.launches) == 1
+    assert result == "held" and len(env.diag.launches) == 1 and env.relay.launches == []
 
 
 def test_local_write_not_started_from_a_diagnosis_is_admitted(tmp_path: Path) -> None:
-    env = reconciling(tmp_path, [("codex", diag_reply(("x", "not_started"))), ("codex", CODEX_SUCCESS)])
+    env = reconciling(tmp_path, [("codex", CODEX_SUCCESS)], diag=[diag_reply(("x", "not_started"))])
     env.head([tool_use("x", "Bash", command="cp a.py b.py"), *QUOTA])
     assert env.run()[0] == "idle"
-    assert "cp: NOT STARTED" in env.relay.launches[1]["task"]
+    assert "cp: NOT STARTED" in env.relay.launches[0]["task"]
 
 
 def _diag_pending(env: Env, nonce: str, pid: int | None) -> None:
@@ -2016,25 +2053,21 @@ def test_supervisor_restart_during_diagnosis_adopts_it_without_a_duplicate(tmp_p
     env = reconciling(tmp_path, [("codex", CODEX_SUCCESS)])
     _diag_pending(env, nonce, pid=4242)
     env.alive[4242] = 2
-
-    def finish_pending() -> None:
-        write_turn(env.relay.sessions_dir() / "20261018-080100-cccccc", diag_reply(("x", "completed"), nonce=nonce)(""),
-                   agent="codex", prompt=relay_prompt(f"[relay-continuity attempt {nonce}]\nRead-only incident diagnosis"))
-    env.relay.finish_pending = finish_pending  # type: ignore[attr-defined]
+    env.relay.finish_pending = lambda: env.diag.write(nonce, diag_reply(("x", "completed"), nonce=nonce)(""))  # type: ignore[attr-defined]
     result, sup = env.run()
     assert result == "idle"
-    assert len(env.relay.launches) == 1 and "Read-only incident diagnosis" not in env.relay.launches[0]["task"]
+    assert env.diag.launches == [] and len(env.relay.launches) == 1
     assert "Agent: COMPLETED" in env.relay.launches[0]["task"]
-    assert sup.state["diagnostics"] == ["20261018-080100-cccccc"]
+    assert sup.state["diagnostics"] == [nonce]
 
 
 def test_restart_with_a_lost_diagnosis_holds_and_never_relaunches(tmp_path: Path) -> None:
     env = reconciling(tmp_path, [])
-    _diag_pending(env, "rc-20261018T080000Z-0d1a9001", pid=4243)  # dead, and no session carries its nonce
+    _diag_pending(env, "rc-20261018T080000Z-0d1a9001", pid=4243)  # dead, and no transcript carries its nonce
     result, sup = env.run()
     assert result == "held" and sup.state["hold"]["reason"] == "attempt_unresolved"
-    assert env.relay.launches == []
-    assert env.run()[0] == "held" and env.relay.launches == []
+    assert env.relay.launches == [] and env.diag.launches == []
+    assert env.run()[0] == "held" and env.diag.launches == []
 
 
 def test_diagnosis_past_its_time_bound_is_terminated_on_restart(tmp_path: Path) -> None:
@@ -2050,47 +2083,51 @@ def test_diagnosis_past_its_time_bound_is_terminated_on_restart(tmp_path: Path) 
 
 
 def test_insufficient_permissions_are_reported_not_bypassed(tmp_path: Path) -> None:
-    env = reconciling(tmp_path, [("codex", diag_reply(("x", "insufficient_permissions")))])
+    env = reconciling(tmp_path, [], diag=[diag_reply(("x", "insufficient_permissions"))])
     env.head([IN_FLIGHT["subagent"], *QUOTA])
     result, sup = env.run()
     assert result == "held" and sup.state["hold"]["reason"] == "reconcile_insufficient_permissions"
-    assert len(env.relay.launches) == 1
+    assert len(env.diag.launches) == 1 and env.relay.launches == []
     assert any("reconcile_insufficient_permissions" in text for text in env.sent)
     # A refused probe is reported the same way, with no diagnosis at all.
     env2 = reconciling(tmp_path / "b", [], probe=lambda call: ("insufficient_permissions", "`gh pr view` was refused"))
     env2.head([IN_FLIGHT["gh pr merge"], *QUOTA])
     assert env2.run()[0] == "held" and env2.store.load()["hold"]["reason"] == "reconcile_insufficient_permissions"
-    assert env2.relay.launches == []
+    assert env2.relay.launches == [] and env2.diag.launches == []
 
 
 @pytest.mark.parametrize("violation", ["write", "fingerprint"])
 def test_a_diagnosis_that_is_not_read_only_is_void(tmp_path: Path, violation: str) -> None:
+    # Defence in depth behind the sandbox: a recorded write attempt or a moved repository voids the findings.
     commands = ("git log", "git commit -am fix") if violation == "write" else ("git log",)
-    env = reconciling(tmp_path, [("codex", diag_reply(("x", "completed"), commands=commands))])
+    env = reconciling(tmp_path, [], diag=[diag_reply(("x", "completed"), commands=commands)])
     env.head([IN_FLIGHT["subagent"], *QUOTA])
     if violation == "fingerprint":
-        env.host.fingerprint = lambda: "fp-after" if env.relay.launches else "fp0"
+        env.host.fingerprint = lambda: "fp-after" if env.diag.launches else "fp0"
     result, sup = env.run()
     assert result == "held" and sup.state["hold"]["reason"] == "reconcile_failed"
-    assert len(env.relay.launches) == 1
+    assert len(env.diag.launches) == 1 and env.relay.launches == []
 
 
 def test_diagnosis_without_a_verdict_is_retried_within_its_bound_then_holds(tmp_path: Path) -> None:
-    env = reconciling(tmp_path, [("codex", diag_reply(("x", "completed"), line=False)),
-                                 ("codex", diag_reply(("x", "completed"), nonce="rc-other"))])
+    env = reconciling(tmp_path, [], diag=[diag_reply(("x", "completed"), line=False),
+                                          diag_reply(("x", "completed"), nonce="rc-other")])
     env.head([IN_FLIGHT["subagent"], *QUOTA])
     result, sup = env.run()
     assert result == "held" and sup.state["hold"]["reason"] == "reconcile_failed"
-    assert len(env.relay.launches) == env.limits.reconcile_attempts == 2
+    assert len(env.diag.launches) == env.limits.reconcile_attempts == 2 and env.relay.launches == []
 
 
-def test_no_confirmed_diagnostic_provider_keeps_the_hold(tmp_path: Path) -> None:
+def test_unconfirmed_codex_is_rechecked_with_bounded_waits_then_held(tmp_path: Path) -> None:
     env = reconciling(tmp_path, [])
-    env.relay.readings = None  # no fresh reading: Codex has no confirmed room, and Claude is out of quota
+    env.limits = rc.Limits(max_wait=timedelta(hours=2))
+    env.relay.readings = None  # never a fresh reading: no evidence Codex has room
     env.head([IN_FLIGHT["subagent"], *QUOTA])
     result, sup = env.run()
-    assert result == "held" and sup.state["hold"]["reason"] == "effects_uncertain"
-    assert env.relay.launches == []
+    assert result == "held" and sup.state["hold"]["reason"] == "wait_exceeded"
+    assert env.diag.launches == [] and env.relay.launches == []
+    assert timedelta(hours=2) <= env.clock.t - T0 <= timedelta(hours=2, minutes=31)
+    assert max(env.clock.slept) <= 5.0  # interruptible sleeps against the clock, rechecked each 30 min
 
 
 def test_a_held_uncertain_turn_is_reexamined_from_evidence_on_the_next_run(tmp_path: Path) -> None:
@@ -2244,18 +2281,18 @@ def test_evidence_bundle_drops_secret_lines(tmp_path: Path) -> None:
 
 
 def test_operation_still_running_remotely_is_rechecked_then_held_within_bounds(tmp_path: Path) -> None:
-    env = reconciling(tmp_path, [("codex", diag_reply(("x", "running"))), ("codex", diag_reply(("x", "running")))])
+    env = reconciling(tmp_path, [], diag=[diag_reply(("x", "running")), diag_reply(("x", "running"))])
     env.head([IN_FLIGHT["subagent"], *QUOTA])
     result, sup = env.run()
     assert result == "held" and sup.state["hold"]["reason"] == "reconcile_unresolved"
-    assert len(env.relay.launches) == 2 and sum(env.clock.slept) >= env.limits.reconcile_poll
+    assert len(env.diag.launches) == 2 and sum(env.clock.slept) >= env.limits.reconcile_poll
 
 
 def test_running_then_completed_continues_once(tmp_path: Path) -> None:
-    env = reconciling(tmp_path, [("codex", diag_reply(("x", "running"))), ("codex", diag_reply(("x", "completed"))),
-                                 ("codex", CODEX_SUCCESS)])
+    env = reconciling(tmp_path, [("codex", CODEX_SUCCESS)],
+                      diag=[diag_reply(("x", "running")), diag_reply(("x", "completed"))])
     env.head([IN_FLIGHT["subagent"], *QUOTA])
-    assert env.run()[0] == "idle" and len(env.relay.launches) == 3
+    assert env.run()[0] == "idle" and len(env.diag.launches) == 2 and len(env.relay.launches) == 1
 
 
 def test_reexamination_never_rewrites_a_held_chain_for_another_session(tmp_path: Path) -> None:
@@ -2273,17 +2310,23 @@ def test_reexamination_never_rewrites_a_held_chain_for_another_session(tmp_path:
 
 
 def test_repeated_reexamination_is_quiet_and_not_a_new_failure(tmp_path: Path) -> None:
+    # A truncated stream after a repository change holds `effects_uncertain` with nothing to reconcile: each
+    # re-examination reaches the same hold, which is neither re-announced nor counted as a new failure.
     env = reconciling(tmp_path, [])
-    env.relay.readings = None  # no provider can diagnose: the hold stays, re-examined each run
-    env.head([IN_FLIGHT["subagent"], *QUOTA])
-    assert env.run()[0] == "held"
-    sent, failures = len(env.sent), env.store.load()["counters"]["consecutive_failures"]
+    env.head([tool_use("r", "Read", file_path="/x"), tool_result("r")])
+    state = rc.default_state()
+    state.update({"phase": "held", "head_session": HEAD, "chain": [HEAD], "permissions_digest": "perm0",
+                  "permissions_pinned": True, "counters": {"consecutive_failures": 1, "transient_streak": 0,
+                                                           "crash_retries": 0},
+                  "last_attempt": {"nonce": "rc-1", "agent": "claude", "attempt": 1, "fingerprint": "fp-before"},
+                  "hold": {"reason": "effects_uncertain", "at": rc.iso(T0), "attempt": 1, "turn": f"{HEAD}/turn-001"}})
+    env.store.save(state, T0)
     for _ in range(3):
         assert env.run()[0] == "held"
     state = env.store.load()
     assert state["hold"]["reason"] == "effects_uncertain" and env.relay.launches == []
-    assert state["counters"]["consecutive_failures"] == failures
-    assert not any("HOLD" in text for text in env.sent[sent:])
+    assert state["counters"]["consecutive_failures"] == 1
+    assert not any("HOLD" in text for text in env.sent)
 
 
 def test_moved_chain_hold_is_not_reexamined_again(tmp_path: Path) -> None:
@@ -2301,10 +2344,12 @@ def test_moved_chain_hold_is_not_reexamined_again(tmp_path: Path) -> None:
 
 def test_claude_is_never_the_diagnostic_agent(tmp_path: Path) -> None:
     env = reconciling(tmp_path, [])
+    env.limits = rc.Limits(max_wait=timedelta(hours=1))
     env.relay.readings = room(env, "claude")  # only Claude has room; Codex is unconfirmed
     env.head([IN_FLIGHT["subagent"], *EAI])
     result, sup = env.run()
-    assert result == "held" and sup.state["hold"]["reason"] == "effects_uncertain" and env.relay.launches == []
+    assert result == "held" and sup.state["hold"]["reason"] == "wait_exceeded"
+    assert env.relay.launches == [] and env.diag.launches == []
 
 
 def test_waived_gate_settles_an_abandoned_diagnosis(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -2321,3 +2366,178 @@ def test_waived_gate_settles_an_abandoned_diagnosis(tmp_path: Path, monkeypatch:
     assert env.run()[0] == "idle" and len(env.relay.launches) == 1
     assert rc.unsettled_nonces(env.store.journal_path) == []
     assert env.run()[0] == "idle"
+
+
+
+# ---------------------------------------------------------------------------
+# Spec 197 review wave 2: durable provider wait and pre-execution read-only enforcement
+
+
+def test_codex_quota_during_reconciliation_waits_for_the_reported_reset_then_diagnoses_once(tmp_path: Path) -> None:
+    env = reconciling(tmp_path, [("codex", CODEX_SUCCESS)], diag=[diag_reply(("x", "completed"))])
+    reset = T0 + timedelta(hours=3)
+    env.relay.readings = room(env, exhausted={"codex": reset, "claude": T0 + timedelta(hours=6)})
+    env.head([IN_FLIGHT["subagent"], *QUOTA])
+    result, sup = env.run()
+    assert result == "idle"
+    (diag,) = env.diag.launches
+    assert reset <= diag["at"] <= reset + timedelta(minutes=1)  # woke at the provider-reported reset
+    assert [launch["agent"] for launch in env.relay.launches] == ["codex"] and env.relay.launches[0]["at"] >= reset
+    assert any("waiting for codex" in line for line in env.logs)
+    assert any("no coordinator provider available" in e for e in env.events())
+
+
+def test_diagnosis_lost_to_codex_quota_is_retried_after_reset_without_using_an_attempt(tmp_path: Path) -> None:
+    env = reconciling(tmp_path, [("codex", CODEX_SUCCESS)], diag=[CODEX_QUOTA, diag_reply(("x", "completed"))])
+    reset = T0 + timedelta(hours=2)
+
+    def readings() -> dict[str, Any]:
+        now = env.clock.now()
+        capped = env.diag.launches and now < reset
+        return {"codex": reading("codex", 100 if capped else 5, reset if capped else now + timedelta(hours=5), now),
+                "claude": reading("claude", 100, T0 + timedelta(hours=8), now)}
+    env.relay.readings = readings
+    env.head([IN_FLIGHT["subagent"], *QUOTA])
+    assert env.run()[0] == "idle"
+    first, second = env.diag.launches
+    assert second["at"] >= reset and first["nonce"] != second["nonce"]
+    assert len(env.relay.launches) == 1
+
+
+def test_restart_during_the_provider_wait_resumes_it_without_a_duplicate(tmp_path: Path) -> None:
+    env = reconciling(tmp_path, [("codex", CODEX_SUCCESS)], diag=[diag_reply(("x", "completed"))])
+    reset = T0 + timedelta(hours=3)
+    env.relay.readings = room(env, exhausted={"codex": reset, "claude": T0 + timedelta(hours=6)})
+    env.head([IN_FLIGHT["subagent"], *QUOTA])
+
+    def stop_during_wait(seconds: float) -> None:  # the machine goes down while the supervisor sleeps
+        env.store.stop_path.write_text("x")
+        env.clock.sleep(seconds)
+    env.host.sleep = stop_during_wait
+    assert env.run()[0] == "stopped"
+    saved = env.store.load()["reconcile"]
+    assert saved["waiting_since"] == rc.iso(T0) and saved["wake_at"] == rc.iso(reset) and env.diag.launches == []
+    env.store.stop_path.unlink()
+    env.host.sleep = env.clock.sleep
+    assert env.run()[0] == "idle"
+    assert len(env.diag.launches) == 1 and env.diag.launches[0]["at"] >= reset and len(env.relay.launches) == 1
+
+
+def test_codex_spend_cap_during_reconciliation_holds_for_the_maintainer(tmp_path: Path) -> None:
+    env = reconciling(tmp_path, [], diag=[[{"type": "thread.started"},
+                                          {"type": "turn.failed", "error": {"message": "credit balance is too low"}}]])
+    env.head([IN_FLIGHT["subagent"], *QUOTA])
+    result, sup = env.run()
+    assert result == "held" and sup.state["hold"]["reason"] == "no_provider_available"
+    assert len(env.diag.launches) == 1 and env.relay.launches == []
+
+
+def test_codex_authentication_failure_in_a_diagnosis_holds(tmp_path: Path) -> None:
+    env = reconciling(tmp_path, [], diag=[[{"type": "thread.started"},
+                                          {"type": "turn.failed", "error": {"message": "401 Unauthorized: please run /login"}}]])
+    env.head([IN_FLIGHT["subagent"], *QUOTA])
+    result, sup = env.run()
+    assert result == "held" and sup.state["hold"]["reason"] == "auth_failure" and env.relay.launches == []
+
+
+def test_provider_lost_diagnoses_are_bounded(tmp_path: Path) -> None:
+    eai = [{"type": "thread.started"}, {"type": "turn.failed", "error": {"message": "stream disconnected EAI_AGAIN"}}]
+    env = reconciling(tmp_path, [], diag=[eai] * 7)
+    env.head([IN_FLIGHT["subagent"], *QUOTA])
+    result, sup = env.run()
+    assert result == "held" and sup.state["hold"]["reason"] == "reconcile_failed"
+    assert len(env.diag.launches) == env.limits.reconcile_provider_failures + 1
+
+
+@pytest.mark.parametrize("problem", ["codex is not installed", "codex read-only sandbox did not block a write"])
+def test_no_diagnosis_runs_without_a_verified_read_only_sandbox(tmp_path: Path, problem: str) -> None:
+    env = reconciling(tmp_path, [], diag=[diag_reply(("x", "completed"))])
+    env.diag.problem = problem
+    env.head([IN_FLIGHT["subagent"], *QUOTA])
+    result, sup = env.run()
+    assert result == "held" and sup.state["hold"]["reason"] == "reconcile_no_sandbox"
+    assert env.diag.launches == [] and env.relay.launches == []
+    env2 = reconciling(tmp_path / "b", [])
+    env2.host.diagnostic = None
+    env2.head([IN_FLIGHT["subagent"], *QUOTA])
+    assert env2.run()[0] == "held" and env2.store.load()["hold"]["reason"] == "reconcile_no_sandbox"
+
+
+FAKE_CODEX = """#!/bin/sh
+# Test double for the codex CLI: records its argv and stdin, behaves per $FAKE_CODEX_MODE.
+printf '%s\n' "$@" > "$FAKE_CODEX_LOG.argv"
+if [ "$1" = exec ] && [ "$2" = --help ]; then
+  echo "--sandbox <SANDBOX_MODE> [possible values: read-only, workspace-write] --ignore-user-config --ignore-rules"
+  echo "--ephemeral --json --output-last-message"
+  exit 0
+fi
+if [ "$1" = sandbox ]; then
+  shift; while [ "$1" != -- ]; do shift; done; shift
+  if [ "$FAKE_CODEX_MODE" = leaky ]; then exec "$@"; fi
+  echo READONLY-OK; exit 0
+fi
+cat > "$FAKE_CODEX_LOG.stdin"
+last=""; prev=""
+for a in "$@"; do [ "$prev" = -o ] && last="$a"; prev="$a"; done
+echo '{"type":"thread.started"}'
+echo '{"type":"turn.completed"}'
+printf 'RECONCILE-VERDICT {}\n' > "$last"
+"""
+
+
+@pytest.fixture
+def fake_codex(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    binary = tmp_path / "bin" / "codex"
+    binary.parent.mkdir()
+    binary.write_text(FAKE_CODEX)
+    binary.chmod(0o755)
+    monkeypatch.setenv("FAKE_CODEX_LOG", str(tmp_path / "codex"))
+    return binary
+
+
+def test_read_only_codex_launch_enforces_the_sandbox_before_execution(tmp_path: Path, fake_codex: Path) -> None:
+    repo = tmp_path / "repo"
+    (repo / ".git").mkdir(parents=True)
+    runner = rc.ReadOnlyCodex(repo, tmp_path / "control", binary=str(fake_codex))
+    assert runner.preflight() is None
+    proc = runner.start("rc-1", "diagnose this")
+    runner.finish(proc, "rc-1", 30)
+    argv = (tmp_path / "codex.argv").read_text().splitlines()
+    assert argv[:3] == ["exec", "--sandbox", "read-only"]
+    for required in ("--ignore-user-config", "--ignore-rules", "--ephemeral", "--json", 'approval_policy="never"',
+                     "mcp_servers={}"):
+        assert required in argv
+    assert not any("dangerously" in a or a in ("--full-auto", "--approve-for-me", "--add-dir") for a in argv)
+    assert argv[-1] == "-" and (tmp_path / "codex.stdin").read_text() == "diagnose this"
+    turn = runner.locate("rc-1")
+    assert turn is not None and rc.classify_turn(turn).outcome == "success"
+    assert rc.final_text(turn).startswith("RECONCILE-VERDICT")
+    with pytest.raises(FileExistsError):
+        runner.start("rc-1", "again")  # a nonce is launched at most once
+
+
+def test_preflight_refuses_a_sandbox_that_lets_a_write_through(tmp_path: Path, fake_codex: Path,
+                                                                monkeypatch: pytest.MonkeyPatch) -> None:
+    repo = tmp_path / "repo"
+    (repo / ".git").mkdir(parents=True)
+    monkeypatch.setenv("FAKE_CODEX_MODE", "leaky")
+    runner = rc.ReadOnlyCodex(repo, tmp_path / "control", binary=str(fake_codex))
+    assert runner.preflight() == "codex read-only sandbox did not block a write"
+    assert not list(runner.root.glob(".canary-*"))
+    assert rc.ReadOnlyCodex(repo, tmp_path / "c2", binary=str(tmp_path / "missing")).preflight() == "codex is not installed"
+
+
+def test_diagnosis_is_found_by_nonce_after_a_restart_before_its_pid_was_recorded(tmp_path: Path) -> None:
+    runner = rc.ReadOnlyCodex(tmp_path, tmp_path / "control")
+    proc_root = tmp_path / "proc"
+    (proc_root / "77").mkdir(parents=True)
+    (proc_root / "77" / "cmdline").write_bytes(b"codex\0exec\0-o\0" + str(runner.turn_dir("rc-9") / "last-message.txt").encode())
+    assert runner.find_pid("rc-9", proc_root) == 77 and runner.find_pid("rc-8", proc_root) is None
+
+
+@pytest.mark.skipif(not os.environ.get("RELAY_CONTINUITY_CODEX"), reason="real codex CLI not configured")
+def test_real_codex_read_only_sandbox_blocks_writes(tmp_path: Path) -> None:
+    """Host evidence: set RELAY_CONTINUITY_CODEX to the codex binary to prove this machine's sandbox."""
+    repo = tmp_path / "repo"
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    assert rc.ReadOnlyCodex(repo, tmp_path / "control").preflight() is None
