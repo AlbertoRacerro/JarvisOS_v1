@@ -1767,7 +1767,8 @@ Coordinator turn {turn} ({agent}) ended with outcome `{outcome}` while the opera
 
 You run in a read-only sandbox: no file can be written and there is no network. Any attempt to change something also voids this diagnosis and holds the chain for the maintainer.
 - Read only. Do not try to edit files, commit, push, merge, comment, trigger or cancel anything, or start or stop processes. Do not repeat or finish the operations.
-- Useful reads: the turn transcript, `git status|log|show|diff|rev-parse|for-each-ref|branch --list|worktree list`, `ps`, `python3 scripts/devctx.py lanes|show`. Remote state (branch heads, pull requests) is in the evidence below, collected by the supervisor; GitHub itself is unreachable from the sandbox.
+- Use only these commands: `rg`, `grep`, `sed -n`, `head`, `tail`, `cat`, `ls`, `wc`, `jq` (for the JSONL transcript), `git status|log|show|diff|rev-parse|for-each-ref|branch --list|worktree list`, `ps`, `python3 scripts/devctx.py lanes|show`. Do not run any other interpreter or script (`python3 -`, `python3 -c`, heredocs, `node`, `perl`): the supervisor cannot verify them as read-only, so they void this diagnosis and hold the chain.
+- A background launch (`&`, `nohup`, `tmux`, `codex exec`) took effect if what it started left traces: a worker lane's `run.log` or `REPORT.md`, a tmux session, a worktree change, a later transcript line. Absolute paths outside the repository are readable. Remote state (branch heads, pull requests) is in the evidence below, collected by the supervisor; GitHub itself is unreachable from the sandbox.
 - If settling an operation needs a check the sandbox refuses and the evidence does not answer, do not work around it: report `insufficient_permissions` for it.
 
 Operations to settle:
@@ -2675,7 +2676,7 @@ class Supervisor:
                 self.host.log("no read-only diagnostic runner is configured")
                 return self._reconcile_hold("reconcile_no_sandbox", report, verdicts)
             if not self._diagnostic_ready(rec):
-                # Codex is out of quota, cooling down or unconfirmed: wait for it durably, then look again.
+                # Codex is out of quota or cooling down: wait for it durably, then look again.
                 if (held := self._wait_for_diagnosis(rec, report)) is not None:
                     return held
                 continue
@@ -2684,7 +2685,10 @@ class Supervisor:
 
     def _diagnostic_ready(self, rec: dict[str, Any]) -> bool:
         """Codex (the only diagnostic agent: it alone has an enforced read-only sandbox) may run a diagnosis now:
-        no cooldown, no pending retry, and a fresh reading positively shows room. This records no switch; the
+        no cooldown, no pending retry, and no fresh reading showing it out of quota. An unconfirmed reading is
+        no reason to wait: Relay refreshes Codex's reading only when Codex runs, so on an idle host it stays
+        stale indefinitely. Trying is safe: a diagnosis lost to quota uses no attempt, takes its cooldown from
+        Codex's own message, and is bounded by `reconcile_provider_failures`. This records no switch; the
         continuation is chosen afterwards."""
         now = self.host.now()
         cooldown = self.state["cooldowns"].get("codex")
@@ -2692,7 +2696,7 @@ class Supervisor:
             return False
         if (retry := parse_ts(rec.get("retry_at"))) and now < retry:
             return False
-        return self.exhausted_until("codex") is False
+        return not isinstance(self.exhausted_until("codex"), datetime)
 
     def _wait_for_diagnosis(self, rec: dict[str, Any], report: TurnReport) -> str | None:
         """Sleep until Codex can be expected back: its provider-reported reset when one is reliable (a fresh

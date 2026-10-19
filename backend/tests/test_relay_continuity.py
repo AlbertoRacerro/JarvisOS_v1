@@ -2118,17 +2118,46 @@ def test_diagnosis_without_a_verdict_is_retried_within_its_bound_then_holds(tmp_
     assert len(env.diag.launches) == env.limits.reconcile_attempts == 2 and env.relay.launches == []
 
 
-def test_unconfirmed_codex_is_rechecked_with_bounded_waits_then_held(tmp_path: Path) -> None:
-    env = reconciling(tmp_path, [])
-    env.limits = rc.Limits(max_wait=timedelta(hours=2))
-    env.relay.readings = None  # never a fresh reading: no evidence Codex has room
+def test_a_stale_codex_reading_does_not_block_the_diagnosis(tmp_path: Path) -> None:
+    # The 2026-10-19 commissioning shape: Relay refreshes Codex's reading only when Codex runs, so an idle host
+    # shows a reading hours old. Waiting for a fresh one would wait until `max_wait`; the diagnosis runs instead.
+    env = reconciling(tmp_path, [("codex", CODEX_SUCCESS)], diag=[diag_reply(("x", "completed"))])
+
+    def readings() -> dict[str, Any]:
+        now = env.clock.now()
+        if env.diag.launches:  # Codex has run: its reading is fresh again
+            return {"codex": reading("codex", 5, now + timedelta(hours=5), now)}
+        return {"codex": reading("codex", 88, T0 - timedelta(hours=1), T0 - timedelta(hours=5))}
+    env.relay.readings = readings
     env.head([IN_FLIGHT["subagent"], *QUOTA])
     result, sup = env.run()
-    assert result == "held" and sup.state["hold"]["reason"] == "wait_exceeded"
-    assert env.diag.launches == [] and env.relay.launches == []
-    assert timedelta(hours=2) <= env.clock.t - T0 <= timedelta(hours=2, minutes=31)
-    assert max(env.clock.slept) <= 5.0  # interruptible sleeps against the clock, rechecked each 30 min
-    assert sum("no coordinator provider available" in e for e in env.events()) == 1  # one notice, not one per recheck
+    assert result == "idle"
+    (diag,) = env.diag.launches
+    assert diag["at"] - T0 < timedelta(minutes=1)  # no wait for a reading that would never come
+    assert [launch["agent"] for launch in env.relay.launches] == ["codex"]
+    assert [r["result"] for r in journal(env) if r.get("event") == "reconcile"] == ["settled"]
+
+
+def test_the_diagnosis_prompt_names_the_verifiable_commands_and_forbids_inline_interpreters() -> None:
+    # Commissioning 2026-10-19: Codex parsed the transcript with `python3 -` heredocs, which the classifier
+    # cannot verify as read-only, voiding an otherwise sound diagnosis. The prompt now says so up front.
+    report = rc.TurnReport(outcome="quota", agent="claude", detail="")
+    text = rc.diagnostic_prompt(report, [], "")
+    assert "Use only these commands" in text and "`jq`" in text
+    assert "Do not run any other interpreter or script" in text and "`python3 -`" in text
+    assert "run.log" in text  # where a background launch leaves its traces
+
+
+def test_an_unconfirmed_codex_that_keeps_losing_to_quota_is_bounded_then_held(tmp_path: Path) -> None:
+    env = reconciling(tmp_path, [], diag=[CODEX_QUOTA] * 7)
+    env.relay.readings = None  # never a fresh reading: each try is lost to quota and waits for the reported reset
+    env.head([IN_FLIGHT["subagent"], *QUOTA])
+    result, sup = env.run()
+    assert result == "held" and sup.state["hold"]["reason"] == "reconcile_failed"
+    assert len(env.diag.launches) == env.limits.reconcile_provider_failures + 1 and env.relay.launches == []
+    gaps = [b["at"] - a["at"] for a, b in zip(env.diag.launches, env.diag.launches[1:], strict=False)]
+    assert all(gap >= timedelta(minutes=1) for gap in gaps)  # each retry waited for Codex's reported reset
+    assert max(env.clock.slept) <= 5.0  # interruptible sleeps against the clock
 
 
 def test_a_held_uncertain_turn_is_reexamined_from_evidence_on_the_next_run(tmp_path: Path) -> None:
@@ -2344,13 +2373,13 @@ def test_moved_chain_hold_is_not_reexamined_again(tmp_path: Path) -> None:
 
 
 def test_claude_is_never_the_diagnostic_agent(tmp_path: Path) -> None:
-    env = reconciling(tmp_path, [])
-    env.limits = rc.Limits(max_wait=timedelta(hours=1))
+    env = reconciling(tmp_path, [("claude", SUCCESS)], diag=[diag_reply(("x", "completed"))])
     env.relay.readings = room(env, "claude")  # only Claude has room; Codex is unconfirmed
     env.head([IN_FLIGHT["subagent"], *EAI])
     result, sup = env.run()
-    assert result == "held" and sup.state["hold"]["reason"] == "wait_exceeded"
-    assert env.relay.launches == [] and env.diag.launches == []
+    assert result == "idle" and len(env.diag.launches) == 1  # the read-only Codex runner, not Relay
+    assert [launch["agent"] for launch in env.relay.launches] == ["claude"]  # Claude only continues the chain
+    assert not any("RECONCILE-VERDICT" in launch["task"] for launch in env.relay.launches)
 
 
 def test_waived_gate_settles_an_abandoned_diagnosis(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
