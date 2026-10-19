@@ -2675,7 +2675,7 @@ class Supervisor:
                 self.host.log("no read-only diagnostic runner is configured")
                 return self._reconcile_hold("reconcile_no_sandbox", report, verdicts)
             if not self._diagnostic_ready(rec):
-                # Codex is out of quota, cooling down or unconfirmed: wait for it durably, then look again.
+                # Codex is out of quota or cooling down: wait for it durably, then look again.
                 if (held := self._wait_for_diagnosis(rec, report)) is not None:
                     return held
                 continue
@@ -2684,7 +2684,10 @@ class Supervisor:
 
     def _diagnostic_ready(self, rec: dict[str, Any]) -> bool:
         """Codex (the only diagnostic agent: it alone has an enforced read-only sandbox) may run a diagnosis now:
-        no cooldown, no pending retry, and a fresh reading positively shows room. This records no switch; the
+        no cooldown, no pending retry, and no fresh reading showing it out of quota. An unconfirmed reading is
+        no reason to wait: Relay refreshes Codex's reading only when Codex runs, so on an idle host it stays
+        stale indefinitely. Trying is safe: a diagnosis lost to quota uses no attempt, takes its cooldown from
+        Codex's own message, and is bounded by `reconcile_provider_failures`. This records no switch; the
         continuation is chosen afterwards."""
         now = self.host.now()
         cooldown = self.state["cooldowns"].get("codex")
@@ -2692,7 +2695,7 @@ class Supervisor:
             return False
         if (retry := parse_ts(rec.get("retry_at"))) and now < retry:
             return False
-        return self.exhausted_until("codex") is False
+        return not isinstance(self.exhausted_until("codex"), datetime)
 
     def _wait_for_diagnosis(self, rec: dict[str, Any], report: TurnReport) -> str | None:
         """Sleep until Codex can be expected back: its provider-reported reset when one is reliable (a fresh
