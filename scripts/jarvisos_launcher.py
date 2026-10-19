@@ -750,6 +750,16 @@ def start(args: argparse.Namespace) -> int:
     elapsed = time.monotonic() - started
     if ready_state == "ready":
         say(f"JarvisOS is ready in {elapsed:.0f}s — {message}")
+    elif ready_state == "degraded":
+        # A missing local model or Hermes must not lock the operator out of Studio.
+        # Keep the backend/frontend availability gate; do not open a broken interface.
+        ui_status, page = http_text(f"http://127.0.0.1:{port}/design/process")
+        if ui_status != 200 or 'id="root"' not in page:
+            raise LaunchError(
+                f"JarvisOS is not ready after {elapsed:.0f}s: the interface is unavailable. "
+                f"See {STATE_DIR / 'logs' / 'backend.log'}"
+            )
+        say(f"JarvisOS interface available in {elapsed:.0f}s; local AI is degraded: {message}")
     else:
         raise LaunchError(f"JarvisOS is not ready after {elapsed:.0f}s: {message}. See {STATE_DIR / 'logs' / 'backend.log'}")
     if not args.no_browser:
