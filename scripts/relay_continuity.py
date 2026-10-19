@@ -1767,7 +1767,8 @@ Coordinator turn {turn} ({agent}) ended with outcome `{outcome}` while the opera
 
 You run in a read-only sandbox: no file can be written and there is no network. Any attempt to change something also voids this diagnosis and holds the chain for the maintainer.
 - Read only. Do not try to edit files, commit, push, merge, comment, trigger or cancel anything, or start or stop processes. Do not repeat or finish the operations.
-- Useful reads: the turn transcript, `git status|log|show|diff|rev-parse|for-each-ref|branch --list|worktree list`, `ps`, `python3 scripts/devctx.py lanes|show`. Remote state (branch heads, pull requests) is in the evidence below, collected by the supervisor; GitHub itself is unreachable from the sandbox.
+- Use only these commands: `rg`, `grep`, `sed -n`, `head`, `tail`, `cat`, `ls`, `wc`, `jq` (for the JSONL transcript), `git status|log|show|diff|rev-parse|for-each-ref|branch --list|worktree list`, `ps`, `python3 scripts/devctx.py lanes|show`. Do not run any other interpreter or script (`python3 -`, `python3 -c`, heredocs, `node`, `perl`): the supervisor cannot verify them as read-only, so they void this diagnosis and hold the chain.
+- A background launch (`&`, `nohup`, `tmux`, `codex exec`) took effect if what it started left traces: a worker lane's `run.log` or `REPORT.md`, a tmux session, a worktree change, a later transcript line. Absolute paths outside the repository are readable. Remote state (branch heads, pull requests) is in the evidence below, collected by the supervisor; GitHub itself is unreachable from the sandbox.
 - If settling an operation needs a check the sandbox refuses and the evidence does not answer, do not work around it: report `insufficient_permissions` for it.
 
 Operations to settle:
