@@ -11,6 +11,7 @@ Run the supervisor when you step away from an interactive Relay REPL session and
 | Quota exhaustion | Switches Claude → Codex, then returns to Claude at a turn boundary once Claude's reset is confirmed. |
 | DNS/API blips | Retries the same agent with bounded backoff. |
 | Interrupted turns | Retries once, but only when no side effect is uncertain. |
+| Uncertain side effects | Settles them from read-only evidence first (spec 197): waits for running work, probes Git/GitHub/files, runs a bounded read-only Codex diagnosis, and continues only when every operation is proven `completed` or `not_started`. |
 
 After a successful turn the chain goes **idle** and waits for you. The supervisor never invents new work.
 
@@ -52,7 +53,10 @@ A hold means automatic continuation was refused and needs your review. Slack sho
 
 | Reason | Meaning and what to check |
 | --- | --- |
-| `effects_uncertain` | The failed turn was interrupted during a non-read-only operation (push, merge, PR comment, file write, subagent, script), or while a background job it launched (a worker lane, a queue) was still running. Background jobs are the commonest cause: check the lane with `devctx.py lanes`. Check whether it took effect with `git log`/`gh pr view`/`python3 scripts/devctx.py recover`. |
+| `reconcile_unresolved` | Spec 197 could not settle an operation from evidence. This is a genuine ambiguity, for example a PR comment that only a model says was not posted. `attempts.jsonl` has a `"event": "reconcile"` record with the verdict, evidence and source for each operation. |
+| `reconcile_insufficient_permissions` | A check needed to settle an operation was refused: `gh`/`git ls-remote` authentication, Claude headless approval, or the Codex sandbox network. It was reported, not worked around. Fix the access or settle the operation by hand, then `release`. |
+| `reconcile_failed` | The diagnostic run made a non-read-only call, changed the repository, or gave no valid verdict within two attempts. Its findings were discarded. Check what it did in its session (listed in `status` → `reconcile` / `diagnostics`). |
+| `effects_uncertain` | With reconciliation on, this hold means no provider could run a diagnosis (Claude out of quota and no fresh Codex reading with room). The next `run` re-examines it automatically. Otherwise: the failed turn was interrupted during a non-read-only operation (push, merge, PR comment, file write, subagent, script), or while a background job it launched (a worker lane, a queue) was still running. Background jobs are the commonest cause: check the lane with `devctx.py lanes`. Check whether it took effect with `git log`/`gh pr view`/`python3 scripts/devctx.py recover`. |
 | `live_work` | Something launched in this chain is still running in the repository or a worktree, or in a container: a dev server, a background test run, a worker lane, `docker compose up -d`, a program in a tmux pane. The log names the processes (names only). Continuing could overlap it. Let it finish or stop it, or confirm it is meant to keep running. A release acknowledges exactly what is live at that moment (a pane that later `exec`s something new, or a new `docker exec`, holds again). A failing check (`process table unreadable`, `docker check failed`) holds until it is repaired. |
 | `output_unparseable` | The turn transcript is corrupt or torn. |
 | `output_missing` | The turn left no output of its own: Relay's "No response captured" turns keep a copy of the previous turn's output, and the agent may still have worked. Check `git log`, `gh pr list`, `devctx.py recover` for what it did. |
@@ -89,3 +93,56 @@ A release is recorded in the attempt journal and the control ledger. Every hold 
 2. Restore the Relay REPL handoff order: `cp ~/jarvis-control/work/continuity/backup-20261018/relay-user-config.toml ~/.config/relay/config.toml`. Check it with `sha256sum` against `SHA256SUMS` in that directory.
 3. Optionally remove `~/jarvis-control/work/continuity/`. Nothing else reads it.
 4. The legacy autopilot is preserved in `~/jarvis-control/autopilot/retired-20261018/` (see its README). Moving the scripts back restores it.
+
+## Incident reconciliation (spec 197)
+
+`run` reconciles uncertain operations before holding (pass `--no-reconcile` for the spec 195 behaviour):
+
+1. **Running work.** Work of the chain still running in a checkout or container (a worker lane, a `nohup` job) is waited for, polled every 5 min, for at most 3 h. It is never relaunched.
+2. **Probes.** The supervisor reads Git and GitHub itself:
+   - one-branch `git push`: is the remote at the local commit?
+   - `gh pr merge`: is the PR merged or still open?
+   - `gh pr create`: does a PR exist for the head?
+   - `Edit`/`Write`: is the change in the file?
+3. **Diagnosis.** For anything else (a subagent, a script, a PR comment), one read-only Relay run, Codex preferred, receives the operations and a sanitized evidence bundle (worktrees, branches, remote heads, PRs, worker lanes). It must answer with a `RECONCILE-VERDICT` line. There are at most two runs of up to 45 min each.
+4. **Promotion is deterministic.** A diagnosis that calls anything non-read-only or changes the repository is void. A model can mark an operation `completed`, or a local operation `not_started`. It can never establish that a push, merge, comment or other external effect did not happen.
+5. **Result.** If everything is settled, the chain continues (for example, Claude quota → Codex) and the recovery prompt lists each operation as COMPLETED (do not repeat) or NOT STARTED. Otherwise it holds with a `reconcile_*` reason. Every outcome is in `attempts.jsonl` (`"event": "reconcile"`) and in the control ledger.
+
+A supervisor killed during a diagnosis adopts it on restart: it waits for the same pid and start time, or finds the session by nonce. It never launches a second diagnosis. If the session cannot be identified, it holds with `attempt_unresolved`.
+
+### Apply and verify on the workstation (Ubuntu/WSL)
+
+Until the PR is merged, run the new script from a separate worktree. The supervisor finds the main repository, its Relay sessions and its state from the current directory, not from the script's location.
+
+```bash
+cd ~/src/JarvisOS_v1
+python3 scripts/relay_continuity.py stop; tmux kill-session -t relay-continuity 2>/dev/null   # never kills a turn
+git fetch origin claude/nice-turing-uzv5ja
+git worktree add ~/src/jarvis-197 origin/claude/nice-turing-uzv5ja    # after merge: plain `git pull` instead
+RC="python3 $HOME/src/jarvis-197/scripts/relay_continuity.py"         # after merge: python3 scripts/relay_continuity.py
+
+# 1. Offline proof on this machine (synthetic fixtures, fault injection; no network, no credentials):
+(cd ~/src/jarvis-197/backend && python3 -m pytest -q tests/test_relay_continuity.py)
+
+# 2. Inspect the held incident (read-only):
+$RC status                              # expect phase "held", hold.reason "effects_uncertain", hold.turn ".../turn-006"
+S=$($RC status | python3 -c 'import json,sys; print(json.load(sys.stdin)["head_session"])')
+$RC classify .agent-relay/sessions/$S/turns/turn-006 | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["outcome"], d["in_flight"])'
+agent-relay --json limits --refresh     # Codex needs a fresh reading with room to run the diagnosis
+
+# 3. Recover it: the held turn is re-examined from evidence; no release needed.
+tmux new -d -s relay-continuity "$RC run --session $S; echo exit=\$?; sleep infinity"
+tmux attach -t relay-continuity         # log lines: "re-examining held turn", "diagnostic run 1/2 on codex", "uncertain operations settled"
+
+# 4. Verify what happened:
+$RC status                              # reconcile record while it runs; afterwards phase idle/running, chain advanced
+grep '"event": "reconcile' ~/jarvis-control/work/continuity/attempts.jsonl | tail -2
+python3 scripts/devctx.py recover       # ledger: "reconciled turn ... from evidence" or the hold reason
+```
+
+Expected results:
+- **Settled.** Codex continues the chain with the reconciled list in its prompt. Exit 0 once it is idle.
+- **`reconcile_*` hold.** Exit 4, with a Slack HOLD. The journal record names the operation, its verdict, the evidence and the source. This is a real decision for the maintainer: settle it, then `$RC release --note "..."` and run again.
+- **`effects_uncertain` again.** No provider was available for the diagnosis. Rerun after Codex's limits show room.
+
+Headless authority is unchanged. Claude headless refuses tool calls that need approval, and the Codex sandbox may block network access. A diagnosis that needs a refused check reports `insufficient_permissions`, and the supervisor's own probes and evidence bundle cover remote branch and PR state so that a diagnosis rarely needs network access. Remove the worktree after merge: `git worktree remove ~/src/jarvis-197`.

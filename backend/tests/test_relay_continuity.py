@@ -118,11 +118,13 @@ class FakeRelay(rc.RelayAdapter):
         self._current = (step, agent, task)
         return FakeProc(None)
 
-    def finish(self, proc: FakeProc) -> Any:
+    def finish(self, proc: FakeProc, timeout: float | None = None) -> Any:
         step, agent, task = self._current
         if step is None:
             return rc.RunResult(None, 1, False)
         _, events = step
+        if callable(events):  # a reply that depends on the task (a diagnostic answers its own nonce)
+            events = events(task)
         sid = f"20261018-{len(self.launches):06d}-{'b' * 6}"
         write_turn(self.sessions_dir() / sid, events, agent=agent, prompt=relay_prompt(task))
         return rc.RunResult(sid, 0, True)
@@ -151,6 +153,7 @@ class Env:
             log=self.logs.append)
         self.limits = limits or rc.Limits()
         self.sender = sender if sender is not None else self._send
+        self.reconcile = False
 
     def _alive(self, pid: int, start: int | None) -> bool:
         left = self.alive.get(pid, 0)
@@ -172,7 +175,8 @@ class Env:
         return copy_fixture(fixture, session) if fixture else write_turn(session, events or SUCCESS, agent=agent)
 
     def supervisor(self, turns: int = 1) -> Any:
-        return rc.Supervisor(self.store, self.host, self.limits, turns=turns, sender=self.sender)
+        return rc.Supervisor(self.store, self.host, self.limits, turns=turns, sender=self.sender,
+                             reconcile=self.reconcile)
 
     def run(self, sid: str = HEAD, task: str | None = None) -> tuple[str, Any]:
         sup = self.supervisor()
@@ -1861,3 +1865,380 @@ def test_other_file_writing_forms(command: str, kind: str) -> None:
 ])
 def test_review_10_write_and_launch_forms(command: str, kind: str) -> None:
     assert rc.classify_command(command)[0] == kind
+
+
+# ---------------------------------------------------------------------------
+# Spec 197: autonomous incident reconciliation of uncertain operations
+
+
+NONCE_RE = r"\[relay-continuity attempt (rc-[0-9TZ]+-[0-9a-f]+)\]"
+
+
+def diag_reply(*entries: tuple[str, str], commands: tuple[str, ...] = ("git log --oneline -5",),
+               nonce: str | None = None, line: bool = True) -> Any:
+    """A Codex diagnostic turn: read-only commands, then the verdict line for its own nonce."""
+    def events(task: str) -> list[dict[str, Any]]:
+        import re
+        own = nonce or re.search(NONCE_RE, task).group(1)  # type: ignore[union-attr]
+        verdict = {"nonce": own, "operations": [{"id": i, "verdict": v, "evidence": f"checked {i}"} for i, v in entries]}
+        text = "Findings above.\n" + (f"RECONCILE-VERDICT {json.dumps(verdict)}" if line else "no verdict")
+        items: list[dict[str, Any]] = [{"type": "thread.started"}]
+        for k, cmd in enumerate(commands):
+            items.append({"type": "item.completed", "item": {"id": f"c{k}", "type": "command_execution", "command": cmd}})
+        items += [{"type": "item.completed", "item": {"id": "m", "type": "agent_message", "text": text}},
+                  {"type": "turn.completed"}]
+        return items
+    return events
+
+
+def reconciling(tmp_path: Path, script: list[Any], *, probe: Any = None) -> Env:
+    env = Env(tmp_path, script)
+    env.reconcile = True
+    env.relay.readings = room(env, "codex")
+    env.host.probe = probe or (lambda call: None)
+    env.host.evidence = lambda report: "### Worktrees\nworktree /r"
+    return env
+
+
+def journal(env: Env) -> list[dict[str, Any]]:
+    return [json.loads(line) for line in env.store.journal_path.read_text().splitlines()]
+
+
+def test_quota_with_a_probed_completed_push_hands_off_to_codex_without_repeating(tmp_path: Path) -> None:
+    env = reconciling(tmp_path, [("codex", CODEX_SUCCESS)],
+                      probe=lambda call: ("completed", "remote branch b is at the pushed commit abc"))
+    env.head([IN_FLIGHT["git push"], *QUOTA])
+    result, sup = env.run()
+    assert result == "idle"
+    assert [launch["agent"] for launch in env.relay.launches] == ["codex"]  # no diagnosis was needed
+    task = env.relay.launches[0]["task"]
+    assert "git push: COMPLETED: it took effect; do not repeat it" in task and "probe:" in task
+    assert sup.state["cooldowns"]["claude"]["reason"] == "quota"
+    settled = [r for r in journal(env) if r.get("event") == "reconcile"]
+    assert settled[0]["result"] == "settled" and settled[0]["verdicts"][0]["verdict"] == "completed"
+    assert any("JarvisOS continuity: uncertain operations settled" in e for e in env.events())
+    assert sup.state["reconcile"] is None
+
+
+def test_interrupted_completed_subagent_is_settled_by_a_codex_diagnosis_not_repeated(tmp_path: Path) -> None:
+    env = reconciling(tmp_path, [("codex", diag_reply(("x", "completed"))), ("codex", CODEX_SUCCESS)])
+    env.head([IN_FLIGHT["subagent"], *QUOTA])
+    result, sup = env.run()
+    assert result == "idle"
+    diag, cont = env.relay.launches
+    assert diag["agent"] == "codex" and "Read-only incident diagnosis" in diag["task"] and diag["turns"] == 1
+    assert "id `x`: [unknown] Agent" in diag["task"] and "### Worktrees" in diag["task"]
+    assert diag["parent"] == HEAD and cont["parent"] == HEAD  # the diagnosis never becomes the chain head
+    assert "Agent: COMPLETED" in cont["task"] and "diagnostic codex" in cont["task"]
+    assert sup.state["diagnostics"] == ["20261018-000001-bbbbbb"]
+    assert sup.state["chain"] == [HEAD, "20261018-000002-bbbbbb"]
+    events = [(r.get("event"), r.get("purpose")) for r in journal(env)]
+    assert events.count(("launch", "diagnostic")) == 1 and events.count(("settle", "diagnostic")) == 1
+
+
+def test_running_background_worker_is_awaited_and_never_duplicated(tmp_path: Path) -> None:
+    worker = tool_use("x", "Bash", command="nohup ./scripts/lane.sh > lane.log &")
+    env = reconciling(tmp_path, [("codex", diag_reply(("x", "completed"))), ("codex", CODEX_SUCCESS)])
+    env.head([worker, tool_result("x"), *QUOTA])
+    checks = {"n": 0}
+
+    def live_work(since: datetime) -> list[Any]:
+        checks["n"] += 1
+        running = checks["n"] <= 3
+        launched_while_running.append(running and bool(env.relay.launches))
+        return [work("proc:9:9:w", "process lane.sh")] if running else []
+    launched_while_running: list[bool] = []
+    env.host.live_work = live_work
+    result, _ = env.run()
+    assert result == "idle" and not any(launched_while_running)
+    assert sum(env.clock.slept) >= 3 * env.limits.reconcile_poll  # waited for the worker to end
+    assert [launch["agent"] for launch in env.relay.launches] == ["codex", "codex"]
+    assert "Read-only incident diagnosis" in env.relay.launches[0]["task"]
+
+
+def test_worker_outliving_the_reconcile_bound_holds_without_launching(tmp_path: Path) -> None:
+    env = reconciling(tmp_path, [])
+    env.limits = rc.Limits(reconcile_wait=timedelta(minutes=20))
+    env.head([tool_use("x", "Bash", command="nohup ./scripts/lane.sh &"), tool_result("x"), *QUOTA])
+    env.host.live_work = lambda since: [work("proc:9:9:w", "process lane.sh")]
+    result, sup = env.run()
+    assert result == "held" and sup.state["hold"]["reason"] == "live_work"
+    assert env.relay.launches == []
+
+
+def test_definitely_unstarted_merge_is_resumed_safely(tmp_path: Path) -> None:
+    env = reconciling(tmp_path, [("codex", CODEX_SUCCESS)],
+                      probe=lambda call: ("not_started", "PR #1 is still open: the merge did not take effect"))
+    env.head([IN_FLIGHT["gh pr merge"], *QUOTA])
+    assert env.run()[0] == "idle"
+    task = env.relay.launches[0]["task"]
+    assert "gh pr merge: NOT STARTED: it did not take effect; perform it only if still required" in task
+    assert "approval gates, review requirements and authority boundaries are exactly as before" in task
+
+
+@pytest.mark.parametrize("verdict", ["not_started", "unresolved"])
+def test_genuinely_ambiguous_external_effect_remains_held(tmp_path: Path, verdict: str) -> None:
+    # A model alone can never establish that a PR comment was not posted.
+    env = reconciling(tmp_path, [("codex", diag_reply(("x", verdict)))])
+    env.head([tool_use("x", "Bash", command="gh pr comment 7 --body done"), *QUOTA])
+    result, sup = env.run()
+    assert result == "held" and sup.state["hold"]["reason"] == "reconcile_unresolved"
+    assert len(env.relay.launches) == 1  # the diagnosis only: no continuation
+    assert sup.state["hold"]["turn"] == f"{HEAD}/turn-001"
+    record = [r for r in journal(env) if r.get("event") == "reconcile"][-1]
+    assert record["verdicts"][0]["verdict"] == "unresolved"
+    result, _ = env.run()  # a reconciliation hold is never re-examined automatically
+    assert result == "held" and len(env.relay.launches) == 1
+
+
+def test_local_write_not_started_from_a_diagnosis_is_admitted(tmp_path: Path) -> None:
+    env = reconciling(tmp_path, [("codex", diag_reply(("x", "not_started"))), ("codex", CODEX_SUCCESS)])
+    env.head([tool_use("x", "Bash", command="cp a.py b.py"), *QUOTA])
+    assert env.run()[0] == "idle"
+    assert "cp: NOT STARTED" in env.relay.launches[1]["task"]
+
+
+def _diag_pending(env: Env, nonce: str, pid: int | None) -> None:
+    env.head([IN_FLIGHT["subagent"], *QUOTA])
+    state = rc.default_state()
+    state.update({"phase": "running", "head_session": HEAD, "chain": [HEAD], "agent": "claude",
+                  "permissions_digest": "perm0", "permissions_pinned": True,
+                  "reconcile": {"turn": f"{HEAD}/turn-001", "since": rc.iso(T0), "attempts": 1, "verdicts": {},
+                                "diag": {"nonce": nonce, "agent": "codex", "parent": HEAD, "started_at": rc.iso(T0),
+                                         "pid": pid, "pid_start": 42, "fingerprint": "fp0", "attempt": 1,
+                                         "ops": ["x"]}}})
+    env.store.save(state, T0)
+    env.store.journal({"event": "launch", "purpose": "diagnostic", "nonce": nonce, "agent": "codex"})
+
+
+def test_supervisor_restart_during_diagnosis_adopts_it_without_a_duplicate(tmp_path: Path) -> None:
+    nonce = "rc-20261018T080000Z-0d1a9000"
+    env = reconciling(tmp_path, [("codex", CODEX_SUCCESS)])
+    _diag_pending(env, nonce, pid=4242)
+    env.alive[4242] = 2
+
+    def finish_pending() -> None:
+        write_turn(env.relay.sessions_dir() / "20261018-080100-cccccc", diag_reply(("x", "completed"), nonce=nonce)(""),
+                   agent="codex", prompt=relay_prompt(f"[relay-continuity attempt {nonce}]\nRead-only incident diagnosis"))
+    env.relay.finish_pending = finish_pending  # type: ignore[attr-defined]
+    result, sup = env.run()
+    assert result == "idle"
+    assert len(env.relay.launches) == 1 and "Read-only incident diagnosis" not in env.relay.launches[0]["task"]
+    assert "Agent: COMPLETED" in env.relay.launches[0]["task"]
+    assert sup.state["diagnostics"] == ["20261018-080100-cccccc"]
+
+
+def test_restart_with_a_lost_diagnosis_holds_and_never_relaunches(tmp_path: Path) -> None:
+    env = reconciling(tmp_path, [])
+    _diag_pending(env, "rc-20261018T080000Z-0d1a9001", pid=4243)  # dead, and no session carries its nonce
+    result, sup = env.run()
+    assert result == "held" and sup.state["hold"]["reason"] == "attempt_unresolved"
+    assert env.relay.launches == []
+    assert env.run()[0] == "held" and env.relay.launches == []
+
+
+def test_diagnosis_past_its_time_bound_is_terminated_on_restart(tmp_path: Path) -> None:
+    env = reconciling(tmp_path, [])
+    _diag_pending(env, "rc-20261018T080000Z-0d1a9002", pid=4244)
+    env.clock.t = T0 + env.limits.reconcile_timeout + timedelta(seconds=1)
+    killed: list[int] = []
+    env.alive[4244] = 3
+    env.relay.finish_pending = lambda: None  # type: ignore[attr-defined]
+    env.host.terminate = killed.append
+    result, _ = env.run()
+    assert killed == [4244] and result == "held" and env.relay.launches == []
+
+
+def test_insufficient_permissions_are_reported_not_bypassed(tmp_path: Path) -> None:
+    env = reconciling(tmp_path, [("codex", diag_reply(("x", "insufficient_permissions")))])
+    env.head([IN_FLIGHT["subagent"], *QUOTA])
+    result, sup = env.run()
+    assert result == "held" and sup.state["hold"]["reason"] == "reconcile_insufficient_permissions"
+    assert len(env.relay.launches) == 1
+    assert any("reconcile_insufficient_permissions" in text for text in env.sent)
+    # A refused probe is reported the same way, with no diagnosis at all.
+    env2 = reconciling(tmp_path / "b", [], probe=lambda call: ("insufficient_permissions", "`gh pr view` was refused"))
+    env2.head([IN_FLIGHT["gh pr merge"], *QUOTA])
+    assert env2.run()[0] == "held" and env2.store.load()["hold"]["reason"] == "reconcile_insufficient_permissions"
+    assert env2.relay.launches == []
+
+
+@pytest.mark.parametrize("violation", ["write", "fingerprint"])
+def test_a_diagnosis_that_is_not_read_only_is_void(tmp_path: Path, violation: str) -> None:
+    commands = ("git log", "git commit -am fix") if violation == "write" else ("git log",)
+    env = reconciling(tmp_path, [("codex", diag_reply(("x", "completed"), commands=commands))])
+    env.head([IN_FLIGHT["subagent"], *QUOTA])
+    if violation == "fingerprint":
+        env.host.fingerprint = lambda: "fp-after" if env.relay.launches else "fp0"
+    result, sup = env.run()
+    assert result == "held" and sup.state["hold"]["reason"] == "reconcile_failed"
+    assert len(env.relay.launches) == 1
+
+
+def test_diagnosis_without_a_verdict_is_retried_within_its_bound_then_holds(tmp_path: Path) -> None:
+    env = reconciling(tmp_path, [("codex", diag_reply(("x", "completed"), line=False)),
+                                 ("codex", diag_reply(("x", "completed"), nonce="rc-other"))])
+    env.head([IN_FLIGHT["subagent"], *QUOTA])
+    result, sup = env.run()
+    assert result == "held" and sup.state["hold"]["reason"] == "reconcile_failed"
+    assert len(env.relay.launches) == env.limits.reconcile_attempts == 2
+
+
+def test_no_confirmed_diagnostic_provider_keeps_the_hold(tmp_path: Path) -> None:
+    env = reconciling(tmp_path, [])
+    env.relay.readings = None  # no fresh reading: Codex has no confirmed room, and Claude is out of quota
+    env.head([IN_FLIGHT["subagent"], *QUOTA])
+    result, sup = env.run()
+    assert result == "held" and sup.state["hold"]["reason"] == "effects_uncertain"
+    assert env.relay.launches == []
+
+
+def test_a_held_uncertain_turn_is_reexamined_from_evidence_on_the_next_run(tmp_path: Path) -> None:
+    # The 2026-10-18 incident shape: Claude quota with an operation in flight, held by spec 195.
+    env = Env(tmp_path, [("codex", CODEX_SUCCESS)])
+    env.relay.readings = room(env, "codex")
+    env.head([IN_FLIGHT["git push"], *QUOTA])
+    assert env.run()[0] == "held" and env.store.load()["hold"]["reason"] == "effects_uncertain"
+    env.reconcile = True
+    env.host.probe = lambda call: ("completed", "remote branch b is at the pushed commit abc")
+    result, sup = env.run()
+    assert result == "idle" and [launch["agent"] for launch in env.relay.launches] == ["codex"]
+    assert any(r.get("event") == "reconcile_resume" for r in journal(env))
+
+
+def test_reexamination_keeps_the_hold_when_the_chain_moved(tmp_path: Path) -> None:
+    env = reconciling(tmp_path, [], probe=lambda call: ("completed", "x"))
+    env.head([IN_FLIGHT["git push"], *QUOTA])
+    state = rc.default_state()
+    state.update({"phase": "held", "head_session": HEAD, "chain": [HEAD], "permissions_digest": "perm0",
+                  "permissions_pinned": True,
+                  "hold": {"reason": "effects_uncertain", "at": rc.iso(T0), "attempt": None, "turn": f"{HEAD}/turn-000"}})
+    env.store.save(state, T0)
+    result, sup = env.run()
+    assert result == "held" and sup.state["hold"]["turn"] == f"{HEAD}/turn-000" and env.relay.launches == []
+
+
+@pytest.mark.parametrize("reason", ["live_work", "auth_failure", "attempt_unresolved", "reconcile_unresolved"])
+def test_other_holds_are_never_released_by_reconciliation(tmp_path: Path, reason: str) -> None:
+    env = reconciling(tmp_path, [], probe=lambda call: ("completed", "x"))
+    env.head([IN_FLIGHT["git push"], *QUOTA])
+    state = rc.default_state()
+    state.update({"phase": "held", "head_session": HEAD, "chain": [HEAD],
+                  "hold": {"reason": reason, "at": rc.iso(T0), "attempt": None, "turn": f"{HEAD}/turn-001"}})
+    env.store.save(state, T0)
+    assert env.run()[0] == "held" and env.relay.launches == []
+
+
+def test_state_written_before_reconciliation_still_loads(tmp_path: Path) -> None:
+    store = rc.Store(tmp_path)
+    state = rc.default_state()
+    assert "reconcile" not in state and "diagnostics" not in state
+    store.save(state, T0)
+    assert store.load()["phase"] == "idle"
+    state["reconcile"] = {"turn": "s/t", "since": rc.iso(T0), "attempts": "1", "verdicts": {}, "diag": None}
+    store.save(state, T0)
+    with pytest.raises(rc.StateCorrupt):
+        store.load()
+
+
+def test_verdict_parsing_is_strict() -> None:
+    ops = [rc.ToolCall("a", "Bash", "external", "gh pr comment", False), rc.ToolCall("b", "Agent", "unknown", "Agent", False)]
+    line = 'RECONCILE-VERDICT {"nonce": "n1", "operations": [{"id": "a", "verdict": "completed", "evidence": "comment 9 exists"}]}'
+    assert rc.parse_verdicts(f"text\n{line}", "n1", ops) == {"a": ("completed", "comment 9 exists"),
+                                                            "b": ("unresolved", "not covered by the diagnosis")}
+    assert rc.parse_verdicts(line, "n2", ops) is None
+    assert rc.parse_verdicts(f"{line}\n{line}", "n1", ops) is None
+    assert rc.parse_verdicts(line.replace("completed", "done"), "n1", ops) is None
+    assert rc.parse_verdicts(line.replace('"a"', '"zz"'), "n1", ops) is None
+    secret = line.replace("comment 9 exists", "token ghp_abcdefghijklmnopqrstuvwxyz0123")
+    assert rc.parse_verdicts(secret, "n1", ops)["a"] == ("unresolved", "the diagnosis gave no usable evidence")
+    assert rc.admit(ops[0], "not_started", "e")[0] == "unresolved"
+    assert rc.admit(ops[0], "completed", "e") == ("completed", "e")
+    assert rc.admit(rc.ToolCall("c", "Edit", "local_write", "Edit a.py", False), "not_started", "e")[0] == "not_started"
+
+
+def fake_runner(responses: dict[str, tuple[int, str]]) -> Any:
+    calls: list[list[str]] = []
+
+    def run(args: list[str], cwd: Path | None = None, timeout: float = 20.0) -> tuple[int | None, str]:
+        calls.append(args)
+        for key, value in responses.items():
+            if key in " ".join(args):
+                return value
+        return 1, "unexpected"
+    run.calls = calls  # type: ignore[attr-defined]
+    return run
+
+
+def bash(command: str) -> Any:
+    return rc._claude_call({"id": "x", "name": "Bash", "input": {"command": command}})
+
+
+@pytest.mark.parametrize(("command", "responses", "expected"), [
+    ("cd /r && git push origin feat", {"rev-parse --verify": (0, "a" * 40 + "\n"),
+                                       "ls-remote": (0, f"{'a' * 40}\trefs/heads/feat\n")}, "completed"),
+    ("git push -u origin HEAD:feat 2>&1", {"rev-parse --verify": (0, "a" * 40), "ls-remote": (0, "")}, "not_started"),
+    ("git push origin feat", {"rev-parse --verify": (0, "a" * 40), "ls-remote": (0, f"{'b' * 40}\trefs/heads/feat"),
+                              "merge-base": (0, "")}, "not_started"),
+    ("git push origin feat", {"rev-parse --verify": (0, "a" * 40), "ls-remote": (0, f"{'b' * 40}\trefs/heads/feat"),
+                              "merge-base": (1, "")}, None),
+    ("git push --force origin feat", {"rev-parse --verify": (0, "a" * 40), "ls-remote": (0, "")}, None),
+    ("git push origin feat", {"rev-parse --verify": (0, "a" * 40), "ls-remote": (128, "fatal: Authentication failed")},
+     "insufficient_permissions"),
+    ("git push --tags origin", {}, None),
+    ("git push origin feat && gh pr create --fill", {}, None),  # two effectful steps: only a diagnosis can tell
+    ("git push origin $BRANCH", {}, None),
+    ("gh pr merge 12 --squash", {"pr view 12": (0, '{"number": 12, "state": "MERGED"}')}, "completed"),
+    ("gh pr merge 12 --squash", {"pr view 12": (0, '{"number": 12, "state": "OPEN"}')}, "not_started"),
+    ("gh pr merge 12 --auto --squash", {}, None),
+    ("gh pr merge 12", {"pr view 12": (1, "HTTP 401: Bad credentials (gh auth login)")}, "insufficient_permissions"),
+    ("gh pr create --head feat --fill", {"pr list": (0, '[{"number": 3, "state": "OPEN"}]')}, "completed"),
+    ("gh pr create --head feat --fill", {"pr list": (0, "[]")}, "not_started"),
+    ("gh pr comment 3 --body hi", {}, None),
+    ("./deploy.sh", {}, None),
+])
+def test_deterministic_probes(command: str, responses: dict[str, tuple[int, str]], expected: str | None) -> None:
+    run = fake_runner(responses)
+    probed = rc.probe_call(bash(command), Path("/r"), run)
+    assert (probed[0] if probed else None) == expected
+    for args in run.calls:  # probes only read
+        assert (args[3] if args[:2] == ["git", "-C"] else " ".join(args[1:3])) in (
+            "rev-parse", "ls-remote", "merge-base", "pr view", "pr list")
+
+
+def test_file_probes(tmp_path: Path) -> None:
+    target = tmp_path / "a.py"
+    edit = rc._claude_call({"id": "e", "name": "Edit", "input": {"file_path": str(target), "old_string": "x = 1",
+                                                                  "new_string": "x = 2"}})
+    write = rc._claude_call({"id": "w", "name": "Write", "input": {"file_path": str(target), "content": "x = 2\n"}})
+    assert rc.probe_call(write, tmp_path)[0] == "not_started"
+    target.write_text("x = 1\n")
+    assert rc.probe_call(edit, tmp_path)[0] == "not_started"
+    assert rc.probe_call(write, tmp_path) is None
+    target.write_text("x = 2\n")
+    assert rc.probe_call(edit, tmp_path)[0] == "completed" and rc.probe_call(write, tmp_path)[0] == "completed"
+    assert "content" not in json.dumps(rc.TurnReport("crash", "claude", "", calls=[write]).to_json())
+
+
+def test_evidence_bundle_drops_secret_lines(tmp_path: Path) -> None:
+    run = fake_runner({"worktree list": (0, "worktree /r\nghp_abcdefghijklmnopqrstuvwxyz0123"),
+                       "ls-remote": (128, "fatal: could not read Username")})
+    report = rc.TurnReport("quota", "claude", "x", turn_id=f"{HEAD}/turn-006")
+    text = rc.collect_evidence(tmp_path, report, run)
+    assert "worktree /r" in text and "ghp_" not in text and "turn-006/output.jsonl" in text
+    assert "(unavailable: fatal: could not read Username)" in text
+
+
+def test_operation_still_running_remotely_is_rechecked_then_held_within_bounds(tmp_path: Path) -> None:
+    env = reconciling(tmp_path, [("codex", diag_reply(("x", "running"))), ("codex", diag_reply(("x", "running")))])
+    env.head([IN_FLIGHT["subagent"], *QUOTA])
+    result, sup = env.run()
+    assert result == "held" and sup.state["hold"]["reason"] == "reconcile_unresolved"
+    assert len(env.relay.launches) == 2 and sum(env.clock.slept) >= env.limits.reconcile_poll
+
+
+def test_running_then_completed_continues_once(tmp_path: Path) -> None:
+    env = reconciling(tmp_path, [("codex", diag_reply(("x", "running"))), ("codex", diag_reply(("x", "completed"))),
+                                 ("codex", CODEX_SUCCESS)])
+    env.head([IN_FLIGHT["subagent"], *QUOTA])
+    assert env.run()[0] == "idle" and len(env.relay.launches) == 3

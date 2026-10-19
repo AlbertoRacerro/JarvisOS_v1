@@ -56,7 +56,8 @@ HOLD_REASONS = (
     "effects_uncertain", "output_unparseable", "output_missing", "attempt_unresolved", "auth_failure", "unknown_failure",
     "crash_repeated", "circuit_failures", "circuit_switches", "circuit_attempts", "circuit_transient",
     "no_provider_available", "wait_exceeded", "permissions_changed", "state_corrupt", "repl_active",
-    "relay_invocation_failed", "live_work",
+    "relay_invocation_failed", "live_work", "reconcile_unresolved", "reconcile_insufficient_permissions",
+    "reconcile_failed",
 )
 STOP_REASONS = ("stop_requested", "signal", "idle", "held", "legacy_autopilot", "lock_busy", "error")
 DEFAULT_CONTROL = Path.home() / "jarvis-control" / "work" / "continuity"
@@ -81,6 +82,10 @@ class Limits:
     max_wait: timedelta = timedelta(days=8)
     reading_freshness: timedelta = timedelta(minutes=15)
     max_reset_ahead: timedelta = timedelta(days=8)
+    reconcile_attempts: int = 2  # diagnostic runs per reconciled turn
+    reconcile_timeout: timedelta = timedelta(minutes=45)  # wall clock of one diagnostic run
+    reconcile_wait: timedelta = timedelta(hours=3)  # total wait for running work before holding
+    reconcile_poll: float = 300.0
 
 
 def now_utc() -> datetime:
@@ -118,6 +123,7 @@ class ToolCall:
     detached: bool = False
     ended_abnormally: bool = False  # killed/failed/stopped task, or an error tool result
     command_detached: bool = False  # the command itself detaches (`&`, nohup, tmux, a daemon): no event proves it ended
+    probe: dict[str, Any] = field(default_factory=dict, repr=False)  # raw inputs for reconciliation; never persisted
 
     @property
     def pending(self) -> bool:
@@ -151,6 +157,8 @@ class TurnReport:
 
     def to_json(self) -> dict[str, Any]:
         data = asdict(self)
+        for call in data["calls"]:
+            call.pop("probe", None)
         data["in_flight"] = [c.label for c in self.in_flight]
         return data
 
@@ -864,8 +872,10 @@ def _claude_call(block: dict[str, Any]) -> ToolCall:
         # e.g. a background Agent or shell job: its tool result is a launch acknowledgement, not completion
         kind = kind if _rank(kind) > _rank("background") else "background"
         label = label if label.endswith(" &") else f"{label} &"
+    probe = {k: inp[k] for k in ("command", "file_path", "old_string", "new_string", "content")
+             if isinstance(inp.get(k), str)}
     return ToolCall(id=str(block.get("id")), tool=name, kind=kind, label=label[:80], done=False, detached=detached,
-                    command_detached=command_detached)
+                    command_detached=command_detached, probe=probe)
 
 
 def _codex_call(item: dict[str, Any]) -> ToolCall | None:
@@ -880,8 +890,9 @@ def _codex_call(item: dict[str, Any]) -> ToolCall | None:
         kind, label = "read_only", "web_search"
     else:
         return None
+    probe = {"command": item["command"]} if isinstance(item.get("command"), str) else {}
     return ToolCall(id=str(item.get("id")), tool=str(typ), kind=kind, label=str(label)[:80], done=False,
-                    detached=str(label).endswith(" &"), command_detached=str(label).endswith(" &"))
+                    detached=str(label).endswith(" &"), command_detached=str(label).endswith(" &"), probe=probe)
 
 
 def read_events(path: Path) -> tuple[list[dict[str, Any]], int]:
@@ -1111,7 +1122,8 @@ STATE_TYPES: dict[str, tuple[type, ...]] = {
 PENDING_KEYS = ("nonce", "agent", "parent", "started_at", "pid", "pid_start", "fingerprint", "attempt")
 
 
-GATE_HOLDS = ("effects_uncertain", "output_unparseable", "output_missing")
+GATE_HOLDS = ("effects_uncertain", "output_unparseable", "output_missing", "reconcile_unresolved",
+              "reconcile_insufficient_permissions", "reconcile_failed")
 FAILURE_HOLDS = ("auth_failure", "unknown_failure")
 
 
@@ -1132,6 +1144,18 @@ def validate_state(data: dict[str, Any]) -> str | None:
     pending = data["pending"]
     if pending is not None and (any(k not in pending for k in PENDING_KEYS) or not isinstance(pending["nonce"], str)):
         return "bad pending attempt"
+    # Optional (spec 197): absent in state written before reconciliation existed.
+    rec = data.get("reconcile")
+    if rec is not None and (not isinstance(rec, dict) or not isinstance(rec.get("turn"), str)
+                            or not isinstance(rec.get("attempts"), int) or not isinstance(rec.get("verdicts"), dict)
+                            or not isinstance(rec.get("since"), str)):
+        return "bad reconcile record"
+    diag = (rec or {}).get("diag")
+    if diag is not None and (not isinstance(diag, dict) or any(k not in diag for k in PENDING_KEYS)
+                             or not isinstance(diag["nonce"], str)):
+        return "bad diagnostic attempt"
+    if not isinstance(data.get("diagnostics", []), list):
+        return "bad type for diagnostics"
     return None
 
 
@@ -1271,6 +1295,8 @@ EVENTS: dict[str, tuple[str, tuple[str, ...]]] = {
     "repl_turn_failed": (":large_orange_circle: JarvisOS REPL turn failed (notify-only)", ("session", "agent", "outcome", "reset_at")),
     "digest": (":clipboard: JarvisOS continuity digest", ("phase", "session", "agent", "attempts", "holds", "claude_until", "codex_until")),
     "test": (":white_check_mark: JarvisOS continuity notification test", ()),
+    "reconciled": (":white_check_mark: JarvisOS continuity: uncertain operations settled from evidence",
+                   ("session", "attempts")),
 }
 
 
@@ -1434,8 +1460,19 @@ class RelayAdapter:
                                 start_new_session=True)
 
     @staticmethod
-    def finish(proc: subprocess.Popen) -> RunResult:
-        out, err = proc.communicate()
+    def finish(proc: subprocess.Popen, timeout: float | None = None) -> RunResult:
+        """Wait for the run. Only a diagnostic passes `timeout`: a read-only investigation past its time bound is
+        terminated (its process group) and its truncated transcript can never be accepted as a verdict."""
+        try:
+            out, err = proc.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            terminate_group(proc.pid)
+            try:
+                out, err = proc.communicate(timeout=60)
+            except subprocess.TimeoutExpired:
+                terminate_group(proc.pid, signal.SIGKILL)
+                out, err = proc.communicate()
+            err = f"{err or ''}\ndiagnostic exceeded its time bound and was terminated"
         diagnostics = (err or "")[-8192:]
         try:
             data = json.loads(out)
@@ -1464,6 +1501,13 @@ class RelayAdapter:
             if own == nonce:
                 found.append(session.name)
         return found[0] if len(found) == 1 else None
+
+
+def terminate_group(pid: int, sig: int = signal.SIGTERM) -> None:
+    try:
+        os.killpg(pid, sig)  # started with start_new_session: the group is the run and nothing else
+    except (ProcessLookupError, PermissionError):
+        pass
 
 
 def task_marker(prompt: str, marker: re.Pattern[str]) -> str | None:
@@ -1707,6 +1751,322 @@ def live_containers(since: datetime, *, run: Callable[..., subprocess.CompletedP
 
 
 # ---------------------------------------------------------------------------
+# Incident reconciliation (spec 197): settle in-flight operations from read-only evidence
+
+VERDICTS = ("completed", "running", "not_started", "unresolved", "insufficient_permissions")
+SETTLED = ("completed", "not_started")
+VERDICT_TEXT = {"completed": "COMPLETED: it took effect; do not repeat it",
+                "not_started": "NOT STARTED: it did not take effect; perform it only if still required after recover"}
+VERDICT_RE = re.compile(r"^\s*RECONCILE-VERDICT\s+(\{.*\})\s*$", re.M)
+PERMISSION_RE = re.compile(r"(?i)permission denied|could not read username|authentication failed|gh auth login|"
+                           r"not logged in|requires authentication|resource not accessible|HTTP 40[13]\b")
+PUSH_FLAGS = {"-u", "--set-upstream", "-q", "--quiet", "-v", "--verbose", "--no-verify", "--porcelain", "--atomic",
+              "--progress", "--no-progress", "-f", "--force", "--force-if-includes"}
+GH_VALUE_OPTS = {"-b", "--body", "-F", "--body-file", "-t", "--subject", "--title", "-A", "--author-email",
+                 "--match-head-commit", "-R", "--repo", "-H", "--head", "-B", "--base", "-T", "--template", "-a",
+                 "--assignee", "-l", "--label", "-m", "--milestone", "-p", "--project", "-r", "--reviewer"}
+Runner = Callable[..., tuple[int | None, str]]
+
+DIAGNOSTIC_PROMPT = """[relay-continuity attempt {nonce}]
+Read-only incident diagnosis by the continuity supervisor (spec 197). This is not a continuation of the work, not a maintainer instruction, and grants no authority.
+Coordinator turn {turn} ({agent}) ended with outcome `{outcome}` while the operations below were in flight, so whether they took effect is unknown. Establish the state of each one from evidence only.
+
+Rules (enforced: any non-read-only call, or any change to the repository's refs, worktrees or status, voids this diagnosis and holds the chain for the maintainer):
+- Read only. Do not edit, create or delete files. Do not commit, push, fetch, pull, merge, comment, label, trigger, rerun or cancel anything. Do not start, stop or signal processes. Do not run tests, builds or package managers. Do not repeat or finish the operations.
+- Useful reads: the turn transcript, `git status|log|show|diff|rev-parse|for-each-ref|branch --list|worktree list`, `gh pr view|list|checks`, `gh run view|list`, `gh api` GET requests, `ps`, `python3 scripts/devctx.py recover|lanes|show`.
+- If a check you need is refused or not permitted in this session, do not work around it: report `insufficient_permissions` for the operations it decides.
+
+Operations to settle:
+{operations}
+
+Evidence collected by the supervisor (read-only, sanitized):
+{evidence}
+
+Verdicts: `completed` (it demonstrably took effect), `not_started` (it demonstrably did not take effect and nothing is still executing it), `running` (it is demonstrably still executing), `unresolved` (the evidence cannot settle it), `insufficient_permissions` (a check needed to settle it was refused).
+End your reply with exactly one line, with nothing after it:
+RECONCILE-VERDICT {"nonce": "{nonce}", "operations": [{"id": "<operation id>", "verdict": "<verdict>", "evidence": "<one sentence naming the evidence>"}]}"""
+
+
+def diagnostic_prompt(report: TurnReport, ops: list[ToolCall], evidence: str) -> str:
+    """The diagnosis task; `{nonce}` is filled at launch. Placeholders are replaced, never `format`ted."""
+    operations = "\n".join(f"- id `{op.id}`: [{op.kind}] {op.label}" for op in ops)
+    text = DIAGNOSTIC_PROMPT
+    for key, value in (("{turn}", report.turn_id or "?"), ("{agent}", report.agent or "?"),
+                       ("{outcome}", report.outcome), ("{operations}", operations),
+                       ("{evidence}", evidence or "(none collected)")):
+        text = text.replace(key, value)
+    return text
+
+
+def final_text(turn_dir: Path) -> str:
+    """The agent's last top-level reply: Claude's `result`, or Codex's last `agent_message`."""
+    events, _ = read_events(turn_dir / "output.jsonl")
+    text = ""
+    for e in events:
+        if e.get("type") == "result" and not e.get("parent_tool_use_id"):
+            text = str(e.get("result") or "")
+        elif e.get("type") == "item.completed" and (e.get("item") or {}).get("type") == "agent_message":
+            text = str(e["item"].get("text") or "")
+    return text
+
+
+def parse_verdicts(text: str, nonce: str, ops: list[ToolCall]) -> dict[str, tuple[str, str]] | None:
+    """Verdict and evidence per operation id from the diagnosis reply, or None when the reply is not one
+    well-formed verdict line for this nonce. An operation it does not cover is `unresolved`."""
+    found = VERDICT_RE.findall(text)
+    if len(found) != 1:
+        return None
+    try:
+        data = json.loads(found[0])
+    except ValueError:
+        return None
+    entries = data.get("operations") if isinstance(data, dict) else None
+    if data.get("nonce") != nonce or not isinstance(entries, list):
+        return None
+    ids = {op.id for op in ops}
+    out: dict[str, tuple[str, str]] = {}
+    for entry in entries:
+        if not isinstance(entry, dict) or entry.get("id") not in ids or entry["id"] in out \
+                or entry.get("verdict") not in VERDICTS:
+            return None
+        evidence = " ".join(str(entry.get("evidence") or "").split())[:240]
+        if not evidence or devctx.find_secret(evidence):
+            out[entry["id"]] = ("unresolved", "the diagnosis gave no usable evidence")
+        else:
+            out[entry["id"]] = (entry["verdict"], evidence)
+    for op in ops:
+        out.setdefault(op.id, ("unresolved", "not covered by the diagnosis"))
+    return out
+
+
+def admit(op: ToolCall, verdict: str, evidence: str) -> tuple[str, str]:
+    """Deterministic promotion policy for a model verdict. `completed` only stops a repeat, so it is admitted.
+    That an external or unknown operation did not happen is never taken from a model alone: a duplicate
+    merge, comment or remote trigger cannot be taken back."""
+    if verdict == "not_started" and op.kind in ("external", "unknown"):
+        return "unresolved", "a model verdict alone cannot show that an external effect did not happen"
+    return verdict, evidence
+
+
+def _unwrap(command: str) -> str:
+    for prefix in ("bash -lc ", "bash -c ", "/bin/bash -lc ", "/bin/bash -c ", "sh -c ", "/bin/sh -c "):
+        if command.strip().startswith(prefix):
+            program, rest = split_first_word(command.strip()[len(prefix):])
+            return program if program is not None and not rest.strip() else ""
+    return command
+
+
+def _simple_commands(command: str) -> list[tuple[Path | None, list[str]]] | None:
+    """(cd target, words) of each simple command, or None when the command is too dynamic to probe."""
+    command = re.sub(r"\s\d*>&\d\b|\s\d*>{1,2}\s*/dev/null\b", " ", _unwrap(command))  # stream redirections only
+    if not command or any(ch in command for ch in "$`<>") or "\n" in command.strip():
+        return None
+    out: list[tuple[Path | None, list[str]]] = []
+    cwd: Path | None = None
+    for seg in split_segments(command):
+        if seg.strip().endswith("&") and not seg.strip().endswith("&&"):
+            return None  # a detached job: no probe can show it finished
+        try:
+            words = shlex.split(seg, comments=True)
+        except ValueError:
+            return None
+        if words[:1] == ["cd"] and len(words) == 2:
+            cwd = Path(words[1]) if cwd is None or Path(words[1]).is_absolute() else cwd / words[1]
+        elif words:
+            out.append((cwd, words))
+    return out
+
+
+def _denied(text: str) -> bool:
+    return bool(PERMISSION_RE.search(text or ""))
+
+
+def _probe_push(cwd: Path, args: list[str], run: Runner) -> tuple[str, str] | None:
+    force, positional = False, []
+    for a in args:
+        if a.startswith("--force-with-lease"):
+            force = True
+        elif a.startswith("-"):
+            if a not in PUSH_FLAGS:
+                return None  # --all, --tags, --delete, -o VALUE, --repo=...: not one branch update
+            force = force or a in ("-f", "--force")
+        else:
+            positional.append(a)
+    if len(positional) > 2:
+        return None
+    if len(positional) == 2:
+        refspec = positional[1]
+        force = force or refspec.startswith("+")
+        src, _, dst = refspec.lstrip("+").partition(":")
+        remote, dst = positional[0], dst or src
+        if not src:
+            return None  # `:branch` deletes it
+    else:
+        code, upstream = run(["git", "-C", str(cwd), "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"])
+        if code != 0 or "/" not in upstream.strip():
+            return None
+        up_remote, _, up_branch = upstream.strip().partition("/")
+        remote, src, dst = (positional[0] if positional else up_remote), "HEAD", up_branch
+    if dst == "HEAD":
+        code, branch = run(["git", "-C", str(cwd), "rev-parse", "--abbrev-ref", "HEAD"])
+        if code != 0 or branch.strip() in ("", "HEAD"):
+            return None
+        dst = branch.strip()
+    dst = dst.removeprefix("refs/heads/")
+    code, local = run(["git", "-C", str(cwd), "rev-parse", "--verify", f"{src}^{{commit}}"])
+    if code != 0:
+        return None
+    local = local.strip()
+    code, listed = run(["git", "-C", str(cwd), "ls-remote", remote, f"refs/heads/{dst}"], timeout=60)
+    if code != 0:
+        return ("insufficient_permissions", f"`git ls-remote {remote}` was refused") if _denied(listed) else None
+    remote_sha = listed.split()[0] if listed.split() else ""
+    if remote_sha == local:
+        return "completed", f"remote branch {dst} is at the pushed commit {local[:12]}"
+    if force:
+        return None  # a forced update may have replaced someone else's work: not settled by ancestry
+    if not remote_sha:
+        return "not_started", f"remote branch {dst} does not exist: the push did not take effect"
+    code, _ = run(["git", "-C", str(cwd), "merge-base", "--is-ancestor", remote_sha, local])
+    if code == 0:
+        return "not_started", f"remote branch {dst} ({remote_sha[:12]}) is behind {local[:12]}: the push did not take effect"
+    return None
+
+
+def _gh_parse(args: list[str]) -> tuple[list[str], dict[str, str], set[str]]:
+    positional, values, flags, i = [], {}, set(), 0
+    while i < len(args):
+        a = args[i]
+        if a.startswith("--") and "=" in a:
+            key, value = a.split("=", 1)
+            values[key] = value
+        elif a in GH_VALUE_OPTS and i + 1 < len(args):
+            values[a] = args[i + 1]
+            i += 1
+        elif a.startswith("-"):
+            flags.add(a)
+        else:
+            positional.append(a)
+        i += 1
+    return positional, values, flags
+
+
+def _probe_gh(cwd: Path, args: list[str], run: Runner) -> tuple[str, str] | None:
+    positional, values, flags = _gh_parse(args)
+    repo = values.get("-R") or values.get("--repo")
+    repo_args = ["--repo", repo] if repo else []
+    if positional[:2] == ["pr", "merge"]:
+        if flags & {"--auto", "--disable-auto"} or len(positional) > 3:
+            return None  # auto-merge is armed, not performed: an open PR proves nothing
+        target = positional[2:3]
+        code, out = run(["gh", "pr", "view", *target, *repo_args, "--json", "number,state"], cwd=cwd, timeout=60)
+        if code != 0:
+            return ("insufficient_permissions", "`gh pr view` was refused") if _denied(out) else None
+        try:
+            pr = json.loads(out)
+        except ValueError:
+            return None
+        if pr.get("state") == "MERGED":
+            return "completed", f"PR #{pr.get('number')} is merged"
+        if pr.get("state") == "OPEN":
+            return "not_started", f"PR #{pr.get('number')} is still open: the merge did not take effect"
+        return None
+    if positional[:2] == ["pr", "create"] and len(positional) == 2:
+        head = values.get("-H") or values.get("--head")
+        if head is None:
+            code, branch = run(["git", "-C", str(cwd), "rev-parse", "--abbrev-ref", "HEAD"])
+            if code != 0 or branch.strip() in ("", "HEAD"):
+                return None
+            head = branch.strip()
+        code, out = run(["gh", "pr", "list", "--head", head, "--state", "all", *repo_args, "--json", "number,state"],
+                        cwd=cwd, timeout=60)
+        if code != 0:
+            return ("insufficient_permissions", "`gh pr list` was refused") if _denied(out) else None
+        try:
+            prs = [p for p in json.loads(out) if isinstance(p, dict)]
+        except (ValueError, TypeError):
+            return None
+        live = [p for p in prs if p.get("state") in ("OPEN", "MERGED")]
+        if live:
+            return "completed", f"PR #{live[0].get('number')} exists for branch {head}"
+        if not prs:
+            return "not_started", f"no PR exists for branch {head}: the creation did not take effect"
+        return None
+    return None
+
+
+def _probe_file(probe: dict[str, Any], tool: str) -> tuple[str, str] | None:
+    path = Path(probe.get("file_path") or "")
+    if not path.is_absolute():
+        return None
+    try:
+        text = path.read_text(encoding="utf-8") if path.exists() else None
+    except (OSError, UnicodeDecodeError):
+        return None
+    if tool == "Write" and "content" in probe:
+        if text is None:
+            return "not_started", f"{path.name} does not exist: the write did not take effect"
+        if text == probe["content"]:
+            return "completed", f"{path.name} holds exactly the written content"
+        return None
+    old, new = probe.get("old_string"), probe.get("new_string")
+    if tool != "Edit" or text is None or not old or new is None or old in new or new in old:
+        return None  # containment makes presence ambiguous
+    if new in text and old not in text:
+        return "completed", f"{path.name} contains the edit's replacement text and not the original"
+    if old in text and new not in text:
+        return "not_started", f"{path.name} still contains the original text: the edit did not take effect"
+    return None
+
+
+def probe_call(call: ToolCall, repo: Path, run: Runner = devctx.run) -> tuple[str, str] | None:
+    """Deterministic read-only probe of one in-flight operation: (verdict, evidence), or None when only a
+    broader investigation can tell. A command probes only when its one effectful step is the operation."""
+    if call.tool in ("Edit", "Write"):
+        return _probe_file(call.probe, call.tool)
+    commands = _simple_commands(str(call.probe.get("command") or ""))
+    if not commands:
+        return None
+    effectful = [(cwd, words) for cwd, words in commands if classify_command(shlex.join(words))[0] != "read_only"]
+    if len(effectful) != 1:
+        return None
+    cd, words = effectful[0]
+    cwd = repo if cd is None else (cd if cd.is_absolute() else repo / cd)
+    if Path(words[0]).name == "git":
+        args = words[1:]
+        while args[:1] == ["-C"] and len(args) > 1:
+            cwd, args = cwd / args[1], args[2:]
+        return _probe_push(cwd, args[1:], run) if args[:1] == ["push"] else None
+    if Path(words[0]).name == "gh":
+        return _probe_gh(cwd, words[1:], run)
+    return None
+
+
+def collect_evidence(repo: Path, report: TurnReport, run: Runner = devctx.run, limit: int = 16_000) -> str:
+    """Read-only evidence for a diagnosis: the turn, worktrees, branches and their remote state, worker lanes.
+    Lines matching a secret pattern are dropped."""
+    session, _, turn = (report.turn_id or "/").partition("/")
+    sections = [f"### Interrupted turn\n{report.turn_id}: {report.outcome} ({report.detail}); transcript "
+                f"{repo / '.agent-relay' / 'sessions' / session / 'turns' / turn / 'output.jsonl'}"]
+    devctx_script = str(Path(__file__).resolve().parent / "devctx.py")
+    for title, args, lines in (
+            ("Worktrees", ["git", "worktree", "list", "--porcelain"], 60),
+            ("Main checkout status", ["git", "status", "--porcelain=v1", "--branch"], 40),
+            ("Local branches (newest first)", ["git", "for-each-ref", "--sort=-committerdate", "--count=30",
+                                               "--format=%(refname:short) %(objectname:short) %(upstream:short) %(upstream:track)",
+                                               "refs/heads"], 30),
+            ("Recent commits", ["git", "log", "--oneline", "-10", "HEAD"], 10),
+            ("Remote branch heads (origin)", ["git", "ls-remote", "--heads", "origin"], 80),
+            ("Pull requests (latest 20)", ["gh", "pr", "list", "--state", "all", "--limit", "20", "--json",
+                                           "number,state,headRefName,headRefOid,mergedAt,updatedAt"], 20),
+            ("Worker lanes", [sys.executable, devctx_script, "lanes"], 40)):
+        code, out = run(args, cwd=repo, timeout=60)
+        body = "\n".join(line for line in (out or "").splitlines()[:lines] if not devctx.find_secret(line))
+        sections.append(f"### {title}\n{body if code == 0 else '(unavailable: ' + body[:200] + ')'}")
+    return "\n\n".join(sections)[:limit]
+
+
+# ---------------------------------------------------------------------------
 # Supervisor
 
 RECOVERY_PROMPT = """[relay-continuity attempt {nonce}]
@@ -1730,12 +2090,17 @@ class Host:
     permissions_digest: Callable[[], str | None] = lambda: None
     log: Callable[[str], None] = lambda msg: print(msg, file=sys.stderr, flush=True)
     live_work: Callable[[datetime], list[Any]] = lambda since: []
+    probe: Callable[[ToolCall], tuple[str, str] | None] = lambda call: None
+    evidence: Callable[[TurnReport], str] = lambda report: ""
+    terminate: Callable[[int], None] = terminate_group
 
 
 class Supervisor:
     def __init__(self, store: Store, host: Host, limits: Limits | None = None, *, turns: int = 1,
-                 sender: Callable[[str], str | None] | None = None):
+                 sender: Callable[[str], str | None] | None = None, reconcile: bool = False):
         self.store = store
+        self.reconcile = reconcile  # spec 197: settle uncertain operations from evidence before holding
+        self.resume_turn: str | None = None
         self.host = host
         self.limits = limits or Limits()
         self.turns = turns
@@ -1890,8 +2255,16 @@ class Supervisor:
             return "held"
         self.notifier = Notifier(self.state, sender=self.sender, log=self.host.log)
         if self.state["phase"] == "held":
-            self.host.log(f"chain is held ({self.state['hold']}); run `release` after review")
-            return "held"
+            hold = self.state.get("hold") or {}
+            if not (self.reconcile and hold.get("reason") == "effects_uncertain" and hold.get("turn")):
+                self.host.log(f"chain is held ({self.state['hold']}); run `release` after review")
+                return "held"
+            # Spec 197: an uncertain-effects hold is re-examined from evidence, for that exact turn only. Every
+            # other hold, and every hold the reconciliation itself reaches, still needs `release`.
+            self.resume_turn = hold["turn"]
+            self.store.journal({"event": "reconcile_resume", "at": iso(now), "hold": hold})
+            self.host.log(f"re-examining held turn {hold['turn']} from read-only evidence")
+            self.state["hold"] = None
         head = self.state.get("head_session")
         if self.state.get("pending") and head and head != session:
             self.host.log(f"a launched attempt from chain {head} is unresolved; resume that chain first")
@@ -1900,8 +2273,8 @@ class Supervisor:
             self.state.update({"head_session": session, "chain": [session], "agent": None, "switches": [],
                                "last_switch_at": None, "waiting_since": None, "last_attempt": None,
                                "counters": {"consecutive_failures": 0, "transient_streak": 0, "crash_retries": 0}})
-        if (unsettled := [n for n in unsettled_nonces(self.store.journal_path)
-                          if n != (self.state.get("pending") or {}).get("nonce")]):
+        own = {(self.state.get("pending") or {}).get("nonce"), ((self.state.get("reconcile") or {}).get("diag") or {}).get("nonce")}
+        if (unsettled := [n for n in unsettled_nonces(self.store.journal_path) if n not in own]):
             # The journal records a launch that the state does not account for: never assume it did not run.
             self.host.log(f"journal has unsettled attempts not in state: {', '.join(unsettled)}")
             return self.hold("attempt_unresolved")
@@ -1941,6 +2314,9 @@ class Supervisor:
             ack = self.state.get("acknowledged") or {}
             if ack.get("turn") and ack.get("turn") == report.turn_id:
                 acknowledged = ack
+        if self.resume_turn and report.turn_id != self.resume_turn:
+            self.host.log("the chain moved since the held turn; keeping the hold")
+            return self.hold("effects_uncertain", turn=self.resume_turn)
         while True:
             if self.stop_requested():
                 self.state["phase"] = "stopped"
@@ -1998,10 +2374,16 @@ class Supervisor:
         pending_fp = (self.state.get("last_attempt") or {}).get("fingerprint")
         if not report.terminal and pending_fp:
             changed = self.host.fingerprint() != pending_fp
+        reconciled: dict[str, dict[str, str]] = {}
         if "gate" not in waive and (reason := gate(report, fingerprint_changed=changed)) is not None:
-            self.notify("turn_failed", session=self.state["head_session"], agent=failed_agent,
-                        outcome=report.outcome, action="hold")
-            return self.hold(reason, self.attempts or None, report.turn_id)
+            if not (self.reconcile and reason == "effects_uncertain" and report.in_flight and not changed):
+                self.notify("turn_failed", session=self.state["head_session"], agent=failed_agent,
+                            outcome=report.outcome, action="hold")
+                return self.hold(reason, self.attempts or None, report.turn_id)
+            settled = self._reconcile(report, failed_agent)
+            if isinstance(settled, str):
+                return settled
+            reconciled = settled
         if (held := self._live_work_hold(report)) is not None:
             return held
 
@@ -2036,6 +2418,10 @@ class Supervisor:
             agent = self._choose(failed_agent, mode=mode)
         listed = report.effects + (report.in_flight if "gate" in waive else [])
         effects = "\n".join(f"- [{c.kind}] {c.label}" for c in listed) or "- none recorded"
+        if reconciled:
+            effects += "\nOperations in flight at the interruption, settled from evidence by the supervisor (spec 197):\n" + \
+                "\n".join(f"- [{c.kind}] {c.label}: {VERDICT_TEXT[reconciled[c.id]['verdict']]} "
+                          f"({reconciled[c.id]['source']}: {reconciled[c.id]['evidence']})" for c in report.in_flight)
         if released:
             effects += "\n(The maintainer reviewed and released this turn.)"
 
@@ -2078,21 +2464,243 @@ class Supervisor:
         released, _ = self.last_release()
         return max(since, released) if released else since
 
-    def _live_work_hold(self, report: TurnReport) -> str | None:
-        """Hold while work launched in this chain is still running in a checkout: continuing would overlap it."""
+    def _live(self) -> list[Work]:
+        """Work launched in this chain that is still running, or a failed inspection (identity None)."""
         _, acknowledged = self.last_release()
         try:
             works = self.host.live_work(self.work_window())
         except Exception as exc:  # noqa: BLE001 - an unreadable process table is not evidence of no work
             works = [inspection_failed(f"check failed ({type(exc).__name__})")]
-        live = [w for w in works if w.identity is None
-                or (w.identity not in acknowledged and (w.recent or w.inherited))]
+        return [w for w in works if w.identity is None or (w.identity not in acknowledged and (w.recent or w.inherited))]
+
+    def _live_work_hold(self, report: TurnReport) -> str | None:
+        """Hold while work launched in this chain is still running in a checkout: continuing would overlap it."""
+        live = self._live()
         if not live:
             return None
         self.host.log(f"live work in the checkout: {', '.join(sorted({w.label for w in live})[:10])}")
         self.notify("turn_failed", session=self.state["head_session"], agent=report.agent or self.state.get("agent") or PREFERRED,
                     outcome=report.outcome, action="hold")
         return self.hold("live_work", self.attempts or None, report.turn_id)
+
+    # -- incident reconciliation (spec 197)
+    def _reconcile(self, report: TurnReport, failed_agent: str) -> dict[str, dict[str, str]] | str:
+        """Settle the turn's in-flight operations from read-only evidence: wait for running work, probe each
+        operation deterministically, then dispatch a bounded diagnostic run for what the probes cannot settle.
+        Returns the verdict per operation id when every one is `completed` or `not_started`; otherwise holds."""
+        ops = report.in_flight
+        rec = self.state.get("reconcile")
+        if not isinstance(rec, dict) or rec.get("turn") != report.turn_id:
+            rec = {"turn": report.turn_id, "since": iso(self.host.now()), "attempts": 0, "diag": None, "verdicts": {}}
+            self.state["reconcile"] = rec
+            self.save()
+            self.record("finding", f"relay-continuity: reconciling {len(ops)} uncertain operation(s) of turn "
+                                   f"{report.turn_id} from read-only evidence (spec 197).")
+        while True:
+            if rec.get("diag"):
+                # A diagnostic launched before a restart: adopt it; another is never launched alongside it.
+                if (adopted := self._adopt_diagnostic(rec, ops)) is not None:
+                    return adopted
+            if (waited := self._await_work(rec, report)) is not None:
+                return waited
+            verdicts: dict[str, dict[str, str]] = {}
+            for op in ops:
+                try:
+                    probed = self.host.probe(op)
+                except Exception as exc:  # noqa: BLE001 - a failed probe settles nothing
+                    self.host.log(f"probe failed for {op.label}: {type(exc).__name__}")
+                    probed = None
+                if probed and probed[0] in VERDICTS:
+                    verdicts[op.id] = {"verdict": probed[0], "evidence": str(probed[1])[:240], "source": "probe"}
+                elif op.id in rec["verdicts"]:
+                    verdicts[op.id] = rec["verdicts"][op.id]
+            open_ops = [op for op in ops if verdicts.get(op.id, {}).get("verdict") not in SETTLED]
+            seen = {verdicts[op.id]["verdict"] for op in open_ops if op.id in verdicts}
+            if not open_ops:
+                return self._reconciled(rec, report, verdicts)
+            if "insufficient_permissions" in seen:
+                return self._reconcile_hold("reconcile_insufficient_permissions", report, verdicts)
+            if "unresolved" in seen:
+                return self._reconcile_hold("reconcile_unresolved", report, verdicts)
+            if rec["attempts"] >= self.limits.reconcile_attempts:
+                return self._reconcile_hold("reconcile_failed" if rec.get("last_error") or not seen
+                                            else "reconcile_unresolved", report, verdicts)
+            if "running" in seen:
+                # Still executing somewhere the process check cannot see (a remote job): wait, then look again.
+                if self.host.now() - (parse_ts(rec["since"]) or self.host.now()) > self.limits.reconcile_wait:
+                    return self._reconcile_hold("reconcile_unresolved", report, verdicts)
+                self.state["phase"] = "waiting"
+                self.save()
+                if self._sleep(self.limits.reconcile_poll):
+                    return "signal" if self.signalled else "stopped"
+                self.state["phase"] = "running"
+                for op in open_ops:
+                    rec["verdicts"].pop(op.id, None)
+            agent = self._diagnostic_agent(failed_agent, report)
+            if agent is None:
+                self.host.log("no provider is available for a diagnostic run; the hold is re-examined on the next run")
+                return self._reconcile_hold("effects_uncertain", report, verdicts)
+            if (held := self._diagnose(rec, agent, report, open_ops)) is not None:
+                return held
+
+    def _diagnostic_agent(self, failed_agent: str, report: TurnReport) -> str | None:
+        """Codex when a fresh reading confirms it has room, else the failed agent unless it is out of quota or
+        cooling down. Choosing a diagnostic agent records no switch: the continuation is chosen afterwards."""
+        now = self.host.now()
+        for agent in dict.fromkeys(("codex", failed_agent)):
+            if agent == failed_agent and report.outcome in ("quota", "spend_limit"):
+                continue
+            cooldown = self.state["cooldowns"].get(agent)
+            if cooldown and ((until := parse_ts(cooldown.get("until"))) is None or now < until):
+                continue
+            if agent != failed_agent and self.exhausted_until(agent) is not False:
+                continue  # no fresh positive evidence of room
+            return agent
+        return None
+
+    def _await_work(self, rec: dict[str, Any], report: TurnReport) -> str | None:
+        """Running work of this chain (a background worker, a detached job): adopt it by waiting for it to end,
+        within the reconciliation's time bound. Nothing is launched while it runs."""
+        logged = False
+        while live := self._live():
+            if any(w.identity is None for w in live) or \
+                    self.host.now() - (parse_ts(rec["since"]) or self.host.now()) > self.limits.reconcile_wait:
+                self.host.log(f"live work in the checkout: {', '.join(sorted({w.label for w in live})[:10])}")
+                return self.hold("live_work", self.attempts or None, report.turn_id)
+            if not logged:
+                self.host.log(f"waiting for running work to finish: {', '.join(sorted({w.label for w in live})[:10])}")
+                logged = True
+            self.state["phase"] = "waiting"
+            self.save()
+            if self._sleep(self.limits.reconcile_poll):
+                return "signal" if self.signalled else "stopped"
+            self.state["phase"] = "running"
+        return None
+
+    def _diagnose(self, rec: dict[str, Any], agent: str, report: TurnReport, ops: list[ToolCall]) -> str | None:
+        """One bounded, read-only diagnostic run through Relay's headless runner. Its intent is durable before
+        launch, so a restart adopts it instead of launching another."""
+        if conflicts := self.host.conflicts({os.getpid()}):
+            return self.hold("repl_active" if "repl_active" in conflicts else "attempt_unresolved")
+        if self.host.permissions_digest() != self.state.get("permissions_digest"):
+            return self.hold("permissions_changed")
+        try:
+            evidence = self.host.evidence(report)
+        except Exception as exc:  # noqa: BLE001 - the agent can still gather its own evidence
+            evidence = f"(evidence collection failed: {type(exc).__name__})"
+        now = self.host.now()
+        self.attempts += 1
+        rec["attempts"] += 1
+        nonce = f"rc-{now.strftime('%Y%m%dT%H%M%SZ')}-{secrets.token_hex(4)}"
+        prompt = diagnostic_prompt(report, ops, evidence).replace("{nonce}", nonce)
+        diag = {"nonce": nonce, "agent": agent, "parent": self.state["head_session"], "started_at": iso(now),
+                "pid": None, "pid_start": None, "fingerprint": self.host.fingerprint(), "attempt": rec["attempts"],
+                "ops": [op.id for op in ops]}
+        rec["diag"] = diag
+        self.save()
+        self.store.journal({"event": "launch", "purpose": "diagnostic",
+                            **{k: v for k, v in diag.items() if k not in ("fingerprint", "ops")}})
+        self.host.log(f"diagnostic run {rec['attempts']}/{self.limits.reconcile_attempts} on {agent} for "
+                      f"{len(ops)} operation(s)")
+        try:
+            proc = self.host.relay.start(agent, self.state["head_session"], prompt, 1)
+        except OSError:
+            rec["diag"] = None
+            self.store.journal({"event": "settle", "purpose": "diagnostic", "nonce": nonce, "session": None,
+                                "outcome": "not_started"})
+            return self.hold("relay_invocation_failed", self.attempts)
+        diag["pid"] = getattr(proc, "pid", None)
+        diag["pid_start"] = devctx.pid_start(diag["pid"]) if diag["pid"] else None
+        self.save()
+        result = self.host.relay.finish(proc, timeout=self.limits.reconcile_timeout.total_seconds())
+        return self._settle_diagnostic(rec, ops, result.session_id, result.diagnostics)
+
+    def _adopt_diagnostic(self, rec: dict[str, Any], ops: list[ToolCall]) -> str | None:
+        diag = rec["diag"]
+        deadline = (parse_ts(diag["started_at"]) or self.host.now()) + self.limits.reconcile_timeout
+        terminated = False
+        if diag.get("pid") and self.host.pid_alive(diag["pid"], diag.get("pid_start")):
+            self.host.log(f"diagnostic {diag['nonce']} still running as pid {diag['pid']}; waiting (never relaunched)")
+            while self.host.pid_alive(diag["pid"], diag.get("pid_start")):
+                if self.host.now() >= deadline and not terminated:
+                    self.host.terminate(diag["pid"])  # same pid and start time: still our diagnostic
+                    terminated = True
+                elif self.host.now() >= deadline + timedelta(minutes=5):
+                    return self.hold("attempt_unresolved", diag.get("attempt"))
+                if self._sleep(30.0):
+                    return "signal" if self.signalled else "stopped"
+        return self._settle_diagnostic(rec, [op for op in ops if op.id in set(diag.get("ops") or [o.id for o in ops])])
+
+    def _settle_diagnostic(self, rec: dict[str, Any], ops: list[ToolCall], session_id: str | None = None,
+                           diagnostics: str = "") -> str | None:
+        """Admit a finished diagnostic's verdicts under the deterministic policy, or hold. None: continue
+        reconciling (verdicts recorded, or the run produced none and the attempt bound decides)."""
+        diag = rec["diag"]
+        session_id = session_id or self.host.relay.find_by_nonce(diag["nonce"], parse_ts(diag["started_at"]) or self.host.now())
+        rec["diag"] = None
+        if session_id is None:
+            # Without its transcript nothing shows the diagnostic stayed read-only.
+            result = self.hold("attempt_unresolved", diag.get("attempt"))
+            self.store.journal({"event": "settle", "purpose": "diagnostic", "nonce": diag["nonce"], "session": None,
+                                "outcome": "unresolved"})
+            return result
+        self.state["diagnostics"] = (self.state.get("diagnostics") or [])[-49:] + [session_id]
+        turn = last_turn_dir(self.host.relay.sessions_dir() / session_id)
+        dreport = classify_turn(turn, diagnostics=diagnostics) if turn else TurnReport(
+            outcome="crash", agent=diag["agent"], detail="session without turns", no_evidence=True)
+        dreport.agent = diag["agent"]
+        acted = sorted({c.label for c in dreport.calls if c.kind != "read_only"})
+        self.store.journal({"event": "settle", "purpose": "diagnostic", "nonce": diag["nonce"], "session": session_id,
+                            "outcome": dreport.outcome, "agent": diag["agent"], "not_read_only": acted})
+        self.save()
+        if acted or dreport.bad_lines or self.host.fingerprint() != diag["fingerprint"]:
+            self.host.log(f"diagnostic {session_id} was not read-only ({', '.join(acted[:5]) or 'repository changed'}); "
+                          "its findings are void")
+            rec["last_error"] = "not_read_only"
+            return self.hold("reconcile_failed", diag.get("attempt"))
+        if dreport.outcome != "success" or turn is None:
+            rec["last_error"] = f"diagnostic_{dreport.outcome}"
+            self.host.log(f"diagnostic {session_id} ended with {dreport.outcome}; no verdicts")
+            if dreport.outcome in ("quota", "spend_limit"):
+                self.set_cooldown(diag["agent"], dreport)
+            self.save()
+            return None
+        parsed = parse_verdicts(final_text(turn), diag["nonce"], ops)
+        if parsed is None:
+            rec["last_error"] = "verdict_invalid"
+            self.host.log(f"diagnostic {session_id} gave no well-formed verdict line")
+            self.save()
+            return None
+        rec.pop("last_error", None)
+        for op in ops:
+            verdict, evidence = admit(op, *parsed[op.id])
+            rec["verdicts"][op.id] = {"verdict": verdict, "evidence": evidence,
+                                      "source": f"diagnostic {diag['agent']} {session_id}"}
+        self.save()
+        return None
+
+    def _reconciled(self, rec: dict[str, Any], report: TurnReport, verdicts: dict[str, dict[str, str]]
+                    ) -> dict[str, dict[str, str]]:
+        ops = report.in_flight
+        self.store.journal({"event": "reconcile", "at": iso(self.host.now()), "turn": report.turn_id,
+                            "result": "settled", "diagnostics": rec["attempts"],
+                            "verdicts": [{"id": op.id, "kind": op.kind, "label": op.label, **verdicts[op.id]} for op in ops]})
+        self.record("decision", f"relay-continuity: reconciled turn {report.turn_id} from evidence: " + "; ".join(
+            f"{op.label} = {verdicts[op.id]['verdict']} ({verdicts[op.id]['source'].split(' ')[0]})" for op in ops))
+        self.notify("reconciled", session=self.state["head_session"], attempts=str(rec["attempts"]))
+        self.host.log("uncertain operations settled: " + ", ".join(f"{op.label}={verdicts[op.id]['verdict']}" for op in ops))
+        return verdicts
+
+    def _reconcile_hold(self, reason: str, report: TurnReport, verdicts: dict[str, dict[str, str]]) -> str:
+        ops = report.in_flight
+        summary = [{"id": op.id, "kind": op.kind, "label": op.label, **verdicts.get(op.id, {"verdict": "unresolved",
+                    "evidence": "no probe or diagnosis settled it", "source": "none"})} for op in ops]
+        self.store.journal({"event": "reconcile", "at": iso(self.host.now()), "turn": report.turn_id, "result": reason,
+                            "verdicts": summary})
+        self.host.log("reconciliation: " + ", ".join(f"{v['label']}={v['verdict']}" for v in summary))
+        self.notify("turn_failed", session=self.state["head_session"], agent=report.agent or self.state.get("agent") or PREFERRED,
+                    outcome=report.outcome, action="hold")
+        return self.hold(reason, self.attempts or None, report.turn_id)
 
     def _choose(self, current: str, *, mode: str) -> str | None:
         """`same`: retry the current agent only (transient, crash). `switch`: another agent only (quota).
@@ -2193,6 +2801,7 @@ class Supervisor:
                    "pid": None, "pid_start": None, "fingerprint": self.host.fingerprint(), "attempt": self.attempts}
         self.state["pending"] = pending  # intent is durable before anything is launched
         self.state["acknowledged"] = None  # the reviewed turn is now behind the chain
+        self.state["reconcile"] = None  # so is the reconciled one
         self.state["agent"] = agent
         self.save()
         self.store.journal({"event": "launch", **{k: v for k, v in pending.items() if k != "fingerprint"}})
@@ -2357,7 +2966,8 @@ def make_host(repo: Path) -> Host:
 
     return Host(relay=RelayAdapter(repo), fingerprint=lambda: fingerprint(repo),
                 conflicts=lambda own: live_conflicts(repo, own), ledger=ledger, permissions_digest=permissions,
-                live_work=live_work)
+                live_work=live_work, probe=lambda call: probe_call(call, repo),
+                evidence=lambda report: collect_evidence(repo, report))
 
 
 def webhook_sender() -> Callable[[str], str | None] | None:
@@ -2391,7 +3001,7 @@ def command_run(args: argparse.Namespace) -> int:
         store = Store(root)
         store.stop_path.unlink(missing_ok=True)
         supervisor = Supervisor(store, make_host(repo), turns=args.turns,
-                                sender=None if args.no_notify else webhook_sender())
+                                sender=None if args.no_notify else webhook_sender(), reconcile=not args.no_reconcile)
 
         def on_signal(signum: int, _frame: Any) -> None:
             supervisor.signalled = True
@@ -2418,7 +3028,7 @@ def command_status(args: argparse.Namespace) -> int:
         print(f"state corrupt: {exc}")
         return 4
     view = {k: state.get(k) for k in ("phase", "head_session", "agent", "hold", "cooldowns", "counters",
-                                      "pending", "last_outcome", "switches", "updated_at")}
+                                      "pending", "last_outcome", "switches", "updated_at", "reconcile")}
     view["chain_length"] = len(state.get("chain") or [])
     view["stop_requested"] = store.stop_path.exists()
     view["notify"] = {k: state["notify"].get(k) for k in ("failures", "dropped", "last_digest")}
@@ -2468,6 +3078,8 @@ def command_release(args: argparse.Namespace) -> int:
         if args.drop_pending:
             dropped = unsettled_nonces(store.journal_path)
             state["pending"] = None
+            if isinstance(state.get("reconcile"), dict):
+                state["reconcile"]["diag"] = None
         if (released or {}).get("reason") == "permissions_changed":
             # The maintainer reviewed the new authority; the next run pins it.
             state["permissions_pinned"] = False
@@ -2525,7 +3137,7 @@ def command_watch(args: argparse.Namespace) -> int:
                 supervised_state = Store(root).load()
             except StateCorrupt:
                 supervised_state = default_state()
-            supervised = set(supervised_state.get("chain") or [])
+            supervised = set(supervised_state.get("chain") or []) | set(supervised_state.get("diagnostics") or [])
             first = not state["watch"].get("seen")
             if first:
                 # Baseline: never alert on history that predates this watch.
@@ -2560,6 +3172,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--task-file", help="maintainer task for the next turn (when the chain is idle)")
     p.add_argument("--turns", type=int, default=1, help="Relay turns per invocation (default 1)")
     p.add_argument("--no-notify", action="store_true")
+    p.add_argument("--no-reconcile", action="store_true",
+                   help="hold on uncertain effects without a read-only diagnosis (spec 195 behaviour)")
     p.set_defaults(func=command_run)
     p = sub.add_parser("classify", help="classify one Relay turn directory")
     p.add_argument("turn_dir")
