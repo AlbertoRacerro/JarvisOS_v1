@@ -1522,6 +1522,19 @@ def fingerprint(repo: Path) -> str:
     return digest.hexdigest()
 
 
+def _relay_argv(argv: list[str]) -> list[str] | None:
+    """Normalize native entry points and Python's installed-script argv layout."""
+    entry_names = {"relay", "agent-relay", "relay_safe.py"}
+    if not argv:
+        return None
+    name = Path(argv[0]).name
+    if name in entry_names:
+        return argv
+    if re.fullmatch(r"python(?:\d+(?:\.\d+)*)?", name) and len(argv) > 1 and Path(argv[1]).name in entry_names:
+        return argv[1:]
+    return None
+
+
 def live_conflicts(repo: Path, own_pids: set[int]) -> list[str]:
     """Reasons another coordinator/supervisor may be acting: legacy autopilot or a live Relay REPL/run."""
     found = []
@@ -1535,10 +1548,11 @@ def live_conflicts(repo: Path, own_pids: set[int]) -> list[str]:
         except OSError:
             continue
         joined = " ".join(argv)
+        relay_argv = _relay_argv(argv)
         if any(marker in joined for marker in LEGACY_MARKERS):
             found.append("legacy_autopilot")
-        elif argv and Path(argv[0]).name in ("relay", "agent-relay") and "daemon" not in argv[1:3] \
-                and "hook" not in argv[1:3] and Path(cwd).resolve() == repo.resolve():
+        elif relay_argv and not any(a in ("daemon", "hook") for a in relay_argv[1:3]) \
+                and Path(cwd).resolve() == repo.resolve():
             found.append("repl_active")
     return sorted(set(found))
 
@@ -1606,7 +1620,8 @@ def _ignorable(argv: list[str], entry: Path) -> bool:
             return False
     if _multiplexer(name):
         return True
-    if name in ("relay", "agent-relay") and any(a in ("daemon", "hook") for a in argv[1:3]):
+    relay_argv = _relay_argv(argv)
+    if relay_argv and any(a in ("daemon", "hook") for a in relay_argv[1:3]):
         return True
     # this supervisor or its notify-only watch
     return name.startswith("python") and len(argv) > 2 and Path(argv[1]).name == "relay_continuity.py" \

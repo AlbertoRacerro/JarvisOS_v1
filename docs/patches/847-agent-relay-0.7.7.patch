@@ -1,0 +1,133 @@
+Subject: [PATCH] Bound Relay output error classification to linear token scans
+
+Upstream: https://github.com/bethvourc/agent--relay
+Package: agent-relay-tool==0.7.7 (PyPI source distribution)
+Original src/agent_relay/run_errors.py SHA-256:
+75ed02a50e3815faba2c35def52f92a451a830323a95f1fe9c3d691fc8322601
+Incident: JarvisOS issue #847, 2026-10-20
+Changes: model token boundary; first sandbox/denied search per newline; regressions.
+No package code is installed or vendored by this patch artifact.
+
+--- a/src/agent_relay/run_errors.py
++++ b/src/agent_relay/run_errors.py
+@@ -26,7 +26,7 @@
+ MAX_ERROR_LENGTH = 280
+
+ _UNSUPPORTED_MODEL = re.compile(
+-    r"""(?:the\s+)?['"]?([^'"\s]+)['"]?\s+model\s+is\s+not\s+supported""",
++    r"""(?<![^'"\s])(?:the\s+)?['"]?([^'"\s]+)['"]?\s+model\s+is\s+not\s+supported""",
+     re.IGNORECASE,
+ )
+ _MISSING_MODEL_METADATA = re.compile(
+@@ -49,7 +49,7 @@
+     r"timed? out|network|connection (?:failed|closed|reset)|dns|resolve host", re.IGNORECASE
+ )
+ _PERMISSION = re.compile(
+-    r"permission denied|operation not permitted|sandbox.*denied", re.IGNORECASE
++    r"permission denied|operation not permitted", re.IGNORECASE
+ )
+ _INTERESTING_PLAIN_LINE = re.compile(
+     r"error|fail|unsupported|unauthorized|rate.?limit", re.IGNORECASE
+@@ -102,7 +102,11 @@
+         )
+     if _NETWORK.search(combined):
+         return f"{display} couldn't reach the service. Check your connection and try again."
+-    if _PERMISSION.search(combined):
++    if _PERMISSION.search(combined) or any(
++        (sandbox := re.search("sandbox", line, re.IGNORECASE)) is not None
++        and re.search("denied", line[sandbox.end():], re.IGNORECASE) is not None
++        for line in combined.split("\n")
++    ):
+         return f"{display} was blocked by a permission setting. Review /permissions and try again."
+
+     # The catch-all only trusts messages lifted out of a structured error
+--- /dev/null
++++ b/tests/test_run_errors_linear.py
+@@ -0,0 +1,68 @@
++"""Bounded regression coverage for successful streams with large token fields."""
++
++import subprocess
++import sys
++
++import pytest
++
++from agent_relay.run_errors import user_facing_run_error
++
++
++@pytest.mark.parametrize(
++    "message",
++    [
++        "The gpt-5.3-codex-spark model is not supported for this account",
++        "'gpt-5.3-codex-spark' model is not supported for this account",
++        '"gpt-5.3-codex-spark" model is not supported for this account',
++        "The\t\n'gpt-5.3-codex-spark'\tmodel\nis\tnot supported for this account",
++        "prefix: gpt-5.3-codex-spark model is not supported for this account",
++    ],
++)
++def test_unsupported_model_message_still_recognized(message):
++    assert user_facing_run_error("codex", message) == (
++        "GPT-5.3 Codex Spark isn't available for this Codex account. "
++        "Choose another model and try again."
++    )
++
++
++@pytest.mark.parametrize("shape", ["token", "whitespace", "quotes", "prefixes", "sandbox"])
++def test_large_successful_stream_finishes_within_bounded_timeout(shape):
++    # Isolate the regex in an owned child: a regression cannot wedge pytest's
++    # own GIL or prevent its timeout machinery from receiving Python signals.
++    script = r'''
++import json
++import sys
++from agent_relay.run_errors import user_facing_run_error
++n = 1_000_000
++shape = sys.argv[1]
++value = {
++    "token": "a" * n,
++    "whitespace": "a" + " " * n + "end",
++    "quotes": '"' * n,
++    "prefixes": "the " * (n // 4) + "end",
++    "sandbox": "sandbox " * (n // 8),
++}[shape]
++stream = json.dumps({"type": "assistant", "message": {
++    "content": [{"type": "image", "source": {"type": "base64", "data": value}}]
++}})
++assert user_facing_run_error("claude", stream) is None
++'''
++    completed = subprocess.run(
++        [sys.executable, "-c", script, shape],
++        capture_output=True,
++        text=True,
++        timeout=5,
++        check=False,
++    )
++    assert completed.returncode == 0, completed.stderr
++
++
++@pytest.mark.parametrize("separator", [" ", "\t", "\r", "\v", "\f", "\u2028"])
++@pytest.mark.parametrize("words", [("sandbox", "denied"), ("ſandbox", "denıed")])
++def test_sandbox_permission_detection_preserves_regex_semantics(separator, words):
++    first, second = words
++    assert user_facing_run_error("claude", first + separator + second) == (
++        "Claude Code was blocked by a permission setting. Review /permissions and try again."
++    )
++    assert user_facing_run_error("claude", second + separator + first) is None
++    assert user_facing_run_error("claude", first + "\n" + second) is None
+
+--
+Provenance/license: upstream Agent Relay declares Apache-2.0 in pyproject.toml;
+context fragments retain upstream terms: https://www.apache.org/licenses/LICENSE-2.0
+Repair and regression tests authored for JarvisOS issue #847. This is a proposed
+source patch, not evidence of upstream acceptance or a released upstream fix.
+
+# Original agent_session.py SHA-256: f104a09fbdd2c1faeeab2cfe1d6fa977f5133d34c3bbbcd989807986e804e493
+--- a/src/agent_relay/repl/agent_session.py
++++ b/src/agent_relay/repl/agent_session.py
+@@ -658,7 +658,7 @@
+
+     @property
+     def busy(self) -> bool:
+-        return self._proc is not None and self._proc.poll() is None
++        return self._proc is not None
+
+     @property
+     def exit_code(self) -> int | None:
