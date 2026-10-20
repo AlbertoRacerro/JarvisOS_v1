@@ -1,6 +1,6 @@
 # 201 — Supervised Relay control plane
 
-State: **planned**. Maintainer mission [#840](https://github.com/AlbertoRacerro/JarvisOS_v1/issues/840), ordered P0 on 2026-10-19. Depends on 195 and 197. This document records the outcome and the ownership direction; it does not grant implementation authority until a separate readiness decision resolves the authority and workstation proof boundaries below.
+State: **ready** (live state in [`STATUS.md`](STATUS.md)). Maintainer mission [#840](https://github.com/AlbertoRacerro/JarvisOS_v1/issues/840), ordered P0 on 2026-10-19. Depends on 195 and 197. Readiness was granted by the maintainer's 2026-10-20 approval of decisions D1–D3 (ledger directive `L20261020085928-0431`), recorded with the verified profile under [Readiness decision](#readiness-decision-2026-10-20).
 
 ## Outcome
 
@@ -77,8 +77,34 @@ The supervisor already takes its control root and repository from `control_root(
    - Claude: project rules with path-scoped `Edit`/`Write` for the same roots and a bounded Bash list. That list covers git except push to `master` or force, `gh pr create|view|checks|list`, tests, build, lint and `devctx`. Denies cover `gh pr merge`, branch-protection or admin API calls, force pushes, and edits to `~/.claude`, `~/.codex`, `~/.relay` and credentials. Optionally, the `bwrap` wrapper above contains the interpreter escape.
    Merging, credentials and host changes stay with the maintainer.
 
-## Decisions requested from the maintainer
+## Readiness decision (2026-10-20)
 
-- **D1 (security):** approve the bounded headless execution profile in protocol item 5: Codex project config plus scoped Claude rules. State whether the supervisor may also wrap its Relay launches in `bwrap`. That is recommended, because Claude rules alone do not contain an allowed interpreter.
-- **D2 (host):** approve `loginctl enable-linger thera` and a `jarvis-control-plane` user unit as the restart owner, or name another start owner.
-- **D3:** approve this protocol as the readiness for an implementation slice (`ready`). The real-workstation acceptance in boundary item 7 then runs under the approved profile.
+The maintainer approved D1–D3 on 2026-10-20 with these boundaries. They are binding for the implementation slice.
+
+- **D1, execution profile.** Approved: a bounded headless profile for Claude and Codex, made of scoped project permissions and verified OS-level bubblewrap isolation. The following are excluded: blanket filesystem access, global permission bypass, secret exposure, uncontrolled subprocess execution, direct pushes to `master` and any weakening of security. Supervised writes may be enabled only after the sandbox has been verified with real isolated Claude and Codex tool calls.
+- **D2, restart owner.** Approved: one persistent control-plane owner as a `systemd --user` service, with safe restart, explicit ownership, journaling and rollback. The scoped user-service setup and `loginctl enable-linger` are authorized if they are demonstrably needed. Authentication is not bypassed, and no unrelated privileged change is made. WSL start after a Windows reboot needs separate verification.
+- **D3, protocol.** Approved: the protocol proposed above is the implementation direction.
+
+### Verified profile (real tool calls, 2026-10-20)
+
+Probes ran in scratch repositories under `~/jarvis-control/work/evidence/201-sandbox/`, through `agent-relay run` wrapped in unprivileged `bwrap` (no remote, nothing pushed). The wrapper mounts `/` read-only and binds read-write only the mission roots, the repository's common Git directory and the providers' own state directories. It gives the run a private `/tmp`. It hides `/run/user` (user bus), `/run/WSL` (Windows interop) and secret configuration directories. It also unshares the PID, IPC and UTS namespaces and starts a new session.
+
+- **Claude** (`20261020-090503-cba6f1`, launched in `default` mode with project rules). A `Write` inside the repository succeeded. An *allowed* `python3` writing to `$HOME` failed with `Read-only file system`, so the interpreter escape seen on 2026-10-19 is contained. The Slack webhook directory was empty inside the sandbox.
+- **Codex** (`20261020-091617-d9b332`). With Codex's own `workspace-write` nested inside `bwrap`, writes were contained. That mode always mounts `.git` read-only, so Codex cannot commit in it. With `danger-full-access` *inside* `bwrap`, Codex committed in a linked worktree (`76465fe`), reached GitHub through `git ls-remote`, and its `$HOME` write failed with `Read-only file system`. The profile therefore uses `bwrap` as the single enforced filesystem boundary for both providers. Claude's project rules and a `gh` guard on `PATH` remain guardrails, not containment.
+- **Escape routes.** `cmd.exe` and `powershell.exe` (WSL interop) failed and left no file on `C:`. `systemd-run --user` could not reach the bus.
+- **Launch hang.** `codex exec` waits on an inherited open stdin, so the supervisor launches every run with `/dev/null` as stdin.
+- **Fresh Codex reading.** Relay reads Codex quota only from Codex's own rollouts, so the reading goes stale on an idle host (13 h observed). A minimal read-only Codex turn refreshed it. Before the supervisor switches to Codex without a fresh reading, it runs one such probe instead of refusing the failover.
+
+### Residual risks accepted for this slice
+
+- The GitHub CLI token must stay readable for PR delivery, so a model could misuse it.
+- Direct pushes to `master` are refused server-side by the active `master` ruleset, which requires status checks and has no bypass actors.
+- `gh pr merge`, `gh api` writes and `gh auth` are refused by the `gh` guard and by Claude's deny rules. A determined interpreter call could still reach the API with that token.
+- Refs in the common Git directory are writable, which branch creation needs. `.git/config` and `.git/hooks` are bound read-only.
+- Unrelated worktrees are read-only inside the sandbox.
+
+Fully removing merge capability requires a differently scoped credential. That is a maintainer credential decision, not part of this slice.
+
+### Host lifecycle
+
+The `systemd --user` manager is running. Without lingering, though, user units stop when the last login session ends. The owner unit uses `KillMode=process`, so stopping or restarting the service never kills a running provider turn. The restarted supervisor adopts that turn through its pending-attempt record and waits for it. Linger is enabled only once it is demonstrated to be needed for running without a login session.
