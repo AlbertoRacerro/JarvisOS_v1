@@ -710,6 +710,48 @@ def test_live_conflicts_detects_real_relay_repl_and_legacy_autopilot(tmp_path: P
             proc.wait()
 
 
+@pytest.mark.parametrize("entry", ["relay", "agent-relay", "relay_safe.py", "unrelated.py"])
+@pytest.mark.parametrize("mode", ["interactive", "daemon", "hook"])
+def test_python_relay_launchers_are_detected_without_claiming_unrelated_python(
+    tmp_path: Path, entry: str, mode: str,
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    script = tmp_path / entry
+    ready = script.with_suffix(".ready")
+    script.write_text(
+        "from pathlib import Path\nimport time\n"
+        "Path(__file__).with_suffix('.ready').touch()\ntime.sleep(30)\n"
+    )
+    args = ["--no-tmux", "--no-onboarding"] if mode == "interactive" else [mode]
+    proc = subprocess.Popen([sys.executable, str(script), *args], cwd=repo)
+    try:
+        deadline = time.monotonic() + 5
+        while not ready.exists() and time.monotonic() < deadline:
+            assert proc.poll() is None
+            time.sleep(0.01)
+        assert ready.exists()
+        recognized = entry != "unrelated.py"
+        assert rc.live_conflicts(repo, {os.getpid()}) == (
+            ["repl_active"] if recognized and mode == "interactive" else []
+        )
+        proc_entry = Path(f"/proc/{proc.pid}")
+        assert rc._ignorable(rc._argv(proc_entry), proc_entry) is (recognized and mode != "interactive")
+        assert rc.live_conflicts(repo, {os.getpid(), proc.pid}) == []
+    finally:
+        proc.kill()
+        proc.wait(timeout=5)
+
+
+@pytest.mark.parametrize("interpreter", [None, "python", "python3", "python3.12"])
+def test_relay_safe_direct_or_python_entry_keeps_command_positions(interpreter: str | None) -> None:
+    command = ["/opt/tools/relay_safe.py", "--no-tmux", "daemon"]
+    argv = [f"/opt/venv/bin/{interpreter}", *command] if interpreter else command
+    assert rc._relay_argv(argv) == command
+    assert rc._ignorable(argv, Path("/unused-proc-entry"))
+    assert not rc._ignorable([*argv[:-1], "--no-onboarding"], Path("/unused-proc-entry"))
+
+
 def test_live_repl_on_the_repository_blocks_launch(tmp_path: Path) -> None:
     env = Env(tmp_path)
     env.conflicts = ["repl_active"]
