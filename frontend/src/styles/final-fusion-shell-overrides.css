@@ -17,7 +17,7 @@
   min-height: 100vh;
   height: 100vh;
   overflow: hidden;
-  background: #fbfaf6;
+  background: var(--color-bg-canvas);
   font-family: "Inter Display", "Inter", "Instrument Sans", "Segoe UI", Arial, sans-serif;
 }
 
@@ -28,8 +28,8 @@
 .application-shell--final .shell-rail {
   padding: 20px 9px 12px;
   gap: 23px;
-  background: linear-gradient(180deg, #faf7f0 0%, #faf6ee 100%);
-  border-inline-end-color: #e5dcce;
+  background: var(--color-bg-shell);
+  border-inline-end-color: var(--color-border-default);
 }
 
 .application-shell--final .shell-rail__identity {
@@ -38,7 +38,7 @@
 }
 
 .application-shell--final .shell-rail__identity strong {
-  font-size: 12px;
+  font-size: var(--font-size-body);
   font-weight: 600;
   letter-spacing: .02em;
 }
@@ -55,21 +55,21 @@
   min-height: 36px;
   padding: 9px 10px;
   border-radius: 4px;
-  color: #596159;
-  font-size: 12px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
   text-decoration: none;
 }
 
 .application-shell--final .shell-nav-link:hover {
-  background: #fffefc;
-  border-color: #ddd5c8;
+  background: var(--color-bg-surface-raised);
+  border-color: var(--color-border-default);
 }
 
 .application-shell--final .shell-nav-link[aria-current="page"] {
-  color: #1f2720;
-  background: #fffefc;
-  border-color: rgba(70, 126, 42, .65);
-  box-shadow: inset 3px 0 0 #467e2a, 0 4px 14px rgba(75, 142, 47, .10);
+  color: var(--color-text-primary);
+  background: var(--color-bg-surface-raised);
+  border-color: var(--color-accent-foreground);
+  box-shadow: inset var(--space-1) 0 0 var(--color-accent-foreground);
   font-weight: 600;
   text-decoration: none;
 }
@@ -79,7 +79,7 @@
   height: 100vh;
   align-items: stretch;
   overflow: hidden;
-  background: #fbfaf6;
+  background: var(--color-bg-canvas);
 }
 
 .application-shell--final .shell-main {

@@ -24,14 +24,14 @@ assert(shellCss.includes("flex-direction: column;"), "final shell main must stac
 assert(!workspaceCss.includes("min-height: 104px"), "workspace header must not reserve the legacy 104px dead band");
 assert(!workspaceCss.includes("calc(100% - 104px)"), "work surface must not use the legacy fixed-height subtraction");
 assert(workspaceCss.includes("grid-template-columns: minmax(0, 1fr) auto;"), "desktop workspace header must place metadata and peer tabs in one horizontal band");
-assert(workspaceCss.includes('"eyebrow tabs"') && workspaceCss.includes('"title tabs"') && workspaceCss.includes('"description tabs"'), "workspace header must bind peer tabs beside title metadata");
+assert(workspaceCss.includes('"eyebrow tabs"') && workspaceCss.includes('"title tabs"') && !workspaceCss.includes('"description tabs"'), "workspace header must bind peer tabs beside compact title metadata without an unused description row");
 assert(workspaceCss.includes(".application-shell--final .shell-main > .final-fusion__workspace-head") && workspaceCss.includes("flex: 0 0 auto;"), "workspace header must override the shared shell flex:1 rule");
 assert(workspaceCss.includes(".final-fusion__workspace-head + .final-fusion,") && workspaceCss.includes(".final-fusion__workspace-head + .final-fusion__workbench"), "workspace repair must bind both unavailable wrapper and direct READ workbench roots");
 assert(workspaceCss.includes("flex: 1 1 auto;") && workspaceCss.includes("height: auto;"), "work surface must consume the space immediately below the compact header");
 assert(workspaceCss.includes(".final-fusion__workspace-head + .final-fusion > .final-fusion__surface-head") && workspaceCss.includes(".final-fusion__workspace-head + .final-fusion__workbench > .final-fusion__surface-head"), "duplicate nested headings must remain suppressed on both production roots");
 
 // Finding B: all peer navigation uses neutral inactive and soft-accent active states.
-for (const token of ["#ddd5c8", "#fffefc", "#76a964", "#edf7e7", "#28581a"]) {
+for (const token of ["--color-border-default", "--color-bg-surface-raised", "--color-accent-foreground", "--color-accent-surface", "--color-text-primary"]) {
   assert(workspaceCss.includes(token), `Memory/Development/Coding peer tabs must include shared token ${token}`);
   assert(repairCss.includes(token), `Design/Settings peer tabs must include shared token ${token}`);
 }

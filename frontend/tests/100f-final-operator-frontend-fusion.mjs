@@ -121,8 +121,8 @@ includesAll(shellOverlay, [
   ".application-shell--final .shell-topbar",
   "display: none",
   'font-family: "Inter Display", "Inter"',
-  "#fbfaf6",
-  "#faf6ee",
+  "var(--color-bg-canvas)",
+  "var(--color-bg-shell)",
   "height: 100vh",
   ".application-shell--final .shell-main > *"
 ], "canonical rail/shell geometry or visual language missing");

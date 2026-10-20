@@ -19,9 +19,7 @@ function FinalSettingsSurface({ section, navigate }: Props) {
     <section className={`final-settings final-settings--${section}`} aria-labelledby="final-settings-title">
       <header className="final-settings__header">
         <div>
-          <p className="eyebrow">Operator controls</p>
           <h1 id="final-settings-title">Settings</h1>
-          <p>Configure visual preferences, AI access and system diagnostics without mixing operational controls into the engineering workspace.</p>
         </div>
       </header>
       <nav className="final-settings__tabs" aria-label="Settings sections">

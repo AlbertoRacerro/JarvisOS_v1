@@ -56,7 +56,7 @@
   --font-size-body: 0.875rem;
   --font-size-section-title: 1rem;
   --font-size-page-title: clamp(1.3125rem, 1.18rem + 0.42vw, 1.5rem);
-  --line-height-body: 1.45;
+  --line-height-body: 1.5;
 
   --space-1: 0.25rem;
   --space-2: 0.5rem;
@@ -129,7 +129,7 @@
   --color-bg-technical-viewport: #121a16;
   --color-text-primary: #20251f;
   --color-text-secondary: #59645b;
-  --color-text-muted: #758078;
+  --color-text-muted: #606b63;
   --color-text-inverse: #fbfcf8;
   --color-text-on-accent: var(--color-accent-on);
   --color-border-default: #cfd8ce;
