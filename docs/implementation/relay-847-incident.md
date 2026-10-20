@@ -244,12 +244,12 @@ Local commands, run from the isolated repair worktree unless noted:
 
 ```bash
 /home/thera/.local/share/jarvisos/relay-0.7.7-847/bin/python -m pytest -q -s tests/relay_reliability
-# Final 41 passed in 13.48 s; actual PTY proof included.
+# Final protocol-correct harness: 41 passed in 12.62 s; actual PTY proof included.
 /home/thera/.local/share/jarvisos/relay-0.7.7-847/bin/python -m pytest -q -s tests/relay_reliability/test_repl.py -k actual_pty
 # Confirming run after repairing the race: 1 passed, 2 deselected in 8.31 s.
 /home/thera/src/JarvisOS_v1/backend/.venv/bin/python -m pytest -q -o addopts='' -o cache_dir=/tmp/incident847-final-devctx-cache backend/tests/test_devctx.py backend/tests/test_devctx_incident847.py
 # 17 passed, 1 warning in 3.29 s.
-/home/thera/src/JarvisOS_v1/backend/.venv/bin/python -m pytest -q -o addopts='' backend/tests/test_relay_continuity.py
+/home/thera/src/JarvisOS_v1/backend/.venv/bin/python -m pytest -q -o addopts='' -o cache_dir=/tmp/incident847-continuity-cache backend/tests/test_relay_continuity.py
 # 407 passed, 1 skipped, 1 warning in 14.96 s.
 /home/thera/src/JarvisOS_v1/backend/.venv/bin/python -m ruff check scripts/relay_safe.py scripts/relay_diagnostics.py tests/relay_reliability backend/tests/test_devctx_incident847.py
 # PASS.
@@ -304,6 +304,15 @@ Failures retained as diagnostic history:
   context markers as trailing whitespace inside the patch artifact. Blank context
   lines were normalized; both `git apply --check` and staged whitespace checks
   then passed. No runtime source changed for this formatting correction.
+- The first remote reliability run, `39391418233` at
+  `f4fde853f733e88d40a9e6cd0f33ebf633bb3992`, failed **40 passed, 1 failed**
+  at the final `/exit` wait after completion, disconnect and resume had passed.
+  Captured terminal bytes showed that the harness could mistake a slash-menu
+  suggestion for the complete editor input. Readiness must match the actual
+  `> full command` input row, and all output drains must answer cursor reports.
+  This was repaired without skipping the test or increasing its deadline.
+  The final harness uses `pyte==0.8.2` to compute real cursor reports and parse
+  split terminal sequences instead of returning an invented constant cursor.
 
 Actual owned WSL PTY proof runs the real `devctx.py note attempt` in a temporary
 Git repository and control root, waits on a fake Claude child, processes a

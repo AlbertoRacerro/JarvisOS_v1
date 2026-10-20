@@ -11,6 +11,7 @@ import sys
 import time
 from pathlib import Path
 
+import pyte
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -140,6 +141,25 @@ class OwnedPTY:
                                      cwd=repo, env=env, stdin=slave, stdout=slave, stderr=slave)
         os.close(slave)
         self.output = b""
+        self.screen = pyte.Screen(120, 40)
+        self.screen.write_process_input = lambda response: os.write(self.master, response.encode())
+        self.screen_stream = pyte.ByteStream(self.screen)
+
+    def pump(self):
+        """Drain output and emulate cursor reports during every terminal phase."""
+        if not select.select([self.master], [], [], .05)[0]:
+            return True
+        try:
+            data = os.read(self.master, 65536)
+        except OSError:
+            return False
+        if not data:
+            return False
+        self.output += data
+        # Parse actual terminal state. DSR/CPR replies use the real cursor,
+        # including escape sequences split across reads and the final exit.
+        self.screen_stream.feed(data)
+        return True
 
     def read_until(self, marker, timeout=8):
         deadline = time.monotonic() + timeout
@@ -148,14 +168,8 @@ class OwnedPTY:
             visible = re.sub(rb"\x1b\[[0-?]*[ -/]*[@-~]", b"", self.output[start:])
             if marker in visible:
                 return
-            if select.select([self.master], [], [], .05)[0]:
-                try:
-                    data = os.read(self.master, 65536)
-                except OSError:
-                    break
-                self.output += data
-                if b"\x1b[6n" in data:
-                    os.write(self.master, b"\x1b[1;1R")
+            if not self.pump():
+                break
             if self.proc.poll() is not None:
                 break
         (self.proof_dir / "terminal-output.bin").write_bytes(self.output)
@@ -171,7 +185,9 @@ class OwnedPTY:
         for character in typed:
             os.write(self.master, character.encode())
             time.sleep(.03)
-        self.read_until(typed.encode(), timeout=5)
+        # Slash suggestions can contain the full command before the editor
+        # has received it. Match the input row, never an autocomplete entry.
+        self.read_until(b"> " + typed.encode(), timeout=5)
         if text.endswith("\r"):
             os.write(self.master, b"\r")
 
@@ -224,11 +240,9 @@ def test_actual_pty_repl_large_output_idle_disconnect_and_resume(tmp_path, isola
         recovered.send("/exit\r")
         deadline = time.monotonic() + 5
         while recovered.proc.poll() is None and time.monotonic() < deadline:
-            if select.select([recovered.master], [], [], .05)[0]:
-                try:
-                    os.read(recovered.master, 65536)
-                except OSError:
-                    break
+            if not recovered.pump():
+                break
+        (tmp_path / "exit-output.bin").write_bytes(recovered.output)
         recovered.proc.wait(timeout=1)
         assert recovered.proc.returncode == 0
         evidence["resume_succeeded"] = True
