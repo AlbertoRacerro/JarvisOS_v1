@@ -1,0 +1,130 @@
+/* A — LUMEN CANOPY (dark, immersive, bioluminescent).
+ * Premise: working inside the emblem. A near-black botanical field lit from within by soft chlorophyll light; every
+ * working surface is a floating, softly rounded glass island; the navigation is a detached glass capsule carrying the
+ * emblem. Ivory "vein" lines mark the active state; luminous chlorophyll is the single action colour. */
+:root[data-jarvis-theme="lumen"] {
+  --jd-scheme: dark;
+  --jd-canvas: #050B06;
+  --jd-surface-solid: #0E1A0F;
+  --jd-raised: #142318;
+  --jd-subtle: #0B150C;
+  --jd-panel-bg: rgba(16, 30, 18, .72);
+  --jd-panel-border: rgba(196, 226, 150, .12);
+  --jd-item-bg: rgba(220, 240, 190, .045);
+  --jd-inset-bg: rgba(220, 240, 190, .03);
+  --jd-control-bg: rgba(220, 240, 190, .05);
+  --jd-field-bg: rgba(3, 10, 4, .55);
+  --jd-segment-bg: rgba(220, 240, 190, .05);
+  --jd-segment-active: radial-gradient(120% 150% at 50% 15%, #B4D86A 0%, #96BD45 45%, #7BA236 100%);
+  --jd-segment-active-color: #96BD45;
+  --jd-segment-active-text: #0A1704;
+  --jd-segment-shadow: 0 0 18px -4px rgba(150, 189, 69, .55);
+  --jd-text: #EEF0DE;
+  --jd-text-2: #BAC6A8;
+  --jd-muted: #97A68D;
+  --jd-rule: rgba(196, 226, 150, .08);
+  --jd-border: rgba(196, 226, 150, .14);
+  --jd-border-strong: rgba(196, 226, 150, .28);
+  --jd-accent: #96BD45;
+  --jd-accent-hover: #A9D058;
+  --jd-on-accent: #0A1704;
+  --jd-accent-text: #B9DC72;
+  --jd-accent-subtle: rgba(150, 189, 69, .13);
+  --jd-accent-border: rgba(150, 189, 69, .55);
+  /* action fill = a lit chlorophyll cell (luminous centre, deeper rim) rather than a flat neon */
+  --jd-accent-fill: radial-gradient(120% 150% at 50% 15%, #B4D86A 0%, #96BD45 45%, #7BA236 100%);
+  --jd-accent-glow: 0 0 0 1px rgba(185, 220, 114, .35), 0 10px 28px -8px rgba(150, 189, 69, .55);
+  --jd-selected-glow: 0 0 0 1px rgba(150, 189, 69, .35), 0 0 24px -6px rgba(150, 189, 69, .45);
+  --jd-vein: #F9F5DF;
+  --jd-focus: #E4F29A;
+  --jd-selection: rgba(150, 189, 69, .35);
+  --jd-eyebrow-color: #B9DC72;
+  --jd-chart-bg: #07110A;
+  --jd-chart-1: #B9DC72; --jd-chart-2: #74C7EF; --jd-chart-3: #F2B35B; --jd-chart-4: #EE92C8; --jd-chart-5: #EDE6BE;
+  --jd-flow-bg: #07100A radial-gradient(rgba(190, 220, 140, .09) 1px, transparent 1.2px) 0 0 / 22px 22px;
+  --jd-flow-node: #112016; --jd-flow-node-stroke: #7FA84A; --jd-flow-edge: #A9BE90; --jd-select: #E4F29A;
+  --jd-sidecar-bg: rgba(14, 26, 16, .78);
+  --jd-sidecar-inset: rgba(220, 240, 190, .05);
+  --jd-sidecar-field: rgba(3, 10, 4, .55);
+  --jd-rail-bg: rgba(14, 26, 16, .66);
+  --jd-rail-text: #F3F1DF;
+  --jd-rail-text-2: #B7C3A5;
+  --jd-glass-filter: blur(22px) saturate(140%);
+  --jd-shadow-panel: inset 0 1px 0 rgba(249, 245, 223, .06), 0 1px 0 rgba(0, 0, 0, .4), 0 30px 70px -34px rgba(0, 0, 0, .9);
+  --jd-shadow-float: inset 0 1px 0 rgba(249, 245, 223, .07), 0 40px 90px -40px rgba(0, 0, 0, .95), 0 0 0 1px rgba(0, 0, 0, .3);
+  --jd-viewport-frame: rgba(249, 245, 223, .22);
+  --jd-viewport-shadow: 0 0 0 6px rgba(150, 189, 69, .06), 0 30px 80px -30px rgba(0, 0, 0, .95);
+  --jd-radius-panel: 28px; --jd-radius-viewport: 24px; --jd-radius-control: 14px; --jd-radius-button: 999px; --jd-radius-item: 18px;
+  --jd-font-ui: "Inter", "Instrument Sans", system-ui, sans-serif;
+  --jd-font-display: "Inter Display", "Inter", system-ui, sans-serif;
+  --jd-font-wordmark: "J198 Bricolage", "Inter", sans-serif;
+  --jd-display-weight: 300; --jd-display-tracking: -.035em; --jd-h1-size: 46px;
+  --jd-section-weight: 500; --jd-h2-size: 20px;
+  --jd-wordmark-size: 13px; --jd-wordmark-weight: 600; --jd-wordmark-tracking: .34em;
+  --jd-emblem: url("/brand-198b/emblem-detailed-dark.svg");
+  --jd-emblem-size: 58px;
+  --jd-emblem-filter: drop-shadow(0 0 14px rgba(150, 189, 69, .35));
+  /* procedural undergrowth: low-frequency moss blotches + fine spore grain, both well under 5 % opacity */
+  --jd-texture:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='g' x='0' y='0' width='100%25' height='100%25' filterUnits='userSpaceOnUse'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .75 0 0 0 0 .86 0 0 0 0 .5 0 0 0 1 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)' opacity='.045'/%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='640' height='640'%3E%3Cfilter id='m' x='0' y='0' width='100%25' height='100%25' filterUnits='userSpaceOnUse'%3E%3CfeTurbulence type='turbulence' baseFrequency='.0125 .01875' numOctaves='3' seed='4' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .35 0 0 0 0 .6 0 0 0 0 .12 0 0 0 2.4 -.6'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23m)' opacity='.04'/%3E%3C/svg%3E");
+}
+
+/* Field: near-black botanical void with two soft chlorophyll light sources and the undergrowth texture. */
+[data-jarvis-theme="lumen"] .application-shell--final {
+  --shell-rail-width: 146px;
+  background:
+    var(--jd-texture),
+    radial-gradient(60% 55% at 12% -6%, rgba(84, 140, 32, .30), transparent 70%),
+    radial-gradient(45% 50% at 98% 104%, rgba(44, 96, 18, .34), transparent 70%),
+    radial-gradient(30% 30% at 55% 40%, rgba(28, 72, 10, .16), transparent 80%),
+    #050B06;
+}
+/* Navigation: a detached glass capsule carrying the emblem. */
+[data-jarvis-theme="lumen"] .application-shell--final .shell-rail {
+  margin: 14px 0 14px 14px; height: calc(100vh - 28px); padding: 22px 10px 16px; gap: 28px;
+  border-radius: 32px; border: 1px solid rgba(196, 226, 150, .12);
+  -webkit-backdrop-filter: var(--jd-glass-filter); backdrop-filter: var(--jd-glass-filter);
+  box-shadow: var(--jd-shadow-float);
+}
+[data-jarvis-theme="lumen"] .application-shell--final .shell-rail__identity { flex-direction: column; gap: 12px; padding: 4px 0 18px; border-bottom: 1px solid rgba(196, 226, 150, .1); }
+[data-jarvis-theme="lumen"] .application-shell--final .shell-rail__links { gap: 6px; }
+[data-jarvis-theme="lumen"] .application-shell--final .shell-nav-link {
+  min-height: 40px; padding: 9px 14px; border-radius: 999px; border: 1px solid transparent; font-size: 13px; background: transparent;
+}
+[data-jarvis-theme="lumen"] .application-shell--final .shell-nav-link:hover { background: rgba(220, 240, 190, .06); border-color: transparent; }
+[data-jarvis-theme="lumen"] .application-shell--final .shell-nav-link[aria-current="page"] {
+  background: radial-gradient(120% 160% at 0% 50%, rgba(150, 189, 69, .32), rgba(150, 189, 69, .08) 70%);
+  border-color: rgba(150, 189, 69, .45);
+  box-shadow: inset 3px 0 0 #F9F5DF, 0 0 22px -6px rgba(150, 189, 69, .6);
+}
+[data-jarvis-theme="lumen"] .application-shell--final .shell-main { padding: 24px 22px 20px 26px; }
+
+/* Hero header: large light display type floating on the field, no box. */
+[data-jarvis-theme="lumen"] .application-shell--final :is(.design-stage__header, .studio-header, .bluecad-final-stage__header) { border: 0; background: none; padding-bottom: 6px; }
+[data-jarvis-theme="lumen"] .application-shell--final .studio-header { align-items: flex-end; margin-bottom: 8px; }
+[data-jarvis-theme="lumen"] .application-shell--final .studio-header h1 { --jd-h1-size: 60px; margin-top: 6px; }
+[data-jarvis-theme="lumen"] .application-shell--final .studio-header .panel-subtitle { font-size: 15px !important; color: #C9D3B8; max-width: 46ch; }
+[data-jarvis-theme="lumen"] .application-shell--final .studio-header .design-stage__title-row > button { margin-top: 14px; }
+
+/* Studio: floating glass islands with generous gutters. */
+[data-jarvis-theme="lumen"] .application-shell--final .studio-layout { gap: 18px; grid-template-columns: minmax(14rem, 17rem) minmax(0, 1fr); }
+[data-jarvis-theme="lumen"] .application-shell--final :is(.studio-library, .studio-workspace) { padding: 20px 18px; }
+[data-jarvis-theme="lumen"] .application-shell--final .studio-workspace {
+  background:
+    radial-gradient(70% 90% at 100% 0%, rgba(150, 189, 69, .10), transparent 60%),
+    var(--jd-panel-bg);
+}
+
+/* Process / BLUECAD: canvas and viewport as islands; Jarvis as a floating island with a living-light rim. */
+[data-jarvis-theme="lumen"] .application-shell--final .draft-canvas { border-radius: 26px; box-shadow: inset 0 0 0 1px rgba(196, 226, 150, .1), inset 0 0 90px rgba(0, 0, 0, .55); }
+[data-jarvis-theme="lumen"] .application-shell--final :is(.shell-sidecar, .shell-navigator) { margin: 14px 14px 14px 4px; height: calc(100vh - 28px); max-height: calc(100vh - 28px); padding: 16px; }
+[data-jarvis-theme="lumen"] .application-shell--final .shell-navigator { margin: 14px 4px 14px 14px; }
+[data-jarvis-theme="lumen"] .application-shell--final .shell-sidecar {
+  background:
+    radial-gradient(90% 40% at 50% 0%, rgba(150, 189, 69, .14), transparent 70%),
+    var(--jd-sidecar-bg);
+}
+[data-jarvis-theme="lumen"] .application-shell--final .bluecad-viewer-frame { position: relative; }
+/* one authored light moment: a soft chlorophyll bloom behind the hero title */
+[data-jarvis-theme="lumen"] .application-shell--final .shell-main { background: radial-gradient(560px 260px at 260px 110px, rgba(150, 189, 69, .12), rgba(150, 189, 69, 0) 100%) no-repeat; }

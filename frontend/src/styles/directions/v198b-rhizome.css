@@ -1,0 +1,133 @@
+/* C — RHIZOME EDITORIAL (hybrid split light/dark, bold editorial typography, asymmetric organic rail).
+ * Premise: a botanical journal spread. A wide, dark, root-like rail with a leaf-curved edge carries the emblem as a
+ * hero and the navigation in large condensed type; the work sits on bright paper with poster-scale headlines and
+ * flat moss "pebble" panels; Jarvis is a dark capsule on the right so the light content is framed by living dark. */
+:root[data-jarvis-theme="rhizome"] {
+  --jd-scheme: light;
+  --jd-canvas: #FAF8EF;
+  --jd-surface-solid: #FFFFFF;
+  --jd-raised: #FFFFFF;
+  --jd-subtle: #EEF0E2;
+  --jd-panel-bg: #EFF1E3;
+  --jd-panel-border: transparent;
+  --jd-item-bg: #FFFFFF;
+  --jd-inset-bg: rgba(255, 255, 255, .6);
+  --jd-control-bg: #FFFFFF;
+  --jd-field-bg: #FFFFFF;
+  --jd-segment-bg: #EEF0E2;
+  --jd-segment-active: #0E1709;
+  --jd-segment-active-color: #0E1709;
+  --jd-segment-active-text: #F9F5DF;
+  --jd-text: #0E1709;
+  --jd-text-2: #3E4A37;
+  --jd-muted: #56614D;
+  --jd-rule: #E2E3D3;
+  --jd-border: #D9DBC8;
+  --jd-border-strong: #A7AA92;
+  --jd-accent: #2E5A0E;
+  --jd-accent-hover: #3A6B13;
+  --jd-on-accent: #F9F5DF;
+  --jd-accent-text: #2E5A0E;
+  --jd-accent-subtle: #E2EACD;
+  --jd-accent-border: #7FA04F;
+  --jd-selected-glow: inset 4px 0 0 #2E5A0E;
+  --jd-vein: #0E1709;
+  --jd-focus: #B4661C;
+  --jd-selection: #D9E7B4;
+  --jd-eyebrow-color: #2E5A0E;
+  --jd-chart-bg: #FFFFFF;
+  --jd-chart-1: #2F6B12; --jd-chart-2: #1F5F99; --jd-chart-3: #B4541A; --jd-chart-4: #8A3F86; --jd-chart-5: #3A3F44;
+  --jd-flow-bg: #FFFFFF radial-gradient(rgba(14, 23, 9, .12) 1px, transparent 1.3px) 0 0 / 20px 20px;
+  --jd-flow-node: #FFFFFF; --jd-flow-node-stroke: #0E1709; --jd-flow-edge: #2D3827; --jd-select: #B4661C;
+  --jd-rail-bg: #071206;
+  --jd-rail-text: #F6F2DC;
+  --jd-rail-text-2: #C3CDB0;
+  --jd-shadow-panel: none;
+  --jd-shadow-float: 0 30px 70px -30px rgba(7, 18, 6, .55);
+  --jd-viewport-frame: #0E1709;
+  --jd-viewport-shadow: 0 22px 44px -30px rgba(7, 18, 6, .5);
+  --jd-radius-panel: 28px; --jd-radius-viewport: 22px; --jd-radius-control: 12px; --jd-radius-button: 999px; --jd-radius-item: 18px;
+  --jd-font-ui: "Inter", "Instrument Sans", system-ui, sans-serif;
+  --jd-font-display: "J198 Bricolage", "Inter", sans-serif;
+  --jd-font-section: "J198 Bricolage", "Inter", sans-serif;
+  --jd-font-wordmark: "J198 Bricolage", "Inter", sans-serif;
+  --jd-display-weight: 780; --jd-display-stretch: 75%; --jd-display-tracking: -.025em; --jd-h1-size: 52px; --jd-h1-leading: .92;
+  --jd-display-axes: "opsz" 96;
+  --jd-section-weight: 700; --jd-section-stretch: 80%; --jd-section-tracking: -.01em; --jd-h2-size: 24px;
+  --jd-wordmark-size: 34px; --jd-wordmark-weight: 800; --jd-wordmark-stretch: 75%; --jd-wordmark-tracking: .08em; --jd-wordmark-color: #F9F5DF;
+  --jd-emblem: url("/brand-198b/emblem-detailed-dark.svg");
+  --jd-emblem-size: 124px;
+  --jd-emblem-filter: drop-shadow(0 0 26px rgba(150, 189, 69, .35));
+  --jd-texture-dark:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='g' x='0' y='0' width='100%25' height='100%25' filterUnits='userSpaceOnUse'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .75 0 0 0 0 .86 0 0 0 0 .5 0 0 0 1 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)' opacity='.05'/%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='520' height='520'%3E%3Cfilter id='m' x='0' y='0' width='100%25' height='100%25' filterUnits='userSpaceOnUse'%3E%3CfeTurbulence type='turbulence' baseFrequency='.0153846 .0230769' numOctaves='3' seed='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .4 0 0 0 0 .66 0 0 0 0 .16 0 0 0 2.4 -.6'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23m)' opacity='.06'/%3E%3C/svg%3E");
+  --jd-texture-light: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='p' x='0' y='0' width='100%25' height='100%25' filterUnits='userSpaceOnUse'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .25 0 0 0 0 .3 0 0 0 0 .12 0 0 0 1 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23p)' opacity='.03'/%3E%3C/svg%3E");
+}
+
+/* Composition: wide asymmetric dark rail with a leaf-curved edge; bright paper workspace. */
+[data-jarvis-theme="rhizome"] .application-shell--final { --shell-rail-width: 214px; background: var(--jd-texture-light), #FAF8EF; }
+[data-jarvis-theme="rhizome"] .application-shell--final .shell-rail {
+  position: relative; z-index: 1; padding: 34px 22px 24px 26px; gap: 34px;
+  border-radius: 0 120px 300px 0 / 0 34% 46% 0;
+  background:
+    var(--jd-texture-dark),
+    radial-gradient(90% 34% at 40% 12%, rgba(84, 140, 32, .42), transparent 70%),
+    radial-gradient(80% 40% at 0% 100%, rgba(44, 96, 18, .38), transparent 70%),
+    #071206;
+  box-shadow: 18px 0 50px -30px rgba(7, 18, 6, .7);
+}
+[data-jarvis-theme="rhizome"] .application-shell--final .shell-rail__identity { flex-direction: column; align-items: flex-start; gap: 14px; padding: 0; }
+[data-jarvis-theme="rhizome"] .application-shell--final .shell-rail__identity::before { margin-left: -8px; }
+[data-jarvis-theme="rhizome"] .application-shell--final .shell-rail__links { gap: 2px; }
+[data-jarvis-theme="rhizome"] .application-shell--final .shell-nav-link {
+  min-height: 42px; padding: 6px 16px 6px 0; border: 0; border-radius: 0; background: transparent;
+  font-family: "J198 Bricolage", "Inter", sans-serif; font-stretch: 80%; font-weight: 560; font-size: 22px; letter-spacing: 0;
+}
+[data-jarvis-theme="rhizome"] .application-shell--final .shell-nav-link:hover { background: transparent; border: 0; color: #F9F5DF; }
+[data-jarvis-theme="rhizome"] .application-shell--final .shell-nav-link[aria-current="page"] {
+  background: transparent; border: 0; box-shadow: none; font-weight: 760; color: #F9F5DF;
+}
+[data-jarvis-theme="rhizome"] .application-shell--final .shell-nav-link[aria-current="page"]::before {
+  content: ""; width: 26px; height: 10px; margin-right: 10px; flex: 0 0 auto;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 26 10'%3E%3Cpath d='M1 5 C8 5 14 5 19 5 M19 5 L24 1.5 M19 5 L24 8.5' fill='none' stroke='%2396BD45' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+[data-jarvis-theme="rhizome"] .application-shell--final .shell-main { padding: 34px 40px 24px 46px; }
+
+/* Editorial header: poster-scale condensed headline; subtitle set as a narrow standfirst. */
+[data-jarvis-theme="rhizome"] .application-shell--final :is(.design-stage__header, .studio-header, .bluecad-final-stage__header) { border: 0; padding-bottom: 10px; }
+[data-jarvis-theme="rhizome"] .application-shell--final .studio-header { border-bottom: 3px solid #0E1709; padding-bottom: 22px; margin-bottom: 10px; align-items: flex-end; }
+[data-jarvis-theme="rhizome"] .application-shell--final .studio-header .design-stage__title-row {
+  display: grid; grid-template-columns: auto minmax(14rem, 22rem); column-gap: 40px; align-items: end;
+}
+[data-jarvis-theme="rhizome"] .application-shell--final .studio-header .design-stage__title-row > div { display: contents; }
+[data-jarvis-theme="rhizome"] .application-shell--final .studio-header .design-stage__title-row .eyebrow { grid-column: 1 / -1; }
+[data-jarvis-theme="rhizome"] .application-shell--final .studio-header .design-stage__title-row h1 { grid-column: 1; grid-row: 2 / span 2; --jd-h1-size: 92px; }
+[data-jarvis-theme="rhizome"] .application-shell--final .studio-header .design-stage__title-row .panel-subtitle { grid-column: 2; grid-row: 2; align-self: end; margin: 0; font-size: 15px !important; line-height: 1.45 !important; color: #3E4A37; padding-bottom: 8px; border-left: 2px solid #96BD45; padding-left: 14px; }
+[data-jarvis-theme="rhizome"] .application-shell--final .studio-header .design-stage__title-row > button { grid-column: 2; grid-row: 3; justify-self: start; margin-left: 16px; }
+[data-jarvis-theme="rhizome"] .application-shell--final .eyebrow::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 8px; border-radius: 50%; background: #6E9A2E; vertical-align: 1px; }
+[data-jarvis-theme="rhizome"] .application-shell--final .studio-header h1 { --jd-h1-size: 92px; }
+
+/* Studio: flat moss pebbles, asymmetric columns. */
+/* Library becomes a horizontal "contents" band above the full-width workspace. */
+[data-jarvis-theme="rhizome"] .application-shell--final .studio-layout { gap: 20px; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+[data-jarvis-theme="rhizome"] .application-shell--final .studio-library {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); column-gap: 14px; row-gap: 8px; align-items: start; padding: 18px 22px 20px;
+}
+[data-jarvis-theme="rhizome"] .application-shell--final .studio-library > :is(h2, p) { grid-column: 1 / -1; margin: 0; }
+[data-jarvis-theme="rhizome"] .application-shell--final .studio-library > h2:not(:first-child) { margin-top: 10px; }
+[data-jarvis-theme="rhizome"] .application-shell--final .studio-library > p { color: var(--jd-text-2); font-size: 13px; }
+[data-jarvis-theme="rhizome"] .application-shell--final .studio-workspace { padding: 26px 30px; background: #FFFFFF; border: 1px solid #E2E3D3; }
+
+/* Jarvis: a dark capsule framing the light work. Tokens are re-scoped so every descendant reads ivory on forest. */
+[data-jarvis-theme="rhizome"] .application-shell--final .shell-sidecar {
+  --jd-text: #F3F0DC; --jd-text-2: #C6CFB4; --jd-muted: #A7B396; --jd-border: rgba(196, 226, 150, .18); --jd-raised: #12240E;
+  --jd-field-bg: rgba(255, 255, 255, .06); --jd-control-bg: rgba(255, 255, 255, .06); --jd-accent: #96BD45; --jd-accent-hover: #A9D058; --jd-on-accent: #0A1704;
+  --jd-accent-text: #B9DC72; --jd-accent-subtle: rgba(150, 189, 69, .14); --jd-focus: #E4F29A;
+  --color-text-primary: #F3F0DC; --color-text-secondary: #C6CFB4; --color-text-muted: #A7B396; --color-border-default: rgba(196, 226, 150, .18);
+  --jd-sidecar-text: #F3F0DC; --jd-sidecar-text-2: #C6CFB4; --jd-sidecar-inset: rgba(255, 255, 255, .05); --jd-sidecar-rule: rgba(196, 226, 150, .16); --jd-sidecar-field: rgba(255, 255, 255, .06);
+  background: var(--jd-texture-dark), radial-gradient(90% 40% at 50% 0%, rgba(84, 140, 32, .3), transparent 70%), #0B1A08;
+  border: 0; margin: 14px 14px 14px 6px; height: calc(100vh - 28px); max-height: calc(100vh - 28px); padding: 18px; border-radius: 34px;
+  box-shadow: var(--jd-shadow-float); color: #F3F0DC;
+}
+[data-jarvis-theme="rhizome"] .application-shell--final .shell-navigator { background: #EFF1E3; border: 0; box-shadow: none; margin: 14px 6px 14px 14px; height: calc(100vh - 28px); max-height: calc(100vh - 28px); padding: 18px; }
+[data-jarvis-theme="rhizome"] .application-shell--final .draft-canvas { border-radius: 24px; border: 2px solid #0E1709; }

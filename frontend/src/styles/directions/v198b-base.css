@@ -1,0 +1,252 @@
+/* Spec 198 round-2 exploration — shared structure for the opt-in families (lumen, herbarium, rhizome).
+ * Every rule is scoped under [data-jarvis-theme]; without the attribute nothing here matches, so the default UI is unchanged.
+ * Families define --jd-* tokens plus their own layout/composition overrides. Status colours (success/warning/danger/
+ * proposed/stale/unavailable) are never remapped to the accent. No data, unit, API, routing or flow is touched. */
+
+:root[data-jarvis-theme] {
+  --color-bg-canvas: var(--jd-canvas);
+  --color-bg-shell: var(--jd-rail-bg);
+  --color-bg-surface: var(--jd-surface-solid);
+  --color-bg-surface-raised: var(--jd-raised);
+  --color-bg-subtle: var(--jd-subtle);
+  --color-text-primary: var(--jd-text);
+  --color-text-secondary: var(--jd-text-2);
+  --color-text-muted: var(--jd-muted);
+  --color-text-inverse: var(--jd-surface-solid);
+  --color-border-default: var(--jd-border);
+  --color-border-strong: var(--jd-border-strong);
+  --color-focus-separator: var(--jd-surface-solid);
+  /* accent is applied inline by theme.ts (custom accent preference); the exploration pins it per family */
+  --color-accent-primary: var(--jd-accent) !important;
+  --color-accent-hover: var(--jd-accent-hover) !important;
+  --color-accent-active: var(--jd-accent-hover) !important;
+  --color-accent-on: var(--jd-on-accent) !important;
+  --color-text-on-accent: var(--jd-on-accent) !important;
+  --color-accent-foreground: var(--jd-accent-text) !important;
+  --color-accent-subtle: var(--jd-accent-subtle) !important;
+  --color-accent-surface: var(--jd-accent-subtle) !important;
+  --color-accent-border: var(--jd-accent-border) !important;
+  --color-accent-border-strong: var(--jd-accent) !important;
+  --color-focus-ring: var(--jd-focus) !important;
+  --font-sans: var(--jd-font-ui);
+  --radius-sm: var(--jd-radius-control);
+  --radius-md: var(--jd-radius-control);
+  --shadow-structural: var(--jd-shadow-panel);
+  color-scheme: var(--jd-scheme, light);
+  background: var(--jd-canvas);
+}
+[data-jarvis-theme] ::selection { background: var(--jd-selection); color: var(--jd-text); }
+
+/* ---------- Shell ---------- */
+[data-jarvis-theme] .application-shell--final { background: var(--jd-canvas); font-family: var(--jd-font-ui); color: var(--jd-text); }
+[data-jarvis-theme] .application-shell--final .shell-workspace { background: transparent; }
+[data-jarvis-theme] .application-shell--final .shell-main { scrollbar-color: var(--jd-border-strong) transparent; }
+[data-jarvis-theme] .application-shell--final .shell-rail { background: var(--jd-rail-bg); border-inline-end: 0; color: var(--jd-rail-text); }
+/* Brand: exploration emblem + JARVIS wordmark (CSS-only; the DOM text "JarvisOS" and aria-label stay unchanged). */
+[data-jarvis-theme] .application-shell--final .shell-rail__identity { display: flex; align-items: center; gap: 10px; }
+[data-jarvis-theme] .application-shell--final .shell-rail__identity::before {
+  content: ""; flex: 0 0 auto; width: var(--jd-emblem-size, 32px); height: var(--jd-emblem-size, 32px);
+  background: var(--jd-emblem) center / contain no-repeat;
+  filter: var(--jd-emblem-filter, none);
+}
+[data-jarvis-theme] .application-shell--final .shell-rail__identity strong { font-size: 0; letter-spacing: 0; line-height: 1; }
+[data-jarvis-theme] .application-shell--final .shell-rail__identity strong::after {
+  content: "JARVIS" / "";
+  font-family: var(--jd-font-wordmark);
+  font-size: var(--jd-wordmark-size, 15px);
+  font-weight: var(--jd-wordmark-weight, 650);
+  font-stretch: var(--jd-wordmark-stretch, 100%);
+  letter-spacing: var(--jd-wordmark-tracking, .2em);
+  color: var(--jd-wordmark-color, var(--jd-rail-text));
+}
+[data-jarvis-theme] .application-shell--final .shell-nav-link { color: var(--jd-rail-text-2); text-decoration: none; transition: background-color 160ms ease-out, color 160ms ease-out, box-shadow 160ms ease-out; }
+[data-jarvis-theme] .application-shell--final .shell-nav-link:hover { color: var(--jd-rail-text); }
+[data-jarvis-theme] .application-shell--final .shell-nav-link[aria-current="page"] { color: var(--jd-rail-text); font-weight: 600; text-decoration: none; }
+[data-jarvis-theme] .application-shell--final .shell-nav-link:focus-visible { outline: 2px solid var(--jd-focus); outline-offset: 2px; }
+[data-jarvis-theme] .application-shell--final .shell-reopen {
+  background: var(--jd-raised); border: 1px solid var(--jd-border); color: var(--jd-text-2); box-shadow: var(--jd-shadow-float);
+}
+
+/* ---------- Stage headers & typography ---------- */
+[data-jarvis-theme] .application-shell--final :is(.design-stage__header, .bluecad-final-stage__header, .studio-header) h1 {
+  font-family: var(--jd-font-display);
+  font-weight: var(--jd-display-weight);
+  font-stretch: var(--jd-display-stretch, 100%);
+  font-variation-settings: var(--jd-display-axes, normal);
+  letter-spacing: var(--jd-display-tracking);
+  font-size: var(--jd-h1-size, 34px);
+  line-height: var(--jd-h1-leading, 1.02);
+  color: var(--jd-display-color, var(--jd-text));
+}
+[data-jarvis-theme] .application-shell--final .eyebrow {
+  font-family: var(--jd-font-ui); font-size: 12px; font-weight: 600; letter-spacing: var(--jd-eyebrow-tracking, .06em);
+  text-transform: var(--jd-eyebrow-case, none); color: var(--jd-eyebrow-color, var(--jd-accent-text));
+}
+[data-jarvis-theme] .application-shell--final .panel-subtitle {
+  font-size: 12.5px !important; /* spec 100: no operating information below 12px (baseline uses 9px here) */
+  line-height: 1.5 !important; color: var(--jd-text-2);
+}
+[data-jarvis-theme] .application-shell--final :is(.studio-library, .studio-workspace) h2,
+[data-jarvis-theme] .application-shell--final .studio-model-head h2 {
+  font-family: var(--jd-font-section, var(--jd-font-ui)); font-weight: var(--jd-section-weight, 600);
+  font-stretch: var(--jd-section-stretch, 100%); letter-spacing: var(--jd-section-tracking, -.01em); font-size: var(--jd-h2-size, 20px);
+  font-variation-settings: var(--jd-section-axes, normal);
+}
+
+/* ---------- Controls: quiet rounded by default, accent fill only where the role is already unambiguous ---------- */
+[data-jarvis-theme] .application-shell--final button:not(.nav-button):not(.bluecad-candidate):not(.jarvis-icon-button):not(.shell-reopen):not(.shell-nav-link) {
+  border: 1px solid var(--jd-control-border, var(--jd-border-strong));
+  border-radius: var(--jd-radius-button);
+  background: var(--jd-control-bg);
+  color: var(--jd-text);
+  font-weight: 500;
+  box-shadow: none;
+}
+[data-jarvis-theme] .application-shell--final button:not(.nav-button):not(.bluecad-candidate):not(.jarvis-icon-button):not(.shell-reopen):not(.shell-nav-link):hover:not(:disabled) {
+  border-color: var(--jd-accent-border); background: var(--jd-accent-subtle); color: var(--jd-text);
+}
+[data-jarvis-theme] .application-shell--final :is(.design-stage__title-row > button, .studio-empty button, button.draft-run-button, button.jarvis-send, button[type="submit"], .jarvis-primary-button, .primary-action, .button-row:has(> .secondary-button) > button:not(.secondary-button)):not(:disabled) {
+  background: var(--jd-accent-fill, var(--jd-accent)) !important;
+  background-color: var(--jd-accent) !important; /* solid base under any gradient (also what the contrast audit reads) */
+  border-color: transparent !important;
+  color: var(--jd-on-accent) !important;
+  font-weight: 600;
+  box-shadow: var(--jd-accent-glow, none) !important;
+}
+[data-jarvis-theme] .application-shell--final :is(.design-stage__title-row > button, .studio-empty button, button.draft-run-button, button.jarvis-send, button[type="submit"], .jarvis-primary-button, .primary-action, .button-row:has(> .secondary-button) > button:not(.secondary-button)):hover:not(:disabled) {
+  background: var(--jd-accent-hover) !important; background-color: var(--jd-accent-hover) !important;
+}
+[data-jarvis-theme] .application-shell--final button:disabled { opacity: .55; }
+[data-jarvis-theme] .application-shell--final :is(button, a, summary, [tabindex]:not([tabindex="-1"])):focus-visible { outline: 2px solid var(--jd-focus) !important; outline-offset: 2px; }
+[data-jarvis-theme] .application-shell--final :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+  background: var(--jd-field-bg); border: 1px solid var(--jd-border); border-radius: var(--jd-radius-field, 12px); color: var(--jd-text);
+}
+[data-jarvis-theme] .application-shell--final :is(input, select, textarea)::placeholder { color: var(--jd-muted); opacity: 1; }
+[data-jarvis-theme] .application-shell--final :is(input, select, textarea):focus-visible { outline: 2px solid var(--jd-focus); outline-offset: 1px; box-shadow: none; }
+[data-jarvis-theme] .application-shell--final input[type="number"],
+[data-jarvis-theme] .application-shell--final :is(table, .studio-table, .studio-hash, .studio-link-provenance) { font-variant-numeric: tabular-nums lining-nums; }
+
+/* Secondary navigation (Process | BLUECAD | Studio) as one rounded segmented capsule */
+[data-jarvis-theme] .application-shell--final .design-stage__tabs {
+  gap: 2px; padding: 3px; width: max-content; max-width: 100%;
+  background: var(--jd-segment-bg); border: 1px solid var(--jd-border); border-radius: 999px;
+}
+[data-jarvis-theme] .application-shell--final .design-stage__tabs button {
+  border: 0 !important; border-radius: 999px !important; background: transparent !important;
+  color: var(--jd-text-2) !important; font-size: 12.5px; padding: 6px 16px; min-height: 30px;
+}
+[data-jarvis-theme] .application-shell--final .design-stage__tabs button:is(.is-active, [aria-current="page"]) {
+  background: var(--jd-segment-active) !important; background-color: var(--jd-segment-active-color, transparent) !important;
+  color: var(--jd-segment-active-text) !important; font-weight: 600;
+  box-shadow: var(--jd-segment-shadow, none) !important;
+}
+
+/* ---------- Studio ---------- */
+/* baseline grid stretches the header row (large empty band); stack header then let the layout fill the height */
+[data-jarvis-theme] .application-shell--final .studio { display: flex; flex-direction: column; }
+[data-jarvis-theme] .application-shell--final .studio > .studio-layout { flex: 1 1 auto; }
+[data-jarvis-theme] .application-shell--final :is(.studio-library, .studio-workspace) {
+  background: var(--jd-panel-bg); border: 1px solid var(--jd-panel-border); border-radius: var(--jd-radius-panel);
+  box-shadow: var(--jd-shadow-panel); -webkit-backdrop-filter: var(--jd-glass-filter, none); backdrop-filter: var(--jd-glass-filter, none);
+}
+[data-jarvis-theme] .application-shell--final :is(.studio-library > button, .studio-library article > button:first-child) {
+  background: var(--jd-item-bg) !important; border: 1px solid var(--jd-border) !important; color: var(--jd-text) !important;
+  border-radius: var(--jd-radius-item, 16px) !important; padding: 12px 14px;
+}
+[data-jarvis-theme] .application-shell--final :is(.studio-library > button, .studio-library article > button:first-child) span { color: var(--jd-text-2); }
+[data-jarvis-theme] .application-shell--final .studio-library button.is-selected { outline: none; border-color: var(--jd-accent-border) !important; background: var(--jd-accent-subtle) !important; box-shadow: var(--jd-selected-glow, none) !important; }
+[data-jarvis-theme] .application-shell--final .studio-tabs { gap: 4px; border-bottom: 1px solid var(--jd-border); }
+[data-jarvis-theme] .application-shell--final .studio-tabs button {
+  border: 0 !important; border-radius: 0 !important; background: transparent !important; color: var(--jd-text-2) !important;
+  padding: 8px 14px; box-shadow: inset 0 -2px 0 transparent;
+}
+[data-jarvis-theme] .application-shell--final .studio-tabs button[aria-current="page"] { outline: none; color: var(--jd-text) !important; font-weight: 600; box-shadow: inset 0 -2px 0 var(--jd-vein); }
+[data-jarvis-theme] .application-shell--final :is(.studio-panel article, .studio-report, .studio-step, .studio-case, .studio-variables) {
+  border-color: var(--jd-border); border-radius: var(--jd-radius-inset, 16px); background: var(--jd-inset-bg, transparent);
+}
+[data-jarvis-theme] .application-shell--final .studio-action { background: var(--jd-subtle); }
+[data-jarvis-theme] .application-shell--final :is(.studio-notice, .studio-warning, .studio-error) { border-radius: 12px; }
+[data-jarvis-theme] .application-shell--final .studio-table th { font-weight: 600; color: var(--jd-text-2); border-bottom: 1px solid var(--jd-border-strong); vertical-align: bottom; letter-spacing: .01em; font-size: 12px; }
+[data-jarvis-theme] .application-shell--final .studio-table :is(td, th) { padding: 6px 10px; font-size: 12.5px; }
+[data-jarvis-theme] .application-shell--final .studio-table td { border-bottom: 1px solid var(--jd-rule); color: var(--jd-text); }
+[data-jarvis-theme] .application-shell--final .studio-table tbody tr:hover td { background: var(--jd-accent-subtle); }
+[data-jarvis-theme] .application-shell--final :is(.studio-chart svg) { background: var(--jd-chart-bg); border: 1px solid var(--jd-border); border-radius: 14px; }
+[data-jarvis-theme] .application-shell--final .studio-chart svg path { stroke-width: 1.75; }
+[data-jarvis-theme] .application-shell--final .studio-chart svg path:nth-of-type(5n+1) { stroke: var(--jd-chart-1); }
+[data-jarvis-theme] .application-shell--final .studio-chart svg path:nth-of-type(5n+2) { stroke: var(--jd-chart-2); stroke-dasharray: 6 3; }
+[data-jarvis-theme] .application-shell--final .studio-chart svg path:nth-of-type(5n+3) { stroke: var(--jd-chart-3); stroke-dasharray: 2 2; }
+[data-jarvis-theme] .application-shell--final .studio-chart svg path:nth-of-type(5n+4) { stroke: var(--jd-chart-4); }
+[data-jarvis-theme] .application-shell--final .studio-chart svg path:nth-of-type(5n+5) { stroke: var(--jd-chart-5); stroke-dasharray: 8 2 2 2; }
+/* legend: series names stay in body ink (AA text contrast); colour + dash pattern are carried by a line swatch */
+[data-jarvis-theme] .application-shell--final .studio-chart figcaption { font-size: 12px; color: var(--jd-text-2); }
+[data-jarvis-theme] .application-shell--final .studio-chart figcaption span { color: var(--jd-text) !important; font-weight: 600; margin-right: 6px; }
+[data-jarvis-theme] .application-shell--final .studio-chart figcaption span::before { content: ""; display: inline-block; width: 18px; margin: 0 5px 3px 0; vertical-align: middle; border-top: 2px solid var(--jd-chart-1); }
+[data-jarvis-theme] .application-shell--final .studio-chart figcaption span:nth-of-type(5n+2)::before { border-top: 2px dashed var(--jd-chart-2); }
+[data-jarvis-theme] .application-shell--final .studio-chart figcaption span:nth-of-type(5n+3)::before { border-top: 2px dotted var(--jd-chart-3); }
+[data-jarvis-theme] .application-shell--final .studio-chart figcaption span:nth-of-type(5n+4)::before { border-top-color: var(--jd-chart-4); }
+[data-jarvis-theme] .application-shell--final .studio-chart figcaption span:nth-of-type(5n+5)::before { border-top: 2px dashed var(--jd-chart-5); }
+[data-jarvis-theme] .application-shell--final select[multiple] { padding: 6px; }
+[data-jarvis-theme] .application-shell--final select[multiple] option { color: var(--jd-text); padding: 2px 6px; border-radius: 6px; }
+[data-jarvis-theme] .application-shell--final select[multiple] option:checked { background: var(--jd-accent-subtle) linear-gradient(0deg, var(--jd-accent-subtle), var(--jd-accent-subtle)); color: var(--jd-text); }
+
+/* ---------- Process flowsheet ---------- */
+[data-jarvis-theme] .application-shell--final .draft-canvas { background: var(--jd-flow-bg); border-color: var(--jd-border); border-radius: var(--jd-radius-panel); }
+[data-jarvis-theme] .application-shell--final .draft-edge,
+[data-jarvis-theme] .application-shell--final #draft-arrow path { stroke: var(--jd-flow-edge); }
+[data-jarvis-theme] .application-shell--final #draft-arrow path { fill: var(--jd-flow-edge); }
+[data-jarvis-theme] .application-shell--final :is(.draft-node rect, .draft-node circle) { fill: var(--jd-flow-node); stroke: var(--jd-flow-node-stroke); }
+[data-jarvis-theme] .application-shell--final .draft-port { fill: var(--jd-flow-edge); stroke: var(--jd-flow-node); }
+[data-jarvis-theme] .application-shell--final .draft-node__tag { fill: var(--jd-text); }
+[data-jarvis-theme] .application-shell--final :is(.draft-node__type, .draft-owner-badge) { fill: var(--jd-text-2); }
+[data-jarvis-theme] .application-shell--final :is(.draft-node.is-selected rect, .draft-node.is-selected circle) { stroke: var(--jd-select); }
+[data-jarvis-theme] .application-shell--final .draft-edge-label,
+[data-jarvis-theme] .application-shell--final .draft-canvas text { fill: var(--jd-text); }
+[data-jarvis-theme] .application-shell--final .draft-palette button {
+  justify-content: flex-start; text-align: left; background: var(--jd-item-bg) !important; border: 1px solid var(--jd-border) !important;
+  color: var(--jd-text) !important; font-weight: 500; border-radius: var(--jd-radius-button) !important;
+}
+[data-jarvis-theme] .application-shell--final .draft-palette button:hover:not(:disabled) { border-color: var(--jd-accent-border) !important; background: var(--jd-accent-subtle) !important; }
+[data-jarvis-theme] .application-shell--final :is(.draft-palette h3, .draft-findings-panel h3) { font-size: 12px; letter-spacing: .04em; color: var(--jd-accent-text); }
+[data-jarvis-theme] .application-shell--final .draft-palette :is(small, p) { color: var(--jd-text-2); }
+
+/* ---------- Jarvis sidecar & navigator ---------- */
+[data-jarvis-theme] .application-shell--final :is(.shell-sidecar, .shell-navigator) {
+  background: var(--jd-sidecar-bg); border: 1px solid var(--jd-sidecar-border, var(--jd-border)); border-radius: var(--jd-radius-panel);
+  box-shadow: var(--jd-shadow-float); color: var(--jd-sidecar-text, var(--jd-text));
+  -webkit-backdrop-filter: var(--jd-glass-filter, none); backdrop-filter: var(--jd-glass-filter, none);
+}
+[data-jarvis-theme] .application-shell--final .jarvis-sidecar { color: inherit; }
+[data-jarvis-theme] .application-shell--final .jarvis-sidecar__header { border-block-end-color: var(--jd-sidecar-rule, var(--jd-border)); }
+[data-jarvis-theme] .application-shell--final .jarvis-sidecar__title h2 { font-family: var(--jd-font-display); font-weight: var(--jd-display-weight); font-stretch: var(--jd-display-stretch, 100%); font-variation-settings: var(--jd-display-axes, normal); letter-spacing: 0; font-size: 18px; }
+[data-jarvis-theme] .application-shell--final :is(.jarvis-status, .jarvis-sidecar__welcome, .jarvis-sidecar__hint) { color: var(--jd-sidecar-text-2, var(--jd-text-2)); }
+[data-jarvis-theme] .application-shell--final .jarvis-icon-button { color: var(--jd-sidecar-text-2, var(--jd-text-2)) !important; }
+[data-jarvis-theme] .application-shell--final :is(.jarvis-sidecar__composer, .jarvis-sidecar__context, .jarvis-chip, .jarvis-surface-chip, .jarvis-sidecar__context-body) {
+  background: var(--jd-sidecar-inset, var(--jd-raised)); border-color: var(--jd-sidecar-rule, var(--jd-border)); color: var(--jd-sidecar-text-2, var(--jd-text-2));
+}
+[data-jarvis-theme] .application-shell--final .jarvis-sidecar__input { background: var(--jd-sidecar-field, var(--jd-field-bg)); border-radius: 16px; color: var(--jd-sidecar-text, var(--jd-text)); }
+[data-jarvis-theme] .application-shell--final .jarvis-sidecar__input :is(textarea, input) { color: var(--jd-sidecar-text, var(--jd-text)); background: transparent; border: 0; }
+[data-jarvis-theme] .application-shell--final .jarvis-sidecar__toggle { color: var(--jd-sidecar-text-2, var(--jd-text-2)); }
+[data-jarvis-theme] .application-shell--final .jarvis-chip { border-radius: 999px; }
+[data-jarvis-theme] .application-shell--final .shell-panel__header h2 { font-family: var(--jd-font-ui); font-weight: 600; }
+
+/* ---------- BLUECAD ---------- */
+/* The WebGL scene (background 0xf8fafc, grid colours) is set in BluecadGlbViewer.tsx and is NOT themed: geometry,
+ * grid and measurement rendering stay exactly as today. Only the frame around it changes. */
+[data-jarvis-theme] .application-shell--final .bluecad-workbench__viewport { border: 0; border-radius: var(--jd-radius-panel); background: transparent; }
+[data-jarvis-theme] .application-shell--final .bluecad-viewer-frame {
+  border: 1px solid var(--jd-viewport-frame, var(--jd-border)); border-radius: var(--jd-radius-viewport, var(--jd-radius-panel)); overflow: hidden;
+  box-shadow: var(--jd-viewport-shadow, var(--jd-shadow-panel));
+}
+[data-jarvis-theme] .application-shell--final .bluecad-viewer__views { background: rgba(255, 255, 255, .92) !important; border: 1px solid #d5dccf !important; border-radius: 999px !important; }
+[data-jarvis-theme] .application-shell--final .bluecad-viewer__views button { background: transparent !important; border-color: transparent !important; color: #2b3a2c !important; border-radius: 999px !important; }
+[data-jarvis-theme] .application-shell--final .bluecad-candidate {
+  background: var(--jd-item-bg); color: var(--jd-text); border: 1px solid var(--jd-border) !important; border-radius: var(--jd-radius-item, 16px) !important;
+  outline: none !important; box-shadow: none !important;
+}
+[data-jarvis-theme] .application-shell--final .bluecad-candidate.active { border-color: var(--jd-accent-border) !important; background: var(--jd-accent-subtle); box-shadow: var(--jd-selected-glow, none) !important; }
+[data-jarvis-theme] .application-shell--final .bluecad-viewer__hint { font-size: 12px; color: var(--jd-text-2); margin-top: 12px; }
+[data-jarvis-theme] .application-shell--final .shell-navigator :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) { max-width: 100%; box-sizing: border-box; }
+
+@media (prefers-reduced-motion: reduce) {
+  [data-jarvis-theme] * { transition-duration: 0ms !important; animation: none !important; }
+}

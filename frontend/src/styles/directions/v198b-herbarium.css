@@ -1,0 +1,115 @@
+/* B — HERBARIUM DAYLIGHT (light, greenhouse daylight, botanical-plate precision).
+ * Premise: the emblem as a pressed specimen on ivory paper. Navigation moves to a horizontal top band (no side rail),
+ * freeing the full width for work; content sits on soft, generously rounded paper sheets lifted by green-tinted
+ * daylight shadows; a soft-serif display face gives the plate-title voice; forest ink is the single action colour. */
+:root[data-jarvis-theme="herbarium"] {
+  --jd-scheme: light;
+  --jd-canvas: #F3EFE0;
+  --jd-surface-solid: #FFFDF6;
+  --jd-raised: #FFFFFF;
+  --jd-subtle: #ECE8D6;
+  --jd-panel-bg: rgba(255, 253, 246, .84);
+  --jd-panel-border: #E4DCC3;
+  --jd-item-bg: #FBF8EC;
+  --jd-inset-bg: #FBF8EE;
+  --jd-control-bg: #FFFDF6;
+  --jd-field-bg: #FFFFFF;
+  --jd-segment-bg: #ECE7D3;
+  --jd-segment-active: #1C480A;
+  --jd-segment-active-color: #1C480A;
+  --jd-segment-active-text: #F9F5DF;
+  --jd-text: #172312;
+  --jd-text-2: #465340;
+  --jd-muted: #5A6651;
+  --jd-rule: #ECE5D1;
+  --jd-border: #DDD4BA;
+  --jd-border-strong: #B9B091;
+  --jd-accent: #1C480A;
+  --jd-accent-hover: #285F12;
+  --jd-on-accent: #F9F5DF;
+  --jd-accent-text: #2B6114;
+  --jd-accent-subtle: #E7EDD5;
+  --jd-accent-border: #8FAE6A;
+  --jd-accent-glow: 0 8px 20px -10px rgba(28, 72, 10, .6);
+  --jd-selected-glow: 0 0 0 1px #8FAE6A;
+  --jd-vein: #1C480A;
+  --jd-focus: #A3601A;
+  --jd-selection: #D8E6B8;
+  --jd-eyebrow-color: #2B6114;
+  --jd-chart-bg: #FFFEF8;
+  --jd-chart-1: #2F6B12; --jd-chart-2: #1F5F99; --jd-chart-3: #B4541A; --jd-chart-4: #8A3F86; --jd-chart-5: #3A3F44;
+  --jd-flow-bg: #FDFBF3 linear-gradient(rgba(28, 72, 10, .055) 1px, transparent 1px) 0 0 / 24px 24px, linear-gradient(90deg, rgba(28, 72, 10, .055) 1px, transparent 1px) 0 0 / 24px 24px;
+  --jd-flow-node: #FFFFFF; --jd-flow-node-stroke: #2F6B12; --jd-flow-edge: #4B5843; --jd-select: #A3601A;
+  --jd-sidecar-bg: #EDF0DF;
+  --jd-sidecar-border: #DCE1C6;
+  --jd-sidecar-inset: #F7F8EE;
+  --jd-sidecar-field: #FFFFFF;
+  --jd-rail-bg: rgba(248, 245, 233, .9);
+  --jd-rail-text: #172312;
+  --jd-rail-text-2: #465340;
+  --jd-shadow-panel: 0 1px 0 rgba(255, 255, 255, .9) inset, 0 1px 2px rgba(28, 52, 10, .06), 0 22px 44px -28px rgba(28, 62, 10, .32);
+  --jd-shadow-float: 0 1px 2px rgba(28, 52, 10, .06), 0 26px 60px -34px rgba(28, 62, 10, .4);
+  --jd-viewport-frame: #D6CDB1;
+  --jd-viewport-shadow: 0 18px 40px -26px rgba(28, 62, 10, .45);
+  --jd-radius-panel: 24px; --jd-radius-viewport: 18px; --jd-radius-control: 12px; --jd-radius-button: 999px; --jd-radius-item: 16px;
+  --jd-font-ui: "Instrument Sans", "Inter", system-ui, sans-serif;
+  --jd-font-display: "J198 Fraunces", Georgia, serif;
+  --jd-font-section: "J198 Fraunces", Georgia, serif;
+  --jd-font-wordmark: "J198 Fraunces", Georgia, serif;
+  --jd-display-weight: 380; --jd-display-tracking: -.02em; --jd-h1-size: 44px;
+  --jd-display-axes: "opsz" 144, "SOFT" 100, "WONK" 0;
+  --jd-section-weight: 500; --jd-section-axes: "opsz" 40, "SOFT" 100; --jd-section-tracking: -.005em; --jd-h2-size: 22px;
+  --jd-wordmark-size: 19px; --jd-wordmark-weight: 600; --jd-wordmark-tracking: .16em; --jd-wordmark-color: #12300A;
+  --jd-emblem: url("/brand-198b/emblem-detailed.svg");
+  --jd-glass-filter: blur(16px) saturate(130%);
+  /* dappled daylight through foliage: very low-frequency light/shade patches, about 6 % at their strongest */
+  --jd-dapple: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='900' height='900'%3E%3Cfilter id='d' x='0' y='0' width='100%25' height='100%25' filterUnits='userSpaceOnUse'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.0044444 .0066667' numOctaves='2' seed='21' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .42 0 0 0 0 .6 0 0 0 0 .16 0 0 0 3.2 -1.45'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23d)' opacity='.07'/%3E%3C/svg%3E");
+  --jd-emblem-size: 36px;
+  --jd-texture:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='p' x='0' y='0' width='100%25' height='100%25' filterUnits='userSpaceOnUse'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.75333' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .3 0 0 0 0 .36 0 0 0 0 .16 0 0 0 1 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23p)' opacity='.04'/%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='700' height='700'%3E%3Cfilter id='m' x='0' y='0' width='100%25' height='100%25' filterUnits='userSpaceOnUse'%3E%3CfeTurbulence type='turbulence' baseFrequency='.01 .0157143' numOctaves='3' seed='9' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .24 0 0 0 0 .42 0 0 0 0 .08 0 0 0 2.2 -.55'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23m)' opacity='.04'/%3E%3C/svg%3E");
+}
+
+/* Composition: navigation is a horizontal top band; the workspace takes the full width beneath it. */
+[data-jarvis-theme="herbarium"] .application-shell--final {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: 64px minmax(0, 1fr) auto;
+  grid-template-areas: "rail" "workspace" "dock";
+  background:
+    var(--jd-texture),
+    var(--jd-dapple),
+    radial-gradient(60% 70% at 100% 0%, rgba(150, 189, 69, .30), transparent 70%),
+    radial-gradient(45% 55% at 0% 100%, rgba(102, 148, 39, .16), transparent 70%),
+    linear-gradient(160deg, #F6F3E6 0%, #F1EEDC 55%, #ECEBD3 100%);
+}
+[data-jarvis-theme="herbarium"] .application-shell--final .shell-workspace { height: calc(100vh - 64px); }
+[data-jarvis-theme="herbarium"] .application-shell--final .shell-rail {
+  flex-direction: row; align-items: center; gap: 40px; padding: 0 32px; height: 64px;
+  border-bottom: 1px solid #E2DAC1; -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+}
+[data-jarvis-theme="herbarium"] .application-shell--final .shell-rail__identity { padding: 0; gap: 12px; }
+[data-jarvis-theme="herbarium"] .application-shell--final .shell-rail__identity strong::after { font-variation-settings: "opsz" 48, "SOFT" 100; }
+[data-jarvis-theme="herbarium"] .application-shell--final .shell-rail__links { display: flex; gap: 4px; padding: 4px; background: #ECE7D3; border-radius: 999px; }
+[data-jarvis-theme="herbarium"] .application-shell--final .shell-nav-link { min-height: 34px; padding: 6px 18px; border-radius: 999px; border: 0; font-size: 13.5px; }
+[data-jarvis-theme="herbarium"] .application-shell--final .shell-nav-link:hover { background: #FFFDF6; border-color: transparent; }
+[data-jarvis-theme="herbarium"] .application-shell--final .shell-nav-link[aria-current="page"] { background: #1C480A; color: #F9F5DF; border-color: transparent; box-shadow: 0 6px 16px -8px rgba(28, 72, 10, .7); }
+[data-jarvis-theme="herbarium"] .application-shell--final .shell-main { padding: 30px 40px 24px; }
+[data-jarvis-theme="herbarium"] .application-shell--final .shell-reopen { margin-top: 18px; }
+
+/* Plate-title header: soft serif display, a fine specimen rule under the eyebrow. */
+[data-jarvis-theme="herbarium"] .application-shell--final :is(.design-stage__header, .studio-header, .bluecad-final-stage__header) { border: 0; padding-bottom: 8px; }
+[data-jarvis-theme="herbarium"] .application-shell--final .eyebrow { display: flex; align-items: center; gap: 10px; }
+[data-jarvis-theme="herbarium"] .application-shell--final .eyebrow::after { content: ""; width: 36px; height: 1px; background: #8FAE6A; }
+[data-jarvis-theme="herbarium"] .application-shell--final .studio-header h1 { --jd-h1-size: 58px; color: #12300A; }
+[data-jarvis-theme="herbarium"] .application-shell--final :is(.design-stage__header, .bluecad-final-stage__header) h1 { color: #12300A; }
+[data-jarvis-theme="herbarium"] .application-shell--final .studio-header .panel-subtitle { font-size: 15px !important; max-width: 52ch; }
+
+/* Studio: an index column and a broad paper sheet. */
+[data-jarvis-theme="herbarium"] .application-shell--final .studio-layout { gap: 28px; grid-template-columns: minmax(14rem, 16rem) minmax(0, 1fr); }
+[data-jarvis-theme="herbarium"] .application-shell--final .studio-library { background: transparent; border: 0; box-shadow: none; border-left: 1px solid #CFC6A8; border-radius: 0; padding: 4px 0 4px 22px; }
+[data-jarvis-theme="herbarium"] .application-shell--final .studio-workspace { padding: 24px 26px; }
+
+/* Process / BLUECAD: graph-paper flowsheet, matted viewport, pale-sage Jarvis sheet. */
+[data-jarvis-theme="herbarium"] .application-shell--final .draft-canvas { border-radius: 20px; border: 1px solid #DDD4BA; box-shadow: var(--jd-shadow-panel); }
+[data-jarvis-theme="herbarium"] .application-shell--final :is(.shell-sidecar, .shell-navigator) { margin: 16px 18px 16px 6px; height: calc(100vh - 96px); max-height: calc(100vh - 96px); padding: 16px; }
+[data-jarvis-theme="herbarium"] .application-shell--final .shell-navigator { margin: 16px 6px 16px 18px; }

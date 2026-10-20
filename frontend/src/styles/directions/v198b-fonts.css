@@ -1,0 +1,6 @@
+/* Preview-only OFL fonts (public/fonts/preview-198b, licences alongside). Declaring a face does not download or
+ * apply it; only the opt-in families reference these names, so the default UI renders exactly as before.
+ * Fraunces: SIL OFL 1.1, The Fraunces Project Authors (fontsource 5.3.0, latin, axes wght/opsz/SOFT/WONK).
+ * Bricolage Grotesque: SIL OFL 1.1, The Bricolage Grotesque Project Authors (fontsource 5.3.0, latin, wght/opsz/wdth). */
+@font-face { font-family: "J198 Fraunces"; src: url("/fonts/preview-198b/Fraunces-latin-full.woff2") format("woff2"); font-weight: 100 900; font-style: normal; font-display: swap; }
+@font-face { font-family: "J198 Bricolage"; src: url("/fonts/preview-198b/BricolageGrotesque-latin.woff2") format("woff2"); font-weight: 200 800; font-stretch: 75% 100%; font-style: normal; font-display: swap; }

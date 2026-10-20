@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 
 import App from "./App";
 import { applyStoredVisualPreferences } from "./theme";
+import { applyVisualDirection } from "./visualDirection";
 import "./styles/tokens.css";
 import "./styles/global.css";
 import "./styles/foundation.css";
@@ -21,8 +22,11 @@ import "./styles/settings.css";
 import "./styles/responsive.css";
 import "./styles/100g-ui-repair.css";
 import "./styles/operator-recovery.css";
+// Spec 198 exploration (round 2): opt-in visual directions, inert unless html[data-jarvis-theme] is set.
+import "./styles/directions/v198b-directions.css";
 
 applyStoredVisualPreferences();
+applyVisualDirection();
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
