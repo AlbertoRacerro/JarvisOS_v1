@@ -3353,9 +3353,13 @@ def make_host(repo: Path, relay_env: dict[str, str] | None = None) -> Host:
                 refresh_codex_quota=lambda: refresh_codex_quota(repo))
 
 
+CODEX_QUOTA_PROBE = tuple(a for a in CODEX_READ_ONLY if a != "--ephemeral")  # Relay reads the rollout it writes
+
+
 def refresh_codex_quota(repo: Path) -> None:
-    """Refresh Relay's stale Codex usage evidence with one bounded, no-tool, read-only turn."""
-    subprocess.run(["codex", *CODEX_READ_ONLY, "-C", str(repo), "-"], cwd=repo,
+    """Refresh Relay's stale Codex usage evidence with one bounded, no-tool, read-only turn. It must not be
+    ephemeral: Relay reads Codex quota only from rollout files, which an ephemeral turn never writes."""
+    subprocess.run(["codex", *CODEX_QUOTA_PROBE, "-C", str(repo), "-"], cwd=repo,
                    input="Reply READY. Do not use tools.\n", text=True, capture_output=True,
                    timeout=120, check=False)
 
@@ -3573,6 +3577,25 @@ def serve_step(root: Path, factory: Callable[[Store, dict[str, Any]], Supervisor
         lock.release()
 
 
+def sandbox_provider_env(home: Path) -> dict[str, str]:
+    """The sandbox's own provider login state. The owner pins it rather than inheriting whatever its launcher
+    (systemd, a Codex shell, a Claude shell) exported: an unset CODEX_HOME sends Codex to the sandbox's empty
+    tmpfs `~/.codex`, where it has no login and Relay finds no quota reading."""
+    state = home / ".local/share/jarvisos-sandbox/state"
+    return {"CLAUDE_CONFIG_DIR": str(state / "claude"), "CODEX_HOME": str(state / "codex")}
+
+
+def link_relay_claude_credentials(config_dir: Path, home: Path) -> None:
+    """Relay 0.7.7 reads Claude's usage token only from `~/.claude/.credentials.json`, which the sandbox's
+    private tmpfs home lacks. Without a Claude reading, a return to Claude after a Codex takeover is never
+    confirmed. Point that one path at the sandbox's own login; an existing file or link is left alone."""
+    link, target = home / ".claude" / ".credentials.json", config_dir / ".credentials.json"
+    if link.exists() or link.is_symlink() or not target.exists():
+        return
+    link.parent.mkdir(parents=True, exist_ok=True)
+    link.symlink_to(target)
+
+
 def command_serve(args: argparse.Namespace) -> int:
     root = control_root()
     if not in_sandbox():
@@ -3592,6 +3615,9 @@ def command_serve(args: argparse.Namespace) -> int:
     if args.clear_stop:
         (root / "STOP").unlink(missing_ok=True)
     sender = None if args.no_notify else webhook_sender()
+    provider_env = sandbox_provider_env(Path.home())
+    os.environ.update(provider_env)  # the Codex quota probe and read-only diagnostics inherit it too
+    link_relay_claude_credentials(Path(provider_env["CLAUDE_CONFIG_DIR"]), Path.home())
     # Relay's headless runner pins Claude to `default` and ignores the REPL permission-mode variable.
     # Its mission-only entrypoint removes that flag and adds bypassPermissions inside the OS boundary.
     claude = shutil.which("claude")
@@ -3600,8 +3626,7 @@ def command_serve(args: argparse.Namespace) -> int:
         owner.release()
         return 2
     mission_bin = Path(__file__).resolve().parent / "relay_mission_bin"
-    relay_env = {"AGENT_RELAY_CLAUDE_PERMISSION_MODE": "bypassPermissions",
-                 "CLAUDE_CONFIG_DIR": str(Path.home() / ".local/share/jarvisos-sandbox/state/claude"),
+    relay_env = {"AGENT_RELAY_CLAUDE_PERMISSION_MODE": "bypassPermissions", **provider_env,
                  "JARVISOS_MISSION_PROFILE": "1", "RELAY_CLAUDE_REAL_BIN": claude,
                  "PATH": str(mission_bin) + os.pathsep + os.environ["PATH"]}
     serve_store = Store(root / "serve")

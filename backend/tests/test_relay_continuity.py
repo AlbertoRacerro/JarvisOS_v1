@@ -2981,6 +2981,43 @@ def test_cli_serve_keeps_an_operator_stop_across_restart(tmp_path: Path, monkeyp
     assert not (tmp_path / "serve.lock").exists()
 
 
+def test_cli_serve_pins_the_sandbox_provider_logins(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    home = tmp_path / "home"
+    login = home / ".local/share/jarvisos-sandbox/state/claude"
+    login.mkdir(parents=True)
+    (login / ".credentials.json").write_text("{}")
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("CODEX_HOME", str(home / ".codex"))  # what a Claude shell's launcher leaves behind
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(home / ".claude"))
+    monkeypatch.setenv("RELAY_CONTINUITY_DIR", str(tmp_path / "control"))
+    monkeypatch.setattr(rc, "in_sandbox", lambda: True)
+    monkeypatch.setattr(rc.shutil, "which", lambda _name: None)  # stop right after the environment is set
+    assert rc.main(["serve", "--once", "--no-notify"]) == 2
+    assert os.environ["CODEX_HOME"] == str(home / ".local/share/jarvisos-sandbox/state/codex")
+    assert os.environ["CLAUDE_CONFIG_DIR"] == str(login)
+    assert (home / ".claude/.credentials.json").resolve() == (login / ".credentials.json").resolve()
+
+
+def test_relay_claude_credentials_link_never_replaces_an_existing_file(tmp_path: Path) -> None:
+    login, home = tmp_path / "login", tmp_path / "home"
+    rc.link_relay_claude_credentials(login, home)
+    assert not (home / ".claude").exists()  # no sandbox login: nothing to point at
+    login.mkdir()
+    (login / ".credentials.json").write_text("sandbox")
+    (home / ".claude").mkdir(parents=True)
+    (home / ".claude/.credentials.json").write_text("own")
+    rc.link_relay_claude_credentials(login, home)
+    assert (home / ".claude/.credentials.json").read_text() == "own"
+
+
+def test_codex_quota_probe_writes_the_rollout_relay_reads(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: dict[str, Any] = {}
+    monkeypatch.setattr(rc.subprocess, "run", lambda args, **kw: seen.update(args=args, **kw))
+    rc.refresh_codex_quota(tmp_path)
+    assert "--ephemeral" not in seen["args"] and seen["args"][:4] == ["codex", "exec", "--sandbox", "read-only"]
+    assert seen["timeout"] == 120
+
+
 def test_relay_start_opens_a_new_session_with_closed_stdin_and_profile_env(tmp_path: Path,
                                                                             monkeypatch: pytest.MonkeyPatch) -> None:
     seen: dict[str, Any] = {}
