@@ -1,0 +1,270 @@
+/* LUMEN v2 — focused second iteration of the selected Lumen family (spec 198 exploration, not authorized for merge).
+ * One family, two modes: lumen2-dark (refined Lumen Canopy) and lumen2-light (botanical daylight; Herbarium is the
+ * chromatic/atmospheric reference only). Shared composition is keyed on html[data-jarvis-family="lumen2"]; each mode
+ * supplies tokens only, so both modes keep the same typography, scale, volumes, capsule rail, glass islands, lit
+ * chlorophyll button language and layered gradients. Status semantics are re-tinted per mode, never remapped. */
+
+/* ===================== Tokens: LUMEN DARK (refined) ===================== */
+:root[data-jarvis-theme="lumen2-dark"] {
+  --jd-scheme: dark;
+  --jd-canvas: #050B06;
+  --jd-surface-solid: #0E1A0F;
+  --jd-raised: #142318;
+  --jd-subtle: #0B150C;
+  /* top-lit glass: a faint light catch at the top edge falling into the body tone gives volume without flatness */
+  --jd-panel-bg: rgba(16, 30, 18, .72);
+  --jd-panel-fill: linear-gradient(180deg, rgba(220, 240, 190, .045) 0%, rgba(220, 240, 190, 0) 38%), rgba(16, 30, 18, .72);
+  --jd-panel-border: rgba(196, 226, 150, .13);
+  --jd-item-bg: rgba(220, 240, 190, .045);
+  --jd-item-fill: linear-gradient(180deg, rgba(220, 240, 190, .07), rgba(220, 240, 190, .025));
+  --jd-inset-bg: rgba(220, 240, 190, .03);
+  --jd-control-bg: rgba(220, 240, 190, .05);
+  --jd-field-bg: rgba(3, 10, 4, .55);
+  --jd-segment-bg: rgba(220, 240, 190, .05);
+  --jd-segment-active: radial-gradient(120% 150% at 50% 15%, #B4D86A 0%, #96BD45 45%, #7BA236 100%);
+  --jd-segment-active-color: #96BD45;
+  --jd-segment-active-text: #0A1704;
+  --jd-segment-shadow: 0 0 18px -4px rgba(150, 189, 69, .55);
+  --jd-text: #EEF0DE;
+  --jd-text-2: #BAC6A8;
+  --jd-muted: #97A68D;
+  --jd-hero-sub: #C9D3B8;
+  --jd-rule: rgba(196, 226, 150, .08);
+  --jd-border: rgba(196, 226, 150, .14);
+  --jd-border-strong: rgba(196, 226, 150, .28);
+  --jd-accent: #96BD45;
+  --jd-accent-hover: #A9D058;
+  --jd-on-accent: #0A1704;
+  --jd-accent-text: #B9DC72;
+  --jd-accent-subtle: rgba(150, 189, 69, .13);
+  --jd-accent-border: rgba(150, 189, 69, .55);
+  --jd-accent-fill: radial-gradient(120% 150% at 50% 15%, #B4D86A 0%, #96BD45 45%, #7BA236 100%);
+  --jd-accent-glow: 0 0 0 1px rgba(185, 220, 114, .35), inset 0 1px 0 rgba(255, 255, 230, .35), 0 10px 28px -8px rgba(150, 189, 69, .55);
+  --jd-selected-glow: 0 0 0 1px rgba(150, 189, 69, .35), 0 0 24px -6px rgba(150, 189, 69, .45);
+  --jd-nav-active: radial-gradient(120% 160% at 0% 50%, rgba(150, 189, 69, .32), rgba(150, 189, 69, .08) 70%);
+  --jd-nav-active-border: rgba(150, 189, 69, .45);
+  --jd-nav-active-glow: 0 0 22px -6px rgba(150, 189, 69, .6);
+  --jd-nav-hover: rgba(220, 240, 190, .06);
+  --jd-vein: #F9F5DF;
+  --jd-focus: #E4F29A;
+  --jd-selection: rgba(150, 189, 69, .35);
+  --jd-eyebrow-color: #B9DC72;
+  --jd-chart-bg: #07110A;
+  --jd-chart-1: #B9DC72; --jd-chart-2: #74C7EF; --jd-chart-3: #F2B35B; --jd-chart-4: #EE92C8; --jd-chart-5: #EDE6BE;
+  --jd-flow-bg: #07100A radial-gradient(rgba(190, 220, 140, .09) 1px, transparent 1.2px) 0 0 / 22px 22px;
+  --jd-flow-inset: inset 0 0 0 1px rgba(196, 226, 150, .1), inset 0 0 90px rgba(0, 0, 0, .55);
+  --jd-flow-node: #112016; --jd-flow-node-stroke: #7FA84A; --jd-flow-edge: #A9BE90; --jd-select: #E4F29A;
+  --jd-sidecar-bg: rgba(14, 26, 16, .78);
+  --jd-sidecar-inset: rgba(220, 240, 190, .05);
+  --jd-sidecar-field: rgba(3, 10, 4, .55);
+  --jd-rail-bg: rgba(14, 26, 16, .66);
+  --jd-rail-border: rgba(196, 226, 150, .12);
+  --jd-rail-sheen: linear-gradient(180deg, rgba(220, 240, 190, .06), rgba(220, 240, 190, 0) 32%);
+  --jd-rail-text: #F3F1DF;
+  --jd-rail-text-2: #B7C3A5;
+  --jd-glass-filter: blur(22px) saturate(140%);
+  --jd-shadow-panel: inset 0 1px 0 rgba(249, 245, 223, .07), 0 1px 0 rgba(0, 0, 0, .4), 0 30px 70px -34px rgba(0, 0, 0, .9);
+  --jd-shadow-float: inset 0 1px 0 rgba(249, 245, 223, .08), 0 40px 90px -40px rgba(0, 0, 0, .95), 0 0 0 1px rgba(0, 0, 0, .3);
+  --jd-viewport-frame: rgba(249, 245, 223, .22);
+  --jd-viewport-shadow: 0 0 0 6px rgba(150, 189, 69, .06), 0 30px 80px -30px rgba(0, 0, 0, .95);
+  --jd-emblem: url("/brand-198b/emblem-detailed-dark.svg");
+  --jd-emblem-halo: radial-gradient(closest-side, rgba(150, 189, 69, .30), rgba(150, 189, 69, .10) 55%, rgba(150, 189, 69, 0) 100%);
+  --jd-emblem-filter: drop-shadow(0 0 10px rgba(169, 208, 88, .45));
+  --jd-wordmark-color: #F6F3E0;
+  --jd-field-light:
+    radial-gradient(60% 55% at 12% -6%, rgba(84, 140, 32, .30), transparent 70%),
+    radial-gradient(45% 50% at 98% 104%, rgba(44, 96, 18, .34), transparent 70%),
+    radial-gradient(30% 30% at 55% 40%, rgba(28, 72, 10, .16), transparent 80%);
+  --jd-hero-bloom: rgba(150, 189, 69, .12);
+  --jd-workspace-bloom: rgba(150, 189, 69, .10);
+  --jd-sidecar-bloom: rgba(150, 189, 69, .14);
+  --jd-texture:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='g' x='0' y='0' width='100%25' height='100%25' filterUnits='userSpaceOnUse'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .75 0 0 0 0 .86 0 0 0 0 .5 0 0 0 1 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)' opacity='.045'/%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='640' height='640'%3E%3Cfilter id='m' x='0' y='0' width='100%25' height='100%25' filterUnits='userSpaceOnUse'%3E%3CfeTurbulence type='turbulence' baseFrequency='.0125 .01875' numOctaves='3' seed='4' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .35 0 0 0 0 .6 0 0 0 0 .12 0 0 0 2.4 -.6'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23m)' opacity='.04'/%3E%3C/svg%3E");
+  --jd-canvas-base: #050B06;
+  /* status: dark-mode tints of the same semantics (round 1 showed pale light-mode bars on the dark field) */
+  --color-status-info-bg: rgba(116, 199, 239, .12);      --color-status-info-text: #A9DCF6;
+  --color-status-success-bg: rgba(146, 223, 173, .11);   --color-status-success-text: #A7E6BC;
+  --color-status-warning-bg: rgba(242, 179, 91, .13);    --color-status-warning-text: #F6CD8E;
+  --color-status-danger-bg: rgba(240, 120, 110, .14);    --color-status-danger-text: #FFB4AA;
+  --color-status-neutral-bg: rgba(220, 240, 190, .07);   --color-status-neutral-text: #C3CCC6;
+  --color-status-proposed-bg: rgba(190, 160, 250, .13);  --color-status-proposed-text: #D6C6FF;
+  --color-status-stale-bg: rgba(255, 190, 100, .12);     --color-status-stale-text: #FFD18B;
+  --color-status-unavailable-bg: rgba(189, 201, 207, .1); --color-status-unavailable-text: #BDC9CF;
+  --color-status-synthetic-bg: rgba(110, 220, 230, .11); --color-status-synthetic-text: #A6E8EF;
+  --color-status-archived-bg: rgba(194, 203, 198, .09);  --color-status-archived-text: #C2CBC6;
+  --jd-status-rim: inset 0 0 0 1px rgba(255, 255, 255, .06);
+}
+
+/* ===================== Tokens: LUMEN LIGHT (botanical daylight) ===================== */
+/* Herbarium supplies the ivory/sage daylight palette and lightness; Lumen supplies everything structural: glass
+ * islands with top-lit gradients, the capsule rail, lit chlorophyll pills with depth, green-tinted volumetric shadows. */
+:root[data-jarvis-theme="lumen2-light"] {
+  --jd-scheme: light;
+  --jd-canvas: #EEF0E1;
+  --jd-surface-solid: #FBFBF3;
+  --jd-raised: #FFFFFB;
+  --jd-subtle: #E9ECDA;
+  --jd-panel-bg: rgba(252, 252, 244, .80);
+  --jd-panel-fill: linear-gradient(180deg, rgba(255, 255, 252, .96) 0%, rgba(250, 251, 241, .86) 40%, rgba(240, 244, 226, .80) 100%);
+  --jd-panel-border: rgba(74, 104, 36, .14);
+  --jd-item-bg: rgba(255, 255, 250, .78);
+  --jd-item-fill: linear-gradient(180deg, #FFFFFC 0%, #F5F7EA 100%);
+  --jd-inset-bg: rgba(236, 241, 220, .45);
+  --jd-control-bg: rgba(255, 255, 250, .75);
+  --jd-field-bg: #FFFFFD;
+  --jd-segment-bg: rgba(226, 232, 206, .7);
+  --jd-segment-active: radial-gradient(120% 150% at 50% 12%, #B9DD72 0%, #95C04A 48%, #739F34 100%);
+  --jd-segment-active-color: #8DB943;
+  --jd-segment-active-text: #0C1A06;
+  --jd-segment-shadow: inset 0 1px 0 rgba(255, 255, 235, .55), 0 6px 14px -6px rgba(84, 130, 30, .55);
+  --jd-text: #15230F;
+  --jd-text-2: #40503A;
+  --jd-muted: #55634C;
+  --jd-hero-sub: #3F4F37;
+  --jd-rule: rgba(60, 90, 30, .10);
+  --jd-border: rgba(60, 90, 30, .17);
+  --jd-border-strong: rgba(60, 90, 30, .30);
+  --jd-accent: #8DB943;
+  --jd-accent-hover: #9CC853;
+  --jd-on-accent: #0C1A06;
+  --jd-accent-text: #34621A;
+  --jd-accent-subtle: rgba(130, 178, 60, .14);
+  --jd-accent-border: rgba(84, 130, 30, .45);
+  --jd-accent-fill: radial-gradient(120% 150% at 50% 12%, #B9DD72 0%, #95C04A 48%, #739F34 100%);
+  --jd-accent-glow: 0 0 0 1px rgba(84, 130, 30, .35), inset 0 1px 0 rgba(255, 255, 235, .6), 0 10px 22px -10px rgba(74, 120, 24, .65);
+  --jd-selected-glow: 0 0 0 1px rgba(84, 130, 30, .30), 0 8px 22px -10px rgba(84, 130, 30, .45);
+  --jd-nav-active: radial-gradient(120% 160% at 0% 50%, rgba(141, 185, 67, .38), rgba(141, 185, 67, .10) 70%);
+  --jd-nav-active-border: rgba(84, 130, 30, .40);
+  --jd-nav-active-glow: 0 8px 20px -10px rgba(84, 130, 30, .55);
+  --jd-nav-hover: rgba(130, 178, 60, .10);
+  --jd-vein: #2F5A12;
+  --jd-focus: #A3601A;
+  --jd-selection: #D8E6B8;
+  --jd-eyebrow-color: #34621A;
+  --jd-chart-bg: #FFFFFB;
+  --jd-chart-1: #2F6B12; --jd-chart-2: #1F5F99; --jd-chart-3: #B4541A; --jd-chart-4: #8A3F86; --jd-chart-5: #3A3F44;
+  --jd-flow-bg: #FAFBF2 radial-gradient(rgba(52, 98, 26, .16) 1px, transparent 1.2px) 0 0 / 22px 22px;
+  --jd-flow-inset: inset 0 0 0 1px rgba(60, 90, 30, .10), inset 0 0 70px rgba(150, 189, 69, .10);
+  --jd-flow-node: #FFFFFD; --jd-flow-node-stroke: #4F8A22; --jd-flow-edge: #4B5843; --jd-select: #A3601A;
+  --jd-sidecar-bg: rgba(250, 251, 242, .82);
+  --jd-sidecar-inset: rgba(232, 238, 214, .6);
+  --jd-sidecar-field: #FFFFFD;
+  --jd-rail-bg: rgba(247, 249, 238, .72);
+  --jd-rail-border: rgba(74, 104, 36, .14);
+  --jd-rail-sheen: linear-gradient(180deg, rgba(255, 255, 255, .75), rgba(255, 255, 255, 0) 38%, rgba(185, 221, 114, .12) 100%);
+  --jd-rail-text: #15230F;
+  --jd-rail-text-2: #45553D;
+  --jd-glass-filter: blur(20px) saturate(135%);
+  --jd-shadow-panel: inset 0 1px 0 rgba(255, 255, 255, .95), inset 0 -1px 0 rgba(84, 120, 40, .06), 0 1px 2px rgba(34, 60, 12, .06), 0 26px 54px -30px rgba(40, 80, 12, .34);
+  --jd-shadow-float: inset 0 1px 0 rgba(255, 255, 255, .95), 0 1px 2px rgba(34, 60, 12, .06), 0 34px 70px -36px rgba(40, 80, 12, .42);
+  --jd-viewport-frame: rgba(60, 90, 30, .22);
+  --jd-viewport-shadow: 0 0 0 6px rgba(141, 185, 67, .10), 0 26px 60px -30px rgba(40, 80, 12, .45);
+  --jd-emblem: url("/brand-198b/emblem-detailed.svg");
+  --jd-emblem-halo: radial-gradient(closest-side, rgba(141, 185, 67, .34), rgba(141, 185, 67, .12) 55%, rgba(141, 185, 67, 0) 100%);
+  --jd-emblem-filter: drop-shadow(0 6px 10px rgba(28, 72, 10, .28));
+  --jd-wordmark-color: #12300A;
+  /* daylight: warm sun high-left, sage canopy bloom low-right, a leaf-shade patch mid-field */
+  --jd-field-light:
+    radial-gradient(60% 55% at 10% -8%, rgba(255, 250, 222, .95), transparent 70%),
+    radial-gradient(55% 60% at 100% 105%, rgba(141, 185, 67, .40), transparent 70%),
+    radial-gradient(30% 45% at -4% 70%, rgba(150, 189, 69, .22), transparent 75%),
+    radial-gradient(38% 40% at 62% 38%, rgba(196, 218, 150, .30), transparent 80%);
+  --jd-hero-bloom: rgba(255, 252, 230, .85);
+  --jd-workspace-bloom: rgba(185, 221, 114, .16);
+  --jd-sidecar-bloom: rgba(185, 221, 114, .22);
+  /* dappled canopy shade + fine paper/spore grain, both a few percent at most */
+  --jd-texture:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='p' x='0' y='0' width='100%25' height='100%25' filterUnits='userSpaceOnUse'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.75333' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .3 0 0 0 0 .36 0 0 0 0 .16 0 0 0 1 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23p)' opacity='.035'/%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='900' height='900'%3E%3Cfilter id='d' x='0' y='0' width='100%25' height='100%25' filterUnits='userSpaceOnUse'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.0044444 .0066667' numOctaves='2' seed='21' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .42 0 0 0 0 .6 0 0 0 0 .16 0 0 0 3.2 -1.45'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23d)' opacity='.11'/%3E%3C/svg%3E");
+  --jd-canvas-base: linear-gradient(165deg, #F6F5E6 0%, #ECF0DB 45%, #DDE8C6 100%);
+  --jd-status-rim: inset 0 0 0 1px rgba(40, 60, 20, .06);
+}
+
+/* ===================== Shared Lumen v2 composition ===================== */
+:root[data-jarvis-family="lumen2"] {
+  --jd-radius-panel: 28px; --jd-radius-viewport: 24px; --jd-radius-control: 14px; --jd-radius-button: 999px; --jd-radius-item: 18px;
+  --jd-font-ui: "Inter", "Instrument Sans", system-ui, sans-serif;
+  --jd-font-display: "Inter Display", "Inter", system-ui, sans-serif;
+  --jd-font-wordmark: "J198 Bricolage", "Inter", sans-serif;
+  --jd-display-weight: 300; --jd-display-tracking: -.035em; --jd-h1-size: 46px;
+  --jd-section-weight: 500; --jd-h2-size: 20px;
+  /* brand: +1px wordmark and a heavier stroke; emblem box carries a soft halo (see .shell-rail__identity::before) */
+  --jd-wordmark-size: 14px; --jd-wordmark-weight: 650; --jd-wordmark-tracking: .32em;
+  --jd-emblem-size: 92px;
+}
+
+/* Field: base tone + light sources + texture. */
+[data-jarvis-family="lumen2"] .application-shell--final {
+  --shell-rail-width: 146px;
+  background: var(--jd-texture), var(--jd-field-light), var(--jd-canvas-base);
+}
+/* Navigation: the detached glass capsule carrying the emblem (unchanged Lumen shape). */
+[data-jarvis-family="lumen2"] .application-shell--final .shell-rail {
+  margin: 14px 0 14px 14px; height: calc(100vh - 28px); padding: 20px 10px 16px; gap: 24px;
+  border-radius: 32px; border: 1px solid var(--jd-rail-border);
+  background: var(--jd-rail-sheen), var(--jd-rail-bg);
+  -webkit-backdrop-filter: var(--jd-glass-filter); backdrop-filter: var(--jd-glass-filter);
+  box-shadow: var(--jd-shadow-float);
+}
+[data-jarvis-family="lumen2"] .application-shell--final .shell-rail__identity { flex-direction: column; gap: 6px; padding: 0 0 16px; border-bottom: 1px solid var(--jd-rule); }
+/* Emblem: Rhizome's lesson (more presence) at Lumen scale — ~20 % larger mark than round 1, sitting in a soft lit halo. */
+[data-jarvis-family="lumen2"] .application-shell--final .shell-rail__identity::before {
+  background: var(--jd-emblem) center / 80% no-repeat, var(--jd-emblem-halo);
+  filter: var(--jd-emblem-filter);
+}
+[data-jarvis-family="lumen2"] .application-shell--final .shell-rail__identity strong::after { color: var(--jd-wordmark-color); }
+[data-jarvis-family="lumen2"] .application-shell--final .shell-rail__links { gap: 6px; }
+[data-jarvis-family="lumen2"] .application-shell--final .shell-nav-link {
+  min-height: 40px; padding: 9px 14px; border-radius: 999px; border: 1px solid transparent; font-size: 13px; background: transparent;
+}
+[data-jarvis-family="lumen2"] .application-shell--final .shell-nav-link:hover { background: var(--jd-nav-hover); border-color: transparent; }
+[data-jarvis-family="lumen2"] .application-shell--final .shell-nav-link[aria-current="page"] {
+  background: var(--jd-nav-active); border-color: var(--jd-nav-active-border);
+  box-shadow: inset 3px 0 0 var(--jd-vein), var(--jd-nav-active-glow);
+}
+/* one authored light moment behind the hero title */
+[data-jarvis-family="lumen2"] .application-shell--final .shell-main {
+  padding: 24px 22px 20px 26px;
+  background: radial-gradient(560px 260px at 260px 110px, var(--jd-hero-bloom), transparent 100%) no-repeat;
+}
+
+/* Hero header: large light display type floating on the field. */
+[data-jarvis-family="lumen2"] .application-shell--final :is(.design-stage__header, .studio-header, .bluecad-final-stage__header) { border: 0; background: none; padding-bottom: 6px; }
+[data-jarvis-family="lumen2"] .application-shell--final .studio-header { align-items: flex-end; margin-bottom: 8px; }
+[data-jarvis-family="lumen2"] .application-shell--final .studio-header h1 { --jd-h1-size: 60px; margin-top: 6px; }
+[data-jarvis-family="lumen2"] .application-shell--final .studio-header .panel-subtitle { font-size: 15px !important; color: var(--jd-hero-sub); max-width: 46ch; }
+[data-jarvis-family="lumen2"] .application-shell--final .studio-header .design-stage__title-row > button { margin-top: 14px; }
+
+/* Glass islands: top-lit gradient body instead of one flat translucent tone. */
+[data-jarvis-family="lumen2"] .application-shell--final :is(.studio-library, .studio-workspace) { background: var(--jd-panel-fill); padding: 20px 18px; }
+[data-jarvis-family="lumen2"] .application-shell--final .studio-layout { gap: 18px; grid-template-columns: minmax(14rem, 17rem) minmax(0, 1fr); }
+[data-jarvis-family="lumen2"] .application-shell--final .studio-workspace {
+  background: radial-gradient(70% 90% at 100% 0%, var(--jd-workspace-bloom), transparent 60%), var(--jd-panel-fill);
+}
+[data-jarvis-family="lumen2"] .application-shell--final :is(.studio-library > button, .studio-library article > button:first-child) {
+  background: var(--jd-item-fill) !important; box-shadow: var(--jd-status-rim);
+}
+/* Status bands sit in the glass as tinted, rimmed pills of their own semantic colour. */
+[data-jarvis-family="lumen2"] .application-shell--final :is(.studio-notice, .studio-warning, .studio-error) { border-radius: 14px; box-shadow: var(--jd-status-rim); padding: 8px 14px; }
+
+/* Process / BLUECAD: canvas and viewport as islands; Jarvis as a floating island with a living-light rim. */
+[data-jarvis-family="lumen2"] .application-shell--final .draft-canvas { border-radius: 26px; box-shadow: var(--jd-flow-inset); }
+/* palette entries can wrap to two lines: a soft rounded tile reads better than a stretched pill */
+[data-jarvis-family="lumen2"] .application-shell--final .draft-palette button { border-radius: 14px !important; background: var(--jd-item-fill) !important; line-height: 1.25; }
+[data-jarvis-family="lumen2"] .application-shell--final :is(.shell-sidecar, .shell-navigator) { margin: 14px 14px 14px 4px; height: calc(100vh - 28px); max-height: calc(100vh - 28px); padding: 16px; }
+[data-jarvis-family="lumen2"] .application-shell--final .shell-navigator { margin: 14px 4px 14px 14px; background: var(--jd-panel-fill); }
+[data-jarvis-family="lumen2"] .application-shell--final .shell-sidecar {
+  background: radial-gradient(90% 40% at 50% 0%, var(--jd-sidecar-bloom), transparent 70%), var(--jd-sidecar-bg);
+}
+/* BLUECAD navigator: give the stacked form room to breathe (round 1 had labels touching controls) */
+[data-jarvis-family="lumen2"] .application-shell--final .shell-navigator :is(label, input, select, textarea, button) { margin-block: 2px; }
+[data-jarvis-family="lumen2"] .application-shell--final .shell-navigator p { margin-top: 10px; }
+[data-jarvis-family="lumen2"] .application-shell--final .bluecad-viewer-frame { position: relative; }
+/* Charts: plot area gets the same soft island radius and a faint top light, the series themselves stay unaltered. */
+[data-jarvis-family="lumen2"] .application-shell--final .studio-chart svg { border-radius: 16px; box-shadow: var(--jd-status-rim); }
+/* Process readiness/run chips hard-code light danger colours in component CSS; give them the dark danger tint here.
+ * (Implementation note: these should move to --color-status-danger-* tokens; see the v2 rationale.) */
+[data-jarvis-theme="lumen2-dark"] .application-shell--final :is(.draft-readiness.has-blockers, .run-state--blocked, .run-state--failed) {
+  background: var(--color-status-danger-bg); color: var(--color-status-danger-text); border-color: rgba(255, 140, 125, .45);
+}

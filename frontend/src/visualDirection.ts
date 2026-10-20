@@ -1,9 +1,10 @@
 // Issue #834 / spec 198 visual-direction exploration hook (round 2) (prototype, not authorized for merge).
 // Purely presentational: sets data-jarvis-theme on <html>; no engineering state, API, routing or data is touched.
 // Default (no param, nothing stored) leaves the attribute absent, so the current UI is unchanged.
-// Select with ?direction=lumen|herbarium|rhizome; ?direction=current clears the stored choice.
+// Select with ?direction=lumen2-dark|lumen2-light (Lumen v2, focused iteration) or the round-1 references
+// lumen|herbarium|rhizome; ?direction=current clears the stored choice. Lumen v2 modes also set data-jarvis-family.
 
-export const VISUAL_DIRECTIONS = ["lumen", "herbarium", "rhizome"] as const;
+export const VISUAL_DIRECTIONS = ["lumen2-dark", "lumen2-light", "lumen", "herbarium", "rhizome"] as const;
 export type VisualDirection = (typeof VISUAL_DIRECTIONS)[number];
 export const VISUAL_DIRECTION_STORAGE_KEY = "jarvisos:visual-direction:v198b";
 
@@ -44,7 +45,10 @@ export function applyVisualDirection(): VisualDirection | null {
   }
   const candidate = requested !== null ? requested : stored;
   const direction = isVisualDirection(candidate) ? candidate : null;
-  if (direction) document.documentElement.dataset.jarvisTheme = direction;
-  else delete document.documentElement.dataset.jarvisTheme;
+  const root = document.documentElement;
+  if (direction) root.dataset.jarvisTheme = direction;
+  else delete root.dataset.jarvisTheme;
+  if (direction?.startsWith("lumen2-")) root.dataset.jarvisFamily = "lumen2";
+  else delete root.dataset.jarvisFamily;
   return direction;
 }
