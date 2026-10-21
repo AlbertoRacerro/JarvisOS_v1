@@ -2604,6 +2604,7 @@ class Supervisor:
             self.state["spend_caps"].pop(failed_agent, None)
             self.state["waiting_since"] = None
             if task is None and self.mission is not None:
+                self._reopen_legacy()
                 self._reverify_released()
                 task = self._mission_task()
                 if task is None:
@@ -3279,6 +3280,16 @@ class Supervisor:
         self.record("finding", f"relay-continuity: mission {self.mission['id']} task {index + 1}/{rec['total']} "
                                f"{outcome} ({check['kind'] if check else 'no check'}) after {agent} in {session_id}.")
         self.host.log(f"mission {self.mission['id']}: task {index + 1}/{rec['total']} {outcome}")
+
+    def _reopen_legacy(self) -> None:
+        """The spec 204 migration, also after a restart settled a pending attempt (which `serve_step` defers it for):
+        no task is chosen and no mission completes while a pre-204 completion is still counted."""
+        if not self.state.get("pending") and (reopened := reopen_unverified(self.state)):
+            assert self.mission is not None
+            self.save()
+            self.store.journal({"event": "mission_reopened", "at": iso(self.host.now()), "mission": self.mission["id"],
+                                "tasks": reopened, "why": "counted complete before spec 204 on a provider return alone"})
+            self.host.log(f"mission {self.mission['id']}: reopened unverified task(s) {', '.join(str(t + 1) for t in reopened)}")
 
     def _reverify_released(self) -> None:
         """After a release, a task whose last attempt already claimed it finished is re-checked before any relaunch:

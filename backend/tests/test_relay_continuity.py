@@ -2827,7 +2827,8 @@ def test_mission_restart_adopts_running_attempt_and_continues_remaining_tasks(tm
     state.update({"phase": "running", "head_session": HEAD, "chain": [HEAD], "agent": "codex", "permissions_digest": "perm0",
                   "permissions_pinned": True,
                   "mission": {"id": mission["id"], "next": 1, "total": 2,
-                              "done": [{"task": 0, "session": HEAD, "agent": "claude", "at": rc.iso(T0)}]},
+                              "done": [{"task": 0, "session": HEAD, "agent": "claude", "at": rc.iso(T0),
+                                        "outcome": "verified"}]},
                   "pending": {"nonce": nonce, "agent": "codex", "parent": HEAD, "started_at": rc.iso(T0), "pid": 4242,
                               "pid_start": 42, "fingerprint": "fp0", "attempt": 1, "task": 1}})
     env.store.save(state, T0)
@@ -3600,3 +3601,28 @@ def test_204_submit_refuses_coordinator_cycle_contracts(tmp_path: Path, monkeypa
     spec.write_text(json.dumps({"authority": DIRECTIVE, "tasks": [{"text": "x", "check": {"kind": "spec_merged", "spec": "204"}}]}))
     assert rc.main(["submit", "--mission-file", str(spec)]) == 0
     assert len(rc.load_missions(road.root)) == 1
+
+
+def test_204_legacy_completion_is_reopened_after_a_pending_final_task_settles(tmp_path: Path) -> None:
+    env = Env(tmp_path, [("claude", SUCCESS, "continue")])
+    root = tmp_path / "control"
+    mission = mission_def("first", "second", checks={0: None}, mid="m-20261018T070000Z-aaaaaa")
+    _write_mission(root, mission)
+    nonce = "rc-20261018T080000Z-0badf00d"
+    store = rc.mission_store(root, mission["id"])
+    state = rc.default_state()
+    state.update({"phase": "stopped", "head_session": HEAD, "chain": [HEAD], "permissions_digest": "perm0",
+                  "permissions_pinned": True,
+                  "mission": {"id": mission["id"], "next": 1, "total": 2, "done": [legacy_done(0, HEAD)]},
+                  "pending": {"nonce": nonce, "agent": "claude", "parent": HEAD, "started_at": rc.iso(T0), "pid": None,
+                              "pid_start": None, "fingerprint": "fp0", "attempt": 1, "task": 1}})
+    store.save(state, T0)
+    store.journal({"event": "launch", "nonce": nonce})
+    write_turn(env.relay.sessions_dir() / "20261018-080100-cccccc", SUCCESS,
+               prompt=relay_prompt(f"[relay-continuity attempt {nonce}]"))
+    env.limits = rc.Limits(max_attempts_per_run=1)
+    factory = lambda s, m: rc.Supervisor(s, env.host, env.limits)  # noqa: E731
+    assert rc.serve_step(root, factory, conflicts=lambda: [], now=env.clock.now) == f"ran:{mission['id']}:held"
+    rec = store.load()["mission"]
+    assert "completed_at" not in rec and rec["next"] == 0 and "mission_completed" not in journal_events(store)
+    assert "mission_reopened" in journal_events(store) and "first" in env.relay.launches[0]["task"]
