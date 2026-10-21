@@ -107,7 +107,7 @@ Probes ran in scratch repositories under `~/jarvis-control/work/evidence/201-san
 
 ### Host lifecycle
 
-The `systemd --user` manager is running. Without lingering, though, user units stop when the last login session ends. The owner unit uses `KillMode=process`, so stopping or restarting the service never kills a running provider turn. The restarted supervisor adopts that turn through its pending-attempt record and waits for it. Linger is enabled only once it is demonstrated to be needed for running without a login session.
+The `systemd --user` manager is running. Without lingering, though, user units stop when the last login session ends. The owner unit uses `KillMode=process`. That does not keep a provider turn alive across a restart, because the owner runs inside `jarvis-sandbox`'s `bwrap --unshare-pid --die-with-parent` and stopping the main process tears down the namespace (host acceptance, defect B). The restarted supervisor settles the killed attempt as `crash` from its pending-attempt record and reconciles it before any relaunch. Linger is enabled only once it is demonstrated to be needed for running without a login session.
 
 ## Implementation evidence (2026-10-20, isolated workstation runs)
 
@@ -122,4 +122,20 @@ Real provider processes ran inside `jarvis-sandbox` against a no-remote copy of 
 
 - **Cross-instance exclusion.** Each `jarvis-sandbox` instance unshares the PID namespace, so the owner's process-table scan could not see a REPL in another instance. `relay` now holds a shared coordinator lease (flock) for the lifetime of every coordinator invocation, and the owner waits while that lease is held. A lease taken in a nested PID namespace was seen from outside it and released on exit. The owner also pins the sandbox's `gh` login and git credential helper, which a session launched without them could not use.
 
-Still to prove on the host: the `systemd --user` owner and its restart (installation is a host step, because the sandbox hides the user bus and host `~/.config`), and pushing, PR and merge through the scoped GitHub token, which is not yet mounted in the sandbox.
+Pushing and PRs through the sandbox's scoped GitHub login were exercised during delivery of #850 and #851.
+
+## Host acceptance (2026-10-21, installed owner)
+
+Directive `L20261021092436-545c`, source `b42e539e`. Evidence: `~/jarvis-control/work/evidence/201-host/RESULT.md`. The coordinator ran inside `jarvis-sandbox`, which hides the user bus, so the unit was verified through its locks and durable state, not through `systemctl`/`journalctl`.
+
+- **Installed owner.** `jarvisos-mission-owner` holds `serve.lock` and re-takes `supervisor.lock` every ~60 s (`serve --interval 60`). `missions` reports `owner_serving: true`.
+- **Installed lease, production.** The interactive Relay REPL running this session held `.agent-relay/locks/coordinator.lease` in shared mode. Mission `m-20261021T093535Z-5613b2` (the staged one-task proof) was submitted to the production control root. At its next poll the owner recorded `waiting` and launched nothing: no mission state, no session. It runs once that REPL exits. That later run was not observed in this acceptance.
+- **Isolated mission, unit process model.** No-remote clone and a separate control root. The owner ran under `bwrap --unshare-pid --die-with-parent` with cwd in the checkout, as the unit runs it. Mission `m-20261021T092523Z-3e9ff2` has two tasks.
+  - A real interactive `relay` REPL in the clone kept the owner at `waiting:…:repl_active`.
+  - After `/exit` the owner advanced: Claude (`bypassPermissions`) completed task 1, the path check passed, and task 2 launched. One release was needed first (defect A).
+  - The owner's main process got SIGTERM during task 2's `sleep 150`, as `systemctl restart` sends it. The whole namespace, including the turn, died (defect B). The replacement settled the attempt as `crash`. A third owner, run as a plain process with no namespace init in the checkout, ran one read-only Codex diagnosis (`sleep &=completed`), relaunched task 2 once, and completed the mission.
+  - Task 1 was never relaunched. Its file keeps the same sha256 and mtime across the restart.
+- **Defect A, open.** `_ancestors()` stops before PID 1, so the owner does not exclude its own sandbox's `bwrap` init, whose cwd is the checkout. When that init started inside a mission's work window, the owner waits on itself, then holds `live_work` after `reconcile_wait` (3 h). That happens when the unit (re)starts after a mission was submitted or its chain began. A long-running owner taking missions submitted later is unaffected.
+- **Defect B, open.** A unit stop or restart kills the running provider turn (see Host lifecycle). Recovery is safe: a settled `crash`, then reconciliation. To restart quiescently, run `relay_continuity.py stop` and let the owner exit at a task boundary. Then remove `STOP` and start the unit (runbook).
+
+Still to prove: the production mission's run after the REPL releases the lease, fixes for defects A and B, and WSL start after a Windows reboot.
