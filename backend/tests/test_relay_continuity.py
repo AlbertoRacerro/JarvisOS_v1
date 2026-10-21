@@ -3184,9 +3184,11 @@ class Roadmap:
     def step(self) -> str | None:
         self.minute += 1
         return rc.roadmap_step(self.root, self.repo, fingerprint=self.fingerprint,
-                               submit=lambda a, t: rc.submit_mission(self.root, self.repo, a, t,
-                                                                     now=T0 + timedelta(minutes=self.minute)),
-                               now=lambda: T0)
+                               submit=self.submit, now=lambda: T0 + timedelta(minutes=self.minute))
+
+    def submit(self, authority: str, tasks: list[dict[str, Any]], mission_id: str) -> Any:
+        return rc.submit_mission(self.root, self.repo, authority, tasks, mission_id=mission_id,
+                                 now=T0 + timedelta(minutes=self.minute))
 
     def finish(self, mission_id: str, *, relay_status: str = "propose_done", cancelled: bool = False) -> None:
         session = f"20261018-0800{self.minute:02d}-cccccc"
@@ -3289,3 +3291,53 @@ def test_owner_ignores_its_own_sandbox_init_in_the_checkout(tmp_path: Path) -> N
     add_proc(proc, 2, argv=["python3", "scripts/relay_continuity.py", "serve"], cwd=repo, started=T0, ppid=1)
     add_proc(proc, 3, argv=["python", "-m", "pytest"], cwd=repo, started=T0, ppid=1)
     assert [w.label for w in rc.live_processes([repo], T0, {2}, proc_root=proc)] == ["process python"]
+
+
+def test_roadmap_stop_is_never_overwritten_by_a_concurrent_owner_step(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    road = Roadmap(tmp_path, monkeypatch, "r0", "r1")
+    rc.main(["roadmap", "start", "--authority", DIRECTIVE])
+    road.finish(road.step().split(":")[2])
+    monkeypatch.setattr(rc, "ROADMAP_LOCK_WAIT", 0.0)
+    stops: list[int] = []
+
+    def slow_remote() -> str:  # the maintainer stops while the owner is reading the remote heads
+        stops.append(rc.main(["roadmap", "stop", "--note", "stop now"]))
+        return "r1"
+    road.fingerprint = slow_remote  # type: ignore[method-assign]
+    assert road.step().startswith("roadmap:submitted:") and stops == [3]  # refused while the step held the lock
+    assert rc.main(["roadmap", "stop", "--note", "stop now"]) == 0
+    assert road.step() == "roadmap:paused:maintainer_stop"
+    lock = rc.roadmap_lock(road.root)
+    assert lock is not None
+    try:
+        assert road.step() == "roadmap:waiting:busy"  # and a held lock never lets the owner write around a stop
+    finally:
+        lock.release()
+
+
+def test_roadmap_cycle_identity_survives_a_crash_around_submission(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    road = Roadmap(tmp_path, monkeypatch, "r0")
+    rc.main(["roadmap", "start", "--authority", DIRECTIVE])
+    real = road.submit
+
+    def crash_before_queueing(authority: str, tasks: list[dict[str, Any]], mission_id: str) -> Any:
+        raise OSError("killed before the mission file was written")
+    road.submit = crash_before_queueing  # type: ignore[method-assign]
+    with pytest.raises(OSError):
+        road.step()
+    recorded = rc.load_roadmap(road.root)["last_mission"]
+    assert not rc.load_missions(road.root)
+
+    def crash_after_queueing(authority: str, tasks: list[dict[str, Any]], mission_id: str) -> Any:
+        real(authority, tasks, mission_id)
+        raise OSError("killed during the ledger note")
+    road.submit = crash_after_queueing  # type: ignore[method-assign]
+    with pytest.raises(OSError):
+        road.step()  # the recorded cycle is queued under its own id, not a new one
+    [(mission, mid, _)] = rc.load_missions(road.root)
+    assert mid == recorded and "cycle 1" in mission["tasks"][0]["text"]
+    road.submit = real  # type: ignore[method-assign]
+    road.finish(mid, relay_status="blocked")
+    assert road.step() == "roadmap:paused:coordinator_blocked"  # the crashed-around cycle is still judged
+    assert len(rc.load_missions(road.root)) == 1

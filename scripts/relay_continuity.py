@@ -3608,6 +3608,7 @@ def serve_step(root: Path, factory: Callable[[Store, dict[str, Any]], Supervisor
 # Roadmap continuation (spec 203): the owner keeps one coordinator cycle queued; the turn chooses the work
 
 ROADMAP_NO_PROGRESS = 3  # consecutive completed cycles with unchanged remote branch heads
+ROADMAP_LOCK_WAIT = 120.0  # seconds `roadmap start|stop` waits for an owner step (bounded by its ls-remote)
 ROADMAP_TASK = (
     "Roadmap continuation cycle {cycle}. Run the Generic Frontier Builder Contract "
     "(docs/AGENT_EXECUTION_AND_AUTOMATION_PROTOCOL.md section 1) for this repository. Fresh GitHub state and "
@@ -3652,12 +3653,35 @@ def final_relay_status(repo: Path, session: str | None) -> str | None:
         return None
 
 
+def roadmap_lock(root: Path, wait: float = 0.0) -> Lock | None:
+    """Serializes every read-modify-write of roadmap.json (owner step, start, stop). None: still busy after `wait`."""
+    lock = Lock(root / "roadmap.lock")
+    deadline = time.monotonic() + wait
+    while not lock.acquire():
+        if time.monotonic() >= deadline:
+            return None
+        time.sleep(0.5)
+    return lock
+
+
 def roadmap_step(root: Path, repo: Path, *, fingerprint: Callable[[], str | None],
-                 submit: Callable[[str, list[dict[str, Any]]], tuple[dict[str, Any] | None, str | None]],
+                 submit: Callable[[str, list[dict[str, Any]], str], tuple[dict[str, Any] | None, str | None]],
                  now: Callable[[], datetime] = now_utc) -> str | None:
     """Called only when every mission is complete or cancelled. Settles the last cycle once, then submits the next
     or pauses. None: roadmap mode is off. Otherwise `roadmap:submitted:<id>`, `roadmap:paused:<reason>`,
     `roadmap:waiting:<why>` or `roadmap:corrupt`."""
+    lock = roadmap_lock(root)
+    if lock is None:
+        return "roadmap:waiting:busy"  # a `roadmap start|stop` is changing it
+    try:
+        return _roadmap_step(root, repo, fingerprint=fingerprint, submit=submit, now=now)
+    finally:
+        lock.release()
+
+
+def _roadmap_step(root: Path, repo: Path, *, fingerprint: Callable[[], str | None],
+                  submit: Callable[[str, list[dict[str, Any]], str], tuple[dict[str, Any] | None, str | None]],
+                  now: Callable[[], datetime]) -> str | None:
     road = load_roadmap(root)
     if road is not None and road.get("corrupt"):
         return "roadmap:corrupt"  # never read as "off": nothing is submitted until it is inspected
@@ -3673,7 +3697,19 @@ def roadmap_step(root: Path, repo: Path, *, fingerprint: Callable[[], str | None
                                 "mission": road.get("last_mission")})
         return f"roadmap:paused:{reason}"
 
+    def queue(mission_id: str) -> str:
+        # The cycle's id is recorded before its mission exists, so a crash in between cannot orphan a cycle: a
+        # recorded id without a mission file is submitted again under the same id.
+        mission, problem = submit(road["authority"], [{"text": ROADMAP_TASK.format(cycle=road["cycle"])}], mission_id)
+        if mission is None:
+            return f"roadmap:waiting:refused ({problem})"
+        missions_journal(root, {"event": "roadmap_cycle_submitted", "at": iso(now()), "cycle": road["cycle"],
+                                "mission": mission_id, "authority": road["authority"]})
+        return f"roadmap:submitted:{mission_id}"
+
     last = road.get("last_mission")
+    if last and not (missions_dir(root) / f"{last}.json").exists():
+        return queue(last)
     if last and road.get("settled") != last:
         status, state = mission_status(mission_store(root, last))
         if status not in ("complete", "cancelled"):
@@ -3685,26 +3721,18 @@ def roadmap_step(root: Path, repo: Path, *, fingerprint: Callable[[], str | None
             return pause("coordinator_blocked")
         current = fingerprint()
         if current is None:
-            road["settled"] = None
-            return "roadmap:waiting:remote_unreadable"
+            return "roadmap:waiting:remote_unreadable"  # nothing written: this cycle is settled again later
         road["no_progress"] = road.get("no_progress", 0) + 1 if current == road.get("fingerprint") else 0
         road["fingerprint"] = current
         if road["no_progress"] >= ROADMAP_NO_PROGRESS:
             return pause("no_progress")
-        write_json_atomic(roadmap_path(root), road)
     if road.get("fingerprint") is None:
         if (current := fingerprint()) is None:
             return "roadmap:waiting:remote_unreadable"
         road["fingerprint"] = current
-    cycle = road.get("cycle", 0) + 1
-    mission, problem = submit(road["authority"], [{"text": ROADMAP_TASK.format(cycle=cycle)}])
-    if mission is None:
-        return f"roadmap:waiting:refused ({problem})"
-    road.update(cycle=cycle, last_mission=mission["id"])
+    road.update(cycle=road.get("cycle", 0) + 1, last_mission=new_mission_id(now()))
     write_json_atomic(roadmap_path(root), road)
-    missions_journal(root, {"event": "roadmap_cycle_submitted", "at": iso(now()), "cycle": cycle,
-                            "mission": mission["id"], "authority": road["authority"]})
-    return f"roadmap:submitted:{mission['id']}"
+    return queue(road["last_mission"])
 
 
 def sandbox_provider_env(home: Path) -> dict[str, str]:
@@ -3785,7 +3813,8 @@ def command_serve(args: argparse.Namespace) -> int:
             outcome = serve_step(root, factory, conflicts=lambda: live_conflicts(repo, {os.getpid()}), log=log)
             if outcome == "empty":
                 outcome = roadmap_step(root, repo, fingerprint=lambda: remote_fingerprint(repo),
-                                       submit=lambda authority, tasks: submit_mission(root, repo, authority, tasks),
+                                       submit=lambda authority, tasks, mid: submit_mission(root, repo, authority, tasks,
+                                                                                           mission_id=mid),
                                        ) or outcome
             if outcome != previous:
                 log(f"owner: {outcome}")
@@ -3825,11 +3854,15 @@ def command_serve(args: argparse.Namespace) -> int:
         owner.release()
 
 
+def new_mission_id(now: datetime) -> str:
+    return f"m-{now.strftime('%Y%m%dT%H%M%SZ')}-{secrets.token_hex(3)}"
+
+
 def submit_mission(root: Path, repo: Path, authority: Any, tasks: Any, *, session: str | None = None,
-                   now: datetime | None = None) -> tuple[dict[str, Any] | None, str | None]:
+                   now: datetime | None = None, mission_id: str | None = None) -> tuple[dict[str, Any] | None, str | None]:
     """Validate and durably queue a mission before any owner can see it. (mission, None) or (None, problem)."""
     now = now or now_utc()
-    mission = {"schema": MISSION_SCHEMA, "id": f"m-{now.strftime('%Y%m%dT%H%M%SZ')}-{secrets.token_hex(3)}",
+    mission = {"schema": MISSION_SCHEMA, "id": mission_id or new_mission_id(now),
                "authority": authority, "tasks": tasks, "submitted_at": iso(now), "session": session, "repo": str(repo)}
     if problem := validate_mission(mission):
         return None, problem
@@ -3907,10 +3940,21 @@ def command_roadmap(args: argparse.Namespace) -> int:
     """Roadmap mode (spec 203): `start` under a recorded directive, `stop` pauses it, `status` shows it. A running
     cycle is never interrupted; use `stop` (the owner's) for that."""
     root = control_root()
-    road = load_roadmap(root)
     if args.action == "status":
-        print(json.dumps(road, indent=1))
+        print(json.dumps(load_roadmap(root), indent=1))
         return 0
+    lock = roadmap_lock(root, wait=ROADMAP_LOCK_WAIT)
+    if lock is None:
+        print("the owner is updating roadmap mode; try again", file=sys.stderr)
+        return 3
+    try:
+        return _command_roadmap(args, root)
+    finally:
+        lock.release()
+
+
+def _command_roadmap(args: argparse.Namespace, root: Path) -> int:
+    road = load_roadmap(root)
     if road and road.get("corrupt"):
         print(f"{roadmap_path(root)} is unreadable; inspect it before changing roadmap mode", file=sys.stderr)
         return 2
