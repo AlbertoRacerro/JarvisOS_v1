@@ -6,6 +6,8 @@ invokes its headless runner. It adds what Relay does not do reliably: determinis
 of a turn from raw evidence, a side-effect gate that refuses automatic continuation when an
 interrupted turn may have left a non-idempotent operation in an unknown state, durable retry and
 cooldown policy between Claude (preferred) and Codex (fallback), and sanitized outbound notices.
+Spec 201 adds durable missions: `submit` queues an ordered list of maintainer-authorized tasks and
+`serve` is their single persistent owner, advancing a task only on a deterministic successful turn.
 
 Standard library only. Never modifies the repository, Relay's configuration, permissions or
 session journals. Durable state lives under ~/jarvis-control/work/continuity/.
@@ -23,6 +25,7 @@ import secrets
 import shlex
 import shutil
 import signal
+import socket
 import subprocess
 import sys
 import time
@@ -57,11 +60,17 @@ HOLD_REASONS = (
     "crash_repeated", "circuit_failures", "circuit_switches", "circuit_attempts", "circuit_transient",
     "no_provider_available", "wait_exceeded", "permissions_changed", "state_corrupt", "repl_active",
     "relay_invocation_failed", "live_work", "reconcile_unresolved", "reconcile_insufficient_permissions",
-    "reconcile_failed", "reconcile_no_sandbox",
+    "reconcile_failed", "reconcile_no_sandbox", "task_check_failed",
 )
 STOP_REASONS = ("stop_requested", "signal", "idle", "held", "legacy_autopilot", "lock_busy", "error")
 DEFAULT_CONTROL = Path.home() / "jarvis-control" / "work" / "continuity"
 WEBHOOK_FILE = Path.home() / ".config" / "jarvis" / "slack_webhook_url"
+MISSION_SCHEMA = "relay-mission.v1"
+MISSION_ID_RE = re.compile(r"m-\d{8}T\d{6}Z-[0-9a-f]{6}")
+DIRECTIVE_ID_RE = re.compile(r"L\d{14}-[0-9a-f]{4}")
+MAX_TASKS = 20
+MAX_TASK_CHARS = 8000
+SANDBOX_HOSTNAME = "jarvis-sandbox"
 LEGACY_MARKERS = ("jarvis-control/autopilot/run.sh", "jarvis-control/autopilot/watchdog.sh",
                   "jarvis-control/autopilot/resume-after-reset.sh", "jarvis-control/autopilot/drain-guard.sh")
 
@@ -1157,6 +1166,12 @@ def validate_state(data: dict[str, Any]) -> str | None:
         return "bad diagnostic attempt"
     if not isinstance(data.get("diagnostics", []), list):
         return "bad type for diagnostics"
+    # Optional (spec 201): present only in a mission's own store.
+    mission = data.get("mission")
+    if mission is not None and (not isinstance(mission, dict) or not isinstance(mission.get("id"), str)
+                                or not isinstance(mission.get("next"), int) or not isinstance(mission.get("total"), int)
+                                or not 0 <= mission["next"] <= mission["total"] or not isinstance(mission.get("done"), list)):
+        return "bad mission record"
     return None
 
 
@@ -1270,7 +1285,7 @@ FIELD_RULES: dict[str, Callable[[str], bool]] = {
     "action": lambda v: v in ("switch", "retry", "wait", "hold", "idle", "notify"),
     "reason": lambda v: v in HOLD_REASONS + STOP_REASONS,
     "reset_at": lambda v: v in ("none", "manual") or bool(re.fullmatch(ISO_RE, v)),
-    "next_check_at": lambda v: bool(re.fullmatch(ISO_RE, v)),
+    "next_check_at": lambda v: v == "none" or bool(re.fullmatch(ISO_RE, v)),
     "claude_until": lambda v: v in ("none", "manual") or bool(re.fullmatch(ISO_RE, v)),
     "codex_until": lambda v: v in ("none", "manual") or bool(re.fullmatch(ISO_RE, v)),
     "reset_source": lambda v: v in ("limits", "message", "estimate", "manual"),
@@ -1280,8 +1295,11 @@ FIELD_RULES: dict[str, Callable[[str], bool]] = {
     "sha": lambda v: bool(re.fullmatch(r"[0-9a-f]{7,40}", v)),
     "pr": lambda v: v == "none" or bool(re.fullmatch(r"\d{1,6}", v)),
     "phase": lambda v: v in PHASES,
+    "mission": lambda v: bool(MISSION_ID_RE.fullmatch(v)),
+    "task": lambda v: bool(re.fullmatch(r"\d{1,2}/\d{1,2}", v)),
+    "owner": lambda v: v == "control-plane",
 }
-OPTIONAL_FIELDS = ("reset_at", "claude_until", "codex_until", "pr")
+OPTIONAL_FIELDS = ("reset_at", "next_check_at", "claude_until", "codex_until", "pr")
 EVENTS: dict[str, tuple[str, tuple[str, ...]]] = {
     "supervisor_started": (":large_green_circle: JarvisOS continuity supervisor started", ("session", "agent")),
     "supervisor_stopped": (":white_circle: JarvisOS continuity supervisor stopped", ("session", "reason", "phase")),
@@ -1299,6 +1317,12 @@ EVENTS: dict[str, tuple[str, tuple[str, ...]]] = {
     "test": (":white_check_mark: JarvisOS continuity notification test", ()),
     "reconciled": (":white_check_mark: JarvisOS continuity: uncertain operations settled from evidence",
                    ("session", "attempts")),
+    "task_completed": (":large_green_circle: JarvisOS mission task completed", ("mission", "task", "agent", "session")),
+    "mission_completed": (":white_check_mark: JarvisOS mission completed", ("mission", "task", "session")),
+    "mission_waiting": (":large_orange_circle: JarvisOS mission waiting",
+                        ("owner", "mission", "task", "agent", "reason", "next_check_at")),
+    "mission_held": (":red_circle: JarvisOS mission held",
+                     ("owner", "mission", "task", "agent", "session", "reason")),
 }
 
 
@@ -1442,9 +1466,10 @@ class RunResult:
 
 
 class RelayAdapter:
-    def __init__(self, repo: Path, binary: str = "agent-relay"):
+    def __init__(self, repo: Path, binary: str = "agent-relay", env: dict[str, str] | None = None):
         self.repo = repo
         self.binary = binary
+        self.env = env  # extra environment for launched runs (the sandboxed mission profile); None: inherited
 
     def limits(self) -> dict[str, Any] | None:
         try:
@@ -1455,11 +1480,14 @@ class RelayAdapter:
             return None
         return {a.get("agent_key"): a for a in data.get("agents", []) if isinstance(a, dict)}
 
-    def start(self, agent: str, parent: str, task: str, turns: int) -> subprocess.Popen:
-        args = [self.binary, "--json", "run", agent, "--continue", parent, "-t", task, "-n", str(turns), "-y",
-                "--repo", str(self.repo)]
-        return subprocess.Popen(args, cwd=self.repo, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-                                start_new_session=True)
+    def start(self, agent: str, parent: str | None, task: str, turns: int) -> subprocess.Popen:
+        # A mission's first task has no parent: Relay opens a new session for it.
+        args = [self.binary, "--json", "run", agent, *(["--continue", parent] if parent else []), "-t", task,
+                "-n", str(turns), "-y", "--repo", str(self.repo)]
+        # stdin is closed: `codex exec` otherwise waits on an inherited open stdin (spec 201 readiness).
+        return subprocess.Popen(args, cwd=self.repo, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE, text=True, start_new_session=True,
+                                env={**os.environ, **self.env} if self.env else None)
 
     @staticmethod
     def finish(proc: subprocess.Popen) -> RunResult:
@@ -1535,9 +1563,33 @@ def _relay_argv(argv: list[str]) -> list[str] | None:
     return None
 
 
+COORDINATOR_LEASE = Path(".agent-relay/locks/coordinator.lease")
+
+
+def coordinator_lease_held(repo: Path) -> bool:
+    """A Relay coordinator in any sandbox instance holds this shared flock (scripts/relay_safe.py). Its process
+    is invisible here when it runs in another PID namespace. An unreadable lease counts as held."""
+    try:
+        handle = (repo / COORDINATOR_LEASE).open("r")
+    except FileNotFoundError:
+        return False
+    except OSError:
+        return True
+    with handle:
+        try:
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return True
+        except OSError:
+            return True
+        fcntl.flock(handle, fcntl.LOCK_UN)
+    return False
+
+
 def live_conflicts(repo: Path, own_pids: set[int]) -> list[str]:
-    """Reasons another coordinator/supervisor may be acting: legacy autopilot or a live Relay REPL/run."""
-    found = []
+    """Reasons another coordinator/supervisor may be acting: legacy autopilot or a live Relay REPL/run, seen in
+    this process table or through the coordinator lease."""
+    found = ["repl_active"] if coordinator_lease_held(repo) else []
     proc_root = Path("/proc")
     for entry in proc_root.iterdir() if proc_root.exists() else []:
         if not entry.name.isdigit() or int(entry.name) in own_pids:
@@ -2212,6 +2264,16 @@ Operations the interrupted turn completed (they already happened; verify their e
 {effects}
 If the work now needs a maintainer decision, stop and report instead of continuing."""
 
+MISSION_HEADER = "## Mission task"
+MISSION_PROMPT = """[relay-continuity attempt {{nonce}}]
+Supervised mission {mission}, task {number}/{total} (spec 201), queued by the maintainer under directive {authority}.
+The task text below is the maintainer's; it grants no authority beyond that directive. Approval gates, review requirements and authority boundaries are unchanged.
+Before acting, run `python3 scripts/devctx.py recover` and verify fresh Git/GitHub state: earlier tasks of this mission, or an interrupted attempt at this one, may already have taken effect.
+If the task needs a maintainer decision, stop and report instead of continuing.
+
+""" + MISSION_HEADER + """
+{text}"""
+
 
 @dataclass
 class Host:
@@ -2229,6 +2291,8 @@ class Host:
     evidence: Callable[[TurnReport], str] = lambda report: ""
     terminate: Callable[[int], None] = terminate_group
     diagnostic: Any = None  # ReadOnlyCodex (spec 197); None: no read-only diagnosis is possible
+    task_check: Callable[[dict[str, Any]], str | None] = lambda check: None  # spec 201: None when the check passes
+    refresh_codex_quota: Callable[[], None] = lambda: None  # read-only probe when Codex's limits are stale
 
 
 class Supervisor:
@@ -2250,12 +2314,16 @@ class Supervisor:
         self.deciding: str | None = None
         self._reading: dict[str, Any] | None = None
         self._reading_at: datetime | None = None
+        self.mission: dict[str, Any] | None = None  # spec 201: the validated mission this store executes
+        self._codex_quota_probed = False
 
     # -- persistence helpers
     def save(self) -> None:
         self.store.save(self.state, self.host.now())
 
     def notify(self, event: str, **fields: Any) -> None:
+        if "session" in fields and fields["session"] is None:
+            fields["session"] = "none"  # a mission before its first launch has no session yet
         try:
             self.notifier.send(event, self.host.now(), **fields)
         except Exception as exc:  # noqa: BLE001 - notification can never interrupt supervision
@@ -2289,6 +2357,10 @@ class Supervisor:
         if event == "hold":
             fields["attempt"] = str(attempt or 0)
         self.notify(event, **fields)
+        if (rec := self.state.get("mission")) is not None and self.mission is not None:
+            self.notify("mission_held", owner="control-plane", mission=self.mission["id"],
+                        task=f"{min(rec['next'] + 1, rec['total'])}/{rec['total']}",
+                        agent=self.state.get("agent") or PREFERRED, session=self.state["head_session"], reason=reason)
         self.record("blocker", f"relay-continuity HOLD ({reason}) on session {self.state['head_session']}; "
                                f"automatic continuation refused until `relay_continuity.py release`.")
         self.host.log(f"hold: {reason}")
@@ -2341,6 +2413,16 @@ class Supervisor:
             if until is None or now < until:
                 return False
         reading = self.exhausted_until(agent)
+        if reading is None and confirm and agent == "codex" and self.mission is not None and not self._codex_quota_probed:
+            # Relay derives Codex quota from its own rollout files. On an idle host that reading can be stale;
+            # one bounded read-only Codex turn refreshes it before a mission's first fallback decision.
+            self._codex_quota_probed = True
+            try:
+                self.host.refresh_codex_quota()
+            except (OSError, subprocess.TimeoutExpired):
+                pass  # an unconfirmed provider remains unavailable
+            self._reading = None
+            reading = self.exhausted_until(agent)
         if isinstance(reading, datetime):
             self.state["cooldowns"][agent] = {"until": iso(reading), "source": "limits", "reason": "quota",
                                               "since": iso(now)}
@@ -2448,6 +2530,10 @@ class Supervisor:
         acknowledged: dict[str, Any] | None = None
         if report == "held":
             return "held"
+        if report is None and self.mission is not None and not self.state.get("head_session"):
+            # A new mission has no turn yet: its first task opens a new Relay session.
+            report = TurnReport(outcome="success", agent=None, detail="mission start", terminal=True,
+                                turn_id=f"{self.mission['id']}/start")
         if report is None:
             turn = last_turn_dir(self.host.relay.sessions_dir() / self.state["head_session"])
             if turn is None:
@@ -2494,6 +2580,10 @@ class Supervisor:
             counters.update({"consecutive_failures": 0, "transient_streak": 0, "crash_retries": 0})
             self.state["spend_caps"].pop(failed_agent, None)
             self.state["waiting_since"] = None
+            if task is None and self.mission is not None:
+                task = self._mission_task()
+                if task is None:
+                    return self._mission_complete()
             if task is None:
                 self.state["phase"] = "idle"
                 self.save()
@@ -2610,6 +2700,9 @@ class Supervisor:
                 created = None
             starts.append(parse_ts(created) or datetime.min.replace(tzinfo=UTC))  # unknown: the widest window
         since = min(starts) if starts else datetime.min.replace(tzinfo=UTC)
+        if not starts and self.mission is not None:
+            # A mission without a session yet: work started since its submission may be its own.
+            since = parse_ts(self.mission.get("submitted_at")) or since
         released, _ = self.last_release()
         return max(since, released) if released else since
 
@@ -2977,6 +3070,11 @@ class Supervisor:
             self.state["phase"] = "waiting"
             self.save()
             self.notify("all_exhausted", dedupe_key=f"all|{iso(min(known))}", next_check_at=iso(wake))
+            if (rec := self.state.get("mission")) is not None and self.mission is not None:
+                self.notify("mission_waiting", dedupe_key=f"wait|{self.mission['id']}|{iso(wake)}",
+                            owner="control-plane", mission=self.mission["id"],
+                            task=f"{rec['next'] + 1}/{rec['total']}", agent=current,
+                            reason="no_provider_available", next_check_at=iso(wake))
             if self._sleep((wake - now).total_seconds()):
                 return "signal" if self.signalled else "stopped"
             self.state["phase"] = "running"
@@ -3015,6 +3113,13 @@ class Supervisor:
         text = prompt.replace("{nonce}", nonce)
         pending = {"nonce": nonce, "agent": agent, "parent": self.state["head_session"], "started_at": iso(now),
                    "pid": None, "pid_start": None, "fingerprint": self.host.fingerprint(), "attempt": self.attempts}
+        if (rec := self.state.get("mission")) is not None and self.mission is not None:
+            # Every launch until the task completes (recoveries and failovers included) serves that task.
+            pending["task"] = rec["next"]
+            if MISSION_HEADER not in text:
+                task = self.mission["tasks"][rec["next"]]["text"]
+                text += (f"\n\nThe interrupted work is mission {self.mission['id']} task {rec['next'] + 1}/{rec['total']}, "
+                         f"which has not been recorded complete:\n{MISSION_HEADER}\n{task}")
         self.state["pending"] = pending  # intent is durable before anything is launched
         self.state["acknowledged"] = None  # the reviewed turn is now behind the chain
         if ((self.state.get("reconcile") or {}).get("diag") or {}).get("nonce"):
@@ -3041,6 +3146,8 @@ class Supervisor:
     def _settle(self, pending: dict[str, Any], session_id: str | None, diagnostics: str = "") -> TurnReport | str:
         session_id = session_id or self.host.relay.find_by_nonce(pending["nonce"], parse_ts(pending["started_at"]) or self.host.now())
         self.state["last_attempt"] = {k: pending[k] for k in ("nonce", "agent", "attempt", "fingerprint")}
+        if "task" in pending:
+            self.state["last_attempt"]["task"] = pending["task"]
         self.state["pending"] = None
         if session_id is None:
             # Remote effects (a merge, a PR comment) leave no local trace, so an unchanged fingerprint proves
@@ -3059,8 +3166,67 @@ class Supervisor:
         self.store.journal({"event": "settle", "nonce": pending["nonce"], "session": session_id,
                             "outcome": report.outcome, "agent": report.agent,
                             "effects": [c.label for c in report.effects], "in_flight": [c.label for c in report.in_flight]})
+        # Keep the launched intent durable until mission progress is saved. If this process dies while
+        # checking a successful task, restart adopts the turn instead of launching that task again.
+        if (held := self._advance(pending, report, session_id)) is not None:
+            return held
         self.save()
         return report
+
+    # -- missions (spec 201)
+    def _mission_task(self) -> str | None:
+        """The prompt of the mission's next incomplete task, or None when every task is recorded complete."""
+        assert self.mission is not None
+        rec = self.state["mission"]
+        if rec["next"] >= rec["total"]:
+            return None
+        return MISSION_PROMPT.format(mission=self.mission["id"], number=rec["next"] + 1, total=rec["total"],
+                                     authority=self.mission["authority"], text=self.mission["tasks"][rec["next"]]["text"])
+
+    def _advance(self, pending: dict[str, Any], report: TurnReport, session_id: str) -> str | None:
+        """Record the attempt's task complete when the turn succeeded and the task's optional read-only check
+        passes. What the model says about remaining work never decides this. A failed check holds."""
+        rec = self.state.get("mission")
+        if self.mission is None or rec is None or report.outcome != "success" or pending.get("task") != rec["next"]:
+            return None
+        index = rec["next"]
+        if check := self.mission["tasks"][index].get("check"):
+            try:
+                problem = self.host.task_check(check)
+            except Exception as exc:  # noqa: BLE001 - an unverifiable check is not a passed one
+                problem = f"check failed ({type(exc).__name__})"
+            if problem:
+                self.host.log(f"mission {self.mission['id']} task {index + 1}: check not satisfied: {problem}")
+                self.store.journal({"event": "task_check_failed", "at": iso(self.host.now()), "mission": self.mission["id"],
+                                    "task": index, "session": session_id, "problem": problem[:240]})
+                return self.hold("task_check_failed", pending.get("attempt"), report.turn_id)
+        now = self.host.now()
+        rec["next"] = index + 1
+        rec["done"].append({"task": index, "session": session_id, "agent": report.agent, "at": iso(now)})
+        self.save()
+        self.store.journal({"event": "task_completed", "at": iso(now), "mission": self.mission["id"], "task": index,
+                            "session": session_id, "agent": report.agent})
+        self.notify("task_completed", mission=self.mission["id"], task=f"{index + 1}/{rec['total']}",
+                    agent=report.agent, session=session_id)
+        self.record("finding", f"relay-continuity: mission {self.mission['id']} task {index + 1}/{rec['total']} "
+                               f"completed by {report.agent} in {session_id}.")
+        self.host.log(f"mission {self.mission['id']}: task {index + 1}/{rec['total']} completed")
+        return None
+
+    def _mission_complete(self) -> str:
+        assert self.mission is not None
+        rec = self.state["mission"]
+        now = self.host.now()
+        rec["completed_at"] = rec.get("completed_at") or iso(now)
+        self.state["phase"] = "idle"
+        self.save()
+        self.store.journal({"event": "mission_completed", "at": iso(now), "mission": self.mission["id"]})
+        self.notify("mission_completed", mission=self.mission["id"], task=f"{rec['next']}/{rec['total']}",
+                    session=self.state["head_session"])
+        self.record("decision", f"relay-continuity: mission {self.mission['id']} completed "
+                                f"({rec['total']} task(s), last session {self.state['head_session']}).")
+        self.host.log(f"mission {self.mission['id']} completed")
+        return "idle"
 
     def _resolve_pending(self) -> TurnReport | str | None:
         """Restart recovery: settle a launched attempt whose outcome was never recorded."""
@@ -3189,7 +3355,7 @@ def permissions_digest(path: Path) -> str | None:
     return hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()
 
 
-def make_host(repo: Path) -> Host:
+def make_host(repo: Path, relay_env: dict[str, str] | None = None) -> Host:
     env = devctx.default_env(repo)
     author = f"relay-continuity pid {os.getpid()}"
 
@@ -3202,10 +3368,148 @@ def make_host(repo: Path) -> Host:
     def live_work(since: datetime) -> list[str]:
         return live_processes(worktree_roots(repo), since, {os.getpid()}) + live_containers(since)
 
-    return Host(relay=RelayAdapter(repo), fingerprint=lambda: fingerprint(repo),
+    return Host(relay=RelayAdapter(repo, env=relay_env), fingerprint=lambda: fingerprint(repo),
                 conflicts=lambda own: live_conflicts(repo, own), ledger=ledger, permissions_digest=permissions,
                 live_work=live_work, probe=lambda call: probe_call(call, repo),
-                evidence=lambda report: collect_evidence(repo, report), diagnostic=ReadOnlyCodex(repo, control_root()))
+                evidence=lambda report: collect_evidence(repo, report), diagnostic=ReadOnlyCodex(repo, control_root()),
+                task_check=lambda check: check_task(repo, check),
+                refresh_codex_quota=lambda: refresh_codex_quota(repo))
+
+
+CODEX_QUOTA_PROBE = tuple(a for a in CODEX_READ_ONLY if a != "--ephemeral")  # Relay reads the rollout it writes
+
+
+def refresh_codex_quota(repo: Path) -> None:
+    """Refresh Relay's stale Codex usage evidence with one bounded, no-tool, read-only turn. It must not be
+    ephemeral: Relay reads Codex quota only from rollout files, which an ephemeral turn never writes."""
+    subprocess.run(["codex", *CODEX_QUOTA_PROBE, "-C", str(repo), "-"], cwd=repo,
+                   input="Reply READY. Do not use tools.\n", text=True, capture_output=True,
+                   timeout=120, check=False)
+
+
+# ---------------------------------------------------------------------------
+# Missions (spec 201): durable submission and a single persistent owner
+
+
+CHECK_KINDS = ("pr_merged", "path_exists")
+
+
+def validate_mission(data: Any) -> str | None:
+    """Problem with a mission definition, or None. Definitions are immutable once submitted."""
+    if not isinstance(data, dict):
+        return "not an object"
+    if data.get("schema") != MISSION_SCHEMA or not MISSION_ID_RE.fullmatch(str(data.get("id"))):
+        return "unknown schema or id"
+    if not DIRECTIVE_ID_RE.fullmatch(str(data.get("authority"))):
+        return "authority must be a maintainer directive ledger id"
+    if parse_ts(data.get("submitted_at")) is None:
+        return "bad submitted_at"
+    if data.get("session") is not None and not re.fullmatch(r"\d{8}-\d{6}-[0-9a-f]{6}", str(data["session"])):
+        return "bad session"
+    tasks = data.get("tasks")
+    if not isinstance(tasks, list) or not 1 <= len(tasks) <= MAX_TASKS:
+        return f"tasks must be a list of 1-{MAX_TASKS} entries"
+    for n, task in enumerate(tasks, 1):
+        if not isinstance(task, dict) or set(task) - {"text", "check"}:
+            return f"task {n}: only text and check are allowed"
+        text = task.get("text")
+        if not isinstance(text, str) or not text.strip() or len(text) > MAX_TASK_CHARS:
+            return f"task {n}: text must be 1-{MAX_TASK_CHARS} characters"
+        if devctx.find_secret(text):
+            return f"task {n}: text matches a secret pattern"
+        check = task.get("check")
+        if check is None:
+            continue
+        if not isinstance(check, dict) or check.get("kind") not in CHECK_KINDS:
+            return f"task {n}: check kind must be one of {', '.join(CHECK_KINDS)}"
+        if check["kind"] == "pr_merged" and (set(check) != {"kind", "pr"} or not isinstance(check["pr"], int)
+                                             or isinstance(check["pr"], bool) or check["pr"] <= 0):
+            return f"task {n}: pr_merged takes a positive integer pr"
+        if check["kind"] == "path_exists":
+            path = check.get("path")
+            if set(check) != {"kind", "path"} or not isinstance(path, str) or not path or Path(path).is_absolute() \
+                    or ".." in Path(path).parts:
+                return f"task {n}: path_exists takes a relative repository path"
+    return None
+
+
+def missions_dir(root: Path) -> Path:
+    return root / "missions"
+
+
+def mission_store(root: Path, mission_id: str) -> Store:
+    store = Store(missions_dir(root) / mission_id)
+    store.stop_path = root / "STOP"  # one stop request stops the owner, whichever mission it executes
+    return store
+
+
+def load_missions(root: Path) -> list[tuple[dict[str, Any] | None, str, str | None]]:
+    """(definition or None, id, problem) for every submitted mission, in submission (FIFO) order."""
+    found = []
+    for path in sorted(missions_dir(root).glob("m-*.json")):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            found.append((None, path.stem, f"unreadable ({type(exc).__name__})"))
+            continue
+        problem = validate_mission(data) or (None if data.get("id") == path.stem else "id does not match file name")
+        found.append((None if problem else data, path.stem, problem))
+    return sorted(found, key=lambda m: ((m[0] or {}).get("submitted_at") or "", m[1]))
+
+
+def mission_status(store: Store) -> tuple[str, dict[str, Any] | None]:
+    """queued | active | waiting | held | complete | cancelled | corrupt, with the store's state."""
+    if not store.state_path.exists():
+        return "queued", None
+    try:
+        state = store.load()
+    except StateCorrupt:
+        return "corrupt", None
+    rec = state.get("mission") or {}
+    if rec.get("cancelled_at"):
+        return "cancelled", state
+    if rec.get("completed_at"):
+        return "complete", state
+    if state["phase"] == "held":
+        return "held", state
+    if state["phase"] == "waiting":
+        return "waiting", state
+    return ("active" if state.get("chain") or state.get("pending") else "queued"), state
+
+
+def write_json_atomic(path: Path, data: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    with open(tmp, "x", encoding="utf-8") as handle:
+        json.dump(data, handle, indent=1, sort_keys=True)
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(tmp, path)
+    dir_fd = os.open(path.parent, os.O_RDONLY)
+    try:
+        os.fsync(dir_fd)
+    finally:
+        os.close(dir_fd)
+
+
+def in_sandbox() -> bool:
+    """The certified jarvis-sandbox boundary (spec 201 D1): its hostname, and no Windows or WSL interop paths."""
+    return socket.gethostname() == SANDBOX_HOSTNAME and not Path("/mnt/c").exists() and not Path("/run/WSL").exists()
+
+
+def check_task(repo: Path, check: dict[str, Any], run: Runner = devctx.run) -> str | None:
+    """Deterministic, read-only completion check of a mission task. None: satisfied."""
+    if check["kind"] == "path_exists":
+        target = (repo / check["path"]).resolve()
+        if repo.resolve() not in target.parents and target != repo.resolve():
+            return "path escapes the repository"
+        return None if target.exists() else f"{check['path']} does not exist"
+    if check["kind"] == "pr_merged":
+        code, out = run(["gh", "pr", "view", str(check["pr"]), "--json", "state", "-q", ".state"], cwd=repo, timeout=60)
+        if code != 0:
+            return f"gh pr view {check['pr']} failed"
+        return None if out.strip() == "MERGED" else f"PR #{check['pr']} is {out.strip() or 'unknown'}"
+    return f"unknown check {check.get('kind')}"
 
 
 def webhook_sender() -> Callable[[str], str | None] | None:
@@ -3253,6 +3557,247 @@ def command_run(args: argparse.Namespace) -> int:
         lock.release()
 
 
+def serve_step(root: Path, factory: Callable[[Store, dict[str, Any]], Supervisor], *,
+               conflicts: Callable[[], list[str]], now: Callable[[], datetime] = now_utc,
+               log: Callable[[str], None] = lambda msg: print(msg, file=sys.stderr, flush=True)) -> str:
+    """One scheduling decision of the persistent owner. Missions run strictly one at a time in submission
+    order: a held or corrupt mission blocks the ones behind it rather than being skipped. Returns `busy`,
+    `empty`, `held:<id>`, `corrupt:<id>`, `waiting:<id>:<reason>` or `ran:<id>:<supervisor result>`."""
+    lock = Lock(root / "supervisor.lock")
+    if not lock.acquire():
+        return "busy"  # a `run`, `release` or `cancel` holds it; look again later
+    try:
+        for mission, mission_id, problem in load_missions(root):
+            if mission is None:
+                log(f"mission {mission_id}: definition invalid ({problem}); queue held")
+                return f"corrupt:{mission_id}"
+            store = mission_store(root, mission_id)
+            status, state = mission_status(store)
+            if status in ("complete", "cancelled"):
+                continue
+            if status in ("held", "corrupt"):
+                return f"{status}:{mission_id}"
+            if state is not None:
+                rec = state.get("mission")
+                if not isinstance(rec, dict) or rec.get("id") != mission_id or rec.get("total") != len(mission["tasks"]):
+                    log(f"mission {mission_id}: state does not match its definition; queue held")
+                    return f"corrupt:{mission_id}"
+            if found := conflicts():
+                # A live REPL or legacy autopilot on the repository: never a concurrent writer, so wait.
+                return f"waiting:{mission_id}:{'repl_active' if 'repl_active' in found else 'live_work'}"
+            if state is None or state.get("mission") is None:
+                state = state or default_state()
+                state["mission"] = {"id": mission_id, "next": 0, "total": len(mission["tasks"]), "done": []}
+                store.save(state, now())
+                store.journal({"event": "mission_started", "at": iso(now()), "mission": mission_id,
+                               "authority": mission["authority"], "tasks": len(mission["tasks"])})
+            supervisor = factory(store, mission)
+            supervisor.mission = mission
+            result = supervisor.run(state.get("head_session") or mission.get("session"))
+            return f"ran:{mission_id}:{result}"
+        return "empty"
+    finally:
+        lock.release()
+
+
+def sandbox_provider_env(home: Path) -> dict[str, str]:
+    """The sandbox's own provider login state. The owner pins it rather than inheriting whatever its launcher
+    (systemd, a Codex shell, a Claude shell) exported: an unset CODEX_HOME sends Codex to the sandbox's empty
+    tmpfs `~/.codex`, where it has no login and Relay finds no quota reading. The project-scoped GitHub login
+    and its git credential helper are pinned the same way when installed: without them a mission cannot push or
+    open a PR, and spec 197's `gh`/`git ls-remote` probes see no authentication."""
+    state = home / ".local/share/jarvisos-sandbox/state"
+    env = {"CLAUDE_CONFIG_DIR": str(state / "claude"), "CODEX_HOME": str(state / "codex")}
+    if (state / "gh" / "hosts.yml").is_file():
+        env["GH_CONFIG_DIR"] = str(state / "gh")
+    if (state / "gitconfig").is_file():
+        env["GIT_CONFIG_GLOBAL"] = str(state / "gitconfig")
+    return env
+
+
+def link_relay_claude_credentials(config_dir: Path, home: Path) -> None:
+    """Relay 0.7.7 reads Claude's usage token only from `~/.claude/.credentials.json`, which the sandbox's
+    private tmpfs home lacks. Without a Claude reading, a return to Claude after a Codex takeover is never
+    confirmed. Point that one path at the sandbox's own login; an existing file or link is left alone."""
+    link, target = home / ".claude" / ".credentials.json", config_dir / ".credentials.json"
+    if link.exists() or link.is_symlink() or not target.exists():
+        return
+    link.parent.mkdir(parents=True, exist_ok=True)
+    link.symlink_to(target)
+
+
+def command_serve(args: argparse.Namespace) -> int:
+    root = control_root()
+    if not in_sandbox():
+        print("serve runs only inside the certified jarvis-sandbox boundary (spec 201 D1); refusing", file=sys.stderr)
+        return 2
+    if (root / "STOP").exists() and not args.clear_stop:
+        print("mission owner is stopped; use serve --clear-stop to resume explicitly", file=sys.stderr)
+        return 0
+    owner = Lock(root / "serve.lock")
+    if not owner.acquire():
+        print("another mission owner is serving; refusing to start", file=sys.stderr)
+        return 3
+    repo = repo_root()
+    stop = {"flag": False}
+    signal.signal(signal.SIGTERM, lambda *_: stop.update(flag=True))
+    signal.signal(signal.SIGINT, lambda *_: stop.update(flag=True))
+    if args.clear_stop:
+        (root / "STOP").unlink(missing_ok=True)
+    sender = None if args.no_notify else webhook_sender()
+    provider_env = sandbox_provider_env(Path.home())
+    os.environ.update(provider_env)  # the Codex quota probe and read-only diagnostics inherit it too
+    link_relay_claude_credentials(Path(provider_env["CLAUDE_CONFIG_DIR"]), Path.home())
+    # Relay's headless runner pins Claude to `default` and ignores the REPL permission-mode variable.
+    # Its mission-only entrypoint removes that flag and adds bypassPermissions inside the OS boundary.
+    claude = shutil.which("claude")
+    if claude is None:
+        print("Claude CLI is unavailable inside the sandbox", file=sys.stderr)
+        owner.release()
+        return 2
+    mission_bin = Path(__file__).resolve().parent / "relay_mission_bin"
+    relay_env = {"AGENT_RELAY_CLAUDE_PERMISSION_MODE": "bypassPermissions", **provider_env,
+                 "JARVISOS_MISSION_PROFILE": "1", "RELAY_CLAUDE_REAL_BIN": claude,
+                 "PATH": str(mission_bin) + os.pathsep + os.environ["PATH"]}
+    serve_store = Store(root / "serve")
+
+    def log(msg: str) -> None:
+        print(f"{iso(now_utc())} {msg}", file=sys.stderr, flush=True)
+
+    def factory(store: Store, mission: dict[str, Any]) -> Supervisor:
+        supervisor = Supervisor(store, make_host(repo, relay_env), turns=args.turns, sender=sender,
+                                reconcile=not args.no_reconcile)
+        signal.signal(signal.SIGTERM, lambda *_: (stop.update(flag=True), setattr(supervisor, "signalled", True)))
+        signal.signal(signal.SIGINT, lambda *_: (stop.update(flag=True), setattr(supervisor, "signalled", True)))
+        return supervisor
+
+    log(f"mission owner serving {missions_dir(root)} (pid {os.getpid()})")
+    previous = None
+    try:
+        while not stop["flag"] and not (root / "STOP").exists():
+            outcome = serve_step(root, factory, conflicts=lambda: live_conflicts(repo, {os.getpid()}), log=log)
+            if outcome != previous:
+                log(f"owner: {outcome}")
+                if outcome.startswith("waiting:"):
+                    _, mission_id, reason = outcome.split(":")
+                    try:
+                        state = serve_store.load()
+                    except StateCorrupt:
+                        state = default_state()
+                    Notifier(state, sender=sender, log=log).send(
+                        "mission_waiting", now_utc(), dedupe_key=f"wait|{mission_id}|{reason}",
+                        owner="control-plane", mission=mission_id,
+                        task="0/0" if not (st := mission_status(mission_store(root, mission_id))[1])
+                        else f"{st['mission']['next'] + 1}/{st['mission']['total']}",
+                        agent=(st or {}).get("agent") or PREFERRED, reason=reason, next_check_at="none")
+                    serve_store.save(state, now_utc())
+            previous = outcome
+            if outcome.endswith((":stopped", ":signal")) or args.once:
+                break
+            if outcome.startswith("ran:") and outcome.endswith(":idle"):
+                continue  # the mission completed: take the next one now
+            for _ in range(int(args.interval)):
+                if stop["flag"] or (root / "STOP").exists():
+                    break
+                time.sleep(1)
+        log("mission owner stopped")
+        return 0
+    finally:
+        owner.release()
+
+
+def command_submit(args: argparse.Namespace) -> int:
+    root = control_root()
+    repo = repo_root()
+    try:
+        spec = json.loads(Path(args.mission_file).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"mission file unreadable: {type(exc).__name__}", file=sys.stderr)
+        return 2
+    if not isinstance(spec, dict) or set(spec) - {"authority", "tasks"}:
+        print("mission file takes only authority and tasks", file=sys.stderr)
+        return 2
+    now = now_utc()
+    mission = {"schema": MISSION_SCHEMA, "id": f"m-{now.strftime('%Y%m%dT%H%M%SZ')}-{secrets.token_hex(3)}",
+               "authority": spec.get("authority"), "tasks": spec.get("tasks"), "submitted_at": iso(now),
+               "session": args.continue_session, "repo": str(repo)}
+    if problem := validate_mission(mission):
+        print(f"mission refused: {problem}", file=sys.stderr)
+        return 2
+    env = devctx.default_env(repo)
+    if not any(e.get("id") == mission["authority"] and e.get("kind") == "directive" for e in devctx.read_ledger(env)):
+        print(f"mission refused: {mission['authority']} is not a recorded maintainer directive", file=sys.stderr)
+        return 2
+    if args.continue_session:
+        turn = last_turn_dir(repo / ".agent-relay" / "sessions" / args.continue_session)
+        if turn is None or classify_turn(turn).outcome != "success":
+            print("mission refused: the session's last turn is not a completed successful turn", file=sys.stderr)
+            return 2
+    path = missions_dir(root) / f"{mission['id']}.json"
+    write_json_atomic(path, mission)  # durable before any owner can see or launch it
+    with open(missions_dir(root) / "journal.jsonl", "a", encoding="utf-8") as handle:
+        handle.write(json.dumps({"event": "mission_submitted", "at": iso(now), "mission": mission["id"],
+                                 "authority": mission["authority"], "tasks": len(mission["tasks"])}, sort_keys=True) + "\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+    try:
+        devctx.append_entry(env, devctx.make_entry(
+            env, "note", f"relay-continuity: mission {mission['id']} submitted under {mission['authority']} "
+                         f"({len(mission['tasks'])} task(s)); owner: `relay_continuity.py serve`.",
+            refs={"spec": "201"}, author=f"relay-continuity pid {os.getpid()}"))
+    except Exception as exc:  # noqa: BLE001 - the mission file is the record; the ledger note is a courtesy
+        print(f"ledger append failed: {type(exc).__name__}", file=sys.stderr)
+    position = sum(1 for m, _, _ in load_missions(root) if m and mission_status(mission_store(root, m["id"]))[0]
+                   not in ("complete", "cancelled"))
+    print(json.dumps({"mission": mission["id"], "tasks": len(mission["tasks"]), "queue_position": position}))
+    return 0
+
+
+def command_missions(args: argparse.Namespace) -> int:
+    root = control_root()
+    rows = []
+    for mission, mission_id, problem in load_missions(root):
+        status, state = mission_status(mission_store(root, mission_id))
+        rec = (state or {}).get("mission") or {}
+        rows.append({"mission": mission_id, "status": "invalid" if problem else status, "problem": problem,
+                     "authority": (mission or {}).get("authority"), "submitted_at": (mission or {}).get("submitted_at"),
+                     "done": rec.get("next", 0), "total": len((mission or {}).get("tasks") or []),
+                     "agent": (state or {}).get("agent"), "head_session": (state or {}).get("head_session"),
+                     "phase": (state or {}).get("phase"), "hold": (state or {}).get("hold"),
+                     "cooldowns": (state or {}).get("cooldowns"), "pending": bool((state or {}).get("pending"))})
+    owner = Lock(root / "serve.lock")
+    serving = not owner.acquire()
+    owner.release()
+    print(json.dumps({"owner_serving": serving, "stop_requested": (root / "STOP").exists(), "missions": rows}, indent=1))
+    return 0
+
+
+def command_cancel(args: argparse.Namespace) -> int:
+    root = control_root()
+    lock = Lock(root / "supervisor.lock")
+    if not lock.acquire():
+        print("the mission is executing; `stop` the owner first (a running turn is never killed)", file=sys.stderr)
+        return 3
+    try:
+        if not (missions_dir(root) / f"{args.mission}.json").exists():
+            print("no such mission", file=sys.stderr)
+            return 2
+        store = mission_store(root, args.mission)
+        state = store.load()
+        if state.get("pending"):
+            print("the mission has an unsettled launched attempt; it must be resolved before cancelling", file=sys.stderr)
+            return 3
+        rec = state.get("mission") or {"id": args.mission, "next": 0, "total": 0, "done": []}
+        rec["cancelled_at"] = iso(now_utc())
+        state["mission"] = rec
+        store.save(state, now_utc())
+        store.journal({"event": "mission_cancelled", "at": iso(now_utc()), "mission": args.mission, "note": args.note[:500]})
+        print(json.dumps({"cancelled": args.mission}))
+        return 0
+    finally:
+        lock.release()
+
+
 def command_classify(args: argparse.Namespace) -> int:
     print(json.dumps(classify_turn(Path(args.turn_dir)).to_json(), indent=1))
     return 0
@@ -3292,9 +3837,22 @@ def command_release(args: argparse.Namespace) -> int:
         if devctx.find_secret(args.note):
             print("note matches a secret pattern; refusing", file=sys.stderr)
             return 2
-        store = Store(root)
+        if args.mission and not (missions_dir(root) / f"{args.mission}.json").exists():
+            print("no such mission", file=sys.stderr)
+            return 2
+        store = mission_store(root, args.mission) if args.mission else Store(root)
         state = store.load()
         released = state.get("hold")
+        advanced = None
+        if args.advance:
+            rec = state.get("mission")
+            if not args.mission or rec is None or rec["next"] >= rec["total"]:
+                print("--advance needs a mission with an incomplete task", file=sys.stderr)
+                return 2
+            # The maintainer records the current task done (e.g. after a failed check was resolved by hand).
+            advanced = rec["next"]
+            rec["done"].append({"task": advanced, "session": None, "agent": None, "at": iso(now_utc()), "by": "maintainer"})
+            rec["next"] += 1
         held_turn = (released or {}).get("turn")
         previous = state.get("acknowledged") or {}
         if held_turn:
@@ -3330,13 +3888,15 @@ def command_release(args: argparse.Namespace) -> int:
             acknowledged = []
         store.journal({"event": "release", "at": iso(now_utc()), "hold": released, "note": args.note[:500],
                        "cleared": args.clear_cooldown or [], "dropped_pending": bool(args.drop_pending),
-                       "dropped": dropped, "acknowledged_work": acknowledged})
+                       "dropped": dropped, "acknowledged_work": acknowledged, "mission": args.mission,
+                       "advanced": advanced})
         try:
             make_host(repo_root()).ledger("decision", f"relay-continuity hold released ({(released or {}).get('reason')}): "
                                                        f"{args.note[:400]}")
         except Exception as exc:  # noqa: BLE001
             print(f"ledger append failed: {type(exc).__name__}", file=sys.stderr)
-        print(json.dumps({"released": released, "cleared": args.clear_cooldown or []}))
+        print(json.dumps({"released": released, "cleared": args.clear_cooldown or [], "mission": args.mission,
+                          "advanced": advanced}))
         return 0
     finally:
         lock.release()
@@ -3422,7 +3982,26 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--note", required=True, help="why it is safe to continue (recorded)")
     p.add_argument("--clear-cooldown", action="append", choices=AGENTS)
     p.add_argument("--drop-pending", action="store_true", help="forget an unresolved launched attempt")
+    p.add_argument("--mission", help="release a mission's hold instead of the `run` chain's")
+    p.add_argument("--advance", action="store_true", help="also record the mission's current task done")
     p.set_defaults(func=command_release)
+    p = sub.add_parser("submit", help="queue a mission of maintainer-authorized tasks (spec 201)")
+    p.add_argument("--mission-file", required=True, help='JSON: {"authority": "<directive id>", "tasks": [...]}')
+    p.add_argument("--continue-session", help="continue this idle session instead of opening a new one")
+    p.set_defaults(func=command_submit)
+    p = sub.add_parser("serve", help="persistent single owner that executes queued missions")
+    p.add_argument("--interval", type=float, default=60.0, help="seconds between scheduling checks")
+    p.add_argument("--turns", type=int, default=1, help="Relay turns per invocation (default 1)")
+    p.add_argument("--once", action="store_true", help="one scheduling step, then exit")
+    p.add_argument("--no-notify", action="store_true")
+    p.add_argument("--no-reconcile", action="store_true")
+    p.add_argument("--clear-stop", action="store_true", help="explicitly resume after an operator stop request")
+    p.set_defaults(func=command_serve)
+    sub.add_parser("missions", help="show every mission and the owner").set_defaults(func=command_missions)
+    p = sub.add_parser("cancel", help="cancel a mission that is not executing")
+    p.add_argument("mission")
+    p.add_argument("--note", required=True)
+    p.set_defaults(func=command_cancel)
     sub.add_parser("notify-test", help="send one fixed test notification").set_defaults(func=command_notify_test)
     p = sub.add_parser("watch", help="notify-only monitor of REPL sessions and master")
     p.add_argument("--interval", type=float, default=60.0)

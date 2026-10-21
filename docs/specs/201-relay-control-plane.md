@@ -108,3 +108,18 @@ Probes ran in scratch repositories under `~/jarvis-control/work/evidence/201-san
 ### Host lifecycle
 
 The `systemd --user` manager is running. Without lingering, though, user units stop when the last login session ends. The owner unit uses `KillMode=process`, so stopping or restarting the service never kills a running provider turn. The restarted supervisor adopts that turn through its pending-attempt record and waits for it. Linger is enabled only once it is demonstrated to be needed for running without a login session.
+
+## Implementation evidence (2026-10-20, isolated workstation runs)
+
+Real provider processes ran inside `jarvis-sandbox` against a no-remote copy of the repository with separate control roots. Only Claude's first launch was replaced by a recorded real quota stream on `PATH`. Evidence: `~/jarvis-control/work/evidence/201-live-20261020/RESULT.md`.
+
+- **Takeover and advancement.** A real Claude quota led to a Codex takeover, and Codex completed both remaining tasks. Their path checks passed (`control2`).
+- **Owner death.** The owner was killed with SIGKILL during a live Codex turn. The replacement waited (`repl_active`) and then adopted that attempt by nonce. One task completion was recorded, with no relaunch (`control3`).
+- **Return to Claude.** After the quota, Codex did task 1. The owner was stopped at the task boundary and restarted after the 20-minute dwell. Claude then took task 2, continuing the Codex session (`control5`). A wait for Claude's own reset also returned to Claude (`control4`).
+- **Ambiguous effect.** Claude was killed during a Bash call that had sent an external POST. The turn settled as `crash` with `curl POST` in flight and held `effects_uncertain`. The next task never launched (`control6`).
+- **Live-work protection.** A stray process in the checkout held the mission rather than launching beside it. A stop request survived restart until `serve --clear-stop`.
+- **Launcher independence.** The first run from a Claude shell exposed three defects. `CODEX_HOME` was inherited (unset), Relay read Claude limits only from `~/.claude`, and the quota probe was `--ephemeral`, so no Codex reading ever appeared. Together they left a Codex takeover unconfirmed and made a confirmed return impossible. The owner now pins both provider logins, links Relay's Claude credential path inside the sandbox home, and runs a non-ephemeral probe.
+
+- **Cross-instance exclusion.** Each `jarvis-sandbox` instance unshares the PID namespace, so the owner's process-table scan could not see a REPL in another instance. `relay` now holds a shared coordinator lease (flock) for the lifetime of every coordinator invocation, and the owner waits while that lease is held. A lease taken in a nested PID namespace was seen from outside it and released on exit. The owner also pins the sandbox's `gh` login and git credential helper, which a session launched without them could not use.
+
+Still to prove on the host: the `systemd --user` owner and its restart (installation is a host step, because the sandbox hides the user bus and host `~/.config`), and pushing, PR and merge through the scoped GitHub token, which is not yet mounted in the sandbox.

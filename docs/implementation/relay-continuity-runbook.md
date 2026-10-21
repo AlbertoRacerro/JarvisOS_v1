@@ -166,3 +166,45 @@ WantedBy=default.target
 Enable it with `systemctl --user enable --now relay-continuity`. Exit 4 (held) and exit 3 (lock busy) are not restarted. Once the PR is merged, `ExecStart` points at the main checkout.
 
 Headless authority of the continuation is unchanged: it runs through Relay's runner exactly as in spec 195. Remove the worktree after merge: `git worktree remove ~/src/jarvis-197`.
+
+## Supervised missions (spec 201)
+
+A mission is an ordered list of tasks under one recorded maintainer directive. You submit it and leave. One owner, `serve`, executes queued missions one at a time in submission order. It reuses the supervisor above for every task: classification, failover, adoption after restart, the side-effect gate and holds. Mission state lives in `~/jarvis-control/work/continuity/missions/<id>/`, separate from the `run` chain, so the historical `effects_uncertain` hold on `20261018-215555-4f193a` is untouched.
+
+```bash
+RC="python3 scripts/relay_continuity.py"
+cat > /tmp/mission.json <<'JSON'
+{"authority": "L20261020085928-0431",
+ "tasks": [{"text": "Fix the flaky test in ...; open a PR.", "check": {"kind": "pr_merged", "pr": 900}},
+           {"text": "Write docs/... and verify it.", "check": {"kind": "path_exists", "path": "docs/..."}}]}
+JSON
+$RC submit --mission-file /tmp/mission.json   # durable before anything launches; refuses unknown directive ids
+$RC missions                                  # every mission: queued | active | waiting | held | complete | cancelled
+$RC stop                                      # the owner exits at its next safe point; a running turn is never killed
+$RC cancel ID --note "..."                    # only while the owner is stopped and nothing is in flight
+```
+
+- **Advancement.** A task completes only on a `success` turn whose optional `check` passes. A failed check holds the mission (`task_check_failed`); the model's own claim is never evidence. A held or corrupt mission blocks the missions behind it.
+- **Never a concurrent writer.** While a Relay REPL or other coordinator runs on the repository, the owner waits (`waiting:<id>:repl_active` or `live_work`). It never types into or adopts a REPL. Each `jarvis-sandbox` instance has its own PID namespace, so a REPL in another instance is invisible in the owner's process table. `relay` (`scripts/relay_safe.py`) therefore holds a shared flock, `.agent-relay/locks/coordinator.lease`, for as long as any coordinator invocation runs. Daemons, hooks and the owner's own turns are exempt. The owner treats a held lease as `repl_active`. A REPL started by a `relay` installed before this change holds no lease, so restart open REPLs after updating it.
+- **Where it runs.** `serve` refuses to start outside the `jarvis-sandbox` boundary (spec 201 D1). Inside, Claude runs in `bypassPermissions` through `scripts/relay_mission_bin/claude`, and Codex runs `danger-full-access`; `bwrap` is the containment. The owner pins `CLAUDE_CONFIG_DIR` and `CODEX_HOME` to the sandbox login state, whatever its launcher exported, and also `GH_CONFIG_DIR` and `GIT_CONFIG_GLOBAL` when the project-scoped GitHub login is installed there. It also links Relay's fixed Claude credential path (`~/.claude/.credentials.json`) inside the sandbox's private home: without a Claude limits reading, a return to Claude after a Codex takeover can never be confirmed.
+- **Provider return.** After a Claude quota switch to Codex, Claude is preferred again once its reset has passed, a fresh reading shows room and 20 minutes have elapsed since the switch.
+
+**Persistent owner (D2).** The user unit runs the owner through the launcher. Create it from a host shell, not from inside the sandbox: there, `~/.config` is sandbox state and the user bus is hidden. Check that `jarvis-sandbox` forwards a command line this way (`jarvis-sandbox python3 -c 'import socket; print(socket.gethostname())'` prints `jarvis-sandbox`) before you enable it. `~/.config/systemd/user/jarvisos-mission-owner.service`:
+
+```ini
+[Unit]
+Description=JarvisOS supervised mission owner (spec 201)
+[Service]
+WorkingDirectory=%h/src/JarvisOS_v1
+ExecStart=%h/.local/bin/jarvis-sandbox python3 scripts/relay_continuity.py serve --interval 60
+KillMode=process
+Restart=on-failure
+RestartPreventExitStatus=2 3
+RestartSec=120
+[Install]
+WantedBy=default.target
+```
+
+`systemctl --user daemon-reload && systemctl --user enable --now jarvisos-mission-owner`. Exit 2 (outside the sandbox, no Claude CLI) and 3 (another owner) are not restarted. `KillMode=process` leaves a running provider turn alive across a restart; the next owner adopts it by nonce. With `Linger=no` the unit runs only while a login session exists. Enable lingering (`loginctl enable-linger $USER`) only if unattended operation without a login is needed. WSL start after a Windows reboot is verified separately.
+
+**Rollback.** `systemctl --user disable --now jarvisos-mission-owner`, then remove the unit file and `daemon-reload`. Missions, journals and Relay sessions stay in `~/jarvis-control/work/continuity/missions/` and `.agent-relay/sessions/`. A later owner resumes queued missions from them. `$RC stop` without systemd has the same effect on a foreground owner.
