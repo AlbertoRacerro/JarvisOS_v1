@@ -72,7 +72,7 @@ full capture set are kept on the qualification host in
   gates `npm run build`. The full build, including every frontend suite and
   `tsc`, passes.
 - `backend/tests/test_process_dynamic_studio_173.py` plus the 172, 185, 186,
-  188 and 191 suites: 132 passed, 3 skipped. No existing backend test was
+  188 and 191 suites: 132 passed, 3 skipped. No existing dynamic or Studio backend test was
   edited. The frontend 191 source test changed only for the shared results
   view (decision 15). Full backend suite: 4435 passed,
   43 skipped.
