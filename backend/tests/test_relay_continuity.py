@@ -2695,9 +2695,12 @@ def test_real_codex_read_only_sandbox_blocks_writes(tmp_path: Path) -> None:
 DIRECTIVE = "L20261020085928-0431"
 
 
-def mission_def(*texts: str, checks: dict[int, dict[str, Any]] | None = None, session: str | None = None,
+def mission_def(*texts: str, checks: dict[int, dict[str, Any] | None] | None = None, session: str | None = None,
                 mid: str = "m-20261018T075500Z-abc123", submitted: datetime = T0 - timedelta(minutes=5)) -> dict[str, Any]:
-    tasks = [{"text": t, **({"check": checks[i]} if checks and i in checks else {})} for i, t in enumerate(texts)]
+    # The fake host accepts checks by default. Explicit None models a legacy unchecked mission.
+    tasks = [{"text": t, **({"check": check} if check is not None else {})}
+             for i, t in enumerate(texts)
+             for check in [(checks or {}).get(i, {"kind": "pr_merged", "pr": 1})]]
     return {"schema": rc.MISSION_SCHEMA, "id": mid, "authority": DIRECTIVE, "tasks": tasks,
             "submitted_at": rc.iso(submitted), "session": session, "repo": "/repo"}
 
@@ -2906,6 +2909,18 @@ def test_mission_task_check_must_pass_before_advancing(tmp_path: Path) -> None:
     assert result == "held" and sup.state["hold"]["reason"] == "task_check_failed"
     assert seen == [{"kind": "pr_merged", "pr": 846}] and sup.state["mission"]["next"] == 0
     assert len(env.relay.launches) == 1 and "task_check_failed" in journal_events(env.store)
+
+
+def test_unchecked_mission_cannot_complete_on_successful_provider_turn(tmp_path: Path) -> None:
+    env = Env(tmp_path, [("claude", SUCCESS)])
+    mission = mission_def("implement, test and merge an engineering deliverable", checks={0: None})
+    start_mission(env, mission)
+    result, sup = run_mission(env, mission)
+    assert result == "held"
+    assert sup.state["hold"]["reason"] == "task_check_failed"
+    assert sup.state["mission"]["next"] == 0
+    assert "mission_completed" not in journal_events(env.store)
+    assert len(env.relay.launches) == 1
 
 
 def test_check_task_is_read_only_and_bounded_to_the_repository(tmp_path: Path) -> None:
@@ -3136,6 +3151,7 @@ def test_release_mission_hold_and_advance(tmp_path: Path, monkeypatch: pytest.Mo
     assert rc.serve_step(root, factory, conflicts=lambda: [], now=env.clock.now) == f"ran:{mission['id']}:held"
     assert rc.main(["release", "--mission", mission["id"], "--advance", "--note", "merged by hand"]) == 0
     env.relay.script = [("claude", SUCCESS)]
+    env.host.task_check = lambda check: None
     assert rc.serve_step(root, factory, conflicts=lambda: [], now=env.clock.now) == f"ran:{mission['id']}:idle"
     assert "then this" in env.relay.launches[-1]["task"]
     state = rc.mission_store(root, mission["id"]).load()

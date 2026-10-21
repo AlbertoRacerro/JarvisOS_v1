@@ -3188,22 +3188,24 @@ class Supervisor:
                                      authority=self.mission["authority"], text=self.mission["tasks"][rec["next"]]["text"])
 
     def _advance(self, pending: dict[str, Any], report: TurnReport, session_id: str) -> str | None:
-        """Record the attempt's task complete when the turn succeeded and the task's optional read-only check
-        passes. What the model says about remaining work never decides this. A failed check holds."""
+        """Advance only after the task's independent completion check passes."""
         rec = self.state.get("mission")
         if self.mission is None or rec is None or report.outcome != "success" or pending.get("task") != rec["next"]:
             return None
         index = rec["next"]
-        if check := self.mission["tasks"][index].get("check"):
+        check = self.mission["tasks"][index].get("check")
+        if check is None:
+            problem = "task has no independent completion check"
+        else:
             try:
                 problem = self.host.task_check(check)
             except Exception as exc:  # noqa: BLE001 - an unverifiable check is not a passed one
                 problem = f"check failed ({type(exc).__name__})"
-            if problem:
-                self.host.log(f"mission {self.mission['id']} task {index + 1}: check not satisfied: {problem}")
-                self.store.journal({"event": "task_check_failed", "at": iso(self.host.now()), "mission": self.mission["id"],
-                                    "task": index, "session": session_id, "problem": problem[:240]})
-                return self.hold("task_check_failed", pending.get("attempt"), report.turn_id)
+        if problem:
+            self.host.log(f"mission {self.mission['id']} task {index + 1}: check not satisfied: {problem}")
+            self.store.journal({"event": "task_check_failed", "at": iso(self.host.now()), "mission": self.mission["id"],
+                                "task": index, "session": session_id, "problem": problem[:240]})
+            return self.hold("task_check_failed", pending.get("attempt"), report.turn_id)
         now = self.host.now()
         rec["next"] = index + 1
         rec["done"].append({"task": index, "session": session_id, "agent": report.agent, "at": iso(now)})
