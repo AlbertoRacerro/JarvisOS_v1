@@ -3341,3 +3341,11 @@ def test_roadmap_cycle_identity_survives_a_crash_around_submission(tmp_path: Pat
     road.finish(mid, relay_status="blocked")
     assert road.step() == "roadmap:paused:coordinator_blocked"  # the crashed-around cycle is still judged
     assert len(rc.load_missions(road.root)) == 1
+
+
+def test_atomic_write_survives_a_stale_temp_file_from_a_killed_write(tmp_path: Path) -> None:
+    target = tmp_path / "missions" / "m-20261018T080000Z-aaaaaa.json"
+    target.parent.mkdir()
+    (target.parent / f".{target.name}.{os.getpid()}.tmp").write_text("{")  # what a killed write left behind
+    rc.write_json_atomic(target, {"ok": True})
+    assert json.loads(target.read_text()) == {"ok": True}

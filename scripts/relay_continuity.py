@@ -3483,7 +3483,9 @@ def mission_status(store: Store) -> tuple[str, dict[str, Any] | None]:
 
 def write_json_atomic(path: Path, data: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    # Unique per write: an owner in a fresh PID namespace reuses its PID, so a temp file left by a killed write
+    # must never collide with the retry.
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.{secrets.token_hex(4)}.tmp")
     with open(tmp, "x", encoding="utf-8") as handle:
         json.dump(data, handle, indent=1, sort_keys=True)
         handle.flush()
