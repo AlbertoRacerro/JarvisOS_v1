@@ -1,13 +1,16 @@
 /* Spec 070 semantic migration layered after the legacy stylesheet. */
 :root {
   font-family: var(--font-sans);
-  font-size: var(--font-size-body);
+  /* Keep rem tokens anchored to the browser preference: body size is not the root size. */
+  font-size: 100%;
   line-height: var(--line-height-body);
   color: var(--color-text-primary);
   background: var(--color-bg-canvas);
 }
 
 body {
+  font-size: var(--font-size-body);
+  font-variant-numeric: tabular-nums;
   background: var(--color-bg-canvas);
   color: var(--color-text-primary);
 }

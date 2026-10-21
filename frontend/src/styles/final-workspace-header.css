@@ -1,16 +1,15 @@
 .final-fusion__workspace-head {
   min-height: 0;
-  padding: 10px 0;
+  padding: var(--space-3) 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   grid-template-areas:
     "eyebrow tabs"
-    "title tabs"
-    "description tabs";
+    "title tabs";
   align-items: center;
-  column-gap: 20px;
-  row-gap: 2px;
-  background: #fbfaf6;
+  column-gap: var(--space-5);
+  row-gap: var(--space-1);
+  background: transparent;
 }
 
 /* The shared shell gives every direct child flex: 1. The workspace header is
@@ -22,26 +21,17 @@
 .final-fusion__workspace-head .eyebrow {
   grid-area: eyebrow;
   margin: 0;
-  color: #6f786f;
-  font-size: 8px;
-  letter-spacing: .16em;
-  text-transform: uppercase;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-body);
 }
 
 .final-fusion__workspace-head h1 {
   grid-area: title;
   margin: 0;
-  font-size: 29px;
-  line-height: 1.02;
-  font-weight: 400;
-  letter-spacing: -.035em;
-}
-
-.final-fusion__workspace-head > p:last-of-type {
-  grid-area: description;
-  margin: 0;
-  color: #687168;
-  font-size: 11px;
+  font-size: var(--font-size-page-title);
+  line-height: 1.2;
+  font-weight: 600;
 }
 
 .final-fusion__peer-tabs {
@@ -49,27 +39,38 @@
   margin-top: 0;
   display: flex;
   align-self: center;
-  gap: 7px;
+  gap: var(--space-2);
+  flex-wrap: wrap;
 }
 
 .final-fusion__peer-tabs a {
-  min-height: 34px;
-  padding: 7px 14px;
+  min-height: var(--control-height-default);
+  padding: var(--space-2) var(--space-3);
   display: inline-flex;
   align-items: center;
-  border: 1px solid #ddd5c8;
-  border-radius: 4px;
-  background: #fffefc;
-  color: #536052;
-  font-size: 11px;
+  border: var(--border-width-default) solid var(--color-border-default);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-surface-raised);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
+  font-weight: 500;
   text-decoration: none;
 }
 
 .final-fusion__peer-tabs a.is-active {
-  border-color: #76a964;
-  background: #edf7e7;
-  color: #28581a;
-  box-shadow: 0 5px 16px rgba(70, 126, 42, .08);
+  border-color: var(--color-accent-foreground);
+  background: var(--color-accent-surface);
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+
+.final-fusion__peer-tabs a:hover {
+  border-color: var(--color-border-strong);
+}
+
+.final-fusion__peer-tabs a:focus-visible {
+  outline: var(--border-width-default) solid var(--color-focus-ring);
+  outline-offset: var(--space-1);
 }
 
 /* Production has two truthful surface roots: backend-owned READ surfaces expose
@@ -91,12 +92,11 @@
 @media (max-width: 900px) {
   .final-fusion__workspace-head {
     min-height: auto;
-    padding: 10px 0 8px;
+    padding: var(--space-3) 0 var(--space-2);
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
       "eyebrow"
       "title"
-      "description"
       "tabs";
     align-items: start;
   }
@@ -107,7 +107,6 @@
   }
 
   .final-fusion__peer-tabs {
-    margin-top: 4px;
-    overflow-x: auto;
+    margin-top: var(--space-1);
   }
 }
