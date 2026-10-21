@@ -47,7 +47,7 @@ class Clock:
         self.t += timedelta(seconds=seconds)
 
 
-def write_turn(session_dir: Path, events: list[dict[str, Any]], *, agent: str = "claude", status: str = "completed",
+def write_turn(session_dir: Path, events: list[dict[str, Any]], *, agent: str = "claude", status: str = "propose_done",
                prompt: str = "task", number: int = 1) -> Path:
     turn = session_dir / "turns" / f"turn-{number:03d}"
     turn.mkdir(parents=True, exist_ok=True)
@@ -123,11 +123,12 @@ class FakeRelay(rc.RelayAdapter):
         step, agent, task = self._current
         if step is None:
             return rc.RunResult(None, 1, False)
-        _, events = step
+        _, events, *reported = step
         if callable(events):  # a reply that depends on the task (a diagnostic answers its own nonce)
             events = events(task)
         sid = f"20261018-{len(self.launches):06d}-{'b' * 6}"
-        write_turn(self.sessions_dir() / sid, events, agent=agent, prompt=relay_prompt(task))
+        write_turn(self.sessions_dir() / sid, events, agent=agent, prompt=relay_prompt(task),
+                   status=reported[0] if reported else "propose_done")
         return rc.RunResult(sid, 0, True)
 
 
@@ -2695,9 +2696,12 @@ def test_real_codex_read_only_sandbox_blocks_writes(tmp_path: Path) -> None:
 DIRECTIVE = "L20261020085928-0431"
 
 
-def mission_def(*texts: str, checks: dict[int, dict[str, Any]] | None = None, session: str | None = None,
+def mission_def(*texts: str, checks: dict[int, dict[str, Any] | None] | None = None, session: str | None = None,
                 mid: str = "m-20261018T075500Z-abc123", submitted: datetime = T0 - timedelta(minutes=5)) -> dict[str, Any]:
-    tasks = [{"text": t, **({"check": checks[i]} if checks and i in checks else {})} for i, t in enumerate(texts)]
+    # The fake host accepts checks by default. Explicit None models a legacy unchecked mission.
+    tasks = [{"text": t, **({"check": check} if check is not None else {})}
+             for i, t in enumerate(texts)
+             for check in [(checks or {}).get(i, {"kind": "pr_merged", "pr": 1})]]
     return {"schema": rc.MISSION_SCHEMA, "id": mid, "authority": DIRECTIVE, "tasks": tasks,
             "submitted_at": rc.iso(submitted), "session": session, "repo": "/repo"}
 
@@ -2823,7 +2827,8 @@ def test_mission_restart_adopts_running_attempt_and_continues_remaining_tasks(tm
     state.update({"phase": "running", "head_session": HEAD, "chain": [HEAD], "agent": "codex", "permissions_digest": "perm0",
                   "permissions_pinned": True,
                   "mission": {"id": mission["id"], "next": 1, "total": 2,
-                              "done": [{"task": 0, "session": HEAD, "agent": "claude", "at": rc.iso(T0)}]},
+                              "done": [{"task": 0, "session": HEAD, "agent": "claude", "at": rc.iso(T0),
+                                        "outcome": "verified"}]},
                   "pending": {"nonce": nonce, "agent": "codex", "parent": HEAD, "started_at": rc.iso(T0), "pid": 4242,
                               "pid_start": 42, "fingerprint": "fp0", "attempt": 1, "task": 1}})
     env.store.save(state, T0)
@@ -2906,6 +2911,42 @@ def test_mission_task_check_must_pass_before_advancing(tmp_path: Path) -> None:
     assert result == "held" and sup.state["hold"]["reason"] == "task_check_failed"
     assert seen == [{"kind": "pr_merged", "pr": 846}] and sup.state["mission"]["next"] == 0
     assert len(env.relay.launches) == 1 and "task_check_failed" in journal_events(env.store)
+
+
+def test_unchecked_mission_cannot_complete_on_successful_provider_turn(tmp_path: Path) -> None:
+    env = Env(tmp_path, [("claude", SUCCESS)])
+    mission = mission_def("implement, test and merge an engineering deliverable", checks={0: None})
+    start_mission(env, mission)
+    result, sup = run_mission(env, mission)
+    assert result == "held"
+    assert sup.state["hold"]["reason"] == "task_check_failed"
+    assert sup.state["mission"]["next"] == 0
+    assert "mission_completed" not in journal_events(env.store)
+    assert len(env.relay.launches) == 1
+
+
+def test_mission_checkpoint_stays_pending_until_check_passes(tmp_path: Path) -> None:
+    env = Env(tmp_path, [("claude", SUCCESS, "continue"), ("claude", SUCCESS, "propose_done")])
+    checks: list[dict[str, Any]] = []
+    env.host.task_check = lambda check: checks.append(check) or None
+    mission = mission_def("merge the deliverable", checks={0: {"kind": "pr_merged", "pr": 846}})
+    start_mission(env, mission)
+    result, sup = run_mission(env, mission)
+    assert result == "idle" and sup.state["mission"]["next"] == 1
+    assert len(env.relay.launches) == 2 and len(checks) == 1
+    assert journal_events(env.store).count("task_checkpointed") == 1
+    assert journal_events(env.store).count("task_completed") == 1
+
+
+def test_mission_repeated_checkpoints_have_a_finite_bound(tmp_path: Path) -> None:
+    env = Env(tmp_path, [("claude", SUCCESS, "continue"), ("claude", SUCCESS, "continue")],
+              limits=rc.Limits(max_attempts_per_run=2))
+    mission = mission_def("unfinished")
+    start_mission(env, mission)
+    result, sup = run_mission(env, mission)
+    assert result == "held" and sup.state["hold"]["reason"] == "circuit_attempts"
+    assert sup.state["mission"]["next"] == 0
+    assert len(env.relay.launches) == 2
 
 
 def test_check_task_is_read_only_and_bounded_to_the_repository(tmp_path: Path) -> None:
@@ -3136,6 +3177,7 @@ def test_release_mission_hold_and_advance(tmp_path: Path, monkeypatch: pytest.Mo
     assert rc.serve_step(root, factory, conflicts=lambda: [], now=env.clock.now) == f"ran:{mission['id']}:held"
     assert rc.main(["release", "--mission", mission["id"], "--advance", "--note", "merged by hand"]) == 0
     env.relay.script = [("claude", SUCCESS)]
+    env.host.task_check = lambda check: None
     assert rc.serve_step(root, factory, conflicts=lambda: [], now=env.clock.now) == f"ran:{mission['id']}:idle"
     assert "then this" in env.relay.launches[-1]["task"]
     state = rc.mission_store(root, mission["id"]).load()
@@ -3362,3 +3404,225 @@ def test_resumed_roadmap_reads_the_remote_before_submitting(tmp_path: Path, monk
     assert road.step() == "roadmap:waiting:remote_unreadable"  # a cached baseline is not a fresh reading
     assert len(rc.load_missions(road.root)) == 1
     assert road.step().startswith("roadmap:submitted:")
+
+
+# ---------------------------------------------------------------------------
+# Spec 204: evidence-backed completion, legacy missions and checkpoints
+
+
+def legacy_done(task: int, session: str) -> dict[str, Any]:
+    """A completion recorded by the pre-204 owner on a successful provider return alone."""
+    return {"task": task, "session": session, "agent": "codex", "at": rc.iso(T0)}
+
+
+def test_204_legacy_counted_tasks_are_reopened_not_completed(tmp_path: Path) -> None:
+    # The m-20261021T125949Z-2e0739 shape: 3/3 counted on provider returns, no completed_at, owner stopped.
+    env = Env(tmp_path, [("claude", SUCCESS, "continue")])
+    root = tmp_path / "control"
+    mission = mission_def("phase A", "phase B", "phase C", checks={0: None, 1: None, 2: None},
+                          mid="m-20261018T070000Z-aaaaaa")
+    _write_mission(root, mission)
+    env.head(SUCCESS)
+    store = rc.mission_store(root, mission["id"])
+    state = rc.default_state()
+    state.update({"phase": "stopped", "head_session": HEAD, "chain": [HEAD], "permissions_digest": "perm0",
+                  "permissions_pinned": True, "last_attempt": {"nonce": "rc-x", "agent": "codex", "attempt": 3,
+                                                               "fingerprint": "fp0", "task": 2},
+                  "mission": {"id": mission["id"], "next": 3, "total": 3,
+                              "done": [legacy_done(0, HEAD), legacy_done(1, HEAD), legacy_done(2, HEAD)]}})
+    store.save(state, T0)
+    assert rc.mission_status(store)[0] == "active"  # never read as complete
+    factory = lambda s, m: rc.Supervisor(s, env.host, env.limits, sender=env.sender)  # noqa: E731
+    env.limits = rc.Limits(max_attempts_per_run=1)
+    assert rc.serve_step(root, factory, conflicts=lambda: [], now=env.clock.now) == f"ran:{mission['id']}:held"
+    after = store.load()
+    rec = after["mission"]
+    assert rec["next"] == 0 and rec["done"] == [] and [d["task"] for d in rec["reopened"]] == [0, 1, 2]
+    assert "completed_at" not in rec and "mission_completed" not in journal_events(store)
+    assert "mission_reopened" in journal_events(store) and "task_checkpointed" in journal_events(store)
+    assert "phase A" in env.relay.launches[0]["task"]  # resumed at the first unverified task, on the same chain
+    assert env.relay.launches[0]["parent"] == HEAD
+    assert "no independent completion check" in env.relay.launches[0]["task"]
+
+
+def test_204_completed_legacy_mission_is_not_reinterpreted_as_verified(tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+                                                                      capsys: pytest.CaptureFixture[str]) -> None:
+    root = tmp_path / "control"
+    monkeypatch.setenv("RELAY_CONTINUITY_DIR", str(root))
+    mission = mission_def("old cycle", checks={0: None})
+    _write_mission(root, mission)
+    state = rc.default_state()
+    state["mission"] = {"id": mission["id"], "next": 1, "total": 1, "done": [legacy_done(0, HEAD)],
+                        "completed_at": rc.iso(T0)}
+    rc.mission_store(root, mission["id"]).save(state, T0)
+    assert rc.reopen_unverified(state) == []  # a finished record stays as it is (the audit judges it)
+    assert rc.main(["missions"]) == 0
+    [row] = json.loads(capsys.readouterr().out)["missions"]
+    assert row["status"] == "complete" and row["verified"] is False and row["outcomes"] == ["legacy_unverified"]
+
+
+def test_204_lying_provider_then_merged_evidence_completes_without_relaunch(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    env = Env(tmp_path, [("claude", SUCCESS)])
+    root = tmp_path / "control"
+    monkeypatch.setenv("RELAY_CONTINUITY_DIR", str(root))
+    monkeypatch.setattr(rc, "make_host", lambda repo: env.host)
+    mission = mission_def("merge it", "then this", checks={0: {"kind": "pr_merged", "pr": 7}})
+    _write_mission(root, mission)
+    merged = {"v": False}
+    env.host.task_check = lambda check: None if merged["v"] else "PR #7 is OPEN"
+    factory = lambda store, m: rc.Supervisor(store, env.host, env.limits)  # noqa: E731
+    assert rc.serve_step(root, factory, conflicts=lambda: [], now=env.clock.now) == f"ran:{mission['id']}:held"
+    store = rc.mission_store(root, mission["id"])
+    assert store.load()["mission"]["next"] == 0 and store.load()["hold"]["reason"] == "task_check_failed"
+    merged["v"] = True  # the PR really merged (e.g. after review)
+    assert rc.main(["release", "--mission", mission["id"], "--note", "PR 7 merged after review"]) == 0
+    env.relay.script = [("claude", SUCCESS)]
+    assert rc.serve_step(root, factory, conflicts=lambda: [], now=env.clock.now) == f"ran:{mission['id']}:idle"
+    assert len(env.relay.launches) == 2 and "then this" in env.relay.launches[1]["task"]  # task 1 never relaunched
+    done = store.load()["mission"]["done"]
+    assert [(d["task"], d["outcome"]) for d in done] == [(0, "verified"), (1, "verified")]
+
+
+def test_204_relay_status_routes_but_never_completes(tmp_path: Path) -> None:
+    for status, reason in (("blocked", "task_blocked"), ("needs_review", "task_report_unverified")):
+        env = Env(tmp_path / status, [("claude", SUCCESS, status)])
+        checks: list[Any] = []
+        env.host.task_check = lambda check, seen=checks: seen.append(check)
+        mission = mission_def("do it")
+        start_mission(env, mission)
+        result, sup = run_mission(env, mission)
+        assert result == "held" and sup.state["hold"]["reason"] == reason
+        assert checks == [] and sup.state["mission"]["next"] == 0
+
+
+def test_204_unreadable_remote_evidence_fails_closed(tmp_path: Path) -> None:
+    env = Env(tmp_path, [("claude", SUCCESS)])
+
+    def offline(check: dict[str, Any]) -> str | None:
+        raise TimeoutError("gh timed out")
+    env.host.task_check = offline
+    mission = mission_def("merge it")
+    start_mission(env, mission)
+    result, sup = run_mission(env, mission)
+    assert result == "held" and sup.state["hold"]["reason"] == "task_check_failed"
+    assert "unverifiable" in [json.loads(x) for x in env.store.journal_path.read_text().splitlines()
+                              if '"task_check_failed"' in x][0]["problem"]
+
+
+def test_204_checkpoint_bound_survives_restarts(tmp_path: Path) -> None:
+    env = Env(tmp_path, [("claude", SUCCESS, "continue")])
+    mission = mission_def("long task")
+    start_mission(env, mission)
+    state = env.store.load()
+    state["mission"]["checkpoints"] = {"0": rc.MAX_TASK_CHECKPOINTS - 1}  # earlier owner runs checkpointed it
+    env.store.save(state, T0)
+    result, sup = run_mission(env, mission)
+    assert result == "held" and sup.state["hold"]["reason"] == "task_checkpoint_limit"
+    assert sup.state["mission"]["next"] == 0 and len(env.relay.launches) == 1
+
+
+def test_204_contract_attaches_only_to_pending_unchecked_tasks(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    env = Env(tmp_path, [("claude", SUCCESS)])
+    root = tmp_path / "control"
+    monkeypatch.setenv("RELAY_CONTINUITY_DIR", str(root))
+    monkeypatch.setattr(rc, "make_host", lambda repo: env.host)
+    mission = mission_def("legacy", "checked", checks={0: None, 1: {"kind": "pr_merged", "pr": 2}})
+    _write_mission(root, mission)
+    spec = '{"kind": "spec_merged", "spec": "204"}'
+    base = ["contract", "--mission", mission["id"], "--note", "spec 204 row is the deliverable"]
+    assert rc.main([*base, "--task", "2", "--check", spec]) == 2  # immutable definition contract
+    assert rc.main([*base, "--task", "1", "--check", '{"kind": "shell"}']) == 2
+    assert rc.main([*base, "--task", "1", "--check", '{"kind": "coordinator_cycle"}']) == 2  # not a roadmap cycle
+    assert rc.main([*base, "--task", "1", "--check", spec]) == 0
+    store = rc.mission_store(root, mission["id"])
+    assert store.load()["mission"]["contracts"] == {"0": {"kind": "spec_merged", "spec": "204"}}
+    assert "contract_attached" in journal_events(store)
+    seen: list[Any] = []
+    env.host.task_check = lambda check: seen.append(check)
+    factory = lambda s, m: rc.Supervisor(s, env.host, env.limits)  # noqa: E731
+    env.relay.script = [("claude", SUCCESS), ("claude", SUCCESS)]
+    assert rc.serve_step(root, factory, conflicts=lambda: [], now=env.clock.now) == f"ran:{mission['id']}:idle"
+    assert seen == [{"kind": "spec_merged", "spec": "204"}, {"kind": "pr_merged", "pr": 2}]
+    assert "spec 204 is `merged`" in env.relay.launches[0]["task"]
+    assert rc.main([*base, "--task", "1", "--check", spec]) == 2  # complete now
+
+
+def test_204_check_task_spec_merged_reads_the_remote_registry(tmp_path: Path) -> None:
+    registry = ("| Spec | State | PRs |\n|---|---|---|\n"
+                "| 203 | merged | [#854](https://x/854) | ROADMAP |\n"
+                "| 204 | merged | [#865](https://x/865), [#870](https://x/870) | MISSION |\n"
+                "| 205 | in_review | [#871](https://x/871) | X |\n| 206 | merged | — | Y |\n")
+    states = {"865": "MERGED", "870": "MERGED", "854": "MERGED"}
+
+    def remote(args: list[str], **_: Any) -> tuple[int, str]:
+        if args[:2] == ["gh", "api"]:
+            assert "ref=master" in args[-1]
+            return 0, registry
+        return 0, states[args[3]] + "\n"
+    check = lambda spec, run=remote: rc.check_task(tmp_path, {"kind": "spec_merged", "spec": spec}, run=run)  # noqa: E731
+    assert check("204") is None
+    states["870"] = "OPEN"
+    assert check("204") == "PR #870 is OPEN"
+    assert check("205") == "spec 205 is in_review in STATUS.md"
+    assert check("206") == "spec 206 links no PR in STATUS.md"
+    assert check("299") == "spec 299 has 0 STATUS.md rows"
+    assert check("204", lambda *a, **k: (1, "")) == "STATUS.md on GitHub master is unreadable"
+    assert rc.check_task(tmp_path, {"kind": "coordinator_cycle"}, run=lambda *a, **k: (0, "abc\trefs/heads/master\n")) is None
+    assert rc.check_task(tmp_path, {"kind": "coordinator_cycle"}, run=lambda *a, **k: (128, ""))
+    assert rc.validate_check({"kind": "spec_merged", "spec": "100g"}) is None
+    assert rc.validate_check({"kind": "spec_merged", "spec": "../x"})
+    assert rc.validate_check({"kind": "coordinator_cycle", "pr": 1})
+
+
+def test_204_roadmap_cycle_settles_on_blocked_as_unverified_cycle(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    road = Roadmap(tmp_path, monkeypatch, "r0", "r1")
+    rc.main(["roadmap", "start", "--authority", DIRECTIVE])
+    cycle = road.step().split(":")[2]
+    [(mission, _, _)] = rc.load_missions(road.root)
+    assert mission["tasks"][0]["check"] == {"kind": "coordinator_cycle"}
+    env = Env(tmp_path / "exec", [("claude", SUCCESS, "blocked")])
+    env.relay.repo = road.repo
+    env.relay.sessions_dir().mkdir(parents=True, exist_ok=True)
+    seen: list[Any] = []
+    env.host.task_check = lambda check: seen.append(check)
+    factory = lambda s, m: rc.Supervisor(s, env.host, env.limits)  # noqa: E731
+    assert rc.serve_step(road.root, factory, conflicts=lambda: [], now=env.clock.now) == f"ran:{cycle}:idle"
+    done = rc.mission_store(road.root, cycle).load()["mission"]["done"]
+    assert seen == [{"kind": "coordinator_cycle"}] and [(d["outcome"], d["status"]) for d in done] == [("cycle_settled", "blocked")]
+    assert road.step() == "roadmap:paused:coordinator_blocked"
+
+
+def test_204_submit_refuses_coordinator_cycle_contracts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    road = Roadmap(tmp_path, monkeypatch)
+    spec = tmp_path / "m.json"
+    spec.write_text(json.dumps({"authority": DIRECTIVE, "tasks": [{"text": "x", "check": {"kind": "coordinator_cycle"}}]}))
+    assert rc.main(["submit", "--mission-file", str(spec)]) == 2
+    spec.write_text(json.dumps({"authority": DIRECTIVE, "tasks": [{"text": "x", "check": {"kind": "spec_merged", "spec": "204"}}]}))
+    assert rc.main(["submit", "--mission-file", str(spec)]) == 0
+    assert len(rc.load_missions(road.root)) == 1
+
+
+def test_204_legacy_completion_is_reopened_after_a_pending_final_task_settles(tmp_path: Path) -> None:
+    env = Env(tmp_path, [("claude", SUCCESS, "continue")])
+    root = tmp_path / "control"
+    mission = mission_def("first", "second", checks={0: None}, mid="m-20261018T070000Z-aaaaaa")
+    _write_mission(root, mission)
+    nonce = "rc-20261018T080000Z-0badf00d"
+    store = rc.mission_store(root, mission["id"])
+    state = rc.default_state()
+    state.update({"phase": "stopped", "head_session": HEAD, "chain": [HEAD], "permissions_digest": "perm0",
+                  "permissions_pinned": True,
+                  "mission": {"id": mission["id"], "next": 1, "total": 2, "done": [legacy_done(0, HEAD)]},
+                  "pending": {"nonce": nonce, "agent": "claude", "parent": HEAD, "started_at": rc.iso(T0), "pid": None,
+                              "pid_start": None, "fingerprint": "fp0", "attempt": 1, "task": 1}})
+    store.save(state, T0)
+    store.journal({"event": "launch", "nonce": nonce})
+    write_turn(env.relay.sessions_dir() / "20261018-080100-cccccc", SUCCESS,
+               prompt=relay_prompt(f"[relay-continuity attempt {nonce}]"))
+    env.limits = rc.Limits(max_attempts_per_run=1)
+    factory = lambda s, m: rc.Supervisor(s, env.host, env.limits)  # noqa: E731
+    assert rc.serve_step(root, factory, conflicts=lambda: [], now=env.clock.now) == f"ran:{mission['id']}:held"
+    rec = store.load()["mission"]
+    assert "completed_at" not in rec and rec["next"] == 0 and "mission_completed" not in journal_events(store)
+    assert "mission_reopened" in journal_events(store) and "first" in env.relay.launches[0]["task"]

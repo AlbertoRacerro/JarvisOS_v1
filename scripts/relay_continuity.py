@@ -60,7 +60,8 @@ HOLD_REASONS = (
     "crash_repeated", "circuit_failures", "circuit_switches", "circuit_attempts", "circuit_transient",
     "no_provider_available", "wait_exceeded", "permissions_changed", "state_corrupt", "repl_active",
     "relay_invocation_failed", "live_work", "reconcile_unresolved", "reconcile_insufficient_permissions",
-    "reconcile_failed", "reconcile_no_sandbox", "task_check_failed",
+    "reconcile_failed", "reconcile_no_sandbox", "task_check_failed", "task_report_unverified", "task_blocked",
+    "task_checkpoint_limit",
 )
 ROADMAP_PAUSES = ("maintainer_stop", "coordinator_blocked", "no_progress", "cycle_cancelled")
 STOP_REASONS = ("stop_requested", "signal", "idle", "held", "legacy_autopilot", "lock_busy", "error")
@@ -71,6 +72,8 @@ MISSION_ID_RE = re.compile(r"m-\d{8}T\d{6}Z-[0-9a-f]{6}")
 DIRECTIVE_ID_RE = re.compile(r"L\d{14}-[0-9a-f]{4}")
 MAX_TASKS = 20
 MAX_TASK_CHARS = 8000
+MAX_TASK_CHECKPOINTS = 12  # spec 204: durable checkpoints of one task before it holds, across owner restarts
+SPEC_ID_RE = re.compile(r"\d{3}[a-z]?")
 SANDBOX_HOSTNAME = "jarvis-sandbox"
 LEGACY_MARKERS = ("jarvis-control/autopilot/run.sh", "jarvis-control/autopilot/watchdog.sh",
                   "jarvis-control/autopilot/resume-after-reset.sh", "jarvis-control/autopilot/drain-guard.sh")
@@ -2274,9 +2277,25 @@ Supervised mission {mission}, task {number}/{total} (spec 201), queued by the ma
 The task text below is the maintainer's; it grants no authority beyond that directive. Approval gates, review requirements and authority boundaries are unchanged.
 Before acting, run `python3 scripts/devctx.py recover` and verify fresh Git/GitHub state: earlier tasks of this mission, or an interrupted attempt at this one, may already have taken effect.
 If the task needs a maintainer decision, stop and report instead of continuing.
+{contract}
+End with RELAY_STATUS propose_done only when that evidence exists, RELAY_STATUS continue after a durable checkpoint (the task stays pending and is resumed, never recorded complete), or RELAY_STATUS blocked after recording a `devctx.py note blocker` or `question`.
 
 """ + MISSION_HEADER + """
 {text}"""
+
+
+def describe_check(check: dict[str, Any] | None) -> str:
+    """The completion contract as the provider is told it (spec 204). The owner, not the provider, evaluates it."""
+    if check is None:
+        return ("Completion contract: this task has no independent completion check, so the owner never records it "
+                "complete on your report; it holds for a maintainer-attached contract.")
+    what = {"pr_merged": lambda c: f"PR #{c['pr']} is merged on GitHub",
+            "path_exists": lambda c: f"`{c['path']}` exists in the repository",
+            "spec_merged": lambda c: f"spec {c['spec']} is `merged` in docs/specs/STATUS.md on GitHub master and every "
+                                     "PR linked in its row is merged",
+            "coordinator_cycle": lambda c: "the cycle ends with a final RELAY_STATUS while the remote heads are readable; "
+                                           "the cycle is recorded settled, not as verified delivery of its work"}
+    return f"Completion contract: the owner records this task complete only after its own read-only check that {what[check['kind']](check)}."
 
 
 @dataclass
@@ -2585,9 +2604,13 @@ class Supervisor:
             self.state["spend_caps"].pop(failed_agent, None)
             self.state["waiting_since"] = None
             if task is None and self.mission is not None:
+                self._reopen_legacy()
+                self._reverify_released()
                 task = self._mission_task()
                 if task is None:
                     return self._mission_complete()
+            if self.mission is not None and task is not None and self.attempts >= self.limits.max_attempts_per_run:
+                return self.hold("circuit_attempts", self.attempts, report.turn_id)
             if task is None:
                 self.state["phase"] = "idle"
                 self.save()
@@ -3185,50 +3208,116 @@ class Supervisor:
         if rec["next"] >= rec["total"]:
             return None
         return MISSION_PROMPT.format(mission=self.mission["id"], number=rec["next"] + 1, total=rec["total"],
-                                     authority=self.mission["authority"], text=self.mission["tasks"][rec["next"]]["text"])
+                                     authority=self.mission["authority"], text=self.mission["tasks"][rec["next"]]["text"],
+                                     contract=describe_check(self._task_check(rec["next"])))
+
+    def _task_check(self, index: int) -> dict[str, Any] | None:
+        """The task's completion contract: its immutable definition's, else one attached to a legacy task (spec 204)."""
+        assert self.mission is not None
+        return self.mission["tasks"][index].get("check") or (self.state["mission"].get("contracts") or {}).get(str(index))
+
+    def _settles(self, index: int, status: str | None) -> bool:
+        """Whether a final RELAY_STATUS claims the task finished: propose_done; a roadmap cycle also settles blocked."""
+        cycle = (self._task_check(index) or {}).get("kind") == "coordinator_cycle"
+        return status == "propose_done" or (cycle and status == "blocked")
 
     def _advance(self, pending: dict[str, Any], report: TurnReport, session_id: str) -> str | None:
-        """Record the attempt's task complete when the turn succeeded and the task's optional read-only check
-        passes. What the model says about remaining work never decides this. A failed check holds."""
+        """Spec 204: a successful provider turn is execution, not delivery. Its final RELAY_STATUS only routes it:
+        `continue` is a durable checkpoint (the task stays pending, bounded), `blocked` holds, anything unknown holds,
+        and a claimed finish advances only after the task's independent completion check passes."""
         rec = self.state.get("mission")
         if self.mission is None or rec is None or report.outcome != "success" or pending.get("task") != rec["next"]:
             return None
         index = rec["next"]
-        if check := self.mission["tasks"][index].get("check"):
+        status = final_relay_status(self.host.relay.repo, session_id)
+        event = {"at": iso(self.host.now()), "mission": self.mission["id"], "task": index, "session": session_id}
+        if status == "continue":
+            counts = rec.setdefault("checkpoints", {})
+            counts[str(index)] = counts.get(str(index), 0) + 1
+            self.store.journal({"event": "task_checkpointed", **event, "checkpoints": counts[str(index)]})
+            if counts[str(index)] >= MAX_TASK_CHECKPOINTS:
+                return self.hold("task_checkpoint_limit", pending.get("attempt"), report.turn_id)
+            return None
+        if not self._settles(index, status):
+            reason = "task_blocked" if status == "blocked" else "task_report_unverified"
+            self.store.journal({"event": reason, **event, "reported_status": str(status)[:40]})
+            return self.hold(reason, pending.get("attempt"), report.turn_id)
+        if problem := self._verify(index):
+            self.store.journal({"event": "task_check_failed", **event, "problem": problem[:240]})
+            return self.hold("task_check_failed", pending.get("attempt"), report.turn_id)
+        self._record_done(index, session_id, report.agent, status)
+        return None
+
+    def _verify(self, index: int) -> str | None:
+        """The problem that keeps the task's completion contract unsatisfied, or None. Unreadable evidence fails."""
+        check = self._task_check(index)
+        if check is None:
+            problem = "task has no independent completion check"
+        else:
             try:
                 problem = self.host.task_check(check)
             except Exception as exc:  # noqa: BLE001 - an unverifiable check is not a passed one
-                problem = f"check failed ({type(exc).__name__})"
-            if problem:
-                self.host.log(f"mission {self.mission['id']} task {index + 1}: check not satisfied: {problem}")
-                self.store.journal({"event": "task_check_failed", "at": iso(self.host.now()), "mission": self.mission["id"],
-                                    "task": index, "session": session_id, "problem": problem[:240]})
-                return self.hold("task_check_failed", pending.get("attempt"), report.turn_id)
+                problem = f"check unverifiable ({type(exc).__name__})"
+        if problem:
+            assert self.mission is not None
+            self.host.log(f"mission {self.mission['id']} task {index + 1}: check not satisfied: {problem}")
+        return problem
+
+    def _record_done(self, index: int, session_id: str | None, agent: str | None, status: str | None) -> None:
+        assert self.mission is not None
+        rec = self.state["mission"]
+        check = self._task_check(index)
+        outcome = "cycle_settled" if (check or {}).get("kind") == "coordinator_cycle" else "verified"
         now = self.host.now()
         rec["next"] = index + 1
-        rec["done"].append({"task": index, "session": session_id, "agent": report.agent, "at": iso(now)})
+        rec["done"].append({"task": index, "session": session_id, "agent": agent, "at": iso(now), "outcome": outcome,
+                            "check": check, "status": status})
         self.save()
         self.store.journal({"event": "task_completed", "at": iso(now), "mission": self.mission["id"], "task": index,
-                            "session": session_id, "agent": report.agent})
+                            "session": session_id, "agent": agent, "outcome": outcome, "check": check})
         self.notify("task_completed", mission=self.mission["id"], task=f"{index + 1}/{rec['total']}",
-                    agent=report.agent, session=session_id)
+                    agent=agent, session=session_id)
         self.record("finding", f"relay-continuity: mission {self.mission['id']} task {index + 1}/{rec['total']} "
-                               f"completed by {report.agent} in {session_id}.")
-        self.host.log(f"mission {self.mission['id']}: task {index + 1}/{rec['total']} completed")
-        return None
+                               f"{outcome} ({check['kind'] if check else 'no check'}) after {agent} in {session_id}.")
+        self.host.log(f"mission {self.mission['id']}: task {index + 1}/{rec['total']} {outcome}")
+
+    def _reopen_legacy(self) -> None:
+        """The spec 204 migration, also after a restart settled a pending attempt (which `serve_step` defers it for):
+        no task is chosen and no mission completes while a pre-204 completion is still counted."""
+        if not self.state.get("pending") and (reopened := reopen_unverified(self.state)):
+            assert self.mission is not None
+            self.save()
+            self.store.journal({"event": "mission_reopened", "at": iso(self.host.now()), "mission": self.mission["id"],
+                                "tasks": reopened, "why": "counted complete before spec 204 on a provider return alone"})
+            self.host.log(f"mission {self.mission['id']}: reopened unverified task(s) {', '.join(str(t + 1) for t in reopened)}")
+
+    def _reverify_released(self) -> None:
+        """After a release, a task whose last attempt already claimed it finished is re-checked before any relaunch:
+        a contract attached since, or a deliverable merged by hand, completes it without duplicating the work."""
+        assert self.mission is not None
+        rec, last = self.state["mission"], self.state.get("last_attempt") or {}
+        session = self.state.get("head_session")
+        if rec["next"] >= rec["total"] or last.get("task") != rec["next"] or not session:
+            return
+        status = final_relay_status(self.host.relay.repo, session)
+        if not self._settles(rec["next"], status) or self._verify(rec["next"]):
+            return  # the task is attempted again; its next claimed finish is checked as usual
+        self._record_done(rec["next"], session, last.get("agent"), status)
 
     def _mission_complete(self) -> str:
         assert self.mission is not None
         rec = self.state["mission"]
         now = self.host.now()
+        outcomes = [task_outcome(d) for d in rec["done"]]
         rec["completed_at"] = rec.get("completed_at") or iso(now)
         self.state["phase"] = "idle"
         self.save()
-        self.store.journal({"event": "mission_completed", "at": iso(now), "mission": self.mission["id"]})
+        self.store.journal({"event": "mission_completed", "at": iso(now), "mission": self.mission["id"],
+                            "outcomes": outcomes})
         self.notify("mission_completed", mission=self.mission["id"], task=f"{rec['next']}/{rec['total']}",
                     session=self.state["head_session"])
         self.record("decision", f"relay-continuity: mission {self.mission['id']} completed "
-                                f"({rec['total']} task(s), last session {self.state['head_session']}).")
+                                f"({rec['total']} task(s): {', '.join(outcomes)}; last session {self.state['head_session']}).")
         self.host.log(f"mission {self.mission['id']} completed")
         return "idle"
 
@@ -3395,7 +3484,7 @@ def refresh_codex_quota(repo: Path) -> None:
 # Missions (spec 201): durable submission and a single persistent owner
 
 
-CHECK_KINDS = ("pr_merged", "path_exists")
+CHECK_KINDS = ("pr_merged", "path_exists", "spec_merged", "coordinator_cycle")
 
 
 def validate_mission(data: Any) -> str | None:
@@ -3421,20 +3510,52 @@ def validate_mission(data: Any) -> str | None:
             return f"task {n}: text must be 1-{MAX_TASK_CHARS} characters"
         if devctx.find_secret(text):
             return f"task {n}: text matches a secret pattern"
-        check = task.get("check")
-        if check is None:
-            continue
-        if not isinstance(check, dict) or check.get("kind") not in CHECK_KINDS:
-            return f"task {n}: check kind must be one of {', '.join(CHECK_KINDS)}"
-        if check["kind"] == "pr_merged" and (set(check) != {"kind", "pr"} or not isinstance(check["pr"], int)
-                                             or isinstance(check["pr"], bool) or check["pr"] <= 0):
-            return f"task {n}: pr_merged takes a positive integer pr"
-        if check["kind"] == "path_exists":
-            path = check.get("path")
-            if set(check) != {"kind", "path"} or not isinstance(path, str) or not path or Path(path).is_absolute() \
-                    or ".." in Path(path).parts:
-                return f"task {n}: path_exists takes a relative repository path"
+        if task.get("check") is not None and (problem := validate_check(task["check"])):
+            return f"task {n}: {problem}"
     return None
+
+
+def validate_check(check: Any) -> str | None:
+    """Problem with one completion contract, or None (spec 204)."""
+    if not isinstance(check, dict) or check.get("kind") not in CHECK_KINDS:
+        return f"check kind must be one of {', '.join(CHECK_KINDS)}"
+    if check["kind"] == "pr_merged" and (set(check) != {"kind", "pr"} or not isinstance(check["pr"], int)
+                                         or isinstance(check["pr"], bool) or check["pr"] <= 0):
+        return "pr_merged takes a positive integer pr"
+    if check["kind"] == "path_exists":
+        path = check.get("path")
+        if set(check) != {"kind", "path"} or not isinstance(path, str) or not path or Path(path).is_absolute() \
+                or ".." in Path(path).parts:
+            return "path_exists takes a relative repository path"
+    if check["kind"] == "spec_merged" and (set(check) != {"kind", "spec"} or not isinstance(check["spec"], str)
+                                           or not SPEC_ID_RE.fullmatch(check["spec"])):
+        return "spec_merged takes a spec id such as \"204\""
+    if check["kind"] == "coordinator_cycle" and set(check) != {"kind"}:
+        return "coordinator_cycle takes no fields"
+    return None
+
+
+def task_outcome(done: dict[str, Any]) -> str:
+    """How a recorded task completion is known (spec 204). Entries written before 204 carry no outcome: they are
+    a successful provider return, never verified delivery."""
+    return done.get("outcome") or ("maintainer_attested" if done.get("by") == "maintainer" else "legacy_unverified")
+
+
+def reopen_unverified(state: dict[str, Any]) -> list[int]:
+    """Spec 204 migration of an unfinished mission: tasks the pre-204 owner counted complete on a successful
+    provider return alone are reopened, from the first such task on, so they are resumed and verified rather than
+    skipped. The history is kept under `reopened`; definitions and finished missions are never touched."""
+    rec = state.get("mission") or {}
+    if rec.get("completed_at") or rec.get("cancelled_at"):
+        return []
+    legacy = [d["task"] for d in rec.get("done") or [] if task_outcome(d) == "legacy_unverified"]
+    if not legacy:
+        return []
+    first = min(legacy)
+    rec["reopened"] = (rec.get("reopened") or []) + [d for d in rec["done"] if d["task"] >= first]
+    rec["done"] = [d for d in rec["done"] if d["task"] < first]
+    rec["next"] = first
+    return sorted(d["task"] for d in rec["reopened"] if d["task"] >= first)
 
 
 def missions_dir(root: Path) -> Path:
@@ -3515,6 +3636,28 @@ def check_task(repo: Path, check: dict[str, Any], run: Runner = devctx.run) -> s
         if code != 0:
             return f"gh pr view {check['pr']} failed"
         return None if out.strip() == "MERGED" else f"PR #{check['pr']} is {out.strip() or 'unknown'}"
+    if check["kind"] == "coordinator_cycle":
+        code, out = run(["git", "ls-remote", "--heads", "origin"], cwd=repo, timeout=60)
+        return None if code == 0 and out.strip() else "remote heads unreadable"
+    if check["kind"] == "spec_merged":
+        # The registry on GitHub master, not a local checkout a provider may have edited.
+        code, out = run(["gh", "api", "-H", "Accept: application/vnd.github.raw",
+                         "repos/{owner}/{repo}/contents/docs/specs/STATUS.md?ref=master"], cwd=repo, timeout=60)
+        if code != 0 or not out.strip():
+            return "STATUS.md on GitHub master is unreadable"
+        rows = [cells for line in out.splitlines() if line.startswith("|")
+                and len(cells := [c.strip() for c in line.strip().strip("|").split("|")]) >= 3 and cells[0] == check["spec"]]
+        if len(rows) != 1:
+            return f"spec {check['spec']} has {len(rows)} STATUS.md rows"
+        if rows[0][1] != "merged":
+            return f"spec {check['spec']} is {rows[0][1] or 'unknown'} in STATUS.md"
+        prs = sorted({int(n) for n in re.findall(r"\[#(\d+)\]", rows[0][2])})
+        if not prs:
+            return f"spec {check['spec']} links no PR in STATUS.md"
+        for pr in prs:
+            if problem := check_task(repo, {"kind": "pr_merged", "pr": pr}, run):
+                return problem
+        return None
     return f"unknown check {check.get('kind')}"
 
 
@@ -3563,6 +3706,18 @@ def command_run(args: argparse.Namespace) -> int:
         lock.release()
 
 
+def init_mission_state(store: Store, mission: dict[str, Any], state: dict[str, Any] | None,
+                       now: Callable[[], datetime]) -> dict[str, Any]:
+    """The mission's durable progress record, created (and journalled started) the first time it is needed."""
+    if state is None or state.get("mission") is None:
+        state = state or default_state()
+        state["mission"] = {"id": mission["id"], "next": 0, "total": len(mission["tasks"]), "done": []}
+        store.save(state, now())
+        store.journal({"event": "mission_started", "at": iso(now()), "mission": mission["id"],
+                       "authority": mission["authority"], "tasks": len(mission["tasks"])})
+    return state
+
+
 def serve_step(root: Path, factory: Callable[[Store, dict[str, Any]], Supervisor], *,
                conflicts: Callable[[], list[str]], now: Callable[[], datetime] = now_utc,
                log: Callable[[str], None] = lambda msg: print(msg, file=sys.stderr, flush=True)) -> str:
@@ -3591,12 +3746,12 @@ def serve_step(root: Path, factory: Callable[[Store, dict[str, Any]], Supervisor
             if found := conflicts():
                 # A live REPL or legacy autopilot on the repository: never a concurrent writer, so wait.
                 return f"waiting:{mission_id}:{'repl_active' if 'repl_active' in found else 'live_work'}"
-            if state is None or state.get("mission") is None:
-                state = state or default_state()
-                state["mission"] = {"id": mission_id, "next": 0, "total": len(mission["tasks"]), "done": []}
+            state = init_mission_state(store, mission, state, now)
+            if not state.get("pending") and (reopened := reopen_unverified(state)):
                 store.save(state, now())
-                store.journal({"event": "mission_started", "at": iso(now()), "mission": mission_id,
-                               "authority": mission["authority"], "tasks": len(mission["tasks"])})
+                store.journal({"event": "mission_reopened", "at": iso(now()), "mission": mission_id, "tasks": reopened,
+                               "why": "counted complete before spec 204 on a provider return alone"})
+                log(f"mission {mission_id}: reopened unverified task(s) {', '.join(str(t + 1) for t in reopened)}")
             supervisor = factory(store, mission)
             supervisor.mission = mission
             result = supervisor.run(state.get("head_session") or mission.get("session"))
@@ -3702,7 +3857,8 @@ def _roadmap_step(root: Path, repo: Path, *, fingerprint: Callable[[], str | Non
     def queue(mission_id: str) -> str:
         # The cycle's id is recorded before its mission exists, so a crash in between cannot orphan a cycle: a
         # recorded id without a mission file is submitted again under the same id.
-        mission, problem = submit(road["authority"], [{"text": ROADMAP_TASK.format(cycle=road["cycle"])}], mission_id)
+        mission, problem = submit(road["authority"], [{"text": ROADMAP_TASK.format(cycle=road["cycle"]),
+                                                       "check": {"kind": "coordinator_cycle"}}], mission_id)
         if mission is None:
             return f"roadmap:waiting:refused ({problem})"
         missions_journal(root, {"event": "roadmap_cycle_submitted", "at": iso(now()), "cycle": road["cycle"],
@@ -3903,6 +4059,23 @@ def missions_journal(root: Path, record: dict[str, Any]) -> None:
         os.fsync(handle.fileno())
 
 
+def read_jsonl(path: Path) -> list[dict[str, Any]]:
+    """Records of a JSONL journal; unreadable lines are skipped (callers only look for positive evidence)."""
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return []
+    out = []
+    for line in lines:
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(record, dict):
+            out.append(record)
+    return out
+
+
 def command_submit(args: argparse.Namespace) -> int:
     root = control_root()
     repo = repo_root()
@@ -3913,6 +4086,10 @@ def command_submit(args: argparse.Namespace) -> int:
         return 2
     if not isinstance(spec, dict) or set(spec) - {"authority", "tasks"}:
         print("mission file takes only authority and tasks", file=sys.stderr)
+        return 2
+    if any(isinstance(t, dict) and (t.get("check") or {}).get("kind") == "coordinator_cycle" for t in spec.get("tasks") or []):
+        print("coordinator_cycle checks are only for roadmap cycles (spec 203); use pr_merged, spec_merged or path_exists",
+              file=sys.stderr)
         return 2
     mission, problem = submit_mission(root, repo, spec.get("authority"), spec.get("tasks"),
                                       session=args.continue_session)
@@ -3934,6 +4111,9 @@ def command_missions(args: argparse.Namespace) -> int:
         rows.append({"mission": mission_id, "status": "invalid" if problem else status, "problem": problem,
                      "authority": (mission or {}).get("authority"), "submitted_at": (mission or {}).get("submitted_at"),
                      "done": rec.get("next", 0), "total": len((mission or {}).get("tasks") or []),
+                     "outcomes": [task_outcome(d) for d in rec.get("done") or []],
+                     "verified": bool(rec.get("done")) and all(task_outcome(d) == "verified" for d in rec["done"]),
+                     "contracts": rec.get("contracts") or {},
                      "agent": (state or {}).get("agent"), "head_session": (state or {}).get("head_session"),
                      "phase": (state or {}).get("phase"), "hold": (state or {}).get("hold"),
                      "cooldowns": (state or {}).get("cooldowns"), "pending": bool((state or {}).get("pending"))})
@@ -4017,6 +4197,66 @@ def command_cancel(args: argparse.Namespace) -> int:
         lock.release()
 
 
+def command_contract(args: argparse.Namespace) -> int:
+    """Spec 204: attach a completion contract to a pending task whose immutable definition has none (a legacy
+    mission). It only ever makes completion depend on independent evidence; it never marks anything complete."""
+    root = control_root()
+    lock = Lock(root / "supervisor.lock")
+    if not lock.acquire():
+        print("the mission is executing; `stop` the owner first (a running turn is never killed)", file=sys.stderr)
+        return 3
+    try:
+        mission = next((m for m, mid, _ in load_missions(root) if m and mid == args.mission), None)
+        if mission is None:
+            print("no such valid mission", file=sys.stderr)
+            return 2
+        try:
+            check = json.loads(args.check)
+        except json.JSONDecodeError:
+            print("--check must be a JSON object", file=sys.stderr)
+            return 2
+        if problem := validate_check(check):
+            print(f"contract refused: {problem}", file=sys.stderr)
+            return 2
+        if devctx.find_secret(args.note):
+            print("note matches a secret pattern; refusing", file=sys.stderr)
+            return 2
+        index = args.task - 1
+        if not 0 <= index < len(mission["tasks"]):
+            print("no such task", file=sys.stderr)
+            return 2
+        if mission["tasks"][index].get("check"):
+            print("the task's definition already carries its contract; definitions are immutable", file=sys.stderr)
+            return 2
+        if check["kind"] == "coordinator_cycle" and not any(
+                r.get("event") == "roadmap_cycle_submitted" and r.get("mission") == args.mission
+                for r in read_jsonl(missions_dir(root) / "journal.jsonl")):
+            print("coordinator_cycle is only for a recorded roadmap cycle mission", file=sys.stderr)
+            return 2
+        store = mission_store(root, args.mission)
+        status, state = mission_status(store)
+        if status in ("complete", "cancelled", "corrupt"):
+            print(f"the mission is {status}", file=sys.stderr)
+            return 2
+        state = init_mission_state(store, mission, state, now_utc)
+        rec = state["mission"]
+        if not state.get("pending") and (reopened := reopen_unverified(state)):
+            # The owner would reopen these anyway; a reopened task may take a contract.
+            store.journal({"event": "mission_reopened", "at": iso(now_utc()), "mission": args.mission, "tasks": reopened,
+                           "why": "counted complete before spec 204 on a provider return alone"})
+        if index < rec["next"]:
+            print(f"task {args.task} is already recorded complete", file=sys.stderr)
+            return 2
+        rec.setdefault("contracts", {})[str(index)] = check
+        store.save(state, now_utc())
+        store.journal({"event": "contract_attached", "at": iso(now_utc()), "mission": args.mission, "task": index,
+                       "check": check, "note": args.note[:500]})
+        print(json.dumps({"mission": args.mission, "task": args.task, "check": check}))
+        return 0
+    finally:
+        lock.release()
+
+
 def command_classify(args: argparse.Namespace) -> int:
     print(json.dumps(classify_turn(Path(args.turn_dir)).to_json(), indent=1))
     return 0
@@ -4070,8 +4310,11 @@ def command_release(args: argparse.Namespace) -> int:
                 return 2
             # The maintainer records the current task done (e.g. after a failed check was resolved by hand).
             advanced = rec["next"]
-            rec["done"].append({"task": advanced, "session": None, "agent": None, "at": iso(now_utc()), "by": "maintainer"})
+            rec["done"].append({"task": advanced, "session": None, "agent": None, "at": iso(now_utc()), "by": "maintainer",
+                                "outcome": "maintainer_attested", "note": args.note[:500]})
             rec["next"] += 1
+        if (released or {}).get("reason") == "task_checkpoint_limit" and (rec := state.get("mission")):
+            (rec.get("checkpoints") or {}).pop(str(rec["next"]), None)  # the maintainer allows a fresh bound
         held_turn = (released or {}).get("turn")
         previous = state.get("acknowledged") or {}
         if held_turn:
@@ -4222,6 +4465,12 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--authority", help="maintainer directive ledger id (start)")
     p.add_argument("--note", help="why roadmap mode is paused (stop)")
     p.set_defaults(func=command_roadmap)
+    p = sub.add_parser("contract", help="attach a completion contract to a legacy task without one (spec 204)")
+    p.add_argument("--mission", required=True)
+    p.add_argument("--task", type=int, required=True, help="1-based task number")
+    p.add_argument("--check", required=True, help='JSON, e.g. {"kind": "spec_merged", "spec": "204"}')
+    p.add_argument("--note", required=True, help="why this evidence proves the task (recorded)")
+    p.set_defaults(func=command_contract)
     p = sub.add_parser("cancel", help="cancel a mission that is not executing")
     p.add_argument("mission")
     p.add_argument("--note", required=True)

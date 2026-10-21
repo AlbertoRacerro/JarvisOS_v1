@@ -68,6 +68,9 @@ A hold means automatic continuation was refused and needs your review. Slack sho
 | `permissions_changed` | The authority-bearing parts of `.agent-relay/permissions.toml` changed. |
 | `repl_active` | A live REPL or `relay run` exists on the repository. |
 | `state_corrupt` | The state file is unreadable. Inspect it, then move it aside to reset. |
+| `task_check_failed` | A mission task claimed it was done, but its completion check failed, could not read its evidence, or the task has no check. Make the evidence real (or attach a `contract` to a legacy task), then `release`: the owner re-checks before relaunching. |
+| `task_blocked`, `task_report_unverified` | A mission task ended `RELAY_STATUS blocked`, or with no recognisable status. Read its `devctx` blocker or question; `release` runs the task again. |
+| `task_checkpoint_limit` | A mission task checkpointed 12 times without finishing. Review its progress; `release` allows a fresh bound. |
 
 After review:
 
@@ -184,7 +187,17 @@ $RC stop                                      # the owner exits at its next safe
 $RC cancel ID --note "..."                    # only while the owner is stopped and nothing is in flight
 ```
 
-- **Advancement.** A task completes only on a `success` turn whose optional `check` passes. A failed check holds the mission (`task_check_failed`); the model's own claim is never evidence. A held or corrupt mission blocks the missions behind it.
+- **Advancement (spec 204).** A successful provider turn is execution, not delivery. Its final `RELAY_STATUS` only routes it. `continue` is a durable checkpoint: the task stays pending and is resumed on the same chain, at most 12 times across owner restarts (`task_checkpoint_limit`). `blocked` holds (`task_blocked`), and a missing or unknown status holds (`task_report_unverified`). `propose_done` advances only after the task's independent read-only check passes; a task without a check, a failed check, or evidence that cannot be read (GitHub down, `gh` unauthenticated) holds with `task_check_failed`. A held or corrupt mission blocks the missions behind it.
+- **Completion contracts.** `pr_merged {"pr": N}` and `path_exists {"path": "rel/path"}` as before; `spec_merged {"spec": "204"}` when the PR number is not known in advance. It reads `docs/specs/STATUS.md` from GitHub master, never the local checkout, and needs the row `merged` with every PR linked in it merged. `coordinator_cycle` is reserved for roadmap cycles (below); `submit` refuses it.
+- **Outcomes.** `$RC missions` shows, per mission, the outcome of each recorded task: `verified` (its check passed), `cycle_settled` (a roadmap cycle ended; its work is not thereby verified), `maintainer_attested` (`release --advance`), or `legacy_unverified` (counted by the owner before spec 204 on a provider return alone). `verified` is true only when every task is `verified`. A finished mission's record is never rewritten; the spec 204 audit judges it.
+- **Legacy missions.** Definitions are immutable. When the owner next runs an unfinished mission, it reopens every task from the first `legacy_unverified` one on (journal `mission_reopened`; the history stays under `reopened`) and resumes there instead of reporting the mission complete. A task with no check holds when it claims to be done. Give it a contract, with the owner stopped, and release it:
+
+  ```bash
+  $RC contract --mission ID --task 1 --check '{"kind": "spec_merged", "spec": "205"}' --note "why this evidence proves the task"
+  $RC release --mission ID --note "contract attached"
+  ```
+
+  After a release, the owner first re-checks a task whose last turn already reported `propose_done`, and records it complete without a relaunch when the evidence is now there, for example when the PR merged after review. Otherwise the task runs again. `contract` refuses a task that already has a check in its definition, or that is recorded complete. It refuses `coordinator_cycle` except on a recorded roadmap cycle mission.
 - **Never a concurrent writer.** While a Relay REPL or other coordinator runs on the repository, the owner waits (`waiting:<id>:repl_active` or `live_work`). It never types into or adopts a REPL. Each `jarvis-sandbox` instance has its own PID namespace, so a REPL in another instance is invisible in the owner's process table. `relay` (`scripts/relay_safe.py`) therefore holds a shared flock, `.agent-relay/locks/coordinator.lease`, for as long as any coordinator invocation runs. Daemons, hooks and the owner's own turns are exempt. The owner treats a held lease as `repl_active`. A REPL started by a `relay` installed before this change holds no lease, so restart open REPLs after updating it.
 - **Where it runs.** `serve` refuses to start outside the `jarvis-sandbox` boundary (spec 201 D1). Inside, Claude runs in `bypassPermissions` through `scripts/relay_mission_bin/claude`, and Codex runs `danger-full-access`; `bwrap` is the containment. The owner pins `CLAUDE_CONFIG_DIR` and `CODEX_HOME` to the sandbox login state, whatever its launcher exported, and also `GH_CONFIG_DIR` and `GIT_CONFIG_GLOBAL` when the project-scoped GitHub login is installed there. It also links Relay's fixed Claude credential path (`~/.claude/.credentials.json`) inside the sandbox's private home: without a Claude limits reading, a return to Claude after a Codex takeover can never be confirmed.
 - **Provider return.** After a Claude quota switch to Codex, Claude is preferred again once its reset has passed, a fresh reading shows room and 20 minutes have elapsed since the switch.
@@ -196,7 +209,7 @@ python3 scripts/devctx.py directive "<the maintainer's message>" --source "relay
 $RC roadmap start --authority L...
 ```
 
-The maintainer then exits the REPL: the owner starts only once the coordinator lease is free. While roadmap mode is on and every mission has finished, the owner queues one cycle at a time. Each cycle is a one-task mission, and its turn runs the Generic Frontier Builder Contract against fresh GitHub, `STATUS.md` and the ledger. Missions you submit yourself go first.
+The maintainer then exits the REPL: the owner starts only once the coordinator lease is free. While roadmap mode is on and every mission has finished, the owner queues one cycle at a time. Each cycle is a one-task mission, and its turn runs the Generic Frontier Builder Contract against fresh GitHub, `STATUS.md` and the ledger. Missions you submit yourself go first. A cycle carries the `coordinator_cycle` contract. It settles when its turn ends `propose_done` or `blocked` while the remote heads are readable, and is recorded `cycle_settled`. That says the cycle ran, not that the work it chose is delivered: a later cycle recovers that work from fresh PR and `STATUS.md` state. A cycle that checkpoints (`continue`) stays pending.
 
 - **Pauses.** Roadmap mode pauses, and sends a Slack `roadmap_paused` notification, in three cases:
   - a cycle ends with `RELAY_STATUS blocked`: the coordinator needs you, or no authorized work remains, and it records why with `devctx.py note question` or `blocker`;
