@@ -62,6 +62,7 @@ HOLD_REASONS = (
     "relay_invocation_failed", "live_work", "reconcile_unresolved", "reconcile_insufficient_permissions",
     "reconcile_failed", "reconcile_no_sandbox", "task_check_failed",
 )
+ROADMAP_PAUSES = ("maintainer_stop", "coordinator_blocked", "no_progress", "cycle_cancelled")
 STOP_REASONS = ("stop_requested", "signal", "idle", "held", "legacy_autopilot", "lock_busy", "error")
 DEFAULT_CONTROL = Path.home() / "jarvis-control" / "work" / "continuity"
 WEBHOOK_FILE = Path.home() / ".config" / "jarvis" / "slack_webhook_url"
@@ -1283,7 +1284,7 @@ FIELD_RULES: dict[str, Callable[[str], bool]] = {
     "from_agent": lambda v: v in AGENTS,
     "outcome": lambda v: v in OUTCOMES,
     "action": lambda v: v in ("switch", "retry", "wait", "hold", "idle", "notify"),
-    "reason": lambda v: v in HOLD_REASONS + STOP_REASONS,
+    "reason": lambda v: v in HOLD_REASONS + STOP_REASONS + ROADMAP_PAUSES,
     "reset_at": lambda v: v in ("none", "manual") or bool(re.fullmatch(ISO_RE, v)),
     "next_check_at": lambda v: v == "none" or bool(re.fullmatch(ISO_RE, v)),
     "claude_until": lambda v: v in ("none", "manual") or bool(re.fullmatch(ISO_RE, v)),
@@ -1323,6 +1324,7 @@ EVENTS: dict[str, tuple[str, tuple[str, ...]]] = {
                         ("owner", "mission", "task", "agent", "reason", "next_check_at")),
     "mission_held": (":red_circle: JarvisOS mission held",
                      ("owner", "mission", "task", "agent", "session", "reason")),
+    "roadmap_paused": (":double_vertical_bar: JarvisOS roadmap continuation paused", ("owner", "reason")),
 }
 
 
@@ -1645,8 +1647,10 @@ def worktree_roots(repo: Path) -> list[Path]:
 
 
 def _ancestors(pid: int, proc_root: Path) -> set[int]:
+    """The process and its ancestors, including PID 1: inside `jarvis-sandbox` that is the sandbox's own `bwrap`
+    init, whose cwd is the checkout, not work of any chain."""
     seen: set[int] = set()
-    while pid > 1 and pid not in seen:
+    while pid >= 1 and pid not in seen:
         seen.add(pid)
         try:
             status = (proc_root / str(pid) / "status").read_text()
@@ -3479,7 +3483,9 @@ def mission_status(store: Store) -> tuple[str, dict[str, Any] | None]:
 
 def write_json_atomic(path: Path, data: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    # Unique per write: an owner in a fresh PID namespace reuses its PID, so a temp file left by a killed write
+    # must never collide with the retry.
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.{secrets.token_hex(4)}.tmp")
     with open(tmp, "x", encoding="utf-8") as handle:
         json.dump(data, handle, indent=1, sort_keys=True)
         handle.flush()
@@ -3600,6 +3606,144 @@ def serve_step(root: Path, factory: Callable[[Store, dict[str, Any]], Supervisor
         lock.release()
 
 
+# ---------------------------------------------------------------------------
+# Roadmap continuation (spec 203): the owner keeps one coordinator cycle queued; the turn chooses the work
+
+ROADMAP_NO_PROGRESS = 3  # consecutive completed cycles with unchanged remote branch heads
+ROADMAP_LOCK_WAIT = 120.0  # seconds `roadmap start|stop` waits for an owner step (bounded by its ls-remote)
+ROADMAP_TASK = (
+    "Roadmap continuation cycle {cycle}. Run the Generic Frontier Builder Contract "
+    "(docs/AGENT_EXECUTION_AND_AUTOMATION_PROTOCOL.md section 1) for this repository. Fresh GitHub state and "
+    "docs/specs/STATUS.md are the backlog; the maintainer directives and holds shown by `devctx.py recover` bind you. "
+    "Recover existing PRs, worktrees and claims before creating new ones. Choose the highest-value authorized work "
+    "and drive it to a verified, merged and reconciled result, or to a durable checkpoint (a pushed branch or PR "
+    "and a ledger note) when it cannot finish in this turn. Do not submit missions or change roadmap mode: the "
+    "mission owner schedules the next cycle. End with RELAY_STATUS propose_done when this cycle's work is merged "
+    "or checkpointed. End with RELAY_STATUS blocked, after recording a `devctx.py note question` or `blocker`, "
+    "when no authorized useful work remains or the next step needs the maintainer: spending, a missing credential "
+    "or permission, a security or destructive risk, or a strategic, scientific or visual decision."
+)
+
+
+def roadmap_path(root: Path) -> Path:
+    return root / "roadmap.json"
+
+
+def load_roadmap(root: Path) -> dict[str, Any] | None:
+    """The roadmap record, None when roadmap mode was never started, or {"corrupt": True}."""
+    try:
+        data = json.loads(roadmap_path(root).read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None
+    except (OSError, json.JSONDecodeError):
+        return {"corrupt": True}
+    return data if isinstance(data, dict) else {"corrupt": True}
+
+
+def remote_fingerprint(repo: Path, run: Runner = devctx.run) -> str | None:
+    """Digest of the remote branch heads; None when they cannot be read."""
+    code, out = run(["git", "ls-remote", "--heads", "origin"], cwd=repo, timeout=60)
+    return hashlib.sha256(out.encode()).hexdigest()[:16] if code == 0 and out.strip() else None
+
+
+def final_relay_status(repo: Path, session: str | None) -> str | None:
+    """RELAY_STATUS the coordinator reported at the end of a session (continue | propose_done | blocked)."""
+    turn = last_turn_dir(repo / ".agent-relay" / "sessions" / session) if session else None
+    try:
+        return json.loads((turn / "state.json").read_text()).get("status") if turn else None
+    except (OSError, json.JSONDecodeError, AttributeError):
+        return None
+
+
+def roadmap_lock(root: Path, wait: float = 0.0) -> Lock | None:
+    """Serializes every read-modify-write of roadmap.json (owner step, start, stop). None: still busy after `wait`."""
+    lock = Lock(root / "roadmap.lock")
+    deadline = time.monotonic() + wait
+    while not lock.acquire():
+        if time.monotonic() >= deadline:
+            return None
+        time.sleep(0.5)
+    return lock
+
+
+def roadmap_step(root: Path, repo: Path, *, fingerprint: Callable[[], str | None],
+                 submit: Callable[[str, list[dict[str, Any]], str], tuple[dict[str, Any] | None, str | None]],
+                 now: Callable[[], datetime] = now_utc) -> str | None:
+    """Called only when every mission is complete or cancelled. Settles the last cycle once, then submits the next
+    or pauses. None: roadmap mode is off. Otherwise `roadmap:submitted:<id>`, `roadmap:paused:<reason>`,
+    `roadmap:waiting:<why>` or `roadmap:corrupt`."""
+    lock = roadmap_lock(root)
+    if lock is None:
+        return "roadmap:waiting:busy"  # a `roadmap start|stop` is changing it
+    try:
+        return _roadmap_step(root, repo, fingerprint=fingerprint, submit=submit, now=now)
+    finally:
+        lock.release()
+
+
+def _roadmap_step(root: Path, repo: Path, *, fingerprint: Callable[[], str | None],
+                  submit: Callable[[str, list[dict[str, Any]], str], tuple[dict[str, Any] | None, str | None]],
+                  now: Callable[[], datetime]) -> str | None:
+    road = load_roadmap(root)
+    if road is not None and road.get("corrupt"):
+        return "roadmap:corrupt"  # never read as "off": nothing is submitted until it is inspected
+    if road is None or not road.get("enabled"):
+        return None
+    if road.get("paused"):
+        return f"roadmap:paused:{road['paused']}"
+
+    def pause(reason: str) -> str:
+        road["paused"], road["paused_at"] = reason, iso(now())
+        write_json_atomic(roadmap_path(root), road)
+        missions_journal(root, {"event": "roadmap_paused", "at": iso(now()), "reason": reason,
+                                "mission": road.get("last_mission")})
+        return f"roadmap:paused:{reason}"
+
+    def queue(mission_id: str) -> str:
+        # The cycle's id is recorded before its mission exists, so a crash in between cannot orphan a cycle: a
+        # recorded id without a mission file is submitted again under the same id.
+        mission, problem = submit(road["authority"], [{"text": ROADMAP_TASK.format(cycle=road["cycle"])}], mission_id)
+        if mission is None:
+            return f"roadmap:waiting:refused ({problem})"
+        missions_journal(root, {"event": "roadmap_cycle_submitted", "at": iso(now()), "cycle": road["cycle"],
+                                "mission": mission_id, "authority": road["authority"]})
+        return f"roadmap:submitted:{mission_id}"
+
+    fresh: dict[str, str] = {}
+
+    def remote_readable() -> bool:
+        """Every submission needs the remote heads read in this step (spec 203), not a cached reading."""
+        if "heads" not in fresh and (current := fingerprint()) is not None:
+            fresh["heads"] = current
+        return "heads" in fresh
+
+    last = road.get("last_mission")
+    if last and not (missions_dir(root) / f"{last}.json").exists():
+        return queue(last) if remote_readable() else "roadmap:waiting:remote_unreadable"
+    if last and road.get("settled") != last:
+        status, state = mission_status(mission_store(root, last))
+        if status not in ("complete", "cancelled"):
+            return f"roadmap:waiting:{last}"
+        road["settled"] = last
+        if status == "cancelled":
+            return pause("cycle_cancelled")
+        if final_relay_status(repo, (state or {}).get("head_session")) == "blocked":
+            return pause("coordinator_blocked")
+        if not remote_readable():
+            return "roadmap:waiting:remote_unreadable"  # nothing written: this cycle is settled again later
+        road["no_progress"] = road.get("no_progress", 0) + 1 if fresh["heads"] == road.get("fingerprint") else 0
+        road["fingerprint"] = fresh["heads"]
+        if road["no_progress"] >= ROADMAP_NO_PROGRESS:
+            return pause("no_progress")
+    if not remote_readable():
+        return "roadmap:waiting:remote_unreadable"
+    if road.get("fingerprint") is None:
+        road["fingerprint"] = fresh["heads"]
+    road.update(cycle=road.get("cycle", 0) + 1, last_mission=new_mission_id(now()))
+    write_json_atomic(roadmap_path(root), road)
+    return queue(road["last_mission"])
+
+
 def sandbox_provider_env(home: Path) -> dict[str, str]:
     """The sandbox's own provider login state. The owner pins it rather than inheriting whatever its launcher
     (systemd, a Codex shell, a Claude shell) exported: an unset CODEX_HOME sends Codex to the sandbox's empty
@@ -3676,8 +3820,21 @@ def command_serve(args: argparse.Namespace) -> int:
     try:
         while not stop["flag"] and not (root / "STOP").exists():
             outcome = serve_step(root, factory, conflicts=lambda: live_conflicts(repo, {os.getpid()}), log=log)
+            if outcome == "empty":
+                outcome = roadmap_step(root, repo, fingerprint=lambda: remote_fingerprint(repo),
+                                       submit=lambda authority, tasks, mid: submit_mission(root, repo, authority, tasks,
+                                                                                           mission_id=mid),
+                                       ) or outcome
             if outcome != previous:
                 log(f"owner: {outcome}")
+                if outcome.startswith("roadmap:paused:"):
+                    try:
+                        state = serve_store.load()
+                    except StateCorrupt:
+                        state = default_state()
+                    Notifier(state, sender=sender, log=log).send("roadmap_paused", now_utc(), owner="control-plane",
+                                                                 reason=outcome.split(":", 2)[2])
+                    serve_store.save(state, now_utc())
                 if outcome.startswith("waiting:"):
                     _, mission_id, reason = outcome.split(":")
                     try:
@@ -3694,8 +3851,8 @@ def command_serve(args: argparse.Namespace) -> int:
             previous = outcome
             if outcome.endswith((":stopped", ":signal")) or args.once:
                 break
-            if outcome.startswith("ran:") and outcome.endswith(":idle"):
-                continue  # the mission completed: take the next one now
+            if (outcome.startswith("ran:") and outcome.endswith(":idle")) or outcome.startswith("roadmap:submitted:"):
+                continue  # the mission completed, or a roadmap cycle was queued: take the next one now
             for _ in range(int(args.interval)):
                 if stop["flag"] or (root / "STOP").exists():
                     break
@@ -3704,6 +3861,46 @@ def command_serve(args: argparse.Namespace) -> int:
         return 0
     finally:
         owner.release()
+
+
+def new_mission_id(now: datetime) -> str:
+    return f"m-{now.strftime('%Y%m%dT%H%M%SZ')}-{secrets.token_hex(3)}"
+
+
+def submit_mission(root: Path, repo: Path, authority: Any, tasks: Any, *, session: str | None = None,
+                   now: datetime | None = None, mission_id: str | None = None) -> tuple[dict[str, Any] | None, str | None]:
+    """Validate and durably queue a mission before any owner can see it. (mission, None) or (None, problem)."""
+    now = now or now_utc()
+    mission = {"schema": MISSION_SCHEMA, "id": mission_id or new_mission_id(now),
+               "authority": authority, "tasks": tasks, "submitted_at": iso(now), "session": session, "repo": str(repo)}
+    if problem := validate_mission(mission):
+        return None, problem
+    env = devctx.default_env(repo)
+    if not any(e.get("id") == mission["authority"] and e.get("kind") == "directive" for e in devctx.read_ledger(env)):
+        return None, f"{mission['authority']} is not a recorded maintainer directive"
+    if session:
+        turn = last_turn_dir(repo / ".agent-relay" / "sessions" / session)
+        if turn is None or classify_turn(turn).outcome != "success":
+            return None, "the session's last turn is not a completed successful turn"
+    write_json_atomic(missions_dir(root) / f"{mission['id']}.json", mission)  # durable before any owner sees it
+    missions_journal(root, {"event": "mission_submitted", "at": iso(now), "mission": mission["id"],
+                            "authority": mission["authority"], "tasks": len(mission["tasks"])})
+    try:
+        devctx.append_entry(env, devctx.make_entry(
+            env, "note", f"relay-continuity: mission {mission['id']} submitted under {mission['authority']} "
+                         f"({len(mission['tasks'])} task(s)); owner: `relay_continuity.py serve`.",
+            refs={"spec": "201"}, author=f"relay-continuity pid {os.getpid()}"))
+    except Exception as exc:  # noqa: BLE001 - the mission file is the record; the ledger note is a courtesy
+        print(f"ledger append failed: {type(exc).__name__}", file=sys.stderr)
+    return mission, None
+
+
+def missions_journal(root: Path, record: dict[str, Any]) -> None:
+    missions_dir(root).mkdir(parents=True, exist_ok=True)
+    with open(missions_dir(root) / "journal.jsonl", "a", encoding="utf-8") as handle:
+        handle.write(json.dumps(record, sort_keys=True) + "\n")
+        handle.flush()
+        os.fsync(handle.fileno())
 
 
 def command_submit(args: argparse.Namespace) -> int:
@@ -3717,36 +3914,11 @@ def command_submit(args: argparse.Namespace) -> int:
     if not isinstance(spec, dict) or set(spec) - {"authority", "tasks"}:
         print("mission file takes only authority and tasks", file=sys.stderr)
         return 2
-    now = now_utc()
-    mission = {"schema": MISSION_SCHEMA, "id": f"m-{now.strftime('%Y%m%dT%H%M%SZ')}-{secrets.token_hex(3)}",
-               "authority": spec.get("authority"), "tasks": spec.get("tasks"), "submitted_at": iso(now),
-               "session": args.continue_session, "repo": str(repo)}
-    if problem := validate_mission(mission):
+    mission, problem = submit_mission(root, repo, spec.get("authority"), spec.get("tasks"),
+                                      session=args.continue_session)
+    if mission is None:
         print(f"mission refused: {problem}", file=sys.stderr)
         return 2
-    env = devctx.default_env(repo)
-    if not any(e.get("id") == mission["authority"] and e.get("kind") == "directive" for e in devctx.read_ledger(env)):
-        print(f"mission refused: {mission['authority']} is not a recorded maintainer directive", file=sys.stderr)
-        return 2
-    if args.continue_session:
-        turn = last_turn_dir(repo / ".agent-relay" / "sessions" / args.continue_session)
-        if turn is None or classify_turn(turn).outcome != "success":
-            print("mission refused: the session's last turn is not a completed successful turn", file=sys.stderr)
-            return 2
-    path = missions_dir(root) / f"{mission['id']}.json"
-    write_json_atomic(path, mission)  # durable before any owner can see or launch it
-    with open(missions_dir(root) / "journal.jsonl", "a", encoding="utf-8") as handle:
-        handle.write(json.dumps({"event": "mission_submitted", "at": iso(now), "mission": mission["id"],
-                                 "authority": mission["authority"], "tasks": len(mission["tasks"])}, sort_keys=True) + "\n")
-        handle.flush()
-        os.fsync(handle.fileno())
-    try:
-        devctx.append_entry(env, devctx.make_entry(
-            env, "note", f"relay-continuity: mission {mission['id']} submitted under {mission['authority']} "
-                         f"({len(mission['tasks'])} task(s)); owner: `relay_continuity.py serve`.",
-            refs={"spec": "201"}, author=f"relay-continuity pid {os.getpid()}"))
-    except Exception as exc:  # noqa: BLE001 - the mission file is the record; the ledger note is a courtesy
-        print(f"ledger append failed: {type(exc).__name__}", file=sys.stderr)
     position = sum(1 for m, _, _ in load_missions(root) if m and mission_status(mission_store(root, m["id"]))[0]
                    not in ("complete", "cancelled"))
     print(json.dumps({"mission": mission["id"], "tasks": len(mission["tasks"]), "queue_position": position}))
@@ -3768,7 +3940,54 @@ def command_missions(args: argparse.Namespace) -> int:
     owner = Lock(root / "serve.lock")
     serving = not owner.acquire()
     owner.release()
-    print(json.dumps({"owner_serving": serving, "stop_requested": (root / "STOP").exists(), "missions": rows}, indent=1))
+    print(json.dumps({"owner_serving": serving, "stop_requested": (root / "STOP").exists(),
+                      "roadmap": load_roadmap(root), "missions": rows}, indent=1))
+    return 0
+
+
+def command_roadmap(args: argparse.Namespace) -> int:
+    """Roadmap mode (spec 203): `start` under a recorded directive, `stop` pauses it, `status` shows it. A running
+    cycle is never interrupted; use `stop` (the owner's) for that."""
+    root = control_root()
+    if args.action == "status":
+        print(json.dumps(load_roadmap(root), indent=1))
+        return 0
+    lock = roadmap_lock(root, wait=ROADMAP_LOCK_WAIT)
+    if lock is None:
+        print("the owner is updating roadmap mode; try again", file=sys.stderr)
+        return 3
+    try:
+        return _command_roadmap(args, root)
+    finally:
+        lock.release()
+
+
+def _command_roadmap(args: argparse.Namespace, root: Path) -> int:
+    road = load_roadmap(root)
+    if road and road.get("corrupt"):
+        print(f"{roadmap_path(root)} is unreadable; inspect it before changing roadmap mode", file=sys.stderr)
+        return 2
+    road = road or {}
+    at = iso(now_utc())
+    if args.action == "start":
+        if not DIRECTIVE_ID_RE.fullmatch(args.authority or ""):
+            print("--authority must be a maintainer directive ledger id", file=sys.stderr)
+            return 2
+        env = devctx.default_env(repo_root())
+        if not any(e.get("id") == args.authority and e.get("kind") == "directive" for e in devctx.read_ledger(env)):
+            print(f"{args.authority} is not a recorded maintainer directive", file=sys.stderr)
+            return 2
+        road.update(enabled=True, authority=args.authority, started_at=at, paused=None, paused_at=None, no_progress=0)
+        record = {"event": "roadmap_started", "at": at, "authority": args.authority}
+    else:
+        if not road.get("enabled") or not args.note:
+            print("roadmap stop needs a started roadmap and --note", file=sys.stderr)
+            return 2
+        road.update(paused="maintainer_stop", paused_at=at, note=args.note)
+        record = {"event": "roadmap_paused", "at": at, "reason": "maintainer_stop", "note": args.note}
+    write_json_atomic(roadmap_path(root), road)
+    missions_journal(root, record)
+    print(json.dumps(road, indent=1))
     return 0
 
 
@@ -3998,6 +4217,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--clear-stop", action="store_true", help="explicitly resume after an operator stop request")
     p.set_defaults(func=command_serve)
     sub.add_parser("missions", help="show every mission and the owner").set_defaults(func=command_missions)
+    p = sub.add_parser("roadmap", help="roadmap continuation cycles through the owner (spec 203)")
+    p.add_argument("action", choices=("start", "stop", "status"))
+    p.add_argument("--authority", help="maintainer directive ledger id (start)")
+    p.add_argument("--note", help="why roadmap mode is paused (stop)")
+    p.set_defaults(func=command_roadmap)
     p = sub.add_parser("cancel", help="cancel a mission that is not executing")
     p.add_argument("mission")
     p.add_argument("--note", required=True)
