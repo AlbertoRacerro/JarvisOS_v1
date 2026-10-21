@@ -29,6 +29,7 @@ import socket
 import subprocess
 import sys
 import time
+import tomllib
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -38,8 +39,6 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
-
-import tomllib
 
 _DEVCTX_PATH = Path(__file__).resolve().parent / "devctx.py"
 _spec = importlib.util.spec_from_file_location("devctx", _DEVCTX_PATH)
@@ -3661,7 +3660,9 @@ def command_serve(args: argparse.Namespace) -> int:
                  "JARVISOS_MISSION_PROFILE": "1", "RELAY_CLAUDE_REAL_BIN": claude,
                  "PATH": str(mission_bin) + os.pathsep + os.environ["PATH"]}
     serve_store = Store(root / "serve")
-    log = lambda msg: print(f"{iso(now_utc())} {msg}", file=sys.stderr, flush=True)
+
+    def log(msg: str) -> None:
+        print(f"{iso(now_utc())} {msg}", file=sys.stderr, flush=True)
 
     def factory(store: Store, mission: dict[str, Any]) -> Supervisor:
         supervisor = Supervisor(store, make_host(repo, relay_env), turns=args.turns, sender=sender,
