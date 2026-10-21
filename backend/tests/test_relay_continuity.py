@@ -3159,3 +3159,133 @@ def test_cancel_refuses_an_unsettled_attempt(tmp_path: Path, monkeypatch: pytest
     store.save(state, T0)
     assert rc.main(["cancel", mission["id"], "--note", "n"]) == 0
     assert rc.mission_status(store)[0] == "cancelled"
+
+
+# ---------------------------------------------------------------------------
+# Spec 203: roadmap continuation cycles
+
+
+class Roadmap:
+    """A control root whose missions are submitted for real and completed or cancelled on demand."""
+
+    def __init__(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *refs: str | None) -> None:
+        self.root, self.repo = tmp_path / "control", tmp_path / "repo"
+        self.repo.mkdir()
+        monkeypatch.setenv("RELAY_CONTINUITY_DIR", str(self.root))
+        monkeypatch.setattr(rc, "repo_root", lambda: self.repo)
+        monkeypatch.setattr(rc.devctx, "read_ledger", lambda env: [{"id": DIRECTIVE, "kind": "directive"}])
+        monkeypatch.setattr(rc.devctx, "append_entry", lambda env, entry: None)
+        self.refs = list(refs)
+        self.minute = 0
+
+    def fingerprint(self) -> str | None:
+        return self.refs.pop(0) if self.refs else "same"
+
+    def step(self) -> str | None:
+        self.minute += 1
+        return rc.roadmap_step(self.root, self.repo, fingerprint=self.fingerprint,
+                               submit=lambda a, t: rc.submit_mission(self.root, self.repo, a, t,
+                                                                     now=T0 + timedelta(minutes=self.minute)),
+                               now=lambda: T0)
+
+    def finish(self, mission_id: str, *, relay_status: str = "propose_done", cancelled: bool = False) -> None:
+        session = f"20261018-0800{self.minute:02d}-cccccc"
+        write_turn(self.repo / ".agent-relay" / "sessions" / session, SUCCESS, status=relay_status)
+        state = rc.default_state()
+        state["head_session"] = session
+        state["mission"] = {"id": mission_id, "next": 1, "total": 1, "done": [],
+                            **({"cancelled_at": rc.iso(T0)} if cancelled else {"completed_at": rc.iso(T0)})}
+        rc.mission_store(self.root, mission_id).save(state, T0)
+
+
+def test_roadmap_is_off_until_started_and_needs_a_recorded_directive(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    road = Roadmap(tmp_path, monkeypatch)
+    assert road.step() is None and not rc.missions_dir(road.root).exists()
+    assert rc.main(["roadmap", "start", "--authority", "L20261020121757-26d5"]) == 2  # not a recorded directive
+    assert rc.main(["roadmap", "stop", "--note", "x"]) == 2  # nothing to stop
+    assert rc.main(["roadmap", "start", "--authority", DIRECTIVE]) == 0
+    outcome = road.step()
+    assert outcome and outcome.startswith("roadmap:submitted:")
+    [(mission, _, problem)] = rc.load_missions(road.root)
+    assert problem is None and mission["authority"] == DIRECTIVE and len(mission["tasks"]) == 1
+    assert "cycle 1" in mission["tasks"][0]["text"] and "Generic Frontier Builder Contract" in mission["tasks"][0]["text"]
+
+
+def test_roadmap_keeps_one_cycle_queued_and_never_runs_beside_a_queued_mission(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    road = Roadmap(tmp_path, monkeypatch, "r0", "r1", "r2")
+    rc.main(["roadmap", "start", "--authority", DIRECTIVE])
+    first = road.step().split(":")[2]
+    assert road.step() == f"roadmap:waiting:{first}"  # its cycle has not finished: no second one
+    road.finish(first)
+    second = road.step().split(":")[2]
+    assert second != first and rc.load_roadmap(road.root)["cycle"] == 2
+    road.finish(second)
+    assert road.step().startswith("roadmap:submitted:")
+    events = [json.loads(line)["event"] for line in (rc.missions_dir(road.root) / "journal.jsonl").read_text().splitlines()]
+    assert events.count("roadmap_cycle_submitted") == 3 and events[0] == "roadmap_started"
+
+
+def test_roadmap_pauses_when_the_coordinator_reports_blocked(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    road = Roadmap(tmp_path, monkeypatch, "r0", "r1")
+    rc.main(["roadmap", "start", "--authority", DIRECTIVE])
+    first = road.step().split(":")[2]
+    road.finish(first, relay_status="blocked")
+    assert road.step() == "roadmap:paused:coordinator_blocked"
+    assert road.step() == "roadmap:paused:coordinator_blocked" and len(rc.load_missions(road.root)) == 1
+    assert rc.main(["roadmap", "start", "--authority", DIRECTIVE]) == 0  # the maintainer resumes it
+    assert road.step().startswith("roadmap:submitted:")  # the blocked cycle is not re-judged
+
+
+def test_roadmap_pauses_after_cycles_without_remote_progress(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    road = Roadmap(tmp_path, monkeypatch, "r0", "r1", "r1", "r1", "r1")
+    rc.main(["roadmap", "start", "--authority", DIRECTIVE])
+    outcomes = []
+    while (outcome := road.step()).startswith("roadmap:submitted:"):
+        outcomes.append(outcome)
+        road.finish(outcome.split(":")[2])
+    # Baseline r0; cycle 1 moved the heads to r1 (progress); cycles 2-4 left them at r1.
+    assert outcome == "roadmap:paused:no_progress" and len(outcomes) == 1 + rc.ROADMAP_NO_PROGRESS
+
+
+def test_roadmap_waits_while_remote_heads_are_unreadable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    road = Roadmap(tmp_path, monkeypatch, None, "r0", "r1", None, "r2")
+    rc.main(["roadmap", "start", "--authority", DIRECTIVE])
+    assert road.step() == "roadmap:waiting:remote_unreadable" and not rc.missions_dir(road.root).joinpath("x").exists()
+    first = road.step().split(":")[2]
+    road.finish(first)
+    second = road.step().split(":")[2]
+    road.finish(second)
+    assert road.step() == "roadmap:waiting:remote_unreadable"
+    assert road.step().startswith("roadmap:submitted:") and rc.load_roadmap(road.root)["no_progress"] == 0
+
+
+def test_roadmap_pauses_on_a_cancelled_cycle_and_on_maintainer_stop(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    road = Roadmap(tmp_path, monkeypatch, "r0", "r1")
+    rc.main(["roadmap", "start", "--authority", DIRECTIVE])
+    first = road.step().split(":")[2]
+    road.finish(first, cancelled=True)
+    assert road.step() == "roadmap:paused:cycle_cancelled"
+    rc.main(["roadmap", "start", "--authority", DIRECTIVE])
+    assert road.step().startswith("roadmap:submitted:")
+    assert rc.main(["roadmap", "stop"]) == 2  # a note is required
+    assert rc.main(["roadmap", "stop", "--note", "reviewing direction"]) == 0
+    assert road.step() == "roadmap:paused:maintainer_stop"
+    rc.roadmap_path(road.root).write_text("{")
+    assert road.step() == "roadmap:corrupt" and rc.main(["roadmap", "start", "--authority", DIRECTIVE]) == 2
+
+
+def test_roadmap_pause_notification_uses_the_fixed_template() -> None:
+    assert rc.render("roadmap_paused", {"owner": "control-plane", "reason": "no_progress"})
+    assert rc.render("roadmap_paused", {"owner": "control-plane", "reason": "anything else"}) is None
+
+
+def test_owner_ignores_its_own_sandbox_init_in_the_checkout(tmp_path: Path) -> None:
+    proc = fake_proc(tmp_path)
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    # Inside jarvis-sandbox, PID 1 is bwrap with --chdir <checkout>; the owner (2) is its child.
+    add_proc(proc, 1, argv=["bwrap", "--chdir", str(repo), "--", "python3"], cwd=repo, started=T0, ppid=0)
+    add_proc(proc, 2, argv=["python3", "scripts/relay_continuity.py", "serve"], cwd=repo, started=T0, ppid=1)
+    add_proc(proc, 3, argv=["python", "-m", "pytest"], cwd=repo, started=T0, ppid=1)
+    assert [w.label for w in rc.live_processes([repo], T0, {2}, proc_root=proc)] == ["process python"]
