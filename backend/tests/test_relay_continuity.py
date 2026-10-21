@@ -4,6 +4,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import runpy
 import shutil
 import subprocess
 import sys
@@ -708,6 +709,60 @@ def test_live_conflicts_detects_real_relay_repl_and_legacy_autopilot(tmp_path: P
         for proc in procs:
             proc.kill()
             proc.wait()
+
+
+RELAY_SAFE = Path(__file__).resolve().parents[2] / "scripts" / "relay_safe.py"
+
+
+def _lease_holder(repo: Path, *argv: str, **env: str) -> subprocess.Popen[bytes]:
+    """A process that takes the coordinator lease exactly as scripts/relay_safe.py does, then idles."""
+    code = ("import os, runpy, sys, time; from pathlib import Path\n"
+            f"lease = runpy.run_path({str(RELAY_SAFE)!r})['hold_coordinator_lease'](sys.argv, Path.cwd(), dict(os.environ))\n"
+            "Path('ready').write_text(str(lease is not None)); time.sleep(30)\n")
+    proc = subprocess.Popen([sys.executable, "-c", code, *argv], cwd=repo,
+                            env={**os.environ, "JARVISOS_MISSION_PROFILE": "", **env})
+    deadline = time.monotonic() + 10
+    while not (repo / "ready").exists() and time.monotonic() < deadline:
+        assert proc.poll() is None
+        time.sleep(0.01)
+    return proc
+
+
+@pytest.mark.parametrize(("argv", "env", "held"), [
+    ((), {}, True),                                     # a REPL
+    (("run", "--agent", "claude"), {}, True),           # a headless coordinator run
+    (("daemon",), {}, False),
+    (("hook", "pre-tool"), {}, False),
+    (("run",), {"JARVISOS_MISSION_PROFILE": "1"}, False),  # the mission owner's own turn
+])
+def test_coordinator_lease_is_seen_across_pid_namespaces(
+    tmp_path: Path, argv: tuple[str, ...], env: dict[str, str], held: bool,
+) -> None:
+    repo = tmp_path / "repo"
+    (repo / ".git").mkdir(parents=True)
+    (repo / "sub").mkdir()
+    assert rc.coordinator_lease_held(repo) is False  # no lease file yet
+    proc = _lease_holder(repo, *argv, **env)
+    try:
+        assert (repo / "ready").read_text() == str(held)
+        # Excluding the holder's pid stands in for another sandbox instance, whose process table is invisible.
+        assert rc.live_conflicts(repo, {os.getpid(), proc.pid}) == (["repl_active"] if held else [])
+    finally:
+        proc.kill()
+        proc.wait(timeout=5)
+    assert rc.coordinator_lease_held(repo) is False  # the kernel released it with the process
+
+
+def test_coordinator_lease_found_from_a_subdirectory_and_never_outside_a_repository(tmp_path: Path) -> None:
+    safe = runpy.run_path(str(RELAY_SAFE))
+    assert safe["hold_coordinator_lease"](["relay"], tmp_path, {}) is None
+    (tmp_path / "repo/.git").mkdir(parents=True)
+    (tmp_path / "repo/a/b").mkdir(parents=True)
+    lease = safe["hold_coordinator_lease"](["relay"], tmp_path / "repo/a/b", {})
+    try:
+        assert lease is not None and (tmp_path / "repo/.agent-relay/locks/coordinator.lease").exists()
+    finally:
+        lease.close()
 
 
 @pytest.mark.parametrize("entry", ["relay", "agent-relay", "relay_safe.py", "unrelated.py"])

@@ -1564,9 +1564,33 @@ def _relay_argv(argv: list[str]) -> list[str] | None:
     return None
 
 
+COORDINATOR_LEASE = Path(".agent-relay/locks/coordinator.lease")
+
+
+def coordinator_lease_held(repo: Path) -> bool:
+    """A Relay coordinator in any sandbox instance holds this shared flock (scripts/relay_safe.py). Its process
+    is invisible here when it runs in another PID namespace. An unreadable lease counts as held."""
+    try:
+        handle = (repo / COORDINATOR_LEASE).open("r")
+    except FileNotFoundError:
+        return False
+    except OSError:
+        return True
+    with handle:
+        try:
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return True
+        except OSError:
+            return True
+        fcntl.flock(handle, fcntl.LOCK_UN)
+    return False
+
+
 def live_conflicts(repo: Path, own_pids: set[int]) -> list[str]:
-    """Reasons another coordinator/supervisor may be acting: legacy autopilot or a live Relay REPL/run."""
-    found = []
+    """Reasons another coordinator/supervisor may be acting: legacy autopilot or a live Relay REPL/run, seen in
+    this process table or through the coordinator lease."""
+    found = ["repl_active"] if coordinator_lease_held(repo) else []
     proc_root = Path("/proc")
     for entry in proc_root.iterdir() if proc_root.exists() else []:
         if not entry.name.isdigit() or int(entry.name) in own_pids:
