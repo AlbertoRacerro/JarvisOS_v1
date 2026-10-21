@@ -60,7 +60,7 @@ HOLD_REASONS = (
     "crash_repeated", "circuit_failures", "circuit_switches", "circuit_attempts", "circuit_transient",
     "no_provider_available", "wait_exceeded", "permissions_changed", "state_corrupt", "repl_active",
     "relay_invocation_failed", "live_work", "reconcile_unresolved", "reconcile_insufficient_permissions",
-    "reconcile_failed", "reconcile_no_sandbox", "task_check_failed",
+    "reconcile_failed", "reconcile_no_sandbox", "task_check_failed", "task_report_unverified",
 )
 ROADMAP_PAUSES = ("maintainer_stop", "coordinator_blocked", "no_progress", "cycle_cancelled")
 STOP_REASONS = ("stop_requested", "signal", "idle", "held", "legacy_autopilot", "lock_busy", "error")
@@ -2588,6 +2588,8 @@ class Supervisor:
                 task = self._mission_task()
                 if task is None:
                     return self._mission_complete()
+            if self.mission is not None and task is not None and self.attempts >= self.limits.max_attempts_per_run:
+                return self.hold("circuit_attempts", self.attempts, report.turn_id)
             if task is None:
                 self.state["phase"] = "idle"
                 self.save()
@@ -3193,6 +3195,16 @@ class Supervisor:
         if self.mission is None or rec is None or report.outcome != "success" or pending.get("task") != rec["next"]:
             return None
         index = rec["next"]
+        status = final_relay_status(self.host.relay.repo, session_id)
+        if status == "continue":
+            self.store.journal({"event": "task_checkpointed", "at": iso(self.host.now()),
+                                "mission": self.mission["id"], "task": index, "session": session_id})
+            return None
+        if status != "propose_done":
+            self.store.journal({"event": "task_report_unverified", "at": iso(self.host.now()),
+                                "mission": self.mission["id"], "task": index, "session": session_id,
+                                "reported_status": str(status)[:40]})
+            return self.hold("task_report_unverified", pending.get("attempt"), report.turn_id)
         check = self.mission["tasks"][index].get("check")
         if check is None:
             problem = "task has no independent completion check"

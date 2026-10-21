@@ -47,7 +47,7 @@ class Clock:
         self.t += timedelta(seconds=seconds)
 
 
-def write_turn(session_dir: Path, events: list[dict[str, Any]], *, agent: str = "claude", status: str = "completed",
+def write_turn(session_dir: Path, events: list[dict[str, Any]], *, agent: str = "claude", status: str = "propose_done",
                prompt: str = "task", number: int = 1) -> Path:
     turn = session_dir / "turns" / f"turn-{number:03d}"
     turn.mkdir(parents=True, exist_ok=True)
@@ -123,11 +123,12 @@ class FakeRelay(rc.RelayAdapter):
         step, agent, task = self._current
         if step is None:
             return rc.RunResult(None, 1, False)
-        _, events = step
+        _, events, *reported = step
         if callable(events):  # a reply that depends on the task (a diagnostic answers its own nonce)
             events = events(task)
         sid = f"20261018-{len(self.launches):06d}-{'b' * 6}"
-        write_turn(self.sessions_dir() / sid, events, agent=agent, prompt=relay_prompt(task))
+        write_turn(self.sessions_dir() / sid, events, agent=agent, prompt=relay_prompt(task),
+                   status=reported[0] if reported else "propose_done")
         return rc.RunResult(sid, 0, True)
 
 
@@ -2921,6 +2922,30 @@ def test_unchecked_mission_cannot_complete_on_successful_provider_turn(tmp_path:
     assert sup.state["mission"]["next"] == 0
     assert "mission_completed" not in journal_events(env.store)
     assert len(env.relay.launches) == 1
+
+
+def test_mission_checkpoint_stays_pending_until_check_passes(tmp_path: Path) -> None:
+    env = Env(tmp_path, [("claude", SUCCESS, "continue"), ("claude", SUCCESS, "propose_done")])
+    checks: list[dict[str, Any]] = []
+    env.host.task_check = lambda check: checks.append(check) or None
+    mission = mission_def("merge the deliverable", checks={0: {"kind": "pr_merged", "pr": 846}})
+    start_mission(env, mission)
+    result, sup = run_mission(env, mission)
+    assert result == "idle" and sup.state["mission"]["next"] == 1
+    assert len(env.relay.launches) == 2 and len(checks) == 1
+    assert journal_events(env.store).count("task_checkpointed") == 1
+    assert journal_events(env.store).count("task_completed") == 1
+
+
+def test_mission_repeated_checkpoints_have_a_finite_bound(tmp_path: Path) -> None:
+    env = Env(tmp_path, [("claude", SUCCESS, "continue"), ("claude", SUCCESS, "continue")],
+              limits=rc.Limits(max_attempts_per_run=2))
+    mission = mission_def("unfinished")
+    start_mission(env, mission)
+    result, sup = run_mission(env, mission)
+    assert result == "held" and sup.state["hold"]["reason"] == "circuit_attempts"
+    assert sup.state["mission"]["next"] == 0
+    assert len(env.relay.launches) == 2
 
 
 def test_check_task_is_read_only_and_bounded_to_the_repository(tmp_path: Path) -> None:
