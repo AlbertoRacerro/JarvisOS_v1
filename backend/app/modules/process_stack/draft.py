@@ -1382,6 +1382,12 @@ def kinetics_scripts(document: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return scripts
 
 
+def dynamic_content(document: dict[str, Any]) -> dict[str, Any]:
+    """Stored typed scenarios, schedules and controllers (spec 173), or empty when the draft has none."""
+    content = {key: copy.deepcopy(document.get(key) or {}) for key in ("scenarios", "schedules", "controllers")}
+    return content if any(content.values()) else {}
+
+
 def projection(workspace_id: str, draft_id: str) -> dict[str, Any]:
     directory = draft_dir(workspace_id, draft_id)
     head = _head(directory)
@@ -1417,6 +1423,7 @@ def projection(workspace_id: str, draft_id: str) -> dict[str, Any]:
                       or proposal["state"] == "stale"],
         **({"pbr_feed_basis": feed_basis} if feed_basis else {}),
         **({"solver": copy.deepcopy(document["solver"])} if document.get("solver") is not None else {}),
+        **({"dynamic": dynamic} if (dynamic := dynamic_content(document)) else {}),
     }
 
 

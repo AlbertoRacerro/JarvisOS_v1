@@ -5,6 +5,7 @@ import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerE
 import ProcessProposals from "../components/process/ProcessProposals";
 import { publishProcessSurface } from "../app/workspaceActionSurface";
 import BiologyModelLibrary from "../components/process/BiologyModelLibrary";
+import DynamicPanel from "../components/dynamic/DynamicPanel";
 import PbrInspector from "../components/process/PbrInspector";
 import StudioUnitInspector, { StudioProvenance } from "../components/process/StudioUnitInspector";
 import { addStudioUnitOp, isStudioUnit, paletteSpec, placedSpec, portLabels } from "../components/process/studioUnitLogic";
@@ -1536,6 +1537,9 @@ export default function ProcessDraftEditor({ workspaceId, navigate }: Readonly<{
           </aside>
         ) : null}
       </div>
+      <details className="draft-dynamic-studio"><summary>Dynamic Studio · scenarios, schedules and runs</summary>
+        <DynamicPanel workspaceId={workspaceId} draft={draft} onUpdated={accept} />
+      </details>
     </div>
   );
 }

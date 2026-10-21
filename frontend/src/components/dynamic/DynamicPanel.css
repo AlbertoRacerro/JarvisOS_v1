@@ -1,0 +1,43 @@
+.draft-dynamic-studio { margin: 12px; border: 1px solid #c6d1c8; border-radius: 8px; background: #f7faf7; }
+.draft-dynamic-studio > summary { cursor: pointer; padding: 12px 16px; font-weight: 700; }
+.dyn-panel { padding: 16px; color: #24372e; }
+.dyn-panel h3, .dyn-panel h4, .dyn-panel h5 { margin: 8px 0; }
+.dyn-panel p { margin: 6px 0; }
+.dyn-notice { padding: 8px 12px; border-left: 4px solid #ad7631; background: #fff6e7; }
+.dyn-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 16px 0; }
+.dyn-tabs button[aria-selected="true"] { background: #205b42; color: white; }
+.dyn-section { display: grid; gap: 12px; min-width: 0; }
+.dyn-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; }
+.dyn-row, .dyn-actions, .dyn-range { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.dyn-field { display: grid; gap: 3px; min-width: 160px; }
+.dyn-field input, .dyn-field select, .dyn-row select, .dyn-section select { max-width: 100%; }
+.dyn-time { grid-template-columns: 1fr auto; align-items: end; }
+.dyn-fieldset { display: grid; gap: 8px; border: 1px solid #b9c7bd; border-radius: 5px; padding: 10px; }
+.dyn-fieldset > label { display: flex; gap: 5px; align-items: center; }
+.dyn-warning, .dyn-error { color: #852c26; }
+.dyn-success { color: #21663c; }
+.dyn-hint { color: #536b5d; font-size: .9em; }
+.dyn-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.dyn-timeline { position: relative; display: grid; gap: 5px; border-left: 1px solid #a9b9ae; padding: 10px; }
+.dyn-timeline-row { position: relative; padding-top: 14px; }
+.dyn-timeline-axis { position: absolute; top: 0; width: 2px; height: 12px; background: #205b42; }
+.dyn-timeline-row button { text-align: left; width: 100%; }
+.dyn-action { border: 1px solid #cad5cc; border-radius: 5px; padding: 10px; }
+.dyn-table-scroll { max-width: 100%; overflow-x: auto; }
+.dyn-table, .dyn-table-scroll table { border-collapse: collapse; width: 100%; }
+.dyn-table th, .dyn-table td, .dyn-table-scroll th, .dyn-table-scroll td { border: 1px solid #c4d0c7; padding: 5px 8px; text-align: left; }
+.dyn-plot { min-height: 220px; }
+.dyn-charts, .dyn-chart { min-width: 0; }
+.dyn-chart { margin: 8px 0 18px; }
+.dyn-legend { display: flex; flex-wrap: wrap; gap: 12px; }
+.dyn-legend i { display: inline-block; width: 12px; height: 3px; vertical-align: middle; margin-right: 5px; }
+.dyn-chips, .dyn-runs { display: grid; gap: 6px; padding-left: 20px; }
+.dyn-kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
+.dyn-kpis li { display: grid; gap: 2px; border: 1px solid #c6d1c8; border-radius: 5px; padding: 8px 10px; background: #fff; }
+.dyn-kpis li span { color: #536b5d; font-size: .9em; }
+.dyn-kpis li.is-missing strong { color: #536b5d; font-weight: 400; }
+.dyn-chip--danger, .dyn-stale--stale, .dyn-badge--warn { color: #8a3423; }
+.dyn-chip--ok, .dyn-stale--current, .dyn-badge--ok { color: #21663c; }
+.dyn-channels { display: flex; flex-wrap: wrap; gap: 12px; }
+.dyn-channels > div { display: grid; gap: 5px; }
+@media (max-width: 640px) { .dyn-panel { padding: 10px; } .dyn-grid { grid-template-columns: 1fr; } }

@@ -116,8 +116,10 @@ assert.ok(/available: true \},\n\s*\{ id: "geometry"/.test(page) || page.include
 const authoring = read("src/components/studio/ProcedureAuthoring.tsx");
 for (const text of ["SimulationNotice", "data-refusal-code", "Bind ", "Repeats every...", "When a condition holds", "Observed unit", "Hysteresis", "Cooldown", "Max fires", "Compiled schedule SHA-256", "Move up", "+ Add action", "+ Add step", "Also simulate the scenario"]) assert.ok(authoring.includes(text), text);
 const bench = read("src/components/studio/ProcedureBench.tsx");
-for (const text of ["Apply", "Run", "updateLabel", "Create a minimal scenario", "Per-cycle KPIs", "Event log", "Balances:", "studio-link-provenance", "Apply anyway (overwrite)", "SimulationNotice", "View results", "getRunSeries"]) assert.ok(bench.includes(text), text);
-assert.equal((bench.match(/<SimulationNotice \/>/g) ?? []).length >= 4, true, "notice on bench, apply, link and results");
+for (const text of ["Apply", "Run", "updateLabel", "Create a minimal scenario", "studio-link-provenance", "Apply anyway (overwrite)", "SimulationNotice", "View results", "RunResultsView"]) assert.ok(bench.includes(text), text);
+const sharedResults = read("src/components/dynamic/RunResultsView.tsx");
+for (const text of ["Per-cycle KPIs", "Event log", "Balances:", "SimulationNotice", "getDynamicSeries"]) assert.ok(sharedResults.includes(text), text);
+assert.equal((bench.match(/<SimulationNotice \/>/g) ?? []).length >= 3, true, "notice on bench, apply and link; shared results carries its own notice");
 const api = read("src/api/studioProcedure.ts");
 assert.ok(api.includes("/procedure/apply") === false && api.includes("/apply`"), "apply route");
 assert.doesNotMatch(read("src/api/studio.ts") + api, /"PATCH"/, "the backend CORS does not allow PATCH");

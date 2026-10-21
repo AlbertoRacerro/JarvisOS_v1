@@ -26,7 +26,7 @@ def git(cwd: Path, *args: str) -> str:
 def commit(repo: Path, files: dict[str, str], message: str) -> str:
     for name, content in files.items():
         (repo / name).parent.mkdir(parents=True, exist_ok=True)
-        (repo / name).write_text(content)
+        (repo / name).write_text(content, encoding="utf-8")
     git(repo, "add", "-A")
     git(repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", message)
     return git(repo, "rev-parse", "HEAD")
@@ -206,7 +206,7 @@ def test_directives_relay_provenance_and_unrecorded_prompts(world) -> None:
     prompt = relay / "s1" / "turns" / "turn-001" / "prompt.md"
     prompt.parent.mkdir(parents=True)
     text = "MAINTAINER MISSION\nSPEC 999 — THE THING\n" + "Build the thing carefully.\n" * 60
-    prompt.write_text(text)
+    prompt.write_text(text, encoding="utf-8")
     packet = devctx.build_packet(env, fetch=True)
     assert any("not recorded as a directive" in w for w in packet["warnings"])
     env.now = env.now + timedelta(seconds=5)

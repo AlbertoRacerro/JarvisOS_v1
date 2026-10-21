@@ -201,6 +201,8 @@ export type DraftProjection = {
   property_package: string | null;
   /** Spec 183 operator solver settings (document.solver); absent means defaults. */
   solver?: Record<string, unknown> | null;
+  /** Spec 173: stored typed scenarios, schedules and controllers; absent when the draft has none. Editing goes through patchDraft ops only. */
+  dynamic?: { scenarios: Record<string, Record<string, unknown>>; schedules: Record<string, Record<string, unknown>>; controllers: Record<string, Record<string, unknown>> };
   objects: DraftObject[];
   reactions?: Record<string, DraftReaction>;
   kinetics_scripts?: Record<string, KineticsScript>;
