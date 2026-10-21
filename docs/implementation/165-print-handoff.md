@@ -53,6 +53,15 @@ roadmap continuation cycle 3. The audit table migration was renumbered to
   ASCII locale and pass under `LANG=C.UTF-8`.
 - ruff, architecture enforcement, frontend contract generation and the
   typecheck ratchet (301 ≤ 310) pass. `npm run build` passes.
+- BLUECAD geometry canary: every pinned `manifest_digest` changes because
+  each manifest now lists `model.3mf` and the `print_handoff` block. The four
+  new digests are taken from the CI canonical-profile run; the fixtures'
+  `spec_id`s and profile are unchanged, and the STL, STEP and GLB bytes of all
+  four fixtures were checked byte-identical between master and this branch.
+- CI core shard: `test_devctx.py` failed once it was rebalanced into a shard
+  whose earlier tests leave an ASCII locale. `scripts/devctx.py` now decodes
+  git output as UTF-8 and the test writes its fixtures as UTF-8 (verified
+  with `LC_ALL=C PYTHONCOERCECLOCALE=0 PYTHONUTF8=0`).
 
 ## Real Chromium GUI proof
 
