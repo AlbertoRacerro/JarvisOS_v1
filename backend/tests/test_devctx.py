@@ -26,7 +26,7 @@ def git(cwd: Path, *args: str) -> str:
 def commit(repo: Path, files: dict[str, str], message: str) -> str:
     for name, content in files.items():
         (repo / name).parent.mkdir(parents=True, exist_ok=True)
-        (repo / name).write_text(content)
+        (repo / name).write_text(content, encoding="utf-8")
     git(repo, "add", "-A")
     git(repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", message)
     return git(repo, "rev-parse", "HEAD")
