@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { DraftProjection } from "../../api/processDraft";
 import type { EnvProfile } from "./dynamicApi";
-import { blankScenario, deleteOp, fmtDuration, isId, scenarioDurationS, scenarioHints, scenarioLimitText, setOp, type DynamicContent, type DynScenario } from "./dynamicLogic";
+import { blankScenario, deleteOp, fmtDuration, isId, scenarioDurationS, scenarioHints, scenarioLimitText, setOp, startingState, type DynamicContent, type DynScenario } from "./dynamicLogic";
 import { NumField, SelectField, TextField, TimeField, type OnPatch } from "./fields";
 import { Refusal, SimulationNotice } from "./SimulationNotice";
 
@@ -43,7 +43,7 @@ export default function ScenarioEditor({ draft, content, profiles, onPatch }: { 
   const toggleUnit = (tag: string, on: boolean) => {
     const next = on ? [...value.units, tag] : value.units.filter((item) => item !== tag);
     const initial = { ...value.initial };
-    if (on && !initial[tag]) initial[tag] = { X: 0.2, N: 0.05, O2: 0.008 };
+    if (on && !initial[tag]) initial[tag] = startingState();
     edit({ units: next, initial });
   };
   const setInitial = (tag: string, key: "X" | "N" | "O2", next: number | undefined) => {

@@ -12,6 +12,26 @@ const L = await import(`data:text/javascript;base64,${Buffer.from(js).toString("
 
 assert.equal(L.NOTICE, "Tier 1 lumped model. Unqualified. Simulation only. This does not command any equipment.");
 
+// Stored content omits fields at their model default; contentOf restores them and keeps every stored value.
+{
+  const stored = { scenarios: { run: { id: "run", units: ["PBR"], profiles: [{ profile_id: "p", digest: "d" }], start_utc: "2026-01-01T00:00:00Z", end_utc: "2026-01-02T00:00:00Z", output_cadence_s: 3600, temperature_source: "unit_mean", rtol: 1e-9 } },
+    controllers: { c: { id: "c", type: "onoff", measurement: "X", unit: "PBR", actuator: "feed:Feed", output_unit: "m3/s", cadence_s: 60, setpoint: 0.5 } }, schedules: { s: { id: "s" } } };
+  const content = L.contentOf(stored);
+  assert.deepEqual(content.scenarios.run.controllers, []);
+  assert.equal(content.scenarios.run.schedule_id, null);
+  assert.equal(content.scenarios.run.controller_cadence_s, 300);
+  assert.equal(content.scenarios.run.solver_method, "BDF");
+  assert.equal(content.scenarios.run.rtol, 1e-9);
+  assert.equal(content.scenarios.run.atol, 1e-9);
+  assert.equal(content.scenarios.run.downstream_enabled, false);
+  assert.deepEqual(content.scenarios.run.initial, {});
+  assert.equal(content.controllers.c.direction, "above");
+  assert.equal(content.controllers.c.upper, 1);
+  assert.deepEqual(content.schedules.s.events, []);
+  assert.deepEqual(L.contentOf(undefined), L.EMPTY_CONTENT);
+  assert.notEqual(L.contentOf(stored).scenarios.run.controllers, content.scenarios.run.controllers);
+}
+
 // Numbers and time.
 assert.equal(L.fmtNum(2e-5), "2e-5");
 assert.equal(L.fmtNum(0.05), "0.05");
@@ -110,6 +130,8 @@ const scenario = L.blankScenario("run", ["PBR"], { profile_id: "sha256:a", diges
 assert.equal(scenario.start_utc, "2026-01-01T00:00:00Z");
 assert.equal(scenario.end_utc, "2026-01-08T00:00:00Z");
 assert.equal(scenario.fidelity, "T1");
+// A unit preselected for a new scenario gets the same editable starting state as one chosen later (the engine requires X, N and O2).
+assert.deepEqual(scenario.initial, { PBR: { X: 0.2, N: 0.05, O2: 0.008 } });
 assert.deepEqual(L.scenarioHints(scenario), []);
 assert.ok(L.scenarioHints({ ...scenario, output_cadence_s: 30 }).some((x) => /at least 60 s/.test(x)));
 assert.ok(L.scenarioHints({ ...scenario, end_utc: "2026-09-01T00:00:00Z" }).some((x) => /exceeds the limit of 120 d/.test(x)));
@@ -300,4 +322,6 @@ assert.ok(read("src/api/processDraft.ts").includes("dynamic?:"));
 assert.ok(read("src/components/studio/ProcedureBench.tsx").includes("<RunResultsView"));
 assert.doesNotMatch(read("src/components/studio/ProcedureBench.tsx"), /<svg|chartPaths|SeriesChart/);
 assert.match(read("package.json"), /npm run test:173/);
+// Draft patch refusals keep their backend code (decision 3): failureText reads DraftApiError as well as StudioApiError.
+assert.match(read(dir + "dynamicApi.ts"), /cause instanceof StudioApiError \|\| cause instanceof DraftApiError/);
 console.log("173 Process dynamic studio frontend ok");

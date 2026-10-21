@@ -1,4 +1,5 @@
 import { StudioApiError, request } from "../../api/studio";
+import { DraftApiError } from "../../api/processDraft";
 import { listProcedureLinks, listProcedureRuns, type ProcedureLink } from "../../api/studioProcedure";
 import { collectSeries, type DynRun, type LinkInfo, type Manifest, type SeriesData, type SeriesFetch } from "./dynamicLogic";
 
@@ -27,4 +28,4 @@ export const listEnvProfiles = (ws: string) => request<EnvProfile[]>(`/workspace
 export const listDraftLinks = (ws: string, draftId: string): Promise<LinkInfo[]> => listProcedureLinks(ws, draftId).then((links: ProcedureLink[]) => links);
 export const listRunLinks = (ws: string, draftId: string) => listProcedureRuns(ws, draftId).then((rows) => Object.fromEntries(rows.map((row) => [row.job.job_id, row.procedure_link])));
 export const failureText = (cause: unknown): { code: string | null; message: string } =>
-  cause instanceof StudioApiError ? { code: cause.code, message: cause.message } : { code: null, message: cause instanceof Error ? cause.message : "Request failed" };
+  cause instanceof StudioApiError || cause instanceof DraftApiError ? { code: cause.code, message: cause.message } : { code: null, message: cause instanceof Error ? cause.message : "Request failed" };

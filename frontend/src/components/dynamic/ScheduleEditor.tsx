@@ -57,7 +57,15 @@ function EventFields({ event, tanks, feeds, splitters, controllers, onChange }: 
       {["inoculation", "harvest"].includes(event.type) && select("Unit", string(event.unit), tanks, (unit) => field("unit", unit))}
       {event.type === "feed_change" && select("Feed stream", string(event.stream), feeds, (stream) => field("stream", stream))}
       {targetOptions.length > 0 && select("Target", string(event.target), targetOptions, (target) => field("target", target))}
-      {["feed_change", "dilution", "setpoint_change", "inoculation"].includes(event.type) && <NumField label={`Value [${string(event.value_unit || (event.type === "dilution" ? "1" : event.type === "feed_change" ? "m3/s" : "kg/m3"))}]`} value={number(event.value)} onChange={(value) => field("value", value)} />}
+      {["feed_change", "inoculation"].includes(event.type) && <SelectField label="Value form" value={event.value !== null && typeof event.value === "object" ? "concentrations" : "number"}
+        options={[{ value: "number", label: "One number" }, { value: "concentrations", label: event.type === "feed_change" ? "Flow and feed culture" : "Concentrations" }]}
+        onChange={(form) => field("value", form === "number" ? 0 : event.type === "feed_change" ? { flow_m3_s: 0, culture: { X: 0, N: 0, O2: 0 }, culture_unit: "kg/m3" } : { X: 0, N: 0, O2: 0 })} />}
+      {["feed_change", "dilution", "setpoint_change", "inoculation"].includes(event.type) && (event.value !== null && typeof event.value === "object" ? <>
+        {event.type === "feed_change" ? <NumField label="Feed flow [m3/s]" value={number((event.value as Record<string, unknown>).flow_m3_s)} onChange={(value) => nested(["value", "flow_m3_s"], value)} /> : null}
+        {(["X", "N", "O2"] as const).map((name) => <NumField key={name} optional label={`Value ${name} [kg/m3]`}
+          value={number(event.type === "feed_change" ? ((event.value as Record<string, unknown>).culture as Record<string, unknown> | undefined)?.[name] : (event.value as Record<string, unknown>)[name])}
+          onChange={(value) => nested(event.type === "feed_change" ? ["value", "culture", name] : ["value", name], value)} />)}
+      </> : <NumField label={`Value [${string(event.value_unit || (event.type === "dilution" ? "1" : event.type === "feed_change" ? "m3/s" : "kg/m3"))}]`} value={number(event.value)} onChange={(value) => field("value", value)} />)}
       {event.type === "harvest" && <NumField label="Harvest fraction [1]" value={number(event.fraction)} onChange={(fraction) => field("fraction", fraction)} />}
     </div>
     {event.type === "actions" && <fieldset className="dyn-fieldset"><legend>Culture actions in order</legend>{actions.map((action, index) => <div className="dyn-action" key={index}>

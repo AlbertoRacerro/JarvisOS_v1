@@ -35,8 +35,17 @@ export type DynScenario = {
 } & Record<string, unknown>;
 export type DynamicContent = { scenarios: Record<string, DynScenario>; schedules: Record<string, DynSchedule>; controllers: Record<string, DynController> };
 export const EMPTY_CONTENT: DynamicContent = { scenarios: {}, schedules: {}, controllers: {} };
+// Stored content omits fields left at their 172 model default (dynamic_models.Scenario, Controller, Schedule). The editors read complete
+// values, so those defaults are restored here; a value that is present is never changed.
+const scenarioDefaults = () => ({ forcing_profile_id: null, schedule_id: null, controllers: [], controller_cadence_s: 300, fidelity: "T1", solver_method: "BDF",
+  rtol: 1e-6, atol: 1e-9, par_scale: 1, par_from_ghi_factor: null, downstream_cadence_s: null, downstream_enabled: false, initial: {}, feed_flows: {}, circulation: {} });
+const controllerDefaults = () => ({ lower: 0, upper: 1, hysteresis: 0, kp: 0, ki: 0, output: 0, direction: "above" });
+const withDefaults = <T,>(items: Record<string, unknown> | undefined, defaults: () => Record<string, unknown>): Record<string, T> =>
+  Object.fromEntries(Object.entries(items ?? {}).map(([id, value]) => [id, { ...defaults(), id, ...(value as Record<string, unknown>) } as T]));
 export const contentOf = (dynamic: Partial<DynamicContent> | undefined | null): DynamicContent => ({
-  scenarios: dynamic?.scenarios ?? {}, schedules: dynamic?.schedules ?? {}, controllers: dynamic?.controllers ?? {},
+  scenarios: withDefaults<DynScenario>(dynamic?.scenarios, scenarioDefaults),
+  schedules: withDefaults<DynSchedule>(dynamic?.schedules, () => ({ events: [] })),
+  controllers: withDefaults<DynController>(dynamic?.controllers, controllerDefaults),
 });
 
 // ------------------------------------------------------------------ numbers and time
@@ -215,6 +224,8 @@ export const scenarioLimitText = (scenario: DynScenario): string => {
 
 // ------------------------------------------------------------------ blank content and ops
 
+/** Editable starting culture state filled in for a unit chosen for a scenario; the operator edits it, nothing is corrected. */
+export const startingState = (): Record<string, number> => ({ X: 0.2, N: 0.05, O2: 0.008 });
 export const blankScenario = (id: string, units: string[], profile: { profile_id: string; digest: string; start: string; end: string } | null): DynScenario => {
   const startMs = profile ? Date.parse(profile.start) : Date.parse("2026-01-01T00:00:00Z");
   const endMs = profile ? Math.min(Date.parse(profile.end), startMs + 7 * 86400000) : startMs + 7 * 86400000;
@@ -222,7 +233,7 @@ export const blankScenario = (id: string, units: string[], profile: { profile_id
   return {
     id, units, profiles: profile ? [{ profile_id: profile.profile_id, digest: profile.digest }] : [], schedule_id: null, controllers: [],
     start_utc: iso(startMs), end_utc: iso(endMs), output_cadence_s: 3600, controller_cadence_s: 300, fidelity: "T1", solver_method: "BDF",
-    rtol: 1e-6, atol: 1e-9, temperature_source: "unit_mean", par_scale: 1, downstream_enabled: false, initial: {}, feed_flows: {}, circulation: {},
+    rtol: 1e-6, atol: 1e-9, temperature_source: "unit_mean", par_scale: 1, downstream_enabled: false, initial: Object.fromEntries(units.map((tag) => [tag, startingState()])), feed_flows: {}, circulation: {},
   };
 };
 export const blankController = (id: string, unit: string, actuator: string): DynController => ({
