@@ -1,6 +1,6 @@
 # 203 — Roadmap continuation through the mission owner
 
-State: **in_review** (live state in [`STATUS.md`](STATUS.md)). Depends on 201. Definition and readiness were granted together by the maintainer directive of 2026-10-21 (ledger `L20261021095156-016b`). That directive asks for the smallest planner-to-mission integration on the spec 201 control plane. Intelligent prioritization stays separate from deterministic execution, and `STATUS.md` stays the single backlog.
+State: **merged** via #854 (live state in [`STATUS.md`](STATUS.md)). Depends on 201. Definition and readiness were granted together by the maintainer directive of 2026-10-21 (ledger `L20261021095156-016b`). That directive asks for the smallest planner-to-mission integration on the spec 201 control plane. Intelligent prioritization stays separate from deterministic execution, and `STATUS.md` stays the single backlog.
 
 ## Outcome
 
