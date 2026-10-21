@@ -69,6 +69,7 @@ export function toSi(kind: string, unit: string, value: number): number | null {
 
 export type PbrEntry = { text: string; unit: string };
 export type PbrFormValues = Record<string, PbrEntry | undefined>;
+export const T2_OPTICS_KEYS = new Set(["tubes_across", "layers", "pitch_h", "pitch_v", "stagger_offset", "axis_azimuth", "centre_height_above_sea", "n_wall", "n_water", "sea_albedo"]);
 
 /** Parse an operator entry into SI; null when empty, not a finite number or in an unknown unit. */
 export function entrySi(kind: string, entry: PbrEntry | undefined): number | null {
@@ -92,6 +93,16 @@ export const PBR_RULES: Record<string, Rule> = {
   diffuse_fraction: { kind: "dimensionless", ok: (v) => v >= 0 && v <= 1, message: "Diffuse fraction must be between 0 and 1" },
   temperature_mean: { kind: "temperature", ok: (v) => v > 0, message: "Mean temperature must be above 0 K" },
   temperature_amplitude: { kind: "temperature_difference", ok: (v) => v >= 0, message: "Temperature amplitude must be zero or greater" },
+  tubes_across: { kind: "dimensionless", ok: (v) => Number.isInteger(v) && v >= 1 && v <= 64, message: "Tubes across must be a whole number from 1 to 64" },
+  layers: { kind: "dimensionless", ok: (v) => Number.isInteger(v) && v >= 1 && v <= 64, message: "Layers must be a whole number from 1 to 64" },
+  pitch_h: { kind: "length", ok: (v) => v > 0, message: "Horizontal pitch must be positive" },
+  pitch_v: { kind: "length", ok: (v) => v > 0, message: "Vertical pitch must be positive" },
+  stagger_offset: { kind: "length", ok: (v) => Number.isFinite(v), message: "Stagger must be finite" },
+  axis_azimuth: { kind: "dimensionless", ok: (v) => v >= 0 && v <= 360, message: "Axis azimuth must be 0–360°" },
+  centre_height_above_sea: { kind: "length", ok: (v) => v >= 0, message: "Tube centre height cannot be negative" },
+  n_wall: { kind: "dimensionless", ok: (v) => v >= 1 && v <= 5, message: "Wall index must be 1–5" },
+  n_water: { kind: "dimensionless", ok: (v) => v >= 1 && v <= 5, message: "Water index must be 1–5" },
+  sea_albedo: { kind: "dimensionless", ok: (v) => v >= 0 && v <= 1, message: "Sea albedo must be 0–1" },
 };
 const TEMPERATURE_FLOOR = "Mean temperature minus the amplitude must stay above 0 K";
 
@@ -107,6 +118,16 @@ export function pbrFieldError(key: string, entry: PbrEntry | undefined, current:
   const si = toSi(rule.kind, entry.unit, value);
   if (si === null) return "";
   if (!rule.ok(si)) return rule.message;
+  const diameter = current("tube_inner_diameter");
+  if ((key === "pitch_h" || key === "pitch_v") && diameter !== null && si < diameter) return "Pitch must be at least the tube diameter";
+  if (key === "centre_height_above_sea" && diameter !== null && si < diameter / 2) return "Lowest tube centre must be above the sea by at least one radius";
+  if (key === "stagger_offset" && current("pitch_h") !== null && Math.abs(si) > current("pitch_h")!) return "Stagger must not exceed horizontal pitch";
+  if (key === "tubes_across" || key === "layers") {
+    const other = current(key === "tubes_across" ? "layers" : "tubes_across");
+    if (other !== null && si * other > 64) return "The representative module supports at most 64 tubes";
+    const count = current("tube_count");
+    if (other !== null && count !== null && si * other > count) return "Module tube count must not exceed the unit tube count";
+  }
   if (key === "temperature_mean" || key === "temperature_amplitude") {
     const mean = key === "temperature_mean" ? si : current("temperature_mean");
     const amplitude = key === "temperature_amplitude" ? si : current("temperature_amplitude");
