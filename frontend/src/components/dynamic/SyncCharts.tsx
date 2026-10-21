@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import type uPlot from "uplot";
+import "uplot/dist/uPlot.min.css";
 import { channelLabel, fmtNum, groupChannelsByUnit, panRange, tableWindow, zoomRange, type SeriesData } from "./dynamicLogic";
 
 // Spec 173 decision 9: uPlot panels share one cursor and one x-range, group channels by their manifest unit, and each carries a values

@@ -322,6 +322,8 @@ assert.ok(read("src/api/processDraft.ts").includes("dynamic?:"));
 assert.ok(read("src/components/studio/ProcedureBench.tsx").includes("<RunResultsView"));
 assert.doesNotMatch(read("src/components/studio/ProcedureBench.tsx"), /<svg|chartPaths|SeriesChart/);
 assert.match(read("package.json"), /npm run test:173/);
+// The charts carry their own uPlot stylesheet; the Environment panel that also imports it is lazy-loaded.
+assert.match(charts, /import "uplot\/dist\/uPlot.min.css";/);
 // Draft patch refusals keep their backend code (decision 3): failureText reads DraftApiError as well as StudioApiError.
 assert.match(read(dir + "dynamicApi.ts"), /cause instanceof StudioApiError \|\| cause instanceof DraftApiError/);
 console.log("173 Process dynamic studio frontend ok");

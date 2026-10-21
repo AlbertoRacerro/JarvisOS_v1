@@ -31,7 +31,11 @@
 .dyn-chart { margin: 8px 0 18px; }
 .dyn-legend { display: flex; flex-wrap: wrap; gap: 12px; }
 .dyn-legend i { display: inline-block; width: 12px; height: 3px; vertical-align: middle; margin-right: 5px; }
-.dyn-chips, .dyn-kpis, .dyn-runs { display: grid; gap: 6px; padding-left: 20px; }
+.dyn-chips, .dyn-runs { display: grid; gap: 6px; padding-left: 20px; }
+.dyn-kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
+.dyn-kpis li { display: grid; gap: 2px; border: 1px solid #c6d1c8; border-radius: 5px; padding: 8px 10px; background: #fff; }
+.dyn-kpis li span { color: #536b5d; font-size: .9em; }
+.dyn-kpis li.is-missing strong { color: #536b5d; font-weight: 400; }
 .dyn-chip--danger, .dyn-stale--stale, .dyn-badge--warn { color: #8a3423; }
 .dyn-chip--ok, .dyn-stale--current, .dyn-badge--ok { color: #21663c; }
 .dyn-channels { display: flex; flex-wrap: wrap; gap: 12px; }
