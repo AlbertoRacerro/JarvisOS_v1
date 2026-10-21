@@ -165,7 +165,7 @@ class Growth:
     def _monod(self, irradiance: np.ndarray) -> np.ndarray:
         return light_response(irradiance, self.light_saturation, 0.0)
 
-    def light(self, par: float, biomass: float) -> float:
+    def light(self, par: float, biomass: float, diffuse_fraction: float | None = None) -> float:
         if par <= 0.0:
             return 0.0
         tau = cylinder.optical_depth(self.extinction, biomass, self.diameter)
@@ -173,18 +173,21 @@ class Growth:
             return light_response(par, self.light_saturation, 0.0)
         if tau > cylinder.TAU_MAX:
             raise _optics_failure(self, biomass)
-        return cylinder.response_average_tau(self._monod, par, tau, self.diffuse_fraction)
+        return cylinder.response_average_tau(
+            self._monod, par, tau, self.diffuse_fraction if diffuse_fraction is None else diffuse_fraction
+        )
 
     def rates(self, hour: float, biomass: float, nitrogen: float) -> tuple[float, float]:
         par, temperature = self.environment(hour)
         return self.rates_at(par, temperature, biomass, nitrogen)
 
-    def rates_at(self, par: float, temperature: float, biomass: float, nitrogen: float) -> tuple[float, float]:
+    def rates_at(self, par: float, temperature: float, biomass: float, nitrogen: float,
+                 diffuse_fraction: float | None = None) -> tuple[float, float]:
         """Evaluate the reviewed hourly biological rates at explicit environmental inputs."""
         thermal = self.thermal(temperature)
         growth = 0.0
         if par > 0.0 and thermal > 0.0:
-            growth = (self.mu_max_h * self.light(par, biomass) * thermal
+            growth = (self.mu_max_h * self.light(par, biomass, diffuse_fraction) * thermal
                       * nitrogen_factor(nitrogen, self.nitrogen_half_saturation))
         return growth, self.loss(par)
 
@@ -788,6 +791,9 @@ def evaluate_pbr(unit: dict[str, Any], inlet: dict[str, Any], context: JarvisUni
     started = time.monotonic()
     clock = _Clock(min(started + WALL_CAP_S, context.deadline))
     tag = str(unit.get("tag", "PBR"))
+    if (unit.get("options") or {}).get("optics_model", "t1") == "t2":
+        raise PbrFailure("OPTICS_T2_REQUIRES_DYNAMIC_PROFILE",
+                         "T2 optics requires a dynamic run with DNI and DHI profile channels.")
     density = float(context.inlet_density_kg_m3)
     if not math.isfinite(density) or density <= 0.0:
         raise PbrFailure("PBR_INLET_DENSITY_UNAVAILABLE", "The photobioreactor inlet has no solved liquid density "

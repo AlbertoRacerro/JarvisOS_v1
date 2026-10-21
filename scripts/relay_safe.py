@@ -4,12 +4,20 @@
 Install the pinned upstream package in a separate virtual environment, then invoke
 that environment's Python with this script. All CLI arguments pass through unchanged.
 No credentials, permissions, launch templates, journals or provider policy change.
+
+While it runs, a coordinator invocation also holds a shared coordinator lease on its repository (spec 201).
+Each jarvis-sandbox instance has its own PID namespace, so the mission owner cannot see a REPL in another
+instance's process table; it sees this flock instead.
 """
 from __future__ import annotations
 
+import fcntl
 import hashlib
 import importlib.metadata
+import os
+import sys
 from pathlib import Path
+from typing import IO
 
 UPSTREAM_VERSION = "0.7.7"
 SESSION_SOURCE_SHA256 = "f104a09fbdd2c1faeeab2cfe1d6fa977f5133d34c3bbbcd989807986e804e493"
@@ -72,8 +80,32 @@ def apply_repair() -> None:
     exec(compile(repaired_session, str(session_path), "exec"), agent_session.__dict__)  # noqa: S102 — SHA-pinned upstream source
 
 
+COORDINATOR_LEASE = Path(".agent-relay/locks/coordinator.lease")
+
+
+def hold_coordinator_lease(argv: list[str], cwd: Path, env: dict[str, str]) -> IO[str] | None:
+    """Hold a shared flock for this process's lifetime, unless this is a daemon or hook, or a run launched by
+    the mission owner itself (its profile marker). The kernel releases it when the process dies."""
+    if env.get("JARVISOS_MISSION_PROFILE") == "1" or any(a in ("daemon", "hook") for a in argv[1:3]):
+        return None
+    root = next((p for p in (cwd, *cwd.parents) if (p / ".git").exists()), None)
+    if root is None:
+        return None
+    path = root / COORDINATOR_LEASE
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        handle = path.open("a")
+        fcntl.flock(handle, fcntl.LOCK_SH)
+    except OSError as exc:
+        print(f"relay: coordinator lease unavailable ({exc}); the mission owner cannot see this session",
+              file=sys.stderr)
+        return None
+    return handle
+
+
 def main() -> int:
     apply_repair()
+    lease = hold_coordinator_lease(sys.argv, Path.cwd(), dict(os.environ))  # noqa: F841 - held until exit
     from agent_relay.cli import main as relay_main
 
     return relay_main()

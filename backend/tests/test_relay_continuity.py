@@ -4,6 +4,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import runpy
 import shutil
 import subprocess
 import sys
@@ -708,6 +709,60 @@ def test_live_conflicts_detects_real_relay_repl_and_legacy_autopilot(tmp_path: P
         for proc in procs:
             proc.kill()
             proc.wait()
+
+
+RELAY_SAFE = Path(__file__).resolve().parents[2] / "scripts" / "relay_safe.py"
+
+
+def _lease_holder(repo: Path, *argv: str, **env: str) -> subprocess.Popen[bytes]:
+    """A process that takes the coordinator lease exactly as scripts/relay_safe.py does, then idles."""
+    code = ("import os, runpy, sys, time; from pathlib import Path\n"
+            f"lease = runpy.run_path({str(RELAY_SAFE)!r})['hold_coordinator_lease'](sys.argv, Path.cwd(), dict(os.environ))\n"
+            "Path('ready').write_text(str(lease is not None)); time.sleep(30)\n")
+    proc = subprocess.Popen([sys.executable, "-c", code, *argv], cwd=repo,
+                            env={**os.environ, "JARVISOS_MISSION_PROFILE": "", **env})
+    deadline = time.monotonic() + 10
+    while not (repo / "ready").exists() and time.monotonic() < deadline:
+        assert proc.poll() is None
+        time.sleep(0.01)
+    return proc
+
+
+@pytest.mark.parametrize(("argv", "env", "held"), [
+    ((), {}, True),                                     # a REPL
+    (("run", "--agent", "claude"), {}, True),           # a headless coordinator run
+    (("daemon",), {}, False),
+    (("hook", "pre-tool"), {}, False),
+    (("run",), {"JARVISOS_MISSION_PROFILE": "1"}, False),  # the mission owner's own turn
+])
+def test_coordinator_lease_is_seen_across_pid_namespaces(
+    tmp_path: Path, argv: tuple[str, ...], env: dict[str, str], held: bool,
+) -> None:
+    repo = tmp_path / "repo"
+    (repo / ".git").mkdir(parents=True)
+    (repo / "sub").mkdir()
+    assert rc.coordinator_lease_held(repo) is False  # no lease file yet
+    proc = _lease_holder(repo, *argv, **env)
+    try:
+        assert (repo / "ready").read_text() == str(held)
+        # Excluding the holder's pid stands in for another sandbox instance, whose process table is invisible.
+        assert rc.live_conflicts(repo, {os.getpid(), proc.pid}) == (["repl_active"] if held else [])
+    finally:
+        proc.kill()
+        proc.wait(timeout=5)
+    assert rc.coordinator_lease_held(repo) is False  # the kernel released it with the process
+
+
+def test_coordinator_lease_found_from_a_subdirectory_and_never_outside_a_repository(tmp_path: Path) -> None:
+    safe = runpy.run_path(str(RELAY_SAFE))
+    assert safe["hold_coordinator_lease"](["relay"], tmp_path, {}) is None
+    (tmp_path / "repo/.git").mkdir(parents=True)
+    (tmp_path / "repo/a/b").mkdir(parents=True)
+    lease = safe["hold_coordinator_lease"](["relay"], tmp_path / "repo/a/b", {})
+    try:
+        assert lease is not None and (tmp_path / "repo/.agent-relay/locks/coordinator.lease").exists()
+    finally:
+        lease.close()
 
 
 @pytest.mark.parametrize("entry", ["relay", "agent-relay", "relay_safe.py", "unrelated.py"])
@@ -2632,3 +2687,678 @@ def test_real_codex_read_only_sandbox_blocks_writes(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     subprocess.run(["git", "init", "-q", str(repo)], check=True)
     assert rc.ReadOnlyCodex(repo, tmp_path / "control").preflight() is None
+
+
+# ---------------------------------------------------------------------------
+# Spec 201: durable missions and the persistent owner
+
+DIRECTIVE = "L20261020085928-0431"
+
+
+def mission_def(*texts: str, checks: dict[int, dict[str, Any]] | None = None, session: str | None = None,
+                mid: str = "m-20261018T075500Z-abc123", submitted: datetime = T0 - timedelta(minutes=5)) -> dict[str, Any]:
+    tasks = [{"text": t, **({"check": checks[i]} if checks and i in checks else {})} for i, t in enumerate(texts)]
+    return {"schema": rc.MISSION_SCHEMA, "id": mid, "authority": DIRECTIVE, "tasks": tasks,
+            "submitted_at": rc.iso(submitted), "session": session, "repo": "/repo"}
+
+
+def start_mission(env: Env, mission: dict[str, Any]) -> None:
+    state = rc.default_state()
+    state["mission"] = {"id": mission["id"], "next": 0, "total": len(mission["tasks"]), "done": []}
+    env.store.save(state, T0)
+
+
+def run_mission(env: Env, mission: dict[str, Any], session: str | None = None) -> tuple[str, Any]:
+    sup = env.supervisor()
+    sup.mission = mission
+    return sup.run(session), sup
+
+
+def journal_events(store: Any) -> list[str]:
+    return [json.loads(line)["event"] for line in store.journal_path.read_text().splitlines()]
+
+
+def test_mission_validation_rejects_unsafe_definitions() -> None:
+    assert rc.validate_mission(mission_def("a", checks={0: {"kind": "pr_merged", "pr": 846}})) is None
+    assert rc.validate_mission(mission_def("a", checks={0: {"kind": "path_exists", "path": "docs/x.md"}})) is None
+    bad = [
+        {**mission_def("a"), "authority": "maintainer said so"},
+        {**mission_def("a"), "id": "m-1"},
+        {**mission_def("a"), "tasks": []},
+        mission_def(*["t"] * (rc.MAX_TASKS + 1)),
+        mission_def("x" * (rc.MAX_TASK_CHARS + 1)),
+        mission_def("use token ghp_" + "a" * 36),
+        mission_def("a", checks={0: {"kind": "shell", "cmd": "true"}}),
+        mission_def("a", checks={0: {"kind": "path_exists", "path": "/etc/passwd"}}),
+        mission_def("a", checks={0: {"kind": "path_exists", "path": "../outside"}}),
+        mission_def("a", checks={0: {"kind": "pr_merged", "pr": True}}),
+        {**mission_def("a"), "tasks": [{"text": "a", "agent": "codex"}]},
+    ]
+    assert [n for n, m in enumerate(bad) if rc.validate_mission(m) is None] == []
+
+
+def test_mission_advances_each_task_only_on_success_and_completes(tmp_path: Path) -> None:
+    env = Env(tmp_path, [("claude", SUCCESS), ("claude", SUCCESS), ("claude", SUCCESS)])
+    mission = mission_def("first task", "second task", "third task")
+    start_mission(env, mission)
+    result, sup = run_mission(env, mission)
+    assert result == "idle"
+    launches = env.relay.launches
+    assert [launch["parent"] for launch in launches] == [None, "20261018-000001-bbbbbb", "20261018-000002-bbbbbb"]
+    for n, (launch, text) in enumerate(zip(launches, ("first task", "second task", "third task"), strict=True), 1):
+        assert f"task {n}/3" in launch["task"] and launch["task"].endswith(f"{rc.MISSION_HEADER}\n{text}")
+        assert DIRECTIVE in launch["task"] and "devctx.py recover" in launch["task"]
+    rec = sup.state["mission"]
+    assert rec["next"] == 3 and rec["completed_at"] and [d["task"] for d in rec["done"]] == [0, 1, 2]
+    assert journal_events(env.store).count("task_completed") == 3 and "mission_completed" in journal_events(env.store)
+    assert sup.state["phase"] == "idle"
+    assert sum("mission task completed" in e for e in env.events()) == 3
+    assert any("mission completed" in e for e in env.events())
+    assert not any("awaiting maintainer" in e for e in env.events())
+
+
+def test_mission_quota_fails_over_to_codex_with_task_context_and_continues(tmp_path: Path) -> None:
+    env = Env(tmp_path, [("claude", SUCCESS), ("claude", QUOTA), ("codex", CODEX_SUCCESS), ("codex", CODEX_SUCCESS)])
+    env.relay.readings = room(env, "codex")
+    mission = mission_def("first task", "second task", "third task")
+    start_mission(env, mission)
+    result, sup = run_mission(env, mission)
+    assert result == "idle"
+    assert [launch["agent"] for launch in env.relay.launches] == ["claude", "claude", "codex", "codex"]
+    takeover = env.relay.launches[2]["task"]
+    assert "grants no new authority" in takeover  # the spec 195 recovery prompt, not a fresh task
+    assert takeover.endswith(f"task 2/3, which has not been recorded complete:\n{rc.MISSION_HEADER}\nsecond task")
+    done = sup.state["mission"]["done"]
+    assert [(d["task"], d["agent"]) for d in done] == [(0, "claude"), (1, "codex"), (2, "codex")]
+    assert sup.state["cooldowns"]["claude"]["reason"] == "quota"
+    assert any("provider switched" in e for e in env.events())
+
+
+def test_mission_refreshes_stale_codex_quota_once_before_fallback(tmp_path: Path) -> None:
+    env = Env(tmp_path, [("claude", QUOTA), ("codex", CODEX_SUCCESS)])
+    env.relay.readings = room(env, "claude")  # no fresh Codex reading on an idle host
+    probes: list[str] = []
+
+    def refresh() -> None:
+        probes.append("read-only")
+        env.relay.readings = room(env, "claude", "codex")
+
+    env.host.refresh_codex_quota = refresh
+    mission = mission_def("one task")
+    start_mission(env, mission)
+    result, sup = run_mission(env, mission)
+    assert result == "idle" and probes == ["read-only"]
+    assert [launch["agent"] for launch in env.relay.launches] == ["claude", "codex"]
+    assert sup.state["mission"]["done"][0]["agent"] == "codex"
+
+
+def test_mission_returns_to_claude_after_its_reset_and_dwell(tmp_path: Path) -> None:
+    env = Env(tmp_path)
+
+    reset = T0 + timedelta(hours=14)
+
+    def codex_until_after_reset(_task: str) -> list[dict[str, Any]]:
+        reported_reset = rc.parse_ts(env.store.load()["cooldowns"]["claude"]["until"])
+        assert reported_reset is not None
+        env.clock.t = reported_reset + timedelta(minutes=30)  # the codex task outlasted Claude's reported reset
+        return CODEX_SUCCESS
+    env.relay.script = [("claude", QUOTA), ("codex", codex_until_after_reset), ("claude", SUCCESS)]
+    exhausted, fresh = room(env, "codex", exhausted={"claude": reset}), room(env, "codex", "claude")
+    env.relay.readings = lambda: exhausted() if env.relay.launches else fresh()  # claude runs out during task 1
+    mission = mission_def("first task", "second task")
+    start_mission(env, mission)
+    result, sup = run_mission(env, mission)
+    assert result == "idle"
+    assert [launch["agent"] for launch in env.relay.launches] == ["claude", "codex", "claude"]
+    assert [(d["task"], d["agent"]) for d in sup.state["mission"]["done"]] == [(0, "codex"), (1, "claude")]
+    assert "claude" not in sup.state["cooldowns"]
+
+
+def test_mission_restart_adopts_running_attempt_and_continues_remaining_tasks(tmp_path: Path) -> None:
+    env = Env(tmp_path, [("claude", SUCCESS)])
+    mission = mission_def("first task", "second task")
+    env.head(SUCCESS)  # task 1's session
+    nonce = "rc-20261018T080000Z-0badf00d"
+    state = rc.default_state()
+    state.update({"phase": "running", "head_session": HEAD, "chain": [HEAD], "agent": "codex", "permissions_digest": "perm0",
+                  "permissions_pinned": True,
+                  "mission": {"id": mission["id"], "next": 1, "total": 2,
+                              "done": [{"task": 0, "session": HEAD, "agent": "claude", "at": rc.iso(T0)}]},
+                  "pending": {"nonce": nonce, "agent": "codex", "parent": HEAD, "started_at": rc.iso(T0), "pid": 4242,
+                              "pid_start": 42, "fingerprint": "fp0", "attempt": 1, "task": 1}})
+    env.store.save(state, T0)
+    env.store.journal({"event": "launch", "nonce": nonce})
+    env.alive[4242] = 2
+
+    def finish_pending() -> None:
+        write_turn(env.relay.sessions_dir() / "20261018-080100-cccccc", CODEX_SUCCESS, agent="codex",
+                   prompt=relay_prompt(f"[relay-continuity attempt {nonce}]"))
+    env.relay.finish_pending = finish_pending  # type: ignore[attr-defined]
+    result, sup = run_mission(env, mission, HEAD)
+    assert result == "idle"
+    assert env.relay.launches == []  # the adopted attempt was never relaunched, and it was the last task
+    assert sup.state["mission"]["next"] == 2 and sup.state["mission"]["done"][-1]["session"] == "20261018-080100-cccccc"
+    assert sup.state["mission"]["completed_at"]
+
+
+def test_mission_crash_while_settling_success_adopts_instead_of_relaunching(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    env = Env(tmp_path)
+    mission = mission_def("one task")
+    start_mission(env, mission)
+    nonce = "rc-20261018T080000Z-0badf00d"
+    pending = {"nonce": nonce, "agent": "claude", "parent": None, "started_at": rc.iso(T0),
+               "pid": None, "pid_start": None, "fingerprint": "fp0", "attempt": 1, "task": 0}
+    state = env.store.load()
+    state["pending"] = pending
+    env.store.save(state, T0)
+    session = "20261018-080100-cccccc"
+    write_turn(env.relay.sessions_dir() / session, SUCCESS, agent="claude",
+               prompt=relay_prompt(f"[relay-continuity attempt {nonce}]"))
+    sup = env.supervisor()
+    sup.mission = mission
+    sup.state = env.store.load()
+
+    def crash_before_progress(*_: Any) -> None:
+        raise RuntimeError("simulated process death")
+
+    monkeypatch.setattr(sup, "_advance", crash_before_progress)
+    with pytest.raises(RuntimeError, match="simulated process death"):
+        sup._settle(pending, session)
+    assert env.store.load()["pending"]["nonce"] == nonce
+
+    result, restarted = run_mission(env, mission)
+    assert result == "idle"
+    assert env.relay.launches == []
+    assert restarted.state["mission"]["next"] == 1
+    assert restarted.state["mission"]["completed_at"]
+
+
+def test_mission_restart_with_unsettled_journal_launch_holds(tmp_path: Path) -> None:
+    env = Env(tmp_path)
+    mission = mission_def("first task")
+    start_mission(env, mission)
+    env.store.journal({"event": "launch", "nonce": "rc-20261018T075900Z-feedface"})  # launched; state lost it
+    result, sup = run_mission(env, mission)
+    assert result == "held" and sup.state["hold"]["reason"] == "attempt_unresolved"
+    assert env.relay.launches == [] and sup.state["mission"]["next"] == 0
+
+
+def test_mission_uncertain_external_effect_holds_without_advancing(tmp_path: Path) -> None:
+    env = Env(tmp_path, [("claude", SUCCESS), ("claude", [tool_use("p", "Bash", command="git push origin x"), *QUOTA])])
+    env.relay.readings = room(env, "codex")
+    mission = mission_def("first task", "second task", "third task")
+    start_mission(env, mission)
+    result, sup = run_mission(env, mission)
+    assert result == "held" and sup.state["hold"]["reason"] == "effects_uncertain"
+    assert sup.state["mission"]["next"] == 1 and len(env.relay.launches) == 2
+    assert "mission_completed" not in journal_events(env.store)
+
+
+def test_mission_task_check_must_pass_before_advancing(tmp_path: Path) -> None:
+    env = Env(tmp_path, [("claude", SUCCESS)])
+    seen: list[dict[str, Any]] = []
+    env.host.task_check = lambda check: seen.append(check) or "PR #846 is OPEN"
+    mission = mission_def("merge 846", "next", checks={0: {"kind": "pr_merged", "pr": 846}})
+    start_mission(env, mission)
+    result, sup = run_mission(env, mission)
+    assert result == "held" and sup.state["hold"]["reason"] == "task_check_failed"
+    assert seen == [{"kind": "pr_merged", "pr": 846}] and sup.state["mission"]["next"] == 0
+    assert len(env.relay.launches) == 1 and "task_check_failed" in journal_events(env.store)
+
+
+def test_check_task_is_read_only_and_bounded_to_the_repository(tmp_path: Path) -> None:
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "x.md").write_text("x")
+    assert rc.check_task(tmp_path, {"kind": "path_exists", "path": "docs/x.md"}) is None
+    assert rc.check_task(tmp_path, {"kind": "path_exists", "path": "docs/y.md"})
+    calls: list[list[str]] = []
+
+    def gh(args: list[str], **_: Any) -> tuple[int, str]:
+        calls.append(args)
+        return 0, "MERGED\n"
+    assert rc.check_task(tmp_path, {"kind": "pr_merged", "pr": 846}, run=gh) is None
+    assert calls == [["gh", "pr", "view", "846", "--json", "state", "-q", ".state"]]
+    assert rc.check_task(tmp_path, {"kind": "pr_merged", "pr": 846}, run=lambda *a, **k: (0, "OPEN")) == "PR #846 is OPEN"
+    assert rc.check_task(tmp_path, {"kind": "pr_merged", "pr": 846}, run=lambda *a, **k: (1, ""))
+
+
+def _write_mission(root: Path, mission: dict[str, Any]) -> None:
+    rc.write_json_atomic(rc.missions_dir(root) / f"{mission['id']}.json", mission)
+
+
+def test_serve_step_runs_missions_one_at_a_time_in_submission_order(tmp_path: Path) -> None:
+    env = Env(tmp_path, [("claude", SUCCESS), ("claude", SUCCESS)])
+    root = tmp_path / "control"
+    first = mission_def("first mission", mid="m-20261018T070000Z-aaaaaa", submitted=T0 - timedelta(hours=1))
+    second = mission_def("second mission", mid="m-20261018T060000Z-bbbbbb", submitted=T0 - timedelta(minutes=30))
+    _write_mission(root, second)
+    _write_mission(root, first)  # file names sort the other way: order is by submission time
+    factory = lambda store, mission: rc.Supervisor(store, env.host, env.limits, sender=env.sender)  # noqa: E731
+    assert rc.serve_step(root, factory, conflicts=lambda: [], now=env.clock.now) == f"ran:{first['id']}:idle"
+    assert "first mission" in env.relay.launches[0]["task"]
+    assert rc.serve_step(root, factory, conflicts=lambda: [], now=env.clock.now) == f"ran:{second['id']}:idle"
+    assert "second mission" in env.relay.launches[1]["task"]
+    assert rc.serve_step(root, factory, conflicts=lambda: [], now=env.clock.now) == "empty"
+    assert journal_events(rc.mission_store(root, first["id"]))[0] == "mission_started"
+
+
+def test_serve_step_waits_for_a_live_repl_and_a_held_mission_blocks_the_queue(tmp_path: Path) -> None:
+    env = Env(tmp_path)
+    root = tmp_path / "control"
+    held = mission_def("held one", mid="m-20261018T070000Z-aaaaaa", submitted=T0 - timedelta(hours=1))
+    later = mission_def("later one", mid="m-20261018T070100Z-bbbbbb", submitted=T0 - timedelta(minutes=30))
+    _write_mission(root, held)
+    _write_mission(root, later)
+    factory = lambda store, mission: rc.Supervisor(store, env.host, env.limits)  # noqa: E731
+    assert rc.serve_step(root, factory, conflicts=lambda: ["repl_active"]) == f"waiting:{held['id']}:repl_active"
+    assert env.relay.launches == []
+    store = rc.mission_store(root, held["id"])
+    state = rc.default_state()
+    state.update({"phase": "held", "hold": {"reason": "effects_uncertain", "at": rc.iso(T0), "attempt": 1, "turn": "x"},
+                  "mission": {"id": held["id"], "next": 0, "total": 1, "done": []}})
+    store.save(state, T0)
+    assert rc.serve_step(root, factory, conflicts=lambda: []) == f"held:{held['id']}"
+    assert env.relay.launches == []
+    busy = rc.Lock(root / "supervisor.lock")
+    assert busy.acquire()
+    try:
+        assert rc.serve_step(root, factory, conflicts=lambda: []) == "busy"
+    finally:
+        busy.release()
+
+
+def test_serve_step_holds_on_a_corrupt_earlier_mission(tmp_path: Path) -> None:
+    root = tmp_path / "control"
+    first = mission_def("first", mid="m-20261018T070000Z-aaaaaa", submitted=T0 - timedelta(hours=1))
+    later = mission_def("later", mid="m-20261018T070100Z-bbbbbb", submitted=T0 - timedelta(minutes=30))
+    _write_mission(root, first)
+    _write_mission(root, later)
+    first_path = rc.missions_dir(root) / f"{first['id']}.json"
+    first_path.write_text("{")
+    assert rc.serve_step(root, lambda *_: pytest.fail("should not execute"), conflicts=lambda: []) == f"corrupt:{first['id']}"
+    first_path.write_text(json.dumps(first))
+    state = rc.default_state()
+    state["mission"] = {"id": first["id"], "next": 0, "total": 2, "done": []}
+    rc.mission_store(root, first["id"]).save(state, T0)
+    assert rc.serve_step(root, lambda *_: pytest.fail("should not execute"), conflicts=lambda: []) == f"corrupt:{first['id']}"
+
+
+def test_mission_store_keeps_the_existing_chain_hold_untouched(tmp_path: Path) -> None:
+    env = Env(tmp_path, [("claude", SUCCESS)])
+    root = tmp_path / "control"
+    chain = rc.Store(root)
+    held = rc.default_state()
+    held.update({"phase": "held", "head_session": HEAD, "chain": [HEAD],
+                 "hold": {"reason": "effects_uncertain", "at": rc.iso(T0), "attempt": 6, "turn": f"{HEAD}/turn-006"}})
+    chain.save(held, T0)
+    before = chain.state_path.read_bytes()
+    _write_mission(root, mission_def("independent work"))
+    factory = lambda store, mission: rc.Supervisor(store, env.host, env.limits)  # noqa: E731
+    assert rc.serve_step(root, factory, conflicts=lambda: []).endswith(":idle")
+    assert chain.state_path.read_bytes() == before and not chain.journal_path.exists()
+
+
+def test_cli_submit_requires_a_recorded_directive_and_is_durable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = tmp_path / "control"
+    monkeypatch.setenv("RELAY_CONTINUITY_DIR", str(root))
+    monkeypatch.setattr(rc, "repo_root", lambda: tmp_path)
+    ledger = [{"id": DIRECTIVE, "kind": "directive"}, {"id": "L20261020121757-26d5", "kind": "claim"}]
+    monkeypatch.setattr(rc.devctx, "read_ledger", lambda env: ledger)
+    notes: list[Any] = []
+    monkeypatch.setattr(rc.devctx, "append_entry", lambda env, entry: notes.append(entry))
+    spec = tmp_path / "m.json"
+    spec.write_text(json.dumps({"authority": "L20261020121757-26d5", "tasks": [{"text": "a"}]}))
+    assert rc.main(["submit", "--mission-file", str(spec)]) == 2  # a claim is not a maintainer directive
+    spec.write_text(json.dumps({"authority": DIRECTIVE, "tasks": [{"text": "a"}], "agent": "codex"}))
+    assert rc.main(["submit", "--mission-file", str(spec)]) == 2
+    spec.write_text(json.dumps({"authority": DIRECTIVE, "tasks": [{"text": "a"}, {"text": "b"}]}))
+    assert rc.main(["submit", "--mission-file", str(spec)]) == 0
+    [(mission, mid, problem)] = rc.load_missions(root)
+    assert problem is None and mission["tasks"][1]["text"] == "b" and mission["authority"] == DIRECTIVE
+    assert rc.mission_status(rc.mission_store(root, mid))[0] == "queued" and len(notes) == 1
+
+
+def test_cli_serve_refuses_outside_the_sandbox(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("RELAY_CONTINUITY_DIR", str(tmp_path))
+    monkeypatch.setattr(rc, "in_sandbox", lambda: False)
+    assert rc.main(["serve", "--once", "--no-notify"]) == 2
+    assert not (tmp_path / "serve.lock").exists()
+
+
+def test_cli_serve_keeps_an_operator_stop_across_restart(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("RELAY_CONTINUITY_DIR", str(tmp_path))
+    monkeypatch.setattr(rc, "in_sandbox", lambda: True)
+    (tmp_path / "STOP").write_text("operator stop")
+    assert rc.main(["serve", "--once", "--no-notify"]) == 0
+    assert (tmp_path / "STOP").read_text() == "operator stop"
+    assert not (tmp_path / "serve.lock").exists()
+
+
+def test_cli_serve_pins_the_sandbox_provider_logins(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    home = tmp_path / "home"
+    login = home / ".local/share/jarvisos-sandbox/state/claude"
+    login.mkdir(parents=True)
+    (login / ".credentials.json").write_text("{}")
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("CODEX_HOME", str(home / ".codex"))  # what a Claude shell's launcher leaves behind
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(home / ".claude"))
+    monkeypatch.setenv("RELAY_CONTINUITY_DIR", str(tmp_path / "control"))
+    monkeypatch.setattr(rc, "in_sandbox", lambda: True)
+    monkeypatch.setattr(rc.shutil, "which", lambda _name: None)  # stop right after the environment is set
+    assert rc.main(["serve", "--once", "--no-notify"]) == 2
+    assert os.environ["CODEX_HOME"] == str(home / ".local/share/jarvisos-sandbox/state/codex")
+    assert os.environ["CLAUDE_CONFIG_DIR"] == str(login)
+    assert (home / ".claude/.credentials.json").resolve() == (login / ".credentials.json").resolve()
+
+
+def test_sandbox_provider_env_pins_the_github_login_only_when_installed(tmp_path: Path) -> None:
+    state = tmp_path / ".local/share/jarvisos-sandbox/state"
+    assert "GH_CONFIG_DIR" not in rc.sandbox_provider_env(tmp_path)
+    assert "GIT_CONFIG_GLOBAL" not in rc.sandbox_provider_env(tmp_path)
+    (state / "gh").mkdir(parents=True)
+    (state / "gh/hosts.yml").write_text("github.com: {}\n")
+    (state / "gitconfig").write_text("[credential]\n")
+    env = rc.sandbox_provider_env(tmp_path)
+    assert env["GH_CONFIG_DIR"] == str(state / "gh") and env["GIT_CONFIG_GLOBAL"] == str(state / "gitconfig")
+
+
+def test_relay_claude_credentials_link_never_replaces_an_existing_file(tmp_path: Path) -> None:
+    login, home = tmp_path / "login", tmp_path / "home"
+    rc.link_relay_claude_credentials(login, home)
+    assert not (home / ".claude").exists()  # no sandbox login: nothing to point at
+    login.mkdir()
+    (login / ".credentials.json").write_text("sandbox")
+    (home / ".claude").mkdir(parents=True)
+    (home / ".claude/.credentials.json").write_text("own")
+    rc.link_relay_claude_credentials(login, home)
+    assert (home / ".claude/.credentials.json").read_text() == "own"
+
+
+def test_codex_quota_probe_writes_the_rollout_relay_reads(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: dict[str, Any] = {}
+    monkeypatch.setattr(rc.subprocess, "run", lambda args, **kw: seen.update(args=args, **kw))
+    rc.refresh_codex_quota(tmp_path)
+    assert "--ephemeral" not in seen["args"] and seen["args"][:4] == ["codex", "exec", "--sandbox", "read-only"]
+    assert seen["timeout"] == 120
+
+
+def test_relay_start_opens_a_new_session_with_closed_stdin_and_profile_env(tmp_path: Path,
+                                                                            monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: dict[str, Any] = {}
+    monkeypatch.setattr(rc.subprocess, "Popen", lambda args, **kw: seen.update(args=args, **kw))
+    rc.RelayAdapter(tmp_path, env={"AGENT_RELAY_CLAUDE_PERMISSION_MODE": "bypassPermissions"}).start("claude", None, "t", 1)
+    assert "--continue" not in seen["args"] and seen["stdin"] is subprocess.DEVNULL
+    assert seen["env"]["AGENT_RELAY_CLAUDE_PERMISSION_MODE"] == "bypassPermissions" and "PATH" in seen["env"]
+    rc.RelayAdapter(tmp_path).start("codex", HEAD, "t", 1)
+    assert seen["args"][4:6] == ["--continue", HEAD] and seen["env"] is None
+
+
+def test_mission_claude_entrypoint_replaces_relays_default_mode(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import runpy
+
+    entrypoint = Path(rc.__file__).resolve().parent / "relay_mission_bin" / "claude"
+    real = tmp_path / "claude-real"
+    real.write_text("real")
+    main = runpy.run_path(str(entrypoint))["main"]
+    monkeypatch.setattr("socket.gethostname", lambda: "jarvis-sandbox")
+    monkeypatch.setenv("JARVISOS_MISSION_PROFILE", "1")
+    monkeypatch.setenv("RELAY_CLAUDE_REAL_BIN", str(real))
+    monkeypatch.setattr("sys.argv", [str(entrypoint), "--permission-mode", "default", "--settings", "rules.json",
+                                    "-p", "task"])
+    invoked: list[Any] = []
+
+    def execv(path: str, argv: list[str]) -> None:
+        invoked.append((path, argv))
+        raise RuntimeError("captured exec")
+
+    monkeypatch.setattr("os.execv", execv)
+    with pytest.raises(RuntimeError, match="captured exec"):
+        main()
+    assert invoked == [(str(real), [str(real), "--settings", "rules.json", "-p", "task",
+                                    "--permission-mode", "bypassPermissions"])]
+    monkeypatch.setattr("socket.gethostname", lambda: "ordinary-host")
+    assert main() == 2
+
+
+def test_release_mission_hold_and_advance(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    env = Env(tmp_path, [("claude", SUCCESS)])
+    root = tmp_path / "control"
+    monkeypatch.setenv("RELAY_CONTINUITY_DIR", str(root))
+    monkeypatch.setattr(rc, "make_host", lambda repo: env.host)
+    mission = mission_def("merge it", "then this", checks={0: {"kind": "pr_merged", "pr": 1}})
+    _write_mission(root, mission)
+    env.host.task_check = lambda check: "PR #1 is OPEN"
+    factory = lambda store, m: rc.Supervisor(store, env.host, env.limits)  # noqa: E731
+    assert rc.serve_step(root, factory, conflicts=lambda: [], now=env.clock.now) == f"ran:{mission['id']}:held"
+    assert rc.main(["release", "--mission", mission["id"], "--advance", "--note", "merged by hand"]) == 0
+    env.relay.script = [("claude", SUCCESS)]
+    assert rc.serve_step(root, factory, conflicts=lambda: [], now=env.clock.now) == f"ran:{mission['id']}:idle"
+    assert "then this" in env.relay.launches[-1]["task"]
+    state = rc.mission_store(root, mission["id"]).load()
+    assert [d.get("by") for d in state["mission"]["done"]] == ["maintainer", None] and state["mission"]["completed_at"]
+    assert rc.Store(root).state_path.exists() is False  # the `run` chain store was never touched
+
+
+def test_cancel_refuses_an_unsettled_attempt(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = tmp_path / "control"
+    monkeypatch.setenv("RELAY_CONTINUITY_DIR", str(root))
+    mission = mission_def("x")
+    _write_mission(root, mission)
+    store = rc.mission_store(root, mission["id"])
+    state = rc.default_state()
+    state.update({"mission": {"id": mission["id"], "next": 0, "total": 1, "done": []},
+                  "pending": {"nonce": "rc-1", "agent": "claude", "parent": None, "started_at": rc.iso(T0), "pid": None,
+                              "pid_start": None, "fingerprint": "f", "attempt": 1, "task": 0}})
+    store.save(state, T0)
+    assert rc.main(["cancel", mission["id"], "--note", "n"]) == 3
+    state["pending"] = None
+    store.save(state, T0)
+    assert rc.main(["cancel", mission["id"], "--note", "n"]) == 0
+    assert rc.mission_status(store)[0] == "cancelled"
+
+
+# ---------------------------------------------------------------------------
+# Spec 203: roadmap continuation cycles
+
+
+class Roadmap:
+    """A control root whose missions are submitted for real and completed or cancelled on demand."""
+
+    def __init__(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *refs: str | None) -> None:
+        self.root, self.repo = tmp_path / "control", tmp_path / "repo"
+        self.repo.mkdir()
+        monkeypatch.setenv("RELAY_CONTINUITY_DIR", str(self.root))
+        monkeypatch.setattr(rc, "repo_root", lambda: self.repo)
+        monkeypatch.setattr(rc.devctx, "read_ledger", lambda env: [{"id": DIRECTIVE, "kind": "directive"}])
+        monkeypatch.setattr(rc.devctx, "append_entry", lambda env, entry: None)
+        self.refs = list(refs)
+        self.minute = 0
+
+    def fingerprint(self) -> str | None:
+        return self.refs.pop(0) if self.refs else "same"
+
+    def step(self) -> str | None:
+        self.minute += 1
+        return rc.roadmap_step(self.root, self.repo, fingerprint=self.fingerprint,
+                               submit=self.submit, now=lambda: T0 + timedelta(minutes=self.minute))
+
+    def submit(self, authority: str, tasks: list[dict[str, Any]], mission_id: str) -> Any:
+        return rc.submit_mission(self.root, self.repo, authority, tasks, mission_id=mission_id,
+                                 now=T0 + timedelta(minutes=self.minute))
+
+    def finish(self, mission_id: str, *, relay_status: str = "propose_done", cancelled: bool = False) -> None:
+        session = f"20261018-0800{self.minute:02d}-cccccc"
+        write_turn(self.repo / ".agent-relay" / "sessions" / session, SUCCESS, status=relay_status)
+        state = rc.default_state()
+        state["head_session"] = session
+        state["mission"] = {"id": mission_id, "next": 1, "total": 1, "done": [],
+                            **({"cancelled_at": rc.iso(T0)} if cancelled else {"completed_at": rc.iso(T0)})}
+        rc.mission_store(self.root, mission_id).save(state, T0)
+
+
+def test_roadmap_is_off_until_started_and_needs_a_recorded_directive(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    road = Roadmap(tmp_path, monkeypatch)
+    assert road.step() is None and not rc.missions_dir(road.root).exists()
+    assert rc.main(["roadmap", "start", "--authority", "L20261020121757-26d5"]) == 2  # not a recorded directive
+    assert rc.main(["roadmap", "stop", "--note", "x"]) == 2  # nothing to stop
+    assert rc.main(["roadmap", "start", "--authority", DIRECTIVE]) == 0
+    outcome = road.step()
+    assert outcome and outcome.startswith("roadmap:submitted:")
+    [(mission, _, problem)] = rc.load_missions(road.root)
+    assert problem is None and mission["authority"] == DIRECTIVE and len(mission["tasks"]) == 1
+    assert "cycle 1" in mission["tasks"][0]["text"] and "Generic Frontier Builder Contract" in mission["tasks"][0]["text"]
+
+
+def test_roadmap_keeps_one_cycle_queued_and_never_runs_beside_a_queued_mission(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    road = Roadmap(tmp_path, monkeypatch, "r0", "r1", "r2")
+    rc.main(["roadmap", "start", "--authority", DIRECTIVE])
+    first = road.step().split(":")[2]
+    assert road.step() == f"roadmap:waiting:{first}"  # its cycle has not finished: no second one
+    road.finish(first)
+    second = road.step().split(":")[2]
+    assert second != first and rc.load_roadmap(road.root)["cycle"] == 2
+    road.finish(second)
+    assert road.step().startswith("roadmap:submitted:")
+    events = [json.loads(line)["event"] for line in (rc.missions_dir(road.root) / "journal.jsonl").read_text().splitlines()]
+    assert events.count("roadmap_cycle_submitted") == 3 and events[0] == "roadmap_started"
+
+
+def test_roadmap_pauses_when_the_coordinator_reports_blocked(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    road = Roadmap(tmp_path, monkeypatch, "r0", "r1")
+    rc.main(["roadmap", "start", "--authority", DIRECTIVE])
+    first = road.step().split(":")[2]
+    road.finish(first, relay_status="blocked")
+    assert road.step() == "roadmap:paused:coordinator_blocked"
+    assert road.step() == "roadmap:paused:coordinator_blocked" and len(rc.load_missions(road.root)) == 1
+    assert rc.main(["roadmap", "start", "--authority", DIRECTIVE]) == 0  # the maintainer resumes it
+    assert road.step().startswith("roadmap:submitted:")  # the blocked cycle is not re-judged
+
+
+def test_roadmap_pauses_after_cycles_without_remote_progress(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    road = Roadmap(tmp_path, monkeypatch, "r0", "r1", "r1", "r1", "r1")
+    rc.main(["roadmap", "start", "--authority", DIRECTIVE])
+    outcomes = []
+    while (outcome := road.step()).startswith("roadmap:submitted:"):
+        outcomes.append(outcome)
+        road.finish(outcome.split(":")[2])
+    # Baseline r0; cycle 1 moved the heads to r1 (progress); cycles 2-4 left them at r1.
+    assert outcome == "roadmap:paused:no_progress" and len(outcomes) == 1 + rc.ROADMAP_NO_PROGRESS
+
+
+def test_roadmap_waits_while_remote_heads_are_unreadable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    road = Roadmap(tmp_path, monkeypatch, None, "r0", "r1", None, "r2")
+    rc.main(["roadmap", "start", "--authority", DIRECTIVE])
+    assert road.step() == "roadmap:waiting:remote_unreadable" and not rc.missions_dir(road.root).joinpath("x").exists()
+    first = road.step().split(":")[2]
+    road.finish(first)
+    second = road.step().split(":")[2]
+    road.finish(second)
+    assert road.step() == "roadmap:waiting:remote_unreadable"
+    assert road.step().startswith("roadmap:submitted:") and rc.load_roadmap(road.root)["no_progress"] == 0
+
+
+def test_roadmap_pauses_on_a_cancelled_cycle_and_on_maintainer_stop(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    road = Roadmap(tmp_path, monkeypatch, "r0", "r1")
+    rc.main(["roadmap", "start", "--authority", DIRECTIVE])
+    first = road.step().split(":")[2]
+    road.finish(first, cancelled=True)
+    assert road.step() == "roadmap:paused:cycle_cancelled"
+    rc.main(["roadmap", "start", "--authority", DIRECTIVE])
+    assert road.step().startswith("roadmap:submitted:")
+    assert rc.main(["roadmap", "stop"]) == 2  # a note is required
+    assert rc.main(["roadmap", "stop", "--note", "reviewing direction"]) == 0
+    assert road.step() == "roadmap:paused:maintainer_stop"
+    rc.roadmap_path(road.root).write_text("{")
+    assert road.step() == "roadmap:corrupt" and rc.main(["roadmap", "start", "--authority", DIRECTIVE]) == 2
+
+
+def test_roadmap_pause_notification_uses_the_fixed_template() -> None:
+    assert rc.render("roadmap_paused", {"owner": "control-plane", "reason": "no_progress"})
+    assert rc.render("roadmap_paused", {"owner": "control-plane", "reason": "anything else"}) is None
+
+
+def test_owner_ignores_its_own_sandbox_init_in_the_checkout(tmp_path: Path) -> None:
+    proc = fake_proc(tmp_path)
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    # Inside jarvis-sandbox, PID 1 is bwrap with --chdir <checkout>; the owner (2) is its child.
+    add_proc(proc, 1, argv=["bwrap", "--chdir", str(repo), "--", "python3"], cwd=repo, started=T0, ppid=0)
+    add_proc(proc, 2, argv=["python3", "scripts/relay_continuity.py", "serve"], cwd=repo, started=T0, ppid=1)
+    add_proc(proc, 3, argv=["python", "-m", "pytest"], cwd=repo, started=T0, ppid=1)
+    assert [w.label for w in rc.live_processes([repo], T0, {2}, proc_root=proc)] == ["process python"]
+
+
+def test_roadmap_stop_is_never_overwritten_by_a_concurrent_owner_step(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    road = Roadmap(tmp_path, monkeypatch, "r0", "r1")
+    rc.main(["roadmap", "start", "--authority", DIRECTIVE])
+    road.finish(road.step().split(":")[2])
+    monkeypatch.setattr(rc, "ROADMAP_LOCK_WAIT", 0.0)
+    stops: list[int] = []
+
+    def slow_remote() -> str:  # the maintainer stops while the owner is reading the remote heads
+        stops.append(rc.main(["roadmap", "stop", "--note", "stop now"]))
+        return "r1"
+    road.fingerprint = slow_remote  # type: ignore[method-assign]
+    assert road.step().startswith("roadmap:submitted:") and stops == [3]  # refused while the step held the lock
+    assert rc.main(["roadmap", "stop", "--note", "stop now"]) == 0
+    assert road.step() == "roadmap:paused:maintainer_stop"
+    lock = rc.roadmap_lock(road.root)
+    assert lock is not None
+    try:
+        assert road.step() == "roadmap:waiting:busy"  # and a held lock never lets the owner write around a stop
+    finally:
+        lock.release()
+
+
+def test_roadmap_cycle_identity_survives_a_crash_around_submission(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    road = Roadmap(tmp_path, monkeypatch, "r0")
+    rc.main(["roadmap", "start", "--authority", DIRECTIVE])
+    real = road.submit
+
+    def crash_before_queueing(authority: str, tasks: list[dict[str, Any]], mission_id: str) -> Any:
+        raise OSError("killed before the mission file was written")
+    road.submit = crash_before_queueing  # type: ignore[method-assign]
+    with pytest.raises(OSError):
+        road.step()
+    recorded = rc.load_roadmap(road.root)["last_mission"]
+    assert not rc.load_missions(road.root)
+
+    def crash_after_queueing(authority: str, tasks: list[dict[str, Any]], mission_id: str) -> Any:
+        real(authority, tasks, mission_id)
+        raise OSError("killed during the ledger note")
+    road.submit = crash_after_queueing  # type: ignore[method-assign]
+    with pytest.raises(OSError):
+        road.step()  # the recorded cycle is queued under its own id, not a new one
+    [(mission, mid, _)] = rc.load_missions(road.root)
+    assert mid == recorded and "cycle 1" in mission["tasks"][0]["text"]
+    road.submit = real  # type: ignore[method-assign]
+    road.finish(mid, relay_status="blocked")
+    assert road.step() == "roadmap:paused:coordinator_blocked"  # the crashed-around cycle is still judged
+    assert len(rc.load_missions(road.root)) == 1
+
+
+def test_atomic_write_survives_a_stale_temp_file_from_a_killed_write(tmp_path: Path) -> None:
+    target = tmp_path / "missions" / "m-20261018T080000Z-aaaaaa.json"
+    target.parent.mkdir()
+    (target.parent / f".{target.name}.{os.getpid()}.tmp").write_text("{")  # what a killed write left behind
+    rc.write_json_atomic(target, {"ok": True})
+    assert json.loads(target.read_text()) == {"ok": True}
+
+
+def test_resumed_roadmap_reads_the_remote_before_submitting(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    road = Roadmap(tmp_path, monkeypatch, "r0", "r1", None, "r2")
+    rc.main(["roadmap", "start", "--authority", DIRECTIVE])
+    road.finish(road.step().split(":")[2], relay_status="blocked")
+    assert road.step() == "roadmap:paused:coordinator_blocked"  # blocked is judged before any remote read
+    rc.main(["roadmap", "start", "--authority", DIRECTIVE])
+    assert road.refs == ["r1", None, "r2"]
+    road.refs.pop(0)  # consume r1 so the next read fails
+    assert road.step() == "roadmap:waiting:remote_unreadable"  # a cached baseline is not a fresh reading
+    assert len(rc.load_missions(road.root)) == 1
+    assert road.step().startswith("roadmap:submitted:")

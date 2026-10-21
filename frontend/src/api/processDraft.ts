@@ -286,6 +286,7 @@ export type DraftRegistry = {
   compounds: string[];
   property_packages: string[];
   quantity_units: Record<string, { si: string; display: string[] }>;
+  pbr_t2_params?: RegistryParam[];
   stream_specs: { key: string; label: string; kind: string }[];
   units: RegistryUnit[];
   /** Spec 190: latest published process-unit version per Studio model of this workspace. */

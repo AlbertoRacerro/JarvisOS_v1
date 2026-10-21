@@ -1,6 +1,6 @@
 # 201 — Supervised Relay control plane
 
-State: **planned**. Maintainer mission [#840](https://github.com/AlbertoRacerro/JarvisOS_v1/issues/840), ordered P0 on 2026-10-19. Depends on 195 and 197. This document records the outcome and the ownership direction; it does not grant implementation authority until a separate readiness decision resolves the authority and workstation proof boundaries below.
+State: **ready** (live state in [`STATUS.md`](STATUS.md)). Maintainer mission [#840](https://github.com/AlbertoRacerro/JarvisOS_v1/issues/840), ordered P0 on 2026-10-19. Depends on 195 and 197. Readiness was granted by the maintainer's 2026-10-20 approval of decisions D1–D3 (ledger directive `L20261020085928-0431`), recorded with the verified profile under [Readiness decision](#readiness-decision-2026-10-20).
 
 ## Outcome
 
@@ -35,3 +35,107 @@ This direction reuses 195/197 classification, locks, side-effect reconciliation,
 ## Readiness work
 
 Before changing the product or service path, resolve and record: the exact task-submission and owner-transition protocol; a bounded headless Claude/Codex authorization profile verified with real tool calls; the actual host restart mechanism and `Linger=no` implications; and a non-destructive way to fault-inject quota and restart against isolated state. These are authority and environment boundaries, so a staged readiness decision is warranted. The coordinator chooses the smallest implementation that passes them; no general queue bus, REPL automation, new provider credentials or repository-administration authority is implied.
+
+## Readiness findings (2026-10-19, workstation, real tool calls)
+
+All probes ran in isolated scratch repositories under `~/jarvis-control/work/` (no remote, nothing pushed). Transcripts and settings are in `~/jarvis-control/work/evidence/201/`. Stray files that the probes created outside their scratch roots were removed.
+
+### Headless Claude through `relay run`
+
+- Relay launches Claude in `default` mode and honours the scratch project's `.claude/settings.local.json` (session `20261019-201929-374a91`).
+- A bare `Write` allow rule let Claude write outside the project and outside `additionalDirectories` (`/home/thera/p201-outside.txt`). An unscoped `Edit`/`Write` grant is therefore unacceptable.
+- With path-scoped rules (`Edit(/**)`, `Write(/**)` relative to the project, plus `//abs/**` for an extra root), writes inside both roots succeeded. A write to `$HOME` was refused as ungranted, a `~/.claude/**` deny was enforced, and a shell redirection outside the working directories was refused (`20261019-202029-3313c1`). `Bash(git commit:*)` matched `git commit -m`, but not `git -c … commit`, because rules match by literal prefix. `gh pr merge` under a deny rule and unlisted `curl` were both refused.
+- An allowed interpreter is an escape hatch. With `Bash(python3:*)` allowed, `python3 -c "open('/home/thera/…','w')"` wrote outside every granted root. Permission rules are guardrails, not containment.
+- With Claude's own `sandbox.enabled: true` (Linux bubblewrap), Bash was **not** confined in a headless `relay run`. The Python write outside the project still succeeded, and `git ls-remote` still required approval. `bwrap` is installed, but `socat` is not. This setting is not a usable boundary on this host as installed.
+
+### Headless Codex
+
+- Relay launches Codex with `-a never -s workspace-write`. The OS sandbox refuses writes outside the writable roots (earlier proof `L20261019191627-0fbf`).
+- A project-scoped `.codex/config.toml` in a **trusted** project is honoured. `[sandbox_workspace_write] writable_roots` and `network_access = true` showed up in the session header (`workspace-write [workdir, /tmp, $TMPDIR, /tmp/p201-extra] (network access enabled)`). The extra-root write and `git ls-remote https://github.com/…` both succeeded. Without such a file, a Codex fallback could not write the sibling implementation worktrees under `~/src/worktrees/`, commit into the main checkout's `.git`, or reach GitHub. That makes a Codex takeover able to analyse but unable to deliver.
+
+### OS boundary candidate
+
+- Unprivileged `bwrap --ro-bind / / --bind <root> <root>` works on this host: a write inside the bound root succeeded and a write elsewhere failed with `Read-only file system`. A supervisor that wraps its own `relay run` invocation in such a namespace would give both providers one deterministic filesystem boundary that the model cannot negotiate. The interpreter escape above would then be contained. The coordinator session's auto-mode classifier refused to launch a Relay turn under `bwrap` (`[Auto-Mode Bypass]`). That attempt is not proven and needs explicit maintainer authorisation before any probe or use.
+
+### Service lifecycle
+
+- After the 2026-10-19 reboot, `agent-relay.service` (user unit) was active again. The tmux `relay-watch` notifier did **not** survive: there was no tmux server. A process held by tmux is therefore not a restart owner.
+- The user manager needs `XDG_RUNTIME_DIR=/run/user/1000`, and `Linger=no`. Without lingering, user units run only while a user session exists. Under WSL, that is while the distribution is started by a login. The proposed owner is a `systemd --user` unit with `Restart=on-failure`. Starting it without an interactive login requires `loginctl enable-linger thera`, a host change reserved to the maintainer.
+
+### Fault injection without touching real state
+
+The supervisor already takes its control root and repository from `control_root()` and `repo_root()`. The spec 197 commissioning ran against an exact no-remote copy. Quota can be injected in a real distinct process by prepending a fixture directory to the supervisor's `PATH` only in the acceptance harness. That directory holds a `claude` shim that emits a recorded quota-limit stream and exits; Codex stays real, under the bounded profile. Restart is injected by killing the supervisor process group mid-turn and restarting the unit. No production state, credential or the held session `20261018-215555-4f193a` is used.
+
+## Proposed protocol (for the readiness decision)
+
+1. **Submission.** `relay_continuity.py submit --mission-file M` validates a mission and writes it atomically to `<control>/missions/<id>.json`, with a `mission_submitted` journal record, before anything launches. A mission has an id, its authority (directive ledger id), the repository, and an ordered list of explicit tasks. Free text is screened for secrets as `--task-file` is today. Only one mission is active; the others wait in FIFO order, visibly.
+2. **Single owner.** A `serve` loop under the existing `supervisor.lock` (kernel flock, released on death) is the only executor. It reuses the spec 195/197 state, journal, pending-attempt adoption, side-effect gate, reconciliation, provider choice, limits and notifier unchanged. Each task launch records `mission`, `task` and the attempt nonce.
+3. **Advancement.** A task completes only on a deterministic `success` turn outcome and its optional declared read-only check, such as `gh pr view N` state or file presence. A model's claim that work remains or is done is advisory. Success with tasks left launches the next task. The last task's success completes the mission. Wait, hold, active and complete are distinct states, shown by `status` and sent to Slack as fixed fields (owner, provider, mission, task index, reason, reset).
+4. **REPL independence.** The supervisor never types into, attaches to or adopts a live REPL. `submit --continue-session S` binds a mission to an existing chain only when that chain's last turn is terminal and the spec 195 live-work check finds no running coordinator or worker for the repository. Otherwise it waits (`repl_active`/`live_work`). The `effects_uncertain` hold on `20261018-215555-4f193a` stays untouched.
+5. **Execution profile.** It is applied by the supervisor and project files, not requested from the model. The profile is:
+   - Codex: a project `.codex/config.toml` with the repository, `~/src/worktrees` and `~/jarvis-control/work` as writable roots, plus network.
+   - Claude: project rules with path-scoped `Edit`/`Write` for the same roots and a bounded Bash list. That list covers git except push to `master` or force, `gh pr create|view|checks|list`, tests, build, lint and `devctx`. Denies cover `gh pr merge`, branch-protection or admin API calls, force pushes, and edits to `~/.claude`, `~/.codex`, `~/.relay` and credentials. Optionally, the `bwrap` wrapper above contains the interpreter escape.
+   Merging, credentials and host changes stay with the maintainer.
+
+## Readiness decision (2026-10-20)
+
+The maintainer approved D1–D3 on 2026-10-20 with these boundaries. They are binding for the implementation slice.
+
+- **D1, execution profile.** Approved: a bounded headless profile for Claude and Codex, made of scoped project permissions and verified OS-level bubblewrap isolation. The following are excluded: blanket filesystem access, global permission bypass, secret exposure, uncontrolled subprocess execution, direct pushes to `master` and any weakening of security. Supervised writes may be enabled only after the sandbox has been verified with real isolated Claude and Codex tool calls.
+- **D2, restart owner.** Approved: one persistent control-plane owner as a `systemd --user` service, with safe restart, explicit ownership, journaling and rollback. The scoped user-service setup and `loginctl enable-linger` are authorized if they are demonstrably needed. Authentication is not bypassed, and no unrelated privileged change is made. WSL start after a Windows reboot needs separate verification.
+- **D3, protocol.** Approved: the protocol proposed above is the implementation direction.
+
+### Verified profile (real tool calls, 2026-10-20)
+
+Probes ran in scratch repositories under `~/jarvis-control/work/evidence/201-sandbox/`, through `agent-relay run` wrapped in unprivileged `bwrap` (no remote, nothing pushed). The wrapper mounts `/` read-only and binds read-write only the mission roots, the repository's common Git directory and the providers' own state directories. It gives the run a private `/tmp`. It hides `/run/user` (user bus), `/run/WSL` (Windows interop) and secret configuration directories. It also unshares the PID, IPC and UTS namespaces and starts a new session.
+
+- **Claude** (`20261020-090503-cba6f1`, launched in `default` mode with project rules). A `Write` inside the repository succeeded. An *allowed* `python3` writing to `$HOME` failed with `Read-only file system`, so the interpreter escape seen on 2026-10-19 is contained. The Slack webhook directory was empty inside the sandbox.
+- **Codex** (`20261020-091617-d9b332`). With Codex's own `workspace-write` nested inside `bwrap`, writes were contained. That mode always mounts `.git` read-only, so Codex cannot commit in it. With `danger-full-access` *inside* `bwrap`, Codex committed in a linked worktree (`76465fe`), reached GitHub through `git ls-remote`, and its `$HOME` write failed with `Read-only file system`. The profile therefore uses `bwrap` as the single enforced filesystem boundary for both providers. Claude's project rules and a `gh` guard on `PATH` remain guardrails, not containment.
+- **Installed workstation boundary (2026-10-20, maintainer directive `L20261020120919-38dd`).** The prototype's `--ro-bind / /` still let the run *read* personal files, so it was replaced by `jarvis-sandbox` (`~/.local/share/jarvisos-sandbox/`, outside every sandbox-writable root). It builds a fresh root: system toolchain read-only; the canonical checkout with its shared `.git`, the JarvisOS worktree roots and `~/jarvis-control` read-write; `.git/config`, `.git/hooks`, the checkout's `.claude/settings*.json` and `.agent-relay/permissions.toml` read-only; sandbox-only Claude/Codex/gh state; an allowlisted environment (`env -i`); user/PID/IPC/UTS/cgroup namespaces with `--die-with-parent`. Personal dotfiles, host `~/.claude`, `~/.config` secrets, unrelated repositories, `/mnt/*`, `/run/WSL`, `/run/user` and host `/tmp` are absent rather than read-only. Its suite (`selftest.py`, 46 checks: nested Python writes, nested user-namespace unmount attempts, PE execution through WSL interop, `sudo`, `systemd-run`, a detached `setsid` daemon reaped after exit, a linked-worktree commit) passed. It certifies the launcher's sha256. Bypass permissions are granted only while that hash matches. A real `bypassPermissions` Claude session inside the boundary then found all 16 sensitive paths absent. Writes outside the roots by nested Python and by the `Write` tool failed with `Read-only file system`. The same session committed in a linked worktree, ran pytest and a `vite` build, and reached GitHub. A Codex `relay run` turn (`danger-full-access` inside the boundary) committed, reached GitHub and was refused by `Read-only file system` outside the roots. The full backend suite ran inside the boundary at `0d6a68ae`: 4374 passed and 43 skipped. Headless `relay run` under `systemd-run --user` and an interactive session killed through a tmux disconnect both left no surviving process. Evidence: `~/jarvis-control/work/evidence/sandbox-bootstrap/`.
+- **Escape routes.** `cmd.exe` and `powershell.exe` (WSL interop) failed and left no file on `C:`. `systemd-run --user` could not reach the bus.
+- **Launch hang.** `codex exec` waits on an inherited open stdin, so the supervisor launches every run with `/dev/null` as stdin.
+- **Fresh Codex reading.** Relay reads Codex quota only from Codex's own rollouts, so the reading goes stale on an idle host (13 h observed). A minimal read-only Codex turn refreshed it. Before the supervisor switches to Codex without a fresh reading, it runs one such probe instead of refusing the failover.
+
+### Residual risks accepted for this slice
+
+- GitHub authority inside the boundary is a fine-grained token restricted to this repository: Contents, Pull requests and Issues read-write; Actions, Checks and Statuses read-only; no Administration. The model can use it for anything those permissions allow in this repository, including exact-head merges, which the maintainer authorized on 2026-10-20. It cannot reach other repositories or repository administration. The broad host `gh` OAuth token never enters the boundary, and the suite fails if it does.
+- Direct pushes to `master` are refused server-side by the active `master` ruleset, which requires status checks and has no bypass actors.
+- Refs in the common Git directory are writable, which branch creation needs. `.git/config` and `.git/hooks` are bound read-only, so `push -u` and `gh pr checkout` cannot record tracking config.
+- Content written inside the boundary is trusted by anything that later runs it outside: host services that execute project venvs, and host-side `git` whose worktree metadata the sandbox can rewrite. All agent and control-plane execution therefore goes through the launcher.
+- The network namespace is shared, so GitHub, package registries, localhost JarvisOS services and the Windows host network are reachable.
+- Claude and Codex login files are bind-mounted read-write, because each provider must authenticate.
+
+### Host lifecycle
+
+The `systemd --user` manager is running. Without lingering, though, user units stop when the last login session ends. The owner unit uses `KillMode=process`. That does not keep a provider turn alive across a restart, because the owner runs inside `jarvis-sandbox`'s `bwrap --unshare-pid --die-with-parent` and stopping the main process tears down the namespace (host acceptance, defect B). The restarted supervisor settles the killed attempt as `crash` from its pending-attempt record and reconciles it before any relaunch. Linger is enabled only once it is demonstrated to be needed for running without a login session.
+
+## Implementation evidence (2026-10-20, isolated workstation runs)
+
+Real provider processes ran inside `jarvis-sandbox` against a no-remote copy of the repository with separate control roots. Only Claude's first launch was replaced by a recorded real quota stream on `PATH`. Evidence: `~/jarvis-control/work/evidence/201-live-20261020/RESULT.md`.
+
+- **Takeover and advancement.** A real Claude quota led to a Codex takeover, and Codex completed both remaining tasks. Their path checks passed (`control2`).
+- **Owner death.** The owner was killed with SIGKILL during a live Codex turn. The replacement waited (`repl_active`) and then adopted that attempt by nonce. One task completion was recorded, with no relaunch (`control3`).
+- **Return to Claude.** After the quota, Codex did task 1. The owner was stopped at the task boundary and restarted after the 20-minute dwell. Claude then took task 2, continuing the Codex session (`control5`). A wait for Claude's own reset also returned to Claude (`control4`).
+- **Ambiguous effect.** Claude was killed during a Bash call that had sent an external POST. The turn settled as `crash` with `curl POST` in flight and held `effects_uncertain`. The next task never launched (`control6`).
+- **Live-work protection.** A stray process in the checkout held the mission rather than launching beside it. A stop request survived restart until `serve --clear-stop`.
+- **Launcher independence.** The first run from a Claude shell exposed three defects. `CODEX_HOME` was inherited (unset), Relay read Claude limits only from `~/.claude`, and the quota probe was `--ephemeral`, so no Codex reading ever appeared. Together they left a Codex takeover unconfirmed and made a confirmed return impossible. The owner now pins both provider logins, links Relay's Claude credential path inside the sandbox home, and runs a non-ephemeral probe.
+
+- **Cross-instance exclusion.** Each `jarvis-sandbox` instance unshares the PID namespace, so the owner's process-table scan could not see a REPL in another instance. `relay` now holds a shared coordinator lease (flock) for the lifetime of every coordinator invocation, and the owner waits while that lease is held. A lease taken in a nested PID namespace was seen from outside it and released on exit. The owner also pins the sandbox's `gh` login and git credential helper, which a session launched without them could not use.
+
+Pushing and PRs through the sandbox's scoped GitHub login were exercised during delivery of #850 and #851.
+
+## Host acceptance (2026-10-21, installed owner)
+
+Directive `L20261021092436-545c`, source `b42e539e`. Evidence: `~/jarvis-control/work/evidence/201-host/RESULT.md`. The coordinator ran inside `jarvis-sandbox`, which hides the user bus, so the unit was verified through its locks and durable state, not through `systemctl`/`journalctl`.
+
+- **Installed owner.** `jarvisos-mission-owner` holds `serve.lock` and re-takes `supervisor.lock` every ~60 s (`serve --interval 60`). `missions` reports `owner_serving: true`.
+- **Installed lease, production.** The interactive Relay REPL running this session held `.agent-relay/locks/coordinator.lease` in shared mode. Mission `m-20261021T093535Z-5613b2` (the staged one-task proof) was submitted to the production control root. At its next poll the owner recorded `waiting` and launched nothing: no mission state, no session. It runs once that REPL exits. That later run was not observed in this acceptance.
+- **Isolated mission, unit process model.** No-remote clone and a separate control root. The owner ran under `bwrap --unshare-pid --die-with-parent` with cwd in the checkout, as the unit runs it. Mission `m-20261021T092523Z-3e9ff2` has two tasks.
+  - A real interactive `relay` REPL in the clone kept the owner at `waiting:…:repl_active`.
+  - After `/exit` the owner advanced: Claude (`bypassPermissions`) completed task 1, the path check passed, and task 2 launched. One release was needed first (defect A).
+  - The owner's main process got SIGTERM during task 2's `sleep 150`, as `systemctl restart` sends it. The whole namespace, including the turn, died (defect B). The replacement settled the attempt as `crash`. A third owner, run as a plain process with no namespace init in the checkout, ran one read-only Codex diagnosis (`sleep &=completed`), relaunched task 2 once, and completed the mission.
+  - Task 1 was never relaunched. Its file keeps the same sha256 and mtime across the restart.
+- **Defect A, fixed by spec 203.** `_ancestors()` stops before PID 1, so the owner does not exclude its own sandbox's `bwrap` init, whose cwd is the checkout. When that init started inside a mission's work window, the owner waits on itself, then holds `live_work` after `reconcile_wait` (3 h). That happens when the unit (re)starts after a mission was submitted or its chain began. A long-running owner taking missions submitted later is unaffected.
+- **Defect B, open.** A unit stop or restart kills the running provider turn (see Host lifecycle). Recovery is safe: a settled `crash`, then reconciliation. To restart quiescently, run `relay_continuity.py stop` and let the owner exit at a task boundary. Then remove `STOP` and start the unit (runbook).
+
+Still to prove: the production mission's run after the REPL releases the lease, a fix for defect B, and WSL start after a Windows reboot.

@@ -31,6 +31,7 @@ from app.modules.process_stack.draft_models import (
     COMPOUNDS,
     FEED_ALTERNATIVES,
     MAX_OBJECTS,
+    PBR_T2_SPECS,
     PROPERTY_PACKAGES,
     QUANTITY_UNITS,
     STREAM_SPECS,
@@ -540,7 +541,12 @@ def apply_op(document: dict[str, Any], op: Any, resolve: studio_unit.Resolver | 
                 if param_spec.key not in unit["params"] and param_spec.default is not None:
                     unit["params"][param_spec.key] = _default_param(param_spec)
         for key, quantity in op.values.items():
-            param = next((item for item in spec.params if item.key == key), None)
+            if (unit["type"] == "PhotobioreactorT1" and key in {item.key for item in PBR_T2_SPECS}
+                    and (unit.get("options") or {}).get("optics_model") != "t2"
+                    and op.options.get("optics_model") != "t2"):
+                raise DraftError("param_inactive", "T2 optics inputs require the T2 optics model.", field=key)
+            param = next((item for item in (*spec.params, *(PBR_T2_SPECS if unit["type"] == "PhotobioreactorT1" else ()))
+                          if item.key == key), None)
             if param is None:
                 raise DraftError("param_unsupported", f"{spec.label} has no supported parameter {key!r}", field=key)
             if unit["mode"] not in param.modes:
@@ -555,7 +561,7 @@ def apply_op(document: dict[str, Any], op: Any, resolve: studio_unit.Resolver | 
                 floor = 0.0 if key == "biomass_recovery" else 1.0
                 if converted["si"] <= floor:
                     raise DraftError("quantity_out_of_range", f"{param.label} must be greater than {floor:g}", field=key)
-            if unit["type"] == "PhotobioreactorT1" and key == "tube_count" and converted["si"] != int(converted["si"]):
+            if unit["type"] == "PhotobioreactorT1" and key in {"tube_count", "tubes_across", "layers"} and converted["si"] != int(converted["si"]):
                 raise DraftError("quantity_out_of_range", f"{param.label} must be a whole number", field=key)
             unit["params"][key] = converted
         if unit["type"] == "PhotobioreactorT1" and op.values and pbr_temperature_invalid(unit["params"]):
@@ -563,7 +569,15 @@ def apply_op(document: dict[str, Any], op: Any, resolve: studio_unit.Resolver | 
                              "Mean culture temperature minus the diel amplitude must stay above 0 K",
                              field="temperature_amplitude")
         if op.options:
-            raise DraftError("option_unsupported", f"{spec.label} does not expose verified enum/boolean inputs", field="options")
+            if unit["type"] == "PhotobioreactorT1" and set(op.options) == {"optics_model"} and op.options["optics_model"] in {"t1", "t2"}:
+                if op.options["optics_model"] == "t1":
+                    unit["options"].pop("optics_model", None)
+                    for t2_param in PBR_T2_SPECS:
+                        unit["params"].pop(t2_param.key, None)
+                else:
+                    unit["options"]["optics_model"] = "t2"
+            else:
+                raise DraftError("option_unsupported", f"{spec.label} does not expose these verified options", field="options")
         if op.reactions is not None:
             missing = sorted(set(op.reactions) - set(document.get("reactions", {})))
             if missing:
@@ -735,7 +749,10 @@ def validate_document(document: dict[str, Any], workspace_id: str | None = None,
             if port >= spec.required_inlets and not _occupant(document, unit["id"], "target", port):
                 add("warning", "OPTIONAL_PORT_UNCONNECTED", f"Optional {name} inlet is not connected.",
                     unit["tag"], f"inlets[{port}]")
-        for param in spec.params_for(unit["mode"]):
+        required_params = spec.params_for(unit["mode"])
+        if unit["type"] == "PhotobioreactorT1" and (unit.get("options") or {}).get("optics_model") == "t2":
+            required_params += PBR_T2_SPECS
+        for param in required_params:
             if param.key not in unit["params"]:
                 add("blocker", "UNIT_PARAM_MISSING", f"Set {param.label}.", unit["tag"], param.key)
         if unit["type"] in {"PFR", "CSTR"} and not unit.get("reactions"):
@@ -1312,6 +1329,9 @@ def registry_projection(workspace_id: str | None = None) -> dict[str, Any]:
         "compounds": list(COMPOUNDS),
         "property_packages": list(PROPERTY_PACKAGES),
         "quantity_units": {kind: {"si": si, "display": list(display)} for kind, (si, display) in QUANTITY_UNITS.items()},
+        "pbr_t2_params": [{"key": item.key, "label": item.label, "kind": item.kind,
+                           "minimum": item.minimum_si, "maximum": item.maximum_si,
+                           "exclusive_minimum": item.exclusive_minimum} for item in PBR_T2_SPECS],
         "kinetics": kinetics.form_table(),
         "stream_specs": [{"key": key, "label": label, "kind": kind} for key, (kind, _arg, label) in STREAM_SPECS.items()],
         "units": [
