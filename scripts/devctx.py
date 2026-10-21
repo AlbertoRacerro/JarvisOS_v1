@@ -64,7 +64,8 @@ def age(ts: datetime, now: datetime) -> str:
 
 def run(args: list[str], cwd: Path | None = None, timeout: float = 20.0) -> tuple[int | None, str]:
     try:
-        proc = subprocess.run(args, cwd=cwd, capture_output=True, text=True, timeout=timeout, check=False)
+        proc = subprocess.run(args, cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                              timeout=timeout, check=False)
         return proc.returncode, proc.stdout if proc.returncode == 0 else (proc.stderr or proc.stdout)
     except (OSError, subprocess.TimeoutExpired) as exc:
         return None, str(exc)

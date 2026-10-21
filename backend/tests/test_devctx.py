@@ -206,7 +206,7 @@ def test_directives_relay_provenance_and_unrecorded_prompts(world) -> None:
     prompt = relay / "s1" / "turns" / "turn-001" / "prompt.md"
     prompt.parent.mkdir(parents=True)
     text = "MAINTAINER MISSION\nSPEC 999 — THE THING\n" + "Build the thing carefully.\n" * 60
-    prompt.write_text(text)
+    prompt.write_text(text, encoding="utf-8")
     packet = devctx.build_packet(env, fetch=True)
     assert any("not recorded as a directive" in w for w in packet["warnings"])
     env.now = env.now + timedelta(seconds=5)
