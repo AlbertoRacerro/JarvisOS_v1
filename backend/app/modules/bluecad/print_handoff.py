@@ -32,6 +32,7 @@ _WINDOWS_PATH = re.compile(r"^[A-Za-z]:\\")
 _WINDOWS_PATH_FORBIDDEN = re.compile(r'[\x00-\x1f"<>|*?&%^]')
 _FILENAME_RE = re.compile(r"^[0-9a-f]{8}-attempt[0-9]{1,6}-[0-9a-f]{8}\.3mf$")
 _EXPLORER = Path("/mnt/c/Windows/explorer.exe")
+_EXPLORER_FALLBACK = re.compile(r"^/mnt/[a-z]/windows/explorer\.exe$", re.IGNORECASE)
 _COPY_CHUNK = 1024 * 1024
 
 
@@ -240,6 +241,7 @@ def _explorer_binary() -> str:
     if _EXPLORER.is_file():
         return str(_EXPLORER)
     found = shutil.which("explorer.exe")
-    if found:
+    # Only the Windows-mounted binary; a PATH entry elsewhere is not explorer.exe.
+    if found and _EXPLORER_FALLBACK.match(str(Path(found).resolve())):
         return found
     raise PrintHandoffError(409, "print_handoff_explorer_missing", "explorer.exe is unavailable; check WSL interop.")

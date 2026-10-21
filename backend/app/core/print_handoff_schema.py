@@ -1,5 +1,5 @@
 PRINT_HANDOFF_MIGRATION_RECORD = {
-    "migration_id": "0024_print_handoff_events",
+    "migration_id": "0025_print_handoff_events",
     "name": "BLUECAD print handoff audit events",
     "checksum": None,
 }
