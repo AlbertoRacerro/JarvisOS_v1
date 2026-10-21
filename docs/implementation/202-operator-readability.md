@@ -45,32 +45,42 @@ Two existing non-frozen frontend visual tests were changed solely to replace
 literal warm-light colour requirements with semantic colour roles and to remove
 the obsolete description grid row. No backend conformance test changed.
 
-## Actual browser observations and missing proof
+## Real Chromium acceptance on the recovered candidate
 
-The available cloud browser cannot reach a Vite server at its own localhost.
-An available workspace preview exposed the real frontend at
-`http://terminal.local:4173/settings/appearance`. A separate pristine worktree
-at the baseline head and the candidate were served successively, not as two
-concurrent Vite instances. Viewport screenshots were 1363×936.
+Recovered candidate source: merge commit `9a3dcfd3e167caba7ab63b544247a1011b866609`
+(the spec 202 product tree of `301201cf` merged with master `42ce1a84`).
+Baseline source: `0d6a68ae28b9c6d1fbb11e7d9046122b7b4ba420`.
+The registry conflict was resolved by retaining merged 201/203 facts and placing
+202 in review; `python3 scripts/check_spec_status.py` passed at the recovered
+candidate. No product file conflicted.
 
-Observed both themes through the real Appearance radios. Baseline dark mode
-showed an almost invisible heading and identity over a hardcoded light canvas.
-Candidate dark mode displayed the heading, identity and navigation clearly on
-dark surfaces. Candidate light mode retained the controls and removed the
-redundant introduction. Active radio state, current Settings route, loading and
-real `Failed to fetch` state remained observable. Screenshots were inspected
-in the interactive session, not committed as durable image artifacts.
+On 2026-10-21, local Playwright 1.55.0 used its cached real Chromium 1187
+against two isolated FastAPI/SQLite backends. Each backend served its own
+built `frontend/dist` at the same origin as its API, on a fresh data root
+bootstrapped with `app.core.bootstrap`. Builds set `VITE_API_BASE_URL=` so
+browser requests used that origin. Provider defaults stayed fake, paid AI off,
+and budget zero. No provider or Studio code execution was enabled.
 
-A real isolated backend was attempted, using a separate scratch data root and
-safe defaults. Imports succeeded and uvicorn reported startup; optional PBR
-warm-up reported absent CoolProp. The preview still could not reach that
-separate runtime. No backend connectivity, solver, Studio lifecycle, dense data,
-or scientific result claim is made. Browser zoom keys did not change the
-observed viewport; they are not narrow-width proof. Keyboard-flow, narrow-layout,
-populated engineering-screen and complete before/after parity remain unproven.
+Before/after screenshots covered Settings Appearance and the Engineering Studio
+at 1365×900 and 390×844 in both light and dark themes: 16 real-browser captures.
+All 16 had no JavaScript page errors or horizontal overflow. Selected captures
+are in [evidence-202](evidence-202/). Visual inspection confirms the baseline
+light canvas / near-invisible dark heading defect, the recovered dark surfaces,
+readable shared navigation and responsive wrap, and the intentional removal of
+repeated introductory copy. The Settings AI tab loaded real fake-mode policy,
+provider and budget projections at narrow width; its screenshot is included.
+The Studio `+ New model` action opened the dense calculation form in both
+versions; paired narrow/dark screenshots show retained fields and controls with
+the candidate's shorter copy. The runtime-disabled and scientific qualification
+notices stayed visible.
 
-Therefore the PR remains draft and unmerged. Do not interpret deterministic
-green checks or these Settings screenshots as complete visual acceptance.
-No workstation deployment, runtime-data migration, credential change or paid
-provider execution was performed. The mistakenly scheduled UI automation was
-disabled at the maintainer's explicit request; no replacement was created.
+Interaction checks on the candidate: selecting Dark changed the root theme;
+Settings AI displayed its permission/budget section; opening the Studio form
+preserved the runtime warning; Tab reached the Process control with a visible
+solid focus outline. No horizontal overflow occurred in that flow. The full
+frontend build, including rendered-header and contrast tests, passed again at
+the recovered source. The exact diff changes no backend, API, routing, data,
+scientific, permission or execution code.
+
+This is visual acceptance for the bounded spec 202 readability/copy pass. It
+does not claim scientific-run, provider, user-code or workstation acceptance.
