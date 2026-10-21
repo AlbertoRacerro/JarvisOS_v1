@@ -3580,9 +3580,16 @@ def serve_step(root: Path, factory: Callable[[Store, dict[str, Any]], Supervisor
 def sandbox_provider_env(home: Path) -> dict[str, str]:
     """The sandbox's own provider login state. The owner pins it rather than inheriting whatever its launcher
     (systemd, a Codex shell, a Claude shell) exported: an unset CODEX_HOME sends Codex to the sandbox's empty
-    tmpfs `~/.codex`, where it has no login and Relay finds no quota reading."""
+    tmpfs `~/.codex`, where it has no login and Relay finds no quota reading. The project-scoped GitHub login
+    and its git credential helper are pinned the same way when installed: without them a mission cannot push or
+    open a PR, and spec 197's `gh`/`git ls-remote` probes see no authentication."""
     state = home / ".local/share/jarvisos-sandbox/state"
-    return {"CLAUDE_CONFIG_DIR": str(state / "claude"), "CODEX_HOME": str(state / "codex")}
+    env = {"CLAUDE_CONFIG_DIR": str(state / "claude"), "CODEX_HOME": str(state / "codex")}
+    if (state / "gh" / "hosts.yml").is_file():
+        env["GH_CONFIG_DIR"] = str(state / "gh")
+    if (state / "gitconfig").is_file():
+        env["GIT_CONFIG_GLOBAL"] = str(state / "gitconfig")
+    return env
 
 
 def link_relay_claude_credentials(config_dir: Path, home: Path) -> None:

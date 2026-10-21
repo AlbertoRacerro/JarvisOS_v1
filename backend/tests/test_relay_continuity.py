@@ -2998,6 +2998,17 @@ def test_cli_serve_pins_the_sandbox_provider_logins(tmp_path: Path, monkeypatch:
     assert (home / ".claude/.credentials.json").resolve() == (login / ".credentials.json").resolve()
 
 
+def test_sandbox_provider_env_pins_the_github_login_only_when_installed(tmp_path: Path) -> None:
+    state = tmp_path / ".local/share/jarvisos-sandbox/state"
+    assert "GH_CONFIG_DIR" not in rc.sandbox_provider_env(tmp_path)
+    assert "GIT_CONFIG_GLOBAL" not in rc.sandbox_provider_env(tmp_path)
+    (state / "gh").mkdir(parents=True)
+    (state / "gh/hosts.yml").write_text("github.com: {}\n")
+    (state / "gitconfig").write_text("[credential]\n")
+    env = rc.sandbox_provider_env(tmp_path)
+    assert env["GH_CONFIG_DIR"] == str(state / "gh") and env["GIT_CONFIG_GLOBAL"] == str(state / "gitconfig")
+
+
 def test_relay_claude_credentials_link_never_replaces_an_existing_file(tmp_path: Path) -> None:
     login, home = tmp_path / "login", tmp_path / "home"
     rc.link_relay_claude_credentials(login, home)
