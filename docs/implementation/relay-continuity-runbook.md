@@ -189,6 +189,24 @@ $RC cancel ID --note "..."                    # only while the owner is stopped 
 - **Where it runs.** `serve` refuses to start outside the `jarvis-sandbox` boundary (spec 201 D1). Inside, Claude runs in `bypassPermissions` through `scripts/relay_mission_bin/claude`, and Codex runs `danger-full-access`; `bwrap` is the containment. The owner pins `CLAUDE_CONFIG_DIR` and `CODEX_HOME` to the sandbox login state, whatever its launcher exported, and also `GH_CONFIG_DIR` and `GIT_CONFIG_GLOBAL` when the project-scoped GitHub login is installed there. It also links Relay's fixed Claude credential path (`~/.claude/.credentials.json`) inside the sandbox's private home: without a Claude limits reading, a return to Claude after a Codex takeover can never be confirmed.
 - **Provider return.** After a Claude quota switch to Codex, Claude is preferred again once its reset has passed, a fresh reading shows room and 20 minutes have elapsed since the switch.
 
+**Roadmap continuation (spec 203).** One sentence from the maintainer, "Continue developing JarvisOS according to the roadmap", is enough. The coordinator in the Relay REPL records it and starts roadmap mode:
+
+```bash
+python3 scripts/devctx.py directive "<the maintainer's message>" --source "relay <session>"   # prints L...
+$RC roadmap start --authority L...
+```
+
+The maintainer then exits the REPL: the owner starts only once the coordinator lease is free. While roadmap mode is on and every mission has finished, the owner queues one cycle at a time. Each cycle is a one-task mission, and its turn runs the Generic Frontier Builder Contract against fresh GitHub, `STATUS.md` and the ledger. Missions you submit yourself go first.
+
+- **Pauses.** Roadmap mode pauses, and sends a Slack `roadmap_paused` notification, in three cases:
+  - a cycle ends with `RELAY_STATUS blocked`: the coordinator needs you, or no authorized work remains, and it records why with `devctx.py note question` or `blocker`;
+  - three cycles in a row leave the remote branch heads unchanged (`no_progress`);
+  - a cycle is cancelled (`cycle_cancelled`).
+
+  While `git ls-remote` fails, the owner submits nothing. A held mission blocks the queue as usual.
+- **Commands.** `$RC roadmap status` (also shown by `$RC missions`) reports the state. `$RC roadmap stop --note ...` pauses after the running cycle; to stop that turn too, use `$RC stop`. To resume, run `roadmap start` again.
+- **Single writer.** Spec 079's `JARVISOS_CONTINUATION_MODE` must stay `OFF` while roadmap mode is on. `EXECUTE_NO_MERGE` would add a second writer on the same PR.
+
 **Persistent owner (D2).** The user unit runs the owner through the launcher. Create it from a host shell, not from inside the sandbox: there, `~/.config` is sandbox state and the user bus is hidden. Check that `jarvis-sandbox` forwards a command line this way (`jarvis-sandbox python3 -c 'import socket; print(socket.gethostname())'` prints `jarvis-sandbox`) before you enable it. `~/.config/systemd/user/jarvisos-mission-owner.service`:
 
 ```ini
@@ -205,6 +223,6 @@ RestartSec=120
 WantedBy=default.target
 ```
 
-`systemctl --user daemon-reload && systemctl --user enable --now jarvisos-mission-owner`. Exit 2 (outside the sandbox, no Claude CLI) and 3 (another owner) are not restarted. `KillMode=process` does **not** keep a running provider turn alive: the owner runs in `jarvis-sandbox`'s PID namespace (`--die-with-parent`), and stopping the main process ends every process in it. The next owner settles the killed attempt as `crash` and reconciles it before any relaunch. To restart without killing a turn, run `$RC stop`, and wait until `systemctl --user status jarvisos-mission-owner` shows it exited at a task boundary (status 0, so `Restart=on-failure` leaves it inactive). Then `rm ~/jarvis-control/work/continuity/STOP && systemctl --user start jarvisos-mission-owner`; while STOP exists, a started owner exits at once. Known defect (spec 201 host acceptance, defect A): an owner started after a mission's work window opened counts its own sandbox init as live work and waits, then holds `live_work` after 3 h. Release it with `$RC release --mission ID --note ...` once `$RC missions` shows no running turn. With `Linger=no` the unit runs only while a login session exists. Enable lingering (`loginctl enable-linger $USER`) only if unattended operation without a login is needed. WSL start after a Windows reboot is verified separately.
+`systemctl --user daemon-reload && systemctl --user enable --now jarvisos-mission-owner`. Exit 2 (outside the sandbox, no Claude CLI) and 3 (another owner) are not restarted. `KillMode=process` does **not** keep a running provider turn alive: the owner runs in `jarvis-sandbox`'s PID namespace (`--die-with-parent`), and stopping the main process ends every process in it. The next owner settles the killed attempt as `crash` and reconciles it before any relaunch. To restart without killing a turn, run `$RC stop`, and wait until `systemctl --user status jarvisos-mission-owner` shows it exited at a task boundary (status 0, so `Restart=on-failure` leaves it inactive). Then `rm ~/jarvis-control/work/continuity/STOP && systemctl --user start jarvisos-mission-owner`; while STOP exists, a started owner exits at once. With `Linger=no` the unit runs only while a login session exists. Enable lingering (`loginctl enable-linger $USER`) only if unattended operation without a login is needed. WSL start after a Windows reboot is verified separately.
 
 **Rollback.** `systemctl --user disable --now jarvisos-mission-owner`, then remove the unit file and `daemon-reload`. Missions, journals and Relay sessions stay in `~/jarvis-control/work/continuity/missions/` and `.agent-relay/sessions/`. A later owner resumes queued missions from them. `$RC stop` without systemd has the same effect on a foreground owner.
