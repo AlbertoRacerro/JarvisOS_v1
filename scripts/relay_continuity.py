@@ -3709,9 +3709,17 @@ def _roadmap_step(root: Path, repo: Path, *, fingerprint: Callable[[], str | Non
                                 "mission": mission_id, "authority": road["authority"]})
         return f"roadmap:submitted:{mission_id}"
 
+    fresh: dict[str, str] = {}
+
+    def remote_readable() -> bool:
+        """Every submission needs the remote heads read in this step (spec 203), not a cached reading."""
+        if "heads" not in fresh and (current := fingerprint()) is not None:
+            fresh["heads"] = current
+        return "heads" in fresh
+
     last = road.get("last_mission")
     if last and not (missions_dir(root) / f"{last}.json").exists():
-        return queue(last)
+        return queue(last) if remote_readable() else "roadmap:waiting:remote_unreadable"
     if last and road.get("settled") != last:
         status, state = mission_status(mission_store(root, last))
         if status not in ("complete", "cancelled"):
@@ -3721,17 +3729,16 @@ def _roadmap_step(root: Path, repo: Path, *, fingerprint: Callable[[], str | Non
             return pause("cycle_cancelled")
         if final_relay_status(repo, (state or {}).get("head_session")) == "blocked":
             return pause("coordinator_blocked")
-        current = fingerprint()
-        if current is None:
+        if not remote_readable():
             return "roadmap:waiting:remote_unreadable"  # nothing written: this cycle is settled again later
-        road["no_progress"] = road.get("no_progress", 0) + 1 if current == road.get("fingerprint") else 0
-        road["fingerprint"] = current
+        road["no_progress"] = road.get("no_progress", 0) + 1 if fresh["heads"] == road.get("fingerprint") else 0
+        road["fingerprint"] = fresh["heads"]
         if road["no_progress"] >= ROADMAP_NO_PROGRESS:
             return pause("no_progress")
+    if not remote_readable():
+        return "roadmap:waiting:remote_unreadable"
     if road.get("fingerprint") is None:
-        if (current := fingerprint()) is None:
-            return "roadmap:waiting:remote_unreadable"
-        road["fingerprint"] = current
+        road["fingerprint"] = fresh["heads"]
     road.update(cycle=road.get("cycle", 0) + 1, last_mission=new_mission_id(now()))
     write_json_atomic(roadmap_path(root), road)
     return queue(road["last_mission"])

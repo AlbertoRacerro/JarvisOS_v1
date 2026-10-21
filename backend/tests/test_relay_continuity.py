@@ -3349,3 +3349,16 @@ def test_atomic_write_survives_a_stale_temp_file_from_a_killed_write(tmp_path: P
     (target.parent / f".{target.name}.{os.getpid()}.tmp").write_text("{")  # what a killed write left behind
     rc.write_json_atomic(target, {"ok": True})
     assert json.loads(target.read_text()) == {"ok": True}
+
+
+def test_resumed_roadmap_reads_the_remote_before_submitting(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    road = Roadmap(tmp_path, monkeypatch, "r0", "r1", None, "r2")
+    rc.main(["roadmap", "start", "--authority", DIRECTIVE])
+    road.finish(road.step().split(":")[2], relay_status="blocked")
+    assert road.step() == "roadmap:paused:coordinator_blocked"  # blocked is judged before any remote read
+    rc.main(["roadmap", "start", "--authority", DIRECTIVE])
+    assert road.refs == ["r1", None, "r2"]
+    road.refs.pop(0)  # consume r1 so the next read fails
+    assert road.step() == "roadmap:waiting:remote_unreadable"  # a cached baseline is not a fresh reading
+    assert len(rc.load_missions(road.root)) == 1
+    assert road.step().startswith("roadmap:submitted:")
