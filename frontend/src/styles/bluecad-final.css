@@ -1,4 +1,4 @@
-/* BLUECAD final stage: compact header and dominant model viewport. */
+/* BlueCad final stage: compact header and dominant model viewport. */
 .bluecad-final-stage {
   height: 100%;
   min-height: 0;
@@ -8,7 +8,7 @@
 }
 .bluecad-final-stage__header { flex: 0 0 auto; min-height: 58px; padding: 2px 2px 0; }
 .bluecad-final-stage__header h1 { margin: 3px 0; font-size: 22px; line-height: 1.08; font-weight: 500; letter-spacing: -.025em; }
-.bluecad-final-stage__header .panel-subtitle { margin: 0; max-width: 720px; font-size: 9px; line-height: 1.35; }
+.bluecad-final-stage__header .panel-subtitle { margin: 0; max-width: 720px; font-size: var(--font-size-caption); line-height: 1.4; color: var(--color-text-secondary); }
 .bluecad-final-stage__body { flex: 1 1 auto; min-height: 0; overflow: hidden; }
 .bluecad-final-stage__body .bluecad-page,
 .bluecad-final-stage__body .bluecad-grid,

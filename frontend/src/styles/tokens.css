@@ -39,6 +39,15 @@
 }
 
 @font-face {
+  font-family: "Bricolage Grotesque";
+  src: url("/fonts/BricolageGrotesque-latin.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 200 800;
+  font-stretch: 75% 100%;
+  font-display: swap;
+}
+
+@font-face {
   font-family: "IBM Plex Mono";
   src: url("/fonts/IBMPlexMono-Variable.woff2") format("woff2");
   font-style: normal;
@@ -49,7 +58,9 @@
 :root {
   color-scheme: light;
 
-  --font-sans: "Instrument Sans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-sans: "Inter", "Instrument Sans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-display: "Inter Display", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-wordmark: "Bricolage Grotesque", "Inter", ui-sans-serif, sans-serif;
   --font-mono: "IBM Plex Mono", "Cascadia Mono", Consolas, "Liberation Mono", monospace;
   --font-size-caption: 0.75rem;
   --font-size-label: 0.8125rem;
@@ -80,37 +91,48 @@
   --motion-standard: 160ms;
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
 
+  /* Spec 198 Lumen geometry: rounded glass islands, capsule controls, detached rail. */
+  --lumen-radius-panel: 1.75rem;
+  --lumen-radius-viewport: 1.5rem;
+  --lumen-radius-item: 1.125rem;
+  --lumen-radius-field: 0.875rem;
+  --lumen-radius-button: 999px;
+  --lumen-rail-width: 9.125rem;
+  --lumen-emblem-size: 5.75rem;
+
   --layout-sidebar-width: 17.5rem;
   --layout-content-max-width: 100rem;
 
-  --accent-seed: #528B68;
-  --color-accent-subtle: #edf3ee;
-  --color-accent-surface: #dfe9e1;
-  --color-accent-border: #afc7b5;
-  --color-accent-border-strong: #789c82;
+  --accent-seed: #8DB943;
+  --color-accent-subtle: #eef3e0;
+  --color-accent-surface: #e1ebc8;
+  --color-accent-border: #a6be78;
+  --color-accent-border-strong: #6f9334;
   --color-accent-primary: var(--accent-seed);
-  --color-accent-foreground: #3f7257;
+  --color-accent-foreground: #556f28;
   --color-accent-hover: var(--accent-seed);
   --color-accent-active: var(--accent-seed);
   --color-accent-on: #ffffff;
   --color-focus-ring: var(--color-accent-foreground);
+  --lumen-accent-fill: var(--accent-seed);
 }
 
+/* Spec 198 Lumen Light: Lumen geometry and depth with Herbarium-inspired botanical daylight colours. */
 :root,
 [data-theme="light"] {
   color-scheme: light;
 
   --palette-neutral-0: #ffffff;
-  --palette-neutral-50: #f2f3ed;
-  --palette-neutral-100: #e9eee7;
-  --palette-neutral-300: #aab7aa;
-  --palette-neutral-500: #758078;
-  --palette-neutral-700: #59645b;
-  --palette-neutral-900: #20251f;
-  --palette-neutral-950: #121a16;
-  --palette-green-700: #528b68;
-  --palette-green-800: #416f53;
-  --palette-green-900: #263d30;
+  --palette-neutral-50: #eef0e1;
+  --palette-neutral-100: #e9ecda;
+  --palette-neutral-300: #aab49a;
+  --palette-neutral-500: #707c66;
+  --palette-neutral-700: #40503a;
+  --palette-neutral-900: #15230f;
+  --palette-neutral-950: #0c1608;
+  --palette-green-700: #4f8a22;
+  --palette-green-800: #2c5614;
+  --palette-green-900: #1a3309;
   --palette-blue-700: #1557b0;
   --palette-amber-50: #fff4d6;
   --palette-amber-800: #684600;
@@ -121,20 +143,21 @@
   --palette-cyan-50: #e9f5f7;
   --palette-cyan-800: #31566a;
 
-  --color-bg-canvas: #f2f3ed;
-  --color-bg-shell: #fbfcf8;
-  --color-bg-surface: #fbfcf8;
-  --color-bg-surface-raised: #ffffff;
-  --color-bg-subtle: #e9eee7;
+  --color-bg-canvas: #eef0e1;
+  --color-bg-shell: #f7f9ee;
+  --color-bg-surface: #fbfbf3;
+  --color-bg-surface-raised: #fffffb;
+  --color-bg-subtle: #e9ecda;
   --color-bg-technical-viewport: #121a16;
-  --color-text-primary: #20251f;
-  --color-text-secondary: #59645b;
-  --color-text-muted: #606b63;
-  --color-text-inverse: #fbfcf8;
+  --color-text-primary: #15230f;
+  --color-text-secondary: #40503a;
+  --color-text-muted: #55634c;
+  --color-text-inverse: #fbfbf3;
   --color-text-on-accent: var(--color-accent-on);
-  --color-border-default: #cfd8ce;
-  --color-border-strong: #aab7aa;
-  --color-focus-separator: #fbfcf8;
+  --color-border-default: #d3d9c2;
+  --color-border-strong: #aab49a;
+  --color-focus-separator: #fbfbf3;
+  --color-selection: #d8e6b8;
 
   --color-status-info-bg: #e7f1fb;
   --color-status-info-text: #12588e;
@@ -144,8 +167,8 @@
   --color-status-warning-text: var(--palette-amber-800);
   --color-status-danger-bg: var(--palette-red-50);
   --color-status-danger-text: var(--palette-red-800);
-  --color-status-neutral-bg: #e9eee7;
-  --color-status-neutral-text: #59645b;
+  --color-status-neutral-bg: #e9ecda;
+  --color-status-neutral-text: #40503a;
   --color-status-proposed-bg: var(--palette-violet-50);
   --color-status-proposed-text: var(--palette-violet-800);
   --color-status-stale-bg: #fff0d8;
@@ -156,90 +179,200 @@
   --color-status-synthetic-text: var(--palette-cyan-800);
   --color-status-archived-bg: #e7e9e8;
   --color-status-archived-text: #3e4b45;
+
+  --color-chart-bg: #fffffb;
+  --color-chart-series-1: #2f6b12;
+  --color-chart-series-2: #1f5f99;
+  --color-chart-series-3: #b4541a;
+  --color-chart-series-4: #8a3f86;
+  --color-chart-series-5: #3a3f44;
+  --color-flow-bg: #fafbf2;
+  --color-flow-grid: rgb(52 98 26 / 0.16);
+  --color-flow-node: #fffffd;
+  --color-flow-node-stroke: #4f8a22;
+  --color-flow-edge: #4b5843;
+  --color-flow-select: #a3601a;
+
+  /* Lumen depth: field light, glass islands, rail capsule, emblem. Decorative only. */
+  --lumen-canvas-base: linear-gradient(160deg, #d3e2b4 0%, #e7eed3 38%, #f4f5e6 70%, #faf9f0 100%);
+  --lumen-field-light:
+    radial-gradient(48% 50% at 14% -10%, rgb(64 120 22 / 0.42), transparent 70%),
+    radial-gradient(70% 62% at 6% -4%, rgb(141 185 67 / 0.48), transparent 72%),
+    radial-gradient(60% 60% at 100% 108%, rgb(255 253 240 / 0.95), transparent 72%),
+    radial-gradient(38% 40% at 62% 42%, rgb(250 250 236 / 0.4), transparent 80%);
+  --lumen-texture:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='p' x='0' y='0' width='100%25' height='100%25' filterUnits='userSpaceOnUse'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.75333' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .3 0 0 0 0 .36 0 0 0 0 .16 0 0 0 1 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23p)' opacity='.035'/%3E%3C/svg%3E");
+  --lumen-panel-fill: linear-gradient(180deg, rgb(226 238 200 / 0.9) 0%, rgb(244 248 232 / 0.86) 34%, rgb(253 253 247 / 0.84) 100%);
+  --lumen-panel-border: rgb(74 104 36 / 0.14);
+  --lumen-item-fill: linear-gradient(180deg, #fffffc 0%, #f5f7ea 100%);
+  --lumen-control-bg: rgb(255 255 250 / 0.75);
+  --lumen-field-bg: #fffffd;
+  --lumen-segment-bg: rgb(226 232 206 / 0.7);
+  --lumen-rule: rgb(60 90 30 / 0.1);
+  --lumen-vein: #2f5a12;
+  --lumen-nav-hover: rgb(130 178 60 / 0.1);
+  --lumen-rail-bg: rgb(247 249 238 / 0.72);
+  --lumen-rail-border: rgb(74 104 36 / 0.14);
+  --lumen-rail-sheen: linear-gradient(180deg, rgb(141 185 67 / 0.3) 0%, rgb(185 221 114 / 0.1) 30%, rgb(255 255 255 / 0) 52%, rgb(255 255 255 / 0.55) 100%);
+  --lumen-sidecar-bg: rgb(250 251 242 / 0.82);
+  --lumen-sidecar-inset: rgb(232 238 214 / 0.6);
+  --lumen-glass-filter: blur(20px) saturate(135%);
+  --lumen-shadow-panel: inset 0 1px 0 rgb(255 255 255 / 0.95), inset 0 -1px 0 rgb(84 120 40 / 0.06), 0 1px 2px rgb(34 60 12 / 0.06), 0 26px 54px -30px rgb(40 80 12 / 0.34);
+  --lumen-shadow-float: inset 0 1px 0 rgb(255 255 255 / 0.95), 0 1px 2px rgb(34 60 12 / 0.06), 0 34px 70px -36px rgb(40 80 12 / 0.42);
+  --lumen-viewport-frame: rgb(60 90 30 / 0.22);
+  --lumen-viewport-shadow: 0 0 0 6px rgb(141 185 67 / 0.1), 0 26px 60px -30px rgb(40 80 12 / 0.45);
+  --lumen-status-rim: inset 0 0 0 1px rgb(40 60 20 / 0.06);
+  --lumen-hero-bloom: rgb(120 172 48 / 0.3);
+  --lumen-workspace-bloom: rgb(185 221 114 / 0.16);
+  --lumen-sidecar-bloom: rgb(185 221 114 / 0.22);
+  --lumen-emblem: url("/brand/emblem-detailed.svg");
+  --lumen-emblem-halo: radial-gradient(closest-side, rgb(141 185 67 / 0.34), rgb(141 185 67 / 0.12) 55%, rgb(141 185 67 / 0) 100%);
+  --lumen-emblem-filter: drop-shadow(0 6px 10px rgb(28 72 10 / 0.28));
+  --lumen-wordmark-color: #12300a;
+  --lumen-accent-shadow: 0 0 0 1px rgb(84 130 30 / 0.35), inset 0 1px 0 rgb(255 255 235 / 0.6), 0 10px 22px -10px rgb(74 120 24 / 0.65);
+  --lumen-selected-glow: 0 0 0 1px rgb(84 130 30 / 0.3), 0 8px 22px -10px rgb(84 130 30 / 0.45);
+  --shadow-structural: var(--lumen-shadow-panel);
+  --shadow-raised: var(--lumen-shadow-float);
 }
 
+/* Spec 198 Lumen Dark: the approved bioluminescent canopy. */
 [data-theme="dark"] {
   color-scheme: dark;
 
-  --palette-neutral-0: #eef2ee;
-  --palette-neutral-50: #dfe5df;
-  --palette-neutral-100: #25302b;
-  --palette-neutral-300: #66766d;
-  --palette-neutral-500: #93a098;
-  --palette-neutral-700: #c3ccc6;
-  --palette-neutral-900: #18211d;
-  --palette-neutral-950: #0d1411;
-  --palette-green-700: #78b48c;
-  --palette-green-800: #91c7a1;
-  --palette-green-900: #17251c;
+  --palette-neutral-0: #eef0de;
+  --palette-neutral-50: #dfe5d2;
+  --palette-neutral-100: #142318;
+  --palette-neutral-300: #5f6f55;
+  --palette-neutral-500: #97a68d;
+  --palette-neutral-700: #bac6a8;
+  --palette-neutral-900: #0e1a0f;
+  --palette-neutral-950: #050b06;
+  --palette-green-700: #96bd45;
+  --palette-green-800: #b9dc72;
+  --palette-green-900: #0b150c;
   --palette-blue-700: #8bbde8;
-  --palette-amber-50: #35270c;
-  --palette-amber-800: #f4ca68;
-  --palette-red-50: #341719;
-  --palette-red-800: #ffaaa5;
-  --palette-violet-50: #281d3c;
-  --palette-violet-800: #d5b7ff;
-  --palette-cyan-50: #16303c;
-  --palette-cyan-800: #a9d9e8;
+  --palette-amber-50: #2a200c;
+  --palette-amber-800: #f6cd8e;
+  --palette-red-50: #2e1513;
+  --palette-red-800: #ffb4aa;
+  --palette-violet-50: #221b33;
+  --palette-violet-800: #d6c6ff;
+  --palette-cyan-50: #0f2a2c;
+  --palette-cyan-800: #a6e8ef;
 
-  --color-bg-canvas: #101713;
-  --color-bg-shell: #151d19;
-  --color-bg-surface: #18211d;
-  --color-bg-surface-raised: #202b26;
-  --color-bg-subtle: #25302b;
-  --color-bg-technical-viewport: #0b110e;
-  --color-text-primary: #eef2ee;
-  --color-text-secondary: #c3ccc6;
-  --color-text-muted: #93a098;
-  --color-text-inverse: #eef2ee;
+  --color-bg-canvas: #050b06;
+  --color-bg-shell: #0e1a0f;
+  --color-bg-surface: #0e1a0f;
+  --color-bg-surface-raised: #142318;
+  --color-bg-subtle: #0b150c;
+  --color-bg-technical-viewport: #07110a;
+  --color-text-primary: #eef0de;
+  --color-text-secondary: #bac6a8;
+  --color-text-muted: #97a68d;
+  --color-text-inverse: #eef0de;
   --color-text-on-accent: var(--color-accent-on);
-  --color-border-default: #526158;
-  --color-border-strong: #718078;
-  --color-accent-subtle: #1c2a22;
-  --color-accent-surface: #22372b;
-  --color-accent-border: #4c7058;
-  --color-accent-border-strong: #679076;
-  --color-accent-foreground: #91c7a1;
+  --color-border-default: #2e4127;
+  --color-border-strong: #4c6340;
+  --color-accent-subtle: #17260f;
+  --color-accent-surface: #1e3313;
+  --color-accent-border: #557a26;
+  --color-accent-border-strong: #7ba236;
+  --color-accent-foreground: #b9dc72;
   --color-accent-hover: var(--accent-seed);
   --color-accent-active: var(--accent-seed);
   --color-focus-ring: var(--color-accent-foreground);
-  --color-focus-separator: #101713;
+  --color-focus-separator: #050b06;
+  --color-selection: rgb(150 189 69 / 0.35);
 
-  --color-status-info-bg: #142a3a;
-  --color-status-info-text: #9bd3f5;
-  --color-status-success-bg: #132b20;
-  --color-status-success-text: #92dfad;
+  --color-status-info-bg: #10232c;
+  --color-status-info-text: #a9dcf6;
+  --color-status-success-bg: #10251a;
+  --color-status-success-text: #a7e6bc;
   --color-status-warning-bg: var(--palette-amber-50);
   --color-status-warning-text: var(--palette-amber-800);
   --color-status-danger-bg: var(--palette-red-50);
   --color-status-danger-text: var(--palette-red-800);
-  --color-status-neutral-bg: #25302b;
+  --color-status-neutral-bg: #142318;
   --color-status-neutral-text: #c3ccc6;
   --color-status-proposed-bg: var(--palette-violet-50);
   --color-status-proposed-text: var(--palette-violet-800);
-  --color-status-stale-bg: #3a260f;
+  --color-status-stale-bg: #2c200e;
   --color-status-stale-text: #ffd18b;
-  --color-status-unavailable-bg: #202a2f;
+  --color-status-unavailable-bg: #172021;
   --color-status-unavailable-text: #bdc9cf;
   --color-status-synthetic-bg: var(--palette-cyan-50);
   --color-status-synthetic-text: var(--palette-cyan-800);
-  --color-status-archived-bg: #242b28;
+  --color-status-archived-bg: #151d17;
   --color-status-archived-text: #c2cbc6;
+
+  --color-chart-bg: #07110a;
+  --color-chart-series-1: #b9dc72;
+  --color-chart-series-2: #74c7ef;
+  --color-chart-series-3: #f2b35b;
+  --color-chart-series-4: #ee92c8;
+  --color-chart-series-5: #ede6be;
+  --color-flow-bg: #07100a;
+  --color-flow-grid: rgb(190 220 140 / 0.09);
+  --color-flow-node: #112016;
+  --color-flow-node-stroke: #7fa84a;
+  --color-flow-edge: #a9be90;
+  --color-flow-select: #e4f29a;
+
+  --lumen-canvas-base: #050b06;
+  --lumen-field-light:
+    radial-gradient(60% 55% at 12% -6%, rgb(84 140 32 / 0.3), transparent 70%),
+    radial-gradient(45% 50% at 98% 104%, rgb(44 96 18 / 0.34), transparent 70%),
+    radial-gradient(30% 30% at 55% 40%, rgb(28 72 10 / 0.16), transparent 80%);
+  --lumen-texture:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='g' x='0' y='0' width='100%25' height='100%25' filterUnits='userSpaceOnUse'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .75 0 0 0 0 .86 0 0 0 0 .5 0 0 0 1 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)' opacity='.045'/%3E%3C/svg%3E");
+  --lumen-panel-fill: linear-gradient(180deg, rgb(220 240 190 / 0.045) 0%, rgb(220 240 190 / 0) 38%), rgb(16 30 18 / 0.72);
+  --lumen-panel-border: rgb(196 226 150 / 0.13);
+  --lumen-item-fill: linear-gradient(180deg, rgb(220 240 190 / 0.07), rgb(220 240 190 / 0.025));
+  --lumen-control-bg: rgb(220 240 190 / 0.05);
+  --lumen-field-bg: rgb(3 10 4 / 0.55);
+  --lumen-segment-bg: rgb(220 240 190 / 0.05);
+  --lumen-rule: rgb(196 226 150 / 0.08);
+  --lumen-vein: #f9f5df;
+  --lumen-nav-hover: rgb(220 240 190 / 0.06);
+  --lumen-rail-bg: rgb(14 26 16 / 0.66);
+  --lumen-rail-border: rgb(196 226 150 / 0.12);
+  --lumen-rail-sheen: linear-gradient(180deg, rgb(220 240 190 / 0.06), rgb(220 240 190 / 0) 32%);
+  --lumen-sidecar-bg: rgb(14 26 16 / 0.78);
+  --lumen-sidecar-inset: rgb(220 240 190 / 0.05);
+  --lumen-glass-filter: blur(22px) saturate(140%);
+  --lumen-shadow-panel: inset 0 1px 0 rgb(249 245 223 / 0.07), 0 1px 0 rgb(0 0 0 / 0.4), 0 30px 70px -34px rgb(0 0 0 / 0.9);
+  --lumen-shadow-float: inset 0 1px 0 rgb(249 245 223 / 0.08), 0 40px 90px -40px rgb(0 0 0 / 0.95), 0 0 0 1px rgb(0 0 0 / 0.3);
+  --lumen-viewport-frame: rgb(249 245 223 / 0.22);
+  --lumen-viewport-shadow: 0 0 0 6px rgb(150 189 69 / 0.06), 0 30px 80px -30px rgb(0 0 0 / 0.95);
+  --lumen-status-rim: inset 0 0 0 1px rgb(255 255 255 / 0.06);
+  --lumen-hero-bloom: rgb(150 189 69 / 0.12);
+  --lumen-workspace-bloom: rgb(150 189 69 / 0.1);
+  --lumen-sidecar-bloom: rgb(150 189 69 / 0.14);
+  --lumen-emblem: url("/brand/emblem-detailed-dark.svg");
+  --lumen-emblem-halo: radial-gradient(closest-side, rgb(150 189 69 / 0.3), rgb(150 189 69 / 0.1) 55%, rgb(150 189 69 / 0) 100%);
+  --lumen-emblem-filter: drop-shadow(0 0 10px rgb(169 208 88 / 0.45));
+  --lumen-wordmark-color: #f6f3e0;
+  --lumen-accent-shadow: 0 0 0 1px rgb(185 220 114 / 0.35), inset 0 1px 0 rgb(255 255 230 / 0.35), 0 10px 28px -8px rgb(150 189 69 / 0.55);
+  --lumen-selected-glow: 0 0 0 1px rgb(150 189 69 / 0.35), 0 0 24px -6px rgb(150 189 69 / 0.45);
+  --shadow-structural: var(--lumen-shadow-panel);
+  --shadow-raised: var(--lumen-shadow-float);
 }
 
 @supports (color: color-mix(in oklch, red, blue)) {
   :root {
-    --color-accent-subtle: color-mix(in oklch, var(--accent-seed) 10%, #fbfcf8);
-    --color-accent-surface: color-mix(in oklch, var(--accent-seed) 18%, #fbfcf8);
-    --color-accent-border: color-mix(in oklch, var(--accent-seed) 38%, #cfd8ce);
-    --color-accent-border-strong: color-mix(in oklch, var(--accent-seed) 64%, #aab7aa);
+    --color-accent-subtle: color-mix(in oklch, var(--accent-seed) 14%, #fbfbf3);
+    --color-accent-surface: color-mix(in oklch, var(--accent-seed) 22%, #fbfbf3);
+    --color-accent-border: color-mix(in oklch, var(--accent-seed) 55%, #6f7f55);
+    --color-accent-border-strong: color-mix(in oklch, var(--accent-seed) 70%, #3d5a20);
+    --lumen-accent-fill: radial-gradient(120% 150% at 50% 12%, color-mix(in oklch, var(--accent-seed) 70%, #ffffff) 0%, var(--accent-seed) 48%, color-mix(in oklch, var(--accent-seed) 80%, #000000) 100%);
   }
 
   [data-theme="dark"] {
-    --color-accent-subtle: color-mix(in oklch, var(--accent-seed) 14%, #18211d);
-    --color-accent-surface: color-mix(in oklch, var(--accent-seed) 22%, #18211d);
-    --color-accent-border: color-mix(in oklch, var(--accent-seed) 48%, #526158);
-    --color-accent-border-strong: color-mix(in oklch, var(--accent-seed) 67%, #718078);
+    --color-accent-subtle: color-mix(in oklch, var(--accent-seed) 13%, #0e1a0f);
+    --color-accent-surface: color-mix(in oklch, var(--accent-seed) 22%, #0e1a0f);
+    --color-accent-border: color-mix(in oklch, var(--accent-seed) 55%, #0e1a0f);
+    --color-accent-border-strong: color-mix(in oklch, var(--accent-seed) 80%, #0e1a0f);
+    --lumen-accent-fill: radial-gradient(120% 150% at 50% 15%, color-mix(in oklch, var(--accent-seed) 75%, #ffffff) 0%, var(--accent-seed) 45%, color-mix(in oklch, var(--accent-seed) 82%, #000000) 100%);
   }
 }
 

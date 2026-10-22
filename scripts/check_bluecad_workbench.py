@@ -321,7 +321,7 @@ def check_async_addendum_contracts() -> None:
         "workspace discovery failure state": "Workspace discovery failed.",
         "candidate loading state": "Loading candidates…",
         "candidate failure state": "Candidate discovery failed.",
-        "candidate empty state": "No BLUECAD candidates exist in this workspace.",
+        "candidate empty state": "No BlueCad candidates exist in this workspace.",
         "attempt trail": "Attempt history",
         "malformed attempt detail preservation": "formatAttemptDetail",
     }

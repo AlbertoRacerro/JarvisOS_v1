@@ -201,7 +201,7 @@
 }
 .final-fusion__dossier-grid section { padding: 11px 0 9px; border-bottom: 1px solid #ece5da; }
 .final-fusion__dossier-grid section > header { display: flex; justify-content: space-between; gap: 8px; }
-.final-fusion__dossier-grid section strong { font-size: 8px; text-transform: uppercase; letter-spacing: .07em; color: #555e53; font-weight: 500; }
+.final-fusion__dossier-grid section strong { font-size: var(--font-size-caption); letter-spacing: .02em; color: var(--color-text-secondary); font-weight: 600; }
 .final-fusion__dossier-grid section span,
 .final-fusion__dossier-grid section p { font-size: 7px; color: #8a9189; }
 .final-fusion__dossier-grid section p { margin: 7px 0 0; }

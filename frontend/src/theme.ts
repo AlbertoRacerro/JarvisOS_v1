@@ -11,7 +11,7 @@ export const APPEARANCE_STORAGE_KEY = "jarvisos:appearance:v1";
 export const APPEARANCE_OPTIONS: readonly AppearancePreference[] = ["system", "light", "dark"];
 export const ACCENT_STORAGE_KEY = "jarvisos:accent:v1";
 export const VISUAL_PREFERENCE_EVENT = "jarvisos:visual-preference-change";
-export const DEFAULT_ACCENT_HEX = "#528B68";
+export const DEFAULT_ACCENT_HEX = "#8DB943";
 export const ACCENT_PRESETS: Readonly<Record<Exclude<AccentPreset, "custom">, string>> = {
   microalgae: DEFAULT_ACCENT_HEX,
   "leaf-chlorophyll": "#5F8F52",
@@ -26,8 +26,9 @@ export const ACCENT_OPTIONS: readonly AccentPreset[] = [
 
 const ACCENT_FOREGROUND_LIGHT = "#FFFFFF";
 const ACCENT_FOREGROUND_DARK = "#000000";
-const ACCENT_TEXT_LIGHT_SURFACE = "#FFFFFF";
-const ACCENT_TEXT_DARK_SURFACE = "#202B26";
+// Spec 198 Lumen: accent text must stay readable on the deepest light tint (panel top) and the raised dark surface.
+const ACCENT_TEXT_LIGHT_SURFACE = "#E2EEC8";
+const ACCENT_TEXT_DARK_SURFACE = "#142318";
 const MIN_TEXT_CONTRAST = 4.5;
 
 function isAppearancePreference(value: unknown): value is AppearancePreference {
@@ -66,6 +67,12 @@ function contrastRatio(firstHex: string, secondHex: string): number {
   return (lighter + 0.05) / (darker + 0.05);
 }
 
+function mixHex(fromHex: string, toHex: string, amount: number): string {
+  const channel = (hex: string, offset: number) => Number.parseInt(hex.slice(offset, offset + 2), 16);
+  const mixed = [1, 3, 5].map((offset) => Math.round(channel(fromHex, offset) + ((channel(toHex, offset) - channel(fromHex, offset)) * amount)));
+  return `#${mixed.map((value) => value.toString(16).padStart(2, "0")).join("").toUpperCase()}`;
+}
+
 export function accentForegroundHex(seedHex: string): string {
   const normalized = normalizeAccentHex(seedHex) ?? DEFAULT_ACCENT_HEX;
   const lightContrast = contrastRatio(normalized, ACCENT_FOREGROUND_LIGHT);
@@ -79,7 +86,13 @@ export function accentTextForegroundHex(seedHex: string, appearance: ResolvedApp
   if (contrastRatio(normalized, surface) >= MIN_TEXT_CONTRAST) return normalized;
   const lightContrast = contrastRatio(surface, ACCENT_FOREGROUND_LIGHT);
   const darkContrast = contrastRatio(surface, ACCENT_FOREGROUND_DARK);
-  return lightContrast >= darkContrast ? ACCENT_FOREGROUND_LIGHT : ACCENT_FOREGROUND_DARK;
+  const target = lightContrast >= darkContrast ? ACCENT_FOREGROUND_LIGHT : ACCENT_FOREGROUND_DARK;
+  // Keep the accent's hue: shade the seed toward the readable extreme only as far as AA text contrast requires.
+  for (let step = 1; step < 20; step += 1) {
+    const shaded = mixHex(normalized, target, step / 20);
+    if (contrastRatio(shaded, surface) >= MIN_TEXT_CONTRAST) return shaded;
+  }
+  return target;
 }
 
 function safeStorage(): Storage | null {

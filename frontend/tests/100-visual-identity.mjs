@@ -21,7 +21,8 @@ const check = (condition, message) => { if (!condition) failures.push(message); 
 
 check(/APPEARANCE_OPTIONS[^\n]*\["system", "light", "dark"\]/.test(theme), "appearance choices drifted");
 check(/ACCENT_OPTIONS[\s\S]*"microalgae"[\s\S]*"leaf-chlorophyll"[\s\S]*"lagoon"[\s\S]*"custom"/.test(theme), "accent choices drifted");
-check(theme.includes('DEFAULT_ACCENT_HEX = "#528B68"'), "Microalgae default missing");
+// Spec 198 Lumen: the Microalgae default seed is the Lumen chlorophyll.
+check(theme.includes('DEFAULT_ACCENT_HEX = "#8DB943"'), "Microalgae default missing");
 check(theme.includes('"leaf-chlorophyll": "#5F8F52"'), "Leaf Chlorophyll seed missing");
 check(theme.includes('lagoon: "#4F938A"'), "Lagoon seed missing");
 check(theme.includes('/^#[0-9A-F]{6}$/'), "six-digit HEX validation missing");
@@ -48,7 +49,7 @@ for (const token of semanticTokens) {
   const matches = tokens.match(new RegExp(`${token}:`, "g")) ?? [];
   check(matches.length >= 2, `${token} missing light/dark definitions`);
 }
-check(tokens.includes("--accent-seed: #528B68"), "accent seed token missing");
+check(tokens.includes("--accent-seed: #8DB943"), "accent seed token missing");
 check(tokens.includes("--color-accent-primary: var(--accent-seed)"), "accent primary must derive from accent seed");
 check(tokens.includes("--color-accent-foreground:"), "contrast-safe accent foreground role missing");
 check((tokens.match(/--color-accent-hover:\s*var\(--accent-seed\)/g) ?? []).length >= 2, "hover fills must preserve the raw-seed foreground contrast decision");
@@ -69,7 +70,7 @@ const supportedAccentBlock = perceptualSupportIndex >= 0 ? tokens.slice(perceptu
 check(!/--color-(?:accent-hover|accent-active|focus-ring):\s*color-mix/.test(supportedAccentBlock), "interaction fills/focus must not be remixed away from their validated contrast roles");
 check(!/--color-status-[^:]+:\s*var\(--accent/.test(tokens), "semantic status token depends on user accent");
 const darkTokens = tokens.split('[data-theme="dark"] {')[1]?.split("@supports (color: color-mix")[0] ?? "";
-check(darkTokens.includes("--color-text-inverse: #eef2ee"), "dark technical surfaces require a light inverse-text token");
+check(darkTokens.includes("--color-text-inverse: #eef0de"), "dark technical surfaces require a light inverse-text token");
 check(darkTokens.includes("--color-text-on-accent: var(--color-accent-on)"), "dark accent fills must use the contrast-derived foreground token");
 check(!darkTokens.includes("--color-accent-on:"), "dark appearance must not override contrast-derived accent foreground");
 check(tokens.includes("--font-size-caption: 0.75rem"), "12px metadata scale missing");

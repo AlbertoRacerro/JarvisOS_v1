@@ -27,4 +27,12 @@ Spec 100 uses only locally bundled open fonts. Normal rendering must not fetch r
 - Required asset:
   - `IBMPlexMono-Variable.woff2` ← `packages/plex-mono-variable/fonts/complete/woff2/IBM Plex Mono Var-Roman.woff2`, upstream blob `09a8c306fe9df33ffb8c2ff8edca7cb7025d79a2`
 
-No commercial, scraped, reverse-engineered, remote-CDN, or runtime-downloaded font is part of VISUAL-IDENTITY-1.
+## Bricolage Grotesque
+
+- Authors: The Bricolage Grotesque Project Authors (`https://github.com/ateliertriay/bricolage`)
+- Distribution: fontsource 5.3.0, latin subset, variable axes wght/opsz/wdth
+- License: SIL Open Font License 1.1 (`OFL-BricolageGrotesque.txt`)
+- Asset: `BricolageGrotesque-latin.woff2`; SHA-256 `a756882d8a7802ebd4663b4544a62ebedafc7227c1c159ab95eea61393af3f8e`
+- Used only by the spec 198 Lumen wordmark in the navigation rail.
+
+No commercial, scraped, reverse-engineered, remote-CDN, or runtime-downloaded font is part of VISUAL-IDENTITY-1 or STUDIO-VISUAL-DESIGN-1.

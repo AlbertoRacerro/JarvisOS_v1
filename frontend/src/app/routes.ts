@@ -43,7 +43,7 @@ export type PeerNavItem = Readonly<{ label: string; href: string }>;
 export const PRODUCTION_ROUTES: readonly AppRouteDefinition[] = [
   { id: "design-process", path: "/design/process", title: "Process", primaryNav: "design", stageKind: "process" },
   { id: "design-studies", path: "/design/studies", title: "Studies", primaryNav: "design", stageKind: "studies" },
-  { id: "design-bluecad", path: "/design/bluecad", title: "BLUECAD", primaryNav: "design", stageKind: "model" },
+  { id: "design-bluecad", path: "/design/bluecad", title: "BlueCad", primaryNav: "design", stageKind: "model" },
   { id: "design-studio", path: "/design/studio", title: "Studio", primaryNav: "design" },
   { id: "memory-project-basis", path: "/memory/project-basis", title: "Project Basis", primaryNav: "memory" },
   { id: "memory-models", path: "/memory/models", title: "Models", primaryNav: "memory" },
@@ -76,7 +76,7 @@ export const PRIMARY_NAV_ITEMS = [
 export const PEER_NAV_ITEMS: Readonly<Record<PrimaryNavId, readonly PeerNavItem[]>> = {
   design: [
     { label: "Process", href: "/design/process" },
-    { label: "BLUECAD", href: "/design/bluecad" },
+    { label: "BlueCad", href: "/design/bluecad" },
     { label: "Studio", href: "/design/studio" }
   ],
   memory: [

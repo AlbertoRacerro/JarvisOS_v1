@@ -175,7 +175,7 @@ function BluecadGlbViewer({ artifactUrl, references = [], inspectionCommand = nu
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setSize(mount.clientWidth, mount.clientHeight);
     renderer.domElement.setAttribute("role", "img");
-    renderer.domElement.setAttribute("aria-label", "Interactive 3D preview and geometry inspection of generated BLUECAD geometry");
+    renderer.domElement.setAttribute("aria-label", "Interactive 3D preview and geometry inspection of generated BlueCad geometry");
     mount.appendChild(renderer.domElement);
 
     const controls = new OrbitControls(camera, renderer.domElement);

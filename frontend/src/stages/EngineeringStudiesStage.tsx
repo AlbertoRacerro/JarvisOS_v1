@@ -712,7 +712,7 @@ function EngineeringStudiesStage({ workspaceId, navigate }: PrimaryStageProps) {
                   Request escalation for best point
                 </button>
                 <AppLink href="/design/bluecad" navigate={navigate} className="shell-text-link">
-                  Open BLUECAD candidates
+                  Open BlueCad candidates
                 </AppLink>
               </div>
               {envelope && (

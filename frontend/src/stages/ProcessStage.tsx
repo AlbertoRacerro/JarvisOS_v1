@@ -173,7 +173,7 @@ function ProcessStage(props: PrimaryStageProps) {
             Process
           </button>
           <button type="button" onClick={() => navigate("/design/bluecad")}>
-            BLUECAD
+            BlueCad
           </button>
           <button type="button" onClick={() => navigate("/design/studio")}>Studio</button>
         </nav>
@@ -695,7 +695,7 @@ function NativeDwsimCaseEditor({
             Process
           </button>
           <button type="button" onClick={() => navigate("/design/bluecad")}>
-            BLUECAD
+            BlueCad
           </button>
           <button type="button" onClick={() => navigate("/design/studio")}>Studio</button>
         </nav>
