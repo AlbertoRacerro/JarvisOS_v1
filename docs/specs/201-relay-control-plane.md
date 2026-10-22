@@ -22,6 +22,8 @@ Make supervised task submission the canonical entrypoint for future unattended m
 
 This direction reuses 195/197 classification, locks, side-effect reconciliation, provider limits and notifications. Add only the durable task/mission state needed to continue after successful turns. A model's statement that work remains is advisory; task completion and promotion use explicit operator directives or deterministic state. The supervisor must never select a new product goal from free-form model output.
 
+Amended 2026-10-23 (spec 195 *Side-effect gate* and *Continuation policy*). The owner keeps the 201 mission, lease and restart contracts. Live-work scanning and the spec 197 diagnosis are replaced by process ownership: the owner is a child subreaper and stops what each turn leaves running. An unconfirmed completion claim is a durable checkpoint (spec 204), not a hold.
+
 ## Acceptance boundary
 
 1. A submitted mission is durable before the first provider launch. At most one coordinator owns it across process restart. An interrupted launch is adopted or held from observable evidence; it is not blindly repeated.

@@ -2,6 +2,12 @@
 
 State: **ready**. Combined definition, full contract and readiness, authorized by the maintainer's 2026-10-19 directive: routine diagnostics, maintenance and recovery of ordinary recoverable continuity holds are software responsibilities, not operator work. It amends the spec 195 side-effect gate and leaves every other spec 195 contract unchanged. It does not overlap the proposed spec 196 (REPL keeper): it adds no terminal control of any kind.
 
+**Amended 2026-10-23** (maintainer directives `L20261022213650-31c7`, `L20261022220755-8248`; see spec 195 *Side-effect gate*). The deterministic read-only probes in Mechanism step 2 remain the only way an interrupted external operation is settled. These parts are retired:
+- waiting for running work (step 1): the supervisor now stops everything a turn left running;
+- the read-only Codex diagnosis, its provider wait, the promotion rules and the diagnosis restart handling (steps 3, 3a, 4, *Safety and restart*, *Enforced read-only*).
+
+The history showed two diagnoses, and both only settled local background launches. A diagnosis has no network, so it could never verify an external effect, and it kept a quota-exhausted Codex blocking an available Claude. Interrupted local operations are now handed to the successor coordinator, on whichever provider is available, to verify. An external operation that no probe settles holds `effects_uncertain`. The text below is kept as the historical contract.
+
 ## Problem
 
 Spec 195 holds the chain (`effects_uncertain`) as soon as the failed turn shows a non-read-only operation without a settled result, and only a maintainer `release` resumes it. On 2026-10-18 session `20261018-215555-4f193a`, turn-006 ended in Claude quota exhaustion. The supervisor classified it `quota` but held with `effects_uncertain` instead of failing over to Codex. Most such holds are settled by reading evidence that already exists: whether the remote branch has the pushed commit, whether the PR is merged, whether the edit is in the file, whether the background worker is still running. Asking the maintainer to do that reading is routine maintenance pushed onto the operator.

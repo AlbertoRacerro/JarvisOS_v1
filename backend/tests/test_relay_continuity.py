@@ -6,6 +6,7 @@ import json
 import os
 import runpy
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -155,7 +156,6 @@ class Env:
             log=self.logs.append)
         self.limits = limits or rc.Limits()
         self.sender = sender if sender is not None else self._send
-        self.reconcile = False
 
     def _alive(self, pid: int, start: int | None) -> bool:
         left = self.alive.get(pid, 0)
@@ -177,8 +177,7 @@ class Env:
         return copy_fixture(fixture, session) if fixture else write_turn(session, events or SUCCESS, agent=agent)
 
     def supervisor(self, turns: int = 1) -> Any:
-        return rc.Supervisor(self.store, self.host, self.limits, turns=turns, sender=self.sender,
-                             reconcile=self.reconcile)
+        return rc.Supervisor(self.store, self.host, self.limits, turns=turns, sender=self.sender)
 
     def run(self, sid: str = HEAD, task: str | None = None) -> tuple[str, Any]:
         sup = self.supervisor()
@@ -223,7 +222,7 @@ def test_real_turns_classify_from_raw_evidence(fixture: str, outcome: str, agent
     report = rc.classify_turn(FIXTURES / fixture, ref=T0)
     assert (report.outcome, report.agent, report.relay_status) == (outcome, agent, relay_status)
     assert report.bad_lines == 0
-    assert rc.gate(report, fingerprint_changed=None) is None
+    assert rc.gate(report) is None
 
 
 def test_relay_completed_status_never_means_success() -> None:
@@ -251,7 +250,7 @@ def test_torn_output_is_unparseable(tmp_path: Path) -> None:
         handle.write('{"type": "result", "is_err')
     report = rc.classify_turn(turn)
     assert report.outcome == "crash" and report.bad_lines == 1
-    assert rc.gate(report, fingerprint_changed=False) == "output_unparseable"
+    assert rc.gate(report) == "output_unparseable"
 
 
 @pytest.mark.parametrize(("text", "status", "expected"), [
@@ -396,44 +395,6 @@ def test_claude_quota_fails_over_to_codex_without_any_usable_reading(tmp_path: P
     assert env.relay.launches[0]["at"] == T0 and "codex" not in sup.state["cooldowns"]
 
 
-def test_transient_retries_same_agent_with_bounded_backoff(tmp_path: Path) -> None:
-    env = Env(tmp_path, [("claude", EAI), ("claude", SUCCESS)])
-    env.head(fixture="claude_eai_again")
-    result, _ = env.run()
-    assert result == "idle"
-    assert [launch["agent"] for launch in env.relay.launches] == ["claude", "claude"]
-    first, second = (launch["at"] for launch in env.relay.launches)
-    assert first - T0 == timedelta(seconds=60) and second - first == timedelta(seconds=120)
-
-
-def test_transient_streak_opens_circuit(tmp_path: Path) -> None:
-    env = Env(tmp_path, [("claude", EAI)] * 3, limits=rc.Limits(max_transient_streak=2))
-    env.head(EAI)
-    result, sup = env.run()
-    assert result == "held" and sup.state["hold"]["reason"] == "circuit_transient"
-    assert len(env.relay.launches) == 2
-
-
-def test_crash_retries_once_then_holds(tmp_path: Path) -> None:
-    env = Env(tmp_path, [("claude", [tool_use("t1", "Read", file_path="/x"), tool_result("t1")])])
-    env.head([tool_use("t1", "Read", file_path="/x"), tool_result("t1")])
-    result, sup = env.run()
-    assert result == "held" and sup.state["hold"]["reason"] == "crash_repeated"
-    assert len(env.relay.launches) == 1
-
-
-@pytest.mark.parametrize(("events", "reason"), [
-    ([claude_result("There's an issue with the selected model", error=True, status=404)], "unknown_failure"),
-    ([claude_result("Invalid API key · Please run /login", error=True, status=401)], "auth_failure"),
-])
-def test_auth_and_unknown_failures_hold_without_switching(tmp_path: Path, events: list[Any], reason: str) -> None:
-    env = Env(tmp_path)
-    env.head(events)
-    result, sup = env.run()
-    assert result == "held" and sup.state["hold"]["reason"] == reason
-    assert env.relay.launches == []
-
-
 def test_unavailable_fallback_waits_for_earliest_validated_reset(tmp_path: Path) -> None:
     codex_reset = T0 + timedelta(hours=1)
 
@@ -464,23 +425,71 @@ def test_spend_limits_on_both_agents_hold(tmp_path: Path) -> None:
     assert sup.state["cooldowns"]["claude"]["until"] is None and sup.state["cooldowns"]["codex"]["until"] is None
 
 
-def test_codex_exhausted_returns_to_recovered_claude_despite_the_switch_budget(tmp_path: Path) -> None:
+CODEX_EAI = [{"type": "thread.started"}, {"type": "turn.failed", "error": {"message": "stream error: EAI_AGAIN"}}]
+CRASH = [tool_use("r", "Read", file_path="/x"), tool_result("r")]
+
+
+def test_transient_failure_backs_off_that_provider_and_the_other_continues(tmp_path: Path) -> None:
+    env = Env(tmp_path, [("codex", CODEX_SUCCESS)])
+    env.head(fixture="claude_eai_again")
+    result, sup = env.run()
+    assert result == "idle" and [launch["agent"] for launch in env.relay.launches] == ["codex"]
+    assert env.relay.launches[0]["at"] == T0  # no wait: only Claude is backing off
+    assert sup.state["cooldowns"]["claude"]["reason"] == "transient"
+    assert rc.parse_ts(sup.state["cooldowns"]["claude"]["until"]) == T0 + timedelta(seconds=60)
+
+
+def test_an_outage_on_both_providers_waits_with_bounded_backoff_then_resumes(tmp_path: Path) -> None:
+    env = Env(tmp_path, [("codex", CODEX_EAI), ("claude", EAI), ("codex", CODEX_SUCCESS)])
+    env.head(EAI)
+    result, sup = env.run()
+    assert result == "idle" and sup.state["hold"] is None
+    agents, at = [launch["agent"] for launch in env.relay.launches], [launch["at"] for launch in env.relay.launches]
+    assert agents[0] == "codex" and set(agents) == {"claude", "codex"}
+    assert at[0] == T0 and at[1] == T0 + timedelta(seconds=60)  # the first backoffs end together
+    assert at[2] - at[1] <= timedelta(seconds=120)
+    assert max(env.clock.slept) <= 5.0  # interruptible, never a busy loop
+
+
+def test_crashes_retry_the_same_provider_until_the_failure_circuit_opens(tmp_path: Path) -> None:
+    env = Env(tmp_path, [("claude", CRASH)] * 3, limits=rc.Limits(max_consecutive_failures=2))
+    env.relay.readings = room(env, "claude", "codex")
+    env.head(CRASH)
+    result, sup = env.run()
+    assert result == "held" and sup.state["hold"]["reason"] == "circuit_failures"
+    assert [launch["agent"] for launch in env.relay.launches] == ["claude"] * 3
+
+
+@pytest.mark.parametrize(("events", "agents"), [
+    ([claude_result("There's an issue with the selected model", error=True, status=404)], ["claude"]),
+    ([claude_result("Invalid API key · Please run /login", error=True, status=401)], ["codex"]),
+])
+def test_auth_failure_disables_only_that_provider_and_unknown_failure_retries(
+        tmp_path: Path, events: list[Any], agents: list[str]) -> None:
+    env = Env(tmp_path, [("any", SUCCESS)])
+    env.head(events)
+    result, sup = env.run()
+    assert result == "idle" and sup.state["hold"] is None
+    assert [launch["agent"] for launch in env.relay.launches] == agents
+    if agents == ["codex"]:
+        cooldown = sup.state["cooldowns"]["claude"]
+        assert cooldown["reason"] == "auth" and rc.parse_ts(cooldown["until"]) == T0 + timedelta(minutes=30)
+        assert any("provider limit" in e for e in env.events())  # the maintainer learns about the login problem
+
+
+def test_codex_exhausted_returns_to_recovered_claude(tmp_path: Path) -> None:
     claude_reset, codex_reset = T0 + timedelta(minutes=5), T0 + timedelta(hours=1)
 
     def readings() -> dict[str, Any]:
         now = env.clock.now()
         out = {"claude": reading("claude", 100 if now < claude_reset else 5,
                                  claude_reset if now < claude_reset else now + timedelta(hours=5), now)}
-        codex_out = bool(env.relay.launches)
-        out["codex"] = reading("codex", 100 if codex_out else 5, codex_reset, now)
+        out["codex"] = reading("codex", 100 if env.relay.launches else 5, codex_reset, now)
         return out
 
-    env = Env(tmp_path, [("codex", CODEX_QUOTA), ("claude", SUCCESS)], readings=readings,
-              limits=rc.Limits(max_switches=1, min_dwell=timedelta(hours=2)))
+    env = Env(tmp_path, [("codex", CODEX_QUOTA), ("claude", SUCCESS)], readings=readings)
     env.head(QUOTA)
     result, sup = env.run()
-    # Claude -> Codex spends the switch budget; Codex then runs out too. Leaving an exhausted agent is never
-    # blocked by the budget or the dwell: the chain goes back to Claude as soon as Claude's reset has passed.
     assert result == "idle" and sup.state["hold"] is None
     assert [launch["agent"] for launch in env.relay.launches] == ["codex", "claude"]
     assert env.relay.launches[1]["at"] >= claude_reset
@@ -491,87 +500,33 @@ CODEX_NO_RESET_QUOTA = [{"type": "thread.started"},
                         {"type": "turn.failed", "error": {"message": "You've hit your usage limit."}}]
 
 
-def test_both_exhausted_without_resets_retry_with_bounded_backoff_and_no_rapid_switching(tmp_path: Path) -> None:
-    # Neither provider prints a reset and no reading exists: every retry waits a doubling estimate, capped.
-    env = Env(tmp_path, [("codex", CODEX_NO_RESET_QUOTA), ("claude", NO_RESET_QUOTA), ("codex", CODEX_NO_RESET_QUOTA),
-                         ("claude", NO_RESET_QUOTA), ("codex", CODEX_NO_RESET_QUOTA), ("claude", NO_RESET_QUOTA)],
-              limits=rc.Limits(max_attempts_per_run=6, recheck_cap=timedelta(hours=1)))
+def test_both_exhausted_without_resets_alternate_with_capped_backoff_and_never_hold(tmp_path: Path) -> None:
+    # Neither provider prints a reset and no reading exists: each retry waits a doubling estimate, capped.
+    env = Env(tmp_path, [("any", NO_RESET_QUOTA)] * 5 + [("any", SUCCESS)],
+              limits=rc.Limits(recheck_cap=timedelta(hours=1)))
     env.head(NO_RESET_QUOTA)
     result, sup = env.run()
-    # Quota is bounded by its cooldowns, not the consecutive-failure circuit; the run's attempt bound ends it.
-    assert result == "held" and sup.state["hold"]["reason"] == "circuit_attempts"
-    agents = [launch["agent"] for launch in env.relay.launches]
-    assert agents == ["codex", "claude"] * 3
-    at = [launch["at"] for launch in env.relay.launches]
-    claude_gaps = [b - a for a, b in zip([T0, *at[1::2]], at[1::2], strict=False)]
-    assert claude_gaps == [timedelta(minutes=30), timedelta(minutes=60), timedelta(minutes=60)]  # 30m, 60m, cap
-    assert min(env.clock.slept) > 0 and max(env.clock.slept) <= 5.0  # interruptible, never a busy loop
-    assert sup.state["counters"]["consecutive_failures"] == 0
-
-
-def test_spent_switch_budget_keeps_a_working_agent_instead_of_holding(tmp_path: Path) -> None:
-    env = Env(tmp_path, [("codex", CODEX_SUCCESS)], limits=rc.Limits(max_switches=2))
-    env.relay.readings = room(env, "claude", "codex")
-    state = rc.default_state()
-    state.update({"head_session": HEAD, "chain": [HEAD], "permissions_digest": "perm0", "permissions_pinned": True,
-                  "agent": "codex", "last_switch_at": rc.iso(T0 - timedelta(hours=1)),
-                  "switches": [rc.iso(T0 - timedelta(hours=2)), rc.iso(T0 - timedelta(hours=1))]})
-    env.store.save(state, T0)
-    env.head(CODEX_SUCCESS, agent="codex")
-    result, sup = env.run(task="next step")
-    # A voluntary return to Claude would exceed the budget: Codex, which works, simply continues.
     assert result == "idle" and sup.state["hold"] is None
-    assert [launch["agent"] for launch in env.relay.launches] == ["codex"]
+    agents = [launch["agent"] for launch in env.relay.launches]
+    assert agents[0] == "codex" and len(agents) == 6 and {"claude", "codex"} == set(agents)
+    at = [T0] + [launch["at"] for launch in env.relay.launches]
+    assert all(b - a <= timedelta(hours=1) for a, b in zip(at, at[1:], strict=False))
+    assert min(env.clock.slept) > 0 and max(env.clock.slept) <= 5.0
+    assert sup.state["counters"]["consecutive_failures"] == 0  # quota never counts towards the circuit
 
 
-def test_transient_and_crash_retries_never_switch_provider(tmp_path: Path) -> None:
-    # Codex is the current agent after a switch; Claude has room and the dwell has long passed.
-    env = Env(tmp_path, [("codex", EAI), ("codex", [tool_use("r", "Read", file_path="/x"), tool_result("r")]),
-                         ("codex", CODEX_SUCCESS)], limits=rc.Limits(min_dwell=timedelta(minutes=2)))
+def test_a_working_provider_keeps_the_chain_until_it_fails(tmp_path: Path) -> None:
+    env = Env(tmp_path, [("codex", CODEX_SUCCESS)])
     env.relay.readings = room(env, "claude", "codex")
     state = rc.default_state()
     state.update({"head_session": HEAD, "chain": [HEAD], "permissions_digest": "perm0", "permissions_pinned": True,
-                  "last_switch_at": rc.iso(T0 - timedelta(hours=1)), "agent": "codex"})
-    env.store.save(state, T0)
-    env.head(EAI, agent="codex")
-    result, _ = env.run()
-    assert result == "idle"
-    assert [launch["agent"] for launch in env.relay.launches] == ["codex", "codex", "codex"]
-
-
-def test_return_to_claude_only_at_a_turn_boundary_after_dwell(tmp_path: Path) -> None:
-    env = Env(tmp_path, [("codex", CODEX_SUCCESS), ("claude", SUCCESS)], limits=rc.Limits(min_dwell=timedelta(minutes=30)))
-    env.relay.readings = room(env, "claude", "codex")
-    state = rc.default_state()
-    state.update({"head_session": HEAD, "chain": [HEAD], "permissions_digest": "perm0", "permissions_pinned": True,
-                  "last_switch_at": rc.iso(T0 - timedelta(minutes=10)), "agent": "codex"})
+                  "agent": "codex"})
     env.store.save(state, T0)
     env.head(CODEX_SUCCESS, agent="codex")
-    # Ten minutes after the switch the next maintainer task stays on Codex ...
-    assert env.run(task="step one")[0] == "idle"
-    env.clock.t += timedelta(minutes=30)
-    # ... and past the dwell the next turn boundary returns to the preferred Claude.
-    assert env.run(task="step two")[0] == "idle"
-    assert [launch["agent"] for launch in env.relay.launches] == ["codex", "claude"]
-
-
-def test_consecutive_failure_circuit(tmp_path: Path) -> None:
-    env = Env(tmp_path, [("claude", EAI)] * 10,
-              limits=rc.Limits(max_consecutive_failures=3, max_transient_streak=99))
-    env.head(EAI)
-    result, sup = env.run()
-    assert result == "held" and sup.state["hold"]["reason"] == "circuit_failures"
-    assert len(env.relay.launches) == 3
-
-
-def test_maintainer_task_runs_on_preferred_agent_when_idle(tmp_path: Path) -> None:
-    env = Env(tmp_path, [("claude", SUCCESS)])
-    env.relay.readings = room(env, "claude")
-    env.head(CODEX_SUCCESS, agent="codex")
-    result, _ = env.run(task="Next step: reconcile STATUS")
-    assert result == "idle"
-    assert env.relay.launches[0]["agent"] == "claude"
-    assert env.relay.launches[0]["task"].endswith("Next step: reconcile STATUS")
+    result, _ = env.run(task="next step")
+    # As the maintainer did by hand: no voluntary switch while the current provider works.
+    assert result == "idle" and [launch["agent"] for launch in env.relay.launches] == ["codex"]
+    assert env.relay.launches[0]["task"].endswith("next step")
 
 
 def test_misreported_success_head_needs_nothing(tmp_path: Path) -> None:
@@ -588,15 +543,19 @@ def test_misreported_success_head_needs_nothing(tmp_path: Path) -> None:
 IN_FLIGHT = {
     "git push": tool_use("x", "Bash", command="cd /r && git push origin HEAD"),
     "gh pr merge": tool_use("x", "Bash", command="gh pr merge 1 --merge"),
+    "gh pr comment": tool_use("x", "Bash", command="gh pr comment 7 --body done"),
+    "mcp tool": tool_use("x", "mcp__slack__post_message", channel="c"),
     "Write": tool_use("x", "Write", file_path="/r/a.py"),
     "subagent": tool_use("x", "Agent", subagent_type="general-purpose"),
     "unknown script": tool_use("x", "Bash", command="./deploy.sh"),
+    "server": tool_use("x", "Bash", command="nohup .venv/bin/python -m uvicorn app.main:app &"),
 }
+EXTERNAL = ("git push", "gh pr merge", "gh pr comment", "mcp tool")
 
 
-@pytest.mark.parametrize("name", sorted(IN_FLIGHT))
+@pytest.mark.parametrize("name", EXTERNAL)
 @pytest.mark.parametrize("terminal", ["quota", "transient", "crash"])
-def test_in_flight_side_effect_holds_and_never_invokes_relay(tmp_path: Path, name: str, terminal: str) -> None:
+def test_interrupted_external_operation_without_a_settling_probe_holds(tmp_path: Path, name: str, terminal: str) -> None:
     tail = {"quota": QUOTA, "transient": EAI, "crash": []}[terminal]
     env = Env(tmp_path)  # an empty script: any Relay invocation fails the test
     env.head([tool_use("r", "Read", file_path="/x"), tool_result("r"), IN_FLIGHT[name], *tail])
@@ -604,9 +563,90 @@ def test_in_flight_side_effect_holds_and_never_invokes_relay(tmp_path: Path, nam
     assert result == "held" and sup.state["hold"]["reason"] == "effects_uncertain"
     assert env.relay.launches == []
     assert any("HOLD" in e for e in env.events())
-    # A restart must not bypass the hold either.
+    record = [r for r in journal(env) if r.get("event") == "reconcile"][-1]
+    assert record["result"] == "effects_uncertain" and record["verdicts"][0]["verdict"] == "unresolved"
+    # A restart decides the same turn again and still holds, quietly.
+    sent = len(env.sent)
     result, _ = env.run()
-    assert result == "held" and env.relay.launches == []
+    assert result == "held" and env.relay.launches == [] and not any("HOLD" in e for e in env.sent[sent:])
+
+
+@pytest.mark.parametrize("name", sorted(set(IN_FLIGHT) - set(EXTERNAL)))
+@pytest.mark.parametrize(("terminal", "successor"), [("quota", "codex"), ("transient", "codex"), ("crash", "claude")])
+def test_interrupted_local_operation_continues_and_the_successor_verifies_it(
+        tmp_path: Path, name: str, terminal: str, successor: str) -> None:
+    tail = {"quota": QUOTA, "transient": EAI, "crash": []}[terminal]
+    env = Env(tmp_path, [("any", SUCCESS)])
+    env.head([tool_use("r", "Read", file_path="/x"), tool_result("r"), IN_FLIGHT[name], *tail])
+    result, sup = env.run()
+    assert result == "idle" and sup.state["hold"] is None
+    assert [launch["agent"] for launch in env.relay.launches] == [successor]
+    task = env.relay.launches[0]["task"]
+    assert ": INTERRUPTED" in task and "Inspect its effects" in task and "RELAY_STATUS blocked" in task
+    assert rc.PROCESSES_UNKNOWN in task  # the head turn predates this supervisor: survivors are not ruled out
+
+
+def test_probe_settled_external_operations_continue_with_their_verdicts(tmp_path: Path) -> None:
+    verdicts = {"git push": ("completed", "remote branch b is at the pushed commit abc"),
+                "gh pr merge": ("not_started", "PR #1 is still open: the merge did not take effect")}
+    env = Env(tmp_path, [("codex", CODEX_SUCCESS)])
+    env.host.probe = lambda call: verdicts["git push" if "push" in call.label else "gh pr merge"]
+    env.head([IN_FLIGHT["git push"], tool_use("y", "Bash", command="gh pr merge 1 --merge"), *QUOTA])
+    result, sup = env.run()
+    assert result == "idle" and [launch["agent"] for launch in env.relay.launches] == ["codex"]
+    task = env.relay.launches[0]["task"]
+    assert "git push: COMPLETED: it took effect; do not repeat it" in task
+    assert "gh pr merge: NOT STARTED: it did not take effect" in task
+    record = [r for r in journal(env) if r.get("event") == "reconcile"][-1]
+    assert record["result"] == "settled" and {v["verdict"] for v in record["verdicts"]} == {"completed", "not_started"}
+    assert any(kind == "decision" and "settled interrupted external" in text for kind, text in env.ledger)
+
+
+def test_an_unsettled_external_operation_holds_even_beside_settled_ones(tmp_path: Path) -> None:
+    env = Env(tmp_path)
+    env.host.probe = lambda call: ("completed", "pushed") if "push" in call.label else None
+    env.head([IN_FLIGHT["git push"], tool_use("y", "Bash", command="gh pr comment 7 --body done"), *QUOTA])
+    result, sup = env.run()
+    assert result == "held" and sup.state["hold"]["reason"] == "effects_uncertain" and env.relay.launches == []
+
+
+def test_a_failing_probe_settles_nothing(tmp_path: Path) -> None:
+    env = Env(tmp_path)
+
+    def broken(call: Any) -> Any:
+        raise RuntimeError("gh unavailable")
+    env.host.probe = broken
+    env.head([IN_FLIGHT["gh pr merge"], *QUOTA])
+    result, sup = env.run()
+    assert result == "held" and sup.state["hold"]["reason"] == "effects_uncertain"
+
+
+def test_processes_a_turn_leaves_running_are_stopped_and_named_to_the_successor(tmp_path: Path) -> None:
+    env = Env(tmp_path, [("claude", [IN_FLIGHT["server"], tool_result("x"), *QUOTA]), ("codex", CODEX_SUCCESS)])
+    reaps: list[int] = []
+
+    def reap() -> list[str]:
+        reaps.append(len(env.relay.launches))
+        return ["python3", "node"] if len(reaps) == 1 else []
+    env.host.reap = reap
+    env.head(CRASH)
+    result, sup = env.run()
+    assert result == "idle"
+    assert reaps == [1, 2]  # after every finished turn, before anything is decided
+    task = env.relay.launches[1]["task"]
+    assert "stopped by the supervisor: python3, node" in task and "python &: INTERRUPTED" in task
+    assert rc.PROCESSES_STOPPED in task
+    settle = [r for r in journal(env) if r.get("event") == "settle"]
+    assert settle[0]["reaped"] == ["python3", "node"] and settle[1]["reaped"] == []
+
+
+def test_crash_after_the_repository_changed_is_retried_not_held(tmp_path: Path) -> None:
+    # Local changes are the successor's to inspect; only an interrupted external operation could not be undone.
+    env = Env(tmp_path, [("claude", CRASH), ("claude", SUCCESS)])
+    env.head(CRASH)
+    env.host.fingerprint = lambda: "fp-after" if env.relay.launches else "fp0"
+    result, sup = env.run()
+    assert result == "idle" and len(env.relay.launches) == 2
 
 
 def test_in_flight_read_only_call_does_not_block(tmp_path: Path) -> None:
@@ -646,16 +686,6 @@ def test_attempt_without_session_holds_even_when_repository_unchanged(tmp_path: 
     assert result == "held" and sup.state["hold"]["reason"] == "attempt_unresolved"
     assert len(env.relay.launches) == 1
     assert env.run()[0] == "held" and len(env.relay.launches) == 1
-
-
-def test_crash_with_recorded_calls_holds_when_repository_changed(tmp_path: Path) -> None:
-    # The retry records only a Read, but the repository moved: an unrecorded write may have happened.
-    env = Env(tmp_path, [("claude", [tool_use("r", "Read", file_path="/x"), tool_result("r")])])
-    env.head(EAI)
-    env.host.fingerprint = lambda: "fp-after" if env.relay.launches else "fp0"
-    result, sup = env.run()
-    assert result == "held" and sup.state["hold"]["reason"] == "effects_uncertain"
-    assert len(env.relay.launches) == 1
 
 
 # ---------------------------------------------------------------------------
@@ -829,8 +859,6 @@ def test_python_relay_launchers_are_detected_without_claiming_unrelated_python(
         assert rc.live_conflicts(repo, {os.getpid()}) == (
             ["repl_active"] if recognized and mode == "interactive" else []
         )
-        proc_entry = Path(f"/proc/{proc.pid}")
-        assert rc._ignorable(rc._argv(proc_entry), proc_entry) is (recognized and mode != "interactive")
         assert rc.live_conflicts(repo, {os.getpid(), proc.pid}) == []
     finally:
         proc.kill()
@@ -842,17 +870,19 @@ def test_relay_safe_direct_or_python_entry_keeps_command_positions(interpreter: 
     command = ["/opt/tools/relay_safe.py", "--no-tmux", "daemon"]
     argv = [f"/opt/venv/bin/{interpreter}", *command] if interpreter else command
     assert rc._relay_argv(argv) == command
-    assert rc._ignorable(argv, Path("/unused-proc-entry"))
-    assert not rc._ignorable([*argv[:-1], "--no-onboarding"], Path("/unused-proc-entry"))
 
 
-def test_live_repl_on_the_repository_blocks_launch(tmp_path: Path) -> None:
-    env = Env(tmp_path)
+def test_live_repl_on_the_repository_defers_launch_without_a_hold(tmp_path: Path) -> None:
+    env = Env(tmp_path, [("codex", CODEX_SUCCESS)])
     env.conflicts = ["repl_active"]
     env.head(QUOTA)
     result, sup = env.run()
-    assert result == "held" and sup.state["hold"]["reason"] == "repl_active"
+    assert result == "waiting" and sup.state["hold"] is None and sup.state["phase"] == "waiting"
     assert env.relay.launches == []
+    env.conflicts = []  # the REPL exited: the same decision is taken again, once
+    result, sup = env.run()
+    assert result == "idle" and [launch["agent"] for launch in env.relay.launches] == ["codex"]
+    assert sup.state["counters"]["consecutive_failures"] == 0
 
 
 def test_permission_change_holds(tmp_path: Path) -> None:
@@ -940,8 +970,9 @@ def test_release_clears_hold_and_records_it(tmp_path: Path, monkeypatch: pytest.
 
 
 def test_released_turn_is_continued_not_regated(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    comment = tool_use("c", "Bash", command="gh pr comment 7 --body done")
     env = Env(tmp_path, [("claude", SUCCESS)])
-    env.head([claude_result("There's an issue with the selected model", error=True, status=404)])
+    env.head([comment])  # the turn died while posting a comment: no probe can settle it
     assert env.run()[0] == "held"
     monkeypatch.setenv("RELAY_CONTINUITY_DIR", str(env.store.root))
     monkeypatch.setattr(rc, "make_host", lambda repo: env.host)
@@ -953,242 +984,12 @@ def test_released_turn_is_continued_not_regated(tmp_path: Path, monkeypatch: pyt
     assert env.relay.launches[0]["task"].endswith("Retry the step")
     assert sup.state["acknowledged"] is None
     # The acknowledgement covers only that turn: a new failure on the chain is gated again.
-    env.relay.script = [("claude", [claude_result("bad", error=True, status=404)])]
+    env.relay.script = [("claude", [comment])]
     assert env.run(task="again")[0] == "held"
 
 
 # ---------------------------------------------------------------------------
 # Live work: detached jobs that outlive the call that launched them
-
-
-def work(identity: str | None = "proc:1:1:x", label: str = "process node", *, recent: bool = True,
-         inherited: bool = False) -> Any:
-    return rc.Work(identity, label, recent=recent, inherited=inherited)
-
-
-def test_live_work_in_a_checkout_holds_a_quota_failure_without_relaunch(tmp_path: Path) -> None:
-    env = Env(tmp_path, [("codex", CODEX_SUCCESS)])
-    seen: list[datetime] = []
-    env.host.live_work = lambda since: seen.append(since) or [work()]
-    env.head(QUOTA)
-    result, sup = env.run()
-    assert result == "held" and sup.state["hold"]["reason"] == "live_work"
-    assert env.relay.launches == [] and seen
-    assert any("live work in the checkout: process node" in line for line in env.logs)
-
-
-def test_live_work_holds_a_new_task_after_a_successful_turn(tmp_path: Path) -> None:
-    env = Env(tmp_path, [("claude", SUCCESS)])
-    env.host.live_work = lambda since: [work("ctr:abc:t:e", "docker container abc")]
-    env.head(SUCCESS)
-    result, sup = env.run(task="Next step")
-    assert result == "held" and sup.state["hold"]["reason"] == "live_work" and env.relay.launches == []
-
-
-def test_failing_live_work_check_holds(tmp_path: Path) -> None:
-    def boom(since: datetime) -> list[Any]:
-        raise RuntimeError("git worktree list failed")
-    env = Env(tmp_path, [("codex", CODEX_SUCCESS)])
-    env.host.live_work = boom
-    env.head(QUOTA)
-    assert env.run()[0] == "held" and env.relay.launches == []
-
-
-@pytest.mark.parametrize(("works", "acknowledged", "held"), [
-    ([], [], False),
-    ([work(recent=False)], [], False),                        # older than the window, a plain process
-    ([work(recent=False, inherited=True)], [], True),         # a pane program or a container with exec sessions
-    ([work(recent=False, inherited=True)], ["proc:1:1:x"], False),  # exactly what the release acknowledged
-    ([work(recent=True)], ["proc:1:1:x"], False),
-    ([work("proc:1:1:y", recent=False, inherited=True)], ["proc:1:1:x"], True),  # same pid, new program (exec)
-    ([work(None, "process unreadable")], [], True),           # an inspection failure is never acknowledged
-])
-def test_live_work_gate_respects_window_inheritance_and_acknowledgement(
-        tmp_path: Path, works: list[Any], acknowledged: list[str], held: bool) -> None:
-    env = Env(tmp_path, [("codex", CODEX_SUCCESS)])
-    env.host.live_work = lambda since: works
-    env.store.root.mkdir(parents=True, exist_ok=True)
-    env.store.journal({"event": "release", "at": rc.iso(T0 - timedelta(days=30)), "acknowledged_work": acknowledged})
-    env.head(QUOTA)
-    assert (env.run()[0] == "held") is held
-    assert (env.relay.launches == []) is held
-
-
-def test_release_acknowledges_the_work_live_at_that_moment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    env = Env(tmp_path, [("codex", CODEX_SUCCESS)])
-    live = [work("proc:7:9:a", recent=False, inherited=True), work(None, "process unreadable")]
-    env.host.live_work = lambda since: live[:1]
-    env.head(QUOTA)
-    assert env.run()[0] == "held"
-    monkeypatch.setenv("RELAY_CONTINUITY_DIR", str(env.store.root))
-    monkeypatch.setattr(rc, "make_host", lambda repo: rc.Host(relay=env.relay, live_work=lambda since: live))
-    monkeypatch.setattr(rc, "repo_root", lambda: env.repo)
-    assert rc.main(["release", "--note", "the pane dev server is meant to keep running"]) == 0
-    record = json.loads(env.store.journal_path.read_text().splitlines()[-1])
-    assert record["event"] == "release" and record["acknowledged_work"] == ["proc:7:9:a"]
-    assert env.run()[0] == "idle" and len(env.relay.launches) == 1
-
-
-def test_work_window_starts_at_the_chain_and_moves_to_the_latest_release(tmp_path: Path) -> None:
-    env = Env(tmp_path)
-    env.head(SUCCESS)
-    session = env.relay.sessions_dir() / HEAD
-    created = T0 - timedelta(days=2)
-    (session / "session.json").write_text(json.dumps({"created_at": rc.iso(created)}))
-    sup = env.supervisor()
-    sup.state["head_session"] = HEAD
-    assert sup.work_window() == created
-    env.store.root.mkdir(parents=True, exist_ok=True)
-    released = T0 - timedelta(hours=1)
-    env.store.journal({"event": "release", "at": rc.iso(released), "acknowledged_work": ["a"]})
-    env.store.journal({"event": "release", "at": rc.iso(created - timedelta(days=1)), "acknowledged_work": ["b"]})
-    assert sup.work_window() == released and sup.last_release() == (released, frozenset({"a"}))
-    (session / "session.json").write_text("not json")
-    env.store.journal_path.unlink()
-    assert sup.work_window() == datetime.min.replace(tzinfo=UTC)  # unknown chain start: the widest window
-
-
-def test_worktree_listing_failure_raises(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.setattr(rc.devctx, "run", lambda *a, **k: (128, ""))
-    with pytest.raises(RuntimeError):
-        rc.worktree_roots(tmp_path)
-
-
-def fake_proc(root: Path, btime: int = 1_000_000) -> Path:
-    proc = root / "proc"
-    proc.mkdir()
-    (proc / "stat").write_text(f"cpu  1 2 3\nbtime {btime}\n")
-    return proc
-
-
-def add_proc(proc: Path, pid: int, *, argv: list[str], cwd: Path | None, started: datetime, btime: int = 1_000_000,
-             ppid: int = 1, state: str = "S", comm: str | None = None, stdin: str = "/dev/pts/3") -> None:
-    entry = proc / str(pid)
-    entry.mkdir()
-    ticks = int((started.timestamp() - btime) * os.sysconf("SC_CLK_TCK"))
-    rest = [state, str(ppid)] + ["0"] * 17 + [str(ticks)]
-    (entry / "stat").write_text(f"{pid} ({comm or Path(argv[0]).name}) {' '.join(rest)} 0 0\n")
-    (entry / "comm").write_text(f"{(comm or Path(argv[0]).name)[:15]}\n")
-    (entry / "status").write_text(f"Name:\t{Path(argv[0]).name}\nPPid:\t{ppid}\n")
-    (entry / "cmdline").write_bytes(b"\0".join(a.encode() for a in argv) + b"\0")
-    (entry / "fd").mkdir()
-    os.symlink(stdin, entry / "fd" / "0")
-    if cwd is None:
-        (entry / "cwd").mkdir()  # readlink fails with EINVAL: unreadable, not gone
-    else:
-        os.symlink(cwd, entry / "cwd")
-
-
-def proc_tree(tmp_path: Path) -> tuple[Path, Path, Path]:
-    proc = fake_proc(tmp_path)
-    repo, worktree, elsewhere = tmp_path / "repo", tmp_path / "wt", tmp_path / "home"
-    for d in (repo / "frontend", worktree, elsewhere):
-        d.mkdir(parents=True)
-    new, old = T0 + timedelta(minutes=5), T0 - timedelta(hours=1)
-    add_proc(proc, 10, argv=["node", "vite"], cwd=repo / "frontend", started=new)
-    add_proc(proc, 11, argv=["python", "-m", "pytest"], cwd=worktree, started=new, comm="py test$(x)")
-    add_proc(proc, 12, argv=["node", "old-server"], cwd=repo, started=old)
-    add_proc(proc, 13, argv=["node", "elsewhere"], cwd=elsewhere, started=new)
-    add_proc(proc, 14, argv=["bash"], cwd=repo, started=new)                          # idle prompt on a terminal
-    add_proc(proc, 15, argv=["bash"], cwd=repo, started=new, stdin="pipe:[4242]", comm="stdin-sh")  # fed a script
-    add_proc(proc, 16, argv=["python", "x.py"], cwd=repo, started=new, state="Z", comm="zombie")
-    add_proc(proc, 17, argv=["tmux", "new-session"], cwd=repo, started=old, comm="tmux: server")
-    add_proc(proc, 23, argv=["tmux: server"], cwd=repo, started=old, comm="tmux: server")  # rewritten title
-    add_proc(proc, 24, argv=["python", "-m", "http.server"], cwd=repo, started=old, ppid=23, comm="pane-exec2")
-    add_proc(proc, 18, argv=["python", "-m", "pytest", "-q"], cwd=repo, started=old, ppid=17, comm="pane-exec")
-    add_proc(proc, 21, argv=["python3", "scripts/relay_continuity.py", "watch"], cwd=repo, started=new, comm="watcher")
-    add_proc(proc, 22, argv=["python3", "scripts/relay_continuity.py", "--help"], cwd=repo, started=new, comm="rc-other")
-    # The supervisor (20) and its ancestors (19: the pane shell running it) are never reported.
-    add_proc(proc, 19, argv=["bash", "-c", "python3 scripts/relay_continuity.py run"], cwd=repo, started=new, comm="pane")
-    add_proc(proc, 20, argv=["python3", "scripts/relay_continuity.py", "run"], cwd=repo, started=new, ppid=19,
-             comm="supervisor")
-    return proc, repo, worktree
-
-
-def test_live_processes_reports_work_in_any_checkout_with_age_and_inheritance(tmp_path: Path) -> None:
-    proc, repo, worktree = proc_tree(tmp_path)
-    found = {w.label: w for w in rc.live_processes([repo, worktree], T0, {20}, proc_root=proc)}
-    assert set(found) == {"process node", "process py_test__x_", "process stdin-sh", "process pane-exec",
-                          "process pane-exec2", "process rc-other"}
-    assert found["process pane-exec2"].inherited  # a server that rewrote its argv to `tmux: server`
-    assert found["process py_test__x_"].recent and not found["process py_test__x_"].inherited
-    assert not found["process pane-exec"].recent and found["process pane-exec"].inherited  # exec in an old pane
-    old = [w for w in rc.live_processes([repo, worktree], T0, {20}, proc_root=proc) if w.label == "process node"]
-    assert sorted(w.recent for w in old) == [False, True]  # vite (new) and old-server (old)
-    assert all(w.identity and w.identity.startswith("proc:") for w in found.values())
-
-
-def test_pane_exec_changes_the_identity(tmp_path: Path) -> None:
-    proc, repo, worktree = proc_tree(tmp_path)
-    before = {w.identity for w in rc.live_processes([repo], T0, {20}, proc_root=proc) if w.label == "process pane-exec"}
-    (proc / "18" / "cmdline").write_bytes(b"python\0-m\0http.server\0")
-    after = {w.identity for w in rc.live_processes([repo], T0, {20}, proc_root=proc) if w.label == "process pane-exec"}
-    assert before and after and before != after
-
-
-def test_unreadable_processes_and_tables_count_as_live_work(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    proc, repo, _ = proc_tree(tmp_path)
-    add_proc(proc, 30, argv=["python"], cwd=None, started=T0)
-    add_proc(proc, 31, argv=["(sd-pam)"], cwd=None, started=T0 - timedelta(days=3), comm="(sd-pam)")
-    unreadable = [w for w in rc.live_processes([repo], T0, {20}, proc_root=proc) if w.label == "process unreadable"]
-    assert sorted(w.recent for w in unreadable) == [False, True]  # judged by start time; acknowledgeable
-    assert all(w.identity and w.identity.endswith(":unreadable") for w in unreadable)
-    (proc / "32").mkdir()  # a process whose stat cannot be read at all
-    (proc / "32" / "stat").mkdir()
-    assert any(w.identity is None for w in rc.live_processes([repo], T0, {20}, proc_root=proc))
-    empty = tmp_path / "noproc"
-    empty.mkdir()
-    assert [w.label for w in rc.live_processes([repo], T0, set(), proc_root=empty)] == ["process table unreadable"]
-    monkeypatch.setattr(rc.os, "getuid", lambda: 4242)  # every process belongs to another user
-    assert rc.live_processes([repo], T0, set(), proc_root=proc) == []
-
-
-def test_live_containers_fail_closed_except_for_an_absent_daemon(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(rc.shutil, "which", lambda tool: f"/usr/bin/{tool}" if tool == "docker" else None)
-
-    def runner(ps: Any, inspect: Any = None) -> Any:
-        def run(cmd: list[str], **_kwargs: Any) -> Any:
-            out = ps if cmd[1] == "ps" else inspect
-            if isinstance(out, BaseException):
-                raise out
-            return subprocess.CompletedProcess(cmd, out[0], out[1], out[2] if len(out) > 2 else "")
-        return run
-
-    def labels(run: Any) -> list[tuple[str, bool, bool, bool]]:
-        return [(w.label, w.identity is None, w.recent, w.inherited) for w in rc.live_containers(T0, run=run)]
-    down = "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?"
-    assert [w.label for w in rc.live_containers(T0, run=runner((1, "", down)), shims=lambda: False)] == []
-    # Live restore: the daemon is down but a container shim still runs, so containers may be running.
-    assert [w.label for w in rc.live_containers(T0, run=runner((1, "", down)), shims=lambda: True)] == ["docker check failed"]
-    assert labels(runner((1, "", "permission denied while trying to connect"))) == [("docker check failed", True, True, False)]
-    assert labels(runner((0, ""))) == []
-    rows = (f"aaa{'1' * 20} 2026-10-18T08:05:00.123456789Z null\n"
-            "bbb 2026-10-17T08:05:00.1Z [\"e1\"]\n"
-            "ccc 2026-10-18T09:59:59.5+02:00 []\n"
-            "ddd 0001-garbage null\n")
-    assert labels(runner((0, "aaa\nbbb\nccc\nddd\n"), (0, rows))) == [
-        ("docker container aaa111111111", False, True, False),
-        ("docker container bbb", False, False, True),        # an old container with an exec session
-        ("docker container ccc", False, False, False),        # 07:59:59.5Z: half a second before the window
-        ("docker container undatable", True, True, False)]
-    assert labels(runner((0, "aaa\n"), (1, ""))) == [("docker check failed", True, True, False)]
-    assert labels(runner(subprocess.TimeoutExpired("docker", 15))) == [("docker check timed out", True, True, False)]
-    assert labels(runner(OSError("exec format error"))) == [("docker check failed", True, True, False)]
-
-
-def test_container_shims_are_detected_for_any_user(tmp_path: Path) -> None:
-    proc = fake_proc(tmp_path)
-    add_proc(proc, 40, argv=["sleep"], cwd=tmp_path, started=T0)
-    assert rc.container_shims(proc) is False
-    add_proc(proc, 41, argv=["/usr/bin/containerd-shim-runc-v2"], cwd=tmp_path, started=T0)
-    (proc / "41" / "comm").write_text("containerd-shim\n")
-    assert rc.container_shims(proc) is True
-
-
-def test_container_timestamps_keep_fractions_and_offsets() -> None:
-    assert rc._container_ts("2026-10-18T08:00:00.999999999Z") == T0 + timedelta(microseconds=999999)
-    assert rc._container_ts("2026-10-18T10:00:00+02:00") == T0
-    assert rc._container_ts("garbage") is None
 
 
 def test_task_notification_never_closes_command_level_detachment(tmp_path: Path) -> None:
@@ -1436,7 +1237,7 @@ def test_background_acknowledgement_is_not_completion(tmp_path: Path) -> None:
     turn = write_turn(tmp_path / "s", [bg_agent, tool_result("a"), started, child, *QUOTA])
     report = rc.classify_turn(turn)
     assert {c.label for c in report.in_flight} == {"Agent &", "git push"}
-    assert rc.gate(report, fingerprint_changed=None) == "effects_uncertain"
+    assert any(rc.external(c) for c in report.in_flight)
     done = write_turn(tmp_path / "t", [bg_agent, tool_result("a"), started,
                                        {"type": "system", "subtype": "task_notification", "task_id": "t-a",
                                         "tool_use_id": "a", "status": "completed"}, *QUOTA])
@@ -1504,7 +1305,7 @@ def test_ambiguous_terminal_evidence_is_never_success(tmp_path: Path, events: li
     assert rc.classify_turn(write_turn(tmp_path / "s", events)).outcome != "success"
 
 
-def test_auth_diagnostics_without_terminal_hold_instead_of_retrying(tmp_path: Path) -> None:
+def test_auth_diagnostics_without_terminal_disable_that_provider(tmp_path: Path) -> None:
     turn = write_turn(tmp_path / "s", [{"type": "system", "subtype": "init"}])
     assert rc.classify_turn(turn).outcome == "crash"
     assert rc.classify_turn(turn, diagnostics="Error: Invalid API key · Please run /login").outcome == "auth"
@@ -1516,13 +1317,14 @@ def test_auth_diagnostics_without_terminal_hold_instead_of_retrying(tmp_path: Pa
             result = super().finish(proc)
             return rc.RunResult(result.session_id, 1, True, "401 Unauthorized: please run /login")
     env = Env(tmp_path / "e")
-    env.relay = AuthRelay(env.repo, [("claude", [{"type": "system", "subtype": "init"}])])
+    env.relay = AuthRelay(env.repo, [("claude", [{"type": "system", "subtype": "init"}]), ("codex", CODEX_SUCCESS)])
     env.relay.clock = env.clock
     env.host.relay = env.relay
-    env.head(EAI)
+    env.head(CRASH)
     result, sup = env.run()
-    assert result == "held" and sup.state["hold"]["reason"] == "auth_failure"
-    assert len(env.relay.launches) == 1
+    # Never a retryable crash: Claude's login is broken, so Claude backs off and Codex continues.
+    assert result == "idle" and [launch["agent"] for launch in env.relay.launches] == ["claude", "codex"]
+    assert sup.state["cooldowns"]["claude"]["reason"] == "auth"
 
 
 @pytest.mark.parametrize("drop", ["pending", "counters", "permissions_pinned"])
@@ -1600,7 +1402,7 @@ def test_turn_that_kept_the_previous_output_has_no_evidence_and_holds(tmp_path: 
     second = write_turn(session, QUOTA, number=2)
     report = rc.classify_turn(second)
     assert (report.outcome, report.no_evidence, report.calls) == ("crash", True, [])
-    assert rc.gate(report, fingerprint_changed=None) == "output_missing"
+    assert rc.gate(report) == "output_missing"
     result, sup = env.run()
     assert result == "held" and sup.state["hold"]["reason"] == "output_missing"
     assert env.relay.launches == []
@@ -1710,7 +1512,7 @@ def test_killed_background_subagent_leaves_its_unanswered_calls_in_flight(tmp_pa
         *QUOTA])
     report = rc.classify_turn(turn)
     assert [c.label for c in report.in_flight] == ["git push"]
-    assert rc.gate(report, fingerprint_changed=None) == "effects_uncertain"
+    assert any(rc.external(c) for c in report.in_flight)
 
 
 @pytest.mark.parametrize("windows", [None, [], [{}], [{"id": "s", "used_percent": "100"}], [{"id": "s", "used_percent": True}]])
@@ -1723,19 +1525,19 @@ def test_unusable_usage_windows_never_block_a_try(tmp_path: Path, windows: Any) 
     assert result == "idle" and [launch["agent"] for launch in env.relay.launches] == ["codex"]
 
 
-def test_same_agent_retry_waits_for_that_agent(tmp_path: Path) -> None:
-    # Codex hits a transient; a fresh reading then shows Codex briefly capped. The retry waits for Codex.
+def test_codex_transient_hands_over_to_claude_with_room(tmp_path: Path) -> None:
+    # Codex hits a transient and a fresh reading shows Codex capped: Claude, which has room, takes over at once.
     codex_reset = T0 + timedelta(minutes=12)
-    env = Env(tmp_path, [("codex", CODEX_SUCCESS)])
+    env = Env(tmp_path, [("claude", SUCCESS)])
     env.relay.readings = room(env, "claude", exhausted={"codex": codex_reset})
     state = rc.default_state()
     state.update({"head_session": HEAD, "chain": [HEAD], "agent": "codex", "permissions_digest": "perm0",
                   "permissions_pinned": True, "last_switch_at": rc.iso(T0 - timedelta(hours=2))})
     env.store.save(state, T0)
-    env.head(EAI, agent="codex")
+    env.head(CODEX_EAI, agent="codex")
     assert env.run()[0] == "idle"
-    assert [launch["agent"] for launch in env.relay.launches] == ["codex"]
-    assert env.relay.launches[0]["at"] >= codex_reset
+    assert [launch["agent"] for launch in env.relay.launches] == ["claude"]
+    assert env.relay.launches[0]["at"] == T0 < codex_reset
 
 
 def codex_spend_capped(env: Env) -> None:
@@ -1881,40 +1683,20 @@ def test_manual_spend_cap_survives_restart_on_the_same_turn(tmp_path: Path) -> N
     assert env.relay.launches == []
 
 
-def test_releases_of_one_turn_accumulate(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    env = Env(tmp_path, [("claude", SUCCESS)])
+def test_released_gate_still_applies_the_provider_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    env = Env(tmp_path, [("codex", CODEX_SUCCESS)])
     env.head([tool_use("p", "Bash", command="git push origin HEAD"),
               claude_result("Invalid API key · Please run /login", error=True, status=401)])
     monkeypatch.setenv("RELAY_CONTINUITY_DIR", str(env.store.root))
     monkeypatch.setattr(rc, "make_host", lambda repo: env.host)
     monkeypatch.setattr(rc, "repo_root", lambda: env.repo)
     result, sup = env.run()
-    assert result == "held" and sup.state["hold"]["reason"] == "auth_failure"
-    assert rc.main(["release", "--note", "logged in again"]) == 0
-    result, sup = env.run()
     assert result == "held" and sup.state["hold"]["reason"] == "effects_uncertain"
     assert rc.main(["release", "--note", "the push landed"]) == 0
     result, sup = env.run()
-    assert result == "idle" and [launch["agent"] for launch in env.relay.launches] == ["claude"]
-
-
-def test_same_agent_wait_ignores_other_agents_expired_cooldowns(tmp_path: Path) -> None:
-    codex_reset = T0 + timedelta(minutes=12)
-    env = Env(tmp_path, [("codex", CODEX_SUCCESS)])
-    env.relay.readings = room(env, "claude", exhausted={"codex": codex_reset})
-    state = rc.default_state()
-    state.update({"head_session": HEAD, "chain": [HEAD], "agent": "codex", "permissions_digest": "perm0",
-                  "permissions_pinned": True, "last_switch_at": rc.iso(T0 - timedelta(hours=2)),
-                  "cooldowns": {"claude": {"until": rc.iso(T0 - timedelta(hours=1)), "source": "message",
-                                           "reason": "quota", "since": rc.iso(T0 - timedelta(hours=6))}}})
-    env.store.save(state, T0)
-    env.head(EAI, agent="codex")
-    assert env.run()[0] == "idle"
-    assert env.relay.launches[0]["agent"] == "codex"
-    # No one-second wake/save spin on Claude's long-expired cooldown while Codex stays capped.
-    assert sum(1 for seconds in env.clock.slept if seconds <= 1.0) <= 1
-    assert env.relay.launches[0]["at"] >= codex_reset
-
+    # The release waives the reviewed gate only: Claude's login failure still takes Claude out.
+    assert result == "idle" and [launch["agent"] for launch in env.relay.launches] == ["codex"]
+    assert sup.state["cooldowns"]["claude"]["reason"] == "auth"
 
 
 # ---------------------------------------------------------------------------
@@ -1932,7 +1714,7 @@ def test_detached_job_in_a_compound_command_stays_in_flight(tmp_path: Path) -> N
     turn = write_turn(tmp_path / "s", [tool_use("x", "Bash", command=command), tool_result("x"), *QUOTA])
     report = rc.classify_turn(turn)
     assert [c.label for c in report.in_flight] == ["git push &"]
-    assert rc.gate(report, fingerprint_changed=None) == "effects_uncertain"
+    assert any(rc.external(c) for c in report.in_flight)
 
 
 
@@ -2038,357 +1820,8 @@ def test_review_10_write_and_launch_forms(command: str, kind: str) -> None:
 # Spec 197: autonomous incident reconciliation of uncertain operations
 
 
-NONCE_RE = r"\[relay-continuity attempt (rc-[0-9TZ]+-[0-9a-f]+)\]"
-
-
-def diag_reply(*entries: tuple[str, str], commands: tuple[str, ...] = ("git log --oneline -5",),
-               nonce: str | None = None, line: bool = True) -> Any:
-    """A Codex diagnostic turn: read-only commands, then the verdict line for its own nonce."""
-    def events(task: str) -> list[dict[str, Any]]:
-        import re
-        own = nonce or re.search(NONCE_RE, task).group(1)  # type: ignore[union-attr]
-        verdict = {"nonce": own, "operations": [{"id": i, "verdict": v, "evidence": f"checked {i}"} for i, v in entries]}
-        text = "Findings above.\n" + (f"RECONCILE-VERDICT {json.dumps(verdict)}" if line else "no verdict")
-        items: list[dict[str, Any]] = [{"type": "thread.started"}]
-        for k, cmd in enumerate(commands):
-            items.append({"type": "item.completed", "item": {"id": f"c{k}", "type": "command_execution", "command": cmd}})
-        items += [{"type": "item.completed", "item": {"id": "m", "type": "agent_message", "text": text}},
-                  {"type": "turn.completed"}]
-        return items
-    return events
-
-
-class FakeDiagnostic:
-    """Read-only Codex runner double: each launch consumes one scripted reply and writes its transcript where
-    the real runner would (`<control>/diagnostics/<nonce>/turns/turn-001`)."""
-
-    def __init__(self, env: Env, script: list[Any]):
-        self.env = env
-        self.script = list(script)
-        self.launches: list[dict[str, Any]] = []
-        self.problem: str | None = None
-        self.layout = rc.ReadOnlyCodex(env.repo, env.store.root)
-
-    def preflight(self) -> str | None:
-        return self.problem
-
-    def start(self, nonce: str, prompt: str) -> FakeProc:
-        if not self.script:
-            raise AssertionError("unexpected diagnostic launch")
-        self.launches.append({"nonce": nonce, "task": prompt, "at": self.env.clock.now()})
-        self._current = (nonce, prompt, self.script.pop(0))
-        return FakeProc(None)
-
-    def finish(self, proc: FakeProc, nonce: str, timeout: float) -> str:
-        _, prompt, events = self._current
-        self.write(nonce, events(prompt) if callable(events) else events, prompt)
-        return ""
-
-    def write(self, nonce: str, events: list[dict[str, Any]], prompt: str = "diagnosis") -> None:
-        write_turn(self.layout.root / nonce, events, agent="codex", prompt=prompt)
-
-    def locate(self, nonce: str) -> Path | None:
-        return self.layout.locate(nonce)
-
-    def find_pid(self, nonce: str) -> int | None:
-        return None
-
-
-def reconciling(tmp_path: Path, script: list[Any], *, diag: list[Any] | None = None, probe: Any = None) -> Env:
-    env = Env(tmp_path, script)
-    env.reconcile = True
-    env.relay.readings = room(env, "codex")
-    env.host.probe = probe or (lambda call: None)
-    env.host.evidence = lambda report: "### Worktrees\nworktree /r"
-    env.diag = FakeDiagnostic(env, diag or [])  # type: ignore[attr-defined]
-    env.host.diagnostic = env.diag  # type: ignore[attr-defined]
-    return env
-
-
 def journal(env: Env) -> list[dict[str, Any]]:
     return [json.loads(line) for line in env.store.journal_path.read_text().splitlines()]
-
-
-def test_quota_with_a_probed_completed_push_hands_off_to_codex_without_repeating(tmp_path: Path) -> None:
-    env = reconciling(tmp_path, [("codex", CODEX_SUCCESS)],
-                      probe=lambda call: ("completed", "remote branch b is at the pushed commit abc"))
-    env.head([IN_FLIGHT["git push"], *QUOTA])
-    result, sup = env.run()
-    assert result == "idle"
-    assert [launch["agent"] for launch in env.relay.launches] == ["codex"]  # no diagnosis was needed
-    task = env.relay.launches[0]["task"]
-    assert "git push: COMPLETED: it took effect; do not repeat it" in task and "probe:" in task
-    assert sup.state["cooldowns"]["claude"]["reason"] == "quota"
-    settled = [r for r in journal(env) if r.get("event") == "reconcile"]
-    assert settled[0]["result"] == "settled" and settled[0]["verdicts"][0]["verdict"] == "completed"
-    assert any("JarvisOS continuity: uncertain operations settled" in e for e in env.events())
-    assert sup.state["reconcile"] is None
-
-
-def test_interrupted_completed_subagent_is_settled_by_a_codex_diagnosis_not_repeated(tmp_path: Path) -> None:
-    env = reconciling(tmp_path, [("codex", CODEX_SUCCESS)], diag=[diag_reply(("x", "completed"))])
-    env.head([IN_FLIGHT["subagent"], *QUOTA])
-    result, sup = env.run()
-    assert result == "idle"
-    (diag,), (cont,) = env.diag.launches, env.relay.launches
-    assert "Read-only incident diagnosis" in diag["task"] and "read-only sandbox" in diag["task"]
-    assert "id `x`: [unknown] Agent" in diag["task"] and "### Worktrees" in diag["task"]
-    assert cont["agent"] == "codex" and cont["parent"] == HEAD  # the diagnosis never becomes the chain head
-    assert "Agent: COMPLETED" in cont["task"] and "diagnostic codex" in cont["task"]
-    assert sup.state["diagnostics"] == [diag["nonce"]]
-    assert sup.state["chain"] == [HEAD, "20261018-000001-bbbbbb"]
-    events = [(r.get("event"), r.get("purpose")) for r in journal(env)]
-    assert events.count(("launch", "diagnostic")) == 1 and events.count(("settle", "diagnostic")) == 1
-
-
-def test_running_background_worker_is_awaited_and_never_duplicated(tmp_path: Path) -> None:
-    worker = tool_use("x", "Bash", command="nohup ./scripts/lane.sh > lane.log &")
-    env = reconciling(tmp_path, [("codex", CODEX_SUCCESS)], diag=[diag_reply(("x", "completed"))])
-    env.head([worker, tool_result("x"), *QUOTA])
-    checks = {"n": 0}
-
-    def live_work(since: datetime) -> list[Any]:
-        checks["n"] += 1
-        running = checks["n"] <= 3
-        launched_while_running.append(running and bool(env.relay.launches or env.diag.launches))
-        return [work("proc:9:9:w", "process lane.sh")] if running else []
-    launched_while_running: list[bool] = []
-    env.host.live_work = live_work
-    result, _ = env.run()
-    assert result == "idle" and not any(launched_while_running)
-    assert sum(env.clock.slept) >= 3 * env.limits.reconcile_poll  # waited for the worker to end
-    assert len(env.diag.launches) == 1 and [launch["agent"] for launch in env.relay.launches] == ["codex"]
-
-
-def test_worker_outliving_the_reconcile_bound_holds_without_launching(tmp_path: Path) -> None:
-    env = reconciling(tmp_path, [])
-    env.limits = rc.Limits(reconcile_wait=timedelta(minutes=20))
-    env.head([tool_use("x", "Bash", command="nohup ./scripts/lane.sh &"), tool_result("x"), *QUOTA])
-    env.host.live_work = lambda since: [work("proc:9:9:w", "process lane.sh")]
-    result, sup = env.run()
-    assert result == "held" and sup.state["hold"]["reason"] == "live_work"
-    assert env.relay.launches == []
-
-
-def test_definitely_unstarted_merge_is_resumed_safely(tmp_path: Path) -> None:
-    env = reconciling(tmp_path, [("codex", CODEX_SUCCESS)],
-                      probe=lambda call: ("not_started", "PR #1 is still open: the merge did not take effect"))
-    env.head([IN_FLIGHT["gh pr merge"], *QUOTA])
-    assert env.run()[0] == "idle"
-    task = env.relay.launches[0]["task"]
-    assert "gh pr merge: NOT STARTED: it did not take effect; perform it only if still required" in task
-    assert "approval gates, review requirements and authority boundaries are exactly as before" in task
-
-
-@pytest.mark.parametrize("verdict", ["not_started", "unresolved"])
-def test_genuinely_ambiguous_external_effect_remains_held(tmp_path: Path, verdict: str) -> None:
-    # A model alone can never establish that a PR comment was not posted.
-    env = reconciling(tmp_path, [], diag=[diag_reply(("x", verdict))])
-    env.head([tool_use("x", "Bash", command="gh pr comment 7 --body done"), *QUOTA])
-    result, sup = env.run()
-    assert result == "held" and sup.state["hold"]["reason"] == "reconcile_unresolved"
-    assert len(env.diag.launches) == 1 and env.relay.launches == []  # no continuation
-    assert sup.state["hold"]["turn"] == f"{HEAD}/turn-001"
-    record = [r for r in journal(env) if r.get("event") == "reconcile"][-1]
-    assert record["verdicts"][0]["verdict"] == "unresolved"
-    result, _ = env.run()  # a reconciliation hold is never re-examined automatically
-    assert result == "held" and len(env.diag.launches) == 1 and env.relay.launches == []
-
-
-def test_local_write_not_started_from_a_diagnosis_is_admitted(tmp_path: Path) -> None:
-    env = reconciling(tmp_path, [("codex", CODEX_SUCCESS)], diag=[diag_reply(("x", "not_started"))])
-    env.head([tool_use("x", "Bash", command="cp a.py b.py"), *QUOTA])
-    assert env.run()[0] == "idle"
-    assert "cp: NOT STARTED" in env.relay.launches[0]["task"]
-
-
-def _diag_pending(env: Env, nonce: str, pid: int | None) -> None:
-    env.head([IN_FLIGHT["subagent"], *QUOTA])
-    state = rc.default_state()
-    state.update({"phase": "running", "head_session": HEAD, "chain": [HEAD], "agent": "claude",
-                  "permissions_digest": "perm0", "permissions_pinned": True,
-                  "reconcile": {"turn": f"{HEAD}/turn-001", "since": rc.iso(T0), "attempts": 1, "verdicts": {},
-                                "diag": {"nonce": nonce, "agent": "codex", "parent": HEAD, "started_at": rc.iso(T0),
-                                         "pid": pid, "pid_start": 42, "fingerprint": "fp0", "attempt": 1,
-                                         "ops": ["x"]}}})
-    env.store.save(state, T0)
-    env.store.journal({"event": "launch", "purpose": "diagnostic", "nonce": nonce, "agent": "codex"})
-
-
-def test_supervisor_restart_during_diagnosis_adopts_it_without_a_duplicate(tmp_path: Path) -> None:
-    nonce = "rc-20261018T080000Z-0d1a9000"
-    env = reconciling(tmp_path, [("codex", CODEX_SUCCESS)])
-    _diag_pending(env, nonce, pid=4242)
-    env.alive[4242] = 2
-    env.relay.finish_pending = lambda: env.diag.write(nonce, diag_reply(("x", "completed"), nonce=nonce)(""))  # type: ignore[attr-defined]
-    result, sup = env.run()
-    assert result == "idle"
-    assert env.diag.launches == [] and len(env.relay.launches) == 1
-    assert "Agent: COMPLETED" in env.relay.launches[0]["task"]
-    assert sup.state["diagnostics"] == [nonce]
-
-
-def test_restart_with_a_lost_diagnosis_holds_and_never_relaunches(tmp_path: Path) -> None:
-    env = reconciling(tmp_path, [])
-    _diag_pending(env, "rc-20261018T080000Z-0d1a9001", pid=4243)  # dead, and no transcript carries its nonce
-    result, sup = env.run()
-    assert result == "held" and sup.state["hold"]["reason"] == "attempt_unresolved"
-    assert env.relay.launches == [] and env.diag.launches == []
-    assert env.run()[0] == "held" and env.diag.launches == []
-
-
-def test_diagnosis_past_its_time_bound_is_terminated_on_restart(tmp_path: Path) -> None:
-    env = reconciling(tmp_path, [])
-    _diag_pending(env, "rc-20261018T080000Z-0d1a9002", pid=4244)
-    env.clock.t = T0 + env.limits.reconcile_timeout + timedelta(seconds=1)
-    killed: list[int] = []
-    env.alive[4244] = 3
-    env.relay.finish_pending = lambda: None  # type: ignore[attr-defined]
-    env.host.terminate = killed.append
-    result, _ = env.run()
-    assert killed == [4244] and result == "held" and env.relay.launches == []
-
-
-def test_insufficient_permissions_are_reported_not_bypassed(tmp_path: Path) -> None:
-    env = reconciling(tmp_path, [], diag=[diag_reply(("x", "insufficient_permissions"))])
-    env.head([IN_FLIGHT["subagent"], *QUOTA])
-    result, sup = env.run()
-    assert result == "held" and sup.state["hold"]["reason"] == "reconcile_insufficient_permissions"
-    assert len(env.diag.launches) == 1 and env.relay.launches == []
-    assert any("reconcile_insufficient_permissions" in text for text in env.sent)
-    # A refused probe is reported the same way, with no diagnosis at all.
-    env2 = reconciling(tmp_path / "b", [], probe=lambda call: ("insufficient_permissions", "`gh pr view` was refused"))
-    env2.head([IN_FLIGHT["gh pr merge"], *QUOTA])
-    assert env2.run()[0] == "held" and env2.store.load()["hold"]["reason"] == "reconcile_insufficient_permissions"
-    assert env2.relay.launches == [] and env2.diag.launches == []
-
-
-@pytest.mark.parametrize("violation", ["write", "fingerprint"])
-def test_a_diagnosis_that_is_not_read_only_is_void(tmp_path: Path, violation: str) -> None:
-    # Defence in depth behind the sandbox: a recorded write attempt or a moved repository voids the findings.
-    commands = ("git log", "git commit -am fix") if violation == "write" else ("git log",)
-    env = reconciling(tmp_path, [], diag=[diag_reply(("x", "completed"), commands=commands)])
-    env.head([IN_FLIGHT["subagent"], *QUOTA])
-    if violation == "fingerprint":
-        env.host.fingerprint = lambda: "fp-after" if env.diag.launches else "fp0"
-    result, sup = env.run()
-    assert result == "held" and sup.state["hold"]["reason"] == "reconcile_failed"
-    assert len(env.diag.launches) == 1 and env.relay.launches == []
-
-
-def test_diagnosis_without_a_verdict_is_retried_within_its_bound_then_holds(tmp_path: Path) -> None:
-    env = reconciling(tmp_path, [], diag=[diag_reply(("x", "completed"), line=False),
-                                          diag_reply(("x", "completed"), nonce="rc-other")])
-    env.head([IN_FLIGHT["subagent"], *QUOTA])
-    result, sup = env.run()
-    assert result == "held" and sup.state["hold"]["reason"] == "reconcile_failed"
-    assert len(env.diag.launches) == env.limits.reconcile_attempts == 2 and env.relay.launches == []
-
-
-def test_a_stale_codex_reading_does_not_block_the_diagnosis(tmp_path: Path) -> None:
-    # The 2026-10-19 commissioning shape: Relay refreshes Codex's reading only when Codex runs, so an idle host
-    # shows a reading hours old. Waiting for a fresh one would wait until `max_wait`; the diagnosis runs instead.
-    env = reconciling(tmp_path, [("codex", CODEX_SUCCESS)], diag=[diag_reply(("x", "completed"))])
-
-    def readings() -> dict[str, Any]:
-        now = env.clock.now()
-        if env.diag.launches:  # Codex has run: its reading is fresh again
-            return {"codex": reading("codex", 5, now + timedelta(hours=5), now)}
-        return {"codex": reading("codex", 88, T0 - timedelta(hours=1), T0 - timedelta(hours=5))}
-    env.relay.readings = readings
-    env.head([IN_FLIGHT["subagent"], *QUOTA])
-    result, sup = env.run()
-    assert result == "idle"
-    (diag,) = env.diag.launches
-    assert diag["at"] - T0 < timedelta(minutes=1)  # no wait for a reading that would never come
-    assert [launch["agent"] for launch in env.relay.launches] == ["codex"]
-    assert [r["result"] for r in journal(env) if r.get("event") == "reconcile"] == ["settled"]
-
-
-def test_the_diagnosis_prompt_names_the_verifiable_commands_and_forbids_inline_interpreters() -> None:
-    # Commissioning 2026-10-19: Codex parsed the transcript with `python3 -` heredocs, which the classifier
-    # cannot verify as read-only, voiding an otherwise sound diagnosis. The prompt now says so up front.
-    report = rc.TurnReport(outcome="quota", agent="claude", detail="")
-    text = rc.diagnostic_prompt(report, [], "")
-    assert "Use only these commands" in text and "`jq`" in text
-    assert "Do not run any other interpreter or script" in text and "`python3 -`" in text
-    assert "run.log" in text  # where a background launch leaves its traces
-
-
-def test_an_unconfirmed_codex_that_keeps_losing_to_quota_is_bounded_then_held(tmp_path: Path) -> None:
-    env = reconciling(tmp_path, [], diag=[CODEX_QUOTA] * 7)
-    env.relay.readings = None  # never a fresh reading: each try is lost to quota and waits for the reported reset
-    env.head([IN_FLIGHT["subagent"], *QUOTA])
-    result, sup = env.run()
-    assert result == "held" and sup.state["hold"]["reason"] == "reconcile_failed"
-    assert len(env.diag.launches) == env.limits.reconcile_provider_failures + 1 and env.relay.launches == []
-    gaps = [b["at"] - a["at"] for a, b in zip(env.diag.launches, env.diag.launches[1:], strict=False)]
-    assert all(gap >= timedelta(minutes=1) for gap in gaps)  # each retry waited for Codex's reported reset
-    assert max(env.clock.slept) <= 5.0  # interruptible sleeps against the clock
-
-
-def test_a_held_uncertain_turn_is_reexamined_from_evidence_on_the_next_run(tmp_path: Path) -> None:
-    # The 2026-10-18 incident shape: Claude quota with an operation in flight, held by spec 195.
-    env = Env(tmp_path, [("codex", CODEX_SUCCESS)])
-    env.relay.readings = room(env, "codex")
-    env.head([IN_FLIGHT["git push"], *QUOTA])
-    assert env.run()[0] == "held" and env.store.load()["hold"]["reason"] == "effects_uncertain"
-    env.reconcile = True
-    env.host.probe = lambda call: ("completed", "remote branch b is at the pushed commit abc")
-    result, sup = env.run()
-    assert result == "idle" and [launch["agent"] for launch in env.relay.launches] == ["codex"]
-    assert any(r.get("event") == "reconcile_resume" for r in journal(env))
-
-
-def test_reexamination_keeps_the_hold_when_the_chain_moved(tmp_path: Path) -> None:
-    env = reconciling(tmp_path, [], probe=lambda call: ("completed", "x"))
-    env.head([IN_FLIGHT["git push"], *QUOTA])
-    state = rc.default_state()
-    state.update({"phase": "held", "head_session": HEAD, "chain": [HEAD], "permissions_digest": "perm0",
-                  "permissions_pinned": True,
-                  "hold": {"reason": "effects_uncertain", "at": rc.iso(T0), "attempt": None, "turn": f"{HEAD}/turn-000"}})
-    env.store.save(state, T0)
-    result, sup = env.run()
-    assert result == "held" and sup.state["hold"]["turn"] == f"{HEAD}/turn-000" and env.relay.launches == []
-
-
-@pytest.mark.parametrize("reason", ["live_work", "auth_failure", "attempt_unresolved", "reconcile_unresolved"])
-def test_other_holds_are_never_released_by_reconciliation(tmp_path: Path, reason: str) -> None:
-    env = reconciling(tmp_path, [], probe=lambda call: ("completed", "x"))
-    env.head([IN_FLIGHT["git push"], *QUOTA])
-    state = rc.default_state()
-    state.update({"phase": "held", "head_session": HEAD, "chain": [HEAD],
-                  "hold": {"reason": reason, "at": rc.iso(T0), "attempt": None, "turn": f"{HEAD}/turn-001"}})
-    env.store.save(state, T0)
-    assert env.run()[0] == "held" and env.relay.launches == []
-
-
-def test_state_written_before_reconciliation_still_loads(tmp_path: Path) -> None:
-    store = rc.Store(tmp_path)
-    state = rc.default_state()
-    assert "reconcile" not in state and "diagnostics" not in state
-    store.save(state, T0)
-    assert store.load()["phase"] == "idle"
-    state["reconcile"] = {"turn": "s/t", "since": rc.iso(T0), "attempts": "1", "verdicts": {}, "diag": None}
-    store.save(state, T0)
-    with pytest.raises(rc.StateCorrupt):
-        store.load()
-
-
-def test_verdict_parsing_is_strict() -> None:
-    ops = [rc.ToolCall("a", "Bash", "external", "gh pr comment", False), rc.ToolCall("b", "Agent", "unknown", "Agent", False)]
-    line = 'RECONCILE-VERDICT {"nonce": "n1", "operations": [{"id": "a", "verdict": "completed", "evidence": "comment 9 exists"}]}'
-    assert rc.parse_verdicts(f"text\n{line}", "n1", ops) == {"a": ("completed", "comment 9 exists"),
-                                                            "b": ("unresolved", "not covered by the diagnosis")}
-    assert rc.parse_verdicts(line, "n2", ops) is None
-    assert rc.parse_verdicts(f"{line}\n{line}", "n1", ops) is None
-    assert rc.parse_verdicts(line.replace("completed", "done"), "n1", ops) is None
-    assert rc.parse_verdicts(line.replace('"a"', '"zz"'), "n1", ops) is None
-    secret = line.replace("comment 9 exists", "token ghp_abcdefghijklmnopqrstuvwxyz0123")
-    assert rc.parse_verdicts(secret, "n1", ops)["a"] == ("unresolved", "the diagnosis gave no usable evidence")
-    assert rc.admit(ops[0], "not_started", "e")[0] == "unresolved"
-    assert rc.admit(ops[0], "completed", "e") == ("completed", "e")
-    assert rc.admit(rc.ToolCall("c", "Edit", "local_write", "Edit a.py", False), "not_started", "e")[0] == "not_started"
 
 
 def fake_runner(responses: dict[str, tuple[int, str]]) -> Any:
@@ -2468,298 +1901,8 @@ def test_file_probes(tmp_path: Path) -> None:
     assert "content" not in json.dumps(rc.TurnReport("crash", "claude", "", calls=[write]).to_json())
 
 
-def test_evidence_bundle_drops_secret_lines(tmp_path: Path) -> None:
-    run = fake_runner({"worktree list": (0, "worktree /r\nghp_abcdefghijklmnopqrstuvwxyz0123"),
-                       "ls-remote": (128, "fatal: could not read Username")})
-    report = rc.TurnReport("quota", "claude", "x", turn_id=f"{HEAD}/turn-006")
-    text = rc.collect_evidence(tmp_path, report, run)
-    assert "worktree /r" in text and "ghp_" not in text and "turn-006/output.jsonl" in text
-    assert "(unavailable: fatal: could not read Username)" in text
-
-
-def test_operation_still_running_remotely_is_rechecked_then_held_within_bounds(tmp_path: Path) -> None:
-    env = reconciling(tmp_path, [], diag=[diag_reply(("x", "running")), diag_reply(("x", "running"))])
-    env.head([IN_FLIGHT["subagent"], *QUOTA])
-    result, sup = env.run()
-    assert result == "held" and sup.state["hold"]["reason"] == "reconcile_unresolved"
-    assert len(env.diag.launches) == 2 and sum(env.clock.slept) >= env.limits.reconcile_poll
-
-
-def test_running_then_completed_continues_once(tmp_path: Path) -> None:
-    env = reconciling(tmp_path, [("codex", CODEX_SUCCESS)],
-                      diag=[diag_reply(("x", "running")), diag_reply(("x", "completed"))])
-    env.head([IN_FLIGHT["subagent"], *QUOTA])
-    assert env.run()[0] == "idle" and len(env.diag.launches) == 2 and len(env.relay.launches) == 1
-
-
-def test_reexamination_never_rewrites_a_held_chain_for_another_session(tmp_path: Path) -> None:
-    env = Env(tmp_path, [])
-    env.head([IN_FLIGHT["git push"], *QUOTA])
-    assert env.run()[0] == "held"
-    before = env.store.load()
-    env.reconcile = True
-    env.host.probe = lambda call: ("completed", "x")
-    env.head(SUCCESS, sid="20261018-090000-ffffff")
-    result, sup = env.run("20261018-090000-ffffff")
-    assert result == "held" and env.relay.launches == []
-    after = env.store.load()
-    assert after["hold"] == before["hold"] and after["chain"] == before["chain"] == [HEAD]
-
-
-def test_repeated_reexamination_is_quiet_and_not_a_new_failure(tmp_path: Path) -> None:
-    # A truncated stream after a repository change holds `effects_uncertain` with nothing to reconcile: each
-    # re-examination reaches the same hold, which is neither re-announced nor counted as a new failure.
-    env = reconciling(tmp_path, [])
-    env.head([tool_use("r", "Read", file_path="/x"), tool_result("r")])
-    state = rc.default_state()
-    state.update({"phase": "held", "head_session": HEAD, "chain": [HEAD], "permissions_digest": "perm0",
-                  "permissions_pinned": True, "counters": {"consecutive_failures": 1, "transient_streak": 0,
-                                                           "crash_retries": 0},
-                  "last_attempt": {"nonce": "rc-1", "agent": "claude", "attempt": 1, "fingerprint": "fp-before"},
-                  "hold": {"reason": "effects_uncertain", "at": rc.iso(T0), "attempt": 1, "turn": f"{HEAD}/turn-001"}})
-    env.store.save(state, T0)
-    for _ in range(3):
-        assert env.run()[0] == "held"
-    state = env.store.load()
-    assert state["hold"]["reason"] == "effects_uncertain" and env.relay.launches == []
-    assert state["counters"]["consecutive_failures"] == 1
-    assert not any("HOLD" in text for text in env.sent)
-
-
-def test_moved_chain_hold_is_not_reexamined_again(tmp_path: Path) -> None:
-    env = reconciling(tmp_path, [], probe=lambda call: ("completed", "x"))
-    env.head([IN_FLIGHT["git push"], *QUOTA])
-    state = rc.default_state()
-    state.update({"phase": "held", "head_session": HEAD, "chain": [HEAD], "permissions_digest": "perm0",
-                  "permissions_pinned": True,
-                  "hold": {"reason": "effects_uncertain", "at": rc.iso(T0), "attempt": None, "turn": f"{HEAD}/turn-000"}})
-    env.store.save(state, T0)
-    assert env.run()[0] == "held" and env.store.load()["hold"]["resumable"] is False
-    resumes = sum(r.get("event") == "reconcile_resume" for r in journal(env))
-    assert env.run()[0] == "held" and sum(r.get("event") == "reconcile_resume" for r in journal(env)) == resumes
-
-
-def test_claude_is_never_the_diagnostic_agent(tmp_path: Path) -> None:
-    env = reconciling(tmp_path, [("claude", SUCCESS)], diag=[diag_reply(("x", "completed"))])
-    env.relay.readings = room(env, "claude")  # only Claude has room; Codex is unconfirmed
-    env.head([IN_FLIGHT["subagent"], *EAI])
-    result, sup = env.run()
-    assert result == "idle" and len(env.diag.launches) == 1  # the read-only Codex runner, not Relay
-    assert [launch["agent"] for launch in env.relay.launches] == ["claude"]  # Claude only continues the chain
-    assert not any("RECONCILE-VERDICT" in launch["task"] for launch in env.relay.launches)
-
-
-def test_waived_gate_settles_an_abandoned_diagnosis(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    env = reconciling(tmp_path, [("codex", CODEX_SUCCESS)])
-    _diag_pending(env, "rc-20261018T080000Z-0d1a9003", pid=None)
-    state = env.store.load()
-    state.update({"phase": "held", "hold": {"reason": "reconcile_failed", "at": rc.iso(T0), "attempt": 1,
-                                            "turn": f"{HEAD}/turn-001"}})
-    env.store.save(state, T0)
-    monkeypatch.setenv("RELAY_CONTINUITY_DIR", str(env.store.root))
-    monkeypatch.setattr(rc, "make_host", lambda repo: env.host)
-    monkeypatch.setattr(rc, "repo_root", lambda: env.repo)
-    assert rc.main(["release", "--note", "checked the diagnosis session by hand; nothing ran"]) == 0
-    assert env.run()[0] == "idle" and len(env.relay.launches) == 1
-    assert rc.unsettled_nonces(env.store.journal_path) == []
-    assert env.run()[0] == "idle"
-
-
-
 # ---------------------------------------------------------------------------
 # Spec 197 review wave 2: durable provider wait and pre-execution read-only enforcement
-
-
-def test_codex_quota_during_reconciliation_waits_for_the_reported_reset_then_diagnoses_once(tmp_path: Path) -> None:
-    env = reconciling(tmp_path, [("codex", CODEX_SUCCESS)], diag=[diag_reply(("x", "completed"))])
-    reset = T0 + timedelta(hours=3)
-    env.relay.readings = room(env, exhausted={"codex": reset, "claude": T0 + timedelta(hours=6)})
-    env.head([IN_FLIGHT["subagent"], *QUOTA])
-    result, sup = env.run()
-    assert result == "idle"
-    (diag,) = env.diag.launches
-    assert reset <= diag["at"] <= reset + timedelta(minutes=1)  # woke at the provider-reported reset
-    assert [launch["agent"] for launch in env.relay.launches] == ["codex"] and env.relay.launches[0]["at"] >= reset
-    assert any("waiting for codex" in line for line in env.logs)
-    assert any("no coordinator provider available" in e for e in env.events())
-
-
-def test_codex_quota_with_uncertain_effects_reconciles_before_claude_takes_over(tmp_path: Path) -> None:
-    # 2026-10-22: Codex hit its limit with an unknown command in flight while Claude had room. The diagnosis
-    # (read-only Codex only) settles the operation first; only then does Claude, not Codex, continue.
-    env = reconciling(tmp_path, [("claude", SUCCESS)], diag=[diag_reply(("x", "completed"))])
-    reset = T0 + timedelta(hours=2)
-    env.relay.readings = None  # no usable usage metadata at all
-    env.head([IN_FLIGHT["unknown script"], *CODEX_QUOTA], agent="codex")
-    env.store.root.mkdir(parents=True, exist_ok=True)
-    state = rc.default_state()
-    state.update({"head_session": HEAD, "chain": [HEAD], "agent": "codex", "permissions_digest": "perm0",
-                  "permissions_pinned": True, "last_switch_at": rc.iso(T0 - timedelta(minutes=5)),
-                  "cooldowns": {"codex": {"until": rc.iso(reset), "source": "message", "reason": "quota",
-                                          "since": rc.iso(T0)}}})
-    env.store.save(state, T0)
-    result, sup = env.run()
-    assert result == "idle"
-    (diag,) = env.diag.launches
-    (launch,) = env.relay.launches
-    assert diag["at"] >= reset and launch["agent"] == "claude" and launch["at"] >= diag["at"]
-    assert "COMPLETED: it took effect; do not repeat it" in launch["task"]
-
-
-def test_diagnosis_lost_to_codex_quota_is_retried_after_reset_without_using_an_attempt(tmp_path: Path) -> None:
-    env = reconciling(tmp_path, [("codex", CODEX_SUCCESS)], diag=[CODEX_QUOTA, diag_reply(("x", "completed"))])
-    reset = T0 + timedelta(hours=2)
-
-    def readings() -> dict[str, Any]:
-        now = env.clock.now()
-        capped = env.diag.launches and now < reset
-        return {"codex": reading("codex", 100 if capped else 5, reset if capped else now + timedelta(hours=5), now),
-                "claude": reading("claude", 100, T0 + timedelta(hours=8), now)}
-    env.relay.readings = readings
-    env.head([IN_FLIGHT["subagent"], *QUOTA])
-    assert env.run()[0] == "idle"
-    first, second = env.diag.launches
-    assert second["at"] >= reset and first["nonce"] != second["nonce"]
-    assert len(env.relay.launches) == 1
-
-
-def test_restart_during_the_provider_wait_resumes_it_without_a_duplicate(tmp_path: Path) -> None:
-    env = reconciling(tmp_path, [("codex", CODEX_SUCCESS)], diag=[diag_reply(("x", "completed"))])
-    reset = T0 + timedelta(hours=3)
-    env.relay.readings = room(env, exhausted={"codex": reset, "claude": T0 + timedelta(hours=6)})
-    env.head([IN_FLIGHT["subagent"], *QUOTA])
-
-    def stop_during_wait(seconds: float) -> None:  # the machine goes down while the supervisor sleeps
-        env.store.stop_path.write_text("x")
-        env.clock.sleep(seconds)
-    env.host.sleep = stop_during_wait
-    assert env.run()[0] == "stopped"
-    saved = env.store.load()["reconcile"]
-    assert saved["waiting_since"] == rc.iso(T0) and saved["wake_at"] == rc.iso(reset) and env.diag.launches == []
-    env.store.stop_path.unlink()
-    env.host.sleep = env.clock.sleep
-    assert env.run()[0] == "idle"
-    assert len(env.diag.launches) == 1 and env.diag.launches[0]["at"] >= reset and len(env.relay.launches) == 1
-
-
-def test_codex_spend_cap_during_reconciliation_holds_for_the_maintainer(tmp_path: Path) -> None:
-    env = reconciling(tmp_path, [], diag=[[{"type": "thread.started"},
-                                          {"type": "turn.failed", "error": {"message": "credit balance is too low"}}]])
-    env.head([IN_FLIGHT["subagent"], *QUOTA])
-    result, sup = env.run()
-    assert result == "held" and sup.state["hold"]["reason"] == "no_provider_available"
-    assert len(env.diag.launches) == 1 and env.relay.launches == []
-
-
-def test_codex_authentication_failure_in_a_diagnosis_holds(tmp_path: Path) -> None:
-    env = reconciling(tmp_path, [], diag=[[{"type": "thread.started"},
-                                          {"type": "turn.failed", "error": {"message": "401 Unauthorized: please run /login"}}]])
-    env.head([IN_FLIGHT["subagent"], *QUOTA])
-    result, sup = env.run()
-    assert result == "held" and sup.state["hold"]["reason"] == "auth_failure" and env.relay.launches == []
-
-
-def test_provider_lost_diagnoses_are_bounded(tmp_path: Path) -> None:
-    eai = [{"type": "thread.started"}, {"type": "turn.failed", "error": {"message": "stream disconnected EAI_AGAIN"}}]
-    env = reconciling(tmp_path, [], diag=[eai] * 7)
-    env.head([IN_FLIGHT["subagent"], *QUOTA])
-    result, sup = env.run()
-    assert result == "held" and sup.state["hold"]["reason"] == "reconcile_failed"
-    assert len(env.diag.launches) == env.limits.reconcile_provider_failures + 1
-
-
-@pytest.mark.parametrize("problem", ["codex is not installed", "codex read-only sandbox did not block a write"])
-def test_no_diagnosis_runs_without_a_verified_read_only_sandbox(tmp_path: Path, problem: str) -> None:
-    env = reconciling(tmp_path, [], diag=[diag_reply(("x", "completed"))])
-    env.diag.problem = problem
-    env.head([IN_FLIGHT["subagent"], *QUOTA])
-    result, sup = env.run()
-    assert result == "held" and sup.state["hold"]["reason"] == "reconcile_no_sandbox"
-    assert env.diag.launches == [] and env.relay.launches == []
-    env2 = reconciling(tmp_path / "b", [])
-    env2.host.diagnostic = None
-    env2.head([IN_FLIGHT["subagent"], *QUOTA])
-    assert env2.run()[0] == "held" and env2.store.load()["hold"]["reason"] == "reconcile_no_sandbox"
-
-
-FAKE_CODEX = """#!/bin/sh
-# Test double for the codex CLI: records its argv and stdin, behaves per $FAKE_CODEX_MODE.
-printf '%s\n' "$@" > "$FAKE_CODEX_LOG.argv"
-if [ "$1" = exec ] && [ "$2" = --help ]; then
-  echo "--sandbox <SANDBOX_MODE> [possible values: read-only, workspace-write] --ignore-user-config --ignore-rules"
-  echo "--ephemeral --json --output-last-message"
-  exit 0
-fi
-if [ "$1" = sandbox ]; then
-  shift; while [ "$1" != -- ]; do shift; done; shift
-  if [ "$FAKE_CODEX_MODE" = leaky ]; then exec "$@"; fi
-  echo READONLY-OK; exit 0
-fi
-cat > "$FAKE_CODEX_LOG.stdin"
-last=""; prev=""
-for a in "$@"; do [ "$prev" = -o ] && last="$a"; prev="$a"; done
-echo '{"type":"thread.started"}'
-echo '{"type":"turn.completed"}'
-printf 'RECONCILE-VERDICT {}\n' > "$last"
-"""
-
-
-@pytest.fixture
-def fake_codex(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    binary = tmp_path / "bin" / "codex"
-    binary.parent.mkdir()
-    binary.write_text(FAKE_CODEX)
-    binary.chmod(0o755)
-    monkeypatch.setenv("FAKE_CODEX_LOG", str(tmp_path / "codex"))
-    return binary
-
-
-def test_read_only_codex_launch_enforces_the_sandbox_before_execution(tmp_path: Path, fake_codex: Path) -> None:
-    repo = tmp_path / "repo"
-    (repo / ".git").mkdir(parents=True)
-    runner = rc.ReadOnlyCodex(repo, tmp_path / "control", binary=str(fake_codex))
-    assert runner.preflight() is None
-    proc = runner.start("rc-1", "diagnose this")
-    runner.finish(proc, "rc-1", 30)
-    argv = (tmp_path / "codex.argv").read_text().splitlines()
-    assert argv[:3] == ["exec", "--sandbox", "read-only"]
-    for required in ("--ignore-user-config", "--ignore-rules", "--ephemeral", "--json", 'approval_policy="never"',
-                     "mcp_servers={}"):
-        assert required in argv
-    assert not any("dangerously" in a or a in ("--full-auto", "--approve-for-me", "--add-dir") for a in argv)
-    assert argv[-1] == "-" and (tmp_path / "codex.stdin").read_text() == "diagnose this"
-    turn = runner.locate("rc-1")
-    assert turn is not None and rc.classify_turn(turn).outcome == "success"
-    assert rc.final_text(turn).startswith("RECONCILE-VERDICT")
-    with pytest.raises(FileExistsError):
-        runner.start("rc-1", "again")  # a nonce is launched at most once
-
-
-def test_preflight_refuses_a_sandbox_that_lets_a_write_through(tmp_path: Path, fake_codex: Path,
-                                                                monkeypatch: pytest.MonkeyPatch) -> None:
-    repo = tmp_path / "repo"
-    (repo / ".git").mkdir(parents=True)
-    monkeypatch.setenv("FAKE_CODEX_MODE", "leaky")
-    runner = rc.ReadOnlyCodex(repo, tmp_path / "control", binary=str(fake_codex))
-    assert runner.preflight() == "codex read-only sandbox did not block a write"
-    assert not list(runner.root.glob(".canary-*"))
-    assert rc.ReadOnlyCodex(repo, tmp_path / "c2", binary=str(tmp_path / "missing")).preflight() == "codex is not installed"
-
-
-def test_diagnosis_is_found_by_nonce_after_a_restart_before_its_pid_was_recorded(tmp_path: Path) -> None:
-    runner = rc.ReadOnlyCodex(tmp_path, tmp_path / "control")
-    proc_root = tmp_path / "proc"
-    (proc_root / "77").mkdir(parents=True)
-    (proc_root / "77" / "cmdline").write_bytes(b"codex\0exec\0-o\0" + str(runner.turn_dir("rc-9") / "last-message.txt").encode())
-    assert runner.find_pid("rc-9", proc_root) == 77 and runner.find_pid("rc-8", proc_root) is None
-
-
-@pytest.mark.skipif(not os.environ.get("RELAY_CONTINUITY_CODEX"), reason="real codex CLI not configured")
-def test_real_codex_read_only_sandbox_blocks_writes(tmp_path: Path) -> None:
-    """Host evidence: set RELAY_CONTINUITY_CODEX to the codex binary to prove this machine's sandbox."""
-    repo = tmp_path / "repo"
-    subprocess.run(["git", "init", "-q", str(repo)], check=True)
-    assert rc.ReadOnlyCodex(repo, tmp_path / "control").preflight() is None
 
 
 # ---------------------------------------------------------------------------
@@ -2902,35 +2045,11 @@ def test_restart_preserves_the_pending_mission_and_recovers_providers_by_time(tm
     env.clock.t = T0 + timedelta(minutes=10)  # restarted before the resets: the same turn is decided again
     result, sup = run_mission(env, mission, saved["head_session"])  # as `serve` resumes it
     assert result == "idle"
-    # Re-deciding Codex's quota turn kept its recorded cooldown (no extension, no extra backoff strike); Claude,
-    # preferred, recovered by time alone and finished the preserved task.
-    assert [launch["agent"] for launch in env.relay.launches] == ["claude", "codex", "claude"]
+    # Re-deciding Codex's quota turn kept its recorded cooldown (no extension, no extra backoff strike): the
+    # providers recovered by time alone, at the original reset, and finished the preserved task.
+    assert [launch["agent"] for launch in env.relay.launches] == ["claude", "codex", "codex"]
     assert env.relay.launches[2]["at"] == T0 + timedelta(minutes=30)
-    assert sup.state["cooldowns"]["codex"]["until"] == rc.iso(T0 + timedelta(minutes=30))
-    assert sup.state["counters"].get("estimated_codex") == 1
-    assert sup.state["mission"]["done"][0]["agent"] == "claude" and "claude" not in sup.state["cooldowns"]
-
-
-def test_mission_returns_to_claude_after_its_reset_and_dwell(tmp_path: Path) -> None:
-    env = Env(tmp_path)
-
-    reset = T0 + timedelta(hours=14)
-
-    def codex_until_after_reset(_task: str) -> list[dict[str, Any]]:
-        reported_reset = rc.parse_ts(env.store.load()["cooldowns"]["claude"]["until"])
-        assert reported_reset is not None
-        env.clock.t = reported_reset + timedelta(minutes=30)  # the codex task outlasted Claude's reported reset
-        return CODEX_SUCCESS
-    env.relay.script = [("claude", QUOTA), ("codex", codex_until_after_reset), ("claude", SUCCESS)]
-    exhausted, fresh = room(env, "codex", exhausted={"claude": reset}), room(env, "codex", "claude")
-    env.relay.readings = lambda: exhausted() if env.relay.launches else fresh()  # claude runs out during task 1
-    mission = mission_def("first task", "second task")
-    start_mission(env, mission)
-    result, sup = run_mission(env, mission)
-    assert result == "idle"
-    assert [launch["agent"] for launch in env.relay.launches] == ["claude", "codex", "claude"]
-    assert [(d["task"], d["agent"]) for d in sup.state["mission"]["done"]] == [(0, "codex"), (1, "claude")]
-    assert "claude" not in sup.state["cooldowns"]
+    assert [d["task"] for d in sup.state["mission"]["done"]] == [0] and sup.state["mission"]["next"] == 1
 
 
 def test_mission_restart_adopts_running_attempt_and_continues_remaining_tasks(tmp_path: Path) -> None:
@@ -3017,15 +2136,17 @@ def test_mission_uncertain_external_effect_holds_without_advancing(tmp_path: Pat
 
 
 def test_mission_task_check_must_pass_before_advancing(tmp_path: Path) -> None:
-    env = Env(tmp_path, [("claude", SUCCESS)])
+    env = Env(tmp_path, [("claude", SUCCESS), ("claude", SUCCESS)])
     seen: list[dict[str, Any]] = []
-    env.host.task_check = lambda check: seen.append(check) or "PR #846 is OPEN"
-    mission = mission_def("merge 846", "next", checks={0: {"kind": "pr_merged", "pr": 846}})
+    env.host.task_check = lambda check: seen.append(check) or (None if len(seen) > 2 else "PR #846 is OPEN")
+    mission = mission_def("merge 846", checks={0: {"kind": "pr_merged", "pr": 846}})
     start_mission(env, mission)
     result, sup = run_mission(env, mission)
-    assert result == "held" and sup.state["hold"]["reason"] == "task_check_failed"
-    assert seen == [{"kind": "pr_merged", "pr": 846}] and sup.state["mission"]["next"] == 0
-    assert len(env.relay.launches) == 1 and "task_check_failed" in journal_events(env.store)
+    # An unconfirmed claim of completion does not advance the task: it is a checkpoint, resumed until confirmed.
+    assert result == "idle" and sup.state["mission"]["completed_at"]
+    assert seen == [{"kind": "pr_merged", "pr": 846}] * 3 and len(env.relay.launches) == 2
+    events = journal_events(env.store)
+    assert events.index("task_check_failed") < events.index("task_checkpointed") < events.index("task_completed")
 
 
 def test_unchecked_mission_cannot_complete_on_successful_provider_turn(tmp_path: Path) -> None:
@@ -3054,14 +2175,13 @@ def test_mission_checkpoint_stays_pending_until_check_passes(tmp_path: Path) -> 
 
 
 def test_mission_repeated_checkpoints_have_a_finite_bound(tmp_path: Path) -> None:
-    env = Env(tmp_path, [("claude", SUCCESS, "continue"), ("claude", SUCCESS, "continue")],
-              limits=rc.Limits(max_attempts_per_run=2))
-    mission = mission_def("unfinished")
+    env = Env(tmp_path, [("claude", SUCCESS, "continue")] * rc.MAX_TASK_CHECKPOINTS)
+    mission = mission_def("unfinished", checks={0: {"kind": "pr_merged", "pr": 1}})
     start_mission(env, mission)
     result, sup = run_mission(env, mission)
-    assert result == "held" and sup.state["hold"]["reason"] == "circuit_attempts"
+    assert result == "held" and sup.state["hold"]["reason"] == "task_checkpoint_limit"
     assert sup.state["mission"]["next"] == 0
-    assert len(env.relay.launches) == 2
+    assert len(env.relay.launches) == rc.MAX_TASK_CHECKPOINTS
 
 
 def test_check_task_is_read_only_and_bounded_to_the_repository(tmp_path: Path) -> None:
@@ -3277,14 +2397,12 @@ def test_release_mission_hold_and_advance(tmp_path: Path, monkeypatch: pytest.Mo
     root = tmp_path / "control"
     monkeypatch.setenv("RELAY_CONTINUITY_DIR", str(root))
     monkeypatch.setattr(rc, "make_host", lambda repo: env.host)
-    mission = mission_def("merge it", "then this", checks={0: {"kind": "pr_merged", "pr": 1}})
-    _write_mission(root, mission)
-    env.host.task_check = lambda check: "PR #1 is OPEN"
+    mission = mission_def("merge it", "then this", checks={0: None})
+    _write_mission(root, mission)  # task 1 has no completion check: its claimed finish holds
     factory = lambda store, m: rc.Supervisor(store, env.host, env.limits)  # noqa: E731
     assert rc.serve_step(root, factory, conflicts=lambda: [], now=env.clock.now) == f"ran:{mission['id']}:held"
     assert rc.main(["release", "--mission", mission["id"], "--advance", "--note", "merged by hand"]) == 0
     env.relay.script = [("claude", SUCCESS)]
-    env.host.task_check = lambda check: None
     assert rc.serve_step(root, factory, conflicts=lambda: [], now=env.clock.now) == f"ran:{mission['id']}:idle"
     assert "then this" in env.relay.launches[-1]["task"]
     state = rc.mission_store(root, mission["id"]).load()
@@ -3431,17 +2549,6 @@ def test_roadmap_pause_notification_uses_the_fixed_template() -> None:
     assert rc.render("roadmap_paused", {"owner": "control-plane", "reason": "anything else"}) is None
 
 
-def test_owner_ignores_its_own_sandbox_init_in_the_checkout(tmp_path: Path) -> None:
-    proc = fake_proc(tmp_path)
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    # Inside jarvis-sandbox, PID 1 is bwrap with --chdir <checkout>; the owner (2) is its child.
-    add_proc(proc, 1, argv=["bwrap", "--chdir", str(repo), "--", "python3"], cwd=repo, started=T0, ppid=0)
-    add_proc(proc, 2, argv=["python3", "scripts/relay_continuity.py", "serve"], cwd=repo, started=T0, ppid=1)
-    add_proc(proc, 3, argv=["python", "-m", "pytest"], cwd=repo, started=T0, ppid=1)
-    assert [w.label for w in rc.live_processes([repo], T0, {2}, proc_root=proc)] == ["process python"]
-
-
 def test_roadmap_stop_is_never_overwritten_by_a_concurrent_owner_step(
         tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     road = Roadmap(tmp_path, monkeypatch, "r0", "r1")
@@ -3524,7 +2631,7 @@ def legacy_done(task: int, session: str) -> dict[str, Any]:
 
 def test_204_legacy_counted_tasks_are_reopened_not_completed(tmp_path: Path) -> None:
     # The m-20261021T125949Z-2e0739 shape: 3/3 counted on provider returns, no completed_at, owner stopped.
-    env = Env(tmp_path, [("claude", SUCCESS, "continue")])
+    env = Env(tmp_path, [("claude", SUCCESS, "blocked")])
     root = tmp_path / "control"
     mission = mission_def("phase A", "phase B", "phase C", checks={0: None, 1: None, 2: None},
                           mid="m-20261018T070000Z-aaaaaa")
@@ -3540,13 +2647,12 @@ def test_204_legacy_counted_tasks_are_reopened_not_completed(tmp_path: Path) -> 
     store.save(state, T0)
     assert rc.mission_status(store)[0] == "active"  # never read as complete
     factory = lambda s, m: rc.Supervisor(s, env.host, env.limits, sender=env.sender)  # noqa: E731
-    env.limits = rc.Limits(max_attempts_per_run=1)
     assert rc.serve_step(root, factory, conflicts=lambda: [], now=env.clock.now) == f"ran:{mission['id']}:held"
     after = store.load()
     rec = after["mission"]
     assert rec["next"] == 0 and rec["done"] == [] and [d["task"] for d in rec["reopened"]] == [0, 1, 2]
     assert "completed_at" not in rec and "mission_completed" not in journal_events(store)
-    assert "mission_reopened" in journal_events(store) and "task_checkpointed" in journal_events(store)
+    assert "mission_reopened" in journal_events(store) and "task_blocked" in journal_events(store)
     assert "phase A" in env.relay.launches[0]["task"]  # resumed at the first unverified task, on the same chain
     assert env.relay.launches[0]["parent"] == HEAD
     assert "no independent completion check" in env.relay.launches[0]["task"]
@@ -3570,41 +2676,43 @@ def test_204_completed_legacy_mission_is_not_reinterpreted_as_verified(tmp_path:
 
 def test_204_lying_provider_then_merged_evidence_completes_without_relaunch(
         tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    env = Env(tmp_path, [("claude", SUCCESS)])
+    env = Env(tmp_path, [("claude", SUCCESS), ("claude", SUCCESS)])
     root = tmp_path / "control"
-    monkeypatch.setenv("RELAY_CONTINUITY_DIR", str(root))
-    monkeypatch.setattr(rc, "make_host", lambda repo: env.host)
     mission = mission_def("merge it", "then this", checks={0: {"kind": "pr_merged", "pr": 7}})
     _write_mission(root, mission)
-    merged = {"v": False}
-    env.host.task_check = lambda check: None if merged["v"] else "PR #7 is OPEN"
+    calls: list[Any] = []
+    # The provider claims the merge before it happened; the PR merges right after (e.g. once checks pass).
+    env.host.task_check = lambda check: calls.append(check) or ("PR #7 is OPEN" if len(calls) == 1 else None)
     factory = lambda store, m: rc.Supervisor(store, env.host, env.limits)  # noqa: E731
-    assert rc.serve_step(root, factory, conflicts=lambda: [], now=env.clock.now) == f"ran:{mission['id']}:held"
-    store = rc.mission_store(root, mission["id"])
-    assert store.load()["mission"]["next"] == 0 and store.load()["hold"]["reason"] == "task_check_failed"
-    merged["v"] = True  # the PR really merged (e.g. after review)
-    assert rc.main(["release", "--mission", mission["id"], "--note", "PR 7 merged after review"]) == 0
-    env.relay.script = [("claude", SUCCESS)]
     assert rc.serve_step(root, factory, conflicts=lambda: [], now=env.clock.now) == f"ran:{mission['id']}:idle"
+    store = rc.mission_store(root, mission["id"])
+    assert "task_check_failed" in journal_events(store)
     assert len(env.relay.launches) == 2 and "then this" in env.relay.launches[1]["task"]  # task 1 never relaunched
     done = store.load()["mission"]["done"]
     assert [(d["task"], d["outcome"]) for d in done] == [(0, "verified"), (1, "verified")]
 
 
 def test_204_relay_status_routes_but_never_completes(tmp_path: Path) -> None:
-    for status, reason in (("blocked", "task_blocked"), ("needs_review", "task_report_unverified")):
-        env = Env(tmp_path / status, [("claude", SUCCESS, status)])
-        checks: list[Any] = []
-        env.host.task_check = lambda check, seen=checks: seen.append(check)
-        mission = mission_def("do it")
-        start_mission(env, mission)
-        result, sup = run_mission(env, mission)
-        assert result == "held" and sup.state["hold"]["reason"] == reason
-        assert checks == [] and sup.state["mission"]["next"] == 0
+    env = Env(tmp_path / "blocked", [("claude", SUCCESS, "blocked")])
+    checks: list[Any] = []
+    env.host.task_check = lambda check, seen=checks: seen.append(check)
+    mission = mission_def("do it")
+    start_mission(env, mission)
+    result, sup = run_mission(env, mission)
+    assert result == "held" and sup.state["hold"]["reason"] == "task_blocked"
+    assert checks == [] and sup.state["mission"]["next"] == 0
+    # An unknown report is a checkpoint: the task is resumed, and completes only on a checked claim.
+    env = Env(tmp_path / "unknown", [("claude", SUCCESS, "needs_review"), ("claude", SUCCESS)])
+    checks.clear()
+    env.host.task_check = lambda check, seen=checks: seen.append(check)
+    start_mission(env, mission)
+    result, sup = run_mission(env, mission)
+    assert result == "idle" and len(checks) == 1 and len(env.relay.launches) == 2
+    assert "task_report_unverified" in journal_events(env.store)
 
 
 def test_204_unreadable_remote_evidence_fails_closed(tmp_path: Path) -> None:
-    env = Env(tmp_path, [("claude", SUCCESS)])
+    env = Env(tmp_path, [("claude", SUCCESS)] * rc.MAX_TASK_CHECKPOINTS)
 
     def offline(check: dict[str, Any]) -> str | None:
         raise TimeoutError("gh timed out")
@@ -3612,7 +2720,9 @@ def test_204_unreadable_remote_evidence_fails_closed(tmp_path: Path) -> None:
     mission = mission_def("merge it")
     start_mission(env, mission)
     result, sup = run_mission(env, mission)
-    assert result == "held" and sup.state["hold"]["reason"] == "task_check_failed"
+    # Never completed on an unverifiable check; resumed a bounded number of times, then held.
+    assert result == "held" and sup.state["hold"]["reason"] == "task_checkpoint_limit"
+    assert sup.state["mission"]["next"] == 0
     assert "unverifiable" in [json.loads(x) for x in env.store.journal_path.read_text().splitlines()
                               if '"task_check_failed"' in x][0]["problem"]
 
@@ -3711,7 +2821,7 @@ def test_204_submit_refuses_coordinator_cycle_contracts(tmp_path: Path, monkeypa
 
 
 def test_204_legacy_completion_is_reopened_after_a_pending_final_task_settles(tmp_path: Path) -> None:
-    env = Env(tmp_path, [("claude", SUCCESS, "continue")])
+    env = Env(tmp_path, [("claude", SUCCESS, "blocked")])
     root = tmp_path / "control"
     mission = mission_def("first", "second", checks={0: None}, mid="m-20261018T070000Z-aaaaaa")
     _write_mission(root, mission)
@@ -3727,7 +2837,6 @@ def test_204_legacy_completion_is_reopened_after_a_pending_final_task_settles(tm
     store.journal({"event": "launch", "nonce": nonce})
     write_turn(env.relay.sessions_dir() / "20261018-080100-cccccc", SUCCESS,
                prompt=relay_prompt(f"[relay-continuity attempt {nonce}]"))
-    env.limits = rc.Limits(max_attempts_per_run=1)
     factory = lambda s, m: rc.Supervisor(s, env.host, env.limits)  # noqa: E731
     assert rc.serve_step(root, factory, conflicts=lambda: [], now=env.clock.now) == f"ran:{mission['id']}:held"
     rec = store.load()["mission"]
@@ -3783,3 +2892,197 @@ def test_roadmap_hostops_waits_for_all_verified_receipts(tmp_path, monkeypatch):
     assert road.step().startswith("roadmap:submitted:")
     assert not rc.load_roadmap(road.root).get("hostops_wait")
     assert rc.load_roadmap(road.root)["cycle"] == 2
+
+
+# ---------------------------------------------------------------------------
+# Process ownership, migration of the earlier controller's state, and the 2026-10-22 incident
+
+
+REAPER_PROBE = r'''
+import os, subprocess, sys, time
+sys.path.insert(0, sys.argv[1])
+import relay_continuity as rc
+assert rc.become_subreaper()
+# A turn in its own session that leaves detached work behind in every common way, then exits.
+subprocess.run(["sh", "-c", "setsid sleep 301 & nohup sleep 302 >/dev/null 2>&1 & (setsid sh -c 'sleep 303' &) ; "
+                "python3 -c 'import os,time\nif os.fork()==0:\n os.setsid()\n if os.fork()==0:\n  time.sleep(304)\n "
+                "os._exit(0)\nos._exit(0)'; sleep 0.3"], start_new_session=True, check=True)
+time.sleep(0.5)
+left = rc.descendants(os.getpid())
+print(len(left), ",".join(rc.reap_descendants(grace=2.0)), len(rc.descendants(os.getpid())))
+'''
+
+
+@pytest.mark.skipif(not Path("/proc/self/task").exists(), reason="Linux process table")
+def test_subreaper_owns_and_stops_everything_a_turn_detached(tmp_path: Path) -> None:
+    out = subprocess.run([sys.executable, "-c", REAPER_PROBE, str(SCRIPT.parent)], capture_output=True, text=True,
+                         timeout=60)
+    assert out.returncode == 0, out.stderr
+    found, names, after = out.stdout.split()
+    assert int(found) >= 4 and after == "0"  # setsid, nohup, setsid sh and a double fork were all owned
+    assert {"sleep", "python3"} <= set(names.split(","))
+
+
+def test_reaper_escalates_to_sigkill_and_never_reports_arguments(tmp_path: Path) -> None:
+    proc = tmp_path / "proc"
+    (proc / "100" / "task" / "100").mkdir(parents=True)
+    (proc / "100" / "task" / "100" / "children").write_text("200")
+    (proc / "200" / "task" / "200").mkdir(parents=True)
+    (proc / "200" / "task" / "200" / "children").write_text("")
+    (proc / "200" / "stat").write_text("200 (stubborn) S 100")
+    (proc / "200" / "comm").write_text("stubborn --token=x\n")
+    sent: list[int] = []
+    clock = {"t": 0.0}
+
+    def kill(pid: int, sig: int) -> None:
+        sent.append(sig)
+        if sig == signal.SIGKILL:
+            (proc / "200" / "stat").write_text("200 (stubborn) Z 100")
+
+    def sleep(seconds: float) -> None:
+        clock["t"] += seconds
+    names = rc.reap_descendants(1.0, pid=100, proc_root=proc, kill=kill, sleep=sleep, clock=lambda: clock["t"])
+    assert sent[0] == signal.SIGTERM and sent[-1] == signal.SIGKILL and len(sent) <= 12
+    assert names == ["stubborn_--token_x"]  # the name is sanitized; no argv is ever read
+    assert rc.descendants(100, proc) == set()
+
+
+def test_cli_run_refuses_without_process_ownership(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("RELAY_CONTINUITY_DIR", str(tmp_path))
+    monkeypatch.setattr(rc, "become_subreaper", lambda: False)
+    monkeypatch.setattr(rc, "live_conflicts", lambda repo, own: [])
+    assert rc.main(["run", "--session", HEAD, "--no-notify"]) == 2
+
+
+def _held_state(env: Env, reason: str, turn: str = f"{HEAD}/turn-001", **extra: Any) -> None:
+    state = rc.default_state()
+    state.update({"phase": "held", "head_session": HEAD, "chain": [HEAD], "agent": "claude",
+                  "permissions_digest": "perm0", "permissions_pinned": True,
+                  "hold": {"reason": reason, "at": rc.iso(T0), "attempt": None, "turn": turn}, **extra})
+    env.store.save(state, T0)
+
+
+@pytest.mark.parametrize("reason", ["live_work", "reconcile_no_sandbox", "reconcile_failed", "auth_failure",
+                                    "effects_uncertain", "circuit_attempts"])
+def test_holds_the_current_policy_would_not_raise_are_decided_again(tmp_path: Path, reason: str) -> None:
+    env = Env(tmp_path, [("codex", CODEX_SUCCESS)])
+    env.head([tool_use("x", "Bash", command="python3 scripts/capture.py"), *QUOTA])
+    _held_state(env, reason)
+    result, sup = env.run()
+    assert result == "idle" and sup.state["hold"] is None
+    assert [launch["agent"] for launch in env.relay.launches] == ["codex"]
+    assert "hold_redecided" in journal_events(env.store)
+
+
+def test_redecided_hold_on_a_moved_chain_or_another_session_is_kept(tmp_path: Path) -> None:
+    env = Env(tmp_path)
+    env.head(QUOTA)
+    _held_state(env, "live_work", turn=f"{HEAD}/turn-000")  # the chain moved past the held turn
+    result, sup = env.run()
+    assert result == "held" and sup.state["hold"]["reason"] == "live_work" and sup.state["hold"]["resumable"] is False
+    assert env.run()[0] == "held" and env.relay.launches == []
+    env2 = Env(tmp_path / "other")
+    env2.head(QUOTA)
+    _held_state(env2, "live_work")
+    assert env2.run(sid="20261018-090000-cccccc")[0] == "held" and env2.relay.launches == []
+
+
+@pytest.mark.parametrize("reason", ["permissions_changed", "output_missing", "attempt_unresolved", "task_blocked",
+                                    "no_provider_available"])
+def test_holds_that_still_need_review_are_never_decided_again(tmp_path: Path, reason: str) -> None:
+    env = Env(tmp_path)
+    env.head(QUOTA)
+    _held_state(env, reason)
+    assert env.run()[0] == "held" and env.relay.launches == []
+
+
+def test_a_pending_diagnosis_of_the_earlier_controller_is_abandoned_not_a_lost_attempt(tmp_path: Path) -> None:
+    env = Env(tmp_path, [("codex", CODEX_SUCCESS)])
+    env.head([tool_use("x", "Bash", command="./deploy.sh"), *QUOTA])
+    diag = {"nonce": "rc-20261018T075900Z-0d0d0d0d", "agent": "codex", "parent": HEAD, "started_at": rc.iso(T0),
+            "pid": None, "pid_start": None, "fingerprint": "fp0", "attempt": 1, "ops": ["x"]}
+    state = rc.default_state()
+    state.update({"phase": "waiting", "head_session": HEAD, "chain": [HEAD], "agent": "claude",
+                  "permissions_digest": "perm0", "permissions_pinned": True,
+                  "reconcile": {"turn": f"{HEAD}/turn-001", "since": rc.iso(T0), "attempts": 1, "verdicts": {},
+                                "diag": diag}})
+    env.store.save(state, T0)
+    env.store.journal({"event": "launch", "purpose": "diagnostic", "nonce": diag["nonce"]})
+    result, sup = env.run()
+    assert result == "idle" and "reconcile" not in sup.state
+    abandoned = [r for r in journal(env) if r.get("outcome") == "abandoned"]
+    assert abandoned and abandoned[0]["nonce"] == diag["nonce"]
+
+
+def test_incident_20261022_three_interrupted_local_commands_continue_on_recovered_claude(tmp_path: Path) -> None:
+    # The preserved m-20261022T181241Z-3c9f97 shape: Codex ran out of quota while uvicorn, `npm run preview` and
+    # a capture script were running; the earlier controller waited for Codex to diagnose them although Claude's
+    # cooldown had ended. Now the processes are gone and Claude, available, continues the task at once.
+    now = T0
+    env = Env(tmp_path, [("claude", SUCCESS)])
+    started = [{"type": "item.started", "item": {"id": f"i{k}", "type": "command_execution", "command": cmd}}
+               for k, cmd in enumerate(["/bin/bash -lc '.venv/bin/python -m uvicorn app.main:app --port 8199'",
+                                        "/bin/bash -lc 'npm run preview -- --port 4199'",
+                                        "/bin/bash -lc 'python3 /tmp/capture_audit.py'"])]
+    env.head([{"type": "thread.started"}, *started,
+              {"type": "error", "message": "You've hit your usage limit. try again at 10:34 PM."},
+              {"type": "turn.failed", "error": {"message": "You've hit your usage limit. try again at 10:34 PM."}}],
+             agent="codex")
+    mission = mission_def("Continue developing JarvisOS according to the roadmap",
+                          checks={0: {"kind": "coordinator_cycle"}})
+    state = rc.default_state()
+    state.update({
+        "phase": "waiting", "head_session": HEAD, "chain": [HEAD], "agent": "codex", "last_outcome": "quota",
+        "permissions_digest": "perm0", "permissions_pinned": True,
+        "counters": {"consecutive_failures": 1, "crash_retries": 0, "transient_streak": 0},
+        "cooldowns": {"claude": {"reason": "quota", "since": rc.iso(now - timedelta(hours=2)), "source": "limits",
+                                 "until": rc.iso(now - timedelta(minutes=10))},
+                      "codex": {"reason": "quota", "since": rc.iso(now), "source": "limits",
+                                "until": rc.iso(now + timedelta(hours=2))}},
+        "last_attempt": {"agent": "codex", "attempt": 2, "fingerprint": "fp0", "nonce": "rc-x", "task": 0},
+        "mission": {"id": mission["id"], "next": 0, "total": 1, "done": [], "checkpoints": {"0": 1}},
+        "reconcile": {"attempts": 0, "diag": None, "since": rc.iso(now), "turn": f"{HEAD}/turn-001", "verdicts": {},
+                      "waiting_since": rc.iso(now), "wake_at": rc.iso(now + timedelta(hours=2))}})
+    env.store.save(state, now)
+    result, sup = run_mission(env, mission, HEAD)
+    assert result == "idle" and sup.state["hold"] is None
+    assert [(launch["agent"], launch["at"]) for launch in env.relay.launches] == [("claude", now)]
+    task = env.relay.launches[0]["task"]
+    assert task.count(": INTERRUPTED") == 3 and rc.MISSION_HEADER in task
+    # That turn ran under the stopped owner, not this one: the successor is told to check for survivors.
+    assert rc.PROCESSES_UNKNOWN in task and rc.PROCESSES_STOPPED not in task
+    assert sup.state["mission"]["completed_at"] and "reconcile" not in sup.state
+
+
+def test_a_successful_turn_with_an_interrupted_background_push_holds(tmp_path: Path) -> None:
+    push = tool_use("p", "Bash", command="nohup git push origin HEAD >/dev/null 2>&1 &")
+    env = Env(tmp_path)
+    mission = mission_def("first", "second")
+    start_mission(env, mission)
+    env.relay.script = [("claude", [push, tool_result("p"), *SUCCESS])]
+    result, sup = run_mission(env, mission)
+    assert result == "held" and sup.state["hold"]["reason"] == "effects_uncertain"
+    assert len(env.relay.launches) == 1
+
+
+def test_the_next_task_is_told_which_processes_were_stopped(tmp_path: Path) -> None:
+    env = Env(tmp_path, [("claude", SUCCESS), ("claude", SUCCESS)])
+    env.host.reap = lambda: ["node"] if len(env.relay.launches) == 1 else []
+    mission = mission_def("first", "second")
+    start_mission(env, mission)
+    assert run_mission(env, mission)[0] == "idle"
+    assert "stopped processes the previous turn left running (node)" in env.relay.launches[1]["task"]
+
+
+def test_relay_run_ends_when_relay_exits_even_if_a_detached_process_keeps_its_output(tmp_path: Path) -> None:
+    fake = tmp_path / "agent-relay"
+    fake.write_text(f"#!/bin/sh\n(sleep 30 & echo $! > {tmp_path}/pid)\n"
+                    "echo '{\"session_id\": \"20261018-080000-abcdef\"}'\necho note >&2\n")
+    fake.chmod(0o755)
+    adapter = rc.RelayAdapter(tmp_path, binary=str(fake))
+    started = time.monotonic()
+    proc = adapter.start("claude", None, "t", 1)
+    result = adapter.finish(proc)
+    assert time.monotonic() - started < 10  # not held until the detached `sleep 30` closes the inherited output
+    assert result.session_id == "20261018-080000-abcdef" and "note" in result.diagnostics
+    os.kill(int((tmp_path / "pid").read_text()), signal.SIGKILL)  # this test's own leftover
