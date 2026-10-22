@@ -355,7 +355,7 @@ def test_provider_reported_reset_is_preferred_and_validated(tmp_path: Path) -> N
     env.head(QUOTA)
     _, sup = env.run()
     assert sup.state["cooldowns"]["claude"] == {"until": rc.iso(reset), "source": "limits", "reason": "quota",
-                                                "since": rc.iso(T0)}
+                                                "since": rc.iso(T0), "turn": f"{HEAD}/turn-001"}
 
 
 @pytest.mark.parametrize("stale", ["old_as_of", "past_reset"])
@@ -381,8 +381,8 @@ def test_codex_quota_returns_to_preferred_claude(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize("readings", ["none", "failed", "stale", "implausible"])
-def test_quota_never_fails_over_without_fresh_confirmed_room(tmp_path: Path, readings: str) -> None:
-    env = Env(tmp_path, [("claude", SUCCESS)])
+def test_claude_quota_fails_over_to_codex_without_any_usable_reading(tmp_path: Path, readings: str) -> None:
+    env = Env(tmp_path, [("codex", CODEX_SUCCESS)])
     entry = {"none": None,
              "failed": {"codex": {"agent_key": "codex", "status": "error"}},
              "stale": {"codex": reading("codex", 5, T0 + timedelta(hours=5), T0 - timedelta(hours=2))},
@@ -390,11 +390,10 @@ def test_quota_never_fails_over_without_fresh_confirmed_room(tmp_path: Path, rea
     env.relay.readings = entry
     env.head(QUOTA)
     result, sup = env.run()
-    # Codex is never launched on missing evidence; the chain waits for Claude's own printed reset
-    # (11:50pm Rome = 21:50Z) and continues on Claude.
+    # Usage metadata is optional: with no usable reading Codex is simply tried, at once, and its run decides.
     assert result == "idle"
-    assert [launch["agent"] for launch in env.relay.launches] == ["claude"]
-    assert env.relay.launches[0]["at"] >= datetime(2026, 10, 18, 21, 50, tzinfo=UTC)
+    assert [launch["agent"] for launch in env.relay.launches] == ["codex"]
+    assert env.relay.launches[0]["at"] == T0 and "codex" not in sup.state["cooldowns"]
 
 
 def test_transient_retries_same_agent_with_bounded_backoff(tmp_path: Path) -> None:
@@ -465,7 +464,7 @@ def test_spend_limits_on_both_agents_hold(tmp_path: Path) -> None:
     assert sup.state["cooldowns"]["claude"]["until"] is None and sup.state["cooldowns"]["codex"]["until"] is None
 
 
-def test_switch_oscillation_is_bounded(tmp_path: Path) -> None:
+def test_codex_exhausted_returns_to_recovered_claude_despite_the_switch_budget(tmp_path: Path) -> None:
     claude_reset, codex_reset = T0 + timedelta(minutes=5), T0 + timedelta(hours=1)
 
     def readings() -> dict[str, Any]:
@@ -476,14 +475,53 @@ def test_switch_oscillation_is_bounded(tmp_path: Path) -> None:
         out["codex"] = reading("codex", 100 if codex_out else 5, codex_reset, now)
         return out
 
-    env = Env(tmp_path, [("codex", CODEX_QUOTA)], readings=readings, limits=rc.Limits(max_switches=1))
+    env = Env(tmp_path, [("codex", CODEX_QUOTA), ("claude", SUCCESS)], readings=readings,
+              limits=rc.Limits(max_switches=1, min_dwell=timedelta(hours=2)))
     env.head(QUOTA)
     result, sup = env.run()
-    # Claude -> Codex is the one allowed switch; returning to Claude five minutes later would be a second
-    # switch inside the window, so the circuit opens instead of oscillating.
-    assert result == "held" and sup.state["hold"]["reason"] == "circuit_switches"
+    # Claude -> Codex spends the switch budget; Codex then runs out too. Leaving an exhausted agent is never
+    # blocked by the budget or the dwell: the chain goes back to Claude as soon as Claude's reset has passed.
+    assert result == "idle" and sup.state["hold"] is None
+    assert [launch["agent"] for launch in env.relay.launches] == ["codex", "claude"]
+    assert env.relay.launches[1]["at"] >= claude_reset
+
+
+NO_RESET_QUOTA = [claude_result("You've hit your session limit", error=True, status=429)]
+CODEX_NO_RESET_QUOTA = [{"type": "thread.started"},
+                        {"type": "turn.failed", "error": {"message": "You've hit your usage limit."}}]
+
+
+def test_both_exhausted_without_resets_retry_with_bounded_backoff_and_no_rapid_switching(tmp_path: Path) -> None:
+    # Neither provider prints a reset and no reading exists: every retry waits a doubling estimate, capped.
+    env = Env(tmp_path, [("codex", CODEX_NO_RESET_QUOTA), ("claude", NO_RESET_QUOTA), ("codex", CODEX_NO_RESET_QUOTA),
+                         ("claude", NO_RESET_QUOTA), ("codex", CODEX_NO_RESET_QUOTA), ("claude", NO_RESET_QUOTA)],
+              limits=rc.Limits(max_attempts_per_run=6, recheck_cap=timedelta(hours=1)))
+    env.head(NO_RESET_QUOTA)
+    result, sup = env.run()
+    # Quota is bounded by its cooldowns, not the consecutive-failure circuit; the run's attempt bound ends it.
+    assert result == "held" and sup.state["hold"]["reason"] == "circuit_attempts"
+    agents = [launch["agent"] for launch in env.relay.launches]
+    assert agents == ["codex", "claude"] * 3
+    at = [launch["at"] for launch in env.relay.launches]
+    claude_gaps = [b - a for a, b in zip([T0, *at[1::2]], at[1::2], strict=False)]
+    assert claude_gaps == [timedelta(minutes=30), timedelta(minutes=60), timedelta(minutes=60)]  # 30m, 60m, cap
+    assert min(env.clock.slept) > 0 and max(env.clock.slept) <= 5.0  # interruptible, never a busy loop
+    assert sup.state["counters"]["consecutive_failures"] == 0
+
+
+def test_spent_switch_budget_keeps_a_working_agent_instead_of_holding(tmp_path: Path) -> None:
+    env = Env(tmp_path, [("codex", CODEX_SUCCESS)], limits=rc.Limits(max_switches=2))
+    env.relay.readings = room(env, "claude", "codex")
+    state = rc.default_state()
+    state.update({"head_session": HEAD, "chain": [HEAD], "permissions_digest": "perm0", "permissions_pinned": True,
+                  "agent": "codex", "last_switch_at": rc.iso(T0 - timedelta(hours=1)),
+                  "switches": [rc.iso(T0 - timedelta(hours=2)), rc.iso(T0 - timedelta(hours=1))]})
+    env.store.save(state, T0)
+    env.head(CODEX_SUCCESS, agent="codex")
+    result, sup = env.run(task="next step")
+    # A voluntary return to Claude would exceed the budget: Codex, which works, simply continues.
+    assert result == "idle" and sup.state["hold"] is None
     assert [launch["agent"] for launch in env.relay.launches] == ["codex"]
-    assert env.clock.now() >= claude_reset
 
 
 def test_transient_and_crash_retries_never_switch_provider(tmp_path: Path) -> None:
@@ -1582,9 +1620,10 @@ def test_missing_or_empty_output_holds(tmp_path: Path, content: str | None) -> N
 def test_spend_cap_that_survives_its_session_reset_becomes_a_manual_cap(tmp_path: Path) -> None:
     capped = [claude_result("You've hit your monthly spend limit · raise it at claude.ai/settings/usage · "
                             "your session limit resets 11:50pm (Europe/Rome)", error=True, status=429)]
-    # Codex has no fresh reading, so the chain waits for Claude's printed reset and retries Claude, which
+    # Codex is spend-capped, so the chain waits for Claude's printed reset and retries Claude, which
     # hits the same spend cap again (as in the 2026-09-24 corpus): that is a real cap, held for the maintainer.
     env = Env(tmp_path, [("claude", capped)])
+    codex_spend_capped(env)
     env.head(capped)
     result, sup = env.run()
     assert [launch["agent"] for launch in env.relay.launches] == ["claude"]
@@ -1597,6 +1636,7 @@ def test_success_clears_the_spend_cap_memory(tmp_path: Path) -> None:
     capped = [claude_result("You've hit your monthly spend limit · your session limit resets 11:50pm (Europe/Rome)",
                             error=True, status=429)]
     env = Env(tmp_path, [("claude", SUCCESS)])
+    codex_spend_capped(env)
     env.head(capped)
     result, sup = env.run()
     assert result == "idle" and sup.state["spend_caps"] == {}
@@ -1674,13 +1714,13 @@ def test_killed_background_subagent_leaves_its_unanswered_calls_in_flight(tmp_pa
 
 
 @pytest.mark.parametrize("windows", [None, [], [{}], [{"id": "s", "used_percent": "100"}], [{"id": "s", "used_percent": True}]])
-def test_unusable_usage_windows_are_not_evidence_of_room(tmp_path: Path, windows: Any) -> None:
-    env = Env(tmp_path, [("claude", SUCCESS)])
+def test_unusable_usage_windows_never_block_a_try(tmp_path: Path, windows: Any) -> None:
+    env = Env(tmp_path, [("codex", CODEX_SUCCESS)])
     env.relay.readings = lambda: {"codex": {"agent_key": "codex", "status": "ok", "as_of": rc.iso(env.clock.now()),
                                             "windows": windows}}
     env.head(QUOTA)
     result, _ = env.run()
-    assert result == "idle" and [launch["agent"] for launch in env.relay.launches] == ["claude"]
+    assert result == "idle" and [launch["agent"] for launch in env.relay.launches] == ["codex"]
 
 
 def test_same_agent_retry_waits_for_that_agent(tmp_path: Path) -> None:
@@ -1698,14 +1738,22 @@ def test_same_agent_retry_waits_for_that_agent(tmp_path: Path) -> None:
     assert env.relay.launches[0]["at"] >= codex_reset
 
 
+def codex_spend_capped(env: Env) -> None:
+    """Codex already carries a manual spend cap on this chain, so only Claude can be retried."""
+    state = rc.default_state()
+    state.update({"head_session": HEAD, "chain": [HEAD], "permissions_digest": "perm0", "permissions_pinned": True,
+                  "cooldowns": {"codex": {"until": None, "source": "manual", "reason": "spend_limit", "since": rc.iso(T0)}}})
+    env.store.save(state, T0)
+
+
 SPEND_WITH_RESET = [claude_result("You've hit your monthly spend limit · your session limit resets 11:50pm (Europe/Rome)",
                                   error=True, status=429)]
 
 
 def test_restart_does_not_escalate_the_same_spend_cap_turn(tmp_path: Path) -> None:
     env = Env(tmp_path)  # any Relay invocation fails the test
+    codex_spend_capped(env)
     env.head(SPEND_WITH_RESET)
-    env.store.root.mkdir(parents=True, exist_ok=True)
 
     def stop_while_waiting(seconds: float) -> None:
         env.store.stop_path.write_text("now")  # the maintainer stops the supervisor during the wait
@@ -1722,6 +1770,7 @@ def test_restart_does_not_escalate_the_same_spend_cap_turn(tmp_path: Path) -> No
 def test_release_clearing_a_spend_cap_retries_the_agent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     spend = [claude_result("You've hit your monthly spend limit", error=True, status=429)]
     env = Env(tmp_path, [("claude", SUCCESS)])
+    codex_spend_capped(env)
     env.head(spend)
     result, sup = env.run()
     assert result == "held" and sup.state["hold"]["reason"] == "no_provider_available"
@@ -1823,7 +1872,8 @@ def test_manual_spend_cap_survives_restart_on_the_same_turn(tmp_path: Path) -> N
     state = rc.default_state()
     state.update({"head_session": HEAD, "chain": [HEAD], "agent": "claude", "permissions_digest": "perm0",
                   "permissions_pinned": True,
-                  "cooldowns": {"claude": {"until": None, "source": "manual", "reason": "spend_limit", "since": rc.iso(T0)}},
+                  "cooldowns": {a: {"until": None, "source": "manual", "reason": "spend_limit", "since": rc.iso(T0)}
+                                for a in ("claude", "codex")},
                   "spend_caps": {"claude": {"turn": f"{HEAD}/turn-001", "at": rc.iso(T0)}}})
     env.store.save(state, T0)
     result, sup = env.run()
@@ -2534,6 +2584,28 @@ def test_codex_quota_during_reconciliation_waits_for_the_reported_reset_then_dia
     assert any("no coordinator provider available" in e for e in env.events())
 
 
+def test_codex_quota_with_uncertain_effects_reconciles_before_claude_takes_over(tmp_path: Path) -> None:
+    # 2026-10-22: Codex hit its limit with an unknown command in flight while Claude had room. The diagnosis
+    # (read-only Codex only) settles the operation first; only then does Claude, not Codex, continue.
+    env = reconciling(tmp_path, [("claude", SUCCESS)], diag=[diag_reply(("x", "completed"))])
+    reset = T0 + timedelta(hours=2)
+    env.relay.readings = None  # no usable usage metadata at all
+    env.head([IN_FLIGHT["unknown script"], *CODEX_QUOTA], agent="codex")
+    env.store.root.mkdir(parents=True, exist_ok=True)
+    state = rc.default_state()
+    state.update({"head_session": HEAD, "chain": [HEAD], "agent": "codex", "permissions_digest": "perm0",
+                  "permissions_pinned": True, "last_switch_at": rc.iso(T0 - timedelta(minutes=5)),
+                  "cooldowns": {"codex": {"until": rc.iso(reset), "source": "message", "reason": "quota",
+                                          "since": rc.iso(T0)}}})
+    env.store.save(state, T0)
+    result, sup = env.run()
+    assert result == "idle"
+    (diag,) = env.diag.launches
+    (launch,) = env.relay.launches
+    assert diag["at"] >= reset and launch["agent"] == "claude" and launch["at"] >= diag["at"]
+    assert "COMPLETED: it took effect; do not repeat it" in launch["task"]
+
+
 def test_diagnosis_lost_to_codex_quota_is_retried_after_reset_without_using_an_attempt(tmp_path: Path) -> None:
     env = reconciling(tmp_path, [("codex", CODEX_SUCCESS)], diag=[CODEX_QUOTA, diag_reply(("x", "completed"))])
     reset = T0 + timedelta(hours=2)
@@ -2778,22 +2850,65 @@ def test_mission_quota_fails_over_to_codex_with_task_context_and_continues(tmp_p
     assert any("provider switched" in e for e in env.events())
 
 
-def test_mission_refreshes_stale_codex_quota_once_before_fallback(tmp_path: Path) -> None:
+def test_mission_fails_over_on_a_stale_codex_reading_without_probing(tmp_path: Path) -> None:
     env = Env(tmp_path, [("claude", QUOTA), ("codex", CODEX_SUCCESS)])
-    env.relay.readings = room(env, "claude")  # no fresh Codex reading on an idle host
-    probes: list[str] = []
-
-    def refresh() -> None:
-        probes.append("read-only")
-        env.relay.readings = room(env, "claude", "codex")
-
-    env.host.refresh_codex_quota = refresh
+    stale = reading("codex", 4, T0 - timedelta(hours=3), T0 - timedelta(hours=6))  # an idle host's old rollout
+    env.relay.readings = lambda: {**room(env, "claude")(), "codex": stale}
     mission = mission_def("one task")
     start_mission(env, mission)
     result, sup = run_mission(env, mission)
-    assert result == "idle" and probes == ["read-only"]
+    assert result == "idle" and not hasattr(env.host, "refresh_codex_quota")
     assert [launch["agent"] for launch in env.relay.launches] == ["claude", "codex"]
+    assert env.relay.launches[1]["at"] == T0  # tried at once: no probe turn, no recheck wait
     assert sup.state["mission"]["done"][0]["agent"] == "codex"
+
+
+def test_mission_codex_exhausted_hands_back_to_claude_with_missing_readings(tmp_path: Path) -> None:
+    env = Env(tmp_path, [("codex", CODEX_QUOTA), ("claude", SUCCESS)])
+    env.relay.readings = None  # `agent-relay limits` returned nothing usable
+    mission = mission_def("one task")
+    state = rc.default_state()
+    state.update({"mission": {"id": mission["id"], "next": 0, "total": 1, "done": []}, "agent": "codex",
+                  "last_switch_at": rc.iso(T0 - timedelta(minutes=1)), "switches": [rc.iso(T0 - timedelta(minutes=1))],
+                  "cooldowns": {"claude": {"until": rc.iso(T0 - timedelta(seconds=1)), "source": "limits",
+                                           "reason": "quota", "since": rc.iso(T0 - timedelta(hours=5))}}})
+    env.store.save(state, T0)
+    result, sup = run_mission(env, mission)
+    # Claude's expired cooldown ends by itself (no `release --clear-cooldown`), and the dwell never pins the
+    # chain to the exhausted Codex: Claude starts at once and completes the task.
+    assert result == "idle"
+    assert [launch["agent"] for launch in env.relay.launches] == ["codex", "claude"]
+    assert env.relay.launches[1]["at"] == T0
+    assert "claude" not in sup.state["cooldowns"] and sup.state["cooldowns"]["codex"]["reason"] == "quota"
+    assert sup.state["mission"]["done"][0]["agent"] == "claude"
+
+
+def test_restart_preserves_the_pending_mission_and_recovers_providers_by_time(tmp_path: Path) -> None:
+    env = Env(tmp_path, [("claude", NO_RESET_QUOTA), ("codex", CODEX_NO_RESET_QUOTA), ("claude", SUCCESS)])
+
+    def stop_during_wait(seconds: float) -> None:  # the owner is stopped while both providers are out
+        env.store.stop_path.write_text("x")
+        env.clock.sleep(seconds)
+    env.host.sleep = stop_during_wait
+    mission = mission_def("one task")
+    start_mission(env, mission)
+    assert run_mission(env, mission)[0] == "stopped"
+    saved = env.store.load()
+    assert saved["phase"] == "waiting" and saved["mission"]["next"] == 0 and saved["pending"] is None
+    assert {a: c["until"] for a, c in saved["cooldowns"].items()} == {"claude": rc.iso(T0 + timedelta(minutes=30)),
+                                                                     "codex": rc.iso(T0 + timedelta(minutes=30))}
+    env.store.stop_path.unlink()
+    env.host.sleep = env.clock.sleep
+    env.clock.t = T0 + timedelta(minutes=10)  # restarted before the resets: the same turn is decided again
+    result, sup = run_mission(env, mission, saved["head_session"])  # as `serve` resumes it
+    assert result == "idle"
+    # Re-deciding Codex's quota turn kept its recorded cooldown (no extension, no extra backoff strike); Claude,
+    # preferred, recovered by time alone and finished the preserved task.
+    assert [launch["agent"] for launch in env.relay.launches] == ["claude", "codex", "claude"]
+    assert env.relay.launches[2]["at"] == T0 + timedelta(minutes=30)
+    assert sup.state["cooldowns"]["codex"]["until"] == rc.iso(T0 + timedelta(minutes=30))
+    assert sup.state["counters"].get("estimated_codex") == 1
+    assert sup.state["mission"]["done"][0]["agent"] == "claude" and "claude" not in sup.state["cooldowns"]
 
 
 def test_mission_returns_to_claude_after_its_reset_and_dwell(tmp_path: Path) -> None:
@@ -3115,14 +3230,6 @@ def test_relay_claude_credentials_link_never_replaces_an_existing_file(tmp_path:
     (home / ".claude/.credentials.json").write_text("own")
     rc.link_relay_claude_credentials(login, home)
     assert (home / ".claude/.credentials.json").read_text() == "own"
-
-
-def test_codex_quota_probe_writes_the_rollout_relay_reads(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    seen: dict[str, Any] = {}
-    monkeypatch.setattr(rc.subprocess, "run", lambda args, **kw: seen.update(args=args, **kw))
-    rc.refresh_codex_quota(tmp_path)
-    assert "--ephemeral" not in seen["args"] and seen["args"][:4] == ["codex", "exec", "--sandbox", "read-only"]
-    assert seen["timeout"] == 120
 
 
 def test_relay_start_opens_a_new_session_with_closed_stdin_and_profile_env(tmp_path: Path,
