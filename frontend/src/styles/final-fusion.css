@@ -1,13 +1,14 @@
 .final-fusion {
-  --fusion-panel: #fffefc;
-  --fusion-panel-warm: #fcf8f2;
-  --fusion-bg: #fbfaf6;
-  --fusion-line: #ddd5c8;
-  --fusion-line-soft: #eee7db;
-  --fusion-green: #467e2a;
-  --fusion-green-deep: #28581a;
-  --fusion-green-soft: #edf7e7;
-  --fusion-muted: #747b71;
+  /* Spec 198 Lumen: the fusion palette is a view of the canonical appearance tokens. */
+  --fusion-panel: var(--color-bg-surface-raised);
+  --fusion-panel-warm: var(--color-bg-surface);
+  --fusion-bg: transparent;
+  --fusion-line: var(--color-border-default);
+  --fusion-line-soft: var(--color-border-default);
+  --fusion-green: var(--color-accent-foreground);
+  --fusion-green-deep: var(--color-accent-foreground);
+  --fusion-green-soft: var(--color-accent-subtle);
+  --fusion-muted: var(--color-text-muted);
   min-width: 0;
   min-height: 0;
   height: 100%;
