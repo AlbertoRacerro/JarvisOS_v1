@@ -200,6 +200,16 @@ def snapshot(root: Path, repo: Path, now: datetime, *, alive: Callable[[Path], b
     snap: dict[str, Any] = {"at": rc.iso(now), "owner": alive(root / "serve.lock"), "stop": (root / "STOP").exists(),
                             "state": "unknown", "mission": None, "reason": None, "turn": {}, "delivered": [],
                             "problems": []}
+    paths = rc.host_ops.Paths(Path.home())
+    try:
+        stale = any(rc.host_ops.REQUEST_NAME_RE.fullmatch(p.name) and
+                    now.timestamp() - p.lstat().st_mtime > 120 for p in paths.requests.iterdir())
+    except OSError:
+        stale = False
+    beat = rc.host_ops._heartbeat(paths)
+    at = rc.parse_ts((beat or {}).get("at"))
+    if stale and (at is None or now - at > timedelta(minutes=2)):
+        snap["problems"].append("hostops_down")
     road = rc.load_roadmap(root)
     if road and not road.get("corrupt"):
         snap["roadmap"] = {"enabled": bool(road.get("enabled")), "cycle": road.get("cycle"),
@@ -304,6 +314,7 @@ def incidents(snap: dict[str, Any], now: datetime) -> dict[str, str]:
         if problem != "owner_down":
             found[f"problem|{problem}"] = {"mission_corrupt": f"definizione o stato della missione {mission} illeggibile",
                                            "roadmap_corrupt": "roadmap.json illeggibile",
+                                           "hostops_down": "esecutore host non disponibile: richieste in attesa da oltre due minuti",
                                            "missions_unreadable": "cartella delle missioni illeggibile"}.get(problem, problem)
     if snap["state"] == "unknown" and not snap["problems"]:
         found["unknown|owner"] = "impossibile stabilire se il proprietario delle missioni è vivo (telemetria sconosciuta)"

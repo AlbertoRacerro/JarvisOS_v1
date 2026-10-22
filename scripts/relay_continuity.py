@@ -48,6 +48,13 @@ if "devctx" not in sys.modules:
     sys.modules["devctx"] = devctx
     _spec.loader.exec_module(devctx)
 
+_HOSTOPS_SPEC = importlib.util.spec_from_file_location("host_ops", Path(__file__).resolve().parent / "host_ops.py")
+assert _HOSTOPS_SPEC and _HOSTOPS_SPEC.loader
+host_ops = sys.modules.get("host_ops") or importlib.util.module_from_spec(_HOSTOPS_SPEC)
+if "host_ops" not in sys.modules:
+    sys.modules["host_ops"] = host_ops
+    _HOSTOPS_SPEC.loader.exec_module(host_ops)
+
 SCHEMA = "relay-continuity.v1"
 AGENTS = ("claude", "codex")
 PREFERRED = "claude"
@@ -2304,7 +2311,8 @@ def describe_check(check: dict[str, Any] | None) -> str:
     if check is None:
         return ("Completion contract: this task has no independent completion check, so the owner never records it "
                 "complete on your report; it holds for a maintainer-attached contract.")
-    what = {"pr_merged": lambda c: f"PR #{c['pr']} is merged on GitHub",
+    what = {"host_receipt": lambda c: f"a signed ok host receipt exists for {c['op']} at {c.get('sha') or 'any commit'}",
+            "pr_merged": lambda c: f"PR #{c['pr']} is merged on GitHub",
             "path_exists": lambda c: f"`{c['path']}` exists in the repository",
             "spec_merged": lambda c: f"spec {c['spec']} is `merged` in docs/specs/STATUS.md on GitHub master and every "
                                      "PR linked in its row is merged",
@@ -3486,7 +3494,7 @@ def refresh_codex_quota(repo: Path) -> None:
 # Missions (spec 201): durable submission and a single persistent owner
 
 
-CHECK_KINDS = ("pr_merged", "path_exists", "spec_merged", "coordinator_cycle")
+CHECK_KINDS = ("host_receipt", "pr_merged", "path_exists", "spec_merged", "coordinator_cycle")
 
 
 def validate_mission(data: Any) -> str | None:
@@ -3521,6 +3529,12 @@ def validate_check(check: Any) -> str | None:
     """Problem with one completion contract, or None (spec 204)."""
     if not isinstance(check, dict) or check.get("kind") not in CHECK_KINDS:
         return f"check kind must be one of {', '.join(CHECK_KINDS)}"
+    if check["kind"] == "host_receipt":
+        if (set(check) - {"kind", "op", "sha"} or not isinstance(check.get("op"), str)
+                or check["op"] not in host_ops.OPERATIONS):
+            return "host_receipt takes a known op and optional full sha"
+        if "sha" in check and (not isinstance(check["sha"], str) or not host_ops.SHA_RE.fullmatch(check["sha"])):
+            return "host_receipt sha must be a full commit id"
     if check["kind"] == "pr_merged" and (set(check) != {"kind", "pr"} or not isinstance(check["pr"], int)
                                          or isinstance(check["pr"], bool) or check["pr"] <= 0):
         return "pr_merged takes a positive integer pr"
@@ -3628,6 +3642,9 @@ def in_sandbox() -> bool:
 
 def check_task(repo: Path, check: dict[str, Any], run: Runner = devctx.run) -> str | None:
     """Deterministic, read-only completion check of a mission task. None: satisfied."""
+    if check["kind"] == "host_receipt":
+        return (None if host_ops.find_ok_receipt(host_ops.Paths(Path.home()), check["op"], check.get("sha"))
+                else "no verified ok host receipt")
     if check["kind"] == "path_exists":
         target = (repo / check["path"]).resolve()
         if repo.resolve() not in target.parents and target != repo.resolve():
@@ -3847,7 +3864,16 @@ def _roadmap_step(root: Path, repo: Path, *, fingerprint: Callable[[], str | Non
     if road is None or not road.get("enabled"):
         return None
     if road.get("paused"):
-        return f"roadmap:paused:{road['paused']}"
+        waits = road.get("hostops_wait")
+        if (road["paused"] == "coordinator_blocked" and isinstance(waits, list) and waits
+                and all(isinstance(i, str) and host_ops.ID_RE.fullmatch(i)
+                        and host_ops.load_receipt(host_ops.Paths(Path.home()), i)[0] for i in waits)):
+            road.update(paused=None, paused_at=None)
+            road.pop("hostops_wait", None)
+            write_json_atomic(roadmap_path(root), road)
+            missions_journal(root, {"event": "roadmap_hostops_resumed", "at": iso(now()), "ids": waits})
+        else:
+            return f"roadmap:paused:{road['paused']}"
 
     def pause(reason: str) -> str:
         road["paused"], road["paused_at"] = reason, iso(now())
@@ -3886,6 +3912,13 @@ def _roadmap_step(root: Path, repo: Path, *, fingerprint: Callable[[], str | Non
         if status == "cancelled":
             return pause("cycle_cancelled")
         if final_relay_status(repo, (state or {}).get("head_session")) == "blocked":
+            session = (state or {}).get("head_session")
+            turn = last_turn_dir(repo / ".agent-relay/sessions" / session) if session else None
+            waits = sorted(set(re.findall(r"HOSTOPS-WAIT: ([0-9a-f]{32})(?![0-9a-f])", final_text(turn)))) if turn else []
+            if waits:
+                road["hostops_wait"] = waits
+            else:
+                road.pop("hostops_wait", None)
             return pause("coordinator_blocked")
         if not remote_readable():
             return "roadmap:waiting:remote_unreadable"  # nothing written: this cycle is settled again later
@@ -4159,6 +4192,7 @@ def _command_roadmap(args: argparse.Namespace, root: Path) -> int:
         if not any(e.get("id") == args.authority and e.get("kind") == "directive" for e in devctx.read_ledger(env)):
             print(f"{args.authority} is not a recorded maintainer directive", file=sys.stderr)
             return 2
+        road.pop("hostops_wait", None)
         road.update(enabled=True, authority=args.authority, started_at=at, paused=None, paused_at=None, no_progress=0)
         record = {"event": "roadmap_started", "at": at, "authority": args.authority}
     else:

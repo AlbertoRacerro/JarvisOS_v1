@@ -423,3 +423,20 @@ def test_clean_neutralises_slack_markup_links_and_host_paths() -> None:
     assert ro.clean("spec 205 in relay_observe.py, see STATUS.md and #869") == \
         "spec 205 in relay_observe.py, see STATUS.md and #869"
     assert "<https://github.com/AlbertoRacerro/JarvisOS_v1/issues/869|#869>" in ro.links(ro.clean("PR #869") or "")
+
+
+@pytest.mark.parametrize("request_age,beat_age,expected", [(121, None, True), (121, 121, True),
+                                                         (121, 30, False), (30, None, False)])
+def test_hostops_down(tmp_path, monkeypatch, request_age, beat_age, expected):
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+    paths = rc.host_ops.Paths(tmp_path)
+    paths.requests.mkdir(parents=True)
+    request = paths.requests / ("a" * 32 + ".json")
+    request.write_text("{}")
+    ts = T0.timestamp() - request_age
+    os.utime(request, (ts, ts))
+    if beat_age is not None:
+        paths.heartbeat.write_text(json.dumps({"at": rc.iso(T0 - timedelta(seconds=beat_age))}))
+    state = ro.snapshot(tmp_path / "control", tmp_path / "repo", T0, alive=lambda _: True, ledger=lambda _: [])
+    alerts = ro.incidents(state, T0)
+    assert ("problem|hostops_down" in alerts) == expected

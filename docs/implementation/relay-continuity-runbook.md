@@ -248,14 +248,14 @@ The mission owner runs in the sandbox, which cannot read the Slack webhook. Slac
 - **Alerts:** sent on detection, at the watcher's polling interval (`--interval`, default 60 s). They cover a held mission, a paused roadmap (with the recorded question when blocked), an owner that is not running while work is pending, a wait longer than 6 hours and unreadable owner state. Each incident is announced once until it clears, including across watcher restarts. When Slack is down nothing blocks: the message is retried on the next poll, and the failure count appears in the next delivered digest.
 - **Test commands (host):** `python3 scripts/relay_continuity.py notify-test --digest` sends the current digest, and `notify-test --alert` sends an alert sample marked as a test. Each prints the delivered text and never prints the URL. To preview without sending, run `python3 scripts/relay_observe.py digest`; `relay_observe.py status` prints the snapshot and incidents as JSON.
 - **Terminal monitor:** `python3 scripts/relay_observe.py follow` (`--no-replay` starts at the live end). It follows the active mission's latest turn, announces task, phase, provider and session changes, and prints messages, tool calls and redacted, bounded results. It never shows hidden reasoning. Ctrl-C only closes the viewer.
-- **Host unit:** `~/.config/systemd/user/jarvisos-relay-watch.service`, created from a host shell:
+- **Host unit (spec 207):** `~/.config/systemd/user/jarvisos-relay-watch.service` is written by `host_ops.py install --sha <merged master sha> --with-watch` from a host shell. See [host installation and rollback](207-host-operations.md). Its template is in the installed release:
 
 ```ini
 [Unit]
 Description=JarvisOS Relay observer: Slack digest and incident alerts (spec 205)
 [Service]
 WorkingDirectory=%h/src/JarvisOS_v1
-ExecStart=/usr/bin/python3 scripts/relay_continuity.py watch --digest-hours 2
+ExecStart=/usr/bin/python3 -I %h/.local/share/jarvisos-hostops/current/scripts/relay_continuity.py watch --digest-hours 2
 Restart=on-failure
 RestartPreventExitStatus=2 3
 RestartSec=60
@@ -263,4 +263,4 @@ RestartSec=60
 WantedBy=default.target
 ```
 
-Run `systemctl --user daemon-reload && systemctl --user enable --now jarvisos-relay-watch`. Run either this unit or a tmux `watch`, never both: the second one exits 3 on `watch.lock`, which the unit does not restart. The watcher is a separate process, so it reports an owner crash or stop while work is pending (`owner_down`) without an `OnFailure=` hook. A watcher that is itself down cannot report anything: check `systemctl --user status jarvisos-relay-watch`. Rollback: `systemctl --user disable --now jarvisos-relay-watch`.
+The installer reloads user units and starts the watcher only with `--with-watch`. After installation the sandbox may request `host_ops.py request service.install --args '{"template":"jarvisos-relay-watch"}' --wait 60` for a signed installation receipt. Run either this unit or a tmux `watch`, never both: the second one exits 3 on `watch.lock`, which the unit does not restart. The watcher is a separate process, so it reports an owner crash or stop while work is pending (`owner_down`) without an `OnFailure=` hook. A watcher that is itself down cannot report anything: check `systemctl --user status jarvisos-relay-watch`. Rollback: `systemctl --user disable --now jarvisos-relay-watch`.

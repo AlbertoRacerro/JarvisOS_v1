@@ -3626,3 +3626,53 @@ def test_204_legacy_completion_is_reopened_after_a_pending_final_task_settles(tm
     rec = store.load()["mission"]
     assert "completed_at" not in rec and rec["next"] == 0 and "mission_completed" not in journal_events(store)
     assert "mission_reopened" in journal_events(store) and "first" in env.relay.launches[0]["task"]
+
+
+@pytest.mark.parametrize("check,valid", [
+    ({"kind": "host_receipt", "op": "service.status"}, True),
+    ({"kind": "host_receipt", "op": "service.status", "sha": "a" * 40}, True),
+    ({"kind": "host_receipt", "op": "shell"}, False),
+    ({"kind": "host_receipt"}, False),
+    ({"kind": "host_receipt", "op": "service.status", "sha": None}, False),
+    ({"kind": "host_receipt", "op": "service.status", "sha": "bad"}, False),
+    ({"kind": "host_receipt", "op": "service.status", "extra": 1}, False),
+])
+def test_host_receipt_contract_validation(check, valid):
+    assert (rc.validate_check(check) is None) == valid
+
+
+def test_host_receipt_evaluation(tmp_path, monkeypatch):
+    calls = []
+
+    def find(paths, op, sha):
+        calls.append((paths.home, op, sha))
+        return None
+
+    monkeypatch.setattr(rc.host_ops, "find_ok_receipt", find)
+    check = {"kind": "host_receipt", "op": "service.status", "sha": "a" * 40}
+    assert rc.check_task(tmp_path, check)
+    assert calls == [(Path.home(), "service.status", "a" * 40)]
+    monkeypatch.setattr(rc.host_ops, "find_ok_receipt", lambda *a: {"outcome": "ok"})
+    assert rc.check_task(tmp_path, check) is None
+
+
+def test_roadmap_hostops_waits_for_all_verified_receipts(tmp_path, monkeypatch):
+    road = Roadmap(tmp_path, monkeypatch, "r0", "r1")
+    rc.main(["roadmap", "start", "--authority", DIRECTIVE])
+    first = road.step().split(":")[2]
+    road.finish(first, relay_status="blocked")
+    state = rc.mission_store(road.root, first).load()
+    turn = rc.last_turn_dir(road.repo / ".agent-relay/sessions" / state["head_session"])
+    ids = ["a" * 32, "b" * 32]
+    (turn / "last-message.txt").write_text("\n".join(f"HOSTOPS-WAIT: {i}" for i in ids) + "\nRELAY_STATUS blocked")
+    assert road.step() == "roadmap:paused:coordinator_blocked"
+    assert rc.load_roadmap(road.root)["hostops_wait"] == ids
+    available = {}
+    monkeypatch.setattr(rc.host_ops, "load_receipt", lambda paths, rid: (available.get(rid), ""))
+    assert road.step() == "roadmap:paused:coordinator_blocked"
+    available[ids[0]] = {"outcome": "refused"}
+    assert road.step() == "roadmap:paused:coordinator_blocked"
+    available[ids[1]] = {"outcome": "failed"}
+    assert road.step().startswith("roadmap:submitted:")
+    assert not rc.load_roadmap(road.root).get("hostops_wait")
+    assert rc.load_roadmap(road.root)["cycle"] == 2
