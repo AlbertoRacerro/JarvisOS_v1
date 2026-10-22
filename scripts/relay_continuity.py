@@ -2318,6 +2318,10 @@ class Supervisor:
         counters = self.state["counters"]
         failed_agent = report.agent or self.state.get("agent") or PREFERRED
         if report.outcome == "success":
+            # A successful turn can still have left a detached job running, now stopped: an external one is gated
+            # like any interrupted operation, before anything is advanced or completed.
+            if "gate" not in waive and isinstance(found := self._settle_external(report), str):
+                return self.hold(found, None, report.turn_id)
             counters.update({"consecutive_failures": 0, "transient_streak": 0, "crash_retries": 0})
             counters.pop(f"estimated_{failed_agent}", None)
             counters.pop(f"transient_{failed_agent}", None)
@@ -2335,10 +2339,6 @@ class Supervisor:
                 self.notify("turn_completed", dedupe_key=f"done|{self.state['head_session']}",
                             session=self.state["head_session"], agent=failed_agent)
                 return "idle"
-            # A successful turn can still have left a detached job running, now stopped: an external one is gated
-            # like any interrupted operation, and the next turn is told what was stopped.
-            if "gate" not in waive and isinstance(found := self._settle_external(report), str):
-                return self.hold(found, None, report.turn_id)
             prompt = f"[relay-continuity attempt {{nonce}}]\n{task}"
             if report.reaped:
                 prompt += ("\n\nThe supervisor stopped processes the previous turn left running ("

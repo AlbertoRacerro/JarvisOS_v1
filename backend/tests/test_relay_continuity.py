@@ -3065,6 +3065,16 @@ def test_a_successful_turn_with_an_interrupted_background_push_holds(tmp_path: P
     assert len(env.relay.launches) == 1
 
 
+def test_an_interrupted_background_push_holds_before_the_last_task_completes(tmp_path: Path) -> None:
+    push = tool_use("p", "Bash", command="nohup git push origin HEAD >/dev/null 2>&1 &")
+    env = Env(tmp_path, [("claude", [push, tool_result("p"), *SUCCESS])])
+    mission = mission_def("only task")
+    start_mission(env, mission)
+    result, sup = run_mission(env, mission)
+    assert result == "held" and sup.state["hold"]["reason"] == "effects_uncertain"
+    assert "completed_at" not in sup.state["mission"] and "mission_completed" not in journal_events(env.store)
+
+
 def test_the_next_task_is_told_which_processes_were_stopped(tmp_path: Path) -> None:
     env = Env(tmp_path, [("claude", SUCCESS), ("claude", SUCCESS)])
     env.host.reap = lambda: ["node"] if len(env.relay.launches) == 1 else []
