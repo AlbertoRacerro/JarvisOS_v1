@@ -1,5 +1,7 @@
 # Engineering Studio visual directions (issue #834)
 
+> **Closed (2026-10-20).** None of these three directions was selected. The maintainer chose **Lumen** in a later exploration round (branch `explore/198b-lumen-v2`); the accepted contract is [spec 198](../../specs/198-studio-visual-design.md). This page is kept as discovery history.
+
 These are browser captures of three reversible CSS explorations on the existing Engineering Studio, Process, and BLUECAD screens. They are **choices for maintainer review**, not an approved redesign. The preview code and full capture harness remain in the local exploration worktree; no preview CSS is part of this planning change. The screenshots use seeded test data, not private research data.
 
 ![Baseline and three directions across four screens](contact-sheet.png)
