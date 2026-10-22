@@ -65,9 +65,14 @@ summary:focus-visible,
   font-size: var(--font-size-section-title);
 }
 
+/* Spec 198 Lumen: eyebrows keep their authored case (product names such as
+ * BlueCad must not be re-uppercased by CSS). */
 .eyebrow {
   color: var(--color-accent-foreground);
   font-size: var(--font-size-caption);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: none;
 }
 
 .sidebar .eyebrow {

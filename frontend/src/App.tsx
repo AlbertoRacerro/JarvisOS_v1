@@ -145,7 +145,7 @@ function App() {
   const requestShellRegionOpen = (region: ShellRegion) => setShellRegionRequest((current) => ({ region, nonce: (current?.nonce ?? 0) + 1 }));
 
   const stageSidecar = shellRegions.sidecar;
-  const semanticSelectionContext = selection?.kind === "bluecad-part" ? <div className="shell-properties__selection"><strong>{selection.partId}</strong><p>{selection.partKind ? `${selection.partKind} · selected BLUECAD part` : "Selected BLUECAD part"}</p></div> : undefined;
+  const semanticSelectionContext = selection?.kind === "bluecad-part" ? <div className="shell-properties__selection"><strong>{selection.partId}</strong><p>{selection.partKind ? `${selection.partKind} · selected BlueCad part` : "Selected BlueCad part"}</p></div> : undefined;
   const knowledgeActions = <JarvisKnowledgeActions workspaceId={workspaceId} routeId={route.id} stableRef={knowledgeStableRef} selectedLabel={selectedKnowledgeLabel} onContextChange={setKnowledgeContext} />;
   const jarvisLocalContext = KNOWLEDGE_ROUTES.has(route.id)
     ? knowledgeActions

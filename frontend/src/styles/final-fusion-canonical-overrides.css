@@ -60,9 +60,9 @@
 .process-stage__header .panel-subtitle {
   margin: 0;
   max-width: 760px;
-  font-size: 9px;
-  line-height: 1.35;
-  color: #747b72;
+  font-size: var(--font-size-caption);
+  line-height: 1.4;
+  color: var(--color-text-secondary);
 }
 
 .process-stage__workbench {
@@ -251,7 +251,7 @@
   box-shadow: 0 12px 28px rgba(70,67,55,.07);
 }
 .process-stage__canvas-empty strong { font-size: 12px; font-weight: 500; }
-.process-stage__canvas-empty .panel-subtitle { margin: 8px 0 0; font-size: 9px; line-height: 1.4; }
+.process-stage__canvas-empty .panel-subtitle { margin: 8px 0 0; font-size: var(--font-size-caption); line-height: 1.4; }
 
 /* Design final routes reuse the legacy shell regions but the canonical
  * workstations treat them as compact structural columns, not generic app cards. */

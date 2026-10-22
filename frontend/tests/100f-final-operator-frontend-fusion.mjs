@@ -48,7 +48,7 @@ includesAll(routes, [
 ], "legacy redirect contract");
 
 includesAll(routes, [
-  'design: [', 'label: "Process"', 'label: "BLUECAD"',
+  'design: [', 'label: "Process"', 'label: "BlueCad"',
   'memory: [', 'label: "Project Basis"', 'label: "Models"', 'label: "Literature"',
   'development: [', 'label: "Roadmap"', 'label: "Brainstorm"',
   'coding: [', 'label: "Repository"', 'label: "Runtime"',

@@ -82,7 +82,7 @@ function ProjectBasisSurface({ description }: Readonly<{ description: string }>)
 
 function ModelsSurface({ description }: Readonly<{ description: string }>) {
   const [collapsed, setCollapsed] = useState(false);
-  const sections = ["Definition", "Assumptions", "Methods & Equations", "Parameters & Inputs", "Process", "BLUECAD", "Results & Validation", "Criticalities", "Sources", "Artifacts", "Runs", "Changelog / Lineage"];
+  const sections = ["Definition", "Assumptions", "Methods & Equations", "Parameters & Inputs", "Process", "BlueCad", "Results & Validation", "Criticalities", "Sources", "Artifacts", "Runs", "Changelog / Lineage"];
   return (
     <div className="final-fusion__workbench final-fusion__workbench--models">
       <Panel title="Model versions" className="final-fusion__versions">

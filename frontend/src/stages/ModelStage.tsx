@@ -9,14 +9,14 @@ function ModelStage({ onSelectionChange, onShellRegionsChange, requestShellRegio
         <div className="design-stage__title-row">
           <div>
             <p className="eyebrow">Design</p>
-            <h1 id="bluecad-final-title">BLUECAD workspace</h1>
+            <h1 id="bluecad-final-title">BlueCad workspace</h1>
             <p className="panel-subtitle">Inspect server-built geometry, create deterministic template parts and download STL, STEP or 3MF for printing.</p>
           </div>
           <span className="design-stage__truth-state">Geometry · Server-owned</span>
         </div>
         <nav className="design-stage__tabs" aria-label="Design workspaces">
           <button type="button" onClick={() => navigate("/design/process")}>Process</button>
-          <button type="button" className="is-active" aria-current="page">BLUECAD</button>
+          <button type="button" className="is-active" aria-current="page">BlueCad</button>
           <button type="button" onClick={() => navigate("/design/studio")}>Studio</button>
         </nav>
       </header>

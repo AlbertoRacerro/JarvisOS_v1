@@ -21,6 +21,8 @@ import "./styles/settings.css";
 import "./styles/responsive.css";
 import "./styles/100g-ui-repair.css";
 import "./styles/operator-recovery.css";
+// Spec 198 Lumen composition: last, so the production identity wins over the earlier layered overrides.
+import "./styles/lumen.css";
 
 applyStoredVisualPreferences();
 
