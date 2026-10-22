@@ -48,7 +48,9 @@ Run on the trusted WSL host, outside the sandbox, on 2026-10-22 by the maintaine
   La domanda è registrata nel ledger (`devctx.py recover`).
   ```
 
-What this proves: Slack's incoming-webhook endpoint accepted both semantic messages. What it does not prove: the session had no Slack read access, so it did not independently confirm that the messages appear in the channel. The digest links the PR as `issues/869`, which GitHub redirects to the pull request.
+What this proves: Slack's incoming-webhook endpoint accepted both semantic messages. What it does not prove: the session had no Slack read access, so it did not independently confirm that the messages appear in the channel.
+
+Channel visibility, 2026-10-22: the maintainer confirmed to the AUTONOMY BOOTSTRAP coordinator session (Relay REPL, ledger claim `L20261022100353-d568`) that the Slack test notifications were received in the channel. This is the maintainer's own observation, recorded as such. No agent read the channel. The digest links the PR as `issues/869`, which GitHub redirects to the pull request.
 
 ## Independent review and repair (2026-10-22)
 
