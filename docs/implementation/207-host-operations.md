@@ -23,12 +23,18 @@ Real host acceptance is **pending**: no services, credentials, WSL, webhook, Git
 
 ## Host installation (maintainer, once)
 
-From a trusted host shell in the merged repository, substitute the actual merged master SHA:
+From a trusted host shell. Do **not** run `scripts/host_ops.py` from the checkout: the sandbox can write it. Fetch the installer from GitHub at the merged master commit instead (`SHA` = the full merge commit):
 
 ```bash
-python3 scripts/host_ops.py install --sha <merged master sha> --with-watch
-python3 -I ~/.local/share/jarvisos-hostops/current/scripts/host_ops.py health
+SHA=<full merged master sha>
+d=$(mktemp -d) && gh api -H 'Accept: application/vnd.github.raw' \
+  "repos/AlbertoRacerro/JarvisOS_v1/contents/scripts/host_ops.py?ref=$SHA" > "$d/host_ops.py" \
+  && sha256sum "$d/host_ops.py" \
+  && python3 -I "$d/host_ops.py" install --sha "$SHA" --with-watch \
+  && python3 -I ~/.local/share/jarvisos-hostops/current/scripts/host_ops.py health
 ```
+
+`install` verifies again that `SHA` is on GitHub master, then installs the whole `scripts/` tree of that commit as the release.
 
 Without `--with-watch`, installation writes the watcher unit but does not start it. The executor is enabled and restarted. Existing host policy and signing keys are preserved. Host-only policy: `~/.config/jarvisos-hostops/policy.json`; retain owner-only write permission. Verify the configured Chromium binary and registered benchmark interpreter exist on this host.
 
