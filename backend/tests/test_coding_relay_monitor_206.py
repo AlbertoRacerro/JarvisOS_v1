@@ -217,6 +217,21 @@ def test_browser_items_scrub_windows_and_other_absolute_paths() -> None:
     assert "Users" not in json.dumps(item) and "internal" not in json.dumps(item)
 
 
+def test_snapshot_scrubs_agent_written_paths_before_delivery(owner: tuple[Path, Path],
+                                                            monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(ro, "snapshot", lambda *_a: {
+        "state": "checkpointed", "turn": {"next_step": r"Inspect C:\Users\operator\private\report.txt"},
+        "mission": {"label": "Check /opt/internal/data.csv"},
+    })
+    monkeypatch.setattr(ro, "incidents", lambda *_a: {})
+    response = client().get("/api/coding/relay-monitor", params={"repository": CANONICAL_RUNTIME_REPOSITORY})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["turn"]["next_step"] == "Inspect …/report.txt"
+    assert body["mission"]["label"] == "Check …/data.csv"
+    assert "Users" not in response.text and "internal" not in response.text
+
+
 def test_invalid_cursor_and_wrong_repository_are_refused(owner: tuple[Path, Path]) -> None:
     for cursor in ("not-a-cursor", "***", ro.encode_cursor("../../etc", None, None, 0),
                    ro.encode_cursor(M1, "../x", "turn-001", 0), ro.encode_cursor(M1, S1, "turn-001", -1)):

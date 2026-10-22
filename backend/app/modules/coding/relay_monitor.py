@@ -59,10 +59,22 @@ def relay_repo() -> Path:
     return Path(common).parent if out.returncode == 0 and common else REPO_ROOT
 
 
-def _checked(payload: dict[str, Any]) -> dict[str, Any]:
+def _checked(payload: dict[str, Any], *, snapshot_paths: bool = False) -> dict[str, Any]:
     text = json.dumps(payload, ensure_ascii=False)
     if observe().devctx.find_secret(text):
         return {"state": "refused", "reason": "secret_detected"}
+    if snapshot_paths:
+        def scrub(value: Any) -> Any:
+            if isinstance(value, str):
+                return observe()._redact(value, len(value) + 1, paths=True, lines=True)
+            if isinstance(value, list):
+                return [scrub(item) for item in value]
+            if isinstance(value, dict):
+                return {key: scrub(item) for key, item in value.items()}
+            return value
+
+        payload = scrub(payload)
+        text = json.dumps(payload, ensure_ascii=False)
     if len(text.encode()) > MAX_PAYLOAD_BYTES:
         return {"state": "refused", "reason": "payload_too_large"}
     return payload
@@ -81,7 +93,7 @@ def snapshot(now: datetime | None = None) -> dict[str, Any]:
     except Exception as exc:  # noqa: BLE001 - any unreadable owner state is reported, never raised
         return {"state": "unknown", "reason": f"owner_state_unreadable:{type(exc).__name__}"}
     delivered = sorted(snap.get("delivered") or [], key=lambda d: d.get("at") or "")[-DELIVERED_SHOWN:]
-    return _checked({**snap, "delivered": delivered, "incidents": sorted(found)})
+    return _checked({**snap, "delivered": delivered, "incidents": sorted(found)}, snapshot_paths=True)
 
 
 def timeline(cursor: str | None, *, start: str = "turn", limit: int = 200) -> dict[str, Any]:
