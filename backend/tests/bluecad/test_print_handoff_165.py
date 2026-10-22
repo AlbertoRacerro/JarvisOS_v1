@@ -264,6 +264,50 @@ def test_handoff_does_not_overwrite_a_hard_linked_file(client: TestClient, built
     assert sha256_file(target) == sha
 
 
+def test_directory_swap_during_copy_cannot_redirect_handoff(client: TestClient, built: dict, handoff_env: dict) -> None:
+    directory = handoff_env["dir"]
+    original = directory.with_name("original-slicer")
+    victim = directory.with_name("other-slicer")
+    victim.mkdir()
+    copy = print_handoff._copy_verified
+
+    def swap_then_copy(source, filename, directory_fd, expected_sha256):
+        directory.rename(original)
+        os.symlink(victim, directory)
+        return copy(source, filename, directory_fd, expected_sha256)
+
+    handoff_env["monkeypatch"].setattr(print_handoff, "_copy_verified", swap_then_copy)
+    item = built["exports"]["export.3mf"]
+    response = _open(client, built["workspace_id"], item["id"])
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "print_handoff_unsafe_target"
+    assert list(victim.iterdir()) == []
+    assert len(list(original.glob("*.3mf"))) == 1
+    assert all(argv[0] != EXPLORER for argv, _ in handoff_env["recorder"].calls)
+    assert _events() == []
+
+
+def test_replaced_destination_before_launch_is_refused(client: TestClient, built: dict, handoff_env: dict) -> None:
+    convert = print_handoff._to_windows_path
+
+    def replace_after_conversion(destination):
+        windows_path = convert(destination)
+        replacement = destination.with_suffix(".replacement")
+        replacement.write_bytes(b"other 3mf bytes")
+        os.replace(replacement, destination)
+        return windows_path
+
+    handoff_env["monkeypatch"].setattr(print_handoff, "_to_windows_path", replace_after_conversion)
+    item = built["exports"]["export.3mf"]
+    response = _open(client, built["workspace_id"], item["id"])
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "print_handoff_unsafe_target"
+    assert all(argv[0] != EXPLORER for argv, _ in handoff_env["recorder"].calls)
+    assert _events() == []
+
+
 def test_wslpath_result_must_be_a_drive_path(client: TestClient, built: dict, handoff_env: dict) -> None:
     handoff_env["monkeypatch"].setattr(print_handoff.subprocess, "run", _Recorder(wsl_stdout="\\\\wsl$\\x\\y.3mf"))
     response = _open(client, built["workspace_id"], built["exports"]["export.3mf"]["id"])
