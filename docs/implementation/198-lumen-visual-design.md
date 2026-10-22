@@ -83,8 +83,11 @@ port 8198 and frontend preview port 5198. Evidence is under
 | `r7/bluecad-populated-{dark,light}-1440.png` | A real deterministic template tube was created in the isolated workspace and rendered in the WebGL canvas in both appearances, with no page/console errors on those captures. The light grid was reduced after the earlier populated capture. |
 | `r7-first3-debug/report.json` | Focused rerun of Process, Studies and BlueCad in both themes/widths: 12 captures, no rendered `BLUECAD`, contrast or focus failures. The full `r7` report recorded four `BLUECAD` flags on BlueCad despite visible screenshots and a direct DOM probe showing BlueCad; the mismatch is not treated as a passing full-matrix spelling check. |
 
-The 429s and inconsistent full-matrix spelling flags leave strict browser
-acceptance open. No backend or GitHub behaviour was altered to suppress them.
-The Sidecar context disclosure and final copy-only head still need a focused
-browser recheck. PR #882 remains draft until that evidence and exact-head review
-are sufficient.
+At code head `d687c721`, `r8/report.json` and the paired screenshots opened
+the Sidecar workspace-context disclosure over the populated WebGL viewport in
+both appearances: one canvas, correct theme, no uppercase product name in
+rendered body text and no page/console errors. The frontend build and suite
+passed again at this copy-only head. The 429s and inconsistent full-matrix
+spelling flags leave strict full-matrix browser acceptance open. No backend or
+GitHub behaviour was altered to suppress them. PR #882 remains draft pending
+that evidence and exact-head review.
