@@ -452,12 +452,62 @@ def test_an_outage_on_both_providers_waits_with_bounded_backoff_then_resumes(tmp
 
 
 def test_crashes_retry_the_same_provider_until_the_failure_circuit_opens(tmp_path: Path) -> None:
-    env = Env(tmp_path, [("claude", CRASH)] * 3, limits=rc.Limits(max_consecutive_failures=2))
+    env = Env(tmp_path, [("claude", CRASH)] * 2, limits=rc.Limits(max_consecutive_failures=2))
     env.relay.readings = room(env, "claude", "codex")
     env.head(CRASH)
     result, sup = env.run()
     assert result == "held" and sup.state["hold"]["reason"] == "circuit_failures"
-    assert [launch["agent"] for launch in env.relay.launches] == ["claude"] * 3
+    assert [launch["agent"] for launch in env.relay.launches] == ["claude"] * 2  # exactly the bound
+
+
+def test_provider_failures_break_the_crash_streak(tmp_path: Path) -> None:
+    env = Env(tmp_path, [("a", CRASH), ("a", QUOTA), ("a", CRASH), ("a", EAI), ("a", CRASH), ("a", SUCCESS)],
+              limits=rc.Limits(max_consecutive_failures=2))
+    env.head(CRASH)
+    result, sup = env.run()
+    assert result == "idle" and sup.state["hold"] is None and len(env.relay.launches) == 6
+
+
+def test_serve_decides_a_legacy_mission_hold_again_once(tmp_path: Path) -> None:
+    env = Env(tmp_path, [("codex", CODEX_SUCCESS)])
+    root = tmp_path / "control"
+    mission = mission_def("cycle", checks={0: {"kind": "coordinator_cycle"}})
+    _write_mission(root, mission)
+    env.head([tool_use("x", "Bash", command="python3 scripts/capture.py"), *QUOTA])
+    store = rc.mission_store(root, mission["id"])
+    state = rc.default_state()
+    state.update({"phase": "held", "head_session": HEAD, "chain": [HEAD], "agent": "claude",
+                  "permissions_digest": "perm0", "permissions_pinned": True,
+                  "hold": {"reason": "live_work", "at": rc.iso(T0), "attempt": None, "turn": f"{HEAD}/turn-001"},
+                  "mission": {"id": mission["id"], "next": 0, "total": 1, "done": []}})
+    store.save(state, T0)
+    factory = lambda s, m: rc.Supervisor(s, env.host, env.limits)  # noqa: E731
+    assert rc.serve_step(root, factory, conflicts=lambda: [], now=env.clock.now) == f"ran:{mission['id']}:idle"
+    assert [launch["agent"] for launch in env.relay.launches] == ["codex"]
+
+
+def test_a_hold_that_stands_when_decided_again_is_not_decided_on_every_poll(tmp_path: Path) -> None:
+    env = Env(tmp_path)
+    root = tmp_path / "control"
+    mission = mission_def("cycle")
+    _write_mission(root, mission)
+    env.head([tool_use("c", "Bash", command="gh pr comment 7 --body done"), *QUOTA])
+    store = rc.mission_store(root, mission["id"])
+    state = rc.default_state()
+    state.update({"phase": "held", "head_session": HEAD, "chain": [HEAD], "agent": "claude",
+                  "permissions_digest": "perm0", "permissions_pinned": True,
+                  "hold": {"reason": "reconcile_unresolved", "at": rc.iso(T0), "attempt": None,
+                           "turn": f"{HEAD}/turn-001"},
+                  "mission": {"id": mission["id"], "next": 0, "total": 1, "done": []}})
+    store.save(state, T0)
+    factory = lambda s, m: rc.Supervisor(s, env.host, env.limits)  # noqa: E731
+    assert rc.serve_step(root, factory, conflicts=lambda: [], now=env.clock.now) == f"ran:{mission['id']}:held"
+    held = store.load()["hold"]
+    assert held["reason"] == "effects_uncertain"  # the PR comment genuinely needs review
+    # Re-holding under the new reason is itself decided once more, then stays put without new launches.
+    assert rc.serve_step(root, factory, conflicts=lambda: [], now=env.clock.now) == f"ran:{mission['id']}:held"
+    assert rc.serve_step(root, factory, conflicts=lambda: [], now=env.clock.now) == f"held:{mission['id']}"
+    assert env.relay.launches == []
 
 
 @pytest.mark.parametrize(("events", "agents"), [
@@ -2232,7 +2282,7 @@ def test_serve_step_waits_for_a_live_repl_and_a_held_mission_blocks_the_queue(tm
     assert env.relay.launches == []
     store = rc.mission_store(root, held["id"])
     state = rc.default_state()
-    state.update({"phase": "held", "hold": {"reason": "effects_uncertain", "at": rc.iso(T0), "attempt": 1, "turn": "x"},
+    state.update({"phase": "held", "hold": {"reason": "permissions_changed", "at": rc.iso(T0), "attempt": 1, "turn": "x"},
                   "mission": {"id": held["id"], "next": 0, "total": 1, "done": []}})
     store.save(state, T0)
     assert rc.serve_step(root, factory, conflicts=lambda: []) == f"held:{held['id']}"

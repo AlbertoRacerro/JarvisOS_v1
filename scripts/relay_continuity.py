@@ -2085,7 +2085,10 @@ class Supervisor:
         self.store.journal({"event": "hold", "at": iso(now), "reason": reason, "session": self.state["head_session"]})
         previous = self.resumed_hold or {}
         if previous.get("reason") == reason and previous.get("turn") == turn:
-            self.host.log(f"hold: {reason} (unchanged since the re-examined hold; not re-announced)")
+            # Decided again with the same result: kept, not re-announced, and not decided again on every poll.
+            self.state["hold"]["resumable"] = False
+            self.save()
+            self.host.log(f"hold: {reason} (unchanged when decided again; not re-announced)")
             return "held"
         event = "circuit_open" if reason.startswith("circuit_") else "hold"
         fields = {"session": self.state["head_session"], "reason": reason}
@@ -2217,8 +2220,7 @@ class Supervisor:
         self.notifier = Notifier(self.state, sender=self.sender, log=self.host.log)
         if self.state["phase"] == "held":
             hold = self.state.get("hold") or {}
-            if not (hold.get("reason") in REDECIDED_HOLDS and hold.get("turn") and hold.get("resumable", True)
-                    and session == self.state.get("head_session")):
+            if not (redecidable(self.state) and session == self.state.get("head_session")):
                 self.host.log(f"chain is held ({self.state['hold']}); run `release` after review")
                 return "held"
             # A hold the current policy may not raise is decided again, for that exact turn only. Every other
@@ -2348,7 +2350,7 @@ class Supervisor:
             agent = self._choose(failed_agent)
             return (agent, prompt) if agent is not None else self._wait_or_hold(lambda _agent: prompt)
 
-        if counters["consecutive_failures"] > self.limits.max_consecutive_failures:
+        if counters["consecutive_failures"] >= self.limits.max_consecutive_failures:
             return self.hold("circuit_failures")
         settled: dict[str, dict[str, str]] = {}
         if "gate" not in waive:
@@ -2567,10 +2569,9 @@ class Supervisor:
         self.state["chain"] = (self.state.get("chain") or []) + [session_id]
         # Counted once per launched attempt. Provider failures are bounded by their cooldowns instead.
         counters = self.state["counters"]
-        if report.outcome in ("crash", "unknown"):
-            counters["consecutive_failures"] += 1
-        elif report.outcome == "success":
-            counters["consecutive_failures"] = 0
+        # Only an unbroken run of crash/unknown turns counts: any other outcome ends the streak.
+        counters["consecutive_failures"] = (counters["consecutive_failures"] + 1
+                                            if report.outcome in ("crash", "unknown") else 0)
         self.store.journal({"event": "settle", "nonce": pending["nonce"], "session": session_id,
                             "outcome": report.outcome, "agent": report.agent, "reaped": report.reaped,
                             "effects": [c.label for c in report.effects], "in_flight": [c.label for c in report.in_flight]})
@@ -2946,6 +2947,13 @@ def load_missions(root: Path) -> list[tuple[dict[str, Any] | None, str, str | No
     return sorted(found, key=lambda m: ((m[0] or {}).get("submitted_at") or "", m[1]))
 
 
+def redecidable(state: dict[str, Any] | None) -> bool:
+    """A hold the current policy may not raise, not yet decided again: the supervisor decides its turn once more."""
+    hold = (state or {}).get("hold") or {}
+    return (hold.get("reason") in REDECIDED_HOLDS and bool(hold.get("turn")) and hold.get("resumable", True)
+            and bool((state or {}).get("head_session")))
+
+
 def mission_status(store: Store) -> tuple[str, dict[str, Any] | None]:
     """queued | active | waiting | held | complete | cancelled | corrupt, with the store's state."""
     if not store.state_path.exists():
@@ -3106,7 +3114,7 @@ def serve_step(root: Path, factory: Callable[[Store, dict[str, Any]], Supervisor
             status, state = mission_status(store)
             if status in ("complete", "cancelled"):
                 continue
-            if status in ("held", "corrupt"):
+            if status == "corrupt" or (status == "held" and not redecidable(state)):
                 return f"{status}:{mission_id}"
             if state is not None:
                 rec = state.get("mission")
