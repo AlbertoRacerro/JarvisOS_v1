@@ -680,9 +680,9 @@ def op_browser_screenshot(ctx: Context) -> dict[str, Any]:
         shot_fd = open_dir(Path(tmp))
         try:
             data = read_regular(shot_fd, "shot.png", 32 << 20)
+            unlink_at(shot_fd, "shot.png")  # through the verified descriptor: the spool path may be swapped
         finally:
             os.close(shot_fd)
-        shot.unlink()
     fd = open_dir(ctx.paths.receipts, create=True)
     try:
         write_at(fd, f"{ctx.request['id']}.png", data)

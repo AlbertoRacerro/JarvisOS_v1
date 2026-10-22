@@ -54,3 +54,37 @@ systemctl --user daemon-reload
 ```
 
 Keep `~/.local/share/jarvisos-hostops/state` and `~/jarvis-control/work/hostops/` for audit. To return to a previous code release, rerun `install --sha <previous master sha> --with-watch` from trusted host code. Rollback is documented here and has not been executed by the constrained worker.
+
+## Security review (merge gate)
+
+Implementation by Codex (`8670dab5`). The coordinator (Claude) reviewed it against the spec 207 threat model: the agent controls everything it can write in `jarvis-sandbox`, including the spool, checkout, worktrees, control state and transcripts. A second Codex instance was asked for an independent adversarial review. OpenAI's safety classifier refused that request ("possible cybersecurity risk"), so it produced no report. Per directive `L20261020120919-38dd`, the refusal was not worked around.
+
+Each item below gives the threat, then the conclusion.
+
+- **Host code provenance.**
+  - The executor and the watcher run `/usr/bin/python3 -I` on `~/.local/share/jarvisos-hostops/current/scripts/…`. That path is absent from the sandbox.
+  - Sibling modules (`devctx`, `relay_observe`, `host_ops`) load from `Path(__file__).resolve().parent`, which is the release. `-I` drops cwd, `PYTHONPATH` and user site.
+  - `install` and `release.install` accept only a commit GitHub reports on master.
+  - Tarball extraction keeps only regular files and directories under `scripts/`. It rejects absolute paths, `..` and links.
+- **Host git in the agent-writable checkout** (the watcher's `fetch`, `rev-parse` and `log`). `.git/config` and `.git/hooks` are read-only bind mounts in the sandbox, and `.git` cannot be renamed because it contains mount points. Hooks, fsmonitor, filters and includes are therefore all fixed by host-controlled config. No execution vector was found.
+- **Receipt forgery and substitution.**
+  - Signatures are made with the host-only key and checked against the published `allowed_signers`, which is a read-only mount in the sandbox. The receipt's `request_id` must equal its file name.
+  - Tests cover an edited receipt, a receipt copied to another id and a signature by another key.
+  - `host_receipt` and the `HOSTOPS-WAIT` resume use the same verification.
+  - A `host_receipt` contract without `sha` accepts any earlier `ok` receipt for that operation, so contracts that need fresh evidence must name the commit.
+- **Spool races.**
+  - Every spool, outbox and screenshot access goes through no-follow, descriptor-anchored walks. A swapped directory makes the operation fail closed (DoS only).
+  - Fixed in review: the screenshot temp file was unlinked by pathname. It is now unlinked through its verified descriptor.
+- **Privilege surface.**
+  - The operation catalogue is closed.
+  - Units come only from templates.
+  - The mission owner is start-only (`68ad55dd`), because stop or restart would kill a running provider turn.
+  - `bench.run` and `browser.screenshot` execute inside `jarvis-sandbox`.
+  - `release.install` is off unless the maintainer sets `trust_master`.
+  - A policy that is unknown, wrong-owner or group/world-writable disables every operation.
+- **Secrets.** The webhook URL is never put in a receipt, log or error class. Slack text is filtered: no markup except links to this repository's issues/PRs, and secret patterns rejected. Receipt output is scrubbed and bounded.
+
+Residual risks, accepted:
+
+- Slack messages through `slack.deliver` are agent-authored, filtered and capped at 6 per hour, and carry a `host-ops` header.
+- An agent can deny service by deleting spool entries. The host keeps the signed done set and republishes receipts.
