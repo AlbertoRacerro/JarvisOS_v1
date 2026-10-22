@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+from typing import Literal
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 
 from app.core.config import get_settings
 from app.modules.ai.jarvis_context import (
@@ -18,6 +19,7 @@ from app.modules.ai.jarvis_context_models import (
     JarvisResolvedRef,
     JarvisRouteDescriptor,
 )
+from app.modules.coding import relay_monitor
 from app.modules.coding.actions import (
     CodingActionError,
     CodingActionsService,
@@ -329,6 +331,34 @@ def control_room(
         "runtime": runtime,
         **projection,
     }
+
+
+def _require_runtime_repository(repository: str) -> None:
+    settings = get_settings()
+    if repository != CANONICAL_RUNTIME_REPOSITORY or repository not in settings.coding_repositories:
+        raise HTTPException(status_code=400, detail={"code": "repository_mismatch"})
+
+
+@router.get("/relay-monitor")
+def relay_monitor_snapshot(repository: str) -> dict[str, object]:
+    """Read-only spec 205 owner snapshot: mission, task, state and reason. Never locks or writes."""
+    _require_runtime_repository(repository)
+    return relay_monitor.snapshot()
+
+
+@router.get("/relay-monitor/timeline")
+def relay_monitor_timeline(
+    repository: str,
+    cursor: str | None = Query(default=None, max_length=512),
+    start: Literal["turn", "mission"] = "turn",
+    limit: int = Query(default=100, ge=1, le=200),
+) -> dict[str, object]:
+    """The next bounded, scrubbed page of the owner's live timeline after an opaque cursor."""
+    _require_runtime_repository(repository)
+    try:
+        return relay_monitor.timeline(cursor, start=start, limit=limit)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail={"code": "cursor_invalid"}) from exc
 
 
 @router.get("/pipeline-state")
