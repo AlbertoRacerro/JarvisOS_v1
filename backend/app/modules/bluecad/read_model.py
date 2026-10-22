@@ -456,7 +456,7 @@ def _artifact_content_is_accessible(stored_path_value: object) -> bool:
     return stored_path.exists() and stored_path.is_file()
 
 
-_EXPORT_ROLES = {"bluecad_stl": "export.stl", "bluecad_step": "export.step"}
+_EXPORT_ROLES = {"bluecad_stl": "export.stl", "bluecad_step": "export.step", "bluecad_3mf": "export.3mf"}
 
 
 def _load_exports(
@@ -478,7 +478,7 @@ def _load_exports(
     rows = connection.execute(
         """
         SELECT id, artifact_type FROM artifacts
-        WHERE workspace_id = ? AND source_ref = ? AND artifact_type IN ('bluecad_stl', 'bluecad_step')
+        WHERE workspace_id = ? AND source_ref = ? AND artifact_type IN ('bluecad_stl', 'bluecad_step', 'bluecad_3mf')
         ORDER BY created_at, id
         """,
         (workspace_id, str(source_ref)),

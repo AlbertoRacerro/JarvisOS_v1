@@ -1,22 +1,22 @@
 {
   "fixtures": [
     {
-      "manifest_digest": "0769b221da9f4d85626a65145af379958400cbd5961f499bdb1a4e45f31e4338",
+      "manifest_digest": "553439cee4b655ab413d667357e4c4c766feac8e61a99267d4047b31deba5554",
       "spec_id": "sha256:bd04044e65c001b9911ce7adbc5e18b64618b0002f2fa25af5f34c1912a05050",
       "spec_path": "minimal_single_tube.json"
     },
     {
-      "manifest_digest": "c70a3427005da0cf9732231110c80b595ebaac84e7212291f8e448e69a0ccb5a",
+      "manifest_digest": "a58f9a1c04096bd855315353cf5f05f3b32690fc8e3a385c9379bd76f80fcdf1",
       "spec_id": "sha256:155ec1b90a0cbe47c6ce0821360f838504695057f8a1bc0b1cf9a67b2851367f",
       "spec_path": "chain_tube_bend_joint.json"
     },
     {
-      "manifest_digest": "ce77db900315c2044ba701288aa96837667d61ff86183db02eee8a2a85488d94",
+      "manifest_digest": "d77abdf6d71327f4cb8000e58c51e38044ad5c9c63c85b2da6d0b15a7782b24b",
       "spec_id": "sha256:5178bfeb841266749e2df7bec3fa777a27a236d31e2e9b232ee6b8944869e14f",
       "spec_path": "u_shape_two_bends.json"
     },
     {
-      "manifest_digest": "599889c9a55a64990e3af436c5c8414557a103929a5924e6cd6efaf04282737e",
+      "manifest_digest": "b66687a3e15662595ba3845eb9336652f62c5db37dd2d80125df43ca01295bc8",
       "spec_id": "sha256:7631c98b0cb478cc1a879200a577ef140c63d887c484bfbf65efaff7951b51b9",
       "spec_path": "property_geometry/minimal_float.json"
     }

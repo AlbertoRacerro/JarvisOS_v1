@@ -238,7 +238,11 @@ def register_artifact(
 
 # Print-handoff exports written next to model.glb by export.py; registered so
 # an inspected candidate can offer STL (mm) and STEP downloads.
-EXPORT_ARTIFACT_ROLES = (("model.stl", "bluecad_stl"), ("model.step", "bluecad_step"))
+EXPORT_ARTIFACT_ROLES = (
+    ("model.stl", "bluecad_stl"),
+    ("model.step", "bluecad_step"),
+    ("model.3mf", "bluecad_3mf"),
+)
 
 
 def register_export_artifacts(

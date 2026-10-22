@@ -17,6 +17,8 @@ class Settings:
     cors_origins: list[str]
     coding_repositories: tuple[str, ...]
     studio_user_code_enabled: bool
+    print_handoff_enabled: bool = False
+    print_handoff_dir: str = ""
 
     @property
     def database_path(self) -> Path:
@@ -51,4 +53,6 @@ def get_settings() -> Settings:
         cors_origins=cors_origins,
         coding_repositories=coding_repositories,
         studio_user_code_enabled=os.getenv("JARVISOS_STUDIO_USER_CODE_ENABLED") == "1",
+        print_handoff_enabled=os.getenv("JARVISOS_PRINT_HANDOFF_ENABLED") == "1",
+        print_handoff_dir=os.getenv("JARVISOS_PRINT_HANDOFF_DIR", "").strip(),
     )

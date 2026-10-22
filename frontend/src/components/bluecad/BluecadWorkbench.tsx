@@ -11,10 +11,12 @@ import {
   getBluecadArtifactJson,
   getBluecadCandidateAggregate,
   getBluecadGenerationAvailability,
+  getBluecadPrintHandoffCapability,
   listBluecadCandidates,
   listBluecadStudioReferences,
   listSimulationRuns,
   listWorkspaces,
+  openBluecadArtifactInSlicer,
   promoteBluecadCandidate,
   moveBluecadStudioReference,
   removeBluecadStudioReference,
@@ -793,12 +795,13 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
             ? <div className="bluecad-workbench__empty-viewer"><h2>Geometry unavailable</h2><p>{candidate.parked_reason ? `Generation was parked: ${candidate.parked_reason}` : "No GLB artifact is available for this candidate yet."}</p><p><button type="button" className="secondary-button" onClick={() => setShowCreate(true)}>Create geometry</button></p></div>
             : <div className="bluecad-workbench__empty-viewer"><p>{selectedId && aggregateState === "error" ? "Candidate detail unavailable. Use Refresh to retry." : aggregateState === "loading" || candidateState === "loading" ? "Loading candidate geometry…" : "Select a candidate from the navigator."}</p>{candidateState === "ready" && aggregateState !== "loading" && <p className="button-row"><button type="button" className="secondary-button" onClick={() => requestShellRegionOpen("navigator")}>Open candidate list</button><button type="button" className="secondary-button" onClick={() => setShowCreate(true)}>Create geometry</button></p>}</div>;
 
-  return <section className="bluecad-workbench" aria-labelledby="bluecad-workbench-title"><header className="bluecad-workbench__chrome"><div style={{ minWidth: 0, flex: "1 1 18rem" }}><p className="eyebrow">BLUECAD</p><h1 id="bluecad-workbench-title" ref={workbenchTitleRef} tabIndex={-1}>Model workbench</h1>{candidate && !showCreate && <div style={{ minWidth: 0, overflowWrap: "anywhere" }}><p className="panel-subtitle">{candidate.brief_text.slice(0, 180)}{candidate.brief_text.length > 180 ? "…" : ""}</p><details><summary>Candidate details</summary><dl><dt>Candidate ID</dt><dd>{candidate.id}</dd></dl><p style={{ maxHeight: "10rem", overflow: "auto", whiteSpace: "pre-wrap" }}>{candidate.brief_text}</p></details></div>}</div><div className="button-row">{candidate && !showCreate && <><span className={`status-pill status-${candidate.status}`}>{candidate.status}</span>{exports.length > 0 && <ExportMenu exports={exports} />}<button type="button" className="secondary-button" onClick={() => requestShellRegionOpen("sidecar")}>Inspect candidate</button><button type="button" className="secondary-button" onClick={duplicateSelectedBrief}>Duplicate brief</button>{candidate.status !== "archived" && <button type="button" className="secondary-button" onClick={() => void onArchive()} disabled={busy}>Archive</button>}{canPromote && <button type="button" onClick={() => void onPromote()} disabled={busy}>Promote to Decision</button>}</>}{workspaceId && !noCandidates && !showCreate && <button type="button" className="secondary-button" onClick={() => setShowCreate(true)} disabled={busy}>New geometry</button>}</div></header>{message && <div className="panel-subtitle" role="status">{message}</div>}{sceneBindingNotice && <div className={sceneBindingPresentation === "resolving" ? "panel-subtitle" : "warning-banner"} role="status">{sceneBindingNotice}</div>}<div className="bluecad-workbench__viewport">{viewportContent}</div></section>;
+  return <section className="bluecad-workbench" aria-labelledby="bluecad-workbench-title"><header className="bluecad-workbench__chrome"><div style={{ minWidth: 0, flex: "1 1 18rem" }}><p className="eyebrow">BLUECAD</p><h1 id="bluecad-workbench-title" ref={workbenchTitleRef} tabIndex={-1}>Model workbench</h1>{candidate && !showCreate && <div style={{ minWidth: 0, overflowWrap: "anywhere" }}><p className="panel-subtitle">{candidate.brief_text.slice(0, 180)}{candidate.brief_text.length > 180 ? "…" : ""}</p><details><summary>Candidate details</summary><dl><dt>Candidate ID</dt><dd>{candidate.id}</dd></dl><p style={{ maxHeight: "10rem", overflow: "auto", whiteSpace: "pre-wrap" }}>{candidate.brief_text}</p></details></div>}</div><div className="button-row">{candidate && !showCreate && <><span className={`status-pill status-${candidate.status}`}>{candidate.status}</span>{exports.length > 0 && <ExportMenu exports={exports} workspaceId={candidate.workspace_id} />}<button type="button" className="secondary-button" onClick={() => requestShellRegionOpen("sidecar")}>Inspect candidate</button><button type="button" className="secondary-button" onClick={duplicateSelectedBrief}>Duplicate brief</button>{candidate.status !== "archived" && <button type="button" className="secondary-button" onClick={() => void onArchive()} disabled={busy}>Archive</button>}{canPromote && <button type="button" onClick={() => void onPromote()} disabled={busy}>Promote to Decision</button>}</>}{workspaceId && !noCandidates && !showCreate && <button type="button" className="secondary-button" onClick={() => setShowCreate(true)} disabled={busy}>New geometry</button>}</div></header>{message && <div className="panel-subtitle" role="status">{message}</div>}{sceneBindingNotice && <div className={sceneBindingPresentation === "resolving" ? "panel-subtitle" : "warning-banner"} role="status">{sceneBindingNotice}</div>}<div className="bluecad-workbench__viewport">{viewportContent}</div></section>;
 }
 
 const EXPORT_LABELS: Record<string, [string, string]> = {
   "export.stl": ["STL mesh", "Millimetres · for slicers such as Bambu Studio"],
-  "export.step": ["STEP solid", "Exact B-rep · for CAD exchange"]
+  "export.step": ["STEP solid", "Exact B-rep · for CAD exchange"],
+  "export.3mf": ["Download 3MF", "Millimetres · one object per part · for slicers such as Bambu Studio"]
 };
 
 function StudioReferenceCard({ reference, repinRun, busy, onChanged, onBusy, onFinding }: {
@@ -826,8 +829,29 @@ function StudioReferenceCard({ reference, repinRun, busy, onChanged, onBusy, onF
   return <article className="studio-panel" aria-label={`Studio reference ${reference.id}`}><strong>Version {reference.version_label}</strong> · generation {reference.simulation_run_id.slice(0, 8)} · <em>Visual only: not in BLUECAD STEP/STL, ports, FEM, CFD, checks or volume</em>{reference.superseded && <span className="warning-banner"> · Superseded; generate and pin a new version explicitly</span>}{reference.stale && <span> · stale (an input or linked Parameter changed)</span>}{!reference.valid && <p className="warning-banner" role="status">{reference.finding}</p>}<dl>{Object.entries(reference.inputs).map(([name, input]) => <div key={name}><dt>{name}</dt><dd>{input.value} {input.unit}</dd></div>)}</dl><details><summary>Provenance and downloads</summary><small>Scene {reference.scene_id} · frame {reference.provenance.frame} · placement {reference.placement_sha256}<br />Source {reference.source_sha256}<br />Contract {reference.contract_sha256}<br />GLB {reference.glb_sha256}<br />STEP {reference.step_sha256}<br />STL {reference.stl_sha256}</small>{reference.valid && <p><a href={`${API_BASE_URL}/workspaces/${reference.workspace_id}/studio/geometry-runs/${reference.simulation_run_id}/model.step`}>Original Studio STEP</a> · <a href={`${API_BASE_URL}/workspaces/${reference.workspace_id}/studio/geometry-runs/${reference.simulation_run_id}/model.stl`}>Original Studio STL</a></p>}</details><fieldset disabled={busy || !reference.valid}><legend>Place component · millimetres and degrees</legend>{(["X", "Y", "Z"] as const).map((axis, index) => <label key={`t-${axis}`}>Move {axis} mm<input type="number" step="any" value={translation[index]} onChange={(event) => setTranslation((old) => old.map((value, i) => i === index ? event.target.value : value))} /></label>)}{(["X", "Y", "Z"] as const).map((axis, index) => <label key={`r-${axis}`}>Rotate {axis}°<input type="number" step="any" value={rotation[index]} onChange={(event) => setRotation((old) => old.map((value, i) => i === index ? event.target.value : value))} /></label>)}<button type="button" onClick={apply}>Apply placement</button></fieldset>{(reference.superseded || reference.stale || !reference.valid) && <button type="button" className="secondary-button" disabled={busy || !repinRun || repinRun === reference.simulation_run_id} title="Pins the generation chosen above with this placement, then removes this reference" onClick={() => { onBusy(true); void addBluecadStudioReference(reference.workspace_id, reference.candidate_id, repinRun, { translation_mm: reference.translation_mm, rotation_deg: reference.rotation_deg }).then(() => removeBluecadStudioReference(reference)).then(onChanged).then(() => onFinding(null)).catch((error: Error) => { onFinding(error.message); void onChanged(); }).finally(() => onBusy(false)); }}>Re-pin to selected generation</button>}<button type="button" className="secondary-button" disabled={busy} onClick={() => { onBusy(true); void removeBluecadStudioReference(reference).then(onChanged).then(() => onFinding(null)).catch((error: Error) => onFinding(error.message)).finally(() => onBusy(false)); }}>Remove reference</button></article>;
 }
 
-function ExportMenu({ exports }: { exports: BluecadArtifactRefRead[] }) {
+function ExportMenu({ exports, workspaceId }: { exports: BluecadArtifactRefRead[]; workspaceId: string }) {
   const [open, setOpen] = useState(false);
+  const [handoffAvailable, setHandoffAvailable] = useState(false);
+  const [handoffStatus, setHandoffStatus] = useState<string | null>(null);
+  const threeMf = exports.find((item) => item.roles[0] === "export.3mf");
+  useEffect(() => {
+    let cancelled = false;
+    setHandoffAvailable(false);
+    setHandoffStatus(null);
+    if (threeMf) {
+      getBluecadPrintHandoffCapability(workspaceId)
+        .then((capability) => { if (!cancelled) setHandoffAvailable(capability.available); })
+        .catch(() => { if (!cancelled) setHandoffAvailable(false); });
+    }
+    return () => { cancelled = true; };
+  }, [workspaceId, threeMf?.id]);
+  const openInSlicer = () => {
+    if (!threeMf) return;
+    setHandoffStatus("Handing the 3MF to Windows…");
+    openBluecadArtifactInSlicer(workspaceId, threeMf.id)
+      .then((event) => setHandoffStatus(`Handed to Windows: ${event.windows_path}`))
+      .catch((error: unknown) => setHandoffStatus(error instanceof Error ? error.message : "Open in slicer failed."));
+  };
   const [flipped, setFlipped] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
@@ -864,7 +888,7 @@ function ExportMenu({ exports }: { exports: BluecadArtifactRefRead[] }) {
   }}><button ref={buttonRef} type="button" className="secondary-button" aria-expanded={open} aria-controls="bluecad-export-menu" onClick={() => setOpen((value) => !value)}>Export ▾</button>{open && <div ref={menuRef} id="bluecad-export-menu" className={`bluecad-export__menu${flipped ? " bluecad-export__menu--flipped" : ""}`} aria-label="Download exports">{items.map((item) => {
     const [label, detail] = EXPORT_LABELS[item.roles[0]];
     return <a key={item.id} href={`${API_BASE_URL}${item.content_url}`} download onClick={() => setOpen(false)}><strong>{label}</strong><small>{detail}</small></a>;
-  })}</div>}</div>;
+  })}{handoffAvailable && threeMf && <button type="button" className="bluecad-export__handoff secondary-button" onClick={openInSlicer}><strong>Open in slicer</strong><small>The Windows default program for .3mf will open this file</small></button>}{handoffStatus && <div className="bluecad-export__status" role="status">{handoffStatus}</div>}</div>}</div>;
 }
 
 type TemplateKind = BluecadTemplateCreate["template"];
@@ -933,7 +957,7 @@ function CreateGeometryPanel({ heading, intro, aiBriefState, disabled, pending, 
     <div className="bluecad-create__intro"><h2>{heading}</h2><p>{intro}</p></div>
     <form className="bluecad-create__route" onSubmit={submit} aria-labelledby="bluecad-template-title" noValidate>
       <h3 id="bluecad-template-title">Template part · no AI</h3>
-      <p>Built deterministically on the server from your dimensions, validated, and exported as GLB, STL and STEP.</p>
+      <p>Built deterministically on the server from your dimensions, validated, and exported as GLB, STL, STEP and 3MF.</p>
       <div className="bluecad-create__fields">
         <label>Template<select value={kind} onChange={(event) => { setKind(event.target.value as TemplateKind); setProblem(null); }} disabled={disabled}><option value="tube">Tube</option><option value="manifold">Manifold</option></select></label>
         {TEMPLATE_FIELDS[kind].map((field) => <label key={`${kind}-${field.key}`}>{field.label}<input type="number" inputMode="decimal" min={field.min} max={field.max} step={field.step} value={raw[kind][field.key]} onChange={(event) => setRaw((current) => ({ ...current, [kind]: { ...current[kind], [field.key]: event.target.value } }))} disabled={disabled} required /></label>)}

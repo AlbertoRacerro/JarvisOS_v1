@@ -35,7 +35,8 @@ LEGACY_CREATE_ONLY_COLUMNS: dict[tuple[str, str], str] = {}
 # legacy database starts from a fresh schema, so it cannot catch that case.
 # An intentional new table changes this digest too and must be reviewed here.
 # Reviewed for spec 194: bluecad_studio_references is a new table, not a new column on an old one.
-BASE_CREATE_ONLY_SHA256 = "4a3c0cc096bc400c96c3ba6ca3046c5e0594b2390f0f4f1dda7c89527066f888"
+# Reviewed for spec 165: print_handoff_events is a new table, not a new column on an old one.
+BASE_CREATE_ONLY_SHA256 = "10c389b02c42e81b7ddc0e524522804ff2cf1f1372d2f4e6b31ea0d0b7fb1174"
 
 # KNOWN DRIFT (spec 028, recorded not fixed): columns added by a migration
 # statement but absent from their owner's CREATE TABLE. A fresh database only has

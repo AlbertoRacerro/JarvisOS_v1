@@ -28,6 +28,15 @@ from app.modules.bluecad.cad_link_topology_execute import execute_cad_link_072
 from app.modules.bluecad.ledger import archive_candidate, get_candidate, list_candidates, mark_promoted
 from app.modules.bluecad.loop import _external_blocked_reason, create_bluecad_candidate
 from app.modules.bluecad.models import BluecadCandidateCreate, BluecadCandidateRead
+from app.modules.bluecad.print_handoff import (
+    PrintHandoffCapability,
+    PrintHandoffError,
+    PrintHandoffEventRead,
+    open_in_slicer,
+)
+from app.modules.bluecad.print_handoff import (
+    capability as print_handoff_capability,
+)
 from app.modules.bluecad.read_model import BluecadCandidateAggregateRead, get_bluecad_candidate_aggregate
 from app.modules.bluecad.studio_references import (
     ReferenceCreate,
@@ -95,7 +104,12 @@ def remove_studio_reference_endpoint(workspace_id: str, candidate_id: str, refer
     except ReferenceError as exc:
         raise _reference_error(exc) from exc
 
-_EXPORT_MEDIA_TYPES = {"bluecad_stl": ("model/stl", ".stl"), "bluecad_step": ("model/step", ".step")}
+
+_EXPORT_MEDIA_TYPES = {
+    "bluecad_stl": ("model/stl", ".stl"),
+    "bluecad_step": ("model/step", ".step"),
+    "bluecad_3mf": ("model/3mf", ".3mf"),
+}
 _CANDIDATE_SOURCE_REF = re.compile(r"^bluecad_candidate:([0-9a-f-]{36}):attempt:(\d+)$")
 
 
@@ -288,3 +302,16 @@ def archive_candidate_endpoint(workspace_id: str, candidate_id: str) -> BluecadC
 def get_bluecad_artifact_content(workspace_id: str, artifact_id: str) -> FileResponse:
     stored_path, media_type, download_name = _bluecad_artifact_path(workspace_id, artifact_id)
     return FileResponse(stored_path, media_type=media_type, filename=download_name)
+
+
+@router.get("/print-handoff/capability", response_model=PrintHandoffCapability)
+def get_print_handoff_capability(workspace_id: str) -> PrintHandoffCapability:
+    return print_handoff_capability()
+
+
+@router.post("/artifacts/{artifact_id}/open-in-slicer", response_model=PrintHandoffEventRead)
+def open_bluecad_artifact_in_slicer(workspace_id: str, artifact_id: str) -> PrintHandoffEventRead:
+    try:
+        return open_in_slicer(workspace_id, artifact_id)
+    except PrintHandoffError as exc:
+        raise HTTPException(status_code=exc.status_code, detail={"code": exc.code, "message": exc.message}) from exc
