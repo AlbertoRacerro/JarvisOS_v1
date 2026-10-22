@@ -99,6 +99,7 @@ class Limits:
     transient_cap: float = 1_800.0
     crash_retries: int = 1
     recheck: timedelta = timedelta(minutes=30)
+    recheck_cap: timedelta = timedelta(hours=4)  # estimated cooldowns double per repeated quota failure up to this
     max_wait: timedelta = timedelta(days=8)
     reading_freshness: timedelta = timedelta(minutes=15)
     max_reset_ahead: timedelta = timedelta(days=8)
@@ -2338,7 +2339,6 @@ class Host:
     terminate: Callable[[int], None] = terminate_group
     diagnostic: Any = None  # ReadOnlyCodex (spec 197); None: no read-only diagnosis is possible
     task_check: Callable[[dict[str, Any]], str | None] = lambda check: None  # spec 201: None when the check passes
-    refresh_codex_quota: Callable[[], None] = lambda: None  # read-only probe when Codex's limits are stale
 
 
 class Supervisor:
@@ -2361,7 +2361,6 @@ class Supervisor:
         self._reading: dict[str, Any] | None = None
         self._reading_at: datetime | None = None
         self.mission: dict[str, Any] | None = None  # spec 201: the validated mission this store executes
-        self._codex_quota_probed = False
 
     # -- persistence helpers
     def save(self) -> None:
@@ -2448,10 +2447,11 @@ class Supervisor:
                     return None  # exhausted but the reset time is stale or implausible: not evidence
         return max(resets) if resets else False
 
-    def available(self, agent: str, *, confirm: bool) -> bool:
-        """Whether `agent` may run now. A cooldown ends at its reset. With `confirm` (switching to `agent`) a
-        fresh, plausible limits reading must also positively show room: missing, stale or failed readings are
-        not evidence, and the unconfirmed agent gets a short recheck cooldown so waits stay bounded."""
+    def available(self, agent: str) -> bool:
+        """Whether `agent` may be tried now. Its own runs are the authority: a cooldown recorded from a real
+        failure ends at its reset, and a fresh, plausible limits reading that shows it out of quota defers it to
+        that reset. A missing, stale or failed reading is no evidence either way, so the agent is tried and its
+        run decides; a quota failure then records the cooldown that keeps retries bounded."""
         now = self.host.now()
         cooldown = self.state["cooldowns"].get(agent)
         if cooldown:
@@ -2459,24 +2459,9 @@ class Supervisor:
             if until is None or now < until:
                 return False
         reading = self.exhausted_until(agent)
-        if reading is None and confirm and agent == "codex" and self.mission is not None and not self._codex_quota_probed:
-            # Relay derives Codex quota from its own rollout files. On an idle host that reading can be stale;
-            # one bounded read-only Codex turn refreshes it before a mission's first fallback decision.
-            self._codex_quota_probed = True
-            try:
-                self.host.refresh_codex_quota()
-            except (OSError, subprocess.TimeoutExpired):
-                pass  # an unconfirmed provider remains unavailable
-            self._reading = None
-            reading = self.exhausted_until(agent)
         if isinstance(reading, datetime):
             self.state["cooldowns"][agent] = {"until": iso(reading), "source": "limits", "reason": "quota",
                                               "since": iso(now)}
-            return False
-        if reading is None and confirm:
-            self.state["cooldowns"][agent] = {"until": iso(now + self.limits.recheck), "source": "estimate",
-                                              "reason": (cooldown or {}).get("reason") or "unconfirmed",
-                                              "since": (cooldown or {}).get("since") or iso(now)}
             return False
         if cooldown:
             self.state["cooldowns"].pop(agent, None)
@@ -2487,6 +2472,8 @@ class Supervisor:
         existing = self.state["cooldowns"].get(agent)
         if isinstance(existing, dict) and existing.get("until") is None:
             return  # a manual cap stays until `release --clear-cooldown`; no reclassification shortens it
+        if isinstance(existing, dict) and report.turn_id and existing.get("turn") == report.turn_id:
+            return  # this turn's cooldown is already recorded: a restart re-deciding it neither extends nor backs off
         caps = self.state["spend_caps"]
         earlier = caps.get(agent)
         if report.spend_cap and report.outcome == "quota" and isinstance(earlier, dict) \
@@ -2505,9 +2492,12 @@ class Supervisor:
             elif message and now < message <= now + self.limits.max_reset_ahead:
                 until, source = message, "message"
             else:
-                until, source = now + self.limits.recheck, "estimate"
+                # No reliable reset: retry periodically, backing off while the agent keeps failing (reset on success).
+                strikes = self.state["counters"].get(f"estimated_{agent}", 0)
+                self.state["counters"][f"estimated_{agent}"] = strikes + 1
+                until, source = now + min(self.limits.recheck * 2 ** strikes, self.limits.recheck_cap), "estimate"
         self.state["cooldowns"][agent] = {"until": iso(until), "source": source, "reason": report.outcome,
-                                          "since": iso(now)}
+                                          "since": iso(now), "turn": report.turn_id}
         self.notify("provider_exhausted", dedupe_key=f"exhausted|{agent}|{iso(until)}", agent=agent,
                     outcome=report.outcome, reset_at=iso(until) or "manual", reset_source=source)
         self.record("finding", f"relay-continuity: {agent} {report.outcome}; cooldown until "
@@ -2624,6 +2614,7 @@ class Supervisor:
         failed_agent = report.agent or self.state.get("agent") or PREFERRED
         if report.outcome == "success":
             counters.update({"consecutive_failures": 0, "transient_streak": 0, "crash_retries": 0})
+            counters.pop(f"estimated_{failed_agent}", None)
             self.state["spend_caps"].pop(failed_agent, None)
             self.state["waiting_since"] = None
             if task is None and self.mission is not None:
@@ -2647,7 +2638,9 @@ class Supervisor:
                 return self._wait_or_hold("prefer", lambda _agent: f"[relay-continuity attempt {{nonce}}]\n{task}")
             return agent, f"[relay-continuity attempt {{nonce}}]\n{task}"
 
-        if report.turn_id != self.resume_turn:  # re-examining a held turn is not a new failure
+        # Re-examining a held turn is not a new failure. Quota is bounded by its cooldowns instead: a provider out
+        # of quota is retried only after its reset (or a backed-off estimate), so it never loops on its own.
+        if report.turn_id != self.resume_turn and report.outcome != "quota":
             counters["consecutive_failures"] += 1
         if counters["consecutive_failures"] > self.limits.max_consecutive_failures:
             return self.hold("circuit_failures")
@@ -3064,25 +3057,27 @@ class Supervisor:
     def _choose(self, current: str, *, mode: str) -> str | None:
         """`same`: retry the current agent only (transient, crash). `switch`: another agent only (quota).
         `prefer`: at a turn boundary, the preferred agent first, returning to it only after the dwell time.
-        Every switch is bounded and needs fresh confirmation that the target has quota."""
+        Switching away from an agent that cannot run is never blocked. A voluntary return to the preferred agent
+        is bounded by the dwell and the switch budget, and over budget the usable current agent simply stays."""
         now = self.host.now()
         last_switch = parse_ts(self.state.get("last_switch_at"))
         dwell_ok = last_switch is None or now - last_switch >= self.limits.min_dwell
+        # Staying is a choice only while the current agent works: not after its last turn ran out of quota.
+        stay_ok = self.state.get("last_outcome") not in ("quota", "spend_limit") and self.available(current)
         if mode == "same":
             order = [current]
         elif mode == "switch":
             order = [a for a in [PREFERRED] + [a for a in AGENTS if a != PREFERRED] if a != current]
         else:
             order = [PREFERRED] + [a for a in AGENTS if a != PREFERRED]
-            if current != PREFERRED and not dwell_ok and self.available(current, confirm=False):
+            if current != PREFERRED and not dwell_ok and stay_ok:
                 order = [current]  # too soon after a switch to return; stay while the current agent is usable
         for agent in order:
-            if self.available(agent, confirm=agent != current):
+            if self.available(agent):
                 if agent != current:
                     recent = [t for t in self.state["switches"] if (ts := parse_ts(t)) and now - ts < self.limits.switch_window]
-                    if len(recent) >= self.limits.max_switches:
-                        self.hold("circuit_switches")
-                        return None
+                    if len(recent) >= self.limits.max_switches and mode == "prefer" and stay_ok:
+                        return current  # the switch budget is spent: no voluntary return, stay where it works
                     recent.append(iso(now))
                     self.state["switches"] = recent
                     self.state["last_switch_at"] = iso(now)
@@ -3103,10 +3098,9 @@ class Supervisor:
             if self.state["phase"] == "held":
                 return "held"
             now = self.host.now()
-            # Only a real reset is worth waiting for; an agent that merely lacks a fresh reading is not one.
+            # Every timed cooldown ends at a reset or a backed-off estimate; only spend caps (no reset) hold.
             relevant = {a: c for a, c in self.state["cooldowns"].items() if mode != "same" or a == current}
-            known = [u for c in relevant.values()
-                     if c.get("reason") != "unconfirmed" and (u := parse_ts(c.get("until"))) is not None]
+            known = [u for c in relevant.values() if (u := parse_ts(c.get("until"))) is not None]
             if not known:
                 return self.hold("no_provider_available")
             since = parse_ts(self.state.get("waiting_since")) or now
@@ -3475,19 +3469,7 @@ def make_host(repo: Path, relay_env: dict[str, str] | None = None) -> Host:
                 conflicts=lambda own: live_conflicts(repo, own), ledger=ledger, permissions_digest=permissions,
                 live_work=live_work, probe=lambda call: probe_call(call, repo),
                 evidence=lambda report: collect_evidence(repo, report), diagnostic=ReadOnlyCodex(repo, control_root()),
-                task_check=lambda check: check_task(repo, check),
-                refresh_codex_quota=lambda: refresh_codex_quota(repo))
-
-
-CODEX_QUOTA_PROBE = tuple(a for a in CODEX_READ_ONLY if a != "--ephemeral")  # Relay reads the rollout it writes
-
-
-def refresh_codex_quota(repo: Path) -> None:
-    """Refresh Relay's stale Codex usage evidence with one bounded, no-tool, read-only turn. It must not be
-    ephemeral: Relay reads Codex quota only from rollout files, which an ephemeral turn never writes."""
-    subprocess.run(["codex", *CODEX_QUOTA_PROBE, "-C", str(repo), "-"], cwd=repo,
-                   input="Reply READY. Do not use tools.\n", text=True, capture_output=True,
-                   timeout=120, check=False)
+                task_check=lambda check: check_task(repo, check))
 
 
 # ---------------------------------------------------------------------------
@@ -3981,7 +3963,7 @@ def command_serve(args: argparse.Namespace) -> int:
         (root / "STOP").unlink(missing_ok=True)
     sender = None if args.no_notify else webhook_sender()
     provider_env = sandbox_provider_env(Path.home())
-    os.environ.update(provider_env)  # the Codex quota probe and read-only diagnostics inherit it too
+    os.environ.update(provider_env)  # read-only diagnostics inherit it too
     link_relay_claude_credentials(Path(provider_env["CLAUDE_CONFIG_DIR"]), Path.home())
     # Relay's headless runner pins Claude to `default` and ignores the REPL permission-mode variable.
     # Its mission-only entrypoint removes that flag and adds bypassPermissions inside the OS boundary.
