@@ -1694,7 +1694,8 @@ def reap_descendants(grace: float = 5.0, *, pid: int | None = None, proc_root: P
                      clock: Callable[[], float] = time.monotonic) -> list[str]:
     """Stop every process still running below this one: SIGTERM, then SIGKILL once `grace` seconds have passed,
     repeated until none is left (a process may fork while being stopped). Called only when no launched run is
-    still awaited. Returns the stopped processes' names, never their arguments."""
+    still awaited. Returns the stopped processes' names, never their arguments. Raises RuntimeError when a process
+    survives (for example one stuck in uninterruptible I/O): the turn is not over until it has gone."""
     pid = os.getpid() if pid is None else pid
     names: set[str] = set()
     deadline, sig = clock() + grace, signal.SIGTERM
@@ -1715,6 +1716,8 @@ def reap_descendants(grace: float = 5.0, *, pid: int | None = None, proc_root: P
         _reap_zombies()
         if clock() >= deadline:
             sig = signal.SIGKILL
+    if survivors := descendants(pid, proc_root):
+        raise RuntimeError(f"{len(survivors)} process(es) survived SIGKILL")
     return sorted(names)
 
 
@@ -2532,18 +2535,30 @@ class Supervisor:
         pending["pid_start"] = devctx.pid_start(pending["pid"]) if pending["pid"] else None
         self.save()
         result = self.host.relay.finish(proc)
-        return self._settle(pending, result.session_id, result.diagnostics, self._reap())
+        if (reaped := self._reap()) is None:
+            # Stopped while a process of the turn still survived: the attempt stays pending, and a restart adopts it.
+            return "signal" if self.signalled else "stopped"
+        return self._settle(pending, result.session_id, result.diagnostics, reaped)
 
-    def _reap(self) -> list[str]:
-        """Stop whatever the finished turn left running, so nothing of it overlaps the next turn."""
-        try:
-            reaped = self.host.reap()
-        except Exception as exc:  # noqa: BLE001 - logged; the next turn is told nothing was stopped
-            self.host.log(f"reap failed: {type(exc).__name__}")
-            return []
-        if reaped:
-            self.host.log(f"stopped processes the turn left running: {', '.join(reaped)}")
-        return reaped
+    def _reap(self) -> list[str] | None:
+        """Stop whatever the finished turn left running, so nothing of it overlaps the next turn. While a process
+        survives, nothing is launched: retry every 30 s. None when a stop request ends that wait."""
+        names: set[str] = set()
+        while True:
+            try:
+                names.update(self.host.reap())
+                break
+            except Exception as exc:  # noqa: BLE001 - a failed cleanup is never taken as a clean one
+                self.host.log(f"processes of the finished turn survive ({type(exc).__name__}: {exc}); "
+                              "waiting before anything is launched")
+                self.state["phase"] = "waiting"
+                self.save()
+                if self._sleep(30.0):
+                    return None
+                self.state["phase"] = "running"
+        if names:
+            self.host.log(f"stopped processes the turn left running: {', '.join(sorted(names))}")
+        return sorted(names)
 
     def _settle(self, pending: dict[str, Any], session_id: str | None, diagnostics: str = "",
                 reaped: list[str] | None = None) -> TurnReport | str:

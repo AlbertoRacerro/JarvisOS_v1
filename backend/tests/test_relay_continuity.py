@@ -684,10 +684,10 @@ def test_processes_a_turn_leaves_running_are_stopped_and_named_to_the_successor(
     assert result == "idle"
     assert reaps == [1, 2]  # after every finished turn, before anything is decided
     task = env.relay.launches[1]["task"]
-    assert "stopped by the supervisor: python3, node" in task and "python &: INTERRUPTED" in task
+    assert "stopped by the supervisor: node, python3" in task and "python &: INTERRUPTED" in task
     assert rc.PROCESSES_STOPPED in task
     settle = [r for r in journal(env) if r.get("event") == "settle"]
-    assert settle[0]["reaped"] == ["python3", "node"] and settle[1]["reaped"] == []
+    assert settle[0]["reaped"] == ["node", "python3"] and settle[1]["reaped"] == []
 
 
 def test_crash_after_the_repository_changed_is_retried_not_held(tmp_path: Path) -> None:
@@ -3146,3 +3146,50 @@ def test_relay_run_ends_when_relay_exits_even_if_a_detached_process_keeps_its_ou
     assert time.monotonic() - started < 10  # not held until the detached `sleep 30` closes the inherited output
     assert result.session_id == "20261018-080000-abcdef" and "note" in result.diagnostics
     os.kill(int((tmp_path / "pid").read_text()), signal.SIGKILL)  # this test's own leftover
+
+
+def test_reaper_reports_a_process_that_survives(tmp_path: Path) -> None:
+    proc = tmp_path / "proc"
+    for pid, children in ((100, "200"), (200, "")):
+        (proc / str(pid) / "task" / str(pid)).mkdir(parents=True)
+        (proc / str(pid) / "task" / str(pid) / "children").write_text(children)
+    (proc / "200" / "stat").write_text("200 (stuck) D 100")
+    (proc / "200" / "comm").write_text("stuck\n")
+    clock = {"t": 0.0}
+
+    def sleep(seconds: float) -> None:
+        clock["t"] += seconds
+    with pytest.raises(RuntimeError, match="survived"):
+        rc.reap_descendants(1.0, pid=100, proc_root=proc, kill=lambda pid, sig: None, sleep=sleep,
+                            clock=lambda: clock["t"])
+
+
+def test_nothing_launches_while_a_process_of_the_turn_survives(tmp_path: Path) -> None:
+    env = Env(tmp_path, [("claude", [IN_FLIGHT["server"], tool_result("x"), *QUOTA]), ("codex", CODEX_SUCCESS)])
+    outcomes = iter([RuntimeError("1 process(es) survived SIGKILL")] * 3 + [["python3"]] + [[]] * 5)
+
+    def reap() -> list[str]:
+        item = next(outcomes)
+        if isinstance(item, Exception):
+            raise item
+        return item
+    env.host.reap = reap
+    env.head(CRASH)
+    result, sup = env.run()
+    assert result == "idle" and [launch["agent"] for launch in env.relay.launches] == ["claude", "codex"]
+    # Codex started only after the cleanup succeeded, three 30 s retries later.
+    assert env.relay.launches[1]["at"] - env.relay.launches[0]["at"] >= timedelta(seconds=90)
+    assert "stopped by the supervisor: python3" in env.relay.launches[1]["task"]
+
+
+def test_a_stop_while_a_process_survives_keeps_the_attempt_pending(tmp_path: Path) -> None:
+    env = Env(tmp_path, [("claude", [IN_FLIGHT["server"], tool_result("x"), *QUOTA])])
+
+    def reap() -> list[str]:
+        env.store.stop_path.write_text("x")
+        raise RuntimeError("1 process(es) survived SIGKILL")
+    env.host.reap = reap
+    env.head(CRASH)
+    result, sup = env.run()
+    assert result == "stopped" and sup.state["pending"] is not None  # adopted on restart, never relaunched
+    assert len(env.relay.launches) == 1
