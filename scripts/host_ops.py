@@ -451,6 +451,9 @@ def op_service_status(ctx: Context) -> dict[str, Any]:
     return {"unit": unit, "state": _unit_state(ctx, unit)}
 
 
+OWNER_ACTIONS = {"jarvisos-mission-owner.service": ["start"]}
+
+
 def op_service_control(ctx: Context) -> dict[str, Any]:
     conf = ctx.conf("service.control")
     args = _args(ctx, {"unit", "action"})
@@ -458,6 +461,10 @@ def op_service_control(ctx: Context) -> dict[str, Any]:
     action = args.get("action")
     if action not in ("start", "stop", "restart"):
         raise Refused("action must be start, stop or restart")
+    # Stopping or restarting the mission owner kills a running provider turn; the graceful path is its STOP file.
+    limited = conf.get("actions") if isinstance(conf.get("actions"), dict) else OWNER_ACTIONS
+    if unit in limited and action not in (limited[unit] or []):
+        raise Refused(f"{action} of {unit} is not allowed by the host policy")
     proc = _systemctl(ctx, action, unit)
     want = "inactive" if action == "stop" else "active"
     state: dict[str, str] = {}
@@ -1104,7 +1111,8 @@ DEFAULT_POLICY: dict[str, Any] = {
         "slack.deliver": {"max_per_hour": 6},
         "service.status": {"units": ["jarvisos-relay-watch.service", "jarvisos-mission-owner.service",
                                      "jarvisos-hostops.service", "agent-relay.service"]},
-        "service.control": {"units": ["jarvisos-relay-watch.service", "jarvisos-mission-owner.service"]},
+        "service.control": {"units": ["jarvisos-relay-watch.service", "jarvisos-mission-owner.service"],
+                            "actions": OWNER_ACTIONS},
         "service.install": {"templates": ["jarvisos-relay-watch"]},
         "wsl.probe": {},
         "wsl.handoff": {"dir": "/mnt/c/Users/thera/JarvisOS-print", "open": True, "max_bytes": 200 << 20,

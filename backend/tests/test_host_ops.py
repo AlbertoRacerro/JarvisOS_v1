@@ -142,6 +142,8 @@ def test_unknown_arguments_and_absent_policy_refused(host, op):
     ("service.status", {"unit": "evil.service"}),
     ("service.control", {"unit": "evil.service", "action": "start"}),
     ("service.control", {"unit": "jarvisos-mission-owner.service", "action": "kill"}),
+    ("service.control", {"unit": "jarvisos-mission-owner.service", "action": "stop"}),
+    ("service.control", {"unit": "jarvisos-mission-owner.service", "action": "restart"}),
     ("service.install", {"template": "evil"}),
     ("wsl.handoff", {"file": "bad.exe"}),
     ("wsl.handoff", {"file": "../bad.png"}),
@@ -476,3 +478,10 @@ def test_named_http_target_cannot_be_external(host):
     policy["ops"]["http.smoke"]["targets"]["bad"] = {"url": "https://example.com", "expect": 200}
     paths.policy.write_text(json.dumps(policy))
     assert request(host, "http.smoke", {"target": "bad"})[1]["outcome"] == "refused"
+
+
+def test_mission_owner_start_is_allowed_and_receipted(host):
+    _, _, calls = host
+    _, receipt = request(host, "service.control", {"unit": "jarvisos-mission-owner.service", "action": "start"})
+    assert receipt["outcome"] == "ok"
+    assert ["systemctl", "--user", "start", "jarvisos-mission-owner.service"] in [argv for argv, _ in calls]
