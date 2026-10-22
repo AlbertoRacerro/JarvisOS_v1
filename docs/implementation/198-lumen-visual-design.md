@@ -36,12 +36,12 @@ What changed (presentation and scoped copy only; no backend, API, persistence, r
   contracts; unchanged by this slice).
 - Real Chromium (Playwright 1.55, isolated backend with a temp data root and one workspace): all 19 production routes
   × Dark/Light × 1440 px/390 px = 76 captures, every capture resolved the requested `data-theme`. Evidence:
-  `/home/thera/jarvis-control/work/evidence/198a-browser/` (`capture.mjs`, `r4/report.json`, `r4/*.png`).
-  - Page/console errors: 0, apart from one `429` from the backend's GitHub read on Coding → Repository (rate limit,
+  `/home/thera/jarvis-control/work/evidence/198a-browser/` (`capture.mjs`, `r5/report.json`, `r5/*.png`, captured from the built head recorded in `r5/HEAD.txt`).
+  - Page/console errors: 0 (an earlier run saw one transient `429` from the backend's GitHub read on Coding → Repository;
     environmental).
   - Computed text contrast (blended background stack, WCAG AA): 2,978 failures before the `--fusion-*` remap, 564
     after. 0 failures on Studio, Studies, Settings, Runs, Engineering Data, Review and AI Threads.
-  - Focus: 432 tab stops audited, 14 without a visible indicator, all the Jarvis sidecar message field.
+  - Focus: 433 tab stops audited, 14 without a visible indicator, all the Jarvis sidecar message field.
   - Rendered `BLUECAD`: only the backend-originated sidecar message “No valid BLUECAD candidate is available…”
     (`backend/app/modules/workspace_actions/service.py`) and relay transcript text quoted by Coding → Runtime.
 
@@ -54,4 +54,5 @@ What changed (presentation and scoped copy only; no backend, API, persistence, r
 | Chart series colours hard-coded for light (`ProfileChart`, `SyncCharts`, `PbrDynamicRuns`) | Dynamic/PBR charts | Slice 2: series tokens per appearance, keeping series identity. |
 | BlueCad WebGL scene background/grid fixed light | BlueCad viewport | Slice 2: viewport background token, geometry rendering unchanged. |
 | Sub-12 px labels (`8px`/`9px`/`10px`) in final-fusion, Coding and sidecar sheets | several | Slice 2 audit fixes (density/hierarchy). |
+| Legacy top-bar routes (Runs, Review, AI Threads, Engineering Data) keep a full-width accent outline on the focused main region and the older top bar chrome | non-final shell | Slice 2: restyle or retire the redundant chrome. |
 | Backend message spells BLUECAD | Workspace actions service | Outside 198 (no backend change); record for a backend copy follow-up. |
