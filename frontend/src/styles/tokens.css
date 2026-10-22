@@ -149,6 +149,8 @@
   --color-bg-surface-raised: #fffffb;
   --color-bg-subtle: #e9ecda;
   --color-bg-technical-viewport: #121a16;
+  --color-viewport-grid-major: #7a8e72;
+  --color-viewport-grid-minor: #b7c4ad;
   --color-text-on-viewport: #dfe8d6;
   --color-text-on-viewport-muted: #a9b6a0;
   --color-text-primary: #15230f;
@@ -268,6 +270,8 @@
   --color-bg-surface-raised: #142318;
   --color-bg-subtle: #0b150c;
   --color-bg-technical-viewport: #07110a;
+  --color-viewport-grid-major: #758c6c;
+  --color-viewport-grid-minor: #344a30;
   --color-text-on-viewport: #dfe8d6;
   --color-text-on-viewport-muted: #a9b6a0;
   --color-text-primary: #eef0de;

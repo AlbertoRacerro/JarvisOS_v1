@@ -168,7 +168,7 @@ function BluecadGlbViewer({ artifactUrl, references = [], inspectionCommand = nu
     }
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0xf8fafc);
+    scene.background = new THREE.Color();
     const camera = new THREE.PerspectiveCamera(45, mount.clientWidth / Math.max(mount.clientHeight, 1), 0.1, 10000);
     camera.position.set(160, 120, 160);
 
@@ -186,8 +186,32 @@ function BluecadGlbViewer({ artifactUrl, references = [], inspectionCommand = nu
     const directional = new THREE.DirectionalLight(0xffffff, 2.4);
     directional.position.set(80, 120, 90);
     scene.add(directional);
-    const grid = new THREE.GridHelper(220, 22, 0x94a3b8, 0xe2e8f0);
+    const viewportStyles = () => getComputedStyle(mount);
+    const createGrid = () => {
+      const styles = viewportStyles();
+      return new THREE.GridHelper(
+        220, 22,
+        styles.getPropertyValue("--color-viewport-grid-major").trim(),
+        styles.getPropertyValue("--color-viewport-grid-minor").trim()
+      );
+    };
+    let grid = createGrid();
     scene.add(grid);
+    const applyViewportAppearance = () => {
+      scene.background = new THREE.Color(viewportStyles().getPropertyValue("--color-bg-technical-viewport").trim());
+      const previousGrid = grid;
+      grid = createGrid();
+      grid.position.copy(previousGrid.position);
+      grid.scale.copy(previousGrid.scale);
+      scene.remove(previousGrid);
+      previousGrid.geometry.dispose();
+      const materials = Array.isArray(previousGrid.material) ? previousGrid.material : [previousGrid.material];
+      for (const material of materials) material.dispose();
+      scene.add(grid);
+    };
+    applyViewportAppearance();
+    const appearanceObserver = new MutationObserver(applyViewportAppearance);
+    appearanceObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
 
     let disposed = false;
     let loadedScene: THREE.Object3D | null = null;
@@ -378,6 +402,7 @@ function BluecadGlbViewer({ artifactUrl, references = [], inspectionCommand = nu
       }
       window.cancelAnimationFrame(animationFrame);
       resizeObserver?.disconnect();
+      appearanceObserver.disconnect();
       window.removeEventListener("resize", resize);
       renderer.domElement.removeEventListener("pointerdown", onPointerDown);
       renderer.domElement.removeEventListener("pointerup", onPointerUp);
