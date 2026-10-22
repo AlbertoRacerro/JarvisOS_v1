@@ -12,8 +12,8 @@ import hashlib
 import os
 import re
 import shutil
+import stat
 import subprocess
-import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from uuid import uuid4
@@ -130,19 +130,27 @@ def open_in_slicer(workspace_id: str, artifact_id: str) -> PrintHandoffEventRead
 
     directory = _resolve_directory(gates.directory)
     destination = directory / filename
-    _copy_verified(source, destination, directory, registered_sha)
-
-    windows_path = _to_windows_path(destination)
-    argv = [_explorer_binary(), windows_path]
-    outcome = "handed_to_windows"
-    failure: str | None = None
     try:
-        # explorer.exe commonly exits 1 on success; success is "started without timeout".
-        subprocess.run(argv, shell=False, timeout=15, capture_output=True)
-    except subprocess.TimeoutExpired:
-        outcome, failure = "timeout", "explorer.exe did not return within 15 seconds."
-    except OSError as exc:
-        outcome, failure = "launch_failed", f"explorer.exe could not be started: {exc.__class__.__name__}"
+        directory_fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    except OSError:
+        raise PrintHandoffError(409, "print_handoff_dir_invalid", "Configured handoff directory cannot be opened.") from None
+    try:
+        _verify_directory(directory, directory_fd)
+        copied_identity = _copy_verified(source, filename, directory_fd, registered_sha)
+        windows_path = _to_windows_path(destination)
+        argv = [_explorer_binary(), windows_path]
+        _verify_destination(destination, directory, directory_fd, copied_identity, registered_sha)
+        outcome = "handed_to_windows"
+        failure: str | None = None
+        try:
+            # explorer.exe commonly exits 1 on success; success is "started without timeout".
+            subprocess.run(argv, shell=False, timeout=15, capture_output=True)
+        except subprocess.TimeoutExpired:
+            outcome, failure = "timeout", "explorer.exe did not return within 15 seconds."
+        except OSError as exc:
+            outcome, failure = "launch_failed", f"explorer.exe could not be started: {exc.__class__.__name__}"
+    finally:
+        os.close(directory_fd)
 
     event = PrintHandoffEventRead(
         id=str(uuid4()),
@@ -195,29 +203,61 @@ def _resolve_directory(configured: Path) -> Path:
     return resolved
 
 
-def _copy_verified(source: Path, destination: Path, directory: Path, expected_sha256: str) -> None:
-    if destination.is_symlink() or destination.parent != directory:
-        raise PrintHandoffError(409, "print_handoff_unsafe_target", "Handoff target is a symlink or outside the directory.")
-    digest = hashlib.sha256()
-    temporary: Path | None = None
+def _identity(info: os.stat_result) -> tuple[int, int]:
+    return info.st_dev, info.st_ino
+
+
+def _verify_directory(directory: Path, directory_fd: int) -> None:
     try:
-        with tempfile.NamedTemporaryFile(mode="wb", prefix=".bluecad-", dir=directory, delete=False) as out, source.open("rb") as handle:
-            temporary = Path(out.name)
+        if _identity(os.stat(directory, follow_symlinks=False)) != _identity(os.fstat(directory_fd)):
+            raise PrintHandoffError(409, "print_handoff_unsafe_target", "Handoff directory changed.")
+    except OSError:
+        raise PrintHandoffError(409, "print_handoff_unsafe_target", "Handoff directory changed.") from None
+
+
+def _copy_verified(source: Path, filename: str, directory_fd: int, expected_sha256: str) -> tuple[int, int]:
+    temporary = f".bluecad-{uuid4().hex}"
+    digest = hashlib.sha256()
+    try:
+        try:
+            target_info = os.stat(filename, dir_fd=directory_fd, follow_symlinks=False)
+        except FileNotFoundError:
+            target_info = None
+        if target_info is not None and stat.S_ISLNK(target_info.st_mode):
+            raise PrintHandoffError(409, "print_handoff_unsafe_target", "Handoff target is a symlink.")
+        fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=directory_fd)
+        with os.fdopen(fd, "wb") as out, source.open("rb") as handle:
             for chunk in iter(lambda: handle.read(_COPY_CHUNK), b""):
                 digest.update(chunk)
                 out.write(chunk)
         if digest.hexdigest() != expected_sha256:
             raise PrintHandoffError(409, "print_handoff_hash_mismatch", "Artifact bytes do not match the registered sha256.")
-        if destination.is_symlink():
-            raise PrintHandoffError(409, "print_handoff_unsafe_target", "Handoff target is a symlink or outside the directory.")
-        # Replacing the directory entry leaves even a hard-linked existing file untouched.
-        os.replace(temporary, destination)
-        temporary = None
+        # Both names are relative to the same open directory, so a pathname swap
+        # cannot redirect the copy. Replacing an entry also leaves hard links intact.
+        os.replace(temporary, filename, src_dir_fd=directory_fd, dst_dir_fd=directory_fd)
+        return _identity(os.stat(filename, dir_fd=directory_fd, follow_symlinks=False))
     except OSError:
         raise PrintHandoffError(409, "print_handoff_copy_failed", "Could not copy the artifact to the handoff directory.") from None
     finally:
-        if temporary is not None:
-            temporary.unlink(missing_ok=True)
+        try:
+            os.unlink(temporary, dir_fd=directory_fd)
+        except FileNotFoundError:
+            pass
+
+
+def _verify_destination(destination: Path, directory: Path, directory_fd: int, identity: tuple[int, int], expected_sha256: str) -> None:
+    _verify_directory(directory, directory_fd)
+    try:
+        fd = os.open(destination.name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=directory_fd)
+        with os.fdopen(fd, "rb") as handle:
+            if _identity(os.fstat(handle.fileno())) != identity:
+                raise PrintHandoffError(409, "print_handoff_unsafe_target", "Handoff target changed before launch.")
+            digest = hashlib.file_digest(handle, "sha256").hexdigest()
+        path_info = os.stat(destination, follow_symlinks=False)
+        if _identity(path_info) != identity or digest != expected_sha256:
+            raise PrintHandoffError(409, "print_handoff_unsafe_target", "Handoff target changed before launch.")
+    except OSError:
+        raise PrintHandoffError(409, "print_handoff_unsafe_target", "Handoff target changed before launch.") from None
 
 
 def _to_windows_path(destination: Path) -> str:
