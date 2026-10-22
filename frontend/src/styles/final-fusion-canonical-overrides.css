@@ -113,7 +113,7 @@
 }
 
 .process-stage__tool svg { color: var(--color-accent-foreground); }
-.process-stage__tool span { font-size: 8px; line-height: 1.05; white-space: nowrap; }
+.process-stage__tool span { font-size: 12px; line-height: 1.05; white-space: nowrap; }
 
 .process-stage__palette {
   grid-area: palette;
@@ -134,7 +134,7 @@
   gap: 6px;
   border-bottom: 1px solid var(--color-border-default);
 }
-.process-stage__palette-head strong { font-size: 10px; font-weight: 500; }
+.process-stage__palette-head strong { font-size: 12px; font-weight: 500; }
 .process-stage__palette-head span { font-size: 7px; color: var(--color-text-muted); }
 
 .process-stage__palette-search {
@@ -145,7 +145,7 @@
   border-radius: 4px;
   background: var(--color-bg-surface-raised);
   color: var(--color-text-muted);
-  font-size: 8px;
+  font-size: 12px;
 }
 
 .process-stage__palette-filters {
@@ -202,7 +202,7 @@
   background: linear-gradient(180deg,var(--color-bg-surface-raised),var(--color-bg-surface)) !important;
   color: var(--color-text-secondary) !important;
   text-align: left;
-  font-size: 8px;
+  font-size: 12px;
   line-height: 1.15;
   overflow-wrap: normal;
   word-break: normal;
@@ -298,7 +298,7 @@
   font-weight: 500;
 }
 .application-shell--final .shell-properties__header .eyebrow,
-.application-shell--final .shell-sidecar__properties .eyebrow { font-size: 10px; }
+.application-shell--final .shell-sidecar__properties .eyebrow { font-size: 12px; }
 .application-shell--final .shell-sidecar__properties .ui-inline-notice,
 .application-shell--final .shell-sidecar__properties p,
 .application-shell--final .shell-sidecar__properties summary,

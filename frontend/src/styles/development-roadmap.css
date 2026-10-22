@@ -27,11 +27,11 @@
 .application-shell--final .roadmap-workspace .roadmap-axis > div { display:flex; justify-content:space-between; }
 .application-shell--final .roadmap-workspace .roadmap-lane { min-height:82px; border-bottom: 1px solid var(--color-border-default); padding:0 12px; }
 .application-shell--final .roadmap-workspace .roadmap-lane .roadmap-lane-label { border: 0; border-radius: 0; background: transparent; padding:12px 12px 12px 0; text-align:left; color: var(--color-text-primary); overflow-wrap:anywhere; }
-.application-shell--final .roadmap-workspace .roadmap-lane-label small { display:block; margin-top:5px; color: var(--color-text-muted); font-size:10px; }
+.application-shell--final .roadmap-workspace .roadmap-lane-label small { display:block; margin-top:5px; color: var(--color-text-muted); font-size: 12px; }
 .application-shell--final .roadmap-workspace .roadmap-track { position:relative; min-height:82px; background: repeating-linear-gradient(90deg,var(--color-bg-subtle) 0,var(--color-bg-subtle) 1px,transparent 1px,transparent 25%); }
 .application-shell--final .roadmap-workspace .roadmap-track .roadmap-window { position:absolute; top:15px; bottom:15px; min-width:8px; padding:7px 10px; border: 1px solid var(--color-accent-border-strong); border-radius: 5px; background: linear-gradient(var(--color-accent-primary),var(--color-accent-primary)); color: var(--color-text-on-accent); text-align:left; overflow:hidden; white-space:nowrap; box-shadow:inset 0 -4px 7px #0002; }
 .application-shell--final .roadmap-workspace .roadmap-window span, .application-shell--final .roadmap-workspace .roadmap-window small { display:block; overflow:hidden; text-overflow:ellipsis; }
-.application-shell--final .roadmap-workspace .roadmap-window small { font-size:10px; margin-top:3px; }
+.application-shell--final .roadmap-workspace .roadmap-window small { font-size: 12px; margin-top:3px; }
 .application-shell--final .roadmap-workspace .roadmap-lane[data-status="Blocked"] .roadmap-window { background: linear-gradient(var(--color-status-danger-text),var(--color-status-danger-text)); border-color: var(--color-status-danger-text); }
 .application-shell--final .roadmap-workspace .roadmap-lane[data-status="In progress"] .roadmap-window { background: linear-gradient(var(--color-status-warning-text),var(--color-status-warning-text)); border-color: var(--color-status-warning-text); }
 .application-shell--final .roadmap-workspace .roadmap-track .roadmap-unscheduled { position:absolute; top:24px; left:10px; background: var(--color-bg-surface-raised); color: var(--color-text-muted); border: 1px dashed var(--color-border-default); }
@@ -51,13 +51,13 @@
 .application-shell--final .roadmap-workspace .calendar-projection { position:relative; overflow:auto; flex:1 0 370px; min-height:300px; border-top: 1px solid var(--color-border-default); }
 .application-shell--final .roadmap-workspace .calendar-time-grid { display:grid; min-width:100%; width:max-content; }
 .application-shell--final .roadmap-workspace .calendar-day-heading { position:sticky; top:0; z-index:3; display:block; height:43px; padding:12px 6px; background: var(--color-bg-surface-raised); border-bottom: 1px solid var(--color-border-default); font-size:11px; }
-.application-shell--final .roadmap-workspace .calendar-hour-column > time { display:block; height:56px; padding:3px 5px; text-align:right; font-size:10px; color: var(--color-text-muted); }
+.application-shell--final .roadmap-workspace .calendar-hour-column > time { display:block; height:56px; padding:3px 5px; text-align:right; font-size: 12px; color: var(--color-text-muted); }
 .application-shell--final .roadmap-workspace .calendar-day-column { border-left: 1px solid var(--color-border-default); min-width:0; }
 .application-shell--final .roadmap-workspace .calendar-day-hours { height:1344px; position:relative; background: repeating-linear-gradient(var(--color-bg-subtle) 0,var(--color-bg-subtle) 1px,transparent 1px,transparent 28px,var(--color-bg-subtle) 28px,var(--color-bg-subtle) 29px,transparent 29px,transparent 56px); }
 .application-shell--final .roadmap-workspace .calendar-event-position { position:absolute; padding:1px 2px; min-height:14px; }
 .application-shell--final .roadmap-workspace .calendar-projection .calendar-event { display:flex; flex-direction:column; gap:4px; text-align:left; width:100%; height:100%; overflow:hidden; border: 1px solid var(--color-accent-border-strong); border-radius: 4px; background: linear-gradient(var(--color-bg-subtle),var(--color-bg-subtle)); color: var(--color-status-success-text); padding:6px; }
 .application-shell--final .roadmap-workspace .calendar-event strong { font-size:11px; overflow:hidden; text-overflow:ellipsis; width:100%; }
-.application-shell--final .roadmap-workspace .calendar-event span { font-size:10px; }
+.application-shell--final .roadmap-workspace .calendar-event span { font-size: 12px; }
 .application-shell--final .roadmap-workspace .calendar-month { display:grid; grid-template-columns:repeat(7,minmax(105px,1fr)); }
 .application-shell--final .roadmap-workspace .calendar-month-day { min-height:135px; padding:3px; border-right: 1px solid var(--color-border-default); border-bottom: 1px solid var(--color-border-default); }
 .application-shell--final .roadmap-workspace .calendar-month-day[data-outside-month="true"] { background: var(--color-bg-subtle); color: var(--color-text-muted); }
