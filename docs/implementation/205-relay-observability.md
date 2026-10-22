@@ -17,6 +17,35 @@ Spec: [205](../specs/205-relay-observability.md). Issues [#866](https://github.c
 - Live terminal monitor, same day: `timeout 5 python3 scripts/relay_observe.py follow` attached to the running owner task (mission `m-20261022T051445Z-1bd5fa`, session `20261022-051514-515816`, the turn that produced this change). It found the session by its attempt nonce before the chain recorded it, then printed the header (`── missione … · compito 1/1 · running · claude`) and the Claude tool calls and results in order, each bounded to one line. It did not stall the owner and took no lock.
 - Successor task, live, 2026-10-22T05:57Z: the next roadmap cycle (mission `m-20261022T055533Z-e4cec8`, cycle 5, session `20261022-055537-fb4f5f`) was auto-discovered by `relay_observe.py status` (`running`, task 1/1, owner alive) and followed with `timeout 8 python3 scripts/relay_observe.py follow`. The monitor printed the new mission header (`── missione m-20261022T055533Z-e4cec8 · compito 1/1 · running · claude`), the session/turn line and that turn's Claude tool calls, results and assistant messages in order, each bounded to one line. It exited cleanly (status 0) and the owner turn continued. This completes the live part of acceptance 3.
 
-## Pending (maintainer host evidence)
+## Host Slack delivery (acceptance 2)
 
-The webhook is deliberately unreadable inside the sandbox, so the sandboxed coordinator cannot run the real Slack end-to-end delivery (acceptance 2). On the host, run `python3 scripts/relay_continuity.py notify-test --digest` and `notify-test --alert`, then enable `jarvisos-relay-watch.service` as described in the runbook. The command prints the delivered text without the URL; record it here.
+Run on the trusted WSL host, outside the sandbox, on 2026-10-22 by the maintainer's direct host session (mandate `L20261022085842-e05d`). The code was `impl/205-relay-observability` rebased onto master `260ed2a6` (head `eb11544b`); `scripts/`, `backend/` and `.github/` are byte-identical to the reviewed head `aa74de6d`. The working directory was the main checkout, so the commands read the live owner state.
+
+- Webhook file `~/.config/jarvis/slack_webhook_url`: present, mode `600`, owner `thera`; its directory is mode `700`. Its content was not read or printed.
+- The owner had been stopped gracefully just before (`relay_continuity.py stop`, 08:57:36Z) with roadmap mode paused at cycle 6.
+- `08:59:36Z` `notify-test --digest`: printed `sent`, exit 0. `sent` means the webhook POST returned HTTP 2xx with no redirect (`post_webhook` returns no error class). Delivered text:
+
+  ```
+  *JarvisOS — aggiornamento delle 22/10 10:59*
+  *In corso:* roadmap in pausa.
+    motivo: il coordinatore ha chiesto una decisione (RELAY_STATUS blocked)
+    perché: roadmap autonoma attiva (ciclo 6) per far avanzare lo sviluppo di JarvisOS/BlueRev senza supervisione continua.
+  *Fatto dall'ultimo aggiornamento:*
+    • nessun risultato nuovo registrato.
+    ultimo turno (blocked): No authorized independent work remains: spec 205/PR #869 (Slack link markup shown here as plain `#869`) needs the maintainer's host-only Slack proof before it can merge, […]
+      – git ls-remote: master 260ed2a6, impl/205-relay-observability aa74de6d, impl/165-bluecad-print-handoff 3a3d47ad
+      – gh pr view 869: OPEN at aa74de6d, no new comments
+      – STATUS non-merged: 062 blocked, 165 in_review, 205 ready, 206 ready (dep 205)
+  *Prossimo:* Maintainer: spec 205 acceptance 2 host step (notify-test --digest/--alert, record the output, enable jarvisos-relay-watch.service)
+  *Serve intervento:* roadmap in pausa: il coordinatore ha chiesto una decisione (RELAY_STATUS blocked)
+  ```
+
+- `08:59:37Z` `notify-test --alert`: printed `sent`, exit 0. Delivered text:
+
+  ```
+  :red_circle: *JarvisOS — serve intervento* (22/10 10:59)
+  prova di allerta (nessun incidente reale): questo è il formato degli avvisi urgenti.
+  La domanda è registrata nel ledger (`devctx.py recover`).
+  ```
+
+What this proves: Slack's incoming-webhook endpoint accepted both semantic messages. What it does not prove: the session had no Slack read access, so it did not independently confirm that the messages appear in the channel. The digest links the PR as `issues/869`, which GitHub redirects to the pull request.
