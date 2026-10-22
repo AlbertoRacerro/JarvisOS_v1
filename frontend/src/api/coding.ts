@@ -199,3 +199,46 @@ export function suggestCodingModification(payload: ExactCodingTarget & {
     body: JSON.stringify(payload)
   });
 }
+
+export type RelayMonitorItem = Readonly<{
+  kind: "message" | "tool" | "output" | "edit" | "error" | "done" | "turn" | "mission" | "gap";
+  mark: string;
+  text: string;
+  detail?: string;
+  failed?: boolean;
+  session: string | null;
+  turn: string | null;
+  offset: number;
+}>;
+
+export type RelayMonitorPage = Readonly<{
+  state: "ok" | "unknown" | "refused";
+  reason?: string;
+  mission?: string | null;
+  items?: readonly RelayMonitorItem[];
+  cursor?: string | null;
+  more?: boolean;
+}>;
+
+export type RelayMonitorSnapshot = Readonly<{
+  state: string;
+  reason?: string | null;
+  at?: string;
+  owner?: boolean | null;
+  stop?: boolean;
+  mission?: Readonly<{ id: string; task?: string; label?: string | null; agent?: string | null }> | null;
+  turn?: Readonly<{ turn?: string; status?: string | null; at?: string | null; reason?: string | null; next_step?: string | null; running?: boolean }>;
+  roadmap?: Readonly<{ enabled: boolean; cycle: number | null; paused: string | null }>;
+  focus?: string | null;
+  question?: string | null;
+  problems?: readonly string[];
+  incidents?: readonly string[];
+}>;
+
+export function readRelayMonitor(repository = CODING_REPOSITORY): Promise<RelayMonitorSnapshot> {
+  return requestJson(`/api/coding/relay-monitor?${query({ repository })}`);
+}
+
+export function readRelayMonitorTimeline(cursor: string | null, repository = CODING_REPOSITORY): Promise<RelayMonitorPage> {
+  return requestJson(`/api/coding/relay-monitor/timeline?${query({ repository, cursor: cursor ?? undefined })}`);
+}

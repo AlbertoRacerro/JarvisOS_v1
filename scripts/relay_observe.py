@@ -12,6 +12,8 @@ Standard library only.
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
 import importlib.util
 import json
 import os
@@ -477,60 +479,92 @@ class Tail:
 
 
 _WEBHOOK_RE = re.compile(r"https://hooks\.slack\.com/\S+")
+DETAIL_LIMIT = 2000
 
 
-def _redact(text: Any, limit: int) -> str:
+def _redact(text: Any, limit: int, *, paths: bool = False, lines: bool = False) -> str:
+    """Secrets (and, for the browser, host paths beyond their last component) removed, bounded. `lines` keeps
+    line breaks for an on-demand detail; otherwise the value is one line."""
     value = _CTRL_RE.sub(" ", str(text or "")).strip()
     for pattern in (*devctx.SECRET_PATTERNS, _WEBHOOK_RE):
         value = pattern.sub("[redacted]", value)
-    value = re.sub(r"\s+", " ", value)
+    if paths:
+        value = _PATH_RE.sub(lambda m: "…/" + m.group(0).rstrip("/").rsplit("/", 1)[-1], value)
+    value = re.sub(r"[ \t]+", " ", value) if lines else re.sub(r"\s+", " ", value)
     return value if len(value) <= limit else value[: limit - 1] + "…"
 
 
-def render_event(event: dict[str, Any]) -> list[str]:
-    """Terminal lines for one Claude stream-json or Codex exec event. Only what the stream states; no reasoning."""
+def event_items(event: dict[str, Any], *, paths: bool = False) -> list[dict[str, Any]]:
+    """One Claude stream-json or Codex exec event as timeline items: what the stream states, never reasoning.
+    Each item has a kind, a terminal mark, a bounded one-line text and, when that line was shortened, a bounded
+    multi-line detail. `paths` scrubs host paths (browser)."""
+    def item(kind: str, mark: str, raw: Any, limit: int, *, wrap: str = "{}", failed: bool = False) -> dict[str, Any]:
+        text = wrap.format(_redact(raw, limit, paths=paths))
+        out: dict[str, Any] = {"kind": kind, "mark": mark, "text": text}
+        full = _redact(raw, DETAIL_LIMIT, paths=paths, lines=True)
+        if len(re.sub(r"\s+", " ", full)) > limit or "\n" in full.strip():
+            out["detail"] = full
+        if failed:
+            out["failed"] = True
+        return out
+
     kind = event.get("type")
-    out: list[str] = []
+    out: list[dict[str, Any]] = []
     if kind == "assistant" and not event.get("parent_tool_use_id"):
         for block in (event.get("message") or {}).get("content") or []:
             if block.get("type") == "text":
-                out.append(f"● {_redact(block.get('text'), 600)}")
+                out.append(item("message", "●", block.get("text"), 600))
             elif block.get("type") == "tool_use":
                 args = block.get("input") or {}
                 detail = args.get("command") or args.get("file_path") or args.get("pattern") or args.get("description") or ""
-                out.append(f"⏺ {block.get('name')}({_redact(detail, 200)})")
+                name = _redact(block.get("name"), 60)
+                out.append(item("tool", "⏺", detail, 200, wrap=name.replace("{", "{{").replace("}", "}}") + "({})"))
     elif kind == "user":
         for block in (event.get("message") or {}).get("content") or []:
             if isinstance(block, dict) and block.get("type") == "tool_result":
                 content = block.get("content")
                 if isinstance(content, list):
                     content = " ".join(str(c.get("text", "")) for c in content if isinstance(c, dict))
-                mark = "✗" if block.get("is_error") else "⎿"
-                out.append(f"  {mark} {_redact(content, 240)}")
+                failed = bool(block.get("is_error"))
+                out.append(item("output", "✗" if failed else "⎿", content, 240, failed=failed))
     elif kind == "result":
-        out.append(f"✓ turno terminato: {event.get('subtype') or 'result'}"
-                   + (" (errore)" if event.get("is_error") else ""))
+        out.append({"kind": "done", "mark": "✓", "text": _redact(event.get("subtype") or "result", 60)}
+                   | ({"failed": True} if event.get("is_error") else {}))
     elif kind in ("item.started", "item.completed"):
-        item = event.get("item") or {}
-        if item.get("type") == "command_execution":
+        entry = event.get("item") or {}
+        if entry.get("type") == "command_execution":
             if kind == "item.started":
-                out.append(f"⏺ Bash({_redact(item.get('command'), 200)})")
+                out.append(item("tool", "⏺", entry.get("command"), 200, wrap="Bash({})"))
             else:
-                mark = "✗" if item.get("exit_code") not in (0, None) else "⎿"
-                out.append(f"  {mark} {_redact(item.get('aggregated_output'), 240)}")
-        elif item.get("type") == "agent_message" and kind == "item.completed":
-            out.append(f"● {_redact(item.get('text'), 600)}")
-        elif item.get("type") == "file_change" and kind == "item.completed":
-            paths = ", ".join(_redact(c.get("path"), 80) for c in item.get("changes") or [] if isinstance(c, dict))
-            out.append(f"⏺ Edit({paths})")
+                failed = entry.get("exit_code") not in (0, None)
+                out.append(item("output", "✗" if failed else "⎿", entry.get("aggregated_output"), 240, failed=failed))
+        elif entry.get("type") == "agent_message" and kind == "item.completed":
+            out.append(item("message", "●", entry.get("text"), 600))
+        elif entry.get("type") == "file_change" and kind == "item.completed":
+            changed = ", ".join(_redact(c.get("path"), 80, paths=paths) for c in entry.get("changes") or []
+                                if isinstance(c, dict))
+            out.append({"kind": "edit", "mark": "⏺", "text": f"Edit({changed})"})
     elif kind == "turn.failed" or kind == "error":
-        out.append(f"✗ errore: {_redact((event.get('error') or {}).get('message') or event.get('message'), 240)}")
+        out.append(item("error", "✗", (event.get("error") or {}).get("message") or event.get("message"), 240))
     return out
 
 
-def active_turn(root: Path, repo: Path) -> tuple[str | None, Path | None, dict[str, Any] | None]:
-    """(mission id, latest turn dir, mission state) of the mission the owner is executing, else the latest one."""
-    chosen = None
+def render_event(event: dict[str, Any]) -> list[str]:
+    """Terminal lines for one Claude stream-json or Codex exec event. Only what the stream states; no reasoning."""
+    lines = []
+    for entry in event_items(event):
+        if entry["kind"] == "done":
+            lines.append(f"✓ turno terminato: {entry['text']}" + (" (errore)" if entry.get("failed") else ""))
+        elif entry["kind"] == "error":
+            lines.append(f"✗ errore: {entry['text']}")
+        else:
+            lines.append(("  " if entry["kind"] == "output" else "") + f"{entry['mark']} {entry['text']}")
+    return lines
+
+
+def _current_mission(root: Path) -> tuple[str | None, dict[str, Any] | None]:
+    """(id, state) of the mission the owner is executing, else of the latest valid one."""
+    chosen: tuple[str | None, dict[str, Any] | None] = (None, None)
     for mission, mission_id, _ in rc.load_missions(root):
         status, state = rc.mission_status(rc.mission_store(root, mission_id))
         if mission is None or status == "corrupt":
@@ -538,12 +572,189 @@ def active_turn(root: Path, repo: Path) -> tuple[str | None, Path | None, dict[s
         chosen = (mission_id, state)
         if status not in ("complete", "cancelled"):
             break
-    if chosen is None:
+    return chosen
+
+
+def active_turn(root: Path, repo: Path) -> tuple[str | None, Path | None, dict[str, Any] | None]:
+    """(mission id, latest turn dir, mission state) of the mission the owner is executing, else the latest one."""
+    mission_id, state = _current_mission(root)
+    if mission_id is None:
         return None, None, None
-    mission_id, state = chosen
     session = live_session(repo, state)
     turn = rc.last_turn_dir(repo / ".agent-relay" / "sessions" / session) if session else None
     return mission_id, turn, state
+
+
+# ---------------------------------------------------------------------------
+# Timeline pages (spec 206): the events `follow` shows, as bounded items after an opaque cursor
+
+
+_SESSION_RE = re.compile(r"\d{8}-\d{6}-[0-9a-f]{6}")
+_TURN_RE = re.compile(r"turn-(\d{1,6})")
+_MISSION_RE = re.compile(r"m-[0-9A-Za-z-]{1,60}")
+PAGE_ITEMS = 200
+PAGE_CHARS = 120_000  # item text and detail per page
+PAGE_READ = 1 << 20  # raw JSONL bytes read per page
+
+
+class CursorInvalid(ValueError):
+    pass
+
+
+def encode_cursor(mission: str, session: str | None, turn: str | None, offset: int, item: int = 0) -> str:
+    raw = json.dumps([mission, session, turn, offset, item], separators=(",", ":")).encode()
+    return base64.urlsafe_b64encode(raw).decode().rstrip("=")
+
+
+def decode_cursor(text: str) -> tuple[str, str | None, str | None, int, int]:
+    """A cursor names only a mission id, a session id, a turn name and a byte offset, each strictly validated:
+    it can never address a file outside the repository's relay session tree."""
+    try:
+        decoded = json.loads(base64.urlsafe_b64decode(text + "=" * (-len(text) % 4)))
+        mission, session, turn, offset, item = (*decoded, 0) if len(decoded) == 4 else decoded
+    except (ValueError, TypeError, binascii.Error) as exc:
+        raise CursorInvalid("cursor_invalid") from exc
+    valid = (isinstance(mission, str) and _MISSION_RE.fullmatch(mission)
+             and (session is None and turn is None and offset == 0
+                  or isinstance(session, str) and _SESSION_RE.fullmatch(session)
+                  and isinstance(turn, str) and _TURN_RE.fullmatch(turn))
+             and type(offset) is int and 0 <= offset < 1 << 40
+             and type(item) is int and 0 <= item < 1 << 20)
+    if not valid:
+        raise CursorInvalid("cursor_invalid")
+    return mission, session, turn, offset, item
+
+
+def mission_turns(repo: Path, state: dict[str, Any] | None) -> list[tuple[str, str]]:
+    """(session, turn) of a mission in execution order: its session chain, then the live session if newer."""
+    sessions = [*((state or {}).get("chain") or []), live_session(repo, state)]
+    out: list[tuple[str, str]] = []
+    for session in dict.fromkeys(s for s in sessions if isinstance(s, str) and _SESSION_RE.fullmatch(s)):
+        try:
+            names = [p.name for p in (repo / ".agent-relay" / "sessions" / session / "turns").iterdir() if p.is_dir()]
+        except OSError:
+            continue
+        found = sorted((int(m.group(1)), name) for name in names if (m := _TURN_RE.fullmatch(name)))
+        out.extend((session, name) for _, name in found)
+    return out
+
+
+def _mission_state(root: Path, mission_id: str) -> dict[str, Any] | None:
+    status, state = rc.mission_status(rc.mission_store(root, mission_id))
+    return None if status == "corrupt" else state
+
+
+def _marker(kind: str, text: str, session: str | None = None, turn: str | None = None) -> dict[str, Any]:
+    return {"kind": kind, "mark": "──", "text": text, "session": session, "turn": turn, "offset": 0}
+
+
+def _mission_marker(mission_id: str, state: dict[str, Any] | None) -> dict[str, Any]:
+    state = state or {}
+    rec = state.get("mission") or {}
+    nxt, total = rec.get("next"), rec.get("total")
+    task = f"{min(nxt + 1, total)}/{total}" if isinstance(nxt, int) and isinstance(total, int) else "?"
+    agent = state.get("agent") if state.get("agent") in rc.AGENTS else "?"
+    return _marker("mission", f"{mission_id} · task {task} · {clean(state.get('phase'), 40) or '?'} · {agent}")
+
+
+def timeline_page(root: Path, repo: Path, cursor: str | None = None, *, start: str = "turn",
+                  limit: int = PAGE_ITEMS) -> dict[str, Any]:
+    """The next bounded page of the owner's timeline after `cursor` (or from the start of the live turn, or of
+    the live mission when `start` is "mission"), and the cursor to resume from. Whole JSONL lines only, so a torn
+    final line is returned once it is complete. A handoff to the next turn or session, or the start of the next
+    mission, appears as a marker in order. Nothing is locked or written."""
+    limit = max(1, min(limit, PAGE_ITEMS))
+    current, current_state = _current_mission(root)
+    items: list[dict[str, Any]] = []
+    if cursor is None:
+        if current is None:
+            return {"mission": None, "items": [], "cursor": None, "more": False}
+        turns = mission_turns(repo, current_state)
+        mission_id, state = current, current_state
+        items.append(_mission_marker(current, current_state))
+        if not turns:
+            return {"mission": current, "items": items, "cursor": encode_cursor(current, None, None, 0), "more": False}
+        session, turn = turns[0] if start == "mission" else turns[-1]
+        offset, item_index = 0, 0
+        items.append(_marker("turn", f"{session}/{turn}", session, turn))
+    else:
+        mission_id, session, turn, offset, item_index = decode_cursor(cursor)
+        state = current_state if mission_id == current else _mission_state(root, mission_id)
+        turns = mission_turns(repo, state)
+        if session is not None and (session, turn) not in turns:
+            # the cursor's turn is gone: resume at the live turn and say so rather than guess
+            items.append(_marker("gap", "the earlier position is no longer available"))
+            mission_id, state, turns = current or mission_id, current_state, mission_turns(repo, current_state)
+            session, turn, offset = (*turns[-1], 0) if turns else (None, None, 0)
+            item_index = 0
+            if session:
+                items.append(_marker("turn", f"{session}/{turn}", session, turn))
+    chars = sum(len(i["text"]) for i in items)
+    more = False
+    while True:
+        if session is None:
+            if not turns:
+                break
+            session, turn, offset = (*turns[0], 0)
+            item_index = 0
+            items.append(_marker("turn", f"{session}/{turn}", session, turn))
+            continue
+        path = repo / ".agent-relay" / "sessions" / session / "turns" / str(turn) / "output.jsonl"
+        try:
+            with open(path, "rb") as handle:
+                handle.seek(offset)
+                chunk = handle.read(PAGE_READ)
+        except OSError:
+            chunk = b""
+        complete = chunk[: chunk.rfind(b"\n") + 1]
+        if not complete and len(chunk) == PAGE_READ:  # one event beyond the read bound: skip it, say so
+            items.append({**_marker("gap", "an oversized event was skipped", session, turn), "offset": offset})
+            offset += len(chunk)  # the rest of that line fails to parse and is skipped like a corrupt line
+            more = True
+            break
+        for raw in complete.splitlines(keepends=True):
+            try:
+                event = json.loads(raw)
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                event = None
+            found = [{**i, "session": session, "turn": turn, "offset": offset}
+                     for i in (event_items(event, paths=True) if isinstance(event, dict) else [])]
+            if item_index > len(found):
+                raise CursorInvalid("cursor_invalid")
+            for index in range(item_index, len(found)):
+                entry = found[index]
+                size = len(entry["text"]) + len(entry.get("detail", ""))
+                if len(items) >= limit or chars + size > PAGE_CHARS:
+                    item_index = index
+                    more = True
+                    break
+                items.append(entry)
+                chars += size
+            if more:
+                break
+            offset += len(raw)
+            item_index = 0
+        if more or len(chunk) == PAGE_READ:
+            more = True
+            break
+        position = turns.index((session, turn)) if (session, turn) in turns else len(turns)
+        if position + 1 < len(turns):
+            session, turn = turns[position + 1]
+            offset = 0
+            item_index = 0
+            items.append(_marker("turn", f"{session}/{turn}", session, turn))
+        elif mission_id != current and current is not None:
+            mission_id, state, turns = current, current_state, mission_turns(repo, current_state)
+            session, turn, offset = None, None, 0
+            item_index = 0
+            items.append(_mission_marker(current, current_state))
+        else:
+            break
+        if len(items) >= limit:
+            more = True
+            break
+    return {"mission": mission_id, "items": items, "cursor": encode_cursor(mission_id, session, turn, offset, item_index),
+            "more": more}
 
 
 def follow(root: Path, repo: Path, *, write: Callable[[str], None], poll: float = 1.0,

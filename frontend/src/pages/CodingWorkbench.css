@@ -170,3 +170,19 @@
   .coding-work-facts { padding-left: 12px; }
   .coding-deps { max-width: 190px; }
 }
+
+/* Spec 206: read-only Relay owner monitor in Coding → Runtime. */
+.coding-relay-monitor .coding-state:is([data-state="running"], [data-state="checkpointed"], [data-state="verified_complete"]) { border-color: var(--fusion-green); background: var(--fusion-green-soft); color: var(--fusion-green-deep); }
+.coding-relay-summary { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 2px 12px; margin: 0; font-size: 12px; }
+.coding-relay-summary dt { color: var(--fusion-muted); }
+.coding-relay-summary dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.coding-relay-alerts { margin: 0; padding-left: 18px; color: var(--fusion-muted); font-size: 12px; }
+.coding-relay-timeline { margin: 0; padding: 8px 10px; list-style: none; max-height: 340px; overflow: auto; border: 1px solid var(--fusion-line); border-radius: 5px; background: var(--fusion-panel); font-family: 'IBM Plex Mono', Consolas, monospace; font-size: 12px; line-height: 1.45; }
+.coding-relay-timeline li { overflow-wrap: anywhere; }
+.coding-relay-timeline li[data-kind="output"] { padding-left: 2ch; color: var(--fusion-muted); }
+.coding-relay-timeline li:is([data-kind="turn"], [data-kind="mission"], [data-kind="gap"]) { margin-top: 4px; color: var(--fusion-muted); }
+.coding-relay-timeline li[data-failed="true"], .coding-relay-timeline li[data-kind="error"] { color: var(--color-status-danger-text); font-weight: 500; }
+.final-fusion__workbench .coding-relay-timeline :is(li, details, summary, pre) { font-family: 'IBM Plex Mono', Consolas, monospace; font-size: 12px; }
+.final-fusion__workbench .coding-relay-timeline details { padding: 0; }
+.coding-relay-timeline summary { cursor: pointer; }
+.coding-relay-timeline pre { margin: 4px 0 6px 2ch; padding: 6px 8px; max-height: 220px; overflow: auto; white-space: pre-wrap; border-left: 2px solid var(--fusion-line); font: inherit; }
