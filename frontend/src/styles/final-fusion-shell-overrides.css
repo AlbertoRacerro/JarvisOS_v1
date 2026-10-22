@@ -114,9 +114,9 @@
   flex-direction: column;
   align-items: center;
   gap: 6px;
-  border: 1px solid #ddd5c8;
-  background: #fffdfa;
-  color: #3e4a3f;
+  border: 1px solid var(--color-border-default);
+  background: var(--color-bg-surface-raised);
+  color: var(--color-text-secondary);
   font: inherit;
   font-size: 12px;
   font-weight: 600;
@@ -125,7 +125,7 @@
 }
 .application-shell--final .shell-reopen span { writing-mode: vertical-rl; letter-spacing: .02em; }
 .application-shell--final .shell-reopen:hover,
-.application-shell--final .shell-reopen:focus-visible { border-color: rgba(70, 126, 42, .65); color: #1f2720; }
+.application-shell--final .shell-reopen:focus-visible { border-color: color-mix(in srgb, var(--color-accent-border-strong) 65%, transparent); color: var(--color-text-primary); }
 .application-shell--final .shell-reopen--navigator { grid-column: 1; border-inline-start: 0; border-radius: 0 6px 6px 0; }
 .application-shell--final .shell-reopen--sidecar { grid-column: 3; border-inline-end: 0; border-radius: 6px 0 0 6px; }
 
@@ -153,7 +153,7 @@
   .application-shell--final .shell-rail {
     min-height: auto;
     border-inline-end: 0;
-    border-block-end: 1px solid #e5dcce;
+    border-block-end: 1px solid var(--color-border-default);
   }
 
   .application-shell--final .shell-rail__links {
@@ -167,7 +167,7 @@
     justify-content: center;
     margin: 8px 12px 0;
     border-radius: 6px;
-    border: 1px solid #ddd5c8;
+    border: 1px solid var(--color-border-default);
   }
   .application-shell--final .shell-reopen span { writing-mode: horizontal-tb; }
 

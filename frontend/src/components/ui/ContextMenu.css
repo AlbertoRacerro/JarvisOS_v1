@@ -7,9 +7,9 @@
   display: flex;
   flex-direction: column;
   gap: 1px;
-  border: 1px solid #d8d0c3;
+  border: 1px solid var(--color-border-default);
   border-radius: 6px;
-  background: #fffefb;
+  background: var(--color-bg-surface-raised);
   box-shadow: 0 10px 28px rgba(40, 38, 30, .16);
   font-size: 13px;
 }
@@ -20,7 +20,7 @@
   border: 0;
   border-radius: 4px;
   background: transparent;
-  color: #232a24;
+  color: var(--color-text-primary);
   font: inherit;
   text-align: left;
   cursor: pointer;
@@ -29,11 +29,11 @@
 .ui-context-menu button:hover:not(:disabled),
 .ui-context-menu button:focus-visible {
   outline: none;
-  background: #eef3e8;
+  background: var(--color-bg-subtle);
 }
 
 .ui-context-menu button:disabled {
-  color: #9aa09a;
+  color: var(--color-text-muted);
   cursor: default;
 }
 
@@ -44,7 +44,7 @@
   border: 1px solid transparent;
   border-radius: 4px;
   background: transparent;
-  color: #4d564e;
+  color: var(--color-text-secondary);
   font: inherit;
   line-height: 1;
   cursor: pointer;
@@ -53,6 +53,6 @@
 .ui-menu-button:hover:not(:disabled),
 .ui-menu-button:focus-visible,
 .ui-menu-button[aria-expanded="true"] {
-  border-color: #d8d0c3;
-  background: #fffefb;
+  border-color: var(--color-border-default);
+  background: var(--color-bg-surface-raised);
 }

@@ -149,6 +149,8 @@
   --color-bg-surface-raised: #fffffb;
   --color-bg-subtle: #e9ecda;
   --color-bg-technical-viewport: #121a16;
+  --color-text-on-viewport: #dfe8d6;
+  --color-text-on-viewport-muted: #a9b6a0;
   --color-text-primary: #15230f;
   --color-text-secondary: #40503a;
   --color-text-muted: #55634c;
@@ -266,6 +268,8 @@
   --color-bg-surface-raised: #142318;
   --color-bg-subtle: #0b150c;
   --color-bg-technical-viewport: #07110a;
+  --color-text-on-viewport: #dfe8d6;
+  --color-text-on-viewport-muted: #a9b6a0;
   --color-text-primary: #eef0de;
   --color-text-secondary: #bac6a8;
   --color-text-muted: #97a68d;
