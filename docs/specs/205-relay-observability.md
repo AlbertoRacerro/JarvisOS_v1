@@ -6,7 +6,7 @@ State: **ready** (live state in [`STATUS.md`](STATUS.md)). Maintainer [issue #86
 
 The maintainer can walk away and still learn, in short plain Italian, what the spec 201 owner is doing, why, what was delivered and with what evidence, what comes next and whether intervention is needed. Actionable incidents arrive promptly instead of waiting for the digest. A terminal viewer follows the active owner's mission and session chain live, read-only.
 
-One canonical read-only adapter derives a semantic snapshot from the authoritative owner state: mission definitions and stores, the missions journal, `roadmap.json`, `STOP`, the owner lock and the latest Relay turn state. It classifies the owner as `running`, `checkpointed` (task pending after a turn), `verified_complete`, `held`, `paused`, `waiting` (provider/CI reset), `idle` (verified no pending work), `stopped` or `unknown`. It never infers liveness from GitHub activity. The Slack digest, the alerts and the terminal monitor all use it, and later JarvisOS Coding (Phase B) can too.
+One canonical read-only adapter derives a semantic snapshot from the authoritative owner state: mission definitions and stores, the missions journal, `roadmap.json`, `STOP`, the owner lock and the latest Relay turn state. It classifies the owner as `running`, `queued`, `checkpointed` (task pending after a turn), `verified_complete`, `held`, `paused`, `waiting` (provider/CI reset), `idle` (verified no pending work), `stopped` or `unknown`. It never infers liveness from GitHub activity. The Slack digest, the alerts and the terminal monitor all use it, and later JarvisOS Coding (Phase B) can too.
 
 ## Design constraints
 

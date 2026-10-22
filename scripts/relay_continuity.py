@@ -1317,7 +1317,6 @@ EVENTS: dict[str, tuple[str, tuple[str, ...]]] = {
     "master_advanced": (":large_green_circle: JarvisOS master advanced", ("sha", "pr")),
     "repl_turn_failed": (":large_orange_circle: JarvisOS REPL turn failed (notify-only)", ("session", "agent", "outcome", "reset_at")),
     "repl_claude_dont_ask": (":red_circle: JarvisOS Claude REPL launched in dontAsk; Bash may be denied", ("session",)),
-    "digest": (":clipboard: JarvisOS continuity digest", ("phase", "session", "agent", "attempts", "holds", "claude_until", "codex_until")),
     "test": (":white_check_mark: JarvisOS continuity notification test", ()),
     "reconciled": (":white_check_mark: JarvisOS continuity: uncertain operations settled from evidence",
                    ("session", "attempts")),
@@ -1413,6 +1412,22 @@ class Notifier:
             self.log(f"notify: dropped {event} (field validation)")
             return False
         key = hashlib.sha256((dedupe_key or f"{event}|{json.dumps(fields, sort_keys=True)}").encode()).hexdigest()[:20]
+        return self._post(event, text, key, now, {"event": event, "fields": fields, "key": key})
+
+    def send_text(self, kind: str, text: str, now: datetime) -> bool:
+        """A semantic message composed by `relay_observe` (spec 205): same secret check, dedupe on `kind`, rate
+        limit, failure accounting and single retry as the fixed templates."""
+        if self.sender is None:
+            return False
+        if not text or len(text) > 3800 or devctx.find_secret(text):
+            self.state["notify"]["dropped"] = self.state["notify"].get("dropped", 0) + 1
+            self.log("notify: dropped semantic message (validation)")
+            return False
+        key = hashlib.sha256(kind.encode()).hexdigest()[:20]
+        return self._post(kind.split("|", 1)[0], text, key, now, None)  # the observer re-sends until delivered
+
+    def _post(self, event: str, text: str, key: str, now: datetime, retry: dict[str, Any] | None) -> bool:
+        notify = self.state["notify"]
         last = parse_ts(notify["sent"].get(key))
         if last and now - last < self.dedupe:
             return False
@@ -1425,7 +1440,7 @@ class Notifier:
         error = self._deliver(text)
         if error:
             notify["failures"] = notify.get("failures", 0) + 1
-            notify["retry"] = {"event": event, "fields": fields, "key": key} if notify.get("retry") is None else notify["retry"]
+            notify["retry"] = retry if notify.get("retry") is None else notify["retry"]
             self.log(f"notify: delivery failed ({error})")
             return False
         window.append(iso(now))
@@ -3407,19 +3422,6 @@ def real_master(repo: Path) -> tuple[str | None, str | None]:
     return sha.strip(), match.group(1) if match else None
 
 
-def digest_fields(state: dict[str, Any], holds: int) -> dict[str, Any]:
-    cooldowns = state.get("cooldowns") or {}
-
-    def until(agent: str) -> str:
-        cd = cooldowns.get(agent)
-        return "none" if not cd else (cd.get("until") or "manual")
-    fields: dict[str, Any] = {"phase": state.get("phase") or "idle", "agent": state.get("agent") or PREFERRED,
-                              "attempts": str(len(state.get("chain") or [])), "holds": str(holds),
-                              "claude_until": until("claude"), "codex_until": until("codex")}
-    fields["session"] = state.get("head_session") or "none"
-    return fields
-
-
 # ---------------------------------------------------------------------------
 # CLI
 
@@ -4364,17 +4366,52 @@ def command_release(args: argparse.Namespace) -> int:
         lock.release()
 
 
+def load_observe() -> Any:
+    """The spec 205 semantic adapter, sharing this module rather than loading a second copy of it."""
+    sys.modules.setdefault("relay_continuity", sys.modules[__name__])
+    spec = importlib.util.spec_from_file_location("relay_observe", Path(__file__).resolve().parent / "relay_observe.py")
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def command_notify_test(args: argparse.Namespace) -> int:
     sender = webhook_sender()
     if sender is None:
         print("no usable webhook configured")
         return 2
-    error = sender(render("test", {}) or "")
+    if args.digest or args.alert:
+        observe, root, repo, now = load_observe(), control_root(), repo_root(), now_utc()
+        snap = observe.snapshot(root, repo, now)
+        since = iso(now - timedelta(hours=args.hours))
+        text = (observe.digest_text(snap, since=since, merges=observe.merges_since(repo, since)) if args.digest else
+                observe.alert_text("prova di allerta (nessun incidente reale): questo è il formato degli avvisi urgenti", snap))
+    else:
+        text = render("test", {}) or ""
+    if devctx.find_secret(text):
+        print("refusing: the message matches a secret pattern")
+        return 1
+    error = sender(text)
     print("sent" if error is None else f"failed: {error}")
+    if error is None and (args.digest or args.alert):
+        print(text)
     return 0 if error is None else 1
 
 
+def mission_sessions(root: Path) -> set[str]:
+    """Sessions of every mission's chain: the owner reports those itself, so the REPL watcher must not."""
+    found: set[str] = set()
+    for _, mission_id, _ in load_missions(root):
+        status, state = mission_status(mission_store(root, mission_id))
+        found.update((state or {}).get("chain") or [])
+    return found
+
+
 def command_watch(args: argparse.Namespace) -> int:
+    if not 1 <= args.digest_hours <= 4:
+        print("--digest-hours must be between 1 and 4", file=sys.stderr)
+        return 2
     root = control_root()
     lock = Lock(root / "watch.lock")
     if not lock.acquire():
@@ -4382,9 +4419,11 @@ def command_watch(args: argparse.Namespace) -> int:
         return 3
     repo = repo_root()
     store = Store(root / "watch")
+    observe = load_observe()
     stop = {"flag": False}
     signal.signal(signal.SIGTERM, lambda *_: stop.update(flag=True))
     signal.signal(signal.SIGINT, lambda *_: stop.update(flag=True))
+    log = lambda m: print(f"{iso(now_utc())} {m}", file=sys.stderr, flush=True)  # noqa: E731
     try:
         while not stop["flag"]:
             now = now_utc()
@@ -4392,12 +4431,12 @@ def command_watch(args: argparse.Namespace) -> int:
                 state = store.load()
             except StateCorrupt:
                 state = default_state()
-            notifier = Notifier(state, sender=None if args.no_notify else webhook_sender(), log=lambda m: print(m, file=sys.stderr))
+            notifier = Notifier(state, sender=None if args.no_notify else webhook_sender(), log=log)
             try:
                 supervised_state = Store(root).load()
             except StateCorrupt:
                 supervised_state = default_state()
-            supervised = set(supervised_state.get("chain") or [])
+            supervised = set(supervised_state.get("chain") or []) | mission_sessions(root)
             first = not state["watch"].get("seen")
             if first:
                 # Baseline: never alert on history that predates this watch.
@@ -4406,12 +4445,15 @@ def command_watch(args: argparse.Namespace) -> int:
             else:
                 notifier.retry_pending(now)
                 watch_once(state, notifier, repo, now, supervised=supervised, master=lambda: real_master(repo))
-            last = parse_ts(state["notify"].get("last_digest"))
-            if not first and (last is None or now - last >= timedelta(hours=args.digest_hours)):
-                journal = root / "attempts.jsonl"
-                holds = sum('"event": "hold"' in line for line in journal.read_text().splitlines()) if journal.exists() else 0
-                notifier.send("digest", now, dedupe_key=f"digest|{iso(now)}", **digest_fields(supervised_state, holds))
-                state["notify"]["last_digest"] = iso(now)
+            # Spec 205: incidents are announced on detection, the semantic digest every --digest-hours.
+            try:
+                observe.observe_step(state["watch"].setdefault("observe", {}), observe.snapshot(root, repo, now), now,
+                                     send=lambda kind, text, n=notifier, t=now: n.send_text(kind, text, t),
+                                     digest_every=timedelta(hours=args.digest_hours),
+                                     merges=lambda since: observe.merges_since(repo, since),
+                                     failures=int(state["notify"].get("failures") or 0))
+            except Exception as exc:  # noqa: BLE001 - observation never stops the watcher
+                log(f"observe: internal error {type(exc).__name__}")
             store.save(state, now)
             if args.once:
                 break
@@ -4475,10 +4517,14 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("mission")
     p.add_argument("--note", required=True)
     p.set_defaults(func=command_cancel)
-    sub.add_parser("notify-test", help="send one fixed test notification").set_defaults(func=command_notify_test)
-    p = sub.add_parser("watch", help="notify-only monitor of REPL sessions and master")
+    p = sub.add_parser("notify-test", help="send one test notification (fixed, or the current digest/alert format)")
+    p.add_argument("--digest", action="store_true", help="send the semantic digest of the current owner state")
+    p.add_argument("--alert", action="store_true", help="send a sample urgent alert (marked as a test)")
+    p.add_argument("--hours", type=float, default=2.0, help="digest look-back window")
+    p.set_defaults(func=command_notify_test)
+    p = sub.add_parser("watch", help="host-side observer: owner incidents, semantic digest, REPL sessions and master")
     p.add_argument("--interval", type=float, default=60.0)
-    p.add_argument("--digest-hours", type=float, default=6.0)
+    p.add_argument("--digest-hours", type=float, default=2.0, help="semantic digest interval, 1-4 hours")
     p.add_argument("--once", action="store_true")
     p.add_argument("--no-notify", action="store_true")
     p.set_defaults(func=command_watch)
