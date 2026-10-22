@@ -190,6 +190,9 @@
   --color-chart-series-3: #b4541a;
   --color-chart-series-4: #8a3f86;
   --color-chart-series-5: #3a3f44;
+  --color-chart-series-6: #476e68;
+  --color-chart-series-7: #87640e;
+  --color-chart-series-8: #126f73;
   --color-flow-bg: #fafbf2;
   --color-flow-grid: rgb(52 98 26 / 0.16);
   --color-flow-node: #fffffd;
@@ -319,6 +322,9 @@
   --color-chart-series-3: #f2b35b;
   --color-chart-series-4: #ee92c8;
   --color-chart-series-5: #ede6be;
+  --color-chart-series-6: #a4c8c2;
+  --color-chart-series-7: #e4ca6c;
+  --color-chart-series-8: #73d1cf;
   --color-flow-bg: #07100a;
   --color-flow-grid: rgb(190 220 140 / 0.09);
   --color-flow-node: #112016;

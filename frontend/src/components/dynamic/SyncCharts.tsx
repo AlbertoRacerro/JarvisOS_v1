@@ -3,10 +3,10 @@ import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import type uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
 import { channelLabel, fmtNum, groupChannelsByUnit, panRange, tableWindow, zoomRange, type SeriesData } from "./dynamicLogic";
+import { chartSeriesColor, useChartAppearance } from "../chartPalette";
 
 // Spec 173 decision 9: uPlot panels share one cursor and one x-range, group channels by their manifest unit, and each carries a values
 // table and keyboard range control. uPlot is loaded lazily, as in the environment profile chart.
-const COLORS = ["#246b45", "#24729b", "#c56825", "#7256a3", "#9a4a55", "#5e7775", "#b18a14", "#287c82"];
 export const SYNC_KEY = "jarvis-dynamic";
 export type Line = { key: string; label: string; values: (number | null)[]; dash?: boolean };
 type Range = [number, number];
@@ -47,6 +47,7 @@ export function ChartPanel({ title, unit, x, lines, range, bounds, onRange, heig
   const boundsRef = useRef(bounds); boundsRef.current = bounds;
   const quiet = useRef(false);
   const [problem, setProblem] = useState("");
+  const appearance = useChartAppearance();
   const keyed = useMemo(() => lines.map((line) => line.key).join("|"), [lines]);
 
   useEffect(() => {
@@ -66,7 +67,7 @@ export function ChartPanel({ title, unit, x, lines, range, bounds, onRange, heig
           const current = rangeRef.current ?? boundsRef.current;
           if (Math.abs(min - current[0]) > 1e-6 || Math.abs(max - current[1]) > 1e-6) onRangeRef.current([min, max]);
         }] },
-        series: [{}, ...lines.map((line, index) => ({ label: line.label, stroke: COLORS[index % COLORS.length], width: 1.5, spanGaps: true, dash: line.dash ? [6, 4] : undefined }))],
+        series: [{}, ...lines.map((line, index) => ({ label: line.label, stroke: chartSeriesColor(index), width: 1.5, spanGaps: true, dash: line.dash ? [6, 4] : undefined }))],
         axes: [
           { label: "Elapsed time [d]", space: 70, values: (_u, values) => values.map((value) => fmtNum(value / 86400)) },
           { label: unit, size: 64 },
@@ -77,7 +78,7 @@ export function ChartPanel({ title, unit, x, lines, range, bounds, onRange, heig
       observer.observe(host.current);
     }).catch((cause: unknown) => { if (active) setProblem(cause instanceof Error ? cause.message : "The chart could not be rendered."); });
     return () => { active = false; observer?.disconnect(); plot.current?.destroy(); plot.current = null; };
-  }, [x, keyed, lines, unit, height]);
+  }, [x, keyed, lines, unit, height, appearance]);
 
   useEffect(() => {
     const chart = plot.current;
@@ -92,7 +93,7 @@ export function ChartPanel({ title, unit, x, lines, range, bounds, onRange, heig
     <figcaption><strong>{title}</strong> [{unit}]</figcaption>
     {problem ? <p className="dyn-error" role="alert">Chart unavailable: {problem}</p> : null}
     <div ref={host} className="dyn-plot" role="img" aria-label={`${title} chart in ${unit}. ${lines.map((line) => line.label).join(", ")}.`} />
-    <div className="dyn-legend" role="list" aria-label={`${title} series`}>{lines.map((line, index) => <span role="listitem" key={line.key}><i style={{ backgroundColor: COLORS[index % COLORS.length] }} />{line.label}</span>)}</div>
+    <div className="dyn-legend" role="list" aria-label={`${title} series`}>{lines.map((line, index) => <span role="listitem" key={line.key}><i style={{ backgroundColor: `var(--color-chart-series-${index % 8 + 1})` }} />{line.label}</span>)}</div>
     <details className="dyn-values"><summary>Values table</summary>
       <p>{rows.total === rows.indices.length ? `${rows.total} rows in range.` : `Showing ${rows.indices.length} of ${rows.total} rows in range.`}</p>
       <div className="dyn-table-scroll"><table aria-label={`${title} values`}><thead><tr><th scope="col">t [s]</th>{lines.map((line) => <th scope="col" key={line.key}>{line.label}</th>)}</tr></thead>

@@ -2,8 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type uPlot from "uplot";
 import type { ProfileValues } from "./types";
 import { CHANNEL_LABELS, displayUnit, displayValue } from "./types";
-
-const COLORS = ["#246b45", "#24729b", "#c56825", "#7256a3", "#9a4a55", "#5e7775", "#b18a14", "#287c82"];
+import { chartSeriesColor, useChartAppearance } from "../chartPalette";
 
 type Props = {
   profile: ProfileValues;
@@ -47,6 +46,7 @@ export function ProfileChart({ profile, timezone, resolutionUsed, onRange }: Pro
   const chart = useRef<InstanceType<typeof uPlot> | null>(null);
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   const [chartError, setChartError] = useState("");
+  const appearance = useChartAppearance();
   const plottedSeries = useMemo(
     () => Object.entries(profile.channels).filter(([, values]) => values.some((value) => value !== null)),
     [profile.channels],
@@ -84,7 +84,7 @@ export function ProfileChart({ profile, timezone, resolutionUsed, onRange }: Pro
           label: CHANNEL_LABELS[name] ?? name,
           scale: displayUnit(name, profile.units[name]),
           show: !hidden.has(name),
-          stroke: COLORS[index % COLORS.length],
+          stroke: chartSeriesColor(index),
           width: 2,
         }))],
         axes: [
@@ -114,7 +114,7 @@ export function ProfileChart({ profile, timezone, resolutionUsed, onRange }: Pro
       chart.current?.destroy();
       chart.current = null;
     };
-  }, [profile.digest, profile.timestamps, profile.units, timezone, resolutionUsed, onRange, plottedSeries]);
+  }, [profile.digest, profile.timestamps, profile.units, timezone, resolutionUsed, onRange, plottedSeries, appearance]);
 
   useEffect(() => {
     if (!chart.current) return;
@@ -141,7 +141,7 @@ export function ProfileChart({ profile, timezone, resolutionUsed, onRange }: Pro
             else next.add(channel);
             return next;
           })}
-        ><span className="environment-swatch" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
+        ><span className="environment-swatch" style={{ backgroundColor: `var(--color-chart-series-${index % 8 + 1})` }} />
           {CHANNEL_LABELS[channel] ?? channel} · {displayUnit(channel, profile.units[channel])}
         </button>)}
       </div>
