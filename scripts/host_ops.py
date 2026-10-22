@@ -8,9 +8,10 @@ receipt with the published public key; nobody without the host-only private key 
 
     host_ops.py request OP [--args JSON] [--sha SHA] [--wait SECONDS]   (sandbox or host)
     host_ops.py verify ID [--op OP] [--sha SHA]                          (sandbox or host)
+    host_ops.py cancel ID                                               (sandbox or host)
     host_ops.py status                                                   (sandbox or host)
     host_ops.py serve                                                    (host executor; systemd unit)
-    host_ops.py install --sha SHA                                        (host; maintainer/host session only)
+    host_ops.py install --sha SHA [--with-watch]                           (host; maintainer/host session only)
     host_ops.py health                                                   (host)
 
 Stdlib only: the installed copy must not import anything from a checkout an agent can write.
@@ -20,24 +21,26 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import io
 import json
 import os
 import re
 import secrets
-import shutil
 import signal
 import socket
 import subprocess
 import sys
+import tarfile
 import tempfile
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 REQUEST_SCHEMA = "jarvisos.hostops.request.v1"
 RECEIPT_SCHEMA = "jarvisos.hostops.receipt.v1"
@@ -373,6 +376,10 @@ class Refused(Exception):
 class Failed(Exception):
     """The action ran and did not succeed."""
 
+    def __init__(self, message, detail=None):
+        super().__init__(message)
+        self.detail = detail or {}
+
 
 @dataclass
 class Context:
@@ -384,6 +391,7 @@ class Context:
     now: Callable[[], datetime]
     cancelled: Callable[[], bool]
     journal: list[dict[str, Any]]
+    restart_required: bool = False
 
     def conf(self, op: str) -> dict[str, Any]:
         conf = (self.policy.get("ops") or {}).get(op)
@@ -468,7 +476,7 @@ UNIT_TEMPLATES = {
     "jarvisos-relay-watch": (
         "[Unit]\nDescription=JarvisOS Relay observer: Slack digest and incident alerts (spec 205)\n"
         "[Service]\nWorkingDirectory=%h/src/JarvisOS_v1\n"
-        "ExecStart=/usr/bin/python3 scripts/relay_continuity.py watch --digest-hours 2\n"
+        "ExecStart=/usr/bin/python3 -I %h/.local/share/jarvisos-hostops/current/scripts/relay_continuity.py watch --digest-hours 2\n"
         "Restart=on-failure\nRestartPreventExitStatus=2 3\nRestartSec=60\n"
         "[Install]\nWantedBy=default.target\n"),
 }
@@ -478,7 +486,7 @@ def op_service_install(ctx: Context) -> dict[str, Any]:
     conf = ctx.conf("service.install")
     args = _args(ctx, {"template"})
     name = args.get("template")
-    if name not in UNIT_TEMPLATES or name not in (conf.get("templates") or []):
+    if not isinstance(name, str) or name not in UNIT_TEMPLATES or name not in (conf.get("templates") or []):
         raise Refused(f"template {name!r} is not allowed by the host policy")
     unit = f"{name}.service"
     body = UNIT_TEMPLATES[name].encode()
@@ -504,7 +512,7 @@ def op_service_install(ctx: Context) -> dict[str, Any]:
     state = _unit_state(ctx, unit)
     detail = {"unit": unit, "unit_sha256": hashlib.sha256(body).hexdigest(), "changed": current != body,
               "returncodes": [reload.returncode, enable.returncode], "state": state}
-    if enable.returncode != 0 or state.get("ActiveState") != "active":
+    if reload.returncode != 0 or enable.returncode != 0 or state.get("ActiveState") != "active":
         raise Failed(f"{unit} is {state.get('ActiveState')} after install", detail)
     return detail
 
@@ -564,7 +572,7 @@ def op_wsl_handoff(ctx: Context) -> dict[str, Any]:
         raise Refused(f"extension {ext!r} is not allowed by the host policy")
     if not isinstance(want, str) or not re.fullmatch(r"[0-9a-f]{64}", want):
         raise Refused("sha256 must be 64 lowercase hex characters")
-    if args.get("open") not in (None, False, True):
+    if "open" in args and not isinstance(args["open"], bool):
         raise Refused("open must be a boolean")
     if args.get("open") and not conf.get("open"):
         raise Refused("opening handed-off files is not enabled in the host policy")
@@ -572,11 +580,18 @@ def op_wsl_handoff(ctx: Context) -> dict[str, Any]:
     limit = int(conf.get("max_bytes", 200 << 20))
     sfd = open_dir(ctx.paths.outbox)
     try:
-        fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=sfd)
+        try:
+            fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=sfd)
+        except OSError:
+            raise Refused("outbox file must be a regular file, never a symlink") from None
     finally:
         os.close(sfd)
     out_name = f"{want[:12]}-{ctx.request['id'][:8]}{ext}"
-    tfd = open_dir(target_dir, create=True)
+    try:
+        tfd = open_dir(target_dir, create=True)
+    except BaseException:
+        os.close(fd)
+        raise
     tmp = f".{out_name}.{secrets.token_hex(4)}.tmp"
     digest, size = hashlib.sha256(), 0
     try:
@@ -612,8 +627,9 @@ def op_wsl_handoff(ctx: Context) -> dict[str, Any]:
         except subprocess.TimeoutExpired:
             raise Failed("explorer.exe did not return within 15 s", detail) from None
         detail["opened"] = "handed to explorer.exe (association decides the program)"
-        script = ("Get-Process | Where-Object { $_.StartTime -ge (Get-Date).AddSeconds(-%d) } | "
-                  "Select-Object -ExpandProperty ProcessName" % (int((ctx.now() - started).total_seconds()) + 5))
+        seconds = int((ctx.now() - started).total_seconds()) + 5
+        script = (f"Get-Process | Where-Object {{ $_.StartTime -ge (Get-Date).AddSeconds(-{seconds}) }} | "
+                  "Select-Object -ExpandProperty ProcessName")
         procs = ctx.run([_POWERSHELL, "-NoProfile", "-NonInteractive", "-Command", script], timeout=40, cwd="/mnt/c")
         names = sorted({n.strip() for n in str(procs.stdout).splitlines() if re.fullmatch(r"[A-Za-z0-9._ -]{1,60}", n.strip())})
         detail["windows_processes_started"] = names[:30]
@@ -634,25 +650,32 @@ def op_browser_screenshot(ctx: Context) -> dict[str, Any]:
     viewport = args.get("viewport", "wide")
     scheme = args.get("scheme", "light")
     wait = args.get("wait_ms", 3000)
-    if viewport not in VIEWPORTS or scheme not in ("light", "dark") or not isinstance(wait, int) \
+    if not isinstance(viewport, str) or viewport not in VIEWPORTS or scheme not in ("light", "dark") or not isinstance(wait, int) \
             or isinstance(wait, bool) or not 0 <= wait <= 15000:
         raise Refused("viewport wide|narrow, scheme light|dark, wait_ms 0-15000")
     chrome = conf.get("chrome")
     if not isinstance(chrome, str) or not Path(chrome).is_file():
         raise Refused("no Chromium binary configured in the host policy")
     width, height = VIEWPORTS[viewport]
-    with tempfile.TemporaryDirectory(prefix="hostops-shot-") as tmp:
+    with tempfile.TemporaryDirectory(dir=ctx.paths.spool, prefix="shot-") as tmp:
         shot = Path(tmp) / "shot.png"
+        os.close(open_dir(ctx.paths.receipts, create=True))
         argv = [chrome, "--headless=new", "--no-first-run", "--no-default-browser-check", "--disable-gpu",
-                "--disable-extensions", "--disable-sync", "--hide-scrollbars", f"--user-data-dir={tmp}/profile",
-                f"--window-size={width},{height}", f"--virtual-time-budget={wait}",
+                "--disable-extensions", "--disable-sync", "--hide-scrollbars",
+                f"--user-data-dir={tmp}/profile", f"--window-size={width},{height}", f"--virtual-time-budget={wait}",
                 f"--blink-settings=preferredColorScheme={0 if scheme == 'dark' else 1}",
                 f"--screenshot={shot}", url]
-        proc = ctx.run(argv, timeout=90)
+        launcher = str(conf.get("launcher") or ctx.paths.home / ".local/bin/jarvis-sandbox")
+        proc = ctx.run([launcher, *argv], timeout=90, cwd=str(ctx.paths.home / "src/JarvisOS_v1"))
         if not shot.is_file() or shot.stat().st_size == 0:
             raise Failed("Chromium wrote no screenshot", {"returncode": proc.returncode,
                                                            "stderr": scrub(str(proc.stderr), 600)})
-        data = shot.read_bytes()
+        shot_fd = open_dir(Path(tmp))
+        try:
+            data = read_regular(shot_fd, "shot.png", 32 << 20)
+        finally:
+            os.close(shot_fd)
+        shot.unlink()
     fd = open_dir(ctx.paths.receipts, create=True)
     try:
         write_at(fd, f"{ctx.request['id']}.png", data)
@@ -666,7 +689,7 @@ def op_http_smoke(ctx: Context) -> dict[str, Any]:
     conf = ctx.conf("http.smoke")
     args = _args(ctx, {"target"})
     targets = conf.get("targets") or {}
-    target = targets.get(args.get("target")) if isinstance(targets, dict) else None
+    target = targets.get(args.get("target")) if isinstance(targets, dict) and isinstance(args.get("target"), str) else None
     if not isinstance(target, dict) or not _LOCAL_URL_RE.fullmatch(str(target.get("url"))):
         raise Refused(f"target {args.get('target')!r} is not defined in the host policy")
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
@@ -689,6 +712,8 @@ def op_bench_run(ctx: Context) -> dict[str, Any]:
     """A policy-registered command, run inside jarvis-sandbox (never with host privileges) under cgroup limits."""
     conf = ctx.conf("bench.run")
     args = _args(ctx, {"bench", "worktree"})
+    if not isinstance(args.get("bench"), str):
+        raise Refused("bench must name a registered benchmark")
     bench = (conf.get("benchmarks") or {}).get(args.get("bench"))
     if not isinstance(bench, dict) or not isinstance(bench.get("argv"), list):
         raise Refused(f"benchmark {args.get('bench')!r} is not registered in the host policy")
@@ -704,24 +729,24 @@ def op_bench_run(ctx: Context) -> dict[str, Any]:
     if ".." in Path(sub).parts or Path(sub).is_absolute():
         raise Refused("benchmark cwd must be relative")
     # The checkout is agent-controlled: its revision is read inside the sandbox, never by host git.
-    head = ctx.run([launcher, "--cwd", str(root), "--", "git", "rev-parse", "HEAD"], timeout=60)
-    dirty = ctx.run([launcher, "--cwd", str(root), "--", "git", "status", "--porcelain", "--untracked-files=no"], timeout=60)
+    head = ctx.run([launcher, "git", "rev-parse", "HEAD"], timeout=60, cwd=str(root))
+    dirty = ctx.run([launcher, "git", "status", "--porcelain"], timeout=60, cwd=str(root))
     reported = str(head.stdout).strip()
-    if head.returncode != 0 or reported != sha or str(dirty.stdout).strip():
+    if head.returncode != 0 or dirty.returncode != 0 or reported != sha or str(dirty.stdout).strip():
         raise Refused(f"worktree {worktree} is not a clean checkout of {sha[:12]} (sandbox reports {reported[:12] or '?'})")
     limits = {"timeout_s": min(int(bench.get("timeout_s", 1800)), 4 * 3600),
               "memory_max": str(bench.get("memory_max", "8G")), "cpu_quota": str(bench.get("cpu_quota", "400%")),
               "tasks_max": int(bench.get("tasks_max", 512))}
     scope = f"hostops-bench-{ctx.request['id'][:12]}"
     argv = ["systemd-run", "--user", "--scope", "--quiet", f"--unit={scope}",
-            f"-p", f"MemoryMax={limits['memory_max']}", "-p", f"CPUQuota={limits['cpu_quota']}",
+            "-p", f"MemoryMax={limits['memory_max']}", "-p", f"CPUQuota={limits['cpu_quota']}",
             "-p", f"TasksMax={limits['tasks_max']}", "--",
-            "timeout", "-k", "15", str(limits["timeout_s"]), launcher, "--cwd", str(root / sub), "--",
+            "timeout", "-k", "15", str(limits["timeout_s"]), launcher,
             *[str(a) for a in bench["argv"]]]
     started = time.monotonic()
     with tempfile.TemporaryFile() as out:
         proc = subprocess.Popen(argv, stdout=out, stderr=subprocess.STDOUT, start_new_session=True,
-                                env=_host_env())
+                                env=_host_env(), cwd=root / sub)
         cancelled = False
         while proc.poll() is None:
             if ctx.cancelled():
@@ -749,9 +774,6 @@ def op_bench_run(ctx: Context) -> dict[str, Any]:
 class Cancelled(Exception):
     pass
 
-
-Failed.__init__ = lambda self, message, detail=None: (Exception.__init__(self, message),  # type: ignore[method-assign]
-                                                      setattr(self, "detail", detail or {}))[0]
 
 OPERATIONS: dict[str, Callable[[Context], dict[str, Any]]] = {
     "slack.deliver": op_slack_deliver,
@@ -827,7 +849,7 @@ def load_policy(paths: Paths) -> tuple[dict[str, Any], str]:
 
 def executor_version() -> str:
     """The installed release directory name is the master commit the executor was installed from."""
-    here = Path(__file__).resolve().parent.name
+    here = Path(__file__).resolve().parent.parent.name
     return here if SHA_RE.fullmatch(here) else "uninstalled"
 
 
@@ -837,6 +859,7 @@ class Executor:
                  log: Callable[[str], None] = lambda m: print(m, file=sys.stderr, flush=True)):
         self.paths, self.run, self.now, self.log = paths, run, now, log
         self.post = post or webhook_poster(paths)
+        self.restart_requested = False
 
     # Host-only durable state: one file per handled request id (replay protection and idempotency), an in-flight
     # marker (recovery) and a journal (rate limits, audit).
@@ -857,7 +880,7 @@ class Executor:
         return out
 
     def _append_journal(self, entry: dict[str, Any]) -> None:
-        open_dir(self.paths.state, create=True).__index__()  # ensure it exists (fd leaked below is closed)
+        os.close(open_dir(self.paths.state, create=True))
         with open(self.paths.state / "journal.jsonl", "a", encoding="utf-8") as handle:
             handle.write(json.dumps(entry, sort_keys=True) + "\n")
 
@@ -871,8 +894,15 @@ class Executor:
                     request = json.loads(read_regular(fd, name, MAX_REQUEST_BYTES))
                 except (OSError, ValueError):
                     request = {"id": name[:-5], "op": None, "args": {}, "sha": None, "requested_at": None}
-                self._finish(request, "interrupted", {}, "the executor stopped while this request was running",
-                             started=None)
+                done_fd = self._state_fd("done")
+                try:
+                    if exists_at(done_fd, name[:-5]):
+                        self._republish(done_fd, name[:-5])
+                    else:
+                        self._finish(request, "interrupted", {}, "the executor stopped while this request was running",
+                                     started=None)
+                finally:
+                    os.close(done_fd)
                 unlink_at(fd, name)
         finally:
             os.close(fd)
@@ -909,8 +939,15 @@ class Executor:
                     except FileNotFoundError:
                         continue
             for _, request_id, name in sorted(entries):
+                if handled:
+                    try:
+                        policy, policy_sha = load_policy(self.paths)
+                    except (OSError, ValueError, RuntimeError):
+                        policy, policy_sha = {"ops": {}}, None
                 self._handle(rfd, request_id, name, policy, policy_sha)
                 handled += 1
+                if self.restart_requested:
+                    break
         finally:
             os.close(rfd)
         return handled
@@ -922,6 +959,11 @@ class Executor:
                 raw = read_regular(rfd, name, MAX_REQUEST_BYTES)
             except (OSError, ValueError):
                 unlink_at(rfd, name)
+                if exists_at(done_fd, request_id):
+                    self._republish(done_fd, request_id)
+                else:
+                    self._finish({"id": request_id}, "refused", {}, "request is not a bounded regular file",
+                                 started=self.now(), policy_sha=policy_sha)
                 return
             unlink_at(rfd, name)  # consumed: the spool copy is never read twice
             cancel = f"{request_id}.cancel"
@@ -968,6 +1010,7 @@ class Executor:
                 outcome, error = "failed", f"executor error {type(exc).__name__}"
             unlink_at(rfd, cancel)
             self._finish(request, outcome, detail, error, started=now, policy_sha=policy_sha, request_raw=raw)
+            self.restart_requested = ctx.restart_required
             ifd = self._state_fd("inflight")
             try:
                 unlink_at(ifd, name)
@@ -1013,18 +1056,21 @@ class Executor:
 
 
 def serve(paths: Paths, interval: float) -> int:
-    lock_fd = os.open(open_dir(paths.state, create=True) and str(paths.state / "serve.lock"),
-                      os.O_RDWR | os.O_CREAT, 0o600)
+    if os.environ.get("JARVIS_SANDBOX") or socket.gethostname() == "jarvis-sandbox":
+        return 2
+    state_fd = open_dir(paths.state, create=True)
+    try:
+        lock_fd = os.open("serve.lock", os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600, dir_fd=state_fd)
+    finally:
+        os.close(state_fd)
     import fcntl
 
     try:
         fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
         print("another host-ops executor is running", file=sys.stderr)
+        os.close(lock_fd)
         return 3
-    if os.environ.get("JARVIS_SANDBOX") or socket.gethostname() == "jarvis-sandbox":
-        print("the host-ops executor runs on the host, never inside jarvis-sandbox", file=sys.stderr)
-        return 2
     stop = {"flag": False}
     signal.signal(signal.SIGTERM, lambda *_: stop.update(flag=True))
     signal.signal(signal.SIGINT, lambda *_: stop.update(flag=True))
@@ -1034,12 +1080,16 @@ def serve(paths: Paths, interval: float) -> int:
     while not stop["flag"]:
         try:
             executor.step()
+            if executor.restart_requested:
+                os.close(lock_fd)
+                return 75
         except Exception as exc:  # noqa: BLE001 - a bad spool entry never stops the executor
             executor.log(f"hostops: step error {type(exc).__name__}: {exc}")
         for _ in range(int(interval * 10)):
             if stop["flag"]:
                 break
             time.sleep(0.1)
+    os.close(lock_fd)
     return 0
 
 
@@ -1050,13 +1100,14 @@ def serve(paths: Paths, interval: float) -> int:
 DEFAULT_POLICY: dict[str, Any] = {
     "schema": POLICY_SCHEMA,
     "ops": {
+        "release.install": {"trust_master": False},
         "slack.deliver": {"max_per_hour": 6},
         "service.status": {"units": ["jarvisos-relay-watch.service", "jarvisos-mission-owner.service",
                                      "jarvisos-hostops.service", "agent-relay.service"]},
-        "service.control": {"units": ["jarvisos-relay-watch.service"]},
+        "service.control": {"units": ["jarvisos-relay-watch.service", "jarvisos-mission-owner.service"]},
         "service.install": {"templates": ["jarvisos-relay-watch"]},
         "wsl.probe": {},
-        "wsl.handoff": {"dir": "/mnt/c/Users/thera/JarvisOS-handoff", "open": True, "max_bytes": 200 << 20,
+        "wsl.handoff": {"dir": "/mnt/c/Users/thera/JarvisOS-print", "open": True, "max_bytes": 200 << 20,
                         "extensions": [".3mf", ".stl", ".step", ".glb", ".png", ".pdf"]},
         "browser.screenshot": {"chrome": "/home/thera/.cache/ms-playwright/chromium-1187/chrome-linux/chrome"},
         "http.smoke": {"targets": {"backend-health": {"url": "http://127.0.0.1:8000/health", "expect": 200}}},
@@ -1070,9 +1121,9 @@ DEFAULT_POLICY: dict[str, Any] = {
 SERVICE_UNIT = (
     "[Unit]\nDescription=JarvisOS host operations executor (spec 207)\n"
     "[Service]\nWorkingDirectory=%h\n"
-    "ExecStart=/usr/bin/python3 -I %h/.local/share/jarvisos-hostops/current/host_ops.py serve\n"
+    "ExecStart=/usr/bin/python3 -I %h/.local/share/jarvisos-hostops/current/scripts/host_ops.py serve\n"
     "Restart=on-failure\nRestartPreventExitStatus=2 3\nRestartSec=30\n"
-    "NoNewPrivileges=yes\n"
+    "NoNewPrivileges=yes\nMemoryMax=2G\nTasksMax=256\nCPUQuota=200%\nRestartForceExitStatus=75\n"
     "[Install]\nWantedBy=default.target\n")
 
 
@@ -1083,25 +1134,69 @@ def _gh(args: list[str]) -> str:
     return proc.stdout
 
 
-def install(paths: Paths, sha: str) -> int:
+def install_release(paths: Paths, sha: str) -> None:
     if os.environ.get("JARVIS_SANDBOX") or socket.gethostname() == "jarvis-sandbox":
-        print("install runs from a host session, never inside jarvis-sandbox", file=sys.stderr)
-        return 2
-    if not SHA_RE.fullmatch(sha):
-        print("--sha must be a full commit id", file=sys.stderr)
-        return 2
+        raise Refused("installation is host-only")
+    if not isinstance(sha, str) or not SHA_RE.fullmatch(sha):
+        raise Refused("sha must be a full commit id")
     status = _gh([f"repos/{REPO}/compare/{sha}...master", "--jq", ".status"]).strip()
     if status not in ("ahead", "identical"):
-        print(f"{sha} is not on GitHub master ({status})", file=sys.stderr)
-        return 2
-    code = _gh(["-H", "Accept: application/vnd.github.raw", f"repos/{REPO}/contents/scripts/host_ops.py?ref={sha}"])
-    release = paths.install / "releases" / sha
-    release.mkdir(parents=True, exist_ok=True)
-    (release / "host_ops.py").write_text(code)
-    os.chmod(release / "host_ops.py", 0o644)
+        raise Refused(f"{sha} is not on GitHub master ({status})")
+    proc = subprocess.run(["gh", "api", f"repos/{REPO}/tarball/{sha}"],
+                          capture_output=True, timeout=120, check=True)
+    releases = paths.install / "releases"
+    releases.mkdir(parents=True, exist_ok=True)
+    release = releases / sha
+    with tempfile.TemporaryDirectory(dir=releases, prefix=".install-") as tmp:
+        stage = Path(tmp)
+        with tarfile.open(fileobj=io.BytesIO(proc.stdout), mode="r:gz") as archive:
+            for member in archive.getmembers():
+                parts = Path(member.name).parts
+                if member.name.startswith("/") or ".." in parts or not (member.isdir() or member.isfile()):
+                    raise Refused("unsafe release archive member")
+                if len(parts) < 2 or parts[1] != "scripts":
+                    continue
+                target = stage.joinpath(*parts[1:])
+                if member.isdir():
+                    target.mkdir(parents=True, exist_ok=True)
+                else:
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    with archive.extractfile(member) as source:
+                        target.write_bytes(source.read())
+                    target.chmod(0o755 if member.mode & 0o111 else 0o644)
+        for name in ("host_ops.py", "relay_continuity.py", "relay_observe.py", "devctx.py"):
+            if not (stage / "scripts" / name).is_file():
+                raise Refused(f"release missing {name}")
+        if not release.exists():
+            os.rename(stage, release)
     tmp_link = paths.install / f".current.{secrets.token_hex(4)}"
     os.symlink(release, tmp_link)
     os.replace(tmp_link, paths.install / "current")
+
+
+def op_release_install(ctx: Context) -> dict[str, Any]:
+    conf = ctx.conf("release.install")
+    args = _args(ctx, {"sha"})
+    if conf.get("trust_master") is not True:
+        raise Refused("release.install requires trust_master: true in the host policy")
+    install_release(ctx.paths, args.get("sha"))
+    ctx.restart_required = True
+    unit = "jarvisos-relay-watch.service"
+    if _unit_state(ctx, unit).get("ActiveState") == "active":
+        if _systemctl(ctx, "restart", unit).returncode:
+            raise Failed("watcher restart failed")
+    return {"sha": args["sha"], "executor_restart": True}
+
+
+OPERATIONS["release.install"] = op_release_install
+
+
+def install(paths: Paths, sha: str, with_watch: bool = False) -> int:
+    try:
+        install_release(paths, sha)
+    except Refused as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
     paths.config.mkdir(mode=0o700, parents=True, exist_ok=True)
     os.chmod(paths.config, 0o700)
     if not paths.key.is_file():
@@ -1116,10 +1211,14 @@ def install(paths: Paths, sha: str) -> int:
         os.chmod(paths.policy, 0o600)
     paths.units.mkdir(parents=True, exist_ok=True)
     (paths.units / UNIT).write_text(SERVICE_UNIT)
+    (paths.units / "jarvisos-relay-watch.service").write_text(UNIT_TEMPLATES["jarvisos-relay-watch"])
     env = _host_env()
     subprocess.run(["systemctl", "--user", "daemon-reload"], check=True, timeout=60, env=env)
     subprocess.run(["systemctl", "--user", "enable", UNIT], check=True, timeout=60, env=env)
     subprocess.run(["systemctl", "--user", "restart", UNIT], check=True, timeout=60, env=env)
+    if with_watch:
+        subprocess.run(["systemctl", "--user", "enable", "--now", "jarvisos-relay-watch.service"],
+                       check=True, timeout=60, env=env)
     print(f"installed host-ops executor {sha} and restarted {UNIT}")
     return 0
 
@@ -1184,6 +1283,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--interval", type=float, default=2.0)
     p = sub.add_parser("install", help="install the executor from a GitHub master commit (host session)")
     p.add_argument("--sha", required=True)
+    p.add_argument("--with-watch", action="store_true")
     sub.add_parser("health", help="host-side health check")
     args = parser.parse_args(argv)
     paths = Paths(Path(args.home))
@@ -1248,7 +1348,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.action == "serve":
         return serve(paths, args.interval)
     if args.action == "install":
-        return install(paths, args.sha)
+        return install(paths, args.sha, args.with_watch)
     if args.action == "health":
         return health(paths)
     return 2
