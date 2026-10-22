@@ -237,7 +237,7 @@
 }
 
 .jarvis-sidecar__error { flex: 0 0 auto; padding: 6px 8px; border-radius: 6px; background: var(--color-bg-subtle); color: var(--color-status-danger-text); font-size: 12px; }
-.jarvis-sidecar__hint { color: var(--color-text-muted); font-size: 12px; }
+.jarvis-sidecar__hint { color: var(--color-text-secondary); font-size: 12px; }
 
 .jarvis-sidecar__field { display: grid; gap: 4px; font-size: 12px; color: var(--color-text-secondary); }
 .jarvis-sidecar__toggle { display: flex; align-items: center; gap: 6px; font-size: 12px; }
@@ -256,7 +256,7 @@
   border-radius: 12px;
   background: var(--color-bg-surface-raised);
 }
-.jarvis-sidecar__input:focus-within { border-color: var(--color-focus-ring); outline: 2px solid var(--color-focus-ring); outline-offset: 2px; }
+.jarvis-sidecar__input:focus-within { border-color: var(--color-focus-ring); }
 .jarvis-sidecar .jarvis-sidecar__input textarea {
   flex: 1 1 auto;
   min-height: 0;
@@ -268,6 +268,7 @@
   resize: none;
   box-shadow: none;
 }
+.jarvis-sidecar .jarvis-sidecar__input textarea:focus-visible { outline: 2px solid var(--color-focus-ring); outline-offset: 2px; border-radius: 3px; }
 .jarvis-send {
   flex: 0 0 auto;
   display: inline-grid;
