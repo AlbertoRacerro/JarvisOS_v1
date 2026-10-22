@@ -33,9 +33,9 @@ python3 scripts/relay_continuity.py status        # phase, head session, cooldow
 python3 scripts/relay_continuity.py stop          # graceful: exits at the next safe point, never kills a turn
 python3 scripts/relay_continuity.py classify .agent-relay/sessions/$S/turns/turn-004   # one turn's outcome
 
-# Notify-only monitor: REPL turn failures, master merges, a periodic digest. Safe alongside a REPL.
-tmux new -d -s relay-watch "python3 scripts/relay_continuity.py watch --digest-hours 6"
-python3 scripts/relay_continuity.py notify-test
+# Host-side observer (spec 205): owner incidents, Italian digest, REPL turn failures, master merges.
+tmux new -d -s relay-watch "python3 scripts/relay_continuity.py watch --digest-hours 2"
+python3 scripts/relay_continuity.py notify-test   # see "Observability (spec 205)" for --digest / --alert
 ```
 
 Exit codes:
@@ -239,3 +239,28 @@ WantedBy=default.target
 `systemctl --user daemon-reload && systemctl --user enable --now jarvisos-mission-owner`. Exit 2 (outside the sandbox, no Claude CLI) and 3 (another owner) are not restarted. `KillMode=process` does **not** keep a running provider turn alive: the owner runs in `jarvis-sandbox`'s PID namespace (`--die-with-parent`), and stopping the main process ends every process in it. The next owner settles the killed attempt as `crash` and reconciles it before any relaunch. To restart without killing a turn, run `$RC stop`, and wait until `systemctl --user status jarvisos-mission-owner` shows it exited at a task boundary (status 0, so `Restart=on-failure` leaves it inactive). Then `rm ~/jarvis-control/work/continuity/STOP && systemctl --user start jarvisos-mission-owner`; while STOP exists, a started owner exits at once. With `Linger=no` the unit runs only while a login session exists. Enable lingering (`loginctl enable-linger $USER`) only if unattended operation without a login is needed. WSL start after a Windows reboot is verified separately.
 
 **Rollback.** `systemctl --user disable --now jarvisos-mission-owner`, then remove the unit file and `daemon-reload`. Missions, journals and Relay sessions stay in `~/jarvis-control/work/continuity/missions/` and `.agent-relay/sessions/`. A later owner resumes queued missions from them. `$RC stop` without systemd has the same effect on a foreground owner.
+
+## Observability (spec 205)
+
+The mission owner runs in the sandbox, which cannot read the Slack webhook. Slack delivery therefore comes from `watch`, which runs on the **host**. It reads the owner's state (missions, `roadmap.json`, `STOP`, the kernel lock table for `serve.lock`, Relay turn `state.json`) and writes only `~/jarvis-control/work/continuity/watch/`. It takes no owner lock and calls no provider. The same adapter, `scripts/relay_observe.py`, backs the terminal monitor.
+
+- **Digest:** every 2 hours by default (`watch --digest-hours 1..4`). It is in Italian and covers *In corso* (state, goal, current claim, why), *Fatto dall'ultimo aggiornamento* (task outcomes labelled verified, settled cycle or unverified; PRs merged to master; the last turn's report and verification), *Prossimo* and *Serve intervento*. The state is one of: running, queued, checkpointed, verified complete, held, paused, waiting, idle, stopped, unknown. A running state is never inferred from GitHub.
+- **Alerts:** sent on detection, at the watcher's polling interval (`--interval`, default 60 s). They cover a held mission, a paused roadmap (with the recorded question when blocked), an owner that is not running while work is pending, a wait longer than 6 hours and unreadable owner state. Each incident is announced once until it clears, including across watcher restarts. When Slack is down nothing blocks: the message is retried on the next poll, and the failure count appears in the next delivered digest.
+- **Test commands (host):** `python3 scripts/relay_continuity.py notify-test --digest` sends the current digest, and `notify-test --alert` sends an alert sample marked as a test. Each prints the delivered text and never prints the URL. To preview without sending, run `python3 scripts/relay_observe.py digest`; `relay_observe.py status` prints the snapshot and incidents as JSON.
+- **Terminal monitor:** `python3 scripts/relay_observe.py follow` (`--no-replay` starts at the live end). It follows the active mission's latest turn, announces task, phase, provider and session changes, and prints messages, tool calls and redacted, bounded results. It never shows hidden reasoning. Ctrl-C only closes the viewer.
+- **Host unit:** `~/.config/systemd/user/jarvisos-relay-watch.service`, created from a host shell:
+
+```ini
+[Unit]
+Description=JarvisOS Relay observer: Slack digest and incident alerts (spec 205)
+[Service]
+WorkingDirectory=%h/src/JarvisOS_v1
+ExecStart=/usr/bin/python3 scripts/relay_continuity.py watch --digest-hours 2
+Restart=on-failure
+RestartPreventExitStatus=2 3
+RestartSec=60
+[Install]
+WantedBy=default.target
+```
+
+Run `systemctl --user daemon-reload && systemctl --user enable --now jarvisos-relay-watch`. Run either this unit or a tmux `watch`, never both: the second one exits 3 on `watch.lock`, which the unit does not restart. The watcher is a separate process, so it reports an owner crash or stop while work is pending (`owner_down`) without an `OnFailure=` hook. A watcher that is itself down cannot report anything: check `systemctl --user status jarvisos-relay-watch`. Rollback: `systemctl --user disable --now jarvisos-relay-watch`.
