@@ -56,3 +56,35 @@ What changed (presentation and scoped copy only; no backend, API, persistence, r
 | Sub-12 px labels (`8px`/`9px`/`10px`) in final-fusion, Coding and sidecar sheets | several | Slice 2 audit fixes (density/hierarchy). |
 | Legacy top-bar routes (Runs, Review, AI Threads, Engineering Data) keep a full-width accent outline on the focused main region and the older top bar chrome | non-final shell | Slice 2: restyle or retire the redundant chrome. |
 | Backend message spells BLUECAD | Workspace actions service | Outside 198 (no backend change); record for a backend copy follow-up. |
+
+## Slice 2 — remaining surfaces and responsive audit (PR #882, draft)
+
+The frontend branch `impl/198-lumen-surfaces` moves Process, Dynamic, Coding,
+Development, Sidecar, BlueCad and chart colours to the canonical Lumen roles.
+Charts retain their series order and data; the WebGL viewer reads its scene and
+grid colours from appearance tokens. A display-only Sidecar conversion spells
+BlueCad in backend-owned workspace context; the payload and persisted data are
+unchanged. The narrow Roadmap, Brainstorm and Memory layouts now stack their
+panels, and the BlueCad navigator uses the available width.
+
+At frontend head `61ce73ab`, `VITE_API_BASE_URL=http://127.0.0.1:8198 npm run
+build` passed the full frontend suite, type check and Vite build. CI on PR #882
+passed backend, frontend-build, classify and evidence checks at that head.
+`git diff --check` passed. The isolated browser used a temporary
+`JARVISOS_DATA_ROOT`, `JARVISOS_CORS_ORIGINS=http://127.0.0.1:5198`, backend
+port 8198 and frontend preview port 5198. Evidence is under
+`/home/thera/jarvis-control/work/evidence/198b-browser/`.
+
+| Browser evidence | Result |
+| --- | --- |
+| `r2/report.json` on the pre-repair branch | 76 route/theme/width captures; 4 text-contrast failures and 15 Sidecar composer focus flags. |
+| `r3/report.json` after focused CSS repair | 6 affected captures; zero contrast, focus or console errors. |
+| `r7/report.json` at `61ce73ab` | 19 routes × Dark/Light × 1440/390 = 76 captures, 0 computed text-contrast failures, 0 focus flags across 433 checked tab stops, 0 wrong themes. The 4 console errors are anonymous GitHub API `429` responses on Coding → Repository; the UI shows its explicit read-error state. |
+| `r7/bluecad-populated-{dark,light}-1440.png` | A real deterministic template tube was created in the isolated workspace and rendered in the WebGL canvas in both appearances, with no page/console errors on those captures. The light grid was reduced after the earlier populated capture. |
+| `r7-first3-debug/report.json` | Focused rerun of Process, Studies and BlueCad in both themes/widths: 12 captures, no rendered `BLUECAD`, contrast or focus failures. The full `r7` report recorded four `BLUECAD` flags on BlueCad despite visible screenshots and a direct DOM probe showing BlueCad; the mismatch is not treated as a passing full-matrix spelling check. |
+
+The 429s and inconsistent full-matrix spelling flags leave strict browser
+acceptance open. No backend or GitHub behaviour was altered to suppress them.
+The Sidecar context disclosure and final copy-only head still need a focused
+browser recheck. PR #882 remains draft until that evidence and exact-head review
+are sufficient.
