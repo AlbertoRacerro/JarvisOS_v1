@@ -209,6 +209,14 @@ def test_secret_check_refuses_the_payload(owner: tuple[Path, Path], monkeypatch:
     assert get_page() == {"state": "refused", "reason": "secret_detected"}
 
 
+def test_browser_items_scrub_windows_and_other_absolute_paths() -> None:
+    event = {"type": "assistant", "message": {"content": [{"type": "text", "text":
+             r"C:\Users\operator\private\report.txt /opt/internal/data.csv \\server\share\private\plan.pdf https://example.test/docs"}]}}
+    item = ro.event_items(event, paths=True)[0]
+    assert item["text"] == "…/report.txt …/data.csv …/plan.pdf https://example.test/docs"
+    assert "Users" not in json.dumps(item) and "internal" not in json.dumps(item)
+
+
 def test_invalid_cursor_and_wrong_repository_are_refused(owner: tuple[Path, Path]) -> None:
     for cursor in ("not-a-cursor", "***", ro.encode_cursor("../../etc", None, None, 0),
                    ro.encode_cursor(M1, "../x", "turn-001", 0), ro.encode_cursor(M1, S1, "turn-001", -1)):

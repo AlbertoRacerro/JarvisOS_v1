@@ -479,6 +479,9 @@ class Tail:
 
 
 _WEBHOOK_RE = re.compile(r"https://hooks\.slack\.com/\S+")
+_BROWSER_PATH_RE = re.compile(
+    r"(?<![\w./\\])(?:[A-Za-z]:[\\/]|\\\\[\w.-]+\\[\w.-]+\\|~?/(?!/))(?:[^\s\"'<>])*"
+)
 DETAIL_LIMIT = 2000
 
 
@@ -489,7 +492,9 @@ def _redact(text: Any, limit: int, *, paths: bool = False, lines: bool = False) 
     for pattern in (*devctx.SECRET_PATTERNS, _WEBHOOK_RE):
         value = pattern.sub("[redacted]", value)
     if paths:
-        value = _PATH_RE.sub(lambda m: "…/" + m.group(0).rstrip("/").rsplit("/", 1)[-1], value)
+        value = _BROWSER_PATH_RE.sub(
+            lambda m: "…/" + re.split(r"[\\/]", m.group(0).rstrip("/\\"))[-1], value
+        )
     value = re.sub(r"[ \t]+", " ", value) if lines else re.sub(r"\s+", " ", value)
     return value if len(value) <= limit else value[: limit - 1] + "…"
 
@@ -517,7 +522,7 @@ def event_items(event: dict[str, Any], *, paths: bool = False) -> list[dict[str,
             elif block.get("type") == "tool_use":
                 args = block.get("input") or {}
                 detail = args.get("command") or args.get("file_path") or args.get("pattern") or args.get("description") or ""
-                name = _redact(block.get("name"), 60)
+                name = _redact(block.get("name"), 60, paths=paths)
                 out.append(item("tool", "⏺", detail, 200, wrap=name.replace("{", "{{").replace("}", "}}") + "({})"))
     elif kind == "user":
         for block in (event.get("message") or {}).get("content") or []:
@@ -528,7 +533,7 @@ def event_items(event: dict[str, Any], *, paths: bool = False) -> list[dict[str,
                 failed = bool(block.get("is_error"))
                 out.append(item("output", "✗" if failed else "⎿", content, 240, failed=failed))
     elif kind == "result":
-        out.append({"kind": "done", "mark": "✓", "text": _redact(event.get("subtype") or "result", 60)}
+        out.append({"kind": "done", "mark": "✓", "text": _redact(event.get("subtype") or "result", 60, paths=paths)}
                    | ({"failed": True} if event.get("is_error") else {}))
     elif kind in ("item.started", "item.completed"):
         entry = event.get("item") or {}
