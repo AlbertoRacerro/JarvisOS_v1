@@ -22,9 +22,9 @@ html { background: var(--color-bg-canvas); }
 
 /* ---------- Rail: detached glass capsule carrying the emblem ---------- */
 .application-shell--final { --shell-rail-width: var(--lumen-rail-width); }
+.application-shell--final .shell-rail { height: calc(100vh - 28px); }
 .application-shell .shell-rail {
   margin: 14px 0 14px 14px;
-  height: calc(100vh - 28px);
   padding: 20px 10px 16px;
   gap: 24px;
   border-radius: 32px;
