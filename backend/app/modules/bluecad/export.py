@@ -5,6 +5,8 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import uuid
+import zipfile
 from pathlib import Path
 from typing import Any
 
@@ -12,7 +14,14 @@ from app.modules.bluecad.assembly import assemble_parts
 from app.modules.bluecad.models import BluecadError, BuiltPart
 from app.modules.bluecad.spec import canonical_json, canonicalize_geometry_spec
 
-ARTIFACT_NAMES = ("model.step", "model.stl", "model.glb")
+ARTIFACT_NAMES = ("model.step", "model.stl", "model.glb", "model.3mf")
+THREE_MF_ARTIFACT = "model.3mf"
+THREE_MF_LINEAR_DEFLECTION = 0.001
+THREE_MF_ANGULAR_DEFLECTION = 0.1
+_MESH_DIGEST_DECIMALS = 6
+_THREE_MF_MODEL_ENTRY = "3D/3dmodel.model"
+_THREE_MF_UUID_RE = re.compile(r'(p:UUID=")[0-9a-fA-F-]{36}(")')
+_THREE_MF_UUID_NAMESPACE = uuid.UUID("5d0f1c6e-3a7b-4c1e-9a52-165b1ec3a0d1")
 SCENE_BINDING_VERSION = "bluecad_scene_binding_v0_1"
 SCENE_BINDING_ARTIFACT = "model.glb"
 _SCENE_BINDING_KEY_PREFIX = "bluecad-part-sha256-"
@@ -26,18 +35,18 @@ def build_artifacts(spec_payload: dict[str, Any], out_dir: str | Path) -> dict[s
     out_path.mkdir(parents=True, exist_ok=True)
     parts = assemble_parts(spec)
     try:
-        scene_bindings = _export_shapes(parts, out_path)
+        scene_bindings, print_handoff = _export_shapes(parts, out_path)
     except Exception as exc:
         if isinstance(exc, BluecadError):
             raise
         raise BluecadError("EXPORT_ERROR", {"message": str(exc)}) from exc
-    manifest = _manifest(spec, parts, out_path, scene_bindings=scene_bindings)
+    manifest = _manifest(spec, parts, out_path, scene_bindings=scene_bindings, print_handoff=print_handoff)
     manifest_path = out_path / "manifest.json"
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return manifest
 
 
-def _export_shapes(parts: dict[str, BuiltPart], out_dir: Path) -> dict[str, str]:
+def _export_shapes(parts: dict[str, BuiltPart], out_dir: Path) -> tuple[dict[str, str], dict[str, Any]]:
     try:
         import build123d as bd
     except ImportError as exc:  # pragma: no cover
@@ -58,11 +67,92 @@ def _export_shapes(parts: dict[str, BuiltPart], out_dir: Path) -> dict[str, str]
         linear_deflection=0.001,
         angular_deflection=0.1,
     )
+    print_handoff = _export_3mf(parts, out_dir / THREE_MF_ARTIFACT, bd)
     for name in ARTIFACT_NAMES:
         path = out_dir / name
         if not path.exists() or path.stat().st_size <= 0:
             raise BluecadError("EXPORT_ERROR", {"artifact": name, "message": "artifact was not written"})
-    return scene_bindings
+    return scene_bindings, print_handoff
+
+
+def _export_3mf(parts: dict[str, BuiltPart], path: Path, bd: Any) -> dict[str, Any]:
+    """Write a millimetre 3MF with one mesh object per part and return the print_handoff block.
+
+    Meshing is from the in-memory kernel shapes. Measured on lib3mf 2.5.0: two
+    identical builds differ in raw bytes only through random ``p:UUID`` values
+    in 3D/3dmodel.model. Those are rewritten to deterministic UUIDs below so the
+    manifest stays reproducible, but ``mesh_digest`` (canonical triangle soup)
+    remains the determinism anchor and callers must not rely on file bytes.
+    """
+    mesher = bd.Mesher(unit=bd.Unit.MM)
+    object_names: list[str] = []
+    for part_id, part in sorted(parts.items()):
+        before = mesher.mesh_count
+        mesher.add_shape(
+            part.shape,
+            linear_deflection=THREE_MF_LINEAR_DEFLECTION,
+            angular_deflection=THREE_MF_ANGULAR_DEFLECTION,
+            part_number=part_id,
+        )
+        if mesher.mesh_count - before != 1:
+            raise BluecadError(
+                "EXPORT_ERROR",
+                {"artifact": THREE_MF_ARTIFACT, "part_id": part_id, "message": "part did not mesh to exactly one object"},
+            )
+        mesher.meshes[-1].SetName(part_id)
+        object_names.append(part_id)
+    triangle_counts = {name: int(count) for name, count in zip(object_names, mesher.triangle_counts, strict=True)}
+    digest = hashlib.sha256()
+    for name, mesh in zip(object_names, mesher.meshes, strict=True):
+        digest.update(f"object:{name}\n".encode())
+        vertices = [tuple(vertex.Coordinates) for vertex in mesh.GetVertices()]
+        soup = sorted(
+            tuple(sorted(_round_vertex(vertices[index]) for index in triangle.Indices))
+            for triangle in mesh.GetTriangleIndices()
+        )
+        for triangle in soup:
+            digest.update((" ".join(f"{c:.{_MESH_DIGEST_DECIMALS}f}" for v in triangle for c in v) + "\n").encode())
+    mesher.write(str(path))
+    _normalize_3mf_uuids(path)
+    return {
+        "unit": "mm",
+        "object_count": len(object_names),
+        "objects": dict(sorted(triangle_counts.items())),
+        "linear_deflection": THREE_MF_LINEAR_DEFLECTION,
+        "angular_deflection": THREE_MF_ANGULAR_DEFLECTION,
+        "mesh_digest": digest.hexdigest(),
+    }
+
+
+def _round_vertex(vertex: tuple[float, float, float]) -> tuple[float, float, float]:
+    # "+ 0.0" folds -0.0 into 0.0 so the digest text is stable.
+    return tuple(round(float(c), _MESH_DIGEST_DECIMALS) + 0.0 for c in vertex)  # type: ignore[return-value]
+
+
+def _normalize_3mf_uuids(path: Path) -> None:
+    with zipfile.ZipFile(path) as source:
+        entries = [(info, source.read(info.filename)) for info in source.infolist()]
+    counter = 0
+
+    def replace(match: re.Match[str]) -> str:
+        nonlocal counter
+        counter += 1
+        value = uuid.uuid5(_THREE_MF_UUID_NAMESPACE, f"bluecad-3mf:{counter}")
+        return f"{match.group(1)}{value}{match.group(2)}"
+
+    rewritten = False
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as target:
+        for info, data in entries:
+            if info.filename == _THREE_MF_MODEL_ENTRY:
+                data = _THREE_MF_UUID_RE.sub(replace, data.decode("utf-8")).encode("utf-8")
+                rewritten = True
+            # Fresh ZipInfo: the source one carries a stale zip64 extra field with the old compressed size.
+            fresh = zipfile.ZipInfo(info.filename, date_time=(1980, 1, 1, 0, 0, 0))
+            fresh.compress_type = zipfile.ZIP_DEFLATED
+            fresh.external_attr = info.external_attr
+            target.writestr(fresh, data)
+    if not rewritten:
+        raise BluecadError("EXPORT_ERROR", {"artifact": path.name, "message": "3MF model part was not found"})
 
 
 def _scene_bound_gltf_shape(parts: dict[str, BuiltPart], bd: Any) -> tuple[Any, dict[str, str]]:
@@ -123,6 +213,7 @@ def _manifest(
     out_dir: Path,
     *,
     scene_bindings: dict[str, str],
+    print_handoff: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Return the canonical geometry manifest.
 
@@ -162,6 +253,8 @@ def _manifest(
             for name in ARTIFACT_NAMES
         },
     }
+    if print_handoff is not None:
+        payload["print_handoff"] = print_handoff
     _validate_scene_binding_manifest(payload)
     payload["manifest_digest"] = hashlib.sha256(canonical_json(payload).encode("utf-8")).hexdigest()
     return payload
