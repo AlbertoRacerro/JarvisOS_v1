@@ -961,7 +961,7 @@ export function useJarvisSidecar(
 
     <form onSubmit={(event) => void submit(event)} className="jarvis-sidecar__composer">
       <div className="jarvis-surface-chip" aria-live="polite">
-        <span>{surfaceBrief?.summary ?? (routeId === "design-process" || routeId === "design-bluecad" || routeId === "design-studio" ? "Reading workspace context…" : "No workspace context on this page")}</span>
+        <span>{surfaceBrief?.summary?.replace(/\bBLUECAD\b/g, "BlueCad") ?? (routeId === "design-process" || routeId === "design-bluecad" || routeId === "design-studio" ? "Reading workspace context…" : "No workspace context on this page")}</span>
         {surfaceBrief?.text ? <details><summary>Workspace context</summary><p>{surfaceBrief.text}</p></details> : null}
       </div>
       {composerTarget === "relay" && relayStatus?.enabled ? <div className="jarvis-sidecar__relay-target">

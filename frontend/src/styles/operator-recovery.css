@@ -145,6 +145,17 @@
 @media(max-width: 1050px) {
   .brainstorm-board { overflow: auto; grid-template-rows: minmax(420px, auto) minmax(350px, auto); }
 }
+@media(max-width: 760px) {
+  .final-fusion__workbench--memory,
+  .final-fusion__workbench--models,
+  .final-fusion__workbench--literature,
+  .brainstorm-board {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto;
+  }
+  .brainstorm-board > aside { grid-column: 1; }
+  .brainstorm-board > section { min-width: 0; }
+}
 .process-stage__available-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 16px; }
 .brainstorm-ideas-column [data-testid="brainstorm-detail"] { padding: 12px; background: var(--fusion-green-soft); border: 1px solid var(--fusion-line); }
 

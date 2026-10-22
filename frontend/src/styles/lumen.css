@@ -175,7 +175,12 @@ html { background: var(--color-bg-canvas); }
   .application-shell .shell-rail__identity::before { width: 2.5rem; height: 2.5rem; }
   .application-shell .shell-rail__links { gap: 4px; }
   .application-shell .shell-nav-link { min-height: 36px; padding: 6px 12px; }
-  .application-shell--final :is(.shell-sidecar, .shell-navigator) { height: auto; max-height: none; margin: 10px; }
+  .application-shell--final :is(.shell-sidecar, .shell-navigator) {
+    width: auto;
+    height: auto;
+    max-height: none;
+    margin: 10px;
+  }
   .application-shell--final .shell-reopen { border: 1px solid var(--color-border-default); border-radius: var(--lumen-radius-button); }
 }
 
