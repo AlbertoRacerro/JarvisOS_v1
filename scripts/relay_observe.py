@@ -77,16 +77,23 @@ REASON_IT = {
 
 
 _CTRL_RE = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
-_URL_RE = re.compile(r"https?://\S+")
+# Any scheme link, `www.` host or bare domain on a common TLD: Slack would render or auto-link them.
+_URL_RE = re.compile(r"(?i)\b(?:[a-z][a-z0-9+.-]{1,15}://\S*|(?:mailto|tel|slack|file):\S+|www\.\S+"
+                     r"|(?:[a-z0-9-]+\.)+(?:com|net|org|io|dev|app|ai|co|me|info|biz|xyz|sh|gg|ly|so|site|online|link"
+                     r"|cloud|tech|example|eu|us|uk|de|it|fr|ru|cn)\b(?:[/?#]\S*)?)")
+_PATH_RE = re.compile(r"(?<![\w.~])(?:~|/(?:home|mnt|root|etc|tmp|run|var|proc))/\S*")
+_SLACK_ESCAPES = (("&", "&amp;"), ("<", "&lt;"), (">", "&gt;"))
 
 
 def clean(text: Any, limit: int = 240) -> str | None:
-    """Agent-written text made safe for an outbound message: one line, no control characters or links, bounded.
-    None when it is empty or looks like it carries a secret."""
+    """Agent-written text made safe for an outbound message: one line, no control characters, links, host paths
+    or Slack markup, bounded. None when it is empty or looks like it carries a secret."""
     if not isinstance(text, str):
         return None
     value = re.sub(re.escape(REPO_URL) + r"/(?:issues|pull)/(\d{1,6})\b\S*", r"#\1", _CTRL_RE.sub(" ", text))
-    value = _URL_RE.sub("[link]", value)
+    value = _PATH_RE.sub("[path]", _URL_RE.sub("[link]", value))
+    for raw, escaped in _SLACK_ESCAPES:  # no `<!channel>`, `<@U…>` or `<url|label>` markup survives
+        value = value.replace(raw, escaped)
     value = re.sub(r"\s+", " ", value).strip()
     if not value or devctx.find_secret(value):
         return None
@@ -250,6 +257,8 @@ def snapshot(root: Path, repo: Path, now: datetime, *, alive: Callable[[Path], b
     entries = ledger(repo)
     snap["focus"] = _latest(entries, ("claim",), mission.get("submitted_at"))
     snap["question"] = _latest(entries, ("question", "blocker"), mission.get("submitted_at"))
+    if status in ("held", "waiting") and snap["owner"] is False and not snap["stop"]:
+        snap["problems"].append("owner_down")  # nothing will resume the wait or pick up a release
     if status == "held":
         snap["state"], snap["reason"] = "held", (state.get("hold") or {}).get("reason")
     elif status == "waiting":
@@ -399,13 +408,19 @@ def observe_step(obs: dict[str, Any], snap: dict[str, Any], now: datetime, *, se
     watcher's durable record (`active` incidents, `last_digest`, `failures_reported`); an incident is announced
     once until it clears, also across watcher restarts. `send(kind, text)` must never raise."""
     active = obs.setdefault("active", {})
+    onsets = obs.setdefault("onset", {})
     current = incidents(snap, now)
     for key, description in current.items():
         if key not in active:
-            if send(f"alert|{key}", alert_text(description, snap)):
+            # The onset makes each occurrence a distinct notifier key, so a recurrence is not swallowed by the
+            # notifier's time-based dedupe; resends of one undelivered occurrence still share it.
+            onset = onsets.setdefault(key, rc.iso(now))
+            if send(f"alert|{key}|{onset}", alert_text(description, snap)):
                 active[key] = rc.iso(now)
     for key in [k for k in active if k not in current]:
         del active[key]
+    for key in [k for k in onsets if k not in current]:
+        del onsets[key]
     last = rc.parse_ts(obs.get("last_digest"))
     if last is None or now - last >= digest_every:
         failed = max(0, failures - int(obs.get("failures_reported") or 0))

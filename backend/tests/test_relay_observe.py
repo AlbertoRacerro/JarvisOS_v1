@@ -375,3 +375,51 @@ def test_first_turn_of_an_attempt_is_found_by_its_nonce(tmp_path: Path) -> None:
     ticks = iter(range(3))
     ro.follow(root, repo, write=out.append, poll=0, stop=lambda: next(ticks, None) is None)
     assert "● avvio" in out
+
+
+def test_a_recurring_incident_is_alerted_again_through_the_real_notifier(tmp_path: Path) -> None:
+    root, repo = tmp_path / "c", tmp_path / "r"
+    mission(root, M1, [ROADMAP_TASK])
+    store_state(root, M1, chain=[SESSION])
+    delivered: list[str] = []
+    state = rc.default_state()
+    notifier = rc.Notifier(state, sender=lambda text: delivered.append(text) or None, log=lambda _m: None)
+    obs: dict[str, Any] = {}
+
+    def step(now: datetime) -> None:
+        ro.observe_step(obs, snap(root, repo), now, send=lambda kind, text: notifier.send_text(kind, text, now),
+                        digest_every=timedelta(hours=4), merges=lambda _s: [])
+
+    now = T0 + timedelta(hours=1)
+    step(now)
+    held(root)
+    step(now := now + timedelta(minutes=1))
+    store_state(root, M1, chain=[SESSION])  # cleared 30 minutes later
+    step(now := now + timedelta(minutes=30))
+    held(root)  # the same hold comes back well inside the notifier's 6 h dedupe window
+    step(now := now + timedelta(minutes=30))
+    step(now + timedelta(minutes=1))  # and is still announced only once per occurrence
+    assert sum("serve intervento" in text for text in delivered) == 2
+
+
+def test_owner_down_is_reported_while_a_mission_waits_or_is_held(tmp_path: Path) -> None:
+    root, repo = tmp_path / "c", tmp_path / "r"
+    mission(root, M1, [ROADMAP_TASK])
+    store_state(root, M1, phase="waiting", chain=[SESSION], waiting_since=rc.iso(T0))
+    assert any(k.startswith("owner_down|") for k in ro.incidents(snap(root, repo, alive=False), T0))
+    assert not any(k.startswith("owner_down|") for k in ro.incidents(snap(root, repo, alive=True), T0))
+    held(root)
+    found = ro.incidents(snap(root, repo, alive=False), T0)
+    assert any(k.startswith("owner_down|") for k in found) and any(k.startswith("held|") for k in found)
+
+
+def test_clean_neutralises_slack_markup_links_and_host_paths() -> None:
+    value = ro.clean("<!channel> <@U123> see evil.example/x?k=1, www.foo.org, HTTPS://A.B/c and "
+                     "<mailto:a@b.c|click> in /home/thera/.config/x; hooks.slack.com/services/T/B/C & done")
+    assert value is not None
+    for leaked in ("<", ">", "evil.example", "www.foo", "A.B/c", "mailto", "/home/thera", "hooks.slack.com"):
+        assert leaked not in value, leaked
+    assert "&lt;!channel&gt;" in value and "&amp; done" in value
+    assert ro.clean("spec 205 in relay_observe.py, see STATUS.md and #869") == \
+        "spec 205 in relay_observe.py, see STATUS.md and #869"
+    assert "<https://github.com/AlbertoRacerro/JarvisOS_v1/issues/869|#869>" in ro.links(ro.clean("PR #869") or "")

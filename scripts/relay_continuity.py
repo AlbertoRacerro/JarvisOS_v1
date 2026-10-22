@@ -4436,7 +4436,12 @@ def command_watch(args: argparse.Namespace) -> int:
                 supervised_state = Store(root).load()
             except StateCorrupt:
                 supervised_state = default_state()
-            supervised = set(supervised_state.get("chain") or []) | mission_sessions(root)
+            try:
+                owned = mission_sessions(root)
+            except Exception as exc:  # noqa: BLE001 - an odd mission store never crash-loops the watcher
+                owned = set()
+                log(f"watch: mission sessions unreadable ({type(exc).__name__})")
+            supervised = set(supervised_state.get("chain") or []) | owned
             first = not state["watch"].get("seen")
             if first:
                 # Baseline: never alert on history that predates this watch.

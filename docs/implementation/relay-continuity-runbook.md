@@ -257,9 +257,10 @@ Description=JarvisOS Relay observer: Slack digest and incident alerts (spec 205)
 WorkingDirectory=%h/src/JarvisOS_v1
 ExecStart=/usr/bin/python3 scripts/relay_continuity.py watch --digest-hours 2
 Restart=on-failure
+RestartPreventExitStatus=2 3
 RestartSec=60
 [Install]
 WantedBy=default.target
 ```
 
-Run `systemctl --user daemon-reload && systemctl --user enable --now jarvisos-relay-watch`. The watcher is a separate process, so it reports an owner crash or stop while work is pending (`owner_down`) without an `OnFailure=` hook. A watcher that is itself down cannot report anything: check `systemctl --user status jarvisos-relay-watch`. Rollback: `systemctl --user disable --now jarvisos-relay-watch`.
+Run `systemctl --user daemon-reload && systemctl --user enable --now jarvisos-relay-watch`. Run either this unit or a tmux `watch`, never both: the second one exits 3 on `watch.lock`, which the unit does not restart. The watcher is a separate process, so it reports an owner crash or stop while work is pending (`owner_down`) without an `OnFailure=` hook. A watcher that is itself down cannot report anything: check `systemctl --user status jarvisos-relay-watch`. Rollback: `systemctl --user disable --now jarvisos-relay-watch`.

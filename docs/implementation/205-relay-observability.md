@@ -11,7 +11,7 @@ Spec: [205](../specs/205-relay-observability.md). Issues [#866](https://github.c
 
 ## Verification
 
-- `backend/tests/test_relay_observe.py`, 17 tests. They cover classification of every state, the rule that a settled cycle is not verified delivery, corrupt state, the kernel lock table both faked and with a real held flock, digest content, links and secret scrubbing, alerts on transition, suppression of repeats and after a watcher restart with JSON-persisted state, re-announcement after clearing, the owner-down incident (also with roadmap mode on and nothing queued), finding the session of a first-turn attempt by its nonce, the prolonged-wait threshold, a blocked roadmap carrying the ledger question, Slack-down retry and failure reporting, `send_text` dedupe and no exceptions, merge parsing, torn JSONL, render redaction, session handoff in `follow` with the control root unmodified and no locks, and the interval bounds.
+- `backend/tests/test_relay_observe.py`, 20 tests. They cover classification of every state, the rule that a settled cycle is not verified delivery, corrupt state, the kernel lock table both faked and with a real held flock, digest content, links and secret scrubbing, alerts on transition, suppression of repeats and after a watcher restart with JSON-persisted state, re-announcement after clearing, the owner-down incident (also with roadmap mode on and nothing queued), finding the session of a first-turn attempt by its nonce, the prolonged-wait threshold, a blocked roadmap carrying the ledger question, Slack-down retry and failure reporting, `send_text` dedupe and no exceptions, merge parsing, torn JSONL, render redaction, session handoff in `follow` with the control root unmodified and no locks, and the interval bounds.
 - The relay continuity suite with the new tests: 481 passed, 1 skipped. Ruff is clean, and `relay_observe.py` was added to the CI ruff gate.
 - Live, read-only, inside the sandbox on 2026-10-22: `relay_observe.py status` and `digest` correctly reported roadmap cycle 4, task 1/1, as `running` on claude with the owner alive, and showed the current claim.
 - Live terminal monitor, same day: `timeout 5 python3 scripts/relay_observe.py follow` attached to the running owner task (mission `m-20261022T051445Z-1bd5fa`, session `20261022-051514-515816`, the turn that produced this change). It found the session by its attempt nonce before the chain recorded it, then printed the header (`── missione … · compito 1/1 · running · claude`) and the Claude tool calls and results in order, each bounded to one line. It did not stall the owner and took no lock.
@@ -49,3 +49,15 @@ Run on the trusted WSL host, outside the sandbox, on 2026-10-22 by the maintaine
   ```
 
 What this proves: Slack's incoming-webhook endpoint accepted both semantic messages. What it does not prove: the session had no Slack read access, so it did not independently confirm that the messages appear in the channel. The digest links the PR as `issues/869`, which GitHub redirects to the pull request.
+
+## Independent review and repair (2026-10-22)
+
+An independent read-only review of head `cbf09034` confirmed the read-only and no-lock guarantees and the crash safety. It found three material defects, repaired in the next commit, each with a test that fails on `cbf09034`:
+
+- **Recurring incidents were swallowed.** The notifier's 6-hour dedupe keyed on `alert|<incident>`, so the same incident returning after it cleared (a roadmap pausing again, an owner crashing twice) was not re-announced. Each occurrence now carries its onset in the notifier key, persisted in the watch store. The test goes through the real `Notifier`.
+- **Slack markup and links in agent text.** `clean()` let `<!channel>`, `<@U…>`, `<mailto:…|…>`, upper-case schemes, bare domains and host paths through. It now replaces scheme links, `www.` hosts, bare domains on common TLDs and absolute host paths, and escapes `&`, `<` and `>`. Only links generated afterwards for this repository's issues and PRs remain.
+- **No owner-down alert while a mission waits or is held.** `owner_down` is now raised in those states as well.
+
+Also: the runbook unit gains `RestartPreventExitStatus=2 3` (a second watcher holding `watch.lock` no longer causes a restart loop), and an unreadable mission store no longer escapes the watch loop. Not changed (P3): a finished owner turn could be reported once as a REPL failure before the owner appends its session to the chain.
+
+The webhook delivery path (`post_webhook`, `Notifier`) is unchanged by the repair. The host acceptance messages above were composed by `cbf09034`. The first digest the installed watcher sends after merge is the live post-repair sample.
