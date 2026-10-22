@@ -86,17 +86,21 @@ recorded: `["wslpath","-w",<path>]` and
 routes, copy, hashing and the audit row ran unmodified. Screenshots:
 [flag on](evidence-165/flag-on-handed.png), [flag off](evidence-165/flag-off-menu.png).
 
-## Host proof (pending)
+## Host proof (WSL qualification host)
 
-The required host proof — real `explorer.exe` on the WSL qualification host —
-cannot run inside the provider sandbox. On the host, outside the sandbox, from
-this branch:
+Run on 2026-10-22 on the trusted WSL host, outside jarvis-sandbox, by the maintainer's direct host session (mandate `L20261022085842-e05d`). Code: PR head `3a3d47ad7bab396bbab6cc34ee8a5ac4fba7ca6a`. The handoff module, the route and the proof script were reviewed before running. The environment was scrubbed (`env -i`, temporary `HOME`, only `PATH`, `LANG`, `WSL_INTEROP` and `WSL_DISTRO_NAME` kept), and `JARVISOS_DATA_ROOT` was a fresh temporary directory.
 
 ```
-cd backend && .venv/bin/python ../scripts/165-print-handoff-host-proof.py /mnt/c/Users/<you>/JarvisOS-print
+cd backend && env -i HOME=<tmp> PATH=... WSL_INTEROP=... WSL_DISTRO_NAME=... \
+  ~/src/JarvisOS_v1/backend/.venv/bin/python ../scripts/165-print-handoff-host-proof.py /mnt/c/Users/thera/JarvisOS-print
 ```
 
-Expected: `open-in-slicer 200` with outcome `handed_to_windows`, and Windows
-opening the file with the `.3mf` default program. Record which program opened
-it and whether it shows millimetre size and one object per part. Maintainer
-confirmation in Bambu Studio is welcome but not a merge gate.
+- `09:07:03Z` capability `{'available': True, 'code': None}` (flag on, WSL, directory set).
+- Tube template candidate `1bef7bdb-…` built. Its `bluecad_3mf` artifact `3c64bea3-…` was found among the exports.
+- `09:07:08Z` `POST …/open-in-slicer` → `200`, event row `a122dd73-b273-40e0-b0ba-60c0ddfc0693`, outcome `handed_to_windows`, `handoff_path` `/mnt/c/Users/thera/JarvisOS-print/1bef7bdb-attempt1-a672b8ac.3mf`, `windows_path` `C:\Users\thera\JarvisOS-print\1bef7bdb-attempt1-a672b8ac.3mf`. The script exited 0.
+- The handed-off file has `sha256 a672b8ac872f49a38dd3a1622d1df22cf72e39f1d2fe33a15ebe21bf022c96d0` (10674 bytes). This equals the registered artifact hash in the event row.
+- Windows process table, read afterwards: `explorer` and `OpenWith` started at 11:07:08 local (09:07:08Z), together with `smartscreen`.
+
+**Association: none.** `assoc .3mf` reports no association. The per-user `UserChoice` points to an AppX handler (`AppXvhc4p7vz4b485xfp46hhk3fq3grkdgjg`) that is no longer installed. No Bambu Studio, OrcaSlicer, PrusaSlicer, Cura or 3D Viewer is installed. Windows therefore showed its "choose an app" dialog (`OpenWith.exe`).
+
+This meets the spec's required host evidence: `explorer.exe` starts on the handed-off path and the event row is written. **No slicer opened the file**, so mm size and one object per part were not confirmed in a slicer; the spec makes that conditional on an existing association and not a merge gate. Nothing was printed.
