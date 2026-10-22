@@ -110,6 +110,11 @@ def test_classification_covers_every_owner_state(tmp_path: Path) -> None:
     store_state(root, M1, chain=[SESSION], mission={"next": 1, "done": [{**done, "outcome": "cycle_settled"}],
                                                     "completed_at": rc.iso(T0)})
     assert snap(root, repo)["state"] == "idle"  # a settled cycle is not verified delivery
+    rc.write_json_atomic(root / "roadmap.json", {"enabled": True, "cycle": 4, "paused": None})
+    assert snap(root, repo)["state"] == "idle"
+    down = snap(root, repo, alive=False)  # nobody left to queue the next roadmap cycle
+    assert down["state"] == "stopped" and "owner_down|-" in ro.incidents(down, T0)
+    assert "la roadmap autonoma è attiva" in ro.incidents(down, T0)["owner_down|-"]
     rc.write_json_atomic(root / "roadmap.json", {"enabled": False, "cycle": 4, "paused": "coordinator_blocked"})
     assert snap(root, repo)["state"] == "paused"
 
@@ -351,3 +356,22 @@ def test_follow_handles_session_handoff_without_locks_or_writes(tmp_path: Path) 
 @pytest.mark.parametrize("hours", [0.5, 5])
 def test_watch_rejects_digest_interval_outside_one_to_four_hours(hours: float) -> None:
     assert rc.main(["watch", "--digest-hours", str(hours), "--once", "--no-notify"]) == 2
+
+
+def test_first_turn_of_an_attempt_is_found_by_its_nonce(tmp_path: Path) -> None:
+    root, repo = tmp_path / "c", tmp_path / "r"
+    mission(root, M1, [ROADMAP_TASK])
+    pending = {"nonce": "rc-20261022T080000Z-0123abcd", "agent": "claude", "parent": None, "started_at": rc.iso(T0),
+               "pid": 1, "pid_start": 1, "fingerprint": "f", "attempt": 1, "task": 0}
+    store_state(root, M1, phase="running", pending=pending, agent="claude")
+    other = turn(repo, "20261022-075900-111111", 1, None, "")
+    (other / "prompt.md").write_text("an unrelated REPL turn")
+    live = turn(repo, "20261022-080001-222222", 1, None,
+                '{"type": "assistant", "message": {"content": [{"type": "text", "text": "avvio"}]}}\n')
+    (live / "prompt.md").write_text("[relay-continuity attempt rc-20261022T080000Z-0123abcd]\nRoadmap ...")
+    assert ro.active_turn(root, repo)[1] == live
+    assert snap(root, repo)["turn"] == {"turn": "turn-001", "running": True}
+    out: list[str] = []
+    ticks = iter(range(3))
+    ro.follow(root, repo, write=out.append, poll=0, stop=lambda: next(ticks, None) is None)
+    assert "● avvio" in out

@@ -146,6 +146,26 @@ def _turn_state(repo: Path, session: str | None) -> dict[str, Any]:
     return out
 
 
+def live_session(repo: Path, state: dict[str, Any] | None) -> str | None:
+    """The session of the mission's current attempt: the chain head, or, before the first turn of an attempt is
+    recorded, the newest session whose last turn prompt carries the pending attempt's nonce."""
+    state = state or {}
+    nonce = (state.get("pending") or {}).get("nonce")
+    sessions = repo / ".agent-relay" / "sessions"
+    if isinstance(nonce, str) and sessions.is_dir():
+        for session in sorted((p for p in sessions.iterdir() if p.is_dir()), reverse=True)[:20]:
+            if session.name == state.get("head_session"):
+                break
+            turn = rc.last_turn_dir(session)
+            try:
+                with open(turn / "prompt.md", encoding="utf-8", errors="replace") as handle:  # type: ignore[operator]
+                    if nonce in handle.read(8192):
+                        return session.name
+            except (OSError, TypeError):
+                continue
+    return state.get("head_session")
+
+
 def _task_label(text: Any) -> str | None:
     if isinstance(text, str) and (m := re.match(r"Roadmap continuation cycle (\d+)", text)):
         return f"ciclo {m.group(1)} della roadmap autonoma (sviluppo JarvisOS dalla coda di STATUS.md)"
@@ -211,6 +231,9 @@ def snapshot(root: Path, repo: Path, now: datetime, *, alive: Callable[[Path], b
         snap["state"] = ("paused" if paused else "stopped" if snap["stop"] else "unknown" if snap["owner"] is None
                          else "verified_complete" if verified else "idle")
         snap["reason"] = paused or ("maintainer_stop" if snap["stop"] else None)
+        if snap["state"] in ("idle", "verified_complete") and snap["owner"] is False and (snap.get("roadmap") or {}).get("enabled"):
+            snap["state"] = "stopped"  # roadmap mode is on, but no owner is there to queue its next cycle
+            snap["problems"].append("owner_down")
         snap["turn"] = _turn_state(repo, last.get("session")) if last else {}
         if paused == "coordinator_blocked":
             snap["question"] = _latest(ledger(repo), ("question", "blocker"), last.get("at") if last else None)
@@ -223,7 +246,7 @@ def snapshot(root: Path, repo: Path, now: datetime, *, alive: Callable[[Path], b
     snap["mission"] = {"id": mission["id"], "task": f"{min(index + 1, len(mission['tasks']))}/{len(mission['tasks'])}",
                        "label": _task_label(task.get("text")), "authority": mission.get("authority"),
                        "agent": state.get("agent") if state.get("agent") in rc.AGENTS else None}
-    snap["turn"] = _turn_state(repo, state.get("head_session"))
+    snap["turn"] = _turn_state(repo, live_session(repo, state))
     entries = ledger(repo)
     snap["focus"] = _latest(entries, ("claim",), mission.get("submitted_at"))
     snap["question"] = _latest(entries, ("question", "blocker"), mission.get("submitted_at"))
@@ -263,8 +286,9 @@ def incidents(snap: dict[str, Any], now: datetime) -> dict[str, str]:
     if snap["state"] == "paused":
         found[f"paused|{reason}"] = f"roadmap in pausa: {REASON_IT.get(reason, reason or 'motivo non registrato')}"
     if "owner_down" in snap["problems"]:
-        found[f"owner_down|{mission}"] = (f"il proprietario delle missioni non è in esecuzione ma la missione {mission} "
-                                          "ha lavoro in sospeso")
+        found[f"owner_down|{mission}"] = ("il proprietario delle missioni non è in esecuzione ma "
+                                          + (f"la missione {mission} ha lavoro in sospeso" if mission != "-"
+                                             else "la roadmap autonoma è attiva"))
     if snap["state"] == "waiting" and (since := rc.parse_ts(snap.get("waiting_since"))) and now - since >= WAIT_ALERT_AFTER:
         found[f"waiting|{mission}|{rc.iso(since)}"] = f"missione {mission} in attesa da più di {int(WAIT_ALERT_AFTER.total_seconds() // 3600)} ore"
     for problem in snap["problems"]:
@@ -385,7 +409,8 @@ def observe_step(obs: dict[str, Any], snap: dict[str, Any], now: datetime, *, se
     last = rc.parse_ts(obs.get("last_digest"))
     if last is None or now - last >= digest_every:
         failed = max(0, failures - int(obs.get("failures_reported") or 0))
-        text = digest_text(snap, since=obs.get("last_digest"), merges=merges(obs.get("last_digest")),
+        since = obs.get("last_digest") or rc.iso(now - digest_every)  # a first digest covers one interval
+        text = digest_text(snap, since=since, merges=merges(since),
                            delivery_failures=failed)
         if send(f"digest|{rc.iso(now)}", text):
             obs["last_digest"] = rc.iso(now)
@@ -490,7 +515,7 @@ def active_turn(root: Path, repo: Path) -> tuple[str | None, Path | None, dict[s
     if chosen is None:
         return None, None, None
     mission_id, state = chosen
-    session = (state or {}).get("head_session")
+    session = live_session(repo, state)
     turn = rc.last_turn_dir(repo / ".agent-relay" / "sessions" / session) if session else None
     return mission_id, turn, state
 
