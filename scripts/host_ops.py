@@ -699,7 +699,7 @@ def op_http_smoke(ctx: Context) -> dict[str, Any]:
     target = targets.get(args.get("target")) if isinstance(targets, dict) and isinstance(args.get("target"), str) else None
     if not isinstance(target, dict) or not _LOCAL_URL_RE.fullmatch(str(target.get("url"))):
         raise Refused(f"target {args.get('target')!r} is not defined in the host policy")
-    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _RejectRedirects())
     started = time.monotonic()
     try:
         with opener.open(urllib.request.Request(target["url"], method="GET"), timeout=15) as response:
