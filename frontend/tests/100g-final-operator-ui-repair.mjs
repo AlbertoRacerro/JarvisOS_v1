@@ -59,7 +59,10 @@ for (const route of [
   assert(routes.includes(`path: "${route}"`), `canonical route must remain present: ${route}`);
 }
 assert(processStage.includes("dwsim-palette") && read("src/stages/ProcessStage.css").includes(".dwsim-palette"), "DWSIM operational palette must remain structurally distinct from the workspace header repair");
-assert(processStage.includes("design-stage__tabs") && bluecadStage.includes("design-stage__tabs"), "Process and BLUECAD must preserve their shared peer selector");
+// Spec 213: the Process / BlueCad / Studio switcher moved to the rail so it keeps one position on all three surfaces.
+const rail = read("src/components/shell/Rail.tsx");
+assert(rail.includes('aria-label="Design workspaces"') && rail.includes("PEER_NAV_ITEMS.design"), "Design surfaces must share one rail switcher");
+assert(!processStage.includes("design-stage__tabs") && !bluecadStage.includes("design-stage__tabs"), "Design headers must not duplicate the rail switcher");
 assert(settingsSurface.includes("final-settings__tabs"), "Settings must preserve its peer selector semantics");
 
 // Regression gate must be part of the normal build.

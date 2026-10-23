@@ -3,6 +3,7 @@ import AppLink from "../../app/AppLink";
 import type { Navigate } from "../../app/AppLink";
 import type { DraftObject, DraftOp, StudioPinStatus, StudioRunProvenance } from "../../api/processDraft";
 import { inspectHref, parameterOp, pinOf, portLabels, provenanceRows, STUDIO_LIMITS, supersededText, updateStudioUnitOp } from "./studioUnitLogic";
+import NumericInput from "../ui/NumericInput";
 
 /** The honest-limits statement, shown on the unit and again in its results (spec 190 decision 9). */
 export function StudioLimits() {
@@ -68,8 +69,8 @@ export default function StudioUnitInspector({ unit, objects, status, provenance,
           return (
             <label className="draft-field" key={item.name}>
               <span>{item.label || item.name} [{item.unit}]{bounds ? ` · ${bounds}` : ""}</span>
-              <input type="number" step="any" aria-label={`${item.label || item.name} in ${item.unit}`} value={entered[item.name] ?? (stored ? String(stored.value) : "")}
-                onChange={(event) => setEntered((current) => ({ ...current, [item.name]: event.target.value }))} />
+              <NumericInput min={item.min ?? undefined} max={item.max ?? undefined} aria-label={`${item.label || item.name} in ${item.unit}`} value={entered[item.name] ?? (stored ? String(stored.value) : "")}
+                onValueChange={(text) => setEntered((current) => ({ ...current, [item.name]: text }))} />
             </label>
           );
         }) : <p className="draft-hint">This unit declares no parameters.</p>}

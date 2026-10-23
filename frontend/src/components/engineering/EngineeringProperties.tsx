@@ -24,6 +24,7 @@ import {
   type PreviousRunLoadability
 } from "./previousRunLoad";
 
+import NumericInput from "../ui/NumericInput";
 export type WorkingBinding = Readonly<{ value: string; parameterId: string }>;
 type BindingMap = Record<string, WorkingBinding>;
 type PreviewPhase = "idle" | "checking" | "ready" | "unavailable" | "local-invalid";
@@ -1084,14 +1085,12 @@ export function EngineeringPropertiesPanel({
         </div>
         <label>
           Value [{variable.unit}]
-          <input
+          <NumericInput
             id={`engineering-property-${variable.name}`}
-            type="number"
-            step="any"
             value={binding.value}
             placeholder="Empty"
             aria-invalid={isInvalid || isRequiredMissing || undefined}
-            onChange={(event) => controller.updateValue(variable, event.target.value)}
+            onValueChange={(text) => controller.updateValue(variable, text)}
           />
         </label>
         <label>

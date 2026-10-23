@@ -239,6 +239,23 @@ export default function ProcessDraftEditor({ workspaceId, navigate }: Readonly<{
   const [lastRun, setLastRun] = useState<DraftRun | null>(null);
   const [solve, setSolve] = useState<SolveStatus | null>(null);
   const [solveEvents, setSolveEvents] = useState<SolveEvent[]>([]);
+  // Spec 213: a Run reveals the live solver console; the toolbar keeps a shortcut to it while a solve exists.
+  const solverConsoleRef = useRef<HTMLDivElement>(null);
+  const [revealRunId, setRevealRunId] = useState<string | null>(null);
+  const showSolverConsole = useCallback((moveFocus: boolean) => {
+    const target = solverConsoleRef.current;
+    if (!target) return;
+    const reduced = typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    target.scrollIntoView({ block: "nearest", behavior: reduced ? "auto" : "smooth" });
+    // Revealing on Run leaves focus on the toolbar; the explicit shortcut moves focus to the console.
+    if (moveFocus) target.focus({ preventScroll: true });
+  }, []);
+  useEffect(() => {
+    if (!revealRunId || solve?.run_id !== revealRunId) return;
+    setRevealRunId(null);
+    const frame = window.requestAnimationFrame(() => showSolverConsole(false));
+    return () => window.cancelAnimationFrame(frame);
+  }, [revealRunId, solve?.run_id, showSolverConsole]);
   const [solvedRun, setSolvedRun] = useState<DraftRun | null>(null);
   const [resultsView, setResultsView] = useState<ResultsView | null>(null);
   const [setupOpen, setSetupOpen] = useState(false);
@@ -701,6 +718,7 @@ export default function ProcessDraftEditor({ workspaceId, navigate }: Readonly<{
         const started = await startSolve(workspaceId, draft.draft_id, revision ?? draft.revision, retryOf);
         setSolveEvents(started.events);
         setSolve(started);
+        setRevealRunId(started.run_id);
         if (!started.live) {
           setBusy(null);
           const run = await getDraftRun(workspaceId, draft.draft_id, started.run_id).catch(() => null);
@@ -752,6 +770,7 @@ export default function ProcessDraftEditor({ workspaceId, navigate }: Readonly<{
         <p>No process draft yet. A draft is the Jarvis-owned flowsheet: edits are instant and DWSIM runs only on Validate/Run.</p>
         <button
           type="button"
+          className="primary-button"
           onClick={() =>
             void createDraft(workspaceId, "Process draft").then((created) => {
               accept(created);
@@ -1500,6 +1519,11 @@ export default function ProcessDraftEditor({ workspaceId, navigate }: Readonly<{
               ? "Running mixed solve (DWSIM + Jarvis)…" : "Running…"
             : "Run"}
         </button>
+        {solve && (
+          <button type="button" className="draft-console-link" aria-controls="process-solver-console" onClick={() => showSolverConsole(true)}>
+            {solve.state === "running" || solve.state === "stopping" ? "Live solver console" : "Solver console"}
+          </button>
+        )}
         <RunStateIndicator blockerCount={shownBlockerCount} reason={outcomeHere ? outcomeHere.reason : null}
           state={runState(busy, blockers.length, outcomeHere, Boolean(outcomeHere))} />
         <span className={`draft-readiness ${blockers.length ? "has-blockers" : "is-ready"}`} data-testid="readiness-chip">
@@ -1623,7 +1647,7 @@ export default function ProcessDraftEditor({ workspaceId, navigate }: Readonly<{
               ))}
             </ul>
           </section>
-          {solve && <SolverConsole solve={solve} events={solveEvents} onStop={requestStop} />}
+          {solve && <div id="process-solver-console" ref={solverConsoleRef} tabIndex={-1} className="draft-console-anchor"><SolverConsole solve={solve} events={solveEvents} onStop={requestStop} /></div>}
           {lastRun && (!solve || !solve.live) && renderRun(lastRun)}
           <RunComparisonPanel key={draft.draft_id} workspaceId={workspaceId} draftId={draft.draft_id} refreshKey={lastRun?.run_id ?? ""} />
           {renderResults()}

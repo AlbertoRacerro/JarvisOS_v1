@@ -228,9 +228,38 @@ function BluecadGlbViewer({ artifactUrl, references = [], inspectionCommand = nu
       if (!currentSessionKey || disposed) return;
       publish({ sessionKey: currentSessionKey, status: "ready", meshes: meshFacts, selected: selectedFact });
     };
+    // Spec 213: the selected part (from the project tree, inspector or a viewport click) is tinted with the accent
+    // on a per-mesh material clone; the shared original material is restored on deselection.
+    let highlighted: { mesh: THREE.Mesh; original: THREE.Material | THREE.Material[] } | null = null;
+    const clearHighlight = () => {
+      if (!highlighted) return;
+      const clones = Array.isArray(highlighted.mesh.material) ? highlighted.mesh.material : [highlighted.mesh.material];
+      highlighted.mesh.material = highlighted.original;
+      for (const clone of clones) clone.dispose();
+      highlighted = null;
+    };
+    const highlightMesh = (mesh: THREE.Mesh | undefined) => {
+      clearHighlight();
+      if (!mesh) return;
+      const accent = new THREE.Color(getComputedStyle(document.documentElement).getPropertyValue("--accent-seed").trim() || "#8DB943");
+      const tint = (material: THREE.Material) => {
+        const clone = material.clone();
+        if ("emissive" in clone && clone.emissive instanceof THREE.Color) {
+          clone.emissive.copy(accent);
+          if ("emissiveIntensity" in clone) clone.emissiveIntensity = 0.55;
+        } else if ("color" in clone && clone.color instanceof THREE.Color) {
+          clone.color.lerp(accent, 0.6);
+        }
+        return clone;
+      };
+      const original = mesh.material;
+      mesh.material = Array.isArray(original) ? original.map(tint) : tint(original);
+      highlighted = { mesh, original };
+    };
     const selectMesh: SessionSelection = (meshKey) => {
       if (!currentSessionKey || disposed) return;
       selectedFact = meshKey ? factByKey.get(meshKey) ?? null : null;
+      highlightMesh(meshKey ? meshByKey.get(meshKey) : undefined);
       emitReady();
     };
 
@@ -407,6 +436,7 @@ function BluecadGlbViewer({ artifactUrl, references = [], inspectionCommand = nu
       renderer.domElement.removeEventListener("pointerdown", onPointerDown);
       renderer.domElement.removeEventListener("pointerup", onPointerUp);
       renderer.domElement.removeEventListener("pointercancel", onPointerCancel);
+      clearHighlight();
       meshByKey.clear();
       keyByMesh.clear();
       factByKey.clear();

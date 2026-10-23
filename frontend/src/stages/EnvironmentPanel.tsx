@@ -11,6 +11,7 @@ import type { Profile, ProfileValues, Site } from "../components/environment/typ
 import "uplot/dist/uPlot.min.css";
 import "./EnvironmentPanel.css";
 
+import NumericInput from "../components/ui/NumericInput";
 type Props = { workspaceId: string; onClose: () => void };
 
 const TABLE_PAGE_SIZE = 50;
@@ -263,8 +264,8 @@ export default function EnvironmentPanel({ workspaceId, onClose }: Props) {
               <p>{selected.label ?? Object.keys(selected.channels).join(" · ")} · {selected.resolution_minutes ?? "Irregular"} min</p>
             </div>
             <div className="environment-derive">
-              <label>Conversion factor (µmol/J)<input type="number" min="0.000001" step="0.01" value={parFactor}
-                onChange={(event) => setParFactor(event.target.value)} /></label>
+              <label>Conversion factor (µmol/J)<NumericInput min={0.000001} value={parFactor}
+                onValueChange={(text) => setParFactor(text)} /></label>
               <small>0.45 PAR fraction × 4.57 µmol/J (screening)</small>
               {hasPar && <label className="environment-inline-check"><input type="checkbox" checked={replacePar}
                 onChange={(event) => setReplacePar(event.target.checked)} />Replace existing PAR channel</label>}
@@ -283,8 +284,8 @@ export default function EnvironmentPanel({ workspaceId, onClose }: Props) {
             <label>Operation<select value={bulkOperation} onChange={(event) => setBulkOperation(event.target.value as "scale" | "offset")}>
               <option value="scale">Scale</option><option value="offset">Offset</option>
             </select></label>
-            <label>{bulkOperation === "scale" ? "Factor" : "Offset"}<input type="number" value={bulkValue}
-              onChange={(event) => setBulkValue(event.target.value)} /></label>
+            <label>{bulkOperation === "scale" ? "Factor" : "Offset"}<NumericInput value={bulkValue}
+              onValueChange={(text) => setBulkValue(text)} /></label>
             <button type="button" disabled={busy} onClick={() => void run(() => environmentApi<Profile>(
               workspaceId,
               `/profiles/${encodeURIComponent(selected.digest)}/edit`,

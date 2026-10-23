@@ -21,10 +21,8 @@ import {
   ACCENT_OPTIONS,
   ACCENT_PRESETS,
   APPEARANCE_OPTIONS,
-  DEFAULT_ACCENT_HEX,
   applyAccentPreference,
   applyAppearancePreference,
-  normalizeAccentHex,
   readAccentPreference,
   readAppearancePreference,
   subscribeToVisualPreferenceUpdates,
@@ -63,7 +61,9 @@ const accentLabels: Readonly<Record<AccentPreset, string>> = {
   microalgae: "Microalgae",
   "leaf-chlorophyll": "Leaf Chlorophyll",
   lagoon: "Lagoon",
-  custom: "Custom"
+  glacier: "Glacier",
+  iris: "Iris",
+  ember: "Ember"
 };
 
 function draftFrom(settings: AISettings): Draft {
@@ -128,10 +128,6 @@ function Settings() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [appearance, setAppearance] = useState<AppearancePreference>(() => readAppearancePreference());
   const [accent, setAccent] = useState<AccentPreference>(() => readAccentPreference());
-  const [customAccentDraft, setCustomAccentDraft] = useState(() => {
-    const stored = readAccentPreference();
-    return stored.preset === "custom" ? stored.customHex ?? DEFAULT_ACCENT_HEX : DEFAULT_ACCENT_HEX;
-  });
 
   const invalidateCanonicalSnapshot = useCallback(() => {
     setSettings(null);
@@ -210,7 +206,6 @@ function Settings() {
     const nextAccent = readAccentPreference();
     setAppearance(nextAppearance);
     setAccent(nextAccent);
-    if (nextAccent.preset === "custom" && nextAccent.customHex) setCustomAccentDraft(nextAccent.customHex);
   }), []);
 
   const refreshAfterMutation = async (savedKey?: EditableKey): Promise<boolean> => {
@@ -320,32 +315,13 @@ function Settings() {
     setAppearance(preference);
   };
 
-  const setVisualAccent = (preset: AccentPreset, customHex?: string) => {
-    const requested: AccentPreference = preset === "custom"
-      ? { preset, customHex: normalizeAccentHex(customHex ?? customAccentDraft) ?? DEFAULT_ACCENT_HEX }
-      : { preset };
-    const stored = writeAccentPreference(requested);
+  const setVisualAccent = (preset: AccentPreset) => {
+    const stored = writeAccentPreference({ preset });
     applyAccentPreference(stored);
     setAccent(stored);
-    if (stored.preset === "custom" && stored.customHex) setCustomAccentDraft(stored.customHex);
-  };
-
-  const updateCustomAccent = (raw: string) => {
-    setCustomAccentDraft(raw);
-    const normalized = normalizeAccentHex(raw);
-    if (!normalized) return;
-    setVisualAccent("custom", normalized);
-  };
-
-  const resetAccent = () => {
-    setCustomAccentDraft(DEFAULT_ACCENT_HEX);
-    setVisualAccent("microalgae");
   };
 
   const allMutationsBusy = settingsBusy || credentialBusy || uncertain;
-  const customAccentSwatch = normalizeAccentHex(customAccentDraft)
-    ?? (accent.preset === "custom" ? accent.customHex : undefined)
-    ?? DEFAULT_ACCENT_HEX;
   const scaleway = providers?.providers.find((provider) => provider.provider_id === "scaleway") ?? null;
 
   return (
@@ -388,21 +364,13 @@ function Settings() {
               {ACCENT_OPTIONS.map((option) => (
                 <label key={option} className="settings-accent-choice">
                   <input type="radio" name="accent" value={option} checked={accent.preset === option} onChange={() => setVisualAccent(option)} />
-                  <span className="settings-accent-swatch" style={{ "--settings-swatch": option === "custom" ? customAccentSwatch : ACCENT_PRESETS[option as Exclude<AccentPreset, "custom">] } as React.CSSProperties} aria-hidden="true" />
+                  <span className="settings-accent-swatch" style={{ "--settings-swatch-light": ACCENT_PRESETS[option].light, "--settings-swatch-dark": ACCENT_PRESETS[option].dark } as React.CSSProperties} aria-hidden="true" />
                   <span>{accentLabels[option]}</span>
                 </label>
               ))}
             </div>
           </fieldset>
-          {accent.preset === "custom" && (
-            <div className="settings-custom-accent">
-              <label><span>Custom color</span><input type="color" value={normalizeAccentHex(customAccentDraft) ?? DEFAULT_ACCENT_HEX} onChange={(event) => updateCustomAccent(event.target.value)} /></label>
-              <label><span>HEX</span><input aria-invalid={normalizeAccentHex(customAccentDraft) === null} value={customAccentDraft} maxLength={7} spellCheck={false} onChange={(event) => updateCustomAccent(event.target.value)} /></label>
-              <button className="button-secondary" type="button" onClick={resetAccent}>Reset to Microalgae</button>
-              {normalizeAccentHex(customAccentDraft) === null && <small className="settings-accent-error">Use a six-digit HEX value such as #528B68.</small>}
-            </div>
-          )}
-          <p className="settings-muted">Accent affects navigation, focus and selection emphasis only. Engineering status and scientific colors remain independent.</p>
+          <p className="settings-muted">Each accent is tuned separately for Light and Dark. Accent affects navigation, focus, selection and primary actions only. Engineering status and scientific colors remain independent.</p>
         </Surface>
 
         <Surface className="settings-card">

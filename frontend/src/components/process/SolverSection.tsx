@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { SEED_MODES, SOLVER_DEFAULTS, SOLVER_METHODS, TOLERANCE_FIELDS, formFromSettings, solverFromForm, validateForm,
   type SolverForm, type SolverSettings } from "./solverSettings";
 
+import NumericInput from "../ui/NumericInput";
 /** Spec 183: Solver section of the Process Setup drawer. `solver` is the document's stored settings (absent = defaults). */
 export function SolverSection({ solver, onApply }: Readonly<{ solver?: SolverSettings | null; onApply: (solver: SolverSettings | null) => unknown }>) {
   const stored = JSON.stringify(solver ?? null);
@@ -26,14 +27,14 @@ export function SolverSection({ solver, onApply }: Readonly<{ solver?: SolverSet
           {SOLVER_METHODS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
         </select>{error("method")}</label>
       <label className="draft-field"><span>Max iterations (1 to 5000)</span>
-        <input aria-label="Max iterations" type="number" inputMode="numeric" min={1} max={5000} step={1} value={form.max_iterations}
-          onChange={(event) => set({ max_iterations: event.target.value })} {...aria("max_iterations")} />{error("max_iterations")}</label>
+        <NumericInput integer aria-label="Max iterations" min={1} max={5000} value={form.max_iterations}
+          onValueChange={(text) => set({ max_iterations: text })} {...aria("max_iterations")} />{error("max_iterations")}</label>
       <label className="draft-field"><span>Damping (0.05 to 1)</span>
-        <input aria-label="Damping" type="number" inputMode="decimal" min={0.05} max={1} step="any" value={form.damping}
-          onChange={(event) => set({ damping: event.target.value })} {...aria("damping")} />{error("damping")}</label>
+        <NumericInput aria-label="Damping" min={0.05} max={1} value={form.damping}
+          onValueChange={(text) => set({ damping: text })} {...aria("damping")} />{error("damping")}</label>
       <label className="draft-field"><span>Wall budget, seconds (10 to 600)</span>
-        <input aria-label="Wall budget seconds" type="number" inputMode="decimal" min={10} max={600} step="any" value={form.wall_s}
-          onChange={(event) => set({ wall_s: event.target.value })} {...aria("wall_s")} />{error("wall_s")}</label>
+        <NumericInput aria-label="Wall budget seconds" min={10} max={600} value={form.wall_s}
+          onValueChange={(text) => set({ wall_s: text })} {...aria("wall_s")} />{error("wall_s")}</label>
       <label className="draft-field"><span>Seed mode</span>
         <select aria-label="Seed mode" value={form.seed_mode} onChange={(event) => set({ seed_mode: event.target.value })} {...aria("seed_mode")}>
           {SEED_MODES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}

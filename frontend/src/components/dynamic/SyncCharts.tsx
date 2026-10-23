@@ -5,6 +5,8 @@ import "uplot/dist/uPlot.min.css";
 import { channelLabel, fmtNum, groupChannelsByUnit, panRange, tableWindow, zoomRange, type SeriesData } from "./dynamicLogic";
 import { chartSeriesColor, useChartAppearance } from "../chartPalette";
 
+import NumericInput from "../ui/NumericInput";
+import { numericOrUndefined } from "../ui/numericStep";
 // Spec 173 decision 9: uPlot panels share one cursor and one x-range, group channels by their manifest unit, and each carries a values
 // table and keyboard range control. uPlot is loaded lazily, as in the environment profile chart.
 export const SYNC_KEY = "jarvis-dynamic";
@@ -27,8 +29,8 @@ export function RangeControls({ range, bounds, onRange }: { range: Range | null;
   const days = (seconds: number) => String(Number((seconds / 86400).toPrecision(8)));
   const commit = (nextStart: number, nextEnd: number) => { if (Number.isFinite(nextStart) && Number.isFinite(nextEnd) && nextEnd > nextStart) onRange([Math.max(bounds[0], nextStart * 86400), Math.min(bounds[1], nextEnd * 86400)]); };
   return <div className="dyn-range" role="group" aria-label="Chart range">
-    <label>Range start [d]<input type="number" step="any" aria-label="Range start [d]" value={days(start)} onChange={(event) => commit(Number(event.target.value), end / 86400)} /></label>
-    <label>Range end [d]<input type="number" step="any" aria-label="Range end [d]" value={days(end)} onChange={(event) => commit(start / 86400, Number(event.target.value))} /></label>
+    <label>Range start [d]<NumericInput aria-label="Range start [d]" value={days(start)} onValueChange={(text) => commit((numericOrUndefined(text) ?? 0), end / 86400)} /></label>
+    <label>Range end [d]<NumericInput aria-label="Range end [d]" value={days(end)} onValueChange={(text) => commit(start / 86400, (numericOrUndefined(text) ?? 0))} /></label>
     <button type="button" onClick={() => onRange(panRange([start, end], bounds, -0.25))}>Pan earlier</button>
     <button type="button" onClick={() => onRange(panRange([start, end], bounds, 0.25))}>Pan later</button>
     <button type="button" onClick={() => onRange(zoomRange([start, end], bounds, 0.5))}>Zoom in</button>

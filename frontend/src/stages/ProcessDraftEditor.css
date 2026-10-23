@@ -557,3 +557,8 @@
 .draft-studio-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .draft-studio-provenance { margin-top: 8px; padding: 6px 8px; border: 1px solid var(--color-border-default); border-radius: 4px; }
 .draft-studio-provenance .is-superseded { border-left: 3px solid var(--color-status-warning-text); padding-left: 6px; }
+
+/* Spec 213: the live solver console is revealed on Run and reachable from the toolbar. */
+.draft-toolbar .draft-console-link { min-height: var(--control-height-compact); padding: 2px 12px; font-size: var(--font-size-label); }
+.draft-console-anchor { scroll-margin-block: 16px; border-radius: 14px; outline: none; }
+.draft-console-anchor:focus-visible { outline: 2px solid var(--color-focus-ring); outline-offset: 2px; }

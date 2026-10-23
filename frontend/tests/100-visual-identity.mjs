@@ -20,20 +20,24 @@ const failures = [];
 const check = (condition, message) => { if (!condition) failures.push(message); };
 
 check(/APPEARANCE_OPTIONS[^\n]*\["system", "light", "dark"\]/.test(theme), "appearance choices drifted");
-check(/ACCENT_OPTIONS[\s\S]*"microalgae"[\s\S]*"leaf-chlorophyll"[\s\S]*"lagoon"[\s\S]*"custom"/.test(theme), "accent choices drifted");
-// Spec 198 Lumen: the Microalgae default seed is the Lumen chlorophyll.
+// Spec 213: a curated accent set, designed per appearance, replaces the free Custom HEX picker.
+check(/ACCENT_OPTIONS[\s\S]*"microalgae"[\s\S]*"leaf-chlorophyll"[\s\S]*"lagoon"[\s\S]*"glacier"[\s\S]*"iris"[\s\S]*"ember"/.test(theme), "accent choices drifted");
+check(!/ACCENT_OPTIONS[^;]*"custom"/.test(theme), "free Custom accent must not return");
+// Spec 198 Lumen: the Microalgae default seed is the Lumen chlorophyll (Dark); Light uses the cooler pine/fern seed.
 check(theme.includes('DEFAULT_ACCENT_HEX = "#8DB943"'), "Microalgae default missing");
-check(theme.includes('"leaf-chlorophyll": "#5F8F52"'), "Leaf Chlorophyll seed missing");
-check(theme.includes('lagoon: "#4F938A"'), "Lagoon seed missing");
+check(theme.includes('DEFAULT_LIGHT_ACCENT_HEX = "#357D4D"'), "Lumen Light pine default missing");
+check(theme.includes('"leaf-chlorophyll": { light: "#4B763B", dark: "#8EC374" }'), "Leaf Chlorophyll seeds missing");
+check(theme.includes('lagoon: { light: "#1E7C72", dark: "#69C4B6" }'), "Lagoon seeds missing");
 check(theme.includes('/^#[0-9A-F]{6}$/'), "six-digit HEX validation missing");
-check((theme.match(/preset: "microalgae"/g) ?? []).length >= 4, "invalid accent paths must fail to Microalgae");
+check(theme.includes("export function nearestAccentPreset") && theme.includes('preset === "custom" && typeof customHex === "string"'), "stored Custom HEX must migrate to the nearest curated preset");
+check((theme.match(/DEFAULT_ACCENT_PRESET/g) ?? []).length >= 5, "invalid accent paths must fail to Microalgae");
 check(theme.includes("jarvisos:accent:v1"), "versioned accent storage key missing");
 check(theme.includes('root.style.setProperty("--accent-seed", seed)'), "accent seed is not applied through isolated CSS variable");
 check(theme.includes('ACCENT_FOREGROUND_LIGHT = "#FFFFFF"') && theme.includes('ACCENT_FOREGROUND_DARK = "#000000"'), "bounded accent foreground candidates must span full readable contrast range");
 check(theme.includes("relativeLuminance") && theme.includes("contrastRatio"), "custom accent foreground must be contrast-derived");
 check(theme.includes('root.style.setProperty("--color-accent-on", accentForegroundHex(seed))'), "custom accent foreground is not applied from selected seed");
 check(theme.includes('root.style.setProperty("--color-accent-foreground", accentTextForegroundHex(seed, appearance))'), "foreground accent text role is not derived from selected seed");
-check(theme.includes('root.style.setProperty("--color-accent-foreground", accentTextForegroundHex(seed, resolved))'), "foreground accent text role is not refreshed when appearance changes");
+check(/export function applyResolvedAppearance[\s\S]*?applyAccentSeed\(root, [^\n]*resolved\)/.test(theme), "accent seed and foreground role are not refreshed when appearance changes");
 check(main.includes("applyStoredVisualPreferences();"), "stored visual preferences are not initialized");
 
 const semanticTokens = [
@@ -83,7 +87,7 @@ check(tokens.includes("@media (prefers-reduced-motion: reduce)"), "reduced-motio
 check(tokens.includes("--motion-fast: 0ms") && tokens.includes("--motion-standard: 0ms"), "reduced-motion must collapse non-essential motion");
 check(!tokens.includes("backdrop-filter"), "structural glass is not authorized in first pass");
 
-const applyAccentBlock = theme.match(/export function applyAccentPreference\([\s\S]*?\n}\n\nexport function applyStoredAccent/)?.[0] ?? "";
+const applyAccentBlock = theme.match(/function applyAccentSeed\([\s\S]*?\n}\n/)?.[0] ?? "";
 const dynamicAccentWrites = [...applyAccentBlock.matchAll(/setProperty\("([^"]+)"/g)].map((match) => match[1]);
 const allowedDynamicAccentWrites = new Set(["--accent-seed", "--color-accent-on", "--color-accent-foreground"]);
 check(dynamicAccentWrites.length === 3, "accent application must have exactly three isolated dynamic CSS writes");
@@ -135,14 +139,10 @@ const unsafeForegroundLinks = /\.shell-(?:skip-link|text-link)\s*\{[\s\S]*?color
 check(!unsafeForegroundLinks, "foreground links must not use the raw Custom accent seed");
 check((shellCss.match(/color:\s*var\(--color-accent-foreground\)/g) ?? []).length >= 2, "foreground links must use the contrast-safe accent role");
 
-check(settings.includes('type="color"'), "Settings Custom accent must use the native color input");
-check(settings.includes("Reset to Microalgae"), "Settings accent Reset is missing");
+check(!settings.includes('type="color"') && !settings.includes("customAccentDraft"), "Settings must offer only the curated accents (spec 213)");
+check(settings.includes('"--settings-swatch-light": ACCENT_PRESETS[option].light') && settingsCss.includes("--settings-swatch-dark"), "accent swatches must preview the per-appearance seed");
 check(settings.includes("APPEARANCE_OPTIONS.map"), "Settings appearance choices are missing");
 check(settings.includes("ACCENT_OPTIONS.map"), "Settings accent choices are missing");
-check(settings.includes("normalizeAccentHex(customAccentDraft)"), "malformed Custom HEX is not guarded before application");
-check(settings.includes("const customAccentSwatch = normalizeAccentHex(customAccentDraft)"), "Custom swatch must normalize draft input before CSS application");
-check(settings.includes('option === "custom" ? customAccentSwatch'), "Custom swatch is still receiving raw malformed draft input");
-check(settingsCss.includes("var(--color-status-danger-text)"), "invalid custom HEX lacks non-accent error semantics");
 check(!/saveAISetting\([^\n]*(accent|appearance)/i.test(settings), "visual preferences must not use canonical settings API");
 
 // U-149 replaces the inert scaffold with a projection-only editor and typed DWSIM commands.

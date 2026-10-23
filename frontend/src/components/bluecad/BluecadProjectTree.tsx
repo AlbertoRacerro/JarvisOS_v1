@@ -39,6 +39,8 @@ type TreeNode = {
   label: string;
   meta?: string;
   description?: string;
+  /** Spec 213: what activating the row does (pointer tooltip). */
+  hint?: string;
   status?: string;
   expandable: boolean;
   selected?: boolean;
@@ -96,12 +98,15 @@ function buildTree(props: Props): TreeNode {
         id: `${candidateNodeId}/part:${mesh.meshKey}`,
         label: mesh.displayName,
         selected: inspection.selected?.meshKey === mesh.meshKey,
+        meta: inspection.selected?.meshKey === mesh.meshKey ? "highlighted" : undefined,
+        hint: inspection.selected?.meshKey === mesh.meshKey ? "Highlighted in the viewport · click to clear" : "Highlight in the viewport and inspect",
         activate: () => onSelectMesh(inspection.selected?.meshKey === mesh.meshKey ? null : mesh.meshKey)
       }))));
       node.children.push(group("references", "Studio references", `${detail.studioRefs.length}`, detail.studioRefs.map((reference) => ({
         id: `${candidateNodeId}/reference:${reference.id}`,
         label: `Version ${reference.version_label}`,
         meta: !reference.valid ? "invalid" : reference.superseded ? "superseded" : reference.stale ? "stale" : "visual only",
+        hint: "Open in the inspector",
         activate: onInspect
       })), onInspect));
       const artifacts = detail.artifacts ?? [];
@@ -109,6 +114,7 @@ function buildTree(props: Props): TreeNode {
         id: `${candidateNodeId}/artifact:${artifact.id}`,
         label: artifact.filename,
         meta: artifact.roles.join(", "),
+        hint: "Open in the inspector",
         activate: onInspect
       })), onInspect));
       const validationMeta = detail.validation === "none" ? "no report" : detail.validation === "loading" ? "loading" : detail.validation === "error" ? "unavailable" : validationSummary(detail.checks);
@@ -230,7 +236,7 @@ function BluecadProjectTree(props: Props) {
     >
       <div
         className={node.selected ? "bluecad-tree__row is-selected" : "bluecad-tree__row"}
-        title={candidateId ? candidates.find((item) => item.id === candidateId)?.brief_text : node.label}
+        title={candidateId ? candidates.find((item) => item.id === candidateId)?.brief_text : node.hint ?? node.label}
         onClick={(event) => {
           event.stopPropagation();
           focusNode(node.id);
