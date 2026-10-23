@@ -64,6 +64,8 @@ const presets: { id: string; label: string; name: string; question: string; inpu
     outputs: [variable("reynolds_number", "Reynolds number", "dimensionless", "Ratio of inertial to viscous forces")] }
 ];
 const STEADY_LIMITS = "Steady only; no energy balance is checked; outlet temperature and pressure are set by the model; unqualified.";
+const CARRIED_NOTICE = "jarvisos:studio:carried-notice";
+const takeCarriedNotice = (): string | null => { const value = sessionStorage.getItem(CARRIED_NOTICE); sessionStorage.removeItem(CARRIED_NOTICE); return value; };
 const emptyCase = (): StudioCase => ({ inputs: {}, expected_outputs: {}, tolerance: 1e-6 });
 const runOutputs = (payload: string | null): string => {
   try {
@@ -97,7 +99,7 @@ export default function Studio({ workspaceId, navigate, engineeringProperties, o
   const [inlets, setInlets] = useState<StudioPort[]>([blankPort()]); const [outlets, setOutlets] = useState<StudioPort[]>([blankPort()]);
   const [parameters, setParameters] = useState<StudioVariable[]>([]); const [symbol, setSymbol] = useState(""); const [generation, setGeneration] = useState<string[]>([]);
   const [unitCases, setUnitCases] = useState<StudioUnitCase[]>([]); const [symbolRefusal, setSymbolRefusal] = useState<string | null>(null); const [compounds, setCompounds] = useState<string[]>([]);
-  const [busy, setBusy] = useState(false); const [error, setError] = useState<string | null>(null); const [notice, setNotice] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false); const [error, setError] = useState<string | null>(null); const [notice, setNotice] = useState<string | null>(takeCarriedNotice);
   const isProc = model?.category === "procedure";
   const sourceDirty = Boolean(model && !isProc && source !== model.source);
   const isUnit = model?.category === "process_unit";
@@ -165,8 +167,11 @@ export default function Studio({ workspaceId, navigate, engineeringProperties, o
   const perform = async (action: () => Promise<void>) => { setBusy(true); setError(null); setErrorCode(null); setNotice(null); setSymbolRefusal(null); try { await action(); } catch (cause) { setError(cause instanceof Error ? cause.message : "Studio action failed"); setErrorCode(cause instanceof StudioApiError ? cause.code : null); setSymbolRefusal(cause instanceof StudioApiError && cause.code === "studio_symbol_invalid" ? cause.message : null); } finally { setBusy(false); } };
   const openExample = () => { void perform(async () => {
     const example = await openStudioExample();
+    const message = example.created || example.added.length ? `Example workspace ready: ${example.added.length} verified artifacts published. Open one from the Library.` : "Example workspace opened. Its existing artifacts, including your edits, were left unchanged.";
+    // Switching to a newly created workspace reloads the workspace list and remounts this page.
+    if (example.workspace.id !== workspaceId) sessionStorage.setItem(CARRIED_NOTICE, message);
+    setNotice(message);
     onWorkspaceChange?.(example.workspace.id);
-    setNotice(example.created || example.added.length ? `Example workspace ready: ${example.added.length} verified artifacts published. Open one from the Library.` : "Example workspace opened. Its existing artifacts, including your edits, were left unchanged.");
   }); };
   const open = (id: string) => { if (!workspaceId) return; void perform(async () => { adopt(await getStudioModel(workspaceId, id)); setWizard(false); setTab("contract"); }); };
   const create = (event: React.FormEvent) => { event.preventDefault(); if (!workspaceId) return; void perform(async () => {
