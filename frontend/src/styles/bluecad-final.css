@@ -145,3 +145,39 @@
   text-align: center;
   color: var(--color-text-muted);
 }
+
+/* Spec 208: compact BlueCad project tree in the navigator. */
+.visually-hidden { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.bluecad-navigator { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.bluecad-navigator__toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; align-items: center; }
+.bluecad-navigator__toolbar label { display: block; min-width: 0; margin: 0; }
+.bluecad-navigator__toolbar :is(select, input[type="search"]) { width: 100%; min-width: 0; min-height: 30px; padding: 4px 8px; font-size: var(--font-size-label); }
+.bluecad-navigator__toolbar .bluecad-navigator__icon { justify-self: end; min-width: 30px; min-height: 30px; padding: 0 8px; font-size: var(--font-size-body); line-height: 1; }
+.bluecad-navigator__toolbar .bluecad-navigator__archived { display: inline-flex; align-items: center; gap: 4px; font-size: var(--font-size-caption); color: var(--color-text-secondary); white-space: nowrap; }
+.bluecad-navigator__state { margin: 0; font-size: var(--font-size-label); color: var(--color-text-secondary); }
+.bluecad-navigator__composer { display: grid; gap: 6px; padding-top: 6px; border-top: 1px solid var(--color-border-default); }
+.bluecad-navigator__composer > button { justify-self: start; min-height: 30px; padding: 4px 10px; font-size: var(--font-size-label); }
+.bluecad-navigator__composer .bluecad-new-form { gap: 6px; }
+.bluecad-navigator__composer .bluecad-new-form .panel-subtitle { margin: 0; font-size: var(--font-size-caption); }
+
+.bluecad-tree, .bluecad-tree ul { margin: 0; padding: 0; list-style: none; }
+.bluecad-tree { min-width: 0; font-size: var(--font-size-label); }
+.bluecad-tree__item { min-width: 0; outline: none; }
+.bluecad-tree__row { display: flex; align-items: center; gap: 6px; min-width: 0; min-height: 26px; padding: 2px 6px 2px calc(4px + (var(--tree-level, 1) - 1) * 14px); border-radius: 6px; color: var(--color-text-primary); cursor: pointer; }
+.bluecad-tree__item--level-1 > .bluecad-tree__row { --tree-level: 1; font-weight: 600; }
+.bluecad-tree__item--level-2 > .bluecad-tree__row { --tree-level: 2; }
+.bluecad-tree__item--level-3 > .bluecad-tree__row { --tree-level: 3; color: var(--color-text-secondary); }
+.bluecad-tree__item--level-4 > .bluecad-tree__row { --tree-level: 4; }
+.bluecad-tree__row:hover { background: var(--color-bg-subtle); }
+.bluecad-tree__row.is-selected { background: var(--color-selection); }
+.bluecad-tree__item:focus-visible > .bluecad-tree__row { box-shadow: 0 0 0 2px var(--color-focus-separator), 0 0 0 4px var(--color-focus-ring); }
+.bluecad-tree__item[aria-disabled="true"] > .bluecad-tree__row { cursor: progress; }
+.bluecad-tree__twisty { flex: 0 0 12px; width: 12px; text-align: center; color: var(--color-text-secondary); }
+.bluecad-tree__label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bluecad-tree__meta { flex: 0 1 auto; min-width: 0; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--font-size-caption); color: var(--color-text-secondary); }
+.bluecad-tree__status { flex: 0 0 auto; padding: 0 5px; border-radius: 4px; font-size: var(--font-size-caption); line-height: 1.5; background: var(--color-status-neutral-bg); color: var(--color-status-neutral-text); }
+.bluecad-tree__status.status-valid { background: var(--color-status-success-bg); color: var(--color-status-success-text); }
+.bluecad-tree__status.status-parked { background: var(--color-status-warning-bg); color: var(--color-status-warning-text); }
+.bluecad-tree__status.status-archived { background: var(--color-status-archived-bg); color: var(--color-status-archived-text); }
+.bluecad-tree__status:is(.status-generating, .status-validating) { background: var(--color-status-info-bg); color: var(--color-status-info-text); }
+.bluecad-tree__flag { flex: 0 0 auto; font-weight: 700; color: var(--color-status-warning-text); }
