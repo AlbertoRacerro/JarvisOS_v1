@@ -1,0 +1,51 @@
+# C1 source reconstruction and capability audit
+
+Date: 2026-10-23. Scope: the two tubular AlgaePARC systems in [spec 212](../specs/212-bluerev-c1-tubular-replication.md). This is the entry evidence for the first BlueRev C1–C9 case, not a claim of scientific replication.
+
+## Source custody
+
+- Primary S01: [de Vree et al. 2015](https://doi.org/10.1186/s13068-015-0400-2), open access CC BY 4.0; publisher HTML and the local 12-page PDF were checked. Local PDF SHA-256: `ad655f38eb0bbcc542df19cba5e73078600a0f6d8f606b684c5501309525b6b1`. The data below are from its Table 1, Table 3 and *Outdoor pilot-scale photobioreactors* methods.
+- S22: [Bosma et al. 2014](https://doi.org/10.1016/j.algal.2014.10.006), publisher text inaccessible in this environment. Chapter 2 of [de Vree's Wageningen dissertation](https://edepot.wur.nl/387236), locally archived as `s35.pdf`, reproduces the design paper's text and is used as **secondary access** for the 46 mm inner/50 mm outer diameter, tube pitch, panel spacing and stripper design. These geometry details need a direct S22 source check before being called independently verified.
+- Manual: local 31-page *Manuale fotobioreattori* (18 October 2026), pages 1–3 and 25. The path named in the roadmap directive with `(1)` is absent on this host; the available `Manuale_fotobioreattori.pdf` is 31 pages. It selects C1 and cites S01/S22. The paper, not the manual's summary, owns the numerical observation.
+
+## Inputs and observations
+
+| Input or observation | Horizontal | Fence | State and source |
+| --- | ---: | ---: | --- |
+| Strain | CCAP 211/78 | CCAP 211/78 | Known, S01 methods |
+| Tube ID / OD | 0.046 / 0.050 m | same | ID supported by S01 optical path and secondary S22 chapter; OD secondary only |
+| Loop count × length | 3 × 80 m | 7 × 80 m | Known, S01 methods |
+| Operated tube velocity | 0.45 m/s | 0.45 m/s | Known, S01 methods |
+| Total working volume | 0.56 m³ | 1.06 m³ | Known, S01 Table 3 |
+| Illuminated volume share | 73% | 71% | Reported, S01 Table 3; see residual below |
+| Occupied ground area | 27.0 m² | 31.0 m² | Known, S01 Table 3, half dummy boundary included |
+| Summer mean measured dilution | 0.25/day | 0.27/day | Known, S01 Table 1; different operations |
+| Summer mean ground areal productivity | 12.1 g/m²/day | 19.4 g/m²/day | Known, S01 Table 1, July–August 2013, 36 days each |
+| Summer mean volumetric productivity | 0.65 g/L/day | 0.57 g/L/day | Same source/window |
+| Time-aligned incident light, temperature, harvest and outages | — | — | Missing from available S01 tables; search for raw dataset remains open |
+| CCAP 211/78 growth/extinction/temperature parameter set | — | — | Missing as a jointly sourced, independently verified card |
+| Exact array/stripper/pump operating state during the 36 days | — | — | Incomplete; design dimensions do not establish as-operated performance |
+
+## Arithmetic and source inconsistencies
+
+The cylindrical tube volumes from the reported ID and lengths are `π·0.046²·240/4 = 0.3989 m³` and `π·0.046²·560/4 = 0.9307 m³`. S01's reported illuminated shares imply `0.73·0.56 = 0.4088 m³` and `0.71·1.06 = 0.7526 m³`. The horizontal difference is about 2.5% of calculated tube volume; the fence difference is about 19.1%. These are source-definition residuals, **not** numbers to silently correct with a fabricated tube count. The 80 m may include opaque connections or the illuminated share may use a different convention; the available methods do not resolve it.
+
+S01 methods say volumetric productivity is calculated from ground areal productivity using reactor volume and ground area (Eq. 2), yet the published Table 1 means do not close under its Table 3 denominators. Multiplication gives horizontal `12.1·27 = 326.7 g/day` versus `0.65·560 = 364.0 g/day` (11.4% relative to the areal value), and fence `19.4·31 = 601.4 g/day` versus `0.57·1060 = 604.2 g/day` (0.5%). Both Table 1 averages report 36 days. Rounding alone cannot explain the horizontal gap. A table error, undocumented denominator or calculation convention remains unresolved; compare each published measure on its stated definition rather than forcing identity by changing an input.
+
+S01 explicitly used separate circulation pumps, service bubble columns (0.15 and 0.31 m³), pH-controlled CO₂, active oxygen removal and temperature management. Its two systems also differed in footprint, working volume, illuminated share and dilution. The paper's output contrast cannot identify an orientation-only effect. Maximum-week outputs and photosynthetic efficiency values are separate targets, not substitutes for the 36-day means.
+
+## Current capability map at master `16028ab9`
+
+| Required effect | Existing owner | C1 limit |
+| --- | --- | --- |
+| Pinned strain/model parameters | 169 biological model cards, consumed by `process_stack/pbr_unit.py` | A source-verified CCAP 211/78 set is not bundled; candidate/assumed values cannot validate C1. |
+| Cylindrical tube light and loop growth | 170 `PhotobioreactorT1`, 172 `dynamic_engine.py` | Well-mixed tube loop; no axial O₂ or full service-unit dynamics. A run needs a pinned card and complete inlet/environment. |
+| Array shade/wall/diffuse PAR | 174 `optics_t2.py` | Requires pitch, axis, height, indices and a time-resolved DNI/DHI profile. Secondary S22 gives some design geometry, not a complete 2013 operating profile. |
+| Sourced environment | 171 immutable imported profiles | No raw, time-aligned 2013 C1 site profile has been identified. A synthetic profile is only a model exercise. |
+| Hydraulic screening | 107 evaluator and 170/172 PBR diagnostics | Straight smooth tube/declared pump efficiency; no measured C1 pump curve, bends, manifold or degasser pressure loss. |
+| Thermal/carbon/O₂ inhibition and fouling | No qualified C1 owner | Tier 1 temperature is prescribed, carbon is nonlimiting, O₂ is reported without growth inhibition, and fouling/restarts are absent. 175 is planned but not ready. |
+| Provenance and qualification | Existing 102/106 evaluation evidence and 169 card pins | A green run does not promote a model or observation into scientific qualification. |
+
+## Bounded next experiment
+
+The publisher page exposes no supplementary file in the checked article view, and a bounded repository search did not locate day-level C1 data; absence has not been proven. Search the original AlgaePARC campaign for day-level light, temperature, dilution and harvested biomass and primary CCAP 211/78 kinetics with matching growth conditions. If complete time-aligned data and a source-verified card are unavailable, run a clearly labelled T2 optical/layout sensitivity case on a declared proxy profile, then publish a **qualified inconclusive** productivity comparison. The first numerical check must preserve the two separate volume/area conventions and report the residuals above. No new physics is justified by this audit alone.
