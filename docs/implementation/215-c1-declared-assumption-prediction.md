@@ -72,6 +72,26 @@ Each window contains 864 complete hourly intervals. The low and high dose
 differ by about 22% of the low dose. Later biomass runs must retain window
 identity and must not label any selected window as the observed 36 days.
 
+### Declared culture-temperature and run-window matrix
+
+[`run_matrix.py`](../../scripts/qualification/215/run_matrix.py) combines the
+three pinned 36-day forcing windows with constant **assumed** culture
+temperatures of 20, 25 and 30 °C, giving nine input cases per layout. S01
+reports only that culture was maintained in the 20–30 °C range, so these are
+screening scenarios, not reconstructed culture temperatures. Each case starts
+one hour before its first KNMI end stamp and ends at its last end stamp,
+covering exactly 864 hourly intervals. The script pins the forcing digest and
+labels the inputs as surrogate scenarios; it makes no biomass prediction.
+
+The existing 172 dynamic scenario uses `temperature_source=unit_mean` with the
+PBR unit's `temperature_mean` set to 293.15, 298.15 or 303.15 K and its
+temperature amplitude set to zero. The KNMI `air_temperature` channel remains
+station weather only. The 30 °C case approaches the assumed biological card's
+30.03 °C fitted maximum and is intentionally a high-sensitivity case; it is
+not a claim that C1 culture was held at 30 °C. Offline tests check the dynamic
+scenario accepts this source, all cases are exactly 36 days, and no case uses
+air temperature as culture temperature.
+
 ## CCAP 211/78 primary-source card audit
 
 The open-access primary study by [Ihadjadene et al. (2025), *Algal Research*
