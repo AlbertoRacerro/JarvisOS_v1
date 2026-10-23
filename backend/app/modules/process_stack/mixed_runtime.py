@@ -1145,19 +1145,21 @@ def run(document: dict[str, Any], *, action: str, client: DwsimMcpClient,
         dwsim_version: str, mcp_sha256: str, run_dir: Path, workspace_id: str | None = None,
         timeout_s: float | None = None, max_iterations: int | None = None,
         initial_tear: dict[str, dict[str, Any]] | None = None,
-        include_tear_state: bool = False) -> dict[str, Any]:
+        include_tear_state: bool = False, observer: Any = None) -> dict[str, Any]:
+    """``observer`` (spec 210), when given, has ``stop_requested() -> bool`` (checked only at iteration
+    boundaries) and ``iteration(row)`` (called with each stored history row as the controller produces it)."""
     return cast(dict[str, Any], finite_json(_run(
         document, action=action, client=client, dwsim_version=dwsim_version,
         mcp_sha256=mcp_sha256, run_dir=run_dir, workspace_id=workspace_id,
         timeout_s=timeout_s, max_iterations=max_iterations, initial_tear=initial_tear,
-        include_tear_state=include_tear_state)))
+        include_tear_state=include_tear_state, observer=observer)))
 
 
 def _run(document: dict[str, Any], *, action: str, client: DwsimMcpClient,
          dwsim_version: str, mcp_sha256: str, run_dir: Path, workspace_id: str | None = None,
          timeout_s: float | None = None, max_iterations: int | None = None,
          initial_tear: dict[str, dict[str, Any]] | None = None,
-         include_tear_state: bool = False) -> dict[str, Any]:
+         include_tear_state: bool = False, observer: Any = None) -> dict[str, Any]:
     part = mixed.partition(document)
     run_dir.mkdir(parents=True, exist_ok=True)
     settings = tear_solver.parse_settings(document.get("solver"))
@@ -1199,6 +1201,8 @@ def _run(document: dict[str, Any], *, action: str, client: DwsimMcpClient,
     reserve_s = max(3.0, reserve_builds * max(3.0, 1.5 * t_build))
     def before_iteration(_iteration: int) -> str | None:
         nonlocal reserve_s
+        if observer is not None and observer.stop_requested():
+            return "operator_stop"
         remaining = wall_s - (time.monotonic() - started)
         if deadline is not None:
             remaining = min(remaining, deadline - time.monotonic())
@@ -1236,9 +1240,14 @@ def _run(document: dict[str, Any], *, action: str, client: DwsimMcpClient,
             builds_seen = True
         return candidate["produced"]
 
+    def on_history(row: dict[str, Any]) -> None:
+        history_rows.append(row)
+        if observer is not None:
+            observer.iteration(_history_record([row])[0])
+
     try:
         controller = mixed.iterate(initial, evaluate, before_iteration=before_iteration,
-                                   on_history=history_rows.append,
+                                   on_history=on_history,
                                    max_iterations=max_iterations, settings=settings)
     except SegmentFailure as exc:
         detail: dict[str, Any] = exc.detail if isinstance(exc.detail, dict) else {"message": str(exc.detail)}

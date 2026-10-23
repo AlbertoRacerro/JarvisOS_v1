@@ -4,16 +4,17 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from starlette.concurrency import run_in_threadpool
 
-from app.modules.process_stack import draft
+from app.modules.process_stack import draft, solve_jobs
 from app.modules.process_stack.draft_models import (
     CreateDraft,
     PatchRequest,
     ProposalDecision,
     ProposalRequest,
     RestoreRequest,
+    SolveRequest,
 )
 
 router = APIRouter(prefix="/workspaces/{workspace_id}/process/drafts", tags=["process-draft"])
@@ -108,6 +109,46 @@ def run(workspace_id: str, draft_id: str, run_id: str) -> dict[str, Any]:
 def run_results(workspace_id: str, draft_id: str, run_id: str) -> dict[str, Any]:
     try:
         return draft.run_results(workspace_id, draft_id, run_id)
+    except draft.DraftError as exc:
+        raise _error(exc) from exc
+
+
+@router.get("/{draft_id}/solves")
+def solves(workspace_id: str, draft_id: str) -> list[dict[str, Any]]:
+    try:
+        return solve_jobs.list_solves(workspace_id, draft_id)
+    except draft.DraftError as exc:
+        raise _error(exc) from exc
+
+
+@router.post("/{draft_id}/solves", status_code=202)
+async def start_solve(workspace_id: str, draft_id: str, payload: SolveRequest) -> dict[str, Any]:
+    try:
+        return await run_in_threadpool(solve_jobs.start, workspace_id, draft_id, payload.revision, payload.retry_of)
+    except draft.DraftError as exc:
+        raise _error(exc) from exc
+
+
+@router.get("/{draft_id}/solves/{run_id}")
+def solve_status(workspace_id: str, draft_id: str, run_id: str, after: int = Query(default=0, ge=0)) -> dict[str, Any]:
+    try:
+        return solve_jobs.status(workspace_id, draft_id, run_id, after)
+    except draft.DraftError as exc:
+        raise _error(exc) from exc
+
+
+@router.post("/{draft_id}/solves/{run_id}/stop")
+def stop_solve(workspace_id: str, draft_id: str, run_id: str) -> dict[str, Any]:
+    try:
+        return solve_jobs.stop(workspace_id, draft_id, run_id)
+    except draft.DraftError as exc:
+        raise _error(exc) from exc
+
+
+@router.get("/{draft_id}/compare")
+def compare_runs(workspace_id: str, draft_id: str, a: str, b: str) -> dict[str, Any]:
+    try:
+        return solve_jobs.compare(workspace_id, draft_id, a, b)
     except draft.DraftError as exc:
         raise _error(exc) from exc
 

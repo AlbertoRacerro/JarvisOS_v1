@@ -363,10 +363,13 @@ def solve(initial: dict[str, dict[str, Any]], evaluate: Any, *, settings: Settin
         row.update({"q_hat": q_secant, "q_hat_stable": q_stable, "classification": classify(q_stable),
                     "estimated_error_normalized": estimate, "estimate_valid": valid})
         history.append(row)
-        if on_history is not None:
-            on_history(row)
+        def emit_history(completed_row: dict[str, Any]) -> None:
+            # Method steps can add events below; observers must see the finished row.
+            if on_history is not None:
+                on_history(completed_row)
         if max_residual <= 1 and (exact or (valid and estimate is not None and estimate <= 1)):
             status, reason = "completed", "converged"
+            emit_history(row)
             break
         # Direct substitution keeps the legacy residual measure; accelerated methods measure growth in the fixed
         # solve scale, because tolerances relative to a moving iterate inflate near a zero bound.
@@ -378,6 +381,7 @@ def solve(initial: dict[str, dict[str, Any]], evaluate: Any, *, settings: Settin
             if growth_events >= limit_events:
                 reason = "damping_exhausted" if method == "direct_substitution" else "acceleration_breakdown"
                 guess = last_input
+                emit_history(row)
                 break
             if method == "direct_substitution":
                 omega = max(omega / 2, 0.125)
@@ -390,6 +394,7 @@ def solve(initial: dict[str, dict[str, Any]], evaluate: Any, *, settings: Settin
                 guess, _projected = _assign(guess, last, keys, (prev_u + last_delta) * scale)
                 row["events"].append("step_halved")
                 growth_events -= 1  # a halving is a line search, not a failure of the method
+                emit_history(row)
                 continue
             else:
                 resets += 1
@@ -402,6 +407,7 @@ def solve(initial: dict[str, dict[str, Any]], evaluate: Any, *, settings: Settin
             slopes = {}
             updates = 0
             estimator.reset()
+            emit_history(row)
             continue
         halvings = 0
         if measure < best_norm:
@@ -413,9 +419,11 @@ def solve(initial: dict[str, dict[str, Any]], evaluate: Any, *, settings: Settin
             if needed is not None and needed > BUDGET_MARGIN * (limit - iteration):
                 diagnostics["required_iterations"] = needed
                 reason = "iteration_budget_insufficient"
+                emit_history(row)
                 break
         if iteration == limit:
             reason = "max_iterations"
+            emit_history(row)
             break
         restarted = False
         step = _step(method, f, u, gu, prev_u, prev_gu, omega, slopes, settings, inverse, prev_f, row)
@@ -435,6 +443,7 @@ def solve(initial: dict[str, dict[str, Any]], evaluate: Any, *, settings: Settin
         if projected:
             row["events"].append("projected_to_bounds")
         prev_u, prev_f, prev_gu = u, f, gu
+        emit_history(row)
     final_q = next((row.get("q_hat_stable") for row in reversed(history) if row.get("q_hat_stable") is not None), None)
     last_row = history[-1] if history else {}
     diagnostics.update({
