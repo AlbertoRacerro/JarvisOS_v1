@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.core.database import open_sqlite_connection
 from app.modules.runner.origin import require_runner_origin
 from app.modules.runner.safety import run_root
-from app.modules.studio import procedure_service, service
+from app.modules.studio import demonstrator, procedure_service, service
 from app.modules.studio.derive import derive_documentation
 from app.modules.studio.geometry import MEDIA_TYPES, GeometryCreate, GeometryTestRequest
 from app.modules.studio.models import StudioCreate, StudioError, StudioUpdate, TestRequest
@@ -55,6 +55,11 @@ def _call(function, *args):
 @router.get("/studio/categories")
 def categories() -> list[dict]:
     return _CATEGORIES
+
+
+@router.post("/studio/example-workspace", dependencies=[Depends(require_runner_origin)])
+def example_workspace() -> dict:
+    return _call(demonstrator.ensure_example)
 
 
 @router.post("/studio/documentation/preview")
