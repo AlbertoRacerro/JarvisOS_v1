@@ -1753,7 +1753,7 @@ def perform(prepared: PreparedRun, observer: Any = None) -> dict[str, Any]:
                 outcome = mixed_runtime.run(record["document"], action=action, client=client,
                                             dwsim_version=dwsim_version, mcp_sha256=mcp_sha256,
                                             run_dir=runs_dir(directory) / run_id, workspace_id=workspace_id,
-                                            observer=observer)
+                                            **({"observer": observer} if observer is not None else {}))
             else:
                 outcome = draft_compiler.materialize(
                     record["document"], action=action, client=client, dwsim_version=dwsim_version,
