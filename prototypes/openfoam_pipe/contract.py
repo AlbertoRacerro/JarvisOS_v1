@@ -40,7 +40,7 @@ class Inlet(BaseModel):
     mixing_length_over_d: float = Field(0.07, gt=0, le=0.5)
 
     @model_validator(mode="after")
-    def _one_of(self) -> "Inlet":
+    def _one_of(self) -> Inlet:
         if (self.mean_velocity_m_s is None) == (self.flow_rate_m3_s is None):
             raise ValueError("specify exactly one of mean_velocity_m_s or flow_rate_m3_s")
         return self
@@ -102,7 +102,7 @@ class PipeCase(BaseModel):
         return self.mean_velocity_m_s * self.diameter_m / self.fluid.kinematic_viscosity_m2_s
 
     @model_validator(mode="after")
-    def _regime_consistent(self) -> "PipeCase":
+    def _regime_consistent(self) -> PipeCase:
         re = self.reynolds
         if self.turbulence == "laminar" and re > LAMINAR_RE_MAX:
             raise ValueError(f"laminar model requested at Re={re:.0f} > {LAMINAR_RE_MAX:.0f}")

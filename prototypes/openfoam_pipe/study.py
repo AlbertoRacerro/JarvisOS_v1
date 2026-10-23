@@ -260,7 +260,7 @@ def reduced_model(summary: dict[str, Any], tools: dict[str, str]) -> dict[str, A
             "max_abs_fit_residual": float(np.max(np.abs(fit_err))),
         },
         "points": [{"reynolds": float(r_), "darcy_f_cfd": float(f_), "darcy_f_hp": 64.0 / r_,
-                    "rel_error": float(f_ / (64.0 / r_) - 1)} for r_, f_ in zip(re, f)],
+                    "rel_error": float(f_ / (64.0 / r_) - 1)} for r_, f_ in zip(re, f, strict=True)],
         "turbulent_spot_checks": [
             {"reynolds": t["reynolds"], "model": t["model"], "darcy_f_cfd_finest": t["meshes"][-1]["darcy_f"],
              "blasius_f": t["reference"]["blasius_f"], "colebrook_smooth_f": t["reference"]["colebrook_smooth_f"],
@@ -307,7 +307,7 @@ def main(argv: list[str] | None = None) -> int:
     with ProcessPoolExecutor(max_workers=args.jobs) as pool:
         futures = [pool.submit(run_case, p, args.work) for p in planned]
         entries = []
-        for p, fut in zip(planned, futures):
+        for p, fut in zip(planned, futures, strict=True):
             entry = fut.result()
             print(f"{p.case.name:24s} Re={p.case.reynolds:8.1f} f={entry['result']['darcy_f']:.6f} "
                   f"it={entry['result']['iterations']} t={entry['wall_time_s']}s", flush=True)

@@ -128,7 +128,7 @@ def make_plots(results: dict[str, Any], out: Path) -> list[str]:
     picks += [t["meshes"][1]["name"] for t in main_turb if t["model"] == "kOmegaSST"]
     if picks:
         fig, axes = plt.subplots(1, len(picks), figsize=(5.2 * len(picks), 3.4), squeeze=False)
-        for ax, name in zip(axes[0], picks):
+        for ax, name in zip(axes[0], picks, strict=True):
             hist = cases[name]["residual_history"]
             n_it = cases[name]["result"]["iterations"]
             for i, (var, vals) in enumerate(sorted(hist.items())):

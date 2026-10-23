@@ -71,7 +71,7 @@ def test_rans_fields(model, extra):
 def test_wedge_cross_section_preserves_pipe_area():
     case = _case()
     verts = casegen.block_mesh_dict(case)["vertices"]
-    _, _, (x, y, z), *_ = verts
+    _, _, (_x, y, z), *_ = verts
     tri_area = y * abs(z)  # triangle (axis, corner -z, corner +z): 0.5 * base(2|z|) * height(y)
     theta = math.radians(case.mesh.wedge_angle_deg)
     assert tri_area == pytest.approx(theta / 2 * (case.diameter_m / 2) ** 2, rel=1e-12)

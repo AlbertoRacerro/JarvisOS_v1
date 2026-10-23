@@ -14,7 +14,9 @@ python3 -m prototypes.openfoam_pipe --work /tmp/pipe_cases --out prototypes/open
 The run takes 20 cases, 4380 CPU-s in total, about 41 min wall on 4 cores. The finest
 SST mesh accounts for 2442 s of that. All 20 cases passed the convergence and mass gates
 (`"issues": {}`). The figures were then re-rendered from `results.json` by `plots.py`
-after a layout-only change; no number changed.
+after a layout-only change; no number changed. Later commits on the branch are
+lint-only (`ruff check --config backend/pyproject.toml` clean: `zip(strict=True)`, unquoted
+annotations), and `--quick` plus the tests re-run green after them.
 
 ## Environment and versions
 

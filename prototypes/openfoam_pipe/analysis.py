@@ -157,7 +157,7 @@ def postprocess(case: PipeCase, case_dir: Path, window: tuple[float, float],
     dpdl = -slope
     edges = np.linspace(xs.min(), xs.max(), 21)
     local_x, local_f = [], []
-    for a, b in zip(edges[:-1], edges[1:]):
+    for a, b in zip(edges[:-1], edges[1:], strict=True):
         m = (xs >= a) & (xs <= b)
         local_x.append(float(0.5 * (a + b)))
         local_f.append(darcy_from_dpdl(float(-np.polyfit(xs[m], p_bar[m], 1)[0]), case))
