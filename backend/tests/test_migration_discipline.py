@@ -36,7 +36,9 @@ LEGACY_CREATE_ONLY_COLUMNS: dict[tuple[str, str], str] = {}
 # An intentional new table changes this digest too and must be reviewed here.
 # Reviewed for spec 194: bluecad_studio_references is a new table, not a new column on an old one.
 # Reviewed for spec 165: print_handoff_events is a new table, not a new column on an old one.
-BASE_CREATE_ONLY_SHA256 = "10c389b02c42e81b7ddc0e524522804ff2cf1f1372d2f4e6b31ea0d0b7fb1174"
+# Reviewed for spec 214: design_project_versions, design_components, design_component_units,
+# design_component_geometry and design_component_models are new tables, not new columns on old ones.
+BASE_CREATE_ONLY_SHA256 = "387dc8d80a5a8cd8d3b43899dc9f9ffba0d44c8bd407c0c5d46f3fd960d4d554"
 
 # KNOWN DRIFT (spec 028, recorded not fixed): columns added by a migration
 # statement but absent from their owner's CREATE TABLE. A fresh database only has

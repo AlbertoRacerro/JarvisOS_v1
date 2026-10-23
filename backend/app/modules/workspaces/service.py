@@ -33,6 +33,12 @@ def create_workspace(payload: WorkspaceCreate, *, actor: str = "local-user") -> 
                 now,
             ),
         )
+        connection.execute(
+            "INSERT INTO design_project_versions "
+            "(id, project_id, data_workspace_id, parent_version_id, label, active, created_at) "
+            "VALUES (?, ?, ?, NULL, 'v1', 1, ?)",
+            (workspace_id, workspace_id, workspace_id, now),
+        )
         log_event(
             connection,
             event_type="WorkspaceCreated",
@@ -49,7 +55,7 @@ def create_workspace(payload: WorkspaceCreate, *, actor: str = "local-user") -> 
 
 def list_workspaces() -> list[WorkspaceRead]:
     with open_sqlite_connection() as connection:
-        rows = connection.execute("SELECT * FROM workspaces ORDER BY created_at ASC").fetchall()
+        rows = connection.execute("SELECT * FROM workspaces WHERE status != 'design_version' ORDER BY created_at ASC").fetchall()
     return rows_to_models(rows, WorkspaceRead)
 
 
@@ -87,6 +93,12 @@ def seed_default_workspace() -> WorkspaceRead:
                 now,
                 now,
             ),
+        )
+        connection.execute(
+            "INSERT INTO design_project_versions "
+            "(id, project_id, data_workspace_id, parent_version_id, label, active, created_at) "
+            "VALUES ('bluerev', 'bluerev', 'bluerev', NULL, 'v1', 1, ?)",
+            (now,),
         )
         log_event(
             connection,

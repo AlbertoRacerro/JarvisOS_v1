@@ -196,6 +196,10 @@ _KINDS = {"process_unit": UNIT_KIND, "geometry": GEOMETRY_KIND,
 _CATEGORY_OF_KIND = {kind: category for category, kind in _KINDS.items()}
 
 
+def category_of_kind(implementation_kind: str) -> str:
+    return _CATEGORY_OF_KIND.get(implementation_kind, "calculation")
+
+
 def _require_workspace(connection, workspace_id: str) -> None:
     if connection.execute("SELECT 1 FROM workspaces WHERE id = ?", (workspace_id,)).fetchone() is None:
         raise StudioError("studio_workspace_not_found", "Workspace not found.")
@@ -229,7 +233,9 @@ def _read(connection, workspace_id: str, model_spec_id: str) -> dict:
             "annotations_stale": bool(row["annotations"] and row["annotations_source_sha256"] != row["source_sha256"]),
             "status": row["model_status"],
             "documentation": ({"derived": None, **contract} if _category(contract) == "procedure"
-                              else {"derived": derive_documentation(row["source"]), **contract}),
+                              else {"derived": derive_documentation(
+                                  row["source"], entry="build" if _category(contract) == "geometry" else "evaluate"
+                              ), **contract}),
             **({"steps": procedure.steps_of(row["source"]), "notice": procedure.NOTICE}
                if _category(contract) == "procedure" else {}),
             "test_cases": json.loads(row["test_cases_json"]), "last_test_report": report,

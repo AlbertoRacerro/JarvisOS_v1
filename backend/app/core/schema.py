@@ -20,8 +20,10 @@ SCHEMA_MODEL_INPUT_CONTRACT_MIGRATION_ID = "0012_model_input_contract"
 SCHEMA_MODEL_INPUT_CONTRACT_MIGRATION_NAME = "Model-version input contracts and scenario DOF metadata"
 SCHEMA_FRESHNESS_INVALIDATION_MIGRATION_ID = "0013_freshness_invalidation"
 SCHEMA_FRESHNESS_INVALIDATION_MIGRATION_NAME = "Parameter replacement and freshness invalidation overlay"
-CURRENT_SCHEMA_MIGRATION_ID = "0025_print_handoff_events"
-CURRENT_SCHEMA_MIGRATION_NAME = "BLUECAD print handoff audit events"
+SCHEMA_DESIGN_PROJECT_VERSIONS_MIGRATION_ID = "0026_design_project_versions"
+SCHEMA_DESIGN_PROJECT_VERSIONS_MIGRATION_NAME = "Design project versions and components"
+CURRENT_SCHEMA_MIGRATION_ID = SCHEMA_DESIGN_PROJECT_VERSIONS_MIGRATION_ID
+CURRENT_SCHEMA_MIGRATION_NAME = SCHEMA_DESIGN_PROJECT_VERSIONS_MIGRATION_NAME
 
 SCHEMA_MIGRATION_RECORDS = [
     {
@@ -79,6 +81,11 @@ SCHEMA_MIGRATION_RECORDS = [
         "name": SCHEMA_FRESHNESS_INVALIDATION_MIGRATION_NAME,
         "checksum": None,
     },
+    {
+        "migration_id": SCHEMA_DESIGN_PROJECT_VERSIONS_MIGRATION_ID,
+        "name": SCHEMA_DESIGN_PROJECT_VERSIONS_MIGRATION_NAME,
+        "checksum": None,
+    },
 ]
 
 SCHEMA_STATEMENTS = [
@@ -100,6 +107,69 @@ SCHEMA_STATEMENTS = [
         status TEXT NOT NULL DEFAULT 'active',
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS design_project_versions (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        data_workspace_id TEXT NOT NULL UNIQUE,
+        parent_version_id TEXT,
+        label TEXT NOT NULL,
+        active INTEGER NOT NULL CHECK (active IN (0, 1)),
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (project_id) REFERENCES workspaces(id),
+        FOREIGN KEY (data_workspace_id) REFERENCES workspaces(id),
+        FOREIGN KEY (parent_version_id) REFERENCES design_project_versions(id)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS design_components (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        version_id TEXT NOT NULL,
+        parent_id TEXT,
+        name TEXT NOT NULL,
+        revision INTEGER NOT NULL DEFAULT 1 CHECK (revision > 0),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (version_id) REFERENCES design_project_versions(id),
+        FOREIGN KEY (parent_id) REFERENCES design_components(id)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS design_component_units (
+        component_id TEXT PRIMARY KEY,
+        version_id TEXT NOT NULL,
+        draft_id TEXT NOT NULL,
+        unit_id TEXT NOT NULL,
+        UNIQUE (version_id, draft_id, unit_id),
+        FOREIGN KEY (component_id) REFERENCES design_components(id),
+        FOREIGN KEY (version_id) REFERENCES design_project_versions(id)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS design_component_geometry (
+        component_id TEXT PRIMARY KEY,
+        candidate_id TEXT NOT NULL,
+        source_draft_revision TEXT,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (component_id) REFERENCES design_components(id),
+        FOREIGN KEY (candidate_id) REFERENCES bluecad_candidates(id)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS design_component_models (
+        component_id TEXT NOT NULL,
+        model_version_id TEXT NOT NULL,
+        node TEXT NOT NULL,
+        category TEXT NOT NULL,
+        source_sha256 TEXT NOT NULL,
+        contract_sha256 TEXT NOT NULL,
+        attached_at TEXT NOT NULL,
+        PRIMARY KEY (component_id, model_version_id),
+        FOREIGN KEY (component_id) REFERENCES design_components(id),
+        FOREIGN KEY (model_version_id) REFERENCES model_versions(id)
     )
     """,
     """
@@ -621,6 +691,12 @@ UNION ALL SELECT 'requirement', id, workspace_id, '', COALESCE(statement, '') ||
 """
 
 SCHEMA_INDEX_STATEMENTS = [
+    "CREATE INDEX IF NOT EXISTS idx_design_components_version_parent "
+    "ON design_components(version_id, parent_id)",
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_design_project_one_active "
+    "ON design_project_versions(project_id) WHERE active = 1",
+    "CREATE INDEX IF NOT EXISTS idx_design_project_versions_project "
+    "ON design_project_versions(project_id, created_at)",
     "CREATE INDEX IF NOT EXISTS idx_studio_procedure_runs_draft ON studio_procedure_runs(workspace_id, draft_id, created_at)",
     "CREATE INDEX IF NOT EXISTS idx_studio_procedure_links_draft ON studio_procedure_links(workspace_id, draft_id)",
     "CREATE INDEX IF NOT EXISTS idx_events_workspace_created_at ON events(workspace_id, created_at)",

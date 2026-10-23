@@ -2,6 +2,7 @@
 
 import hashlib
 from pathlib import Path
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
@@ -23,6 +24,7 @@ router = APIRouter(tags=["studio"])
 class DocumentationPreview(BaseModel):
     model_config = ConfigDict(extra="forbid")
     source: str = Field(max_length=65536)
+    entry: Literal["evaluate", "build"] = "evaluate"
 
 _CATEGORIES = [
     {"id": "calculation", "label": "Calculation", "available": True, "reason": None},
@@ -65,7 +67,7 @@ def example_workspace() -> dict:
 @router.post("/studio/documentation/preview")
 def preview_documentation(data: DocumentationPreview) -> dict:
     """Parse unsaved source for the editor; no execution or persistence."""
-    return derive_documentation(data.source)
+    return derive_documentation(data.source, entry=data.entry)
 
 
 @router.post("/workspaces/{workspace_id}/studio/models", status_code=201)

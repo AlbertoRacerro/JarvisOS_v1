@@ -290,6 +290,19 @@ def _geometry_model(client: TestClient) -> tuple[str, str]:
     return model["id"], model["source"]
 
 
+def test_geometry_documentation_uses_build_entry_without_running_source(client: TestClient) -> None:
+    model_id, source = _geometry_model(client)
+    stored = client.get(f"/workspaces/bluerev/studio/models/{model_id}")
+    assert stored.status_code == 200
+    derived = stored.json()["documentation"]["derived"]
+    assert derived["status"] == "ok"
+    assert derived["functions"][0]["name"] == "build"
+    preview = client.post("/studio/documentation/preview", json={"source": source, "entry": "build"})
+    assert preview.status_code == 200
+    assert preview.json() == derived
+    assert client.post("/studio/documentation/preview", json={"source": source, "entry": "main"}).status_code == 422
+
+
 def _cases(**bounds) -> dict:
     return {"cases": [{"inputs": BAFFLE_INPUTS, **bounds}]}
 

@@ -1,0 +1,208 @@
+{
+  "spec": "214",
+  "acceptance": "2 real-browser walk",
+  "head": "2a04444c0c9345555fe1dbb71771760b78b2299d",
+  "browser": "chromium 140.0.7339.16",
+  "started_at": "2026-10-23T17:29:00.269Z",
+  "data_root": "isolated temporary JARVISOS_DATA_ROOT",
+  "appearances": {
+    "light": {
+      "screenshots": [
+        {
+          "file": "light-01-plant-flowsheet.png",
+          "sha256": "804250119df3452e5ea2bc0e33e1ef706310270d4e2d7eb3a2d803cbbbef45da"
+        },
+        {
+          "file": "light-02-component-parameters.png",
+          "sha256": "2ed1e6f75a23dd63d5827e3354056469f4d6d2b73bce834e35042ac96c4c2518"
+        },
+        {
+          "file": "light-03-component-geometry-deepen.png",
+          "sha256": "7ea993d1b5f644069c64cfd0e1d174935dbdfbe252942b325b75c90dcfbab38b"
+        },
+        {
+          "file": "light-04-stage-placeholder.png",
+          "sha256": "593e5ae19fafc0ac80173ee8b874a7eb58759981b53c113dc8357efbc8566aa6"
+        },
+        {
+          "file": "light-05-workshop-step1.png",
+          "sha256": "209ddf062a1924bb904baf68d05303c61c497b211c642f8bee3c51efc7d54ad8"
+        },
+        {
+          "file": "light-06-workshop-fields.png",
+          "sha256": "d69a54b23b05d89a9a0a5f6a1ce1c427c803bd53359b65626423da122fe0648b"
+        },
+        {
+          "file": "light-07-workshop-review.png",
+          "sha256": "b0ee6dcd1bd30cf1ae67fd144f769ff5ae83a2c0340526dbcafcaac04bacc984"
+        },
+        {
+          "file": "light-08-workshop-two-column-editor.png",
+          "sha256": "6b78d4718bebc464c9a40a42ab2d7b430e28147365dee8d4a38977e1f5995aa2"
+        },
+        {
+          "file": "light-09-old-design.png",
+          "sha256": "c8f130ebcea2ba32571bb041602944088eee76f08ce447229be771e12f3d1c72"
+        }
+      ],
+      "console_errors": [],
+      "page_errors": [],
+      "steps": [
+        {
+          "step": "project_version_visible",
+          "version": "v1"
+        },
+        {
+          "step": "process_setup_drawer_closed"
+        },
+        {
+          "step": "pfd_unit_opened",
+          "via": "keyboard Enter"
+        },
+        {
+          "step": "component_parameters_from_process",
+          "text": "Parameters\n\nPBR1 · PhotobioreactorT1 · Process 0D/1D model. Values below are read from the active version's Process draft.\n\ntube_inner_diameter\n0.046 m\ntube_length\n8 m"
+        },
+        {
+          "step": "tree_jump_geometry_focuses_cad"
+        },
+        {
+          "step": "stage_jumps",
+          "motion": "placeholder labelled",
+          "optics": "focuses Physics node, placeholder labelled"
+        },
+        {
+          "step": "plant_return_same_version",
+          "version": "v1"
+        },
+        {
+          "step": "workshop_guided_seven_steps"
+        },
+        {
+          "step": "workshop_full_editor_with_existing_test_publish_path",
+          "save_draft_present": true,
+          "publish_present": true,
+          "publish_enabled": false,
+          "runtime_notice": "Studio execution unavailable: disabled. To enable it, start the backend with JARVISOS_STUDIO_USER_CODE_ENABLED=1 on a Linux or WSL2 host with bubblewrap installed. Test and Run stay refused until then."
+        },
+        {
+          "step": "old_new_design_switch",
+          "old": "/design/bluecad",
+          "back": "/design/project"
+        }
+      ],
+      "editor_controls": {
+        "save_draft_present": true,
+        "publish_present": true,
+        "publish_enabled": false,
+        "runtime_notice": "Studio execution unavailable: disabled. To enable it, start the backend with JARVISOS_STUDIO_USER_CODE_ENABLED=1 on a Linux or WSL2 host with bubblewrap installed. Test and Run stay refused until then."
+      }
+    },
+    "dark": {
+      "screenshots": [
+        {
+          "file": "dark-01-plant-flowsheet.png",
+          "sha256": "a66be388b9b4544894ae9d39a9aef7b82190579c14ba67a03a1f0624268e4114"
+        },
+        {
+          "file": "dark-02-component-parameters.png",
+          "sha256": "197a1c1980704bdc6640659238dcdf42bd495e343c3faa84c2da53879d2531df"
+        },
+        {
+          "file": "dark-03-component-geometry-deepen.png",
+          "sha256": "34bf9d6fb9295364d0424277a66d3aca0511b978dc4b37baff8d36d8d8b75185"
+        },
+        {
+          "file": "dark-04-stage-placeholder.png",
+          "sha256": "1c63635d626875dbccf846e38f95d20f68075d2f359308afb74dd188f4197304"
+        },
+        {
+          "file": "dark-05-workshop-step1.png",
+          "sha256": "43c19dd15d7ab34826510a3e2a1510e1f4698928e9d575e9bd02a9d38152543a"
+        },
+        {
+          "file": "dark-06-workshop-fields.png",
+          "sha256": "7eae03a56e578c6ab1de3679078a0ea5a0b1a5c1f4ec82a2737656c770dd90b4"
+        },
+        {
+          "file": "dark-07-workshop-review.png",
+          "sha256": "e8cefb1c83d3226020bc43e63f2b519ad0cc3241eb4e53f3ca849b4212caabce"
+        },
+        {
+          "file": "dark-08-workshop-two-column-editor.png",
+          "sha256": "625cb930050e7c794f9b2c846a0812df0bb736d7c3b726b0e26f733710bb0449"
+        },
+        {
+          "file": "dark-09-old-design.png",
+          "sha256": "7e0a48dfd0efe08dd590364454f4792bc6e0472f1ed4f6c3a4bc6bcdf84443ea"
+        }
+      ],
+      "console_errors": [],
+      "page_errors": [],
+      "steps": [
+        {
+          "step": "project_version_visible",
+          "version": "v1"
+        },
+        {
+          "step": "process_setup_drawer_closed"
+        },
+        {
+          "step": "pfd_unit_opened",
+          "via": "double-click"
+        },
+        {
+          "step": "component_parameters_from_process",
+          "text": "Parameters\n\nPBR1 · PhotobioreactorT1 · Process 0D/1D model. Values below are read from the active version's Process draft.\n\ntube_inner_diameter\n0.046 m\ntube_length\n8 m"
+        },
+        {
+          "step": "tree_jump_geometry_focuses_cad"
+        },
+        {
+          "step": "stage_jumps",
+          "motion": "placeholder labelled",
+          "optics": "focuses Physics node, placeholder labelled"
+        },
+        {
+          "step": "plant_return_same_version",
+          "version": "v1"
+        },
+        {
+          "step": "workshop_guided_seven_steps"
+        },
+        {
+          "step": "workshop_full_editor_with_existing_test_publish_path",
+          "save_draft_present": true,
+          "publish_present": true,
+          "publish_enabled": false,
+          "runtime_notice": "Studio execution unavailable: disabled. To enable it, start the backend with JARVISOS_STUDIO_USER_CODE_ENABLED=1 on a Linux or WSL2 host with bubblewrap installed. Test and Run stay refused until then."
+        },
+        {
+          "step": "old_new_design_switch",
+          "old": "/design/bluecad",
+          "back": "/design/project"
+        }
+      ],
+      "editor_controls": {
+        "save_draft_present": true,
+        "publish_present": true,
+        "publish_enabled": false,
+        "runtime_notice": "Studio execution unavailable: disabled. To enable it, start the backend with JARVISOS_STUDIO_USER_CODE_ENABLED=1 on a Linux or WSL2 host with bubblewrap installed. Test and Run stay refused until then."
+      }
+    }
+  },
+  "placeholders_marked": [
+    "Motion/Mechanics",
+    "Optics"
+  ],
+  "limits": [
+    "Selecting a PFD unit opens the existing Process inspector, which re-fits the canvas; the walk selects the unit before double-clicking it.",
+    "Studio user-code execution is disabled in this isolated proof backend, so Test and Publish are shown present and refused with the runtime notice rather than executed."
+  ],
+  "seed": {
+    "project_id": "d90c2e27-db82-4506-b96b-695c69b6c8fb",
+    "draft_id": "ceecbfe0-b97d-46da-b511-e7c502c14572",
+    "draft_revision": "2:5e63afeccc7bcde0"
+  },
+  "finished_at": "2026-10-23T17:29:15.023Z"
+}

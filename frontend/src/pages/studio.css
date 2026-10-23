@@ -27,6 +27,8 @@
 .studio-runs-head{display:flex;align-items:center;justify-content:space-between;gap:var(--space-3)}
 .studio .binding-state:empty{display:none}
 .studio-math-workspace{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,25rem),1fr));gap:var(--space-4);min-width:0}.studio-math-workspace>section,.studio-code-workspace>section{display:grid;align-content:start;gap:var(--space-3);min-width:0}.studio-math-pane{min-width:0;max-height:70vh;overflow:auto;padding:var(--space-3);border:var(--border-width-default) solid var(--color-border-default);border-radius:var(--radius-sm);background:var(--color-bg-subtle)}.studio-math-pane h3,.studio-math-pane h4{margin:0}.studio-math-pane .studio-equation{overflow-x:auto}
+.studio--embedded .studio-math-workspace>section:first-child{order:2}.studio--embedded .studio-math-workspace>section:nth-child(2){order:1}
+.studio-equation-link{display:inline-flex;align-items:center;gap:var(--space-2);max-width:100%;text-align:left;background:transparent;color:inherit;border:1px solid transparent;border-radius:var(--radius-sm);padding:var(--space-1)}.studio-equation-link:hover,.studio-equation-link[aria-pressed=true]{border-color:var(--color-focus-ring);background:var(--color-accent-surface)}.studio-equation-link>span{font-size:var(--font-size-caption);color:var(--color-text-muted);white-space:nowrap}
 /* Spec 190 process-unit authoring */
 .studio-port,.studio-stream{display:grid;gap:var(--space-2);grid-template-columns:repeat(auto-fit,minmax(10rem,1fr));align-items:end;min-width:0;margin:0}
 .studio-stream{padding:var(--space-3);border:var(--border-width-default) solid var(--color-border-default);border-radius:var(--radius-sm)}

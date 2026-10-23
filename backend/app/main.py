@@ -52,6 +52,8 @@ from app.modules.secrets.routes import router as secrets_router
 from app.modules.studio.routes import router as studio_router
 from app.modules.studio_runtime.routes import router as studio_runtime_router
 from app.modules.workspace_actions.routes import router as workspace_actions_router
+from app.modules.workspaces.design_components import router as design_components_router
+from app.modules.workspaces.design_versions import router as design_versions_router
 from app.modules.workspaces.routes import router as workspaces_router
 
 RUNNER_RECOVERY_RECHECK_SECONDS = 0.25
@@ -182,6 +184,8 @@ def create_app() -> FastAPI:
     app.include_router(bio_models_router)
     app.include_router(secrets_router)
     app.include_router(workspaces_router)
+    app.include_router(design_versions_router)
+    app.include_router(design_components_router)
     app.include_router(environment_router)
     app.include_router(modeling_router)
     app.include_router(memory_router)

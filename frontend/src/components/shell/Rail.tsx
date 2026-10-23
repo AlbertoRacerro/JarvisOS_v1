@@ -29,6 +29,7 @@ function Rail({ current, currentPath, navigate }: RailProps) {
             </AppLink>
             {item.id === "design" && current === "design" ? (
               <ul className="shell-rail__switcher" aria-label="Design workspaces">
+                <li><AppLink href="/design/project" navigate={navigate} aria-current={currentPath === "/design/project" ? "page" : undefined}>New Design</AppLink></li>
                 {PEER_NAV_ITEMS.design.map((peer) => (
                   <li key={peer.href}>
                     <AppLink href={peer.href} navigate={navigate} aria-current={currentPath === peer.href ? "page" : undefined}>

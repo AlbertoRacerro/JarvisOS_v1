@@ -27,6 +27,7 @@ import AIDraft from "./pages/AIDraft";
 import AIThreads from "./pages/AIThreads";
 import CodingWorkbench from "./pages/CodingWorkbench";
 import DevelopmentBrainstorm from "./pages/DevelopmentBrainstorm";
+import DesignProject from "./pages/DesignProject";
 import DevelopmentRoadmap from "./pages/DevelopmentRoadmap";
 import DomainFoundation from "./pages/DomainFoundation";
 import EngineeringData from "./pages/EngineeringData";
@@ -168,6 +169,9 @@ function App() {
     content = <Stage workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} selection={selection} onSelectionChange={setSelection} onShellRegionsChange={setShellRegions} requestShellRegionOpen={requestShellRegionOpen} navigate={navigate} />;
   } else {
     switch (route.id) {
+      case "design-project":
+        content = <DesignProject projectId={workspaceId} navigate={navigate} engineeringProperties={engineeringProperties} />;
+        break;
       case "design-studio":
         content = <Studio workspaceId={workspaceId} navigate={navigate} engineeringProperties={engineeringProperties} onModelSelectionChange={setStudioModelId} onWorkspaceChange={setWorkspaceId} />;
         break;

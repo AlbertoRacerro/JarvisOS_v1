@@ -73,6 +73,32 @@ def _growth_for_unit(item: dict[str, Any], *, dark: bool = False) -> Any:
                    oxygen_saturation=params.get("oxygen_saturation", growth.oxygen_saturation))
 
 
+def t2_optics_for_unit(item: dict[str, Any]) -> optics_t2.Optics:
+    """Map one T2 PBR unit's typed draft layout and resolved tube dimensions onto the optics kernel."""
+    raw = item["unit"].get("params") or {}
+    names = ("tubes_across", "layers", "pitch_h", "pitch_v", "stagger_offset", "axis_azimuth",
+             "centre_height_above_sea", "n_wall", "n_water", "sea_albedo")
+    missing = [name for name in names if (raw.get(name) or {}).get("si") is None]
+    if missing:
+        raise DynamicError("OPTICS_LAYOUT_INVALID", "T2 optics layout is incomplete.",
+                           {"unit": item["tag"], "fields": missing})
+    values = {name: raw[name]["si"] for name in names}
+    for name in ("tubes_across", "layers"):
+        if isinstance(values[name], bool) or not isinstance(values[name], (int, float)) or not math.isfinite(values[name]) or int(values[name]) != values[name]:
+            raise DynamicError("OPTICS_LAYOUT_INVALID", f"{name} must be a whole number.")
+    optics = optics_t2.Optics(
+        diameter=item["params"]["tube_inner_diameter"], tubes_across=int(values["tubes_across"]),
+        layers=int(values["layers"]), pitch_h=float(values["pitch_h"]), pitch_v=float(values["pitch_v"]),
+        stagger=float(values["stagger_offset"]), axis_azimuth=math.radians(float(values["axis_azimuth"])),
+        centre_height=float(values["centre_height_above_sea"]), n_wall=float(values["n_wall"]),
+        n_water=float(values["n_water"]), lower_albedo=float(values["sea_albedo"]),
+    )
+    if optics.module_tubes > item["params"]["tube_count"]:
+        raise DynamicError("OPTICS_LAYOUT_INVALID", "The representative module exceeds the unit tube count.",
+                           {"unit": item["tag"], "module_tubes": optics.module_tubes})
+    return optics
+
+
 def _prepare_t2_optics(workspace_id: str, units: list[dict[str, Any]],
                        profile: dict[str, Any], scenario: Scenario) -> None:
     """Freeze profile-interval optics for T2 PBRs before the ODE worker starts."""
@@ -123,27 +149,7 @@ def _prepare_t2_optics(workspace_id: str, units: list[dict[str, Any]],
         "delta_t": float(params.get("delta_t", 67.0)),
     }
     for item in selected:
-        raw = item["unit"].get("params") or {}
-        names = ("tubes_across", "layers", "pitch_h", "pitch_v", "stagger_offset", "axis_azimuth",
-                 "centre_height_above_sea", "n_wall", "n_water", "sea_albedo")
-        missing = [name for name in names if (raw.get(name) or {}).get("si") is None]
-        if missing:
-            raise DynamicError("OPTICS_LAYOUT_INVALID", "T2 optics layout is incomplete.",
-                               {"unit": item["tag"], "fields": missing})
-        values = {name: raw[name]["si"] for name in names}
-        for name in ("tubes_across", "layers"):
-            if isinstance(values[name], bool) or not isinstance(values[name], (int, float)) or not math.isfinite(values[name]) or int(values[name]) != values[name]:
-                raise DynamicError("OPTICS_LAYOUT_INVALID", f"{name} must be a whole number.")
-        optics = optics_t2.Optics(
-            diameter=item["params"]["tube_inner_diameter"], tubes_across=int(values["tubes_across"]),
-            layers=int(values["layers"]), pitch_h=float(values["pitch_h"]), pitch_v=float(values["pitch_v"]),
-            stagger=float(values["stagger_offset"]), axis_azimuth=math.radians(float(values["axis_azimuth"])),
-            centre_height=float(values["centre_height_above_sea"]), n_wall=float(values["n_wall"]),
-            n_water=float(values["n_water"]), lower_albedo=float(values["sea_albedo"]),
-        )
-        if optics.module_tubes > item["params"]["tube_count"]:
-            raise DynamicError("OPTICS_LAYOUT_INVALID", "The representative module exceeds the unit tube count.",
-                               {"unit": item["tag"], "module_tubes": optics.module_tubes})
+        optics = t2_optics_for_unit(item)
         handoff = optics_t2.build_handoff(optics, midpoints, site, conditions, dni, dhi)
         item["optics_t2"] = {
             "layout": asdict(optics),
