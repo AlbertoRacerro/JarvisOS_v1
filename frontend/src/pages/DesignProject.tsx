@@ -8,13 +8,15 @@ import {
 } from "../api/designProject";
 import { listStudioLibrary, type StudioLibraryEntry } from "../api/studio";
 import ProcessDraftEditor from "../stages/ProcessDraftEditor";
+import Studio from "./Studio";
+import type { EngineeringPropertiesController } from "../components/engineering/EngineeringProperties";
 import { getDraft, type DraftObject } from "../api/processDraft";
 import "./designProject.css";
 
 const NODES = ["Parameters", "Geometry", "Materials", "Physics", "Mesh", "Studies", "Results", "Reduced model"] as const;
 const STAGES = ["Plant", "CAD", "Motion/Mechanics", "CFD", "Optics", "Reduced model"] as const;
 
-export default function DesignProject({ projectId, navigate }: { projectId: string | null; navigate: Navigate }) {
+export default function DesignProject({ projectId, navigate, engineeringProperties }: { projectId: string | null; navigate: Navigate; engineeringProperties: EngineeringPropertiesController }) {
   const [projectName, setProjectName] = useState("");
   const [versions, setVersions] = useState<DesignVersionSet | null>(null);
   const [components, setComponents] = useState<DesignComponent[]>([]);
@@ -24,6 +26,7 @@ export default function DesignProject({ projectId, navigate }: { projectId: stri
   const [sourceUnit, setSourceUnit] = useState<DraftObject | null>(null);
   const [sourceError, setSourceError] = useState<string | null>(null);
   const [stage, setStage] = useState<(typeof STAGES)[number]>("Plant");
+  const [workshop, setWorkshop] = useState<{ modelId: string | null; key: number } | null>(null);
   const [newVersion, setNewVersion] = useState("");
   const [newComponent, setNewComponent] = useState("");
   const [editName, setEditName] = useState("");
@@ -67,6 +70,7 @@ export default function DesignProject({ projectId, navigate }: { projectId: stri
     finally { setBusy(false); }
   };
   const active = versions?.versions.find((item) => item.id === versions.active_version_id);
+  useEffect(() => { setWorkshop(null); }, [active?.id]);
   const selected = components.find((item) => item.id === selectedId);
   useEffect(() => {
     let live = true;
@@ -131,14 +135,18 @@ export default function DesignProject({ projectId, navigate }: { projectId: stri
     {error ? <p role="alert" className="design-project__error">{error}</p> : null}
     <nav className="design-project__stages" aria-label="Design stages">
       {STAGES.map((item) => <button key={item} type="button" aria-current={stage === item ? "step" : undefined} onClick={() => {
-        setStage(item);
+        setWorkshop(null); setStage(item);
         if (item === "Plant") setSelectedId(null);
         else if (item === "CAD") setSelectedNode("Geometry");
         else if (item === "Reduced model") setSelectedNode("Reduced model");
         else setSelectedNode("Physics");
       }}>{item}</button>)}
     </nav>
-    <div className="design-project__body">
+    {workshop && active ? <section className="design-project__workshop" aria-label="Workshop">
+      <div className="design-project__workshop-head"><h2>Workshop · {active.label}</h2><button type="button" onClick={() => { setWorkshop(null); void reload(); }}>Back to Design</button></div>
+      <Studio key={`${active.data_workspace_id}:${workshop.key}`} workspaceId={active.data_workspace_id} navigate={navigate}
+        engineeringProperties={engineeringProperties} requestedModelId={workshop.modelId} startWizard={!workshop.modelId} embedded />
+    </section> : <div className="design-project__body">
       <aside className="design-project__panel">
         <h2>Components</h2>
         {components.length ? tree(null) : <p>No components in this version.</p>}
@@ -185,7 +193,8 @@ export default function DesignProject({ projectId, navigate }: { projectId: stri
       </main>
       <aside className="design-project__panel">
         <h2>Library</h2>
-        {library.length ? <ul>{library.map((item) => <li key={item.id}>{item.name} · {item.version_label}</li>)}</ul> : <p>No published Studio models in this version.</p>}
+        {library.length ? <ul>{library.map((item) => <li key={item.id}><button type="button" onClick={() => setWorkshop({ modelId: item.model_spec_id, key: Date.now() })}>{item.name} · {item.version_label}</button></li>)}</ul> : <p>No published Studio models in this version.</p>}
+        <button type="button" disabled={!active} onClick={() => setWorkshop({ modelId: null, key: Date.now() })}>Generate new in Workshop</button>
         {active?.id === projectId ? <AppLink href="/design/studio" navigate={navigate}>Open current Studio workspace</AppLink> : null}
         <h2>Versions</h2>
         <form onSubmit={(event) => { event.preventDefault(); if (!versions || !newVersion.trim()) return; void perform(async () => { await createDesignVersion(projectId, newVersion.trim(), versions.active_version_id); setNewVersion(""); }); }}>
@@ -195,6 +204,6 @@ export default function DesignProject({ projectId, navigate }: { projectId: stri
         </form>
         <p><AppLink href="/design/bluecad" navigate={navigate}>Open old Design</AppLink></p>
       </aside>
-    </div>
+    </div>}
   </div>;
 }

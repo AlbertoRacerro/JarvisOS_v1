@@ -75,7 +75,7 @@ const runOutputs = (payload: string | null): string => {
     return Object.entries(outputs).map(([name, item]) => `${name} = ${String(item.value)} ${item.unit}`).join(" · ");
   } catch { return ""; }
 };
-export default function Studio({ workspaceId, navigate, engineeringProperties, onModelSelectionChange, onWorkspaceChange }: { workspaceId: string | null; navigate: Navigate; engineeringProperties: EngineeringPropertiesController; onModelSelectionChange?(id: string | null): void; onWorkspaceChange?(id: string): void }) {
+export default function Studio({ workspaceId, navigate, engineeringProperties, onModelSelectionChange, onWorkspaceChange, requestedModelId, startWizard = false, embedded = false }: { workspaceId: string | null; navigate: Navigate; engineeringProperties: EngineeringPropertiesController; onModelSelectionChange?(id: string | null): void; onWorkspaceChange?(id: string): void; requestedModelId?: string | null; startWizard?: boolean; embedded?: boolean }) {
   const [runs, setRuns] = useState<SimulationRunDetail[]>([]);
   const [models, setModels] = useState<StudioModel[]>([]);
   const [library, setLibrary] = useState<StudioLibraryEntry[]>([]);
@@ -154,17 +154,17 @@ export default function Studio({ workspaceId, navigate, engineeringProperties, o
     return () => window.removeEventListener("jarvis:workspace-action", receive);
   }, [workspaceId, draftDirty]);
   useEffect(() => {
-    let alive = true; setModel(null); setSelectedId(null); setError(null);
+    let alive = true; setModel(null); setSelectedId(null); setError(null); setWizard(startWizard);
     void Promise.all([listStudioCategories(), getStudioRuntimeStatus()]).then(([nextCategories, nextRuntime]) => { if (alive) { setCategories(nextCategories); setRuntime(nextRuntime); } }).catch((cause: Error) => { if (alive) setError(cause.message); });
     if (workspaceId) void Promise.all([listStudioModels(workspaceId), listStudioLibrary(workspaceId)]).then(([nextModels, nextLibrary]) => { if (alive) { setModels(nextModels); setLibrary(nextLibrary); } }).catch((cause: Error) => { if (alive) setError(cause.message); });
     // Test streams name flowsheet compounds; the Process registry is their single source.
     if (workspaceId) void getDraftRegistry(workspaceId).then((registry) => { if (alive) setCompounds(registry.compounds); }).catch(() => undefined);
     if (workspaceId) void listBenchDrafts(workspaceId).then((next) => { if (alive) setBenchDrafts(next); }).catch(() => undefined);
     // "Inspect model" in the Process inspector opens the pinned model: /design/studio?model=<spec id>.
-    const target = new URLSearchParams(window.location.search).get("model");
+    const target = requestedModelId !== undefined ? requestedModelId : new URLSearchParams(window.location.search).get("model");
     if (workspaceId && target) void getStudioModel(workspaceId, target).then((next) => { if (alive) { adopt(next); setWizard(false); setTab("versions"); } }).catch((cause: Error) => { if (alive) setError(cause.message); });
     return () => { alive = false; };
-  }, [workspaceId]);
+  }, [workspaceId, requestedModelId, startWizard]);
   useEffect(() => { if (workspaceId && isProc && (tab === "steps" || tab === "tests")) void listBenchDrafts(workspaceId).then(setBenchDrafts).catch(() => undefined); }, [workspaceId, isProc, tab]);
   const perform = async (action: () => Promise<void>) => { setBusy(true); setError(null); setErrorCode(null); setNotice(null); setSymbolRefusal(null); try { await action(); } catch (cause) { setError(cause instanceof Error ? cause.message : "Studio action failed"); setErrorCode(cause instanceof StudioApiError ? cause.code : null); setSymbolRefusal(cause instanceof StudioApiError && cause.code === "studio_symbol_invalid" ? cause.message : null); } finally { setBusy(false); } };
   const openExample = () => { void perform(async () => {
@@ -204,7 +204,7 @@ export default function Studio({ workspaceId, navigate, engineeringProperties, o
   const updateCase = (index: number, patch: Partial<StudioCase>) => setCases(cases.map((item, i) => i === index ? { ...item, ...patch } : item));
 
   return <main className="studio" aria-labelledby="studio-title">
-    <header className="design-stage__header studio-header"><div className="design-stage__title-row"><div><p className="eyebrow">Design</p><h1 id="studio-title">Engineering Studio</h1></div><div className="studio-header__actions"><button type="button" disabled={busy || (!!runtime && !runtimeReady)} title="Open a workspace with an AI-prepared pipe calculation, flanged spool geometry, harvest settler unit and harvest-cycle procedure" onClick={openExample}>Open example workspace</button><button type="button" onClick={() => { setWizard(true); setModel(null); setSelectedId(null); setName(""); setQuestion(""); setInputs([blankVariable()]); setOutputs([blankVariable()]); setCustom(false); resetUnit(); }}>+ New model</button></div></div></header>
+    <header className="design-stage__header studio-header"><div className="design-stage__title-row"><div><p className="eyebrow">Design</p><h1 id="studio-title">{embedded ? "Workshop" : "Engineering Studio"}</h1></div><div className="studio-header__actions">{!embedded ? <button type="button" disabled={busy || (!!runtime && !runtimeReady)} title="Open a workspace with an AI-prepared pipe calculation, flanged spool geometry, harvest settler unit and harvest-cycle procedure" onClick={openExample}>Open example workspace</button> : null}<button type="button" onClick={() => { setWizard(true); setModel(null); setSelectedId(null); setName(""); setQuestion(""); setInputs([blankVariable()]); setOutputs([blankVariable()]); setCustom(false); resetUnit(); }}>+ New model</button></div></div></header>
     {!runtimeReady && runtime && !isProc && !(wizard && wizardCategory === "procedure") ? <p className="studio-warning" role="status">Studio execution unavailable: {runtime.reason || (runtime.enabled ? "Runtime unavailable" : "Runtime disabled")}. To enable it, start the backend with JARVISOS_STUDIO_USER_CODE_ENABLED=1 on a Linux or WSL2 host with bubblewrap installed. Test and Run stay refused until then.</p> : null}
     {error ? errorCode ? <Refusal code={errorCode} message={error} /> : <p className="studio-error" role="alert">{error}</p> : null}{notice ? <p className="studio-notice" role="status">{notice}</p> : null}
     <div className="studio-layout"><aside className="studio-library"><h2>Library</h2><p>Published versions are recorded and scientifically unqualified.</p>

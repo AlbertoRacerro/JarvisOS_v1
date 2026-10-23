@@ -170,7 +170,7 @@ function App() {
   } else {
     switch (route.id) {
       case "design-project":
-        content = <DesignProject projectId={workspaceId} navigate={navigate} />;
+        content = <DesignProject projectId={workspaceId} navigate={navigate} engineeringProperties={engineeringProperties} />;
         break;
       case "design-studio":
         content = <Studio workspaceId={workspaceId} navigate={navigate} engineeringProperties={engineeringProperties} onModelSelectionChange={setStudioModelId} onWorkspaceChange={setWorkspaceId} />;
