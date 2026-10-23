@@ -26,6 +26,8 @@ assert.deepEqual([get("campaign_draws_culture").scope, get("campaign_draws_cultu
 assert.match(get("mean_PBR_A").qualification, /sampled points from 20/);
 assert.match(get("final_PBR_B").qualification, /model card: limited/);
 assert.equal(metrics.filter((item) => item.scope === "plant").some((item) => item.id.startsWith("final_")), false);
+assert.equal(L.comparablePlantMetrics(get("campaign_prod_culture"), { ...get("campaign_prod_culture"), label: "Mean last-2 productivity, loop culture" }), false);
+assert.equal(L.comparablePlantMetrics(get("campaign_prod_culture"), get("campaign_prod_culture")), true);
 
 const saved = { runIds: ["r1", "removed-run", "r2", "r1"], metricIds: ["harvest", "gone", "final_PBR_A"], overviewIds: ["harvest", "final_PBR_A"], equipmentId: "removed-unit", view: "charts" };
 const restored = L.restorePlantChoices(saved, ["r1", "r2"], metrics.map((item) => item.id), ["a", "b"], metrics.filter((item) => item.scope === "plant").map((item) => item.id));

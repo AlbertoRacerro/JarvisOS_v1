@@ -437,6 +437,8 @@ export const fmtKpi = (kpi: Kpi) => (kpi.value === null ? `not available${kpi.re
 
 // Spec 211: explicit metric ownership. A unit or culture-loop value must never be promoted to a plant total.
 export type PlantMetric = Kpi & { scope: "plant" | "equipment" | "loop" | "unclassified"; owner: string | null; qualification: string };
+export const comparablePlantMetrics = (source: PlantMetric, candidate: PlantMetric) =>
+  source.id === candidate.id && source.label === candidate.label && source.unit === candidate.unit;
 const PLANT_METRICS = new Set(["harvest", "events", "controller_fires", "vol_prod", "areal_prod"]);
 export function plantMetrics(manifest: Manifest | null, series: SeriesData | null): PlantMetric[] {
   const unitTags = (manifest?.units ?? []).map((unit) => unit.tag).sort((a, b) => b.length - a.length);

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { DraftObject, DraftProjection } from "../../api/processDraft";
 import { exportRunRows, failureText, getDynamicManifest } from "./dynamicApi";
 import {
-  DEFAULT_PLANT_OVERVIEW, EMPTY_PLANT_CHOICES, fmtKpi, fmtNum, isTerminal, movePlantMetric, plantChoiceKey, plantMetrics, restorePlantChoices, runTitle, staleness,
+  comparablePlantMetrics, DEFAULT_PLANT_OVERVIEW, EMPTY_PLANT_CHOICES, fmtKpi, fmtNum, isTerminal, movePlantMetric, plantChoiceKey, plantMetrics, restorePlantChoices, runTitle, staleness,
   type DynRun, type Manifest, type PlantChoices, type PlantMetric, type SeriesData,
 } from "./dynamicLogic";
 import { SimulationNotice } from "./SimulationNotice";
@@ -153,16 +153,16 @@ export default function PlantView({ workspaceId, draft, runs }: { workspaceId: s
             <button type="button" aria-pressed={choices.view === "charts"} onClick={() => setChoices((old) => ({ ...old, view: "charts" }))}>Charts</button></div>
           {choices.view === "table" ? <div className="dyn-table-scroll"><table aria-label="Shared KPI comparison"><thead><tr><th scope="col">KPI and scope</th>{activeIds.map((id) => <th scope="col" key={id}>{id.slice(0, 8)}</th>)}</tr></thead>
             <tbody>{choices.metricIds.map((id) => { const source = metricsById.get(id); return <tr key={id}><th scope="row">{source?.label ?? id}<small>{source?.scope}{source?.owner ? ` · ${source.owner}` : ""} · {source?.unit ?? "unit unavailable"}</small></th>
-              {activeIds.map((runId) => { const run = completed.find((item) => item.job_id === runId)!; const metric = metricFor(id, runId); const mismatch = metric && source && metric.unit !== source.unit;
-                return <td key={runId}>{mismatch ? `not comparable: ${metric.unit} versus ${source.unit}` : metricText(metric)}
+              {activeIds.map((runId) => { const run = completed.find((item) => item.job_id === runId)!; const metric = metricFor(id, runId); const mismatch = metric && source && !comparablePlantMetrics(source, metric);
+                return <td key={runId}>{mismatch ? `not comparable: ${metric.label} [${metric.unit}] versus ${source.label} [${source.unit}]` : metricText(metric)}
                   <small>{qualification(run, loaded[runId], metric, draft.seq)}</small></td>; })}</tr>; })}</tbody></table></div>
             : <div className="dyn-plant__charts">{choices.metricIds.map((id) => { const source = metricsById.get(id); if (!source) return null;
-              const values = activeIds.map((runId) => { const metric = metricFor(id, runId); return metric && metric.unit === source.unit && typeof metric.value === "number" && Number.isFinite(metric.value) ? metric.value : null; });
+              const values = activeIds.map((runId) => { const metric = metricFor(id, runId); return metric && comparablePlantMetrics(source, metric) && typeof metric.value === "number" && Number.isFinite(metric.value) ? metric.value : null; });
               const max = Math.max(0, ...values.map((value) => Math.abs(value ?? 0)));
               return <figure key={id} aria-label={`${source.label} comparison chart`}><figcaption>{source.label} · {source.scope}{source.owner ? ` ${source.owner}` : ""} [{source.unit}]</figcaption>
                 {activeIds.map((runId, index) => { const run = completed.find((item) => item.job_id === runId)!; const metric = metricFor(id, runId); return <div className="dyn-plant__bar-row" key={runId}>
                   <span>{runId.slice(0, 8)}</span><div className="dyn-plant__bar-track">{values[index] !== null ? <div className="dyn-plant__bar" style={{ width: `${max ? Math.abs(values[index]!) / max * 100 : 0}%` }} /> : null}</div>
-                  <strong>{metric && metric.unit !== source.unit ? `not comparable: ${metric.unit}` : metricText(metric)}</strong><small>{qualification(run, loaded[runId], metric, draft.seq)}</small></div>; })}</figure>; })}</div>}
+                  <strong>{metric && !comparablePlantMetrics(source, metric) ? `not comparable: ${metric.label} [${metric.unit}]` : metricText(metric)}</strong><small>{qualification(run, loaded[runId], metric, draft.seq)}</small></div>; })}</figure>; })}</div>}
         </> : <p>No KPI is selected for the shared comparison.</p>}
       </section>
     </>}
