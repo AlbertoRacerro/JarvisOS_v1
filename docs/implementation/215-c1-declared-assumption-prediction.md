@@ -1,8 +1,8 @@
-# Spec 215 C1 prediction — forcing checkpoint
+# Spec 215 C1 prediction — input and assumed-card checkpoints
 
-Status: input preparation only. **No biomass prediction or C1 verdict has been run.**
-The full 36-day band report still requires a sourced, assumed CCAP 211/78 model
-card, dynamic runs and uncertainty analysis. This checkpoint does not change the
+Status: input preparation and an assumed screening card only. **No biomass
+prediction or C1 verdict has been run.** The full 36-day band report still
+requires dynamic runs and uncertainty analysis. This checkpoint does not change the
 qualified-inconclusive result of [spec 212](212-c1-source-and-capability-audit.md).
 
 ## Pinned surrogate forcing
@@ -122,9 +122,8 @@ source-backed uncertainty bound. The paper's Table 1 gives a training
 temperature range of 20.94–25.44 °C; the fitted 30.03 °C upper cardinal
 temperature lies outside it.
 
-The existing 169/170 card still needs an actual candidate revision and
-uncertainty treatment for transferred nutrient, composition, light, extinction
-and loss parameters. N quota and oxygen yield derive from the selected
+The 169/170 card still needs uncertainty treatment for transferred nutrient,
+composition, light, extinction and loss parameters. N quota and oxygen yield derive from the selected
 stoichiometry. The 2025 paper's two-flux optical coefficients
 and optimum light response cannot be inserted into the 170 cylindrical
 Beer–Lambert/Monod fields without a declared model-form approximation.
@@ -133,8 +132,8 @@ pins the exact same-strain conversions that can be made without that
 approximation, with source locator, original conditions and candidate state.
 It explicitly lists the 2025 optimum irradiance and maintenance loss as
 nontransferable to the current 170 Monod/first-order symbols, and names every
-missing 170 parameter. This is an incomplete audit record, not a stored 169
-card. No complete card has been created and no biomass prediction has been run.
+missing 170 parameter. This audit is not itself a stored 169 card. The assumed
+card below pins a central screening choice, but no biomass prediction has run.
 
 ### Cross-strain, model-form-compatible candidates
 
@@ -172,13 +171,13 @@ The 167/170 culture field is **total dissolved N as N** in kg m⁻³. Multiplyin
 the reported nitrate-ion concentration by `14.0067 / 62.0049` and by `0.001`
 converts the central candidate to `0.0009036 kg N m⁻³`; the source's ±2 mg/L
 corresponds to `0.0004518–0.0013554 kg N m⁻³`. These are a transferred
-screening range, not a C1 uncertainty interval. The model card would select
+screening range, not a C1 uncertainty interval. The assumed card selects
 `HNO3` as its assumed N source, but the generic inlet does not verify nitrate
 speciation. An independent [*N. gaditana* nitrate-uptake study](https://doi.org/10.3389/fmars.2020.00077)
 observed growth continuing after extracellular nitrate depletion, so the
 simple extracellular Monod factor is also a model-form limitation. The
-conversion and provenance are pinned in `card_candidates.py`; no card or
-biomass prediction is claimed by this checkpoint.
+conversion and provenance are pinned in `card_candidates.py`; no biomass
+prediction is claimed by this checkpoint.
 
 ### Cross-strain biomass-composition candidates
 
@@ -200,8 +199,23 @@ pins these conversions as `a`, `b`, `c`, `d` and `w_ash`, all marked
 **cross-strain candidates** with the source locator and transfer caveat.
 This closes the symbol inventory for a T1 card but does not make a source-
 verified or qualified card: composition, optics, nutrient response and loss
-still need declared transfer uncertainty and an actual 169 card revision before
-any C1 biomass run. No C1 observation was used to select these values.
+still need declared transfer uncertainty before any C1 biomass run. No C1
+observation was used to select these values.
+
+[`assumed_card.py`](../../scripts/qualification/215/assumed_card.py) now creates
+one pinned **candidate** parameter set and card through the existing 169 owner
+in a caller-supplied isolated workspace. Its central screening choices are the
+same-strain 2025 `mu_max` and cardinal temperatures, cross-strain Lima `K_I`,
+`k_d` and annular `k_X=200 m² kg⁻¹`, cross-strain Sánchez-Bayo nitrate `K_j_0`
+and biomass composition. The selected N source is assumed HNO₃; the inlet
+does not establish speciation. Each stored parameter retains original source
+conditions and its transfer caveat, while the returned manifest pins DOI and
+audited source digest. The 169 values remain `candidate`, because the cited
+papers are not registered and independently verified as 169 literature records
+in that workspace. The card is **assumed / not qualified**, not a measured C1
+model. The 200–380 m² kg⁻¹ extinction, nitrate and other transfer ranges still
+need sensitivity coverage before the final band report. A focused offline test
+confirms that the card resolves through 170 and that no symbol is promoted.
 
 ## Declared geometry and operation matrix
 
