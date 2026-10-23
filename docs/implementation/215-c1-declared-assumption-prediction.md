@@ -2,7 +2,7 @@
 
 Status: input preparation only. **No biomass prediction or C1 verdict has been run.**
 The full 36-day band report still requires a sourced, assumed CCAP 211/78 model
-card, scenario geometry and dynamic runs. This checkpoint does not change the
+card, dynamic runs and uncertainty analysis. This checkpoint does not change the
 qualified-inconclusive result of [spec 212](212-c1-source-and-capability-audit.md).
 
 ## Pinned surrogate forcing
@@ -97,3 +97,32 @@ stoichiometry and oxygen yield. The 2025 paper's two-flux optical coefficients
 and optimum light response cannot be inserted into the 170 cylindrical
 Beer–Lambert/Monod fields without a declared model-form approximation.
 No complete card has been created and no biomass prediction has been run.
+
+## Declared geometry and operation matrix
+
+[`scenario_inputs.py`](../../scripts/qualification/215/scenario_inputs.py)
+pins S01's layout, dilution, ground area, working volume and observed outputs
+without changing the spec 212 source audit. Its 24 scenarios vary the two
+**assumed** representative cross-sections per layout, three **unmeasured**
+array azimuths (0°, 45°, 90°), and two illuminated-volume conventions. The
+3×1 horizontal and 1×7 fence cross-sections reproduce the spec 212 proxy;
+1×3 and 2×4 are alternative optical modules, not claimed as-built arrays.
+The latter fence alternative contains eight representative tubes, deliberately
+showing that an optical module is not a claim about the seven physical loops.
+
+| Layout | Source geometry/operation | Reported illuminated / tube-cylinder volume | S01 observed mass implied by areal / volumetric means |
+| --- | --- | ---: | ---: |
+| Horizontal | 3×80 m loops; 0.56 m³ working; 27 m² ground; 0.25 d⁻¹ dilution | 0.4088 / 0.39886 m³ | 326.7 / 364.0 g d⁻¹ |
+| Fence | 7×80 m loops; 1.06 m³ working; 31 m² ground; 0.27 d⁻¹ dilution | 0.7526 / 0.93067 m³ | 601.4 / 604.2 g d⁻¹ |
+
+The horizontal S01 output means imply daily masses differing by 37.3 g; the
+fence means differ by 2.8 g. The fence illuminated-volume definitions differ
+by 0.17807 m³. These residuals are retained as separate comparison bases, not
+``corrected`` with an invented tube count or observation. The outer diameter
+(0.050 m), 0.100 m pitch and 0.425 m tube-centre height come from secondary
+S22 access as documented in spec 212. S01 says pH-controlled carbon supply,
+active O₂ removal, and 20–30 °C culture temperature, but supplies no aligned
+operating trace. The matrix therefore records those limits without generating
+unobserved temperature or O₂ data. A later dynamic run must declare its
+temperature scenario and map the selected volume basis into the existing PBR
+owner explicitly.
