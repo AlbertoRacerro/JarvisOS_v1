@@ -89,6 +89,22 @@ the Sidecar workspace-context disclosure over the populated WebGL viewport in
 both appearances: one canvas, correct theme, no uppercase product name in
 rendered body text and no page/console errors. The frontend build and suite
 passed again at this copy-only head. The instrumented full matrix resolved the
-spelling flags as quoted evidence. The GitHub 429s leave the strict no-console-
-errors criterion open. No backend or GitHub behaviour was altered to suppress
-them. PR #882 remains draft pending a clean browser run and exact-head review.
+spelling flags as quoted evidence. No backend or GitHub behaviour was altered to
+suppress the earlier GitHub 429s.
+
+### Final exact-head browser run (`1e46ea90`)
+
+`r11/` holds the final evidence. Its build log is `r11/build.log`, `r11/HEAD.txt` records the head, and
+`r11/run2/report.json` plus 76 screenshots hold the matrix results. At code head `1e46ea90`,
+`VITE_API_BASE_URL=http://127.0.0.1:8198 npm run build` passed the full frontend suite, the type check and the Vite
+build. The audit ran on a fresh copy of the isolated data root, with the same ports and CORS origin as above.
+
+| Run | Result |
+| --- | --- |
+| `r11/report.json` | 76 captures. 12 console errors, all on BlueCad: the copied fixture's artifact rows still held absolute paths into the original data root, so the backend correctly refused them with `404`. This is a harness error, not a product error. |
+| `r11/run2/report.json` | Same matrix after rewriting those 7 `stored_path` rows into the copied root: **76 captures, 0 page/console errors, 0 text-contrast failures, 0 focus flags across 434 tab stops, 0 wrong themes**. The anonymous GitHub API quota had reset, so Coding → Repository loaded without `429`s. |
+
+The 4 remaining `BLUECAD` flags are all on Coding → Runtime. A DOM probe at this head placed every hit in the quoted
+Relay transcript (`.coding-relay-timeline` `pre`/`summary`) or in spec names and STATUS summaries in the work list
+(`BLUECAD-PRINT-HANDOFF-1`, `BLUECAD-PROJECT-TREE-1`, …). §4 of the contract leaves spec names unchanged, and the
+transcript is kept verbatim. All acceptance criteria now have evidence on the exact code head.
