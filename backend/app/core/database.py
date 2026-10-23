@@ -196,6 +196,15 @@ def initialize_database() -> DatabaseInfo:
             connection.execute(statement)
         for statement in PRINT_HANDOFF_SCHEMA_STATEMENTS:
             connection.execute(statement)
+        # Existing workspace data is the first Design project version. The
+        # stable workspace id keeps every legacy Process/BlueCad/Studio ref valid.
+        connection.execute("""
+            INSERT INTO design_project_versions
+                (id, project_id, data_workspace_id, parent_version_id, label, active, created_at)
+            SELECT id, id, id, NULL, 'v1', 1, created_at FROM workspaces
+            WHERE status != 'design_version'
+              AND NOT EXISTS (SELECT 1 FROM design_project_versions v WHERE v.project_id = workspaces.id)
+        """)
         for statement in [
             *SCHEMA_MIGRATION_STATEMENTS,
             *EGRESS_SCHEMA_MIGRATION_STATEMENTS,
