@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import hashlib
 import math
+import runpy
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -47,3 +48,19 @@ def test_surrogate_is_pinned_hourly_and_energy_closes() -> None:
     for ghi, dni, dhi, angle in zip(values["ghi_w_m2"], values["dni_w_m2"],
                                    values["dhi_w_m2"], zenith, strict=True):
         assert math.isclose(ghi, dhi + dni * max(0.0, math.cos(math.radians(angle))), abs_tol=1e-6)
+
+
+def test_declared_36_day_forcing_windows() -> None:
+    script = ROOT / "scripts/qualification/215/forcing_windows.py"
+    result = runpy.run_path(str(script))["select_windows"]()
+    assert result["input_sha256"] == SHA256
+    assert result["window_hours"] == 36 * 24
+    assert result["candidate_windows"] == 27
+    assert "observation dates unknown" in result["status"]
+    selected = result["selected"]
+    assert selected["low"]["first_end_utc"] == "2013-07-26T01:00:00Z"
+    assert selected["median"]["first_end_utc"] == "2013-07-14T01:00:00Z"
+    assert selected["high"]["first_end_utc"] == "2013-07-06T01:00:00Z"
+    assert [selected[name]["par_dose_mol_m2"] for name in ("low", "median", "high")] == [
+        1173.4389, 1303.73874, 1431.838125,
+    ]

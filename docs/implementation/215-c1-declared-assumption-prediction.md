@@ -42,6 +42,25 @@ Regenerate with the raw archive using the command in the script module docstring
 The focused offline test checks the committed digest, complete hourly coverage,
 PAR conversion, solar-position sanity and GHI = DHI + DNI·cos(zenith) closure.
 
+### Declared 36-day forcing windows
+
+S01 reports 36 days in July–August but does not identify the calendar dates.
+[`forcing_windows.py`](../../scripts/qualification/215/forcing_windows.py)
+examines every 36-day start in the pinned 62-day surrogate and chooses the
+minimum, median and maximum integrated PAR windows. This is a deterministic
+forcing sensitivity axis, **not** a reconstruction of the S01 campaign dates.
+The digest check prevents selecting windows from a changed CSV silently.
+
+| Scenario | First/last hourly end stamp (UTC) | Integrated surrogate PAR (mol m⁻²) |
+| --- | --- | ---: |
+| Low | 2013-07-26 01:00 / 2013-08-31 00:00 | 1173.438900 |
+| Median | 2013-07-14 01:00 / 2013-08-19 00:00 | 1303.738740 |
+| High | 2013-07-06 01:00 / 2013-08-11 00:00 | 1431.838125 |
+
+Each window contains 864 complete hourly intervals. The low and high dose
+differ by about 22% of the low dose. Later biomass runs must retain window
+identity and must not label any selected window as the observed 36 days.
+
 ## CCAP 211/78 primary-source card audit
 
 The open-access primary study by [Ihadjadene et al. (2025), *Algal Research*
