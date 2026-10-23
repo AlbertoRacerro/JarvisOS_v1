@@ -8,6 +8,8 @@ The single spec 201 owner advances an engineering mission task only when indepen
 
 Existing mission definitions stay immutable. The repair must safely cover missions already submitted without a `check`, including `m-20261021T125949Z-2e0739`; it must not interrupt an active turn, create a second coordinator, bypass `effects_uncertain`, or silently reinterpret a previous complete label as verified delivery. Use the existing mission store, journal, ledger, GitHub and registry. Add only the minimum deterministic check or queued-only priority operation demonstrated necessary.
 
+Amended 2026-10-23 (directive `L20261022220755-8248`). A claimed finish that the check does not confirm (unsatisfied or unreadable evidence), and a missing or unknown `RELAY_STATUS`, are durable checkpoints. The task stays pending and is resumed, bounded by `MAX_TASK_CHECKPOINTS`, after which it holds `task_checkpoint_limit`. A task with no completion check still holds `task_check_failed` on a claimed finish, and `blocked` still holds `task_blocked`. Nothing completes without passing its check.
+
 ## Acceptance
 
 1. A deterministic regression reproduces unchecked false completion and shows that an unsupported or unverified claim cannot advance a task. Objective evidence allows completion; a checkpoint keeps it pending. Restart, replay, bounded retries, queue order and holds remain safe.
