@@ -16,6 +16,7 @@ from app.modules.bluecad.template import (
 from app.modules.events.service import log_event, utc_now
 from app.modules.process_stack import draft
 from app.modules.process_stack.draft import DraftError
+from app.modules.studio.service import category_of_kind
 
 router = APIRouter(
     prefix="/workspaces/{project_id}/design-versions/{version_id}/components",
@@ -36,6 +37,15 @@ class ComponentEdit(BaseModel):
     expected_active_version_id: str
 
 
+class AttachedModel(BaseModel):
+    model_version_id: str
+    node: str
+    category: str
+    source_sha256: str
+    contract_sha256: str
+    attached_at: str
+
+
 class ComponentRead(BaseModel):
     id: str
     project_id: str
@@ -49,6 +59,19 @@ class ComponentRead(BaseModel):
     source_unit_id: str | None = None
     geometry_candidate_id: str | None = None
     geometry_source_draft_revision: str | None = None
+    models: list[AttachedModel] = Field(default_factory=list)
+
+
+class ModelAttachment(BaseModel):
+    model_version_id: str
+    expected_revision: int = Field(ge=1)
+    expected_active_version_id: str
+
+
+# Studio categories that belong to a component node; process units and procedures attach to Plant
+# through their existing Process owners instead.
+COMPONENT_NODE_OF_CATEGORY = {"calculation": "Physics", "geometry": "Geometry"}
+_PLANT_CATEGORIES = {"process_unit": "a Process unit model", "procedure": "an operating procedure"}
 
 
 class UnitEntry(BaseModel):
@@ -147,7 +170,11 @@ def _read_component(connection, row) -> ComponentRead:
     return ComponentRead(**dict(row), source_draft_id=source["draft_id"] if source else None,
                          source_unit_id=source["unit_id"] if source else None,
                          geometry_candidate_id=geometry["candidate_id"] if geometry else None,
-                         geometry_source_draft_revision=geometry["source_draft_revision"] if geometry else None)
+                         geometry_source_draft_revision=geometry["source_draft_revision"] if geometry else None,
+                         models=[AttachedModel(**dict(item)) for item in connection.execute(
+                             "SELECT model_version_id, node, category, source_sha256, contract_sha256, attached_at "
+                             "FROM design_component_models WHERE component_id = ? ORDER BY attached_at, rowid",
+                             (row["id"],)).fetchall()])
 
 
 def _active_version(connection, project_id: str, version_id: str, expected: str) -> None:
@@ -345,6 +372,54 @@ def attach_component_geometry(
                   target_type="DesignComponent", target_id=component_id, workspace_id=project_id,
                   payload={"version_id": version_id, "candidate_id": payload.candidate_id,
                            "source_draft_revision": payload.expected_draft_revision})
+        row = _component(connection, project_id, version_id, component_id)
+        connection.commit()
+        return _read_component(connection, row)
+
+
+@router.put("/{component_id}/models", response_model=ComponentRead)
+def attach_component_model(
+    project_id: str, version_id: str, component_id: str, payload: ModelAttachment,
+) -> ComponentRead:
+    """Pin a published Studio version from this project version to its compatible component node."""
+
+    with open_sqlite_connection() as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        _active_version(connection, project_id, version_id, payload.expected_active_version_id)
+        if _component(connection, project_id, version_id, component_id)["revision"] != payload.expected_revision:
+            raise HTTPException(409, detail="Component changed; reload before attaching a model.")
+        published = connection.execute(
+            "SELECT mv.implementation_kind, sp.source_sha256, sp.contract_sha256 FROM studio_published_versions sp "
+            "JOIN model_versions mv ON mv.id = sp.version_id JOIN design_project_versions v "
+            "ON v.data_workspace_id = mv.workspace_id WHERE sp.version_id = ? AND v.id = ? AND v.project_id = ?",
+            (payload.model_version_id, version_id, project_id),
+        ).fetchone()
+        if published is None:
+            raise HTTPException(404, detail="Published Studio model not found in this Design version.")
+        category = category_of_kind(published["implementation_kind"])
+        node = COMPONENT_NODE_OF_CATEGORY.get(category)
+        if node is None:
+            raise HTTPException(422, detail=f"This Studio model is {_PLANT_CATEGORIES.get(category, category)}; "
+                                "it attaches to Plant through Process, not to a component node.")
+        if connection.execute(
+            "SELECT 1 FROM design_component_models WHERE component_id = ? AND model_version_id = ?",
+            (component_id, payload.model_version_id),
+        ).fetchone():
+            raise HTTPException(409, detail="This Studio model version is already attached to the component.")
+        now = utc_now()
+        connection.execute(
+            "INSERT INTO design_component_models (component_id, model_version_id, node, category, source_sha256, "
+            "contract_sha256, attached_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (component_id, payload.model_version_id, node, category, published["source_sha256"],
+             published["contract_sha256"], now),
+        )
+        connection.execute(
+            "UPDATE design_components SET revision = revision + 1, updated_at = ? WHERE id = ?", (now, component_id),
+        )
+        log_event(connection, event_type="DesignComponentModelAttached", actor="local-user",
+                  target_type="DesignComponent", target_id=component_id, workspace_id=project_id,
+                  payload={"version_id": version_id, "model_version_id": payload.model_version_id,
+                           "node": node, "source_sha256": published["source_sha256"]})
         row = _component(connection, project_id, version_id, component_id)
         connection.commit()
         return _read_component(connection, row)

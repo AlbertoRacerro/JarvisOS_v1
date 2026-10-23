@@ -11,7 +11,13 @@ export type DesignComponent = {
   name: string; revision: number; created_at: string; updated_at: string;
   source_draft_id: string | null; source_unit_id: string | null;
   geometry_candidate_id: string | null; geometry_source_draft_revision: string | null;
+  models: DesignComponentModel[];
 };
+export type DesignComponentModel = {
+  model_version_id: string; node: string; category: string; source_sha256: string; contract_sha256: string; attached_at: string;
+};
+/** Studio categories that attach to a component node; process units and procedures attach to Plant. */
+export const COMPONENT_NODE_OF_CATEGORY: Record<string, string> = { calculation: "Physics", geometry: "Geometry" };
 
 const base = (projectId: string) => `/workspaces/${encodeURIComponent(projectId)}/design-versions`;
 const components = (projectId: string, versionId: string) => `${base(projectId)}/${encodeURIComponent(versionId)}/components`;
@@ -54,4 +60,8 @@ export const deepenDesignGeometry = (projectId: string, versionId: string, compo
   request<DesignComponent>(`${components(projectId, versionId)}/${encodeURIComponent(component.id)}/geometry/from-process`, "POST", {
     wall_t_mm: wallMm, expected_revision: component.revision, expected_active_version_id: versionId,
     expected_draft_revision: draftRevision
+  });
+export const attachDesignModel = (projectId: string, versionId: string, component: DesignComponent, modelVersionId: string) =>
+  request<DesignComponent>(`${components(projectId, versionId)}/${encodeURIComponent(component.id)}/models`, "PUT", {
+    model_version_id: modelVersionId, expected_revision: component.revision, expected_active_version_id: versionId
   });

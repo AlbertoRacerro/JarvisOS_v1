@@ -272,3 +272,48 @@ def test_deepen_maps_typed_process_dimensions_into_attached_tube_geometry() -> N
         candidate = client.get(f"/workspaces/{project_id}/bluecad/candidates/{component['geometry_candidate_id']}")
         assert candidate.json()["status"] == "valid" and candidate.json()["origin"] == "template"
         assert client.post(f"{base}/{reactor['id']}/geometry/from-process", json=handoff).status_code == 409
+
+
+def test_studio_models_attach_only_to_compatible_component_nodes() -> None:
+    initialize_database()
+    with TestClient(app) as client:
+        project_id = client.post("/workspaces", json={"name": "Models", "slug": "models"}).json()["id"]
+        base = f"/workspaces/{project_id}/design-versions/{project_id}/components"
+        component = client.post(base, json={"name": "Reactor", "expected_active_version_id": project_id}).json()
+        next_version = client.post(f"/workspaces/{project_id}/design-versions", json={
+            "label": "Next", "expected_active_version_id": project_id,
+        }).json()["versions"][1]
+        with open_sqlite_connection() as connection:
+            for version_id, workspace_id, kind in (
+                ("calc-local", project_id, "studio_calc_v1"),
+                ("unit-local", project_id, "studio_unit_v1"),
+                ("calc-other", next_version["data_workspace_id"], "studio_calc_v1"),
+            ):
+                connection.execute(
+                    "INSERT INTO model_specs (id, workspace_id, title, engineering_question, created_at, updated_at) "
+                    "VALUES (?, ?, 'Correlation', 'q', '2026-01-01', '2026-01-01')", (f"spec-{version_id}", workspace_id),
+                )
+                connection.execute(
+                    "INSERT INTO model_versions (id, workspace_id, model_spec_id, version_label, implementation_kind, "
+                    "created_at) VALUES (?, ?, ?, 'v1', ?, '2026-01-01')",
+                    (version_id, workspace_id, f"spec-{version_id}", kind),
+                )
+                connection.execute(
+                    "INSERT INTO studio_published_versions (version_id, model_spec_id, contract_json, source_sha256, "
+                    "contract_sha256, created_at) VALUES (?, ?, '{}', 'src', 'contract', '2026-01-01')",
+                    (version_id, f"spec-{version_id}"),
+                )
+            connection.commit()
+        path = f"{base}/{component['id']}/models"
+        payload = {"model_version_id": "calc-local", "expected_revision": 1, "expected_active_version_id": project_id}
+        assert client.put(path, json={**payload, "model_version_id": "calc-other"}).status_code == 404
+        plant_only = client.put(path, json={**payload, "model_version_id": "unit-local"})
+        assert plant_only.status_code == 422 and "Plant" in plant_only.json()["detail"]
+        attached = client.put(path, json=payload)
+        assert attached.status_code == 200, attached.text
+        assert attached.json()["revision"] == 2
+        assert [(item["model_version_id"], item["node"], item["source_sha256"])
+                for item in attached.json()["models"]] == [("calc-local", "Physics", "src")]
+        assert client.put(path, json=payload).status_code == 409
+        assert client.put(path, json={**payload, "expected_revision": 2}).status_code == 409
+        assert client.get(base).json()[0]["models"][0]["model_version_id"] == "calc-local"

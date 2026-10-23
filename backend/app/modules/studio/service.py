@@ -196,6 +196,10 @@ _KINDS = {"process_unit": UNIT_KIND, "geometry": GEOMETRY_KIND,
 _CATEGORY_OF_KIND = {kind: category for category, kind in _KINDS.items()}
 
 
+def category_of_kind(implementation_kind: str) -> str:
+    return _CATEGORY_OF_KIND.get(implementation_kind, "calculation")
+
+
 def _require_workspace(connection, workspace_id: str) -> None:
     if connection.execute("SELECT 1 FROM workspaces WHERE id = ?", (workspace_id,)).fetchone() is None:
         raise StudioError("studio_workspace_not_found", "Workspace not found.")

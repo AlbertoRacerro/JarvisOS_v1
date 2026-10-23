@@ -159,6 +159,20 @@ SCHEMA_STATEMENTS = [
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS design_component_models (
+        component_id TEXT NOT NULL,
+        model_version_id TEXT NOT NULL,
+        node TEXT NOT NULL,
+        category TEXT NOT NULL,
+        source_sha256 TEXT NOT NULL,
+        contract_sha256 TEXT NOT NULL,
+        attached_at TEXT NOT NULL,
+        PRIMARY KEY (component_id, model_version_id),
+        FOREIGN KEY (component_id) REFERENCES design_components(id),
+        FOREIGN KEY (model_version_id) REFERENCES model_versions(id)
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS events (
         id TEXT PRIMARY KEY,
         workspace_id TEXT,

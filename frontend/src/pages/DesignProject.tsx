@@ -3,7 +3,7 @@ import AppLink, { type Navigate } from "../app/AppLink";
 import { bluecadArtifactContentUrl, getBluecadCandidateAggregate, listBluecadCandidates, listWorkspaces,
   type BluecadCandidate, type BluecadCandidateAggregateRead } from "../api/client";
 import {
-  activateDesignVersion, attachDesignGeometry, createDesignComponent, createDesignVersion, deepenDesignGeometry,
+  activateDesignVersion, attachDesignGeometry, attachDesignModel, COMPONENT_NODE_OF_CATEGORY, createDesignComponent, createDesignVersion, deepenDesignGeometry,
   editDesignComponent, getProcessGeometryMapping, listDesignComponents, listDesignVersions, openDesignUnit,
   type DesignComponent, type DesignVersionSet, type ProcessGeometryMapping
 } from "../api/designProject";
@@ -34,6 +34,7 @@ export default function DesignProject({ projectId, navigate, engineeringProperti
   const [geometryAggregate, setGeometryAggregate] = useState<BluecadCandidateAggregateRead | null>(null);
   const [geometryMapping, setGeometryMapping] = useState<ProcessGeometryMapping | null>(null);
   const [wallMm, setWallMm] = useState("3");
+  const [modelSelection, setModelSelection] = useState("");
   const [stage, setStage] = useState<(typeof STAGES)[number]>("Plant");
   const [workshop, setWorkshop] = useState<{ modelId: string | null; key: number } | null>(null);
   const [newVersion, setNewVersion] = useState("");
@@ -125,6 +126,10 @@ export default function DesignProject({ projectId, navigate, engineeringProperti
     }
     return () => { live = false; };
   }, [active?.data_workspace_id, selected?.source_draft_id, selected?.source_unit_id]);
+  const nodeModels = selected?.models.filter((item) => item.node === selectedNode) ?? [];
+  const libraryNames = new Map(library.map((item) => [item.id, `${item.name} · ${item.version_label}`]));
+  const compatibleModels = library.filter((item) => COMPONENT_NODE_OF_CATEGORY[item.category ?? "calculation"] === selectedNode
+    && !nodeModels.some((model) => model.model_version_id === item.id));
   const descendants = new Set<string>();
   if (selected) {
     const visit = (id: string) => {
@@ -136,7 +141,7 @@ export default function DesignProject({ projectId, navigate, engineeringProperti
   }
   const selectComponent = (item: DesignComponent) => {
     setSelectedId(item.id); setSelectedNode("Parameters");
-    setGeometrySelection("");
+    setGeometrySelection(""); setModelSelection("");
     setEditName(item.name); setEditParent(item.parent_id ?? "");
   };
   const openUnit = async (draftId: string, revision: string, unit: DraftObject) => {
@@ -229,8 +234,27 @@ export default function DesignProject({ projectId, navigate, engineeringProperti
                 <p>{sourceUnit.tag} · {sourceUnit.type} · Process 0D/1D model. Values below are read from the active version's Process draft.</p>
                 {Object.entries(sourceUnit.params ?? {}).length ? <dl>{Object.entries(sourceUnit.params ?? {}).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{value.value} {value.unit}</dd></div>)}</dl> : <p>No typed Process design parameters are set for this unit.</p>}
               </> : <p>Loading Process parameters…</p>}
-            </> : <p>{selectedNode === "Parameters" ? "No Process source is attached to this component." : `No ${selectedNode.toLowerCase()} capability is attached to this component yet.`}</p>}
+            </> : nodeModels.length ? null : <p>{selectedNode === "Parameters" ? "No Process source is attached to this component." : `No ${selectedNode.toLowerCase()} capability is attached to this component yet.`}</p>}
           </section>
+          {active && (selectedNode === "Physics" || selectedNode === "Geometry") ? <section aria-label={`${selectedNode} Studio models`}>
+            {nodeModels.length ? <ul>{nodeModels.map((item) => <li key={item.model_version_id}>
+              {libraryNames.get(item.model_version_id) ?? item.model_version_id.slice(0, 8)} · Studio {item.category} pinned at source {item.source_sha256.slice(0, 12)}
+            </li>)}</ul> : <p>No published Studio {selectedNode === "Physics" ? "calculation" : "geometry"} model is attached to this node.</p>}
+            <form onSubmit={(event) => {
+              event.preventDefault();
+              if (!modelSelection) return;
+              void perform(async () => { await attachDesignModel(projectId, active.id, selected, modelSelection); setModelSelection(""); });
+            }}>
+              <label htmlFor="design-node-model">Attach published Studio model</label>
+              <select id="design-node-model" value={modelSelection} onChange={(event) => setModelSelection(event.target.value)}>
+                <option value="">Choose a compatible model</option>
+                {compatibleModels.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.version_label}</option>)}
+              </select>
+              <button type="submit" disabled={busy || !modelSelection}>Attach model</button>
+              {!compatibleModels.length ? <p>No compatible published model in this version's Library.</p> : null}
+              <p>Process unit models and procedures attach to Plant through Process, not to a component node.</p>
+            </form>
+          </section> : null}
           {selectedNode === "Geometry" && active ? <form onSubmit={(event) => {
             event.preventDefault();
             if (!geometrySelection || (selected.source_draft_id && !sourceRevision)) return;
