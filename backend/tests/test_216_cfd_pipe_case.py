@@ -325,6 +325,15 @@ def test_residual_stream_flags_fatal_and_rejects_hostile_values() -> None:
     assert [row.iteration for row in parse_log(partial)] == [1, 2, 3]
 
 
+def test_residual_stream_drops_iteration_missing_execution_time_before_next_time() -> None:
+    log = (
+        "Time = 1\nSolving for Ux, Initial residual = 0.1, Final residual = 0.01, No Iterations 1\n"
+        "Time = 2\nSolving for Ux, Initial residual = 0.02, Final residual = 0.001, No Iterations 1\n"
+        "ExecutionTime = 2 s  ClockTime = 2 s\n"
+    )
+    assert [row.iteration for row in parse_log(log)] == [2]
+
+
 def test_convergence_requires_every_field_below_target_over_window() -> None:
     def log(values: list[float]) -> str:
         return "".join(

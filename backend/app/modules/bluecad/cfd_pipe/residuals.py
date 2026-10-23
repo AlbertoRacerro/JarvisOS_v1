@@ -73,12 +73,13 @@ class ResidualStream:
             self.solver_reported_end = True
         time = _TIME.match(stripped)
         if time:
-            done = [self._finish()] if self._current is not None else []
             value = float(time.group(1))
             if not math.isfinite(value) or value < 0 or value != int(value):
                 raise LogParseError(f"invalid steady iteration label {time.group(1)!r}")
+            # A new iteration does not make a prior one complete. Only its
+            # ExecutionTime line establishes that the solver finished it.
             self._current = {"iteration": int(value), "initial": {}, "final": {}}
-            return done
+            return []
         if self._current is None:
             return []
         solve = _SOLVE.search(stripped)
