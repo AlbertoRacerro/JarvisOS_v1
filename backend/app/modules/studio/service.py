@@ -229,7 +229,9 @@ def _read(connection, workspace_id: str, model_spec_id: str) -> dict:
             "annotations_stale": bool(row["annotations"] and row["annotations_source_sha256"] != row["source_sha256"]),
             "status": row["model_status"],
             "documentation": ({"derived": None, **contract} if _category(contract) == "procedure"
-                              else {"derived": derive_documentation(row["source"]), **contract}),
+                              else {"derived": derive_documentation(
+                                  row["source"], entry="build" if _category(contract) == "geometry" else "evaluate"
+                              ), **contract}),
             **({"steps": procedure.steps_of(row["source"]), "notice": procedure.NOTICE}
                if _category(contract) == "procedure" else {}),
             "test_cases": json.loads(row["test_cases_json"]), "last_test_report": report,

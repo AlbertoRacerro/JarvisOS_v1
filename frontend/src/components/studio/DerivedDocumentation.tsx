@@ -14,10 +14,10 @@ function Steps({ steps, selectedLine, onSelectLine }: { steps: StudioStep[] } & 
   })}</>;
 }
 
-export default function DerivedDocumentation({ derived, selectedLine, onSelectLine }: { derived: StudioDerived } & Selection) {
+export default function DerivedDocumentation({ derived, selectedLine, onSelectLine, entry = "evaluate" }: { derived: StudioDerived; entry?: "evaluate" | "build" } & Selection) {
   if (derived.status === "syntax_error") return <p className="studio-warning">Python syntax error{derived.error?.line ? ` on line ${derived.error.line}` : ""}: {derived.error?.message}. No equations can be derived until it is fixed.</p>;
   return <>
-    {derived.status === "entry_missing" ? <p className="studio-warning">The source does not define <code>evaluate</code>, so no equations can be derived.</p> : null}
+    {derived.status === "entry_missing" ? <p className="studio-warning">The source does not define <code>{entry}</code>, so no equations can be derived.</p> : null}
     {derived.unrendered_count ? <p className="studio-warning">{derived.unrendered_count} construct{derived.unrendered_count === 1 ? " is" : "s are"} shown as code because {derived.unrendered_count === 1 ? "it" : "they"} cannot be rendered as equations.</p> : null}
     {derived.module_constants.length ? <article><strong>Constants</strong><Steps steps={derived.module_constants} selectedLine={selectedLine} onSelectLine={onSelectLine} /></article> : null}
     {derived.functions.map((item) => <article key={item.name}><strong>{item.name}({item.args.join(", ")})</strong>{item.docstring ? <p className="studio-docstring">{item.docstring}</p> : null}{item.steps.length ? <Steps steps={item.steps} selectedLine={selectedLine} onSelectLine={onSelectLine} /> : <p>No statements to derive.</p>}</article>)}
