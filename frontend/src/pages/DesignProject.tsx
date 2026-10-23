@@ -3,9 +3,9 @@ import AppLink, { type Navigate } from "../app/AppLink";
 import { bluecadArtifactContentUrl, getBluecadCandidateAggregate, listBluecadCandidates, listWorkspaces,
   type BluecadCandidate, type BluecadCandidateAggregateRead } from "../api/client";
 import {
-  activateDesignVersion, attachDesignGeometry, createDesignComponent, createDesignVersion, editDesignComponent,
-  listDesignComponents, listDesignVersions, openDesignUnit,
-  type DesignComponent, type DesignVersionSet
+  activateDesignVersion, attachDesignGeometry, createDesignComponent, createDesignVersion, deepenDesignGeometry,
+  editDesignComponent, getProcessGeometryMapping, listDesignComponents, listDesignVersions, openDesignUnit,
+  type DesignComponent, type DesignVersionSet, type ProcessGeometryMapping
 } from "../api/designProject";
 import { listStudioLibrary, type StudioLibraryEntry } from "../api/studio";
 import ProcessDraftEditor from "../stages/ProcessDraftEditor";
@@ -13,6 +13,7 @@ import Studio from "./Studio";
 import type { EngineeringPropertiesController } from "../components/engineering/EngineeringProperties";
 import { getDraft, type DraftObject } from "../api/processDraft";
 import BluecadGlbViewer from "../components/BluecadGlbViewer";
+import NumericInput from "../components/ui/NumericInput";
 import "./designProject.css";
 
 const NODES = ["Parameters", "Geometry", "Materials", "Physics", "Mesh", "Studies", "Results", "Reduced model"] as const;
@@ -31,6 +32,8 @@ export default function DesignProject({ projectId, navigate, engineeringProperti
   const [geometryCandidates, setGeometryCandidates] = useState<BluecadCandidate[]>([]);
   const [geometrySelection, setGeometrySelection] = useState("");
   const [geometryAggregate, setGeometryAggregate] = useState<BluecadCandidateAggregateRead | null>(null);
+  const [geometryMapping, setGeometryMapping] = useState<ProcessGeometryMapping | null>(null);
+  const [wallMm, setWallMm] = useState("3");
   const [stage, setStage] = useState<(typeof STAGES)[number]>("Plant");
   const [workshop, setWorkshop] = useState<{ modelId: string | null; key: number } | null>(null);
   const [newVersion, setNewVersion] = useState("");
@@ -85,7 +88,17 @@ export default function DesignProject({ projectId, navigate, engineeringProperti
       if (live) setGeometryCandidates(items.filter((item) => item.status === "valid"));
     }).catch((cause: unknown) => { if (live) setError(cause instanceof Error ? cause.message : "BlueCad candidates are unavailable."); });
     return () => { live = false; };
-  }, [active?.data_workspace_id, active?.id]);
+  }, [active?.data_workspace_id, active?.id, selected?.geometry_candidate_id]);
+  useEffect(() => {
+    let live = true;
+    setGeometryMapping(null);
+    if (projectId && active && selected?.source_unit_id && selectedNode === "Geometry") {
+      void getProcessGeometryMapping(projectId, active.id, selected.id).then((item) => {
+        if (live) setGeometryMapping(item);
+      }).catch((cause: unknown) => { if (live) setError(cause instanceof Error ? cause.message : "Process geometry mapping is unavailable."); });
+    }
+    return () => { live = false; };
+  }, [projectId, active?.id, selected?.id, selected?.source_unit_id, selected?.revision, selectedNode, sourceRevision]);
   useEffect(() => {
     let live = true;
     setGeometryAggregate(null);
@@ -232,6 +245,18 @@ export default function DesignProject({ projectId, navigate, engineeringProperti
             <button type="submit" disabled={busy || !geometrySelection || Boolean(selected.source_draft_id && !sourceRevision)}>Attach geometry</button>
             {!geometryCandidates.length ? <p>No validated BlueCad candidates in this project version.</p> : null}
           </form> : null}
+          {selectedNode === "Geometry" && active && selected.source_unit_id ? geometryMapping?.supported ? <form onSubmit={(event) => {
+            event.preventDefault();
+            const wall = Number(wallMm);
+            if (!(wall > 0)) return;
+            void perform(() => deepenDesignGeometry(projectId, active.id, selected, wall, geometryMapping.draft_revision));
+          }}>
+            <p>Deepen from Process: {geometryMapping.unit_type} → BlueCad {geometryMapping.template} template · inner Ø {geometryMapping.inner_d_mm?.toFixed(2)} mm · length {geometryMapping.length_mm?.toFixed(1)} mm.</p>
+            <p>{geometryMapping.basis} Wall thickness is not a Process parameter, so state it here.</p>
+            <label htmlFor="design-geometry-wall">Wall thickness (mm)</label>
+            <NumericInput id="design-geometry-wall" min={0.5} max={100} value={wallMm} onValueChange={setWallMm} />
+            <button type="submit" disabled={busy || !(Number(wallMm) > 0)}>Generate and attach geometry</button>
+          </form> : <p>{geometryMapping ? geometryMapping.basis : "Checking Process geometry mapping…"}</p> : null}
         </> : null}
         {stage === "Plant" && !selected && active ? <>
           <p>Flowsheet edits and runs use this version's Process data context. The Process editor owns its revisions and solver results.</p>

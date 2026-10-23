@@ -43,3 +43,15 @@ export const attachDesignGeometry = (projectId: string, versionId: string, compo
     candidate_id: candidateId, expected_revision: component.revision, expected_active_version_id: versionId,
     expected_draft_revision: draftRevision
   });
+export type ProcessGeometryMapping = {
+  supported: boolean; unit_type: string; template: string | null; inner_d_mm: number | null; length_mm: number | null;
+  basis: string; draft_revision: string;
+};
+export const getProcessGeometryMapping = (projectId: string, versionId: string, componentId: string) =>
+  request<ProcessGeometryMapping>(`${components(projectId, versionId)}/${encodeURIComponent(componentId)}/geometry/process-mapping`);
+export const deepenDesignGeometry = (projectId: string, versionId: string, component: DesignComponent,
+  wallMm: number, draftRevision: string) =>
+  request<DesignComponent>(`${components(projectId, versionId)}/${encodeURIComponent(component.id)}/geometry/from-process`, "POST", {
+    wall_t_mm: wallMm, expected_revision: component.revision, expected_active_version_id: versionId,
+    expected_draft_revision: draftRevision
+  });

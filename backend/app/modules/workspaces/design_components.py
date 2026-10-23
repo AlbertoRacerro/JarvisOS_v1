@@ -1,11 +1,13 @@
 """Version-scoped Design component tree with optimistic edits."""
 
+import math
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from app.core.database import open_sqlite_connection
+from app.modules.bluecad.template import TemplateError, TubeTemplateCreate, create_template_candidate
 from app.modules.events.service import log_event, utc_now
 from app.modules.process_stack import draft
 from app.modules.process_stack.draft import DraftError
@@ -56,6 +58,78 @@ class GeometryAttachment(BaseModel):
     expected_revision: int = Field(ge=1)
     expected_active_version_id: str
     expected_draft_revision: str | None = None
+
+
+class ProcessGeometryHandoff(BaseModel):
+    wall_t_mm: float = Field(gt=0)
+    expected_revision: int = Field(ge=1)
+    expected_active_version_id: str
+    expected_draft_revision: str
+
+
+class ProcessGeometryMapping(BaseModel):
+    supported: bool
+    unit_type: str
+    template: str | None = None
+    inner_d_mm: float | None = None
+    length_mm: float | None = None
+    basis: str
+    draft_revision: str
+
+
+def _si(unit: dict, key: str) -> float | None:
+    value = (unit.get("params") or {}).get(key)
+    return float(value["si"]) if isinstance(value, dict) and value.get("si") is not None else None
+
+
+def _tube_mapping(unit: dict, draft_revision: str) -> ProcessGeometryMapping:
+    """Map typed Process unit parameters onto the BlueCad tube template, or say why not."""
+
+    kind = unit.get("type", "")
+    inner = length = None
+    if kind == "PhotobioreactorT1":
+        inner, length = _si(unit, "tube_inner_diameter"), _si(unit, "tube_length")
+        basis = "One representative PBR tube from tube_inner_diameter and tube_length; tube_count and layout are not modelled."
+    elif kind == "PFR":
+        volume, length = _si(unit, "volume"), _si(unit, "length")
+        inner = math.sqrt(4 * volume / (math.pi * length)) if volume and length else None
+        basis = "PFR as one straight tube; inner diameter derived as sqrt(4·volume/(π·length))."
+    else:
+        return ProcessGeometryMapping(
+            supported=False, unit_type=kind, draft_revision=draft_revision,
+            basis=f"No parametric BlueCad geometry mapping exists for Process unit type {kind or 'unknown'} yet.",
+        )
+    if not inner or not length:
+        return ProcessGeometryMapping(
+            supported=False, unit_type=kind, draft_revision=draft_revision,
+            basis="The Process unit is missing the typed dimensions this mapping needs.",
+        )
+    return ProcessGeometryMapping(
+        supported=True, unit_type=kind, template="tube", inner_d_mm=inner * 1000, length_mm=length * 1000,
+        basis=basis, draft_revision=draft_revision,
+    )
+
+
+def _process_unit(connection, project_id: str, version_id: str, component_id: str) -> tuple[str, dict, str]:
+    _component(connection, project_id, version_id, component_id)
+    source = connection.execute(
+        "SELECT draft_id, unit_id FROM design_component_units WHERE component_id = ?", (component_id,)
+    ).fetchone()
+    if source is None:
+        raise HTTPException(422, detail="This component has no Process unit source.")
+    version = connection.execute(
+        "SELECT data_workspace_id FROM design_project_versions WHERE id = ? AND project_id = ?",
+        (version_id, project_id),
+    ).fetchone()
+    try:
+        process = draft.projection(version["data_workspace_id"], source["draft_id"])
+    except DraftError as error:
+        raise HTTPException(error.status, detail=str(error)) from error
+    unit = next((item for item in process["objects"] if item["id"] == source["unit_id"]
+                 and item["kind"] == "unit"), None)
+    if unit is None:
+        raise HTTPException(404, detail="Process unit not found in this version.")
+    return version["data_workspace_id"], unit, process["revision"]
 
 
 def _read_component(connection, row) -> ComponentRead:
@@ -269,3 +343,47 @@ def attach_component_geometry(
         row = _component(connection, project_id, version_id, component_id)
         connection.commit()
         return _read_component(connection, row)
+
+
+@router.get("/{component_id}/geometry/process-mapping", response_model=ProcessGeometryMapping)
+def process_geometry_mapping(project_id: str, version_id: str, component_id: str) -> ProcessGeometryMapping:
+    with open_sqlite_connection() as connection:
+        _, unit, revision = _process_unit(connection, project_id, version_id, component_id)
+    return _tube_mapping(unit, revision)
+
+
+@router.post("/{component_id}/geometry/from-process", response_model=ComponentRead)
+def deepen_component_geometry(
+    project_id: str, version_id: str, component_id: str, payload: ProcessGeometryHandoff,
+) -> ComponentRead:
+    """Build a template candidate from typed Process dimensions, then attach it through the guarded owner."""
+
+    with open_sqlite_connection() as connection:
+        _active_version(connection, project_id, version_id, payload.expected_active_version_id)
+        if _component(connection, project_id, version_id, component_id)["revision"] != payload.expected_revision:
+            raise HTTPException(409, detail="Component changed; reload before generating geometry.")
+        workspace_id, unit, revision = _process_unit(connection, project_id, version_id, component_id)
+    if revision != payload.expected_draft_revision:
+        raise HTTPException(409, detail="Process draft changed; reload before generating geometry.")
+    mapping = _tube_mapping(unit, revision)
+    if not mapping.supported:
+        raise HTTPException(422, detail=mapping.basis)
+    try:
+        request = TubeTemplateCreate(template="tube", params={
+            "outer_d_mm": mapping.inner_d_mm + 2 * payload.wall_t_mm,
+            "wall_t_mm": payload.wall_t_mm, "length_mm": mapping.length_mm,
+        })
+    except ValidationError as error:
+        raise HTTPException(422, detail="Process dimensions are outside the BlueCad tube template range: "
+                            + "; ".join(item["msg"] for item in error.errors())) from error
+    try:
+        candidate = create_template_candidate(workspace_id, request)
+    except TemplateError as error:
+        raise HTTPException(error.status_code, detail=error.message) from error
+    if candidate.status != "valid":
+        raise HTTPException(409, detail=f"BlueCad candidate {candidate.id} did not validate; it was not attached.")
+    return attach_component_geometry(project_id, version_id, component_id, GeometryAttachment(
+        candidate_id=candidate.id, expected_revision=payload.expected_revision,
+        expected_active_version_id=payload.expected_active_version_id,
+        expected_draft_revision=payload.expected_draft_revision,
+    ))

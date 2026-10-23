@@ -231,3 +231,44 @@ def test_geometry_attachment_checks_version_candidate_and_component_revision() -
             "version_id": next_version["id"], "expected_active_version_id": project_id,
         })
         assert client.put(path, json={**payload, "expected_revision": 2}).status_code == 409
+
+
+def test_deepen_maps_typed_process_dimensions_into_attached_tube_geometry() -> None:
+    initialize_database()
+    with TestClient(app) as client:
+        project_id = client.post("/workspaces", json={"name": "Deepen", "slug": "deepen"}).json()["id"]
+        process = draft.create_draft(project_id, "Plant")
+        adapter = TypeAdapter(DraftOp)
+        changed = draft.patch(project_id, process["draft_id"], process["revision"], [
+            adapter.validate_python({"op": "add_unit", "id": "pfr", "type": "PFR", "tag": "R1", "x": 0, "y": 0}),
+            adapter.validate_python({"op": "add_unit", "id": "pump", "type": "Pump", "tag": "P1", "x": 1, "y": 0}),
+            adapter.validate_python({"op": "set_unit_params", "unit": "pfr", "mode": "adiabatic", "values": {
+                "volume": {"value": 0.002, "unit": "m3"}, "length": {"value": 1, "unit": "m"}}}),
+        ])
+        base = f"/workspaces/{project_id}/design-versions/{project_id}/components"
+        entry = {"draft_id": process["draft_id"], "expected_draft_revision": changed["revision"],
+                 "expected_active_version_id": project_id}
+        reactor = client.post(f"{base}/from-unit", json={**entry, "unit_id": "pfr"}).json()
+        pump = client.post(f"{base}/from-unit", json={**entry, "unit_id": "pump"}).json()
+
+        mapping = client.get(f"{base}/{reactor['id']}/geometry/process-mapping").json()
+        assert mapping["supported"] is True and mapping["template"] == "tube"
+        assert abs(mapping["inner_d_mm"] - 50.46265) < 1e-4 and mapping["length_mm"] == 1000
+        unsupported = client.get(f"{base}/{pump['id']}/geometry/process-mapping").json()
+        assert unsupported["supported"] is False and "Pump" in unsupported["basis"]
+
+        handoff = {"wall_t_mm": 3, "expected_revision": 1, "expected_active_version_id": project_id,
+                   "expected_draft_revision": changed["revision"]}
+        assert client.post(f"{base}/{pump['id']}/geometry/from-process", json=handoff).status_code == 422
+        assert client.post(f"{base}/{reactor['id']}/geometry/from-process",
+                           json={**handoff, "expected_draft_revision": "stale"}).status_code == 409
+        assert client.post(f"{base}/{reactor['id']}/geometry/from-process",
+                           json={**handoff, "wall_t_mm": 150}).status_code == 422
+        deepened = client.post(f"{base}/{reactor['id']}/geometry/from-process", json=handoff)
+        assert deepened.status_code == 200, deepened.text
+        component = deepened.json()
+        assert component["revision"] == 2
+        assert component["geometry_source_draft_revision"] == changed["revision"]
+        candidate = client.get(f"/workspaces/{project_id}/bluecad/candidates/{component['geometry_candidate_id']}")
+        assert candidate.json()["status"] == "valid" and candidate.json()["origin"] == "template"
+        assert client.post(f"{base}/{reactor['id']}/geometry/from-process", json=handoff).status_code == 409
