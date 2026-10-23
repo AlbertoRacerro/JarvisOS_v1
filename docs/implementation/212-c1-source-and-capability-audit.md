@@ -22,6 +22,7 @@ Date: 2026-10-23. Scope: the two tubular AlgaePARC systems in [spec 212](../spec
 | Summer mean measured dilution | 0.25/day | 0.27/day | Known, S01 Table 1; different operations |
 | Summer mean ground areal productivity | 12.1 g/m²/day | 19.4 g/m²/day | Known, S01 Table 1, July–August 2013, 36 days each |
 | Summer mean volumetric productivity | 0.65 g/L/day | 0.57 g/L/day | Same source/window |
+| Outdoor culture temperature | 20–30 °C | 20–30 °C | S01 outdoor methods give the maintained range, not the time series or exact values for either 36-day window |
 | Time-aligned incident light, temperature, harvest and outages | — | — | Missing from available S01 tables; search for raw dataset remains open |
 | CCAP 211/78 growth/extinction/temperature parameter set | — | — | Missing as a jointly sourced, independently verified card |
 | Exact array/stripper/pump operating state during the 36 days | — | — | Incomplete; design dimensions do not establish as-operated performance |
@@ -45,6 +46,24 @@ S01 explicitly used separate circulation pumps, service bubble columns (0.15 and
 | Hydraulic screening | 107 evaluator and 170/172 PBR diagnostics | Straight smooth tube/declared pump efficiency; no measured C1 pump curve, bends, manifold or degasser pressure loss. |
 | Thermal/carbon/O₂ inhibition and fouling | No qualified C1 owner | Tier 1 temperature is prescribed, carbon is nonlimiting, O₂ is reported without growth inhibition, and fouling/restarts are absent. 175 is planned but not ready. |
 | Provenance and qualification | Existing 102/106 evaluation evidence and 169 card pins | A green run does not promote a model or observation into scientific qualification. |
+
+## Quantitative C1 comparison at this checkpoint
+
+The observation is the 36-day July–August 2013 mean, not a per-day trace. A comparable prediction is currently unavailable for either layout: a pinned C1-suitable model card and time-aligned 2013 light/temperature/harvest inputs have not been established. Thus the prediction and prediction-minus-observation discrepancy are **not computable**, rather than zero. The available geometric and published-output arithmetic is:
+
+| Quantity | Horizontal | Fence | Interpretation |
+| --- | ---: | ---: | --- |
+| Tube cylinder volume, `πD²L/4` | 0.3989 m³ | 0.9307 m³ | `D=0.046 m`; `L=240/560 m` from S01 methods |
+| Reported illuminated volume, share × total | 0.4088 m³ | 0.7526 m³ | S01 Table 3; cylinder-minus-reported is −0.0099/0.1781 m³ |
+| Observed ground areal productivity | 12.1 g m⁻² d⁻¹ | 19.4 g m⁻² d⁻¹ | S01 Table 1; occupied ground area is 27/31 m² |
+| Observed volumetric productivity | 0.65 g L⁻¹ d⁻¹ | 0.57 g L⁻¹ d⁻¹ | S01 Table 1; total working volume is 560/1060 L |
+| Areal implied daily biomass, productivity × ground area | 326.7 g d⁻¹ | 601.4 g d⁻¹ | Observed-mean arithmetic, not a simulation |
+| Volumetric implied daily biomass, productivity × total volume | 364.0 g d⁻¹ | 604.2 g d⁻¹ | Horizontal value is 11.4% above the areal implication; fence is 0.47% above |
+| C1 model prediction / discrepancy | unavailable / not computable | unavailable / not computable | Missing source-matched forcing and parameter basis; no scientific agreement claim |
+
+The **bounded conclusion is inconclusive** for model agreement and orientation causality. The observations themselves show higher ground areal productivity for the fence system and higher volumetric productivity for the horizontal system under different operated dilution rates and geometries. The unexplained denominator and illuminated-volume residuals above must remain visible in any later simulation comparison.
+
+A further [2025 primary study of CCAP 211/78 kinetics](https://doi.org/10.1016/j.algal.2025.104196) is a candidate parameter source, but its fitted parameters and light law come from a different ProviAPT indoor geometry and conditions. Its publisher abstract and accessible search extract do not establish a complete T1 card or 2013 outdoor forcing. No value from it has been promoted into this C1 run.
 
 ## Bounded next experiment
 
