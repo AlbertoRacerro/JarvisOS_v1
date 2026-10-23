@@ -10,6 +10,7 @@ export type DesignComponent = {
   id: string; project_id: string; version_id: string; parent_id: string | null;
   name: string; revision: number; created_at: string; updated_at: string;
   source_draft_id: string | null; source_unit_id: string | null;
+  geometry_candidate_id: string | null; geometry_source_draft_revision: string | null;
 };
 
 const base = (projectId: string) => `/workspaces/${encodeURIComponent(projectId)}/design-versions`;

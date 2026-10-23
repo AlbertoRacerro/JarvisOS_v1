@@ -177,7 +177,12 @@ export default function DesignProject({ projectId, navigate, engineeringProperti
         {selected ? <>
           <div className="design-project__nodes" aria-label="Component model tree">{NODES.map((node) => <button key={node} type="button" aria-pressed={selectedNode === node} onClick={() => { setSelectedNode(node); setStage(node === "Geometry" ? "CAD" : node === "Reduced model" ? "Reduced model" : node === "Physics" || node === "Mesh" ? "CFD" : "Plant"); }}>{node}</button>)}</div>
           <section aria-label={`${selectedNode} details`}><h3>{selectedNode}</h3>
-            {selectedNode === "Parameters" && selected.source_unit_id ? <>
+            {selectedNode === "Geometry" && selected.geometry_candidate_id ? <>
+              <p>A validated BlueCad candidate is attached to this component in the active project version.</p>
+              {selected.geometry_source_draft_revision ? <p>Process source revision: {selected.geometry_source_draft_revision.slice(0, 12)}</p> : null}
+              <details><summary>Geometry reference</summary><code>{selected.geometry_candidate_id}</code></details>
+              <p>Geometry remains a separate BlueCad candidate; no CFD or reduced model is implied.</p>
+            </> : selectedNode === "Parameters" && selected.source_unit_id ? <>
               {sourceError ? <p role="status">{sourceError}</p> : sourceUnit ? <>
                 <p>{sourceUnit.tag} · {sourceUnit.type} · Process 0D/1D model. Values below are read from the active version's Process draft.</p>
                 {Object.entries(sourceUnit.params ?? {}).length ? <dl>{Object.entries(sourceUnit.params ?? {}).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{value.value} {value.unit}</dd></div>)}</dl> : <p>No typed Process design parameters are set for this unit.</p>}

@@ -40,6 +40,8 @@ class ComponentRead(BaseModel):
     updated_at: str
     source_draft_id: str | None = None
     source_unit_id: str | None = None
+    geometry_candidate_id: str | None = None
+    geometry_source_draft_revision: str | None = None
 
 
 class UnitEntry(BaseModel):
@@ -49,12 +51,24 @@ class UnitEntry(BaseModel):
     expected_active_version_id: str
 
 
+class GeometryAttachment(BaseModel):
+    candidate_id: str
+    expected_revision: int = Field(ge=1)
+    expected_active_version_id: str
+    expected_draft_revision: str | None = None
+
+
 def _read_component(connection, row) -> ComponentRead:
     source = connection.execute(
         "SELECT draft_id, unit_id FROM design_component_units WHERE component_id = ?", (row["id"],)
     ).fetchone()
+    geometry = connection.execute(
+        "SELECT candidate_id, source_draft_revision FROM design_component_geometry WHERE component_id = ?", (row["id"],)
+    ).fetchone()
     return ComponentRead(**dict(row), source_draft_id=source["draft_id"] if source else None,
-                         source_unit_id=source["unit_id"] if source else None)
+                         source_unit_id=source["unit_id"] if source else None,
+                         geometry_candidate_id=geometry["candidate_id"] if geometry else None,
+                         geometry_source_draft_revision=geometry["source_draft_revision"] if geometry else None)
 
 
 def _active_version(connection, project_id: str, version_id: str, expected: str) -> None:
@@ -197,6 +211,61 @@ def edit_design_component(
                   target_type="DesignComponent", target_id=component_id, workspace_id=project_id,
                   payload={"version_id": version_id, "revision": payload.expected_revision + 1,
                            "parent_id": payload.parent_id})
+        row = _component(connection, project_id, version_id, component_id)
+        connection.commit()
+        return _read_component(connection, row)
+
+
+@router.put("/{component_id}/geometry", response_model=ComponentRead)
+def attach_component_geometry(
+    project_id: str, version_id: str, component_id: str, payload: GeometryAttachment,
+) -> ComponentRead:
+    with open_sqlite_connection() as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        _active_version(connection, project_id, version_id, payload.expected_active_version_id)
+        current = _component(connection, project_id, version_id, component_id)
+        if current["revision"] != payload.expected_revision:
+            raise HTTPException(409, detail="Component changed; reload before attaching geometry.")
+        version = connection.execute(
+            "SELECT data_workspace_id FROM design_project_versions WHERE id = ? AND project_id = ?",
+            (version_id, project_id),
+        ).fetchone()
+        candidate = connection.execute(
+            "SELECT id, status FROM bluecad_candidates WHERE id = ? AND workspace_id = ?",
+            (payload.candidate_id, version["data_workspace_id"]),
+        ).fetchone()
+        if candidate is None:
+            raise HTTPException(404, detail="BlueCad candidate not found in this Design version.")
+        if candidate["status"] != "valid":
+            raise HTTPException(409, detail="Only a validated BlueCad candidate can be attached.")
+        source = connection.execute(
+            "SELECT draft_id FROM design_component_units WHERE component_id = ?", (component_id,)
+        ).fetchone()
+        if source:
+            if payload.expected_draft_revision is None:
+                raise HTTPException(422, detail="Process draft revision is required for this component.")
+            try:
+                process = draft.projection(version["data_workspace_id"], source["draft_id"])
+            except DraftError as error:
+                raise HTTPException(error.status, detail=str(error)) from error
+            if process["revision"] != payload.expected_draft_revision:
+                raise HTTPException(409, detail="Process draft changed; reload before attaching geometry.")
+        elif payload.expected_draft_revision is not None:
+            raise HTTPException(422, detail="This component has no Process draft source.")
+        now = utc_now()
+        connection.execute(
+            "INSERT INTO design_component_geometry (component_id, candidate_id, source_draft_revision, updated_at) "
+            "VALUES (?, ?, ?, ?) ON CONFLICT(component_id) DO UPDATE SET candidate_id = excluded.candidate_id, "
+            "source_draft_revision = excluded.source_draft_revision, updated_at = excluded.updated_at",
+            (component_id, payload.candidate_id, payload.expected_draft_revision, now),
+        )
+        connection.execute(
+            "UPDATE design_components SET revision = revision + 1, updated_at = ? WHERE id = ?", (now, component_id),
+        )
+        log_event(connection, event_type="DesignComponentGeometryAttached", actor="local-user",
+                  target_type="DesignComponent", target_id=component_id, workspace_id=project_id,
+                  payload={"version_id": version_id, "candidate_id": payload.candidate_id,
+                           "source_draft_revision": payload.expected_draft_revision})
         row = _component(connection, project_id, version_id, component_id)
         connection.commit()
         return _read_component(connection, row)

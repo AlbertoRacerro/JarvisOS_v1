@@ -159,6 +159,27 @@ def test_process_unit_opens_one_version_scoped_component() -> None:
         assert client.post(f"{base}/from-unit", json={**payload, "unit_id": "missing"}).status_code == 404
         assert client.post(f"{base}/from-unit", json={**payload, "expected_draft_revision": "stale"}).status_code == 409
 
+        with open_sqlite_connection() as connection:
+            connection.execute(
+                "INSERT INTO bluecad_candidates (id, workspace_id, brief_text, brief_digest, status, "
+                "origin, loop_config_json, created_at, updated_at) VALUES "
+                "('pump-cad', ?, 'pump', 'digest', 'valid', 'template', '{}', '2026-01-01', '2026-01-01')",
+                (project_id,),
+            )
+            connection.commit()
+        geometry_path = f"{base}/{first.json()['id']}/geometry"
+        geometry_payload = {"candidate_id": "pump-cad", "expected_revision": 1,
+                            "expected_active_version_id": project_id}
+        assert client.put(geometry_path, json=geometry_payload).status_code == 422
+        assert client.put(geometry_path, json={
+            **geometry_payload, "expected_draft_revision": "stale",
+        }).status_code == 409
+        attached = client.put(geometry_path, json={
+            **geometry_payload, "expected_draft_revision": changed["revision"],
+        })
+        assert attached.status_code == 200, attached.text
+        assert attached.json()["geometry_source_draft_revision"] == changed["revision"]
+
         version = client.post(f"/workspaces/{project_id}/design-versions", json={
             "label": "Next", "expected_active_version_id": project_id,
         }).json()["versions"][1]
@@ -169,3 +190,44 @@ def test_process_unit_opens_one_version_scoped_component() -> None:
         assert client.post(f"{next_base}/from-unit", json={
             **payload, "expected_active_version_id": version["id"],
         }).status_code == 404
+
+
+def test_geometry_attachment_checks_version_candidate_and_component_revision() -> None:
+    initialize_database()
+    with TestClient(app) as client:
+        project_id = client.post("/workspaces", json={"name": "Geometry", "slug": "geometry"}).json()["id"]
+        base = f"/workspaces/{project_id}/design-versions/{project_id}/components"
+        component = client.post(base, json={
+            "name": "Tube", "expected_active_version_id": project_id,
+        }).json()
+        next_version = client.post(f"/workspaces/{project_id}/design-versions", json={
+            "label": "Next", "expected_active_version_id": project_id,
+        }).json()["versions"][1]
+        with open_sqlite_connection() as connection:
+            for candidate_id, workspace_id, status in (
+                ("valid-local", project_id, "valid"),
+                ("pending-local", project_id, "generating"),
+                ("valid-other", next_version["data_workspace_id"], "valid"),
+            ):
+                connection.execute(
+                    "INSERT INTO bluecad_candidates (id, workspace_id, brief_text, brief_digest, status, "
+                    "origin, loop_config_json, created_at, updated_at) VALUES (?, ?, 'tube', 'digest', ?, "
+                    "'template', '{}', '2026-01-01', '2026-01-01')",
+                    (candidate_id, workspace_id, status),
+                )
+            connection.commit()
+        path = f"{base}/{component['id']}/geometry"
+        payload = {"candidate_id": "valid-local", "expected_revision": 1,
+                   "expected_active_version_id": project_id}
+        assert client.put(path, json={**payload, "candidate_id": "valid-other"}).status_code == 404
+        assert client.put(path, json={**payload, "candidate_id": "pending-local"}).status_code == 409
+        attached = client.put(path, json=payload)
+        assert attached.status_code == 200, attached.text
+        assert attached.json()["geometry_candidate_id"] == "valid-local"
+        assert attached.json()["revision"] == 2
+        assert client.get(base).json()[0]["geometry_candidate_id"] == "valid-local"
+        assert client.put(path, json=payload).status_code == 409
+        client.post(f"/workspaces/{project_id}/design-versions/activate", json={
+            "version_id": next_version["id"], "expected_active_version_id": project_id,
+        })
+        assert client.put(path, json={**payload, "expected_revision": 2}).status_code == 409

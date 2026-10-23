@@ -142,6 +142,16 @@ SCHEMA_STATEMENTS = [
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS design_component_geometry (
+        component_id TEXT PRIMARY KEY,
+        candidate_id TEXT NOT NULL,
+        source_draft_revision TEXT,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (component_id) REFERENCES design_components(id),
+        FOREIGN KEY (candidate_id) REFERENCES bluecad_candidates(id)
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS events (
         id TEXT PRIMARY KEY,
         workspace_id TEXT,
