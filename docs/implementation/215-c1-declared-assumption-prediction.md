@@ -96,7 +96,13 @@ The existing 169/170 card still needs a source-backed or explicitly assumed
 stoichiometry and oxygen yield. The 2025 paper's two-flux optical coefficients
 and optimum light response cannot be inserted into the 170 cylindrical
 Beer–Lambert/Monod fields without a declared model-form approximation.
-No complete card has been created and no biomass prediction has been run.
+[`card_candidates.py`](../../scripts/qualification/215/card_candidates.py) now
+pins the exact same-strain conversions that can be made without that
+approximation, with source locator, original conditions and candidate state.
+It explicitly lists the 2025 optimum irradiance and maintenance loss as
+nontransferable to the current 170 Monod/first-order symbols, and names every
+missing 170 parameter. This is an incomplete audit record, not a stored 169
+card. No complete card has been created and no biomass prediction has been run.
 
 ## Declared geometry and operation matrix
 
