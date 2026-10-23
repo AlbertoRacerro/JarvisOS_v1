@@ -1,0 +1,13 @@
+{
+  "name": "C1 surrogate KNMI Deelen July-August 2013",
+  "timestamp_column": "time_end_utc",
+  "resolution_minutes": 60,
+  "stamp_convention": "end",
+  "channels": {
+    "ghi": {"column": "ghi_w_m2", "unit": "W m-2"},
+    "dni": {"column": "dni_w_m2", "unit": "W m-2"},
+    "dhi": {"column": "dhi_w_m2", "unit": "W m-2"},
+    "par": {"column": "par_umol_m2_s", "unit": "umol m-2 s-1"},
+    "air_temperature": {"column": "air_temperature_c", "unit": "°C"}
+  }
+}

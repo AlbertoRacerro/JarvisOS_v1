@@ -1,0 +1,3844 @@
+{
+ "days": null,
+ "factors": {
+  "K_I": {
+   "law": [
+    "loguniform",
+    7.64,
+    30.56
+   ],
+   "levels": [
+    7.64,
+    30.56
+   ],
+   "state": "assumed factor-2 screening range around cross-strain Lima 2022; no source interval"
+  },
+  "K_j_0": {
+   "law": [
+    "uniform",
+    0.00045179332601133135,
+    0.0013553799780339942
+   ],
+   "levels": [
+    0.00045179332601133135,
+    0.0013553799780339942
+   ],
+   "state": "cross-strain Sanchez-Bayo 2020 4 +/- 2 mg NO3/L converted to N"
+  },
+  "axis_azimuth_deg": {
+   "law": [
+    "choice",
+    [
+     0.0,
+     45.0,
+     90.0
+    ]
+   ],
+   "levels": [
+    45.0,
+    90.0
+   ],
+   "state": "scenario; S01 gives no array azimuth"
+  },
+  "cross_section": {
+   "law": [
+    "choice",
+    [
+     "primary",
+     "alternative"
+    ]
+   ],
+   "levels": [
+    "alternative"
+   ],
+   "state": "assumed optical module; 3x1/1x3 horizontal, 1x7/2x3 fence"
+  },
+  "culture_temperature_c": {
+   "law": [
+    "uniform",
+    20.0,
+    30.0
+   ],
+   "levels": [
+    20.0,
+    30.0
+   ],
+   "state": "assumed constant inside S01's maintained 20-30 C"
+  },
+  "forcing_window": {
+   "law": [
+    "choice",
+    [
+     "low",
+     "median",
+     "high"
+    ]
+   ],
+   "levels": [
+    "low",
+    "median",
+    "high"
+   ],
+   "state": "scenario; lowest/median/highest-PAR 36-day KNMI surrogate windows"
+  },
+  "illuminated_volume_basis": {
+   "law": [
+    "choice",
+    [
+     "tube_cylinder",
+     "reported_illuminated_share"
+    ]
+   ],
+   "levels": [
+    "reported_illuminated_share"
+   ],
+   "state": "S01 reported illuminated share or calculated tube cylinder"
+  },
+  "initial_biomass_kg_m3": {
+   "law": [
+    "loguniform",
+    0.5,
+    2.0
+   ],
+   "levels": [
+    0.5,
+    2.0
+   ],
+   "state": "assumed start; S01 reports no aligned initial state"
+  },
+  "k_X": {
+   "law": [
+    "uniform",
+    200.0,
+    380.0
+   ],
+   "levels": [
+    380.0
+   ],
+   "state": "cross-strain Lima 2022 annular/flat fitted values as bounds"
+  },
+  "k_d": {
+   "law": [
+    "loguniform",
+    0.0023,
+    0.0092
+   ],
+   "levels": [
+    0.0023,
+    0.0092
+   ],
+   "state": "assumed factor-2 screening range around cross-strain Lima 2022; no source interval"
+  },
+  "mu_max": {
+   "law": [
+    "uniform",
+    0.08333333333333334,
+    0.125
+   ],
+   "levels": [
+    0.08333333333333334,
+    0.125
+   ],
+   "state": "assumed +/-20% screening range around same-strain 2025 value; no source interval used"
+  }
+ },
+ "plan_sha256": "bfdcf00668bdc09a06eac2b3268a49cec36115974e825bdcacaba48b5727c33c",
+ "results": [
+  {
+   "draw": {},
+   "factor": null,
+   "id": "central",
+   "kind": "central",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 7.283680738976173e-13,
+     "harvest_g": 31025.7347269534,
+     "harvest_only_areal_g_m2_day": 27.800837568954663,
+     "illuminated_volume_m3": 0.9306654076994403,
+     "inventory_change_g": 1947.6468424057543,
+     "min_pbr_nitrogen_kg_m3": 0.268113421712062,
+     "predicted_areal_g_m2_day": 29.546040832759097,
+     "predicted_volumetric_g_l_day": 0.864082326241068,
+     "produced_g": 32973.38156935915
+    },
+    "horizontal": {
+     "biomass_residual_rel": 7.534735301097914e-13,
+     "harvest_g": 12920.02141136672,
+     "harvest_only_areal_g_m2_day": 13.292203098113909,
+     "illuminated_volume_m3": 0.3988566032997601,
+     "inventory_change_g": 794.9672377931983,
+     "min_pbr_nitrogen_kg_m3": 0.3036697004709045,
+     "predicted_areal_g_m2_day": 14.110070626707735,
+     "predicted_volumetric_g_l_day": 0.6803069766448373,
+     "produced_g": 13714.988649159919
+    }
+   },
+   "summary_sha256": "16cd2450156b2876e67e8e9fd4965b03a42dfecd3a5e4178e9f864881523819f"
+  },
+  {
+   "draw": {
+    "forcing_window": "low"
+   },
+   "factor": "forcing_window",
+   "id": "oat_forcing_window_low",
+   "kind": "oat",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 3.251250386597045e-13,
+     "harvest_g": 29157.0668372147,
+     "harvest_only_areal_g_m2_day": 26.126403975998837,
+     "illuminated_volume_m3": 0.9306654076994403,
+     "inventory_change_g": 1980.8554690776416,
+     "min_pbr_nitrogen_kg_m3": 0.2755671865872168,
+     "predicted_areal_g_m2_day": 27.90136407373866,
+     "predicted_volumetric_g_l_day": 0.8159832889489607,
+     "produced_g": 31137.92230629234
+    },
+    "horizontal": {
+     "biomass_residual_rel": 2.6766272896206866e-13,
+     "harvest_g": 12125.788224852158,
+     "harvest_only_areal_g_m2_day": 12.475090766308805,
+     "illuminated_volume_m3": 0.3988566032997601,
+     "inventory_change_g": 800.525612608153,
+     "min_pbr_nitrogen_kg_m3": 0.31207681842265045,
+     "predicted_areal_g_m2_day": 13.298676787510608,
+     "predicted_volumetric_g_l_day": 0.6411862022549758,
+     "produced_g": 12926.313837460311
+    }
+   },
+   "summary_sha256": "c18ffb8b251a1d31a8714e6db96b606bdd71c0594171afb518dffa5254a2dbe6"
+  },
+  {
+   "draw": {
+    "forcing_window": "median"
+   },
+   "factor": "forcing_window",
+   "id": "oat_forcing_window_median",
+   "kind": "oat",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 3.665116803164999e-13,
+     "harvest_g": 31025.734726969353,
+     "harvest_only_areal_g_m2_day": 27.800837568968955,
+     "illuminated_volume_m3": 0.9306654076994403,
+     "inventory_change_g": 1947.646842407749,
+     "min_pbr_nitrogen_kg_m3": 0.26811342171193653,
+     "predicted_areal_g_m2_day": 29.546040832775184,
+     "predicted_volumetric_g_l_day": 0.8640823262415384,
+     "produced_g": 32973.3815693771
+    },
+    "horizontal": {
+     "biomass_residual_rel": 1.1915042180367177e-13,
+     "harvest_g": 12920.021411382279,
+     "harvest_only_areal_g_m2_day": 13.292203098129916,
+     "illuminated_volume_m3": 0.3988566032997601,
+     "inventory_change_g": 794.9672377935501,
+     "min_pbr_nitrogen_kg_m3": 0.30366970047084146,
+     "predicted_areal_g_m2_day": 14.110070626724102,
+     "predicted_volumetric_g_l_day": 0.6803069766456263,
+     "produced_g": 13714.988649175828
+    }
+   },
+   "summary_sha256": "90c7dabe0901c1a83e0e36d95ae196897bc58ef86d62155c23df34fa1bad2eca"
+  },
+  {
+   "draw": {
+    "forcing_window": "high"
+   },
+   "factor": "forcing_window",
+   "id": "oat_forcing_window_high",
+   "kind": "oat",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 4.1233267308924585e-14,
+     "harvest_g": 32251.244197506145,
+     "harvest_only_areal_g_m2_day": 28.898964334682926,
+     "illuminated_volume_m3": 0.9306654076994403,
+     "inventory_change_g": 2117.246363568555,
+     "min_pbr_nitrogen_kg_m3": 0.25322844367173086,
+     "predicted_areal_g_m2_day": 30.796138495586646,
+     "predicted_volumetric_g_l_day": 0.900641786191685,
+     "produced_g": 34368.4905610747
+    },
+    "horizontal": {
+     "biomass_residual_rel": 1.0221436200580456e-13,
+     "harvest_g": 13457.451803426353,
+     "harvest_only_areal_g_m2_day": 13.845115024101185,
+     "illuminated_volume_m3": 0.3988566032997601,
+     "inventory_change_g": 869.8216177451479,
+     "min_pbr_nitrogen_kg_m3": 0.2917109637161622,
+     "predicted_areal_g_m2_day": 14.739993231657925,
+     "predicted_volumetric_g_l_day": 0.7106782450977928,
+     "produced_g": 14327.273421171501
+    }
+   },
+   "summary_sha256": "5f032e1fc08f5e599f2ba152deacfd4bcb1cba8bd0fd1dedae365a7d28191eec"
+  },
+  {
+   "draw": {
+    "culture_temperature_c": 20.0
+   },
+   "factor": "culture_temperature_c",
+   "id": "oat_culture_temperature_c_20.0",
+   "kind": "oat",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 8.75473198704569e-13,
+     "harvest_g": 23838.727490657657,
+     "harvest_only_areal_g_m2_day": 21.360866927112596,
+     "illuminated_volume_m3": 0.9306654076994403,
+     "inventory_change_g": 1230.831722826271,
+     "min_pbr_nitrogen_kg_m3": 0.3231411981868971,
+     "predicted_areal_g_m2_day": 22.46376273609671,
+     "predicted_volumetric_g_l_day": 0.6569590988858471,
+     "produced_g": 25069.559213483928
+    },
+    "horizontal": {
+     "biomass_residual_rel": 7.306010514883992e-13,
+     "harvest_g": 9873.84900498272,
+     "harvest_only_areal_g_m2_day": 10.158280869323786,
+     "illuminated_volume_m3": 0.3988566032997601,
+     "inventory_change_g": 463.1377333790734,
+     "min_pbr_nitrogen_kg_m3": 0.35146671066906926,
+     "predicted_areal_g_m2_day": 10.634760018890734,
+     "predicted_volumetric_g_l_day": 0.5127473580536603,
+     "produced_g": 10336.986738361793
+    }
+   },
+   "summary_sha256": "48d450a6b5964532770f87e76c664ba0722b3ae9d8f6874a4364fc951a93e46c"
+  },
+  {
+   "draw": {
+    "culture_temperature_c": 30.0
+   },
+   "factor": "culture_temperature_c",
+   "id": "oat_culture_temperature_c_30.0",
+   "kind": "oat",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 4.175173606693261e-13,
+     "harvest_g": 791.2372778771451,
+     "harvest_only_areal_g_m2_day": 0.7089939765924238,
+     "illuminated_volume_m3": 0.9306654076994403,
+     "inventory_change_g": -1059.9975427504364,
+     "min_pbr_nitrogen_kg_m3": 0.5,
+     "predicted_areal_g_m2_day": -0.24082461010151557,
+     "predicted_volumetric_g_l_day": -0.0070429838803273415,
+     "produced_g": -268.76026487329136
+    },
+    "horizontal": {
+     "biomass_residual_rel": 2.504423028427506e-13,
+     "harvest_g": 405.57825807198685,
+     "harvest_only_areal_g_m2_day": 0.4172615823785873,
+     "illuminated_volume_m3": 0.3988566032997601,
+     "inventory_change_g": -559.9976754010758,
+     "min_pbr_nitrogen_kg_m3": 0.5,
+     "predicted_areal_g_m2_day": -0.1588677133015318,
+     "predicted_volumetric_g_l_day": -0.0076596933198952825,
+     "produced_g": -154.4194173290889
+    }
+   },
+   "summary_sha256": "d64bf0141cf27a7879c152066ba3c7f2f030f977fa05adfeca436fee8bfdc03f"
+  },
+  {
+   "draw": {
+    "axis_azimuth_deg": 45.0
+   },
+   "factor": "axis_azimuth_deg",
+   "id": "oat_axis_azimuth_deg_45.0",
+   "kind": "oat",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 1.5642126071898775e-13,
+     "harvest_g": 30818.330020890935,
+     "harvest_only_areal_g_m2_day": 27.614991058146,
+     "illuminated_volume_m3": 0.9306654076994403,
+     "inventory_change_g": 1923.1650314721867,
+     "min_pbr_nitrogen_kg_m3": 0.26971681978326384,
+     "predicted_areal_g_m2_day": 29.338257215379144,
+     "predicted_volumetric_g_l_day": 0.858005635544107,
+     "produced_g": 32741.495052363123
+    },
+    "horizontal": {
+     "biomass_residual_rel": 5.5854950300402e-14,
+     "harvest_g": 12888.482609811797,
+     "harvest_only_areal_g_m2_day": 13.259755771411314,
+     "illuminated_volume_m3": 0.3988566032997601,
+     "inventory_change_g": 791.0221093274914,
+     "min_pbr_nitrogen_kg_m3": 0.30413932354496986,
+     "predicted_areal_g_m2_day": 14.073564525863468,
+     "predicted_volumetric_g_l_day": 0.6785468610684171,
+     "produced_g": 13679.50471913929
+    }
+   },
+   "summary_sha256": "e58ea6983668ecb2b1594e08511a1e778e0535c1add4cde57cc820999092727a"
+  },
+  {
+   "draw": {
+    "axis_azimuth_deg": 90.0
+   },
+   "factor": "axis_azimuth_deg",
+   "id": "oat_axis_azimuth_deg_90.0",
+   "kind": "oat",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 5.738985367762215e-13,
+     "harvest_g": 30268.939830525716,
+     "harvest_only_areal_g_m2_day": 27.12270594133129,
+     "illuminated_volume_m3": 0.9306654076994403,
+     "inventory_change_g": 1884.0570630082457,
+     "min_pbr_nitrogen_kg_m3": 0.27372938437429156,
+     "predicted_areal_g_m2_day": 28.810929116069858,
+     "predicted_volumetric_g_l_day": 0.8425837760360053,
+     "produced_g": 32152.996893533964
+    },
+    "horizontal": {
+     "biomass_residual_rel": 2.6925760601976504e-13,
+     "harvest_g": 12719.849500200782,
+     "harvest_only_areal_g_m2_day": 13.086264917902039,
+     "illuminated_volume_m3": 0.3988566032997601,
+     "inventory_change_g": 772.7224195528371,
+     "min_pbr_nitrogen_kg_m3": 0.3070607977466079,
+     "predicted_areal_g_m2_day": 13.881246831022244,
+     "predicted_volumetric_g_l_day": 0.6692744007814295,
+     "produced_g": 13492.57191975362
+    }
+   },
+   "summary_sha256": "99d0a996d497f563f320f470445a934c35eb3ace9fa0c49b24c0b7460e3b6818"
+  },
+  {
+   "draw": {
+    "cross_section": "alternative"
+   },
+   "factor": "cross_section",
+   "id": "oat_cross_section_alternative",
+   "kind": "oat",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 4.2269550570470056e-13,
+     "harvest_g": 29402.14415437976,
+     "harvest_only_areal_g_m2_day": 26.346007306791897,
+     "illuminated_volume_m3": 0.9306654076994403,
+     "inventory_change_g": 1782.505221587134,
+     "min_pbr_nitrogen_kg_m3": 0.27986914751057923,
+     "predicted_areal_g_m2_day": 27.94323420785564,
+     "predicted_volumetric_g_l_day": 0.8172077928712498,
+     "produced_g": 31184.649375966892
+    },
+    "horizontal": {
+     "biomass_residual_rel": 4.2253456375208223e-13,
+     "harvest_g": 12948.735880353119,
+     "harvest_only_areal_g_m2_day": 13.321744732873578,
+     "illuminated_volume_m3": 0.3988566032997601,
+     "inventory_change_g": 797.3906287139419,
+     "min_pbr_nitrogen_kg_m3": 0.30347798512995083,
+     "predicted_areal_g_m2_day": 14.14210546200315,
+     "predicted_volumetric_g_l_day": 0.6818515133465803,
+     "produced_g": 13746.12650906706
+    }
+   },
+   "summary_sha256": "f966e4fff68ce1b9c9eb5dcb2948b9ab2a6fa60d3026a8fed224594373f2dcfa"
+  },
+  {
+   "draw": {
+    "illuminated_volume_basis": "reported_illuminated_share"
+   },
+   "factor": "illuminated_volume_basis",
+   "id": "oat_illuminated_volume_basis_reported_illuminated_share",
+   "kind": "oat",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 1.1560854114220467e-12,
+     "harvest_g": 24696.963764952216,
+     "harvest_only_areal_g_m2_day": 22.129895846731376,
+     "illuminated_volume_m3": 0.7526,
+     "inventory_change_g": 1316.6721919907616,
+     "min_pbr_nitrogen_kg_m3": 0.3165411546106565,
+     "predicted_areal_g_m2_day": 23.30970963883779,
+     "predicted_volumetric_g_l_day": 0.681699055475445,
+     "produced_g": 26013.635956942977
+    },
+    "horizontal": {
+     "biomass_residual_rel": 8.996378683127273e-13,
+     "harvest_g": 13267.484471579319,
+     "harvest_only_areal_g_m2_day": 13.64967538228325,
+     "illuminated_volume_m3": 0.40880000000000005,
+     "inventory_change_g": 832.7028694743021,
+     "min_pbr_nitrogen_kg_m3": 0.2982301656543183,
+     "predicted_areal_g_m2_day": 14.50636557721566,
+     "predicted_volumetric_g_l_day": 0.699414054615755,
+     "produced_g": 14100.187341053621
+    }
+   },
+   "summary_sha256": "30ef68f95211e5770abea4e8f616fb71763939c9a208261716bf3fe989ae216c"
+  },
+  {
+   "draw": {
+    "k_X": 380.0
+   },
+   "factor": "k_X",
+   "id": "oat_k_X_380.0",
+   "kind": "oat",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 2.2346446006830646e-14,
+     "harvest_g": 16785.51422104505,
+     "harvest_only_areal_g_m2_day": 15.040783352190905,
+     "illuminated_volume_m3": 0.9306654076994403,
+     "inventory_change_g": 524.173059958394,
+     "min_pbr_nitrogen_kg_m3": 0.3779014283564331,
+     "predicted_areal_g_m2_day": 15.510472474017424,
+     "predicted_volumetric_g_l_day": 0.4536081572590001,
+     "produced_g": 17309.687281003444
+    },
+    "horizontal": {
+     "biomass_residual_rel": 4.068343953696864e-13,
+     "harvest_g": 7036.7153259640345,
+     "harvest_only_areal_g_m2_day": 7.2394190596337795,
+     "illuminated_volume_m3": 0.3988566032997601,
+     "inventory_change_g": 153.5552806889917,
+     "min_pbr_nitrogen_kg_m3": 0.39668255764117677,
+     "predicted_areal_g_m2_day": 7.397397743470192,
+     "predicted_volumetric_g_l_day": 0.3566602483458843,
+     "produced_g": 7190.270606653026
+    }
+   },
+   "summary_sha256": "1bf25d8f8b7f6cb51dcff703397aeaf78c4131caf16e915d792dc0df7690e061"
+  },
+  {
+   "draw": {
+    "K_I": 7.64
+   },
+   "factor": "K_I",
+   "id": "oat_K_I_7.64",
+   "kind": "oat",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 6.41873226220633e-13,
+     "harvest_g": 38030.899273252624,
+     "harvest_only_areal_g_m2_day": 34.07786673230522,
+     "illuminated_volume_m3": 0.9306654076994403,
+     "inventory_change_g": 2661.9240334884867,
+     "min_pbr_nitrogen_kg_m3": 0.21575618518102702,
+     "predicted_areal_g_m2_day": 36.463103321452614,
+     "predicted_volumetric_g_l_day": 1.0663737763821046,
+     "produced_g": 40692.82330674111
+    },
+    "horizontal": {
+     "biomass_residual_rel": 4.884572563640897e-13,
+     "harvest_g": 15806.883115401948,
+     "harvest_only_areal_g_m2_day": 16.262225427368257,
+     "illuminated_volume_m3": 0.3988566032997601,
+     "inventory_change_g": 1116.2920005293845,
+     "min_pbr_nitrogen_kg_m3": 0.26010108713957425,
+     "predicted_areal_g_m2_day": 17.410673987583674,
+     "predicted_volumetric_g_l_day": 0.8394432101156415,
+     "produced_g": 16923.17511593133
+    }
+   },
+   "summary_sha256": "fd186fbee8910d3d818b79883a4314be0b2a9587d7c3f99cbd37af136ad00883"
+  },
+  {
+   "draw": {
+    "K_I": 30.56
+   },
+   "factor": "K_I",
+   "id": "oat_K_I_30.56",
+   "kind": "oat",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 3.5324226185327594e-13,
+     "harvest_g": 24547.743958289197,
+     "harvest_only_areal_g_m2_day": 21.99618634255304,
+     "illuminated_volume_m3": 0.9306654076994403,
+     "inventory_change_g": 1289.5868061517622,
+     "min_pbr_nitrogen_kg_m3": 0.3158647032932907,
+     "predicted_areal_g_m2_day": 23.15173007566394,
+     "predicted_volumetric_g_l_day": 0.6770788984392284,
+     "produced_g": 25837.330764440958
+    },
+    "horizontal": {
+     "biomass_residual_rel": 3.316962631072011e-13,
+     "harvest_g": 10248.386086481682,
+     "harvest_only_areal_g_m2_day": 10.543607084857697,
+     "illuminated_volume_m3": 0.3988566032997601,
+     "inventory_change_g": 498.5996349875639,
+     "min_pbr_nitrogen_kg_m3": 0.3441115772710687,
+     "predicted_areal_g_m2_day": 11.056569672293463,
+     "predicted_volumetric_g_l_day": 0.5330846091998633,
+     "produced_g": 10746.985721469246
+    }
+   },
+   "summary_sha256": "a4da076cbc81104da029e99b66715c351ef1f8dead75d16654b4e4cade807883"
+  },
+  {
+   "draw": {
+    "k_d": 0.0023
+   },
+   "factor": "k_d",
+   "id": "oat_k_d_0.0023",
+   "kind": "oat",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 1.6521705834343787e-13,
+     "harvest_g": 36232.45516330664,
+     "harvest_only_areal_g_m2_day": 32.46635767321383,
+     "illuminated_volume_m3": 0.9306654076994403,
+     "inventory_change_g": 2532.298341262431,
+     "min_pbr_nitrogen_kg_m3": 0.22947090342982368,
+     "predicted_areal_g_m2_day": 34.73544220839522,
+     "predicted_volumetric_g_l_day": 1.0158478381700489,
+     "produced_g": 38764.75350456907
+    },
+    "horizontal": {
+     "biomass_residual_rel": 1.4237799278239967e-13,
+     "harvest_g": 15263.109502066545,
+     "harvest_only_areal_g_m2_day": 15.702787553566404,
+     "illuminated_volume_m3": 0.3988566032997601,
+     "inventory_change_g": 1080.9153379272525,
+     "min_pbr_nitrogen_kg_m3": 0.26790818857758425,
+     "predicted_areal_g_m2_day": 16.81484037036399,
+     "predicted_volumetric_g_l_day": 0.8107155178568353,
+     "produced_g": 16344.024839993797
+    }
+   },
+   "summary_sha256": "bdfbc863f6ae9105fafcf22d57d17b30b2f3209ce5768efc647194e2e94aae7e"
+  },
+  {
+   "draw": {
+    "k_d": 0.0092
+   },
+   "factor": "k_d",
+   "id": "oat_k_d_0.0092",
+   "kind": "oat",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 7.147485303724914e-14,
+     "harvest_g": 23842.686923811925,
+     "harvest_only_areal_g_m2_day": 21.364414806283087,
+     "illuminated_volume_m3": 0.9306654076994403,
+     "inventory_change_g": 1171.6607502057043,
+     "min_pbr_nitrogen_kg_m3": 0.3196297094617939,
+     "predicted_areal_g_m2_day": 22.414290030481748,
+     "predicted_volumetric_g_l_day": 0.6555122556084284,
+     "produced_g": 25014.34767401763
+    },
+    "horizontal": {
+     "biomass_residual_rel": 1.207076043118907e-13,
+     "harvest_g": 9731.41797703485,
+     "harvest_only_areal_g_m2_day": 10.01174688995355,
+     "illuminated_volume_m3": 0.3988566032997601,
+     "inventory_change_g": 421.6402096693947,
+     "min_pbr_nitrogen_kg_m3": 0.35123030579090825,
+     "predicted_areal_g_m2_day": 10.445533113893255,
+     "predicted_volumetric_g_l_day": 0.5036239179912819,
+     "produced_g": 10153.058186704244
+    }
+   },
+   "summary_sha256": "8a87e7ab49141e07ff14e30f305173fa0d5e3b690782feed6fc7fe8ee00668da"
+  },
+  {
+   "draw": {
+    "mu_max": 0.08333333333333334
+   },
+   "factor": "mu_max",
+   "id": "oat_mu_max_0.08333333333333334",
+   "kind": "oat",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 1.4466097433848686e-13,
+     "harvest_g": 24408.79368743122,
+     "harvest_only_areal_g_m2_day": 21.871678931389983,
+     "illuminated_volume_m3": 0.9306654076994403,
+     "inventory_change_g": 1287.800487458406,
+     "min_pbr_nitrogen_kg_m3": 0.31877002720042763,
+     "predicted_areal_g_m2_day": 23.025622020510422,
+     "predicted_volumetric_g_l_day": 0.6733908326753048,
+     "produced_g": 25696.59417488963
+    },
+    "horizontal": {
+     "biomass_residual_rel": 1.187954668286731e-13,
+     "harvest_g": 10116.164808414604,
+     "harvest_only_areal_g_m2_day": 10.40757696338951,
+     "illuminated_volume_m3": 0.3988566032997601,
+     "inventory_change_g": 489.6261611827395,
+     "min_pbr_nitrogen_kg_m3": 0.3476583817788661,
+     "predicted_areal_g_m2_day": 10.91130758189027,
+     "predicted_volumetric_g_l_day": 0.5260809012697094,
+     "produced_g": 10605.790969597343
+    }
+   },
+   "summary_sha256": "733ae63e6f3b7f675111e31f735d9916dead0d22477f1fddc7f64f30f34fb408"
+  },
+  {
+   "draw": {
+    "mu_max": 0.125
+   },
+   "factor": "mu_max",
+   "id": "oat_mu_max_0.125",
+   "kind": "oat",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 1.0299272214516625e-13,
+     "harvest_g": 37603.00820259084,
+     "harvest_only_areal_g_m2_day": 33.69445179443623,
+     "illuminated_volume_m3": 0.9306654076994403,
+     "inventory_change_g": 2602.039202841561,
+     "min_pbr_nitrogen_kg_m3": 0.21786358761779387,
+     "predicted_areal_g_m2_day": 36.02602814106846,
+     "predicted_volumetric_g_l_day": 1.0535913890312474,
+     "produced_g": 40205.0474054324
+    },
+    "horizontal": {
+     "biomass_residual_rel": 1.7198315893241614e-13,
+     "harvest_g": 15700.158186556782,
+     "harvest_only_areal_g_m2_day": 16.15242611785677,
+     "illuminated_volume_m3": 0.3988566032997601,
+     "inventory_change_g": 1096.5834988886497,
+     "min_pbr_nitrogen_kg_m3": 0.26016415113075714,
+     "predicted_areal_g_m2_day": 17.280598441816288,
+     "predicted_volumetric_g_l_day": 0.833171710587571,
+     "produced_g": 16796.74168544543
+    }
+   },
+   "summary_sha256": "6eb5ae8214f4a3fb2b01568442bb531ee6d4f52e9abbef7f6621e4b5f2e1fee1"
+  },
+  {
+   "draw": {
+    "initial_biomass_kg_m3": 0.5
+   },
+   "factor": "initial_biomass_kg_m3",
+   "id": "oat_initial_biomass_kg_m3_0.5",
+   "kind": "oat",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 1.323985738108873e-12,
+     "harvest_g": 30364.95372114961,
+     "harvest_only_areal_g_m2_day": 27.208739893503235,
+     "illuminated_volume_m3": 0.9306654076994403,
+     "inventory_change_g": 2477.6431850933536,
+     "min_pbr_nitrogen_kg_m3": 0.2680651797633048,
+     "predicted_areal_g_m2_day": 29.428850274411257,
+     "predicted_volumetric_g_l_day": 0.8606550551950463,
+     "produced_g": 32842.596906242965
+    },
+    "horizontal": {
+     "biomass_residual_rel": 1.1614381511818905e-12,
+     "harvest_g": 12562.45421007757,
+     "harvest_only_areal_g_m2_day": 12.92433560707569,
+     "illuminated_volume_m3": 0.3988566032997601,
+     "inventory_change_g": 1074.962301407364,
+     "min_pbr_nitrogen_kg_m3": 0.30360021678561055,
+     "predicted_areal_g_m2_day": 14.030263900704664,
+     "predicted_volumetric_g_l_day": 0.6764591523554035,
+     "produced_g": 13637.416511484935
+    }
+   },
+   "summary_sha256": "c2cd8e9e6bd3c3df90d09ba3139ec0a6a92be3ee3868b8b43c9670e103b1d979"
+  },
+  {
+   "draw": {
+    "initial_biomass_kg_m3": 2.0
+   },
+   "factor": "initial_biomass_kg_m3",
+   "id": "oat_initial_biomass_kg_m3_2.0",
+   "kind": "oat",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 1.1391745720693584e-12,
+     "harvest_g": 31957.203029927572,
+     "harvest_only_areal_g_m2_day": 28.635486585956603,
+     "illuminated_volume_m3": 0.9306654076994403,
+     "inventory_change_g": 887.6516700395624,
+     "min_pbr_nitrogen_kg_m3": 0.2682260055520845,
+     "predicted_areal_g_m2_day": 29.43087338706733,
+     "predicted_volumetric_g_l_day": 0.860714221697252,
+     "produced_g": 32844.85469996714
+    },
+    "horizontal": {
+     "biomass_residual_rel": 8.905249112436191e-13,
+     "harvest_g": 13408.1752408216,
+     "harvest_only_areal_g_m2_day": 13.794418972038683,
+     "illuminated_volume_m3": 0.3988566032997601,
+     "inventory_change_g": 234.97328647921844,
+     "min_pbr_nitrogen_kg_m3": 0.3038419806593225,
+     "predicted_areal_g_m2_day": 14.036161036317715,
+     "predicted_volumetric_g_l_day": 0.6767434785367469,
+     "produced_g": 13643.148527300818
+    }
+   },
+   "summary_sha256": "f6ea16b0ac97a25c2c6b04a8df1a147f5d6cad2c5c3b3df370f7bb22fb9662cb"
+  },
+  {
+   "draw": {
+    "K_j_0": 0.00045179332601133135
+   },
+   "factor": "K_j_0",
+   "id": "oat_K_j_0_0.00045179332601133135",
+   "kind": "oat",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 6.0440505235324e-13,
+     "harvest_g": 31074.215880080952,
+     "harvest_only_areal_g_m2_day": 27.84427946243813,
+     "illuminated_volume_m3": 0.9306654076994403,
+     "inventory_change_g": 1952.5183890464714,
+     "min_pbr_nitrogen_kg_m3": 0.2677198223823241,
+     "predicted_areal_g_m2_day": 29.593847911404502,
+     "predicted_volumetric_g_l_day": 0.8654804577863581,
+     "produced_g": 33026.734269127424
+    },
+    "horizontal": {
+     "biomass_residual_rel": 5.968251758533377e-13,
+     "harvest_g": 12938.636277455746,
+     "harvest_only_areal_g_m2_day": 13.311354194913319,
+     "illuminated_volume_m3": 0.3988566032997601,
+     "inventory_change_g": 797.0161904860084,
+     "min_pbr_nitrogen_kg_m3": 0.3033629253979228,
+     "predicted_areal_g_m2_day": 14.131329699528555,
+     "predicted_volumetric_g_l_day": 0.681331967655841,
+     "produced_g": 13735.652467941754
+    }
+   },
+   "summary_sha256": "f8fde36c80eff378693fe22fe98f6d2748ae4b29e374d8c694d57968523d1108"
+  },
+  {
+   "draw": {
+    "K_j_0": 0.0013553799780339942
+   },
+   "factor": "K_j_0",
+   "id": "oat_K_j_0_0.0013553799780339942",
+   "kind": "oat",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 4.2480464030666544e-13,
+     "harvest_g": 30977.495929353136,
+     "harvest_only_areal_g_m2_day": 27.757612839922164,
+     "illuminated_volume_m3": 0.9306654076994403,
+     "inventory_change_g": 1942.7995923116646,
+     "min_pbr_nitrogen_kg_m3": 0.2685048633043337,
+     "predicted_areal_g_m2_day": 29.4984726896638,
+     "predicted_volumetric_g_l_day": 0.8626911824335638,
+     "produced_g": 32920.2955216648
+    },
+    "horizontal": {
+     "biomass_residual_rel": 5.143939271238158e-13,
+     "harvest_g": 12901.482792895034,
+     "harvest_only_areal_g_m2_day": 13.273130445365261,
+     "illuminated_volume_m3": 0.3988566032997601,
+     "inventory_change_g": 792.9267357741664,
+     "min_pbr_nitrogen_kg_m3": 0.3039751143345307,
+     "predicted_areal_g_m2_day": 14.088898692046504,
+     "predicted_volumetric_g_l_day": 0.6792861869379564,
+     "produced_g": 13694.4095286692
+    }
+   },
+   "summary_sha256": "5363f9d34c4ee11af7ea7e2742561b568ce09bf4ec74fc16d6ffae33b05dac74"
+  },
+  {
+   "draw": {
+    "K_I": 19.214891409254573,
+    "K_j_0": 0.0005554080768035371,
+    "axis_azimuth_deg": 45.0,
+    "cross_section": "primary",
+    "culture_temperature_c": 26.314528503950257,
+    "forcing_window": "low",
+    "illuminated_volume_basis": "reported_illuminated_share",
+    "initial_biomass_kg_m3": 0.5220959589721192,
+    "k_X": 242.7530760717841,
+    "k_d": 0.004887145251911176,
+    "mu_max": 0.09567649435075677
+   },
+   "factor": null,
+   "id": "mc_000",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 4.0165317391089713e-14,
+     "harvest_g": 14273.201560570862,
+     "harvest_only_areal_g_m2_day": 12.789607133128012,
+     "illuminated_volume_m3": 0.7526,
+     "inventory_change_g": 940.7788855551071,
+     "min_pbr_nitrogen_kg_m3": 0.3892764035188486,
+     "predicted_areal_g_m2_day": 13.632598966062696,
+     "predicted_volumetric_g_l_day": 0.39868921504522986,
+     "produced_g": 15213.98044612597
+    },
+    "horizontal": {
+     "biomass_residual_rel": 9.453160572420364e-14,
+     "harvest_g": 7727.852048657941,
+     "harvest_only_areal_g_m2_day": 7.950465070635742,
+     "illuminated_volume_m3": 0.40880000000000005,
+     "inventory_change_g": 586.1224663870304,
+     "min_pbr_nitrogen_kg_m3": 0.3779380034062281,
+     "predicted_areal_g_m2_day": 8.553471723297296,
+     "predicted_volumetric_g_l_day": 0.4123995295161196,
+     "produced_g": 8313.97451504497
+    }
+   },
+   "summary_sha256": "c8987ecdd016f13f8e3ac2e6df075b1d704da9058afd524ad7c78de5c9836c67"
+  },
+  {
+   "draw": {
+    "K_I": 13.932903987319326,
+    "K_j_0": 0.0008224614833988943,
+    "axis_azimuth_deg": 45.0,
+    "cross_section": "primary",
+    "culture_temperature_c": 28.2576289162796,
+    "forcing_window": "high",
+    "illuminated_volume_basis": "reported_illuminated_share",
+    "initial_biomass_kg_m3": 1.1643461285129983,
+    "k_X": 348.2665756877137,
+    "k_d": 0.002843667893965075,
+    "mu_max": 0.10173375334856555
+   },
+   "factor": null,
+   "id": "mc_001",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 2.0459163756111707e-12,
+     "harvest_g": 10761.692551803193,
+     "harvest_only_areal_g_m2_day": 9.643093684411463,
+     "illuminated_volume_m3": 0.7526,
+     "inventory_change_g": -255.93529098242706,
+     "min_pbr_nitrogen_kg_m3": 0.4251510531768081,
+     "predicted_areal_g_m2_day": 9.413760986398536,
+     "predicted_volumetric_g_l_day": 0.2753081043192025,
+     "produced_g": 10505.757260820767
+    },
+    "horizontal": {
+     "biomass_residual_rel": 1.7902698260597035e-12,
+     "harvest_g": 5868.65445116849,
+     "harvest_only_areal_g_m2_day": 6.037710340708323,
+     "illuminated_volume_m3": 0.40880000000000005,
+     "inventory_change_g": -67.47647462462014,
+     "min_pbr_nitrogen_kg_m3": 0.4165396137843059,
+     "predicted_areal_g_m2_day": 5.968290099324969,
+     "predicted_volumetric_g_l_day": 0.2877568440745967,
+     "produced_g": 5801.17797654387
+    }
+   },
+   "summary_sha256": "42f7ebd1e49ad4e79bc25b8804d8c11b37a26d2bc22b627bb30c92303c2dfd1c"
+  },
+  {
+   "draw": {
+    "K_I": 15.662986246167781,
+    "K_j_0": 0.001262028587700694,
+    "axis_azimuth_deg": 45.0,
+    "cross_section": "alternative",
+    "culture_temperature_c": 21.320142346578915,
+    "forcing_window": "median",
+    "illuminated_volume_basis": "reported_illuminated_share",
+    "initial_biomass_kg_m3": 0.5371369228488699,
+    "k_X": 244.71120663398787,
+    "k_d": 0.0031050711069518346,
+    "mu_max": 0.09247453768913758
+   },
+   "factor": null,
+   "id": "mc_002",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 3.2921256569240177e-13,
+     "harvest_g": 15539.30023357686,
+     "harvest_only_areal_g_m2_day": 13.924104151950592,
+     "illuminated_volume_m3": 0.7526,
+     "inventory_change_g": 959.375498167874,
+     "min_pbr_nitrogen_kg_m3": 0.3829832895573378,
+     "predicted_areal_g_m2_day": 14.78375961625872,
+     "predicted_volumetric_g_l_day": 0.43235523406039655,
+     "produced_g": 16498.675731744734
+    },
+    "horizontal": {
+     "biomass_residual_rel": 3.2973684325485976e-13,
+     "harvest_g": 8911.123414433823,
+     "harvest_only_areal_g_m2_day": 9.16782244283315,
+     "illuminated_volume_m3": 0.40880000000000005,
+     "inventory_change_g": 659.413618135318,
+     "min_pbr_nitrogen_kg_m3": 0.36278310665909463,
+     "predicted_areal_g_m2_day": 9.84623151498883,
+     "predicted_volumetric_g_l_day": 0.47472901947267565,
+     "produced_g": 9570.537032569142
+    }
+   },
+   "summary_sha256": "c4751f69fb680a8c6ac85ae6f3738d27dc50411ab38fcb56ab29d3aa54dc66f3"
+  },
+  {
+   "draw": {
+    "K_I": 16.7925632294533,
+    "K_j_0": 0.0009647350414299256,
+    "axis_azimuth_deg": 45.0,
+    "cross_section": "primary",
+    "culture_temperature_c": 27.582131642738425,
+    "forcing_window": "median",
+    "illuminated_volume_basis": "reported_illuminated_share",
+    "initial_biomass_kg_m3": 1.993257072097283,
+    "k_X": 230.27188679115764,
+    "k_d": 0.0023412088292723843,
+    "mu_max": 0.11207938398988299
+   },
+   "factor": null,
+   "id": "mc_003",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 1.7961057901261045e-13,
+     "harvest_g": 21191.514948298496,
+     "harvest_only_areal_g_m2_day": 18.988812677686823,
+     "illuminated_volume_m3": 0.7526,
+     "inventory_change_g": -166.22493534783445,
+     "min_pbr_nitrogen_kg_m3": 0.3526906005533234,
+     "predicted_areal_g_m2_day": 18.839865603002387,
+     "predicted_volumetric_g_l_day": 0.5509772015972396,
+     "produced_g": 21025.290012950663
+    },
+    "horizontal": {
+     "biomass_residual_rel": 1.5366614141674224e-13,
+     "harvest_g": 11507.542479443306,
+     "harvest_only_areal_g_m2_day": 11.839035472678297,
+     "illuminated_volume_m3": 0.40880000000000005,
+     "inventory_change_g": 43.21779265652381,
+     "min_pbr_nitrogen_kg_m3": 0.33556141576792964,
+     "predicted_areal_g_m2_day": 11.883498222324926,
+     "predicted_volumetric_g_l_day": 0.5729543785763804,
+     "produced_g": 11550.76027209983
+    }
+   },
+   "summary_sha256": "08630c1110dc76b60f6ef78da8bf4aeaaa8ac917b4fdda45203f81b665edb771"
+  },
+  {
+   "draw": {
+    "K_I": 22.983100893567944,
+    "K_j_0": 0.0009001702228231451,
+    "axis_azimuth_deg": 90.0,
+    "cross_section": "alternative",
+    "culture_temperature_c": 29.133925699319498,
+    "forcing_window": "high",
+    "illuminated_volume_basis": "tube_cylinder",
+    "initial_biomass_kg_m3": 1.4610709061993832,
+    "k_X": 296.65453746583125,
+    "k_d": 0.0023986712676123865,
+    "mu_max": 0.1154055583733265
+   },
+   "factor": null,
+   "id": "mc_004",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 8.884153753627436e-13,
+     "harvest_g": 8737.133730176136,
+     "harvest_only_areal_g_m2_day": 7.828972876501914,
+     "illuminated_volume_m3": 0.9306654076994403,
+     "inventory_change_g": -828.8566072884897,
+     "min_pbr_nitrogen_kg_m3": 0.4430730748442164,
+     "predicted_areal_g_m2_day": 7.086269823376027,
+     "predicted_volumetric_g_l_day": 0.20723996653269514,
+     "produced_g": 7908.277122887646
+    },
+    "horizontal": {
+     "biomass_residual_rel": 7.171663257742899e-13,
+     "harvest_g": 3872.3226151020135,
+     "harvest_only_areal_g_m2_day": 3.9838710031913718,
+     "illuminated_volume_m3": 0.3988566032997601,
+     "inventory_change_g": -491.3674853018698,
+     "min_pbr_nitrogen_kg_m3": 0.450509087898,
+     "predicted_areal_g_m2_day": 3.4783488989713414,
+     "predicted_volumetric_g_l_day": 0.1677061076289754,
+     "produced_g": 3380.955129800144
+    }
+   },
+   "summary_sha256": "53c9bdf25940b9744ecd8c270338c1dcaa515c81a14e9490cd17a9bae5e491cc"
+  },
+  {
+   "draw": {
+    "K_I": 11.513791197272095,
+    "K_j_0": 0.0012994081390480436,
+    "axis_azimuth_deg": 0.0,
+    "cross_section": "alternative",
+    "culture_temperature_c": 29.833694795789434,
+    "forcing_window": "median",
+    "illuminated_volume_basis": "tube_cylinder",
+    "initial_biomass_kg_m3": 0.7978250407462693,
+    "k_X": 252.52940876646326,
+    "k_d": 0.006357642652449441,
+    "mu_max": 0.11358247257040638
+   },
+   "factor": null,
+   "id": "mc_005",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 4.0609304601343523e-13,
+     "harvest_g": 783.1783876654573,
+     "harvest_only_areal_g_m2_day": 0.7017727488041732,
+     "illuminated_volume_m3": 0.9306654076994403,
+     "inventory_change_g": -845.6644787848454,
+     "min_pbr_nitrogen_kg_m3": 0.5,
+     "predicted_areal_g_m2_day": -0.05599112107472052,
+     "predicted_volumetric_g_l_day": -0.0016374761823739021,
+     "produced_g": -62.48609111938811
+    },
+    "horizontal": {
+     "biomass_residual_rel": 3.676477868026866e-13,
+     "harvest_g": 379.69375180698756,
+     "harvest_only_areal_g_m2_day": 0.39063143190019295,
+     "illuminated_volume_m3": 0.3988566032997601,
+     "inventory_change_g": -446.7687361072261,
+     "min_pbr_nitrogen_kg_m3": 0.5,
+     "predicted_areal_g_m2_day": -0.06900718549407259,
+     "predicted_volumetric_g_l_day": -0.0033271321577499286,
+     "produced_g": -67.07498430023855
+    }
+   },
+   "summary_sha256": "5b314328535a0a3b671faf7b022563ab92f6b8fb9d1a31f7ee7d88b8eb2b0de2"
+  },
+  {
+   "draw": {
+    "K_I": 11.404842063917139,
+    "K_j_0": 0.0005278624818524639,
+    "axis_azimuth_deg": 45.0,
+    "cross_section": "primary",
+    "culture_temperature_c": 28.032709854869125,
+    "forcing_window": "high",
+    "illuminated_volume_basis": "tube_cylinder",
+    "initial_biomass_kg_m3": 0.5977613534993946,
+    "k_X": 243.29586799805068,
+    "k_d": 0.004623203562396043,
+    "mu_max": 0.0858248473443831
+   },
+   "factor": null,
+   "id": "mc_006",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 1.604816936350942e-13,
+     "harvest_g": 15138.530544534635,
+     "harvest_only_areal_g_m2_day": 13.564991527360784,
+     "illuminated_volume_m3": 0.9306654076994403,
+     "inventory_change_g": 859.8403570750042,
+     "min_pbr_nitrogen_kg_m3": 0.38424855571344096,
+     "predicted_areal_g_m2_day": 14.335457797141252,
+     "predicted_volumetric_g_l_day": 0.4192445204824329,
+     "produced_g": 15998.37090160964
+    },
+    "horizontal": {
+     "biomass_residual_rel": 3.4731743485971715e-13,
+     "harvest_g": 6175.244457962249,
+     "harvest_only_areal_g_m2_day": 6.353132158397376,
+     "illuminated_volume_m3": 0.3988566032997601,
+     "inventory_change_g": 318.71394710268686,
+     "min_pbr_nitrogen_kg_m3": 0.4045551517695819,
+     "predicted_areal_g_m2_day": 6.681027165704666,
+     "predicted_volumetric_g_l_day": 0.32212095263218926,
+     "produced_g": 6493.9584050649355
+    }
+   },
+   "summary_sha256": "53cf71deba4a3d0de6f26b522cb0b519532b4e8eadb0eb171185d0262edc226b"
+  },
+  {
+   "draw": {
+    "K_I": 9.70352464797506,
+    "K_j_0": 0.0008713295284835886,
+    "axis_azimuth_deg": 45.0,
+    "cross_section": "primary",
+    "culture_temperature_c": 27.46236255545966,
+    "forcing_window": "high",
+    "illuminated_volume_basis": "tube_cylinder",
+    "initial_biomass_kg_m3": 0.9812477293545072,
+    "k_X": 344.1837524424201,
+    "k_d": 0.002725999183749679,
+    "mu_max": 0.11401973018887743
+   },
+   "factor": null,
+   "id": "mc_007",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 3.563263274299451e-13,
+     "harvest_g": 21417.43437020955,
+     "harvest_only_areal_g_m2_day": 19.19124943567164,
+     "illuminated_volume_m3": 0.9306654076994403,
+     "inventory_change_g": 1066.5571136461406,
+     "min_pbr_nitrogen_kg_m3": 0.341154002939367,
+     "predicted_areal_g_m2_day": 20.14694577406424,
+     "predicted_volumetric_g_l_day": 0.5892031311282938,
+     "produced_g": 22483.99148385569
+    },
+    "horizontal": {
+     "biomass_residual_rel": 3.0664116653117895e-13,
+     "harvest_g": 9072.684264070102,
+     "harvest_only_areal_g_m2_day": 9.334037308714096,
+     "illuminated_volume_m3": 0.3988566032997601,
+     "inventory_change_g": 408.8324631989132,
+     "min_pbr_nitrogen_kg_m3": 0.3644192542885847,
+     "predicted_areal_g_m2_day": 9.75464683875413,
+     "predicted_volumetric_g_l_day": 0.4703133297256456,
+     "produced_g": 9481.516727269014
+    }
+   },
+   "summary_sha256": "95f8e5286771f172db01337b9cfc53e1e5e31a421503cc8e366a2ecab1ba8a9d"
+  },
+  {
+   "draw": {
+    "K_I": 15.629014707220742,
+    "K_j_0": 0.0011777542495311154,
+    "axis_azimuth_deg": 90.0,
+    "cross_section": "alternative",
+    "culture_temperature_c": 22.150511865207797,
+    "forcing_window": "low",
+    "illuminated_volume_basis": "reported_illuminated_share",
+    "initial_biomass_kg_m3": 1.3215562651703114,
+    "k_X": 347.5224157554968,
+    "k_d": 0.0032998232139275613,
+    "mu_max": 0.08925585460119798
+   },
+   "factor": null,
+   "id": "mc_008",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 5.690162867683335e-14,
+     "harvest_g": 11168.96832329625,
+     "harvest_only_areal_g_m2_day": 10.008036131985888,
+     "illuminated_volume_m3": 0.7526,
+     "inventory_change_g": -336.96938541837574,
+     "min_pbr_nitrogen_kg_m3": 0.42251738882301143,
+     "predicted_areal_g_m2_day": 9.706092238241824,
+     "predicted_volumetric_g_l_day": 0.2838574145146194,
+     "produced_g": 10831.998937877876
+    },
+    "horizontal": {
+     "biomass_residual_rel": 1.0218436479094887e-13,
+     "harvest_g": 6369.577314345946,
+     "harvest_only_areal_g_m2_day": 6.553063080602826,
+     "illuminated_volume_m3": 0.40880000000000005,
+     "inventory_change_g": -69.76511254058038,
+     "min_pbr_nitrogen_kg_m3": 0.41010552445270115,
+     "predicted_areal_g_m2_day": 6.481288273462311,
+     "predicted_volumetric_g_l_day": 0.31249068461336144,
+     "produced_g": 6299.812201805366
+    }
+   },
+   "summary_sha256": "ad4a139844c83d65f17d84472cf0a263a8c6cf8f8d62f7a18173d64d388958b7"
+  },
+  {
+   "draw": {
+    "K_I": 19.39574339938571,
+    "K_j_0": 0.0007198997655037172,
+    "axis_azimuth_deg": 0.0,
+    "cross_section": "primary",
+    "culture_temperature_c": 22.063914454631654,
+    "forcing_window": "high",
+    "illuminated_volume_basis": "reported_illuminated_share",
+    "initial_biomass_kg_m3": 0.6225956680769162,
+    "k_X": 338.47932856625545,
+    "k_d": 0.003788316391726789,
+    "mu_max": 0.09885927874135689
+   },
+   "factor": null,
+   "id": "mc_009",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 6.348602653874923e-13,
+     "harvest_g": 12958.120553855477,
+     "harvest_only_areal_g_m2_day": 11.611219134279102,
+     "illuminated_volume_m3": 0.7526,
+     "inventory_change_g": 595.8077690734733,
+     "min_pbr_nitrogen_kg_m3": 0.40246615601679864,
+     "predicted_areal_g_m2_day": 12.145097063556408,
+     "predicted_volumetric_g_l_day": 0.3551868009153289,
+     "produced_g": 13553.92832292895
+    },
+    "horizontal": {
+     "biomass_residual_rel": 5.482755595242713e-13,
+     "harvest_g": 6998.95829705623,
+     "harvest_only_areal_g_m2_day": 7.200574379687479,
+     "illuminated_volume_m3": 0.40880000000000005,
+     "inventory_change_g": 390.5104625760731,
+     "min_pbr_nitrogen_kg_m3": 0.3926675502087852,
+     "predicted_areal_g_m2_day": 7.602334114848048,
+     "predicted_volumetric_g_l_day": 0.36654110910874516,
+     "produced_g": 7389.468759632303
+    }
+   },
+   "summary_sha256": "d87f791d4e5cc9fde8845607a19ab33c49405bf0702ccb85beefd6cb7e28a3d4"
+  },
+  {
+   "draw": {
+    "K_I": 12.93082260882908,
+    "K_j_0": 0.0006803518660885241,
+    "axis_azimuth_deg": 0.0,
+    "cross_section": "alternative",
+    "culture_temperature_c": 20.587744675623576,
+    "forcing_window": "high",
+    "illuminated_volume_basis": "tube_cylinder",
+    "initial_biomass_kg_m3": 1.7555263716643397,
+    "k_X": 209.4130672409553,
+    "k_d": 0.0038668516507162146,
+    "mu_max": 0.08916150144921525
+   },
+   "factor": null,
+   "id": "mc_010",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 4.02431062775194e-13,
+     "harvest_g": 23160.886476914595,
+     "harvest_only_areal_g_m2_day": 20.753482506195873,
+     "illuminated_volume_m3": 0.9306654076994403,
+     "inventory_change_g": 319.11450106261395,
+     "min_pbr_nitrogen_kg_m3": 0.33168918275189957,
+     "predicted_areal_g_m2_day": 21.039427399621154,
+     "predicted_volumetric_g_l_day": 0.6153040088568451,
+     "produced_g": 23480.000977977208
+    },
+    "horizontal": {
+     "biomass_residual_rel": 1.458494638288822e-13,
+     "harvest_g": 10213.584419313682,
+     "harvest_only_areal_g_m2_day": 10.50780290052848,
+     "illuminated_volume_m3": 0.3988566032997601,
+     "inventory_change_g": 48.2911541323785,
+     "min_pbr_nitrogen_kg_m3": 0.35149181409296393,
+     "predicted_areal_g_m2_day": 10.557485157866317,
+     "predicted_volumetric_g_l_day": 0.5090216058256974,
+     "produced_g": 10261.875573446061
+    }
+   },
+   "summary_sha256": "350f6e2476ff4d1d0903b12f7655e07acb3bff7ba0455589c03d451de6e49dca"
+  },
+  {
+   "draw": {
+    "K_I": 11.095035853401706,
+    "K_j_0": 0.0010971568483227419,
+    "axis_azimuth_deg": 90.0,
+    "cross_section": "alternative",
+    "culture_temperature_c": 21.593587816343398,
+    "forcing_window": "high",
+    "illuminated_volume_basis": "tube_cylinder",
+    "initial_biomass_kg_m3": 0.9521736644585851,
+    "k_X": 220.73465913184384,
+    "k_d": 0.006768567786477265,
+    "mu_max": 0.0998648417821863
+   },
+   "factor": null,
+   "id": "mc_011",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 4.25550335062652e-13,
+     "harvest_g": 22390.77269374784,
+     "harvest_only_areal_g_m2_day": 20.063416392247166,
+     "illuminated_volume_m3": 0.9306654076994403,
+     "inventory_change_g": 1158.0724670941413,
+     "min_pbr_nitrogen_kg_m3": 0.3300063797712569,
+     "predicted_areal_g_m2_day": 21.10111573552149,
+     "predicted_volumetric_g_l_day": 0.6171081016992134,
+     "produced_g": 23548.845160841982
+    },
+    "horizontal": {
+     "biomass_residual_rel": 4.4963744076872276e-13,
+     "harvest_g": 9681.474533864895,
+     "harvest_only_areal_g_m2_day": 9.960364746774584,
+     "illuminated_volume_m3": 0.3988566032997601,
+     "inventory_change_g": 478.779189459869,
+     "min_pbr_nitrogen_kg_m3": 0.3516525428567103,
+     "predicted_areal_g_m2_day": 10.452935929346465,
+     "predicted_volumetric_g_l_day": 0.5039808394506332,
+     "produced_g": 10160.253723324764
+    }
+   },
+   "summary_sha256": "736735441b40d954968a65cc45366e8ee3f3a8639c073ca9b7bdcd7ee29cb058"
+  },
+  {
+   "draw": {
+    "K_I": 9.684432790112819,
+    "K_j_0": 0.001239835687415698,
+    "axis_azimuth_deg": 0.0,
+    "cross_section": "alternative",
+    "culture_temperature_c": 22.535147860838503,
+    "forcing_window": "low",
+    "illuminated_volume_basis": "tube_cylinder",
+    "initial_biomass_kg_m3": 0.6947412789647852,
+    "k_X": 328.3982875587045,
+    "k_d": 0.0066692696955845485,
+    "mu_max": 0.08616778847254969
+   },
+   "factor": null,
+   "id": "mc_012",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 7.881372478493765e-14,
+     "harvest_g": 13198.315754483809,
+     "harvest_only_areal_g_m2_day": 11.826447808677248,
+     "illuminated_volume_m3": 0.9306654076994403,
+     "inventory_change_g": 603.5982664851782,
+     "min_pbr_nitrogen_kg_m3": 0.39944890635676716,
+     "predicted_areal_g_m2_day": 12.367306470402319,
+     "predicted_volumetric_g_l_day": 0.36168537790799227,
+     "produced_g": 13801.914020968987
+    },
+    "horizontal": {
+     "biomass_residual_rel": 1.1241746539663661e-13,
+     "harvest_g": 5687.440101879811,
+     "harvest_only_areal_g_m2_day": 5.851275824979229,
+     "illuminated_volume_m3": 0.3988566032997601,
+     "inventory_change_g": 231.32610093994188,
+     "min_pbr_nitrogen_kg_m3": 0.41343612016580567,
+     "predicted_areal_g_m2_day": 6.089265640761062,
+     "predicted_volumetric_g_l_day": 0.29358959339383695,
+     "produced_g": 5918.766202819753
+    }
+   },
+   "summary_sha256": "4d2e4a07f255be6eb00eddddd369a1d4bf129038aa8c9f159d72a43809321886"
+  },
+  {
+   "draw": {
+    "K_I": 28.856967026215536,
+    "K_j_0": 0.0010269512097325858,
+    "axis_azimuth_deg": 90.0,
+    "cross_section": "primary",
+    "culture_temperature_c": 28.242739469106407,
+    "forcing_window": "high",
+    "illuminated_volume_basis": "reported_illuminated_share",
+    "initial_biomass_kg_m3": 0.5569096995810656,
+    "k_X": 311.59258744347056,
+    "k_d": 0.005078775181595634,
+    "mu_max": 0.10395500255641248
+   },
+   "factor": null,
+   "id": "mc_013",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 5.626157301043719e-13,
+     "harvest_g": 7425.961633337965,
+     "harvest_only_areal_g_m2_day": 6.654087485069862,
+     "illuminated_volume_m3": 0.7526,
+     "inventory_change_g": 96.49358060505708,
+     "min_pbr_nitrogen_kg_m3": 0.4450985771932477,
+     "predicted_areal_g_m2_day": 6.740551266974034,
+     "predicted_volumetric_g_l_day": 0.1971293295058444,
+     "produced_g": 7522.4552139430225
+    },
+    "horizontal": {
+     "biomass_residual_rel": 2.3731626373971176e-13,
+     "harvest_g": 4108.7104562714085,
+     "harvest_only_areal_g_m2_day": 4.227068370649597,
+     "illuminated_volume_m3": 0.40880000000000005,
+     "inventory_change_g": 104.40614011179261,
+     "min_pbr_nitrogen_kg_m3": 0.43770143509877146,
+     "predicted_areal_g_m2_day": 4.334482095044446,
+     "predicted_volumetric_g_l_day": 0.20898395815392862,
+     "produced_g": 4213.116596383201
+    }
+   },
+   "summary_sha256": "f2dda380d76ce336bc0f88132ed77faef6ceb418106198a549ca9ed4b9880226"
+  },
+  {
+   "draw": {
+    "K_I": 27.753018630967674,
+    "K_j_0": 0.0007529042268896069,
+    "axis_azimuth_deg": 90.0,
+    "cross_section": "alternative",
+    "culture_temperature_c": 28.36349077686488,
+    "forcing_window": "median",
+    "illuminated_volume_basis": "tube_cylinder",
+    "initial_biomass_kg_m3": 1.496880684936472,
+    "k_X": 268.31227219680943,
+    "k_d": 0.00569782981526631,
+    "mu_max": 0.10906633851625644
+   },
+   "factor": null,
+   "id": "mc_014",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 7.410398871704473e-13,
+     "harvest_g": 10537.070725596977,
+     "harvest_only_areal_g_m2_day": 9.441819646592274,
+     "illuminated_volume_m3": 0.9306654076994403,
+     "inventory_change_g": -682.5987059689793,
+     "min_pbr_nitrogen_kg_m3": 0.42774058651432273,
+     "predicted_areal_g_m2_day": 8.830172060598564,
+     "predicted_volumetric_g_l_day": 0.2582408810175052,
+     "produced_g": 9854.472019627998
+    },
+    "horizontal": {
+     "biomass_residual_rel": 6.420033519881293e-13,
+     "harvest_g": 4630.221897602977,
+     "harvest_only_areal_g_m2_day": 4.763602775311705,
+     "illuminated_volume_m3": 0.3988566032997601,
+     "inventory_change_g": -419.48769887929365,
+     "min_pbr_nitrogen_kg_m3": 0.43737933866751355,
+     "predicted_areal_g_m2_day": 4.332031068645765,
+     "predicted_volumetric_g_l_day": 0.20886578366684938,
+     "produced_g": 4210.734198723683
+    }
+   },
+   "summary_sha256": "254da85363bb04a2f176b3241640b322a4feddcf93834a48fb46e17f3cc004fa"
+  },
+  {
+   "draw": {
+    "K_I": 15.402048278361685,
+    "K_j_0": 0.0006770611228308123,
+    "axis_azimuth_deg": 90.0,
+    "cross_section": "primary",
+    "culture_temperature_c": 22.8601680060491,
+    "forcing_window": "median",
+    "illuminated_volume_basis": "tube_cylinder",
+    "initial_biomass_kg_m3": 1.1785862053528333,
+    "k_X": 263.5840871645914,
+    "k_d": 0.006380851746926822,
+    "mu_max": 0.10852989643685179
+   },
+   "factor": null,
+   "id": "mc_015",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 1.762781831246314e-12,
+     "harvest_g": 21081.149490467364,
+     "harvest_only_areal_g_m2_day": 18.88991889826825,
+     "illuminated_volume_m3": 0.9306654076994403,
+     "inventory_change_g": 737.0357351093093,
+     "min_pbr_nitrogen_kg_m3": 0.34478426793022554,
+     "predicted_areal_g_m2_day": 19.55034518420849,
+     "predicted_volumetric_g_l_day": 0.5717553780287388,
+     "produced_g": 21818.18522557667
+    },
+    "horizontal": {
+     "biomass_residual_rel": 1.627349238513871e-12,
+     "harvest_g": 8828.704214471134,
+     "harvest_only_areal_g_m2_day": 9.083029027233676,
+     "illuminated_volume_m3": 0.3988566032997601,
+     "inventory_change_g": 230.51739839533914,
+     "min_pbr_nitrogen_kg_m3": 0.36886070787157377,
+     "predicted_areal_g_m2_day": 9.320186844512833,
+     "predicted_volumetric_g_l_day": 0.4493661514318687,
+     "produced_g": 9059.221612866473
+    }
+   },
+   "summary_sha256": "572d9e9ec70ad075543c37b61a273f869add93beb538ed32febad7c2c57fcb46"
+  },
+  {
+   "draw": {
+    "K_I": 18.613346164009773,
+    "K_j_0": 0.00048214471261683755,
+    "axis_azimuth_deg": 45.0,
+    "cross_section": "alternative",
+    "culture_temperature_c": 20.304217537806547,
+    "forcing_window": "high",
+    "illuminated_volume_basis": "reported_illuminated_share",
+    "initial_biomass_kg_m3": 1.798707101467823,
+    "k_X": 341.39291788888715,
+    "k_d": 0.0052556031203203225,
+    "mu_max": 0.10342775266756069
+   },
+   "factor": null,
+   "id": "mc_016",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 5.051120388850118e-14,
+     "harvest_g": 11003.837686843815,
+     "harvest_only_areal_g_m2_day": 9.860069611867218,
+     "illuminated_volume_m3": 0.7526,
+     "inventory_change_g": -958.6665941839918,
+     "min_pbr_nitrogen_kg_m3": 0.4263123982221167,
+     "predicted_areal_g_m2_day": 9.001049366182638,
+     "predicted_volumetric_g_l_day": 0.263238236180813,
+     "produced_g": 10045.171092659824
+    },
+    "horizontal": {
+     "biomass_residual_rel": 7.87163580571505e-14,
+     "harvest_g": 6219.540711124529,
+     "harvest_only_areal_g_m2_day": 6.398704435313301,
+     "illuminated_volume_m3": 0.40880000000000005,
+     "inventory_change_g": -414.1732371852771,
+     "min_pbr_nitrogen_kg_m3": 0.4145164380907142,
+     "predicted_areal_g_m2_day": 5.9726002818305055,
+     "predicted_volumetric_g_l_day": 0.28796465644539937,
+     "produced_g": 5805.367473939252
+    }
+   },
+   "summary_sha256": "c4254695babacdc426f9d0d4f3ffba887de06b9a0c7a4a7e7bec9deeef815bab"
+  },
+  {
+   "draw": {
+    "K_I": 12.2690096213084,
+    "K_j_0": 0.0007695418183288403,
+    "axis_azimuth_deg": 90.0,
+    "cross_section": "primary",
+    "culture_temperature_c": 28.436587846151312,
+    "forcing_window": "low",
+    "illuminated_volume_basis": "tube_cylinder",
+    "initial_biomass_kg_m3": 1.70899211872359,
+    "k_X": 247.2899107168089,
+    "k_d": 0.0038018592186514974,
+    "mu_max": 0.08758004558257158
+   },
+   "factor": null,
+   "id": "mc_017",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 6.74551631890376e-14,
+     "harvest_g": 12879.461060720125,
+     "harvest_only_areal_g_m2_day": 11.540735717491152,
+     "illuminated_volume_m3": 0.9306654076994403,
+     "inventory_change_g": -611.1340004732781,
+     "min_pbr_nitrogen_kg_m3": 0.4123733519035252,
+     "predicted_areal_g_m2_day": 10.993124605955957,
+     "predicted_volumetric_g_l_day": 0.3214970403628629,
+     "produced_g": 12268.327060246847
+    },
+    "horizontal": {
+     "biomass_residual_rel": 3.1455835537667694e-13,
+     "harvest_g": 5353.104124666112,
+     "harvest_only_areal_g_m2_day": 5.507308770232625,
+     "illuminated_volume_m3": 0.3988566032997601,
+     "inventory_change_g": -444.83611129765563,
+     "min_pbr_nitrogen_kg_m3": 0.42882665270119397,
+     "predicted_areal_g_m2_day": 5.049658449967548,
+     "predicted_volumetric_g_l_day": 0.24346567526629245,
+     "produced_g": 4908.268013368456
+    }
+   },
+   "summary_sha256": "0911b454d8ca8570c14528dc6086d3213c9c32fd51ae293f39924b09999c533f"
+  },
+  {
+   "draw": {
+    "K_I": 22.987672096867012,
+    "K_j_0": 0.0011750703519494694,
+    "axis_azimuth_deg": 45.0,
+    "cross_section": "primary",
+    "culture_temperature_c": 28.239248677538857,
+    "forcing_window": "median",
+    "illuminated_volume_basis": "reported_illuminated_share",
+    "initial_biomass_kg_m3": 1.309633802186633,
+    "k_X": 258.84703154586913,
+    "k_d": 0.0024537943227675527,
+    "mu_max": 0.0891962300723165
+   },
+   "factor": null,
+   "id": "mc_018",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 3.626634198237164e-13,
+     "harvest_g": 10480.961619599464,
+     "harvest_only_areal_g_m2_day": 9.391542669891994,
+     "illuminated_volume_m3": 0.7526,
+     "inventory_change_g": -475.2802837354424,
+     "min_pbr_nitrogen_kg_m3": 0.42972785967661836,
+     "predicted_areal_g_m2_day": 8.965664279448047,
+     "predicted_volumetric_g_l_day": 0.26220338930461273,
+     "produced_g": 10005.681335864021
+    },
+    "horizontal": {
+     "biomass_residual_rel": 2.6363693002768057e-13,
+     "harvest_g": 5758.494355341953,
+     "harvest_only_areal_g_m2_day": 5.924376908788018,
+     "illuminated_volume_m3": 0.40880000000000005,
+     "inventory_change_g": -178.1889577827729,
+     "min_pbr_nitrogen_kg_m3": 0.4201932010930621,
+     "predicted_areal_g_m2_day": 5.741054935760474,
+     "predicted_volumetric_g_l_day": 0.2768008629741657,
+     "produced_g": 5580.30539755918
+    }
+   },
+   "summary_sha256": "f1bc80fca9639f9ee29441ff0878afcf07cfc78bd22b8a11ec6c4d775e675fe7"
+  },
+  {
+   "draw": {
+    "K_I": 21.440859440268635,
+    "K_j_0": 0.0010215260549645611,
+    "axis_azimuth_deg": 90.0,
+    "cross_section": "primary",
+    "culture_temperature_c": 23.830139773978505,
+    "forcing_window": "high",
+    "illuminated_volume_basis": "reported_illuminated_share",
+    "initial_biomass_kg_m3": 0.5030138758421987,
+    "k_X": 322.6855744842736,
+    "k_d": 0.005733056298504204,
+    "mu_max": 0.09199119624719146
+   },
+   "factor": null,
+   "id": "mc_019",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 1.0747694262614832e-13,
+     "harvest_g": 11095.862441167208,
+     "harvest_only_areal_g_m2_day": 9.942529069146243,
+     "illuminated_volume_m3": 0.7526,
+     "inventory_change_g": 542.0833548613073,
+     "min_pbr_nitrogen_kg_m3": 0.4157304434945955,
+     "predicted_areal_g_m2_day": 10.428266842319458,
+     "predicted_volumetric_g_l_day": 0.3049776151999086,
+     "produced_g": 11637.945796028514
+    },
+    "horizontal": {
+     "biomass_residual_rel": 1.8124775585819882e-13,
+     "harvest_g": 6041.994621594915,
+     "harvest_only_areal_g_m2_day": 6.216043849377485,
+     "illuminated_volume_m3": 0.40880000000000005,
+     "inventory_change_g": 353.19543480520144,
+     "min_pbr_nitrogen_kg_m3": 0.40600918779667466,
+     "predicted_areal_g_m2_day": 6.579413638271724,
+     "predicted_volumetric_g_l_day": 0.317221728988101,
+     "produced_g": 6395.190056400116
+    }
+   },
+   "summary_sha256": "c0242b1609a69a6797e75cd0c77fc0399cc48047ba9bc084b9c5efb434e1da5f"
+  },
+  {
+   "draw": {
+    "K_I": 10.292838187901907,
+    "K_j_0": 0.0006566233832790136,
+    "axis_azimuth_deg": 45.0,
+    "cross_section": "alternative",
+    "culture_temperature_c": 21.427059906701416,
+    "forcing_window": "median",
+    "illuminated_volume_basis": "reported_illuminated_share",
+    "initial_biomass_kg_m3": 1.6392451493217246,
+    "k_X": 355.7637045028066,
+    "k_d": 0.0070154288289056305,
+    "mu_max": 0.12371956611085828
+   },
+   "factor": null,
+   "id": "mc_020",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 5.7145142276316e-13,
+     "harvest_g": 14361.202322045201,
+     "harvest_only_areal_g_m2_day": 12.868460862047671,
+     "illuminated_volume_m3": 0.7526,
+     "inventory_change_g": -456.7609528538592,
+     "min_pbr_nitrogen_kg_m3": 0.3993491143161373,
+     "predicted_areal_g_m2_day": 12.459176854114105,
+     "predicted_volumetric_g_l_day": 0.3643721532806955,
+     "produced_g": 13904.441369191341
+    },
+    "horizontal": {
+     "biomass_residual_rel": 3.489009398856845e-13,
+     "harvest_g": 8034.65303577301,
+     "harvest_only_areal_g_m2_day": 8.266103946268528,
+     "illuminated_volume_m3": 0.40880000000000005,
+     "inventory_change_g": -131.92216478294506,
+     "min_pbr_nitrogen_kg_m3": 0.3845625526788405,
+     "predicted_areal_g_m2_day": 8.130381554516527,
+     "predicted_volumetric_g_l_day": 0.3920005392356183,
+     "produced_g": 7902.730870990064
+    }
+   },
+   "summary_sha256": "45c6f56a63d82ffa10a74491e0118b172d93c4dd283ae852528cbfceee906a34"
+  },
+  {
+   "draw": {
+    "K_I": 7.716793844617278,
+    "K_j_0": 0.0008375541977288007,
+    "axis_azimuth_deg": 0.0,
+    "cross_section": "alternative",
+    "culture_temperature_c": 29.136755450420825,
+    "forcing_window": "median",
+    "illuminated_volume_basis": "reported_illuminated_share",
+    "initial_biomass_kg_m3": 0.9756327047094564,
+    "k_X": 264.8231254906583,
+    "k_d": 0.007209373386073478,
+    "mu_max": 0.10055546858291119
+   },
+   "factor": null,
+   "id": "mc_021",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 5.561157955983127e-13,
+     "harvest_g": 3276.0729416527424,
+     "harvest_only_areal_g_m2_day": 2.935549230871633,
+     "illuminated_volume_m3": 0.7526,
+     "inventory_change_g": -950.9459703506718,
+     "min_pbr_nitrogen_kg_m3": 0.47466293318852426,
+     "predicted_areal_g_m2_day": 2.083447106901497,
+     "predicted_volumetric_g_l_day": 0.060931000296175854,
+     "produced_g": 2325.1269713020706
+    },
+    "horizontal": {
+     "biomass_residual_rel": 3.7026967757513185e-13,
+     "harvest_g": 2184.9599556198273,
+     "harvest_only_areal_g_m2_day": 2.247901188909287,
+     "illuminated_volume_m3": 0.40880000000000005,
+     "inventory_change_g": -443.23522635172617,
+     "min_pbr_nitrogen_kg_m3": 0.46751056691171605,
+     "predicted_areal_g_m2_day": 1.7918978696173877,
+     "predicted_volumetric_g_l_day": 0.08639507585655264,
+     "produced_g": 1741.724729268101
+    }
+   },
+   "summary_sha256": "0fd567c33232eab072fe9bce050d4944b997378bf561cbd0a80f44af44f1cddc"
+  },
+  {
+   "draw": {
+    "K_I": 22.325079758933228,
+    "K_j_0": 0.0008802781612729212,
+    "axis_azimuth_deg": 90.0,
+    "cross_section": "alternative",
+    "culture_temperature_c": 20.69183672222919,
+    "forcing_window": "median",
+    "illuminated_volume_basis": "reported_illuminated_share",
+    "initial_biomass_kg_m3": 1.8111288915069115,
+    "k_X": 252.31449343722863,
+    "k_d": 0.0023786814009184106,
+    "mu_max": 0.0938629129253411
+   },
+   "factor": null,
+   "id": "mc_022",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 2.607170730443533e-13,
+     "harvest_g": 14729.206824594532,
+     "harvest_only_areal_g_m2_day": 13.198214000532735,
+     "illuminated_volume_m3": 0.7526,
+     "inventory_change_g": -615.9320841208245,
+     "min_pbr_nitrogen_kg_m3": 0.4002271052283348,
+     "predicted_areal_g_m2_day": 12.64630353089042,
+     "predicted_volumetric_g_l_day": 0.369844725903399,
+     "produced_g": 14113.274740473707
+    },
+    "horizontal": {
+     "biomass_residual_rel": 3.449416928371666e-13,
+     "harvest_g": 8436.159484551112,
+     "harvest_only_areal_g_m2_day": 8.679176424435301,
+     "illuminated_volume_m3": 0.40880000000000005,
+     "inventory_change_g": -184.99544306423687,
+     "min_pbr_nitrogen_kg_m3": 0.38197716575186286,
+     "predicted_areal_g_m2_day": 8.488851894533822,
+     "predicted_volumetric_g_l_day": 0.40928393062930923,
+     "produced_g": 8251.164041486874
+    }
+   },
+   "summary_sha256": "49dda62b07913a801820497c1dd49daf042a845e7a622ef3149bf1fab4cd773e"
+  },
+  {
+   "draw": {
+    "K_I": 27.613805945695393,
+    "K_j_0": 0.0006262442934293754,
+    "axis_azimuth_deg": 45.0,
+    "cross_section": "primary",
+    "culture_temperature_c": 21.490250015587257,
+    "forcing_window": "median",
+    "illuminated_volume_basis": "tube_cylinder",
+    "initial_biomass_kg_m3": 1.9783368802035204,
+    "k_X": 279.9397187100145,
+    "k_d": 0.003255226067140813,
+    "mu_max": 0.11037226838015389
+   },
+   "factor": null,
+   "id": "mc_023",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 6.206260934163863e-13,
+     "harvest_g": 19775.48030884409,
+     "harvest_only_areal_g_m2_day": 17.71996443444811,
+     "illuminated_volume_m3": 0.9306654076994403,
+     "inventory_change_g": -299.56375345173905,
+     "min_pbr_nitrogen_kg_m3": 0.3613423690397327,
+     "predicted_areal_g_m2_day": 17.451538132072002,
+     "predicted_volumetric_g_l_day": 0.5103751717870113,
+     "produced_g": 19475.916555392352
+    },
+    "horizontal": {
+     "biomass_residual_rel": 5.593618133305276e-13,
+     "harvest_g": 8464.116188450318,
+     "harvest_only_areal_g_m2_day": 8.707938465483867,
+     "illuminated_volume_m3": 0.3988566032997601,
+     "inventory_change_g": -287.59533242773426,
+     "min_pbr_nitrogen_kg_m3": 0.3813424976614894,
+     "predicted_areal_g_m2_day": 8.412058493850395,
+     "predicted_volumetric_g_l_day": 0.4055813916677869,
+     "produced_g": 8176.520856022584
+    }
+   },
+   "summary_sha256": "864d8f3cb8eab0998b5266dd94e22d5bb0b85c0e887c9fda7288b273244e3996"
+  },
+  {
+   "draw": {
+    "K_I": 13.902426057686192,
+    "K_j_0": 0.0012876535274457376,
+    "axis_azimuth_deg": 90.0,
+    "cross_section": "primary",
+    "culture_temperature_c": 28.98133304767802,
+    "forcing_window": "high",
+    "illuminated_volume_basis": "tube_cylinder",
+    "initial_biomass_kg_m3": 1.5616865747018687,
+    "k_X": 307.17527849787314,
+    "k_d": 0.004020666101017209,
+    "mu_max": 0.11479162046944263
+   },
+   "factor": null,
+   "id": "mc_024",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 2.780007691377901e-13,
+     "harvest_g": 10533.765014708892,
+     "harvest_only_areal_g_m2_day": 9.438857540061731,
+     "illuminated_volume_m3": 0.9306654076994403,
+     "inventory_change_g": -744.9556858675467,
+     "min_pbr_nitrogen_kg_m3": 0.42967855955086665,
+     "predicted_areal_g_m2_day": 8.771334524051385,
+     "predicted_volumetric_g_l_day": 0.2565201606090499,
+     "produced_g": 9788.809328841346
+    },
+    "horizontal": {
+     "biomass_residual_rel": 8.302673429428613e-14,
+     "harvest_g": 4423.25973761801,
+     "harvest_only_areal_g_m2_day": 4.55067874240536,
+     "illuminated_volume_m3": 0.3988566032997601,
+     "inventory_change_g": -485.1106267761237,
+     "min_pbr_nitrogen_kg_m3": 0.44211680584930874,
+     "predicted_areal_g_m2_day": 4.0515937354340394,
+     "predicted_volumetric_g_l_day": 0.1953446979584269,
+     "produced_g": 3938.1491108418863
+    }
+   },
+   "summary_sha256": "ed8b207fb23cf3f27c905ddcdeb7a191154d3fa9930f33141a2b3762aaee1f0c"
+  },
+  {
+   "draw": {
+    "K_I": 8.420554005027588,
+    "K_j_0": 0.0010555455761151506,
+    "axis_azimuth_deg": 0.0,
+    "cross_section": "primary",
+    "culture_temperature_c": 25.33722793200878,
+    "forcing_window": "high",
+    "illuminated_volume_basis": "reported_illuminated_share",
+    "initial_biomass_kg_m3": 0.5678801414955176,
+    "k_X": 324.3913930572403,
+    "k_d": 0.004021360432961219,
+    "mu_max": 0.12000728474006145
+   },
+   "factor": null,
+   "id": "mc_025",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 1.7382905150870358e-13,
+     "harvest_g": 22541.06610592215,
+     "harvest_only_areal_g_m2_day": 20.198087908532393,
+     "illuminated_volume_m3": 0.7526,
+     "inventory_change_g": 1650.263203359641,
+     "min_pbr_nitrogen_kg_m3": 0.3276031707064903,
+     "predicted_areal_g_m2_day": 21.676818377492644,
+     "predicted_volumetric_g_l_day": 0.6339446883983698,
+     "produced_g": 24191.32930928179
+    },
+    "horizontal": {
+     "biomass_residual_rel": 5.178539439711809e-14,
+     "harvest_g": 12113.228688615842,
+     "harvest_only_areal_g_m2_day": 12.462169432732347,
+     "illuminated_volume_m3": 0.40880000000000005,
+     "inventory_change_g": 997.8612626297855,
+     "min_pbr_nitrogen_kg_m3": 0.3112092072824724,
+     "predicted_areal_g_m2_day": 13.488775670005788,
+     "predicted_volumetric_g_l_day": 0.6503516840895648,
+     "produced_g": 13111.089951245627
+    }
+   },
+   "summary_sha256": "40131cb6774ae6253748d43436bffad9766e1f0e467f2123dcf5f8a6c20b562e"
+  },
+  {
+   "draw": {
+    "K_I": 13.228194971675846,
+    "K_j_0": 0.0007748686198065428,
+    "axis_azimuth_deg": 90.0,
+    "cross_section": "primary",
+    "culture_temperature_c": 28.076995817396725,
+    "forcing_window": "high",
+    "illuminated_volume_basis": "reported_illuminated_share",
+    "initial_biomass_kg_m3": 1.2736283292963648,
+    "k_X": 315.25351386128517,
+    "k_d": 0.006705216463101217,
+    "mu_max": 0.10013540361745599
+   },
+   "factor": null,
+   "id": "mc_026",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 1.334881917879418e-13,
+     "harvest_g": 9440.13395170719,
+     "harvest_only_areal_g_m2_day": 8.458901390418628,
+     "illuminated_volume_m3": 0.7526,
+     "inventory_change_g": -524.8150639038477,
+     "min_pbr_nitrogen_kg_m3": 0.43477072172657394,
+     "predicted_areal_g_m2_day": 7.988636996239555,
+     "predicted_volumetric_g_l_day": 0.2336299498900247,
+     "produced_g": 8915.318887803343
+    },
+    "horizontal": {
+     "biomass_residual_rel": 6.081280911645706e-14,
+     "harvest_g": 5147.7574261873115,
+     "harvest_only_areal_g_m2_day": 5.296046734760608,
+     "illuminated_volume_m3": 0.40880000000000005,
+     "inventory_change_g": -219.21376991555618,
+     "min_pbr_nitrogen_kg_m3": 0.42706243484209067,
+     "predicted_areal_g_m2_day": 5.070518164888637,
+     "predicted_volumetric_g_l_day": 0.24447141152141644,
+     "produced_g": 4928.543656271755
+    }
+   },
+   "summary_sha256": "b63c6b461ad0558d1597f84416a4449fdf6668278cc8a620e01f3f79c9b3aee0"
+  },
+  {
+   "draw": {
+    "K_I": 8.496035332719703,
+    "K_j_0": 0.0010298078049200028,
+    "axis_azimuth_deg": 45.0,
+    "cross_section": "alternative",
+    "culture_temperature_c": 29.04588543411211,
+    "forcing_window": "high",
+    "illuminated_volume_basis": "tube_cylinder",
+    "initial_biomass_kg_m3": 0.9914474797113372,
+    "k_X": 208.92492648668437,
+    "k_d": 0.0033991163639735134,
+    "mu_max": 0.10692141906298844
+   },
+   "factor": null,
+   "id": "mc_027",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 4.0141620806052464e-13,
+     "harvest_g": 14392.446795905093,
+     "harvest_only_areal_g_m2_day": 12.896457702423918,
+     "illuminated_volume_m3": 0.9306654076994403,
+     "inventory_change_g": 311.56715246678334,
+     "min_pbr_nitrogen_kg_m3": 0.39458557533590555,
+     "predicted_areal_g_m2_day": 13.175639738684476,
+     "predicted_volumetric_g_l_day": 0.38532531311247054,
+     "produced_g": 14704.013948371876
+    },
+    "horizontal": {
+     "biomass_residual_rel": 1.4288963621047617e-13,
+     "harvest_g": 6080.992509701751,
+     "harvest_only_areal_g_m2_day": 6.2561651334380155,
+     "illuminated_volume_m3": 0.3988566032997601,
+     "inventory_change_g": 53.23765547191872,
+     "min_pbr_nitrogen_kg_m3": 0.41096801895999524,
+     "predicted_areal_g_m2_day": 6.310936383923529,
+     "predicted_volumetric_g_l_day": 0.30427728993917014,
+     "produced_g": 6134.23016517367
+    }
+   },
+   "summary_sha256": "2c0b8fbaccb8709933ed55a9cd8d3901e1e9173add9e59e1578b4155c4db5bfc"
+  },
+  {
+   "draw": {
+    "K_I": 9.675407520393858,
+    "K_j_0": 0.0007564861089058261,
+    "axis_azimuth_deg": 0.0,
+    "cross_section": "alternative",
+    "culture_temperature_c": 27.17504749781652,
+    "forcing_window": "median",
+    "illuminated_volume_basis": "tube_cylinder",
+    "initial_biomass_kg_m3": 0.9463129627162488,
+    "k_X": 285.5623144261177,
+    "k_d": 0.0041653905386579175,
+    "mu_max": 0.12083715792845348
+   },
+   "factor": null,
+   "id": "mc_028",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 4.887769058790446e-13,
+     "harvest_g": 24086.254079988463,
+     "harvest_only_areal_g_m2_day": 21.58266494622622,
+     "illuminated_volume_m3": 0.9306654076994403,
+     "inventory_change_g": 1324.6716242515286,
+     "min_pbr_nitrogen_kg_m3": 0.32218628127664045,
+     "predicted_areal_g_m2_day": 22.769646688387088,
+     "predicted_volumetric_g_l_day": 0.6659047616415092,
+     "produced_g": 25410.92570423999
+    },
+    "horizontal": {
+     "biomass_residual_rel": 4.866747101995736e-13,
+     "harvest_g": 10584.184008373124,
+     "harvest_only_areal_g_m2_day": 10.889078197914737,
+     "illuminated_volume_m3": 0.3988566032997601,
+     "inventory_change_g": 577.5733284857467,
+     "min_pbr_nitrogen_kg_m3": 0.3416575966938446,
+     "predicted_areal_g_m2_day": 11.48328944121283,
+     "predicted_volumetric_g_l_day": 0.5536585980584757,
+     "produced_g": 11161.757336858871
+    }
+   },
+   "summary_sha256": "13136e4793e11f9bef4b6a7ce36f9534989bb2008a960253d057d818f36b4c78"
+  },
+  {
+   "draw": {
+    "K_I": 13.322977704155724,
+    "K_j_0": 0.0012237735099412885,
+    "axis_azimuth_deg": 0.0,
+    "cross_section": "primary",
+    "culture_temperature_c": 24.4819273931888,
+    "forcing_window": "median",
+    "illuminated_volume_basis": "tube_cylinder",
+    "initial_biomass_kg_m3": 0.6883583027266743,
+    "k_X": 353.30291717635373,
+    "k_d": 0.0037801230911843104,
+    "mu_max": 0.10678315630737081
+   },
+   "factor": null,
+   "id": "mc_029",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 5.773434907048337e-13,
+     "harvest_g": 20061.43215109678,
+     "harvest_only_areal_g_m2_day": 17.976193683778476,
+     "illuminated_volume_m3": 0.9306654076994403,
+     "inventory_change_g": 1222.3934631098762,
+     "min_pbr_nitrogen_kg_m3": 0.35114826944487343,
+     "predicted_areal_g_m2_day": 19.07152832814216,
+     "predicted_volumetric_g_l_day": 0.5577522435588746,
+     "produced_g": 21283.825614206653
+    },
+    "horizontal": {
+     "biomass_residual_rel": 5.670801367204763e-13,
+     "harvest_g": 8399.643702651898,
+     "harvest_only_areal_g_m2_day": 8.641608747584257,
+     "illuminated_volume_m3": 0.3988566032997601,
+     "inventory_change_g": 498.3701009260923,
+     "min_pbr_nitrogen_kg_m3": 0.3733637787917825,
+     "predicted_areal_g_m2_day": 9.154335188866247,
+     "predicted_volumetric_g_l_day": 0.4413697323203369,
+     "produced_g": 8898.013803577991
+    }
+   },
+   "summary_sha256": "772d73d69551dba384353bffb06b18afb77750c09e138a5b0e8130148b5c1824"
+  },
+  {
+   "draw": {
+    "K_I": 16.964228499860134,
+    "K_j_0": 0.0008133708445034908,
+    "axis_azimuth_deg": 90.0,
+    "cross_section": "alternative",
+    "culture_temperature_c": 22.550721137632863,
+    "forcing_window": "high",
+    "illuminated_volume_basis": "reported_illuminated_share",
+    "initial_biomass_kg_m3": 0.5334395949728612,
+    "k_X": 231.745268298435,
+    "k_d": 0.002770696522688008,
+    "mu_max": 0.08360413024407885
+   },
+   "factor": null,
+   "id": "mc_030",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 3.0301838877867015e-13,
+     "harvest_g": 16337.590014778198,
+     "harvest_only_areal_g_m2_day": 14.639417575966128,
+     "illuminated_volume_m3": 0.7526,
+     "inventory_change_g": 1069.4121915155838,
+     "min_pbr_nitrogen_kg_m3": 0.37494558422905366,
+     "predicted_areal_g_m2_day": 15.597672227861814,
+     "predicted_volumetric_g_l_day": 0.45615833873935485,
+     "produced_g": 17407.002206293782
+    },
+    "horizontal": {
+     "biomass_residual_rel": 3.3092977685898443e-13,
+     "harvest_g": 9372.338120938291,
+     "harvest_only_areal_g_m2_day": 9.6423231696896,
+     "illuminated_volume_m3": 0.40880000000000005,
+     "inventory_change_g": 730.1415955366242,
+     "min_pbr_nitrogen_kg_m3": 0.35394822885880256,
+     "predicted_areal_g_m2_day": 10.393497650694359,
+     "predicted_volumetric_g_l_day": 0.5011150653013351,
+     "produced_g": 10102.479716474916
+    }
+   },
+   "summary_sha256": "fb7aedf86f125198b60b8fc5f6b57b0ae261e11020b288a72fad03e5291f7f76"
+  },
+  {
+   "draw": {
+    "K_I": 8.145738099150398,
+    "K_j_0": 0.0011874737022895755,
+    "axis_azimuth_deg": 45.0,
+    "cross_section": "alternative",
+    "culture_temperature_c": 22.840341649801523,
+    "forcing_window": "low",
+    "illuminated_volume_basis": "tube_cylinder",
+    "initial_biomass_kg_m3": 1.419004167402322,
+    "k_X": 280.7892146170481,
+    "k_d": 0.004031747381565492,
+    "mu_max": 0.11544105393857954
+   },
+   "factor": null,
+   "id": "mc_031",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 6.65435507561359e-14,
+     "harvest_g": 27174.248802780843,
+     "harvest_only_areal_g_m2_day": 24.34968530715129,
+     "illuminated_volume_m3": 0.9306654076994403,
+     "inventory_change_g": 1273.9103343705272,
+     "min_pbr_nitrogen_kg_m3": 0.29787376242540886,
+     "predicted_areal_g_m2_day": 25.49118202253707,
+     "predicted_volumetric_g_l_day": 0.7454968327345747,
+     "produced_g": 28448.15913715137
+    },
+    "horizontal": {
+     "biomass_residual_rel": 9.387534349437865e-14,
+     "harvest_g": 11970.919779798063,
+     "harvest_only_areal_g_m2_day": 12.315761090327225,
+     "illuminated_volume_m3": 0.3988566032997601,
+     "inventory_change_g": 522.6995671942968,
+     "min_pbr_nitrogen_kg_m3": 0.3219554799185258,
+     "predicted_areal_g_m2_day": 12.853517846699958,
+     "predicted_volumetric_g_l_day": 0.6197231818944623,
+     "produced_g": 12493.61934699236
+    }
+   },
+   "summary_sha256": "f252c53349a266005857e245a0fdc8b9666faba19901af44646aa351e74a4b57"
+  },
+  {
+   "draw": {
+    "K_I": 15.149421614112242,
+    "K_j_0": 0.0011717759625683173,
+    "axis_azimuth_deg": 45.0,
+    "cross_section": "alternative",
+    "culture_temperature_c": 29.624454582416234,
+    "forcing_window": "high",
+    "illuminated_volume_basis": "tube_cylinder",
+    "initial_biomass_kg_m3": 1.4671086097763402,
+    "k_X": 240.82016431375925,
+    "k_d": 0.002861375428261471,
+    "mu_max": 0.10576847302924167
+   },
+   "factor": null,
+   "id": "mc_032",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 6.62884596217894e-13,
+     "harvest_g": 3257.9656058667,
+     "harvest_only_areal_g_m2_day": 2.9193240195938173,
+     "illuminated_volume_m3": 0.9306654076994403,
+     "inventory_change_g": -1515.621923186275,
+     "min_pbr_nitrogen_kg_m3": 0.4789020852100805,
+     "predicted_areal_g_m2_day": 1.561239859032639,
+     "predicted_volumetric_g_l_day": 0.045658901537746995,
+     "produced_g": 1742.3436826804252
+    },
+    "horizontal": {
+     "biomass_residual_rel": 5.065627786030005e-13,
+     "harvest_g": 1431.3424640925175,
+     "harvest_only_areal_g_m2_day": 1.4725745515355118,
+     "illuminated_volume_m3": 0.3988566032997601,
+     "inventory_change_g": -811.03616837146,
+     "min_pbr_nitrogen_kg_m3": 0.48331569442067135,
+     "predicted_areal_g_m2_day": 0.6381752013591127,
+     "predicted_volumetric_g_l_day": 0.03076916149410007,
+     "produced_g": 620.3062957210575
+    }
+   },
+   "summary_sha256": "514e6a25a00029966c59ce14136fbc65675f9eeed75620e2b9264bd4dfe660c4"
+  },
+  {
+   "draw": {
+    "K_I": 12.92161358264503,
+    "K_j_0": 0.0012482713942133968,
+    "axis_azimuth_deg": 45.0,
+    "cross_section": "primary",
+    "culture_temperature_c": 28.322864404829712,
+    "forcing_window": "median",
+    "illuminated_volume_basis": "reported_illuminated_share",
+    "initial_biomass_kg_m3": 1.788917345247958,
+    "k_X": 268.9392112131659,
+    "k_d": 0.005025571441474625,
+    "mu_max": 0.1179002674711373
+   },
+   "factor": null,
+   "id": "mc_033",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 4.0982459097900845e-13,
+     "harvest_g": 13562.691346106092,
+     "harvest_only_areal_g_m2_day": 12.15294923486209,
+     "illuminated_volume_m3": 0.7526,
+     "inventory_change_g": -712.3757933353105,
+     "min_pbr_nitrogen_kg_m3": 0.40811464040042467,
+     "predicted_areal_g_m2_day": 11.514619670941562,
+     "predicted_volumetric_g_l_day": 0.3367483111313098,
+     "produced_g": 12850.315552770782
+    },
+    "horizontal": {
+     "biomass_residual_rel": 4.2340922650306423e-13,
+     "harvest_g": 7328.910371771296,
+     "harvest_only_areal_g_m2_day": 7.540031246678288,
+     "illuminated_volume_m3": 0.40880000000000005,
+     "inventory_change_g": -298.8048293442709,
+     "min_pbr_nitrogen_kg_m3": 0.39783383658771704,
+     "predicted_areal_g_m2_day": 7.232618870809698,
+     "predicted_volumetric_g_l_day": 0.34871555269975324,
+     "produced_g": 7030.105542427025
+    }
+   },
+   "summary_sha256": "b14f0d39043f6ba5d4a7fb70b217534a5cc6f8d625a911111a7376c96213658a"
+  },
+  {
+   "draw": {
+    "K_I": 27.54573599112081,
+    "K_j_0": 0.0005439735965820896,
+    "axis_azimuth_deg": 45.0,
+    "cross_section": "alternative",
+    "culture_temperature_c": 23.004238031856374,
+    "forcing_window": "high",
+    "illuminated_volume_basis": "tube_cylinder",
+    "initial_biomass_kg_m3": 0.7857501529592997,
+    "k_X": 379.5454236798706,
+    "k_d": 0.008059100927992292,
+    "mu_max": 0.11947119036630713
+   },
+   "factor": null,
+   "id": "mc_034",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 3.023591975628926e-13,
+     "harvest_g": 12208.92055835425,
+     "harvest_only_areal_g_m2_day": 10.939892973435708,
+     "illuminated_volume_m3": 0.9306654076994403,
+     "inventory_change_g": 315.74537002117097,
+     "min_pbr_nitrogen_kg_m3": 0.40756789827183393,
+     "predicted_areal_g_m2_day": 11.222818932236041,
+     "predicted_volumetric_g_l_day": 0.32821451594275214,
+     "produced_g": 12524.665928375422
+    },
+    "horizontal": {
+     "biomass_residual_rel": 2.3014403088592423e-13,
+     "harvest_g": 5372.631300915795,
+     "harvest_only_areal_g_m2_day": 5.5273984577323,
+     "illuminated_volume_m3": 0.3988566032997601,
+     "inventory_change_g": 103.92569313185169,
+     "min_pbr_nitrogen_kg_m3": 0.4182685199619371,
+     "predicted_areal_g_m2_day": 5.634317895110747,
+     "predicted_volumetric_g_l_day": 0.27165461279998243,
+     "produced_g": 5476.556994047646
+    }
+   },
+   "summary_sha256": "cde89780de4ac81ec83b68336bc6c5eed49ea6bb3ef82e1fadd1f357a2d17948"
+  },
+  {
+   "draw": {
+    "K_I": 20.36483566117648,
+    "K_j_0": 0.0009962109075460283,
+    "axis_azimuth_deg": 90.0,
+    "cross_section": "alternative",
+    "culture_temperature_c": 22.47072396890512,
+    "forcing_window": "median",
+    "illuminated_volume_basis": "tube_cylinder",
+    "initial_biomass_kg_m3": 0.8456107030900926,
+    "k_X": 365.96102733900193,
+    "k_d": 0.005012236837815105,
+    "mu_max": 0.11814786064496757
+   },
+   "factor": null,
+   "id": "mc_035",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 2.1096046764644598e-13,
+     "harvest_g": 15244.14492970005,
+     "harvest_only_areal_g_m2_day": 13.659628073207932,
+     "illuminated_volume_m3": 0.9306654076994403,
+     "inventory_change_g": 542.098056834251,
+     "min_pbr_nitrogen_kg_m3": 0.3875719659625467,
+     "predicted_areal_g_m2_day": 14.145379020192028,
+     "predicted_volumetric_g_l_day": 0.4136856128546725,
+     "produced_g": 15786.242986534302
+    },
+    "horizontal": {
+     "biomass_residual_rel": 1.4306042310538832e-14,
+     "harvest_g": 6755.951095762474,
+     "harvest_only_areal_g_m2_day": 6.950566970949048,
+     "illuminated_volume_m3": 0.3988566032997601,
+     "inventory_change_g": 216.3042156095205,
+     "min_pbr_nitrogen_kg_m3": 0.39943064597577466,
+     "predicted_areal_g_m2_day": 7.17310217219341,
+     "predicted_volumetric_g_l_day": 0.3458459975878966,
+     "produced_g": 6972.255311371995
+    }
+   },
+   "summary_sha256": "0f7cb45db4309d9b7e2d1ac7b12853f3d6d9b4e9729c4e99ca86528a0c85d0b1"
+  },
+  {
+   "draw": {
+    "K_I": 20.833623265746134,
+    "K_j_0": 0.0005455727499889429,
+    "axis_azimuth_deg": 90.0,
+    "cross_section": "primary",
+    "culture_temperature_c": 21.745375126610387,
+    "forcing_window": "low",
+    "illuminated_volume_basis": "tube_cylinder",
+    "initial_biomass_kg_m3": 1.2750820955051916,
+    "k_X": 204.7367793717781,
+    "k_d": 0.00630996912247044,
+    "mu_max": 0.0916145477928342
+   },
+   "factor": null,
+   "id": "mc_036",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 8.519733980475058e-14,
+     "harvest_g": 17892.814696880552,
+     "harvest_only_areal_g_m2_day": 16.03298807964207,
+     "illuminated_volume_m3": 0.9306654076994403,
+     "inventory_change_g": 439.5332950960649,
+     "min_pbr_nitrogen_kg_m3": 0.3657658087827916,
+     "predicted_areal_g_m2_day": 16.426835118258616,
+     "predicted_volumetric_g_l_day": 0.48040744213775205,
+     "produced_g": 18332.347991976618
+    },
+    "horizontal": {
+     "biomass_residual_rel": 1.9209689196003173e-13,
+     "harvest_g": 7410.059750162595,
+     "harvest_only_areal_g_m2_day": 7.623518261484152,
+     "illuminated_volume_m3": 0.3988566032997601,
+     "inventory_change_g": 73.93869544598087,
+     "min_pbr_nitrogen_kg_m3": 0.3893765815581571,
+     "predicted_areal_g_m2_day": 7.699586878198123,
+     "predicted_volumetric_g_l_day": 0.3712300816274095,
+     "produced_g": 7483.998445608576
+    }
+   },
+   "summary_sha256": "07ace9abd8d331f02fe6af8b90436e8f0fadd4fb173e3e032d05ff24f841100f"
+  },
+  {
+   "draw": {
+    "K_I": 9.24459933785766,
+    "K_j_0": 0.000795272128306659,
+    "axis_azimuth_deg": 90.0,
+    "cross_section": "alternative",
+    "culture_temperature_c": 21.82604010935518,
+    "forcing_window": "median",
+    "illuminated_volume_basis": "tube_cylinder",
+    "initial_biomass_kg_m3": 0.5708936283649797,
+    "k_X": 291.62374421780595,
+    "k_d": 0.006128312938553348,
+    "mu_max": 0.11252959876682594
+   },
+   "factor": null,
+   "id": "mc_037",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 6.004516708509833e-13,
+     "harvest_g": 20569.917243453645,
+     "harvest_only_areal_g_m2_day": 18.431825486965632,
+     "illuminated_volume_m3": 0.9306654076994403,
+     "inventory_change_g": 1385.8008229424113,
+     "min_pbr_nitrogen_kg_m3": 0.3450190087426527,
+     "predicted_areal_g_m2_day": 19.673582496770663,
+     "predicted_volumetric_g_l_day": 0.5753594881131042,
+     "produced_g": 21955.718066396057
+    },
+    "horizontal": {
+     "biomass_residual_rel": 6.183895642653006e-13,
+     "harvest_g": 8916.990970620074,
+     "harvest_only_areal_g_m2_day": 9.173859023271682,
+     "illuminated_volume_m3": 0.3988566032997601,
+     "inventory_change_g": 618.0928502496602,
+     "min_pbr_nitrogen_kg_m3": 0.36376027592761234,
+     "predicted_areal_g_m2_day": 9.809757017355695,
+     "predicted_volumetric_g_l_day": 0.4729704276225067,
+     "produced_g": 9535.083820869735
+    }
+   },
+   "summary_sha256": "6ba23f25a1b7cfa44b10b76828b9e8cb3f790ac87ea6f30efba2f5320f44f0ff"
+  },
+  {
+   "draw": {
+    "K_I": 25.076425867245394,
+    "K_j_0": 0.0013319189428524095,
+    "axis_azimuth_deg": 45.0,
+    "cross_section": "alternative",
+    "culture_temperature_c": 20.447840962165333,
+    "forcing_window": "low",
+    "illuminated_volume_basis": "reported_illuminated_share",
+    "initial_biomass_kg_m3": 0.77388043527769,
+    "k_X": 237.47136659558504,
+    "k_d": 0.004572041287367492,
+    "mu_max": 0.12149200397391689
+   },
+   "factor": null,
+   "id": "mc_038",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 3.8115635371262153e-13,
+     "harvest_g": 14626.586486685337,
+     "harvest_only_areal_g_m2_day": 13.106260292728797,
+     "illuminated_volume_m3": 0.7526,
+     "inventory_change_g": 681.931478289852,
+     "min_pbr_nitrogen_kg_m3": 0.3881514523582578,
+     "predicted_areal_g_m2_day": 13.717310004458055,
+     "predicted_volumetric_g_l_day": 0.40116661333792425,
+     "produced_g": 15308.51796497519
+    },
+    "horizontal": {
+     "biomass_residual_rel": 2.2425795873314594e-13,
+     "harvest_g": 8391.398228251932,
+     "harvest_only_areal_g_m2_day": 8.633125749230382,
+     "illuminated_volume_m3": 0.40880000000000005,
+     "inventory_change_g": 507.1632662200354,
+     "min_pbr_nitrogen_kg_m3": 0.3698489555193317,
+     "predicted_areal_g_m2_day": 9.154898656864164,
+     "predicted_volumetric_g_l_day": 0.4413968995273793,
+     "produced_g": 8898.561494471967
+    }
+   },
+   "summary_sha256": "4e2a818459d715bcff36d11572d73600a5b82c9b09a9cdfb55ef636eece32957"
+  },
+  {
+   "draw": {
+    "K_I": 16.981967118527013,
+    "K_j_0": 0.0009928255660800489,
+    "axis_azimuth_deg": 0.0,
+    "cross_section": "primary",
+    "culture_temperature_c": 28.608249823559703,
+    "forcing_window": "median",
+    "illuminated_volume_basis": "tube_cylinder",
+    "initial_biomass_kg_m3": 0.9379313804011159,
+    "k_X": 336.22108341858006,
+    "k_d": 0.0065998870056956736,
+    "mu_max": 0.0843373794041395
+   },
+   "factor": null,
+   "id": "mc_039",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 1.2801404518399137e-12,
+     "harvest_g": 6190.212872684113,
+     "harvest_only_areal_g_m2_day": 5.546785728211571,
+     "illuminated_volume_m3": 0.9306654076994403,
+     "inventory_change_g": -494.3367498153588,
+     "min_pbr_nitrogen_kg_m3": 0.45810901764305706,
+     "predicted_areal_g_m2_day": 5.103831651316089,
+     "predicted_volumetric_g_l_day": 0.14926300112339502,
+     "produced_g": 5695.8761228687545
+    },
+    "horizontal": {
+     "biomass_residual_rel": 1.3002148652823851e-12,
+     "harvest_g": 2293.0906070516994,
+     "harvest_only_areal_g_m2_day": 2.3591467150737646,
+     "illuminated_volume_m3": 0.3988566032997601,
+     "inventory_change_g": -360.96581256776994,
+     "min_pbr_nitrogen_kg_m3": 0.4692029368227003,
+     "predicted_areal_g_m2_day": 1.987782710374413,
+     "predicted_volumetric_g_l_day": 0.0958395235359092,
+     "produced_g": 1932.1247944839295
+    }
+   },
+   "summary_sha256": "6bbab0de029d2be32e7ef717c189266a24276e83e83bf35157d659b2fd8c1aa2"
+  },
+  {
+   "draw": {
+    "K_I": 26.004573032190923,
+    "K_j_0": 0.0011719291834181435,
+    "axis_azimuth_deg": 45.0,
+    "cross_section": "primary",
+    "culture_temperature_c": 23.13886813031101,
+    "forcing_window": "median",
+    "illuminated_volume_basis": "tube_cylinder",
+    "initial_biomass_kg_m3": 0.6948925734059032,
+    "k_X": 232.3190796526793,
+    "k_d": 0.0033947466348022287,
+    "mu_max": 0.10688622299803842
+   },
+   "factor": null,
+   "id": "mc_040",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 3.505117982380721e-13,
+     "harvest_g": 23911.383939055373,
+     "harvest_only_areal_g_m2_day": 21.425971271554992,
+     "illuminated_volume_m3": 0.9306654076994403,
+     "inventory_change_g": 1600.1325116442838,
+     "min_pbr_nitrogen_kg_m3": 0.31962308535873846,
+     "predicted_areal_g_m2_day": 22.859781765859907,
+     "predicted_volumetric_g_l_day": 0.6685407874921293,
+     "produced_g": 25511.516450699655
+    },
+    "horizontal": {
+     "biomass_residual_rel": 4.4065307198997366e-13,
+     "harvest_g": 10063.271836044756,
+     "harvest_only_areal_g_m2_day": 10.353160325148927,
+     "illuminated_volume_m3": 0.3988566032997601,
+     "inventory_change_g": 677.8009583207233,
+     "min_pbr_nitrogen_kg_m3": 0.3454419874959074,
+     "predicted_areal_g_m2_day": 11.050486413956255,
+     "predicted_volumetric_g_l_day": 0.5327913092443195,
+     "produced_g": 10741.07279436548
+    }
+   },
+   "summary_sha256": "b9aca7d49fea34bcc7d4344f0a20e83ea51b297c65b6d40227ad0869a2d10d85"
+  },
+  {
+   "draw": {
+    "K_I": 14.366037255880405,
+    "K_j_0": 0.0007537462704415848,
+    "axis_azimuth_deg": 45.0,
+    "cross_section": "alternative",
+    "culture_temperature_c": 25.78300704217625,
+    "forcing_window": "high",
+    "illuminated_volume_basis": "reported_illuminated_share",
+    "initial_biomass_kg_m3": 0.6711603325892476,
+    "k_X": 231.44109486982094,
+    "k_d": 0.006398260411002456,
+    "mu_max": 0.0874746496073379
+   },
+   "factor": null,
+   "id": "mc_041",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 9.590382766761528e-13,
+     "harvest_g": 14957.821741765449,
+     "harvest_only_areal_g_m2_day": 13.40306607685076,
+     "illuminated_volume_m3": 0.7526,
+     "inventory_change_g": 733.4493590148388,
+     "min_pbr_nitrogen_kg_m3": 0.38530025333676027,
+     "predicted_areal_g_m2_day": 14.060278764140044,
+     "predicted_volumetric_g_l_day": 0.41119683178145405,
+     "produced_g": 15691.271100780288
+    },
+    "horizontal": {
+     "biomass_residual_rel": 6.552380171512493e-13,
+     "harvest_g": 8490.118502555948,
+     "harvest_only_areal_g_m2_day": 8.73468981744439,
+     "illuminated_volume_m3": 0.40880000000000005,
+     "inventory_change_g": 521.8383184318005,
+     "min_pbr_nitrogen_kg_m3": 0.36728795917347634,
+     "predicted_areal_g_m2_day": 9.271560515419495,
+     "predicted_volumetric_g_l_day": 0.4470216677077256,
+     "produced_g": 9011.956820987749
+    }
+   },
+   "summary_sha256": "0521a9f520d71944acfb50b5575ac670adbc26d1c5b73a9a6ac5d9169c875661"
+  },
+  {
+   "draw": {
+    "K_I": 7.788223925339457,
+    "K_j_0": 0.000796942281869744,
+    "axis_azimuth_deg": 0.0,
+    "cross_section": "primary",
+    "culture_temperature_c": 26.38521809335893,
+    "forcing_window": "high",
+    "illuminated_volume_basis": "reported_illuminated_share",
+    "initial_biomass_kg_m3": 1.8837307171836062,
+    "k_X": 301.2690529403848,
+    "k_d": 0.005910501029962835,
+    "mu_max": 0.12035239084298352
+   },
+   "factor": null,
+   "id": "mc_042",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 4.2632931565454436e-13,
+     "harvest_g": 21776.64040515025,
+     "harvest_only_areal_g_m2_day": 19.51311864260775,
+     "illuminated_volume_m3": 0.7526,
+     "inventory_change_g": 40.19671961254478,
+     "min_pbr_nitrogen_kg_m3": 0.34305216639042957,
+     "predicted_areal_g_m2_day": 19.549137208568812,
+     "predicted_volumetric_g_l_day": 0.5717200504392765,
+     "produced_g": 21816.837124762795
+    },
+    "horizontal": {
+     "biomass_residual_rel": 4.5218745790786666e-13,
+     "harvest_g": 11628.216761213513,
+     "harvest_only_areal_g_m2_day": 11.963185968326659,
+     "illuminated_volume_m3": 0.40880000000000005,
+     "inventory_change_g": 128.99264309026947,
+     "min_pbr_nitrogen_kg_m3": 0.32928625739357326,
+     "predicted_areal_g_m2_day": 12.095894448872203,
+     "predicted_volumetric_g_l_day": 0.583194910927767,
+     "produced_g": 11757.209404303781
+    }
+   },
+   "summary_sha256": "77c49d99aedfa139f069db198ddabac087806723cdd5d40087506460f6be43a4"
+  },
+  {
+   "draw": {
+    "K_I": 10.748258736922265,
+    "K_j_0": 0.0013260627585579418,
+    "axis_azimuth_deg": 90.0,
+    "cross_section": "alternative",
+    "culture_temperature_c": 25.914325876945952,
+    "forcing_window": "median",
+    "illuminated_volume_basis": "tube_cylinder",
+    "initial_biomass_kg_m3": 0.6375076079236268,
+    "k_X": 316.9062633103414,
+    "k_d": 0.007885208336984759,
+    "mu_max": 0.08412009690838908
+   },
+   "factor": null,
+   "id": "mc_043",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 6.855927259454451e-14,
+     "harvest_g": 12658.129795708177,
+     "harvest_only_areal_g_m2_day": 11.342410211208044,
+     "illuminated_volume_m3": 0.9306654076994403,
+     "inventory_change_g": 510.4660103581489,
+     "min_pbr_nitrogen_kg_m3": 0.4058625943125715,
+     "predicted_areal_g_m2_day": 11.799817030525382,
+     "predicted_volumetric_g_l_day": 0.34508898862857246,
+     "produced_g": 13168.595806066325
+    },
+    "horizontal": {
+     "biomass_residual_rel": 1.2031335063654934e-13,
+     "harvest_g": 5415.2108718205645,
+     "harvest_only_areal_g_m2_day": 5.571204600638441,
+     "illuminated_volume_m3": 0.3988566032997601,
+     "inventory_change_g": 190.40515198563307,
+     "min_pbr_nitrogen_kg_m3": 0.4186283415091239,
+     "predicted_areal_g_m2_day": 5.767094674697734,
+     "predicted_volumetric_g_l_day": 0.2780563503872122,
+     "produced_g": 5605.6160238061975
+    }
+   },
+   "summary_sha256": "591e0cb70abd1676e562bf3976b97d08e1c2664c76845d1759f952c8fe83c80d"
+  },
+  {
+   "draw": {
+    "K_I": 15.907784480745327,
+    "K_j_0": 0.0011690765345266061,
+    "axis_azimuth_deg": 45.0,
+    "cross_section": "alternative",
+    "culture_temperature_c": 22.521340672463793,
+    "forcing_window": "low",
+    "illuminated_volume_basis": "reported_illuminated_share",
+    "initial_biomass_kg_m3": 0.5038581387086496,
+    "k_X": 316.0921605653133,
+    "k_d": 0.0076950354603912505,
+    "mu_max": 0.10808260592184385
+   },
+   "factor": null,
+   "id": "mc_044",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 1.8984468246229155e-13,
+     "harvest_g": 10935.46081733727,
+     "harvest_only_areal_g_m2_day": 9.798800015535189,
+     "illuminated_volume_m3": 0.7526,
+     "inventory_change_g": 583.7111675842846,
+     "min_pbr_nitrogen_kg_m3": 0.41457216559938903,
+     "predicted_areal_g_m2_day": 10.321838696166267,
+     "predicted_volumetric_g_l_day": 0.3018650939444852,
+     "produced_g": 11519.171984921555
+    },
+    "horizontal": {
+     "biomass_residual_rel": 3.5526082345447034e-13,
+     "harvest_g": 6202.00209619872,
+     "harvest_only_areal_g_m2_day": 6.380660592797038,
+     "illuminated_volume_m3": 0.40880000000000005,
+     "inventory_change_g": 407.9738829101959,
+     "min_pbr_nitrogen_kg_m3": 0.4017061526924421,
+     "predicted_areal_g_m2_day": 6.800386809782836,
+     "predicted_volumetric_g_l_day": 0.3278757926145296,
+     "produced_g": 6609.975979108916
+    }
+   },
+   "summary_sha256": "3b41854cae3b29a1598a58fddcbc31bf91b8482d8a4a5da7983f7ec2720eb843"
+  },
+  {
+   "draw": {
+    "K_I": 17.69345221065003,
+    "K_j_0": 0.0008221788208870313,
+    "axis_azimuth_deg": 0.0,
+    "cross_section": "primary",
+    "culture_temperature_c": 29.7084276686866,
+    "forcing_window": "high",
+    "illuminated_volume_basis": "tube_cylinder",
+    "initial_biomass_kg_m3": 1.2336275670341197,
+    "k_X": 354.5238850523034,
+    "k_d": 0.0026719209005983623,
+    "mu_max": 0.12129859441201299
+   },
+   "factor": null,
+   "id": "mc_045",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 3.629169910372981e-13,
+     "harvest_g": 2350.9997672707154,
+     "harvest_only_areal_g_m2_day": 2.1066306158339745,
+     "illuminated_volume_m3": 0.9306654076994403,
+     "inventory_change_g": -1287.8232900012515,
+     "min_pbr_nitrogen_kg_m3": 0.48650360730048564,
+     "predicted_areal_g_m2_day": 0.9526670943274768,
+     "predicted_volumetric_g_l_day": 0.027861018796369603,
+     "produced_g": 1063.176477269464
+    },
+    "horizontal": {
+     "biomass_residual_rel": 3.1455766958590755e-13,
+     "harvest_g": 1046.0839671351546,
+     "harvest_only_areal_g_m2_day": 1.0762180731843154,
+     "illuminated_volume_m3": 0.3988566032997601,
+     "inventory_change_g": -685.5379280702207,
+     "min_pbr_nitrogen_kg_m3": 0.48998687802130103,
+     "predicted_areal_g_m2_day": 0.37093213895569327,
+     "predicted_volumetric_g_l_day": 0.017884228128220925,
+     "produced_g": 360.5460390649339
+    }
+   },
+   "summary_sha256": "d3b4e93bb3dbf7435a1abed84b8ae7889e5740580a42e9f29b0cbc1ec1fbc7e7"
+  },
+  {
+   "draw": {
+    "K_I": 8.29857207880291,
+    "K_j_0": 0.0013179111901688739,
+    "axis_azimuth_deg": 90.0,
+    "cross_section": "primary",
+    "culture_temperature_c": 27.033278116204638,
+    "forcing_window": "high",
+    "illuminated_volume_basis": "reported_illuminated_share",
+    "initial_biomass_kg_m3": 0.6036066788839486,
+    "k_X": 224.78733642784118,
+    "k_d": 0.00381554579938051,
+    "mu_max": 0.09589010839563916
+   },
+   "factor": null,
+   "id": "mc_046",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 2.934831070691244e-13,
+     "harvest_g": 21381.058828588724,
+     "harvest_only_areal_g_m2_day": 19.158654864326813,
+     "illuminated_volume_m3": 0.7526,
+     "inventory_change_g": 1516.4476707887047,
+     "min_pbr_nitrogen_kg_m3": 0.33643401650748284,
+     "predicted_areal_g_m2_day": 20.51747894209447,
+     "predicted_volumetric_g_l_day": 0.6000394784952157,
+     "produced_g": 22897.50649937743
+    },
+    "horizontal": {
+     "biomass_residual_rel": 3.495075684162751e-13,
+     "harvest_g": 11652.730408774725,
+     "harvest_only_areal_g_m2_day": 11.988405770344366,
+     "illuminated_volume_m3": 0.40880000000000005,
+     "inventory_change_g": 937.1825966684214,
+     "min_pbr_nitrogen_kg_m3": 0.31768176073656024,
+     "predicted_areal_g_m2_day": 12.952585396546446,
+     "predicted_volumetric_g_l_day": 0.6244996530477751,
+     "produced_g": 12589.913005443146
+    }
+   },
+   "summary_sha256": "54feb8384fd4c925c223dcfc68ad04ed3805601d220f521277e264af7c568d71"
+  },
+  {
+   "draw": {
+    "K_I": 7.857654598248941,
+    "K_j_0": 0.0005524772703439745,
+    "axis_azimuth_deg": 0.0,
+    "cross_section": "alternative",
+    "culture_temperature_c": 23.893648628629723,
+    "forcing_window": "low",
+    "illuminated_volume_basis": "reported_illuminated_share",
+    "initial_biomass_kg_m3": 0.5155509752205881,
+    "k_X": 286.22888495181996,
+    "k_d": 0.004844606546670505,
+    "mu_max": 0.0909670954830788
+   },
+   "factor": null,
+   "id": "mc_047",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 4.055423168011617e-13,
+     "harvest_g": 15679.064021696422,
+     "harvest_only_areal_g_m2_day": 14.049340521233354,
+     "illuminated_volume_m3": 0.7526,
+     "inventory_change_g": 1093.6317440934215,
+     "min_pbr_nitrogen_kg_m3": 0.3792368970373839,
+     "predicted_areal_g_m2_day": 15.029297281173692,
+     "predicted_volumetric_g_l_day": 0.43953605256262684,
+     "produced_g": 16772.695765789842
+    },
+    "horizontal": {
+     "biomass_residual_rel": 4.667727250282619e-13,
+     "harvest_g": 8871.70694684615,
+     "harvest_only_areal_g_m2_day": 9.127270521446656,
+     "illuminated_volume_m3": 0.40880000000000005,
+     "inventory_change_g": 721.9435867252322,
+     "min_pbr_nitrogen_kg_m3": 0.3614133750198187,
+     "predicted_areal_g_m2_day": 9.870010837007595,
+     "predicted_volumetric_g_l_day": 0.47587552249858045,
+     "produced_g": 9593.650533571383
+    }
+   },
+   "summary_sha256": "14cf60f1856e2bc0814d74b95f57dc281a4ef40bcc9ebab7aac50ed17ac5affe"
+  },
+  {
+   "draw": {
+    "K_I": 13.986690206301367,
+    "K_j_0": 0.0011714785317651047,
+    "axis_azimuth_deg": 0.0,
+    "cross_section": "primary",
+    "culture_temperature_c": 21.456123777640755,
+    "forcing_window": "low",
+    "illuminated_volume_basis": "tube_cylinder",
+    "initial_biomass_kg_m3": 1.3334953741721431,
+    "k_X": 245.09815665756565,
+    "k_d": 0.0038977434244048654,
+    "mu_max": 0.10055688749523282
+   },
+   "factor": null,
+   "id": "mc_048",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 5.873339338285068e-13,
+     "harvest_g": 22234.37945830335,
+     "harvest_only_areal_g_m2_day": 19.923279084501207,
+     "illuminated_volume_m3": 0.9306654076994403,
+     "inventory_change_g": 850.6424515300721,
+     "min_pbr_nitrogen_kg_m3": 0.33508612153657896,
+     "predicted_areal_g_m2_day": 20.685503503434962,
+     "predicted_volumetric_g_l_day": 0.6049534043457395,
+     "produced_g": 23085.02190983342
+    },
+    "horizontal": {
+     "biomass_residual_rel": 3.702912264369428e-13,
+     "harvest_g": 9306.914966149845,
+     "harvest_only_areal_g_m2_day": 9.575015397273503,
+     "illuminated_volume_m3": 0.3988566032997601,
+     "inventory_change_g": 265.9103992092924,
+     "min_pbr_nitrogen_kg_m3": 0.3622988129418199,
+     "predicted_areal_g_m2_day": 9.84858576683039,
+     "predicted_volumetric_g_l_day": 0.474842528043608,
+     "produced_g": 9572.825365359138
+    }
+   },
+   "summary_sha256": "89e17e8ea76405dfc972b5d5598f07bab729a81d7c0611075b9a7d6dc4615fde"
+  },
+  {
+   "draw": {
+    "K_I": 24.654247435389223,
+    "K_j_0": 0.0012223679177240827,
+    "axis_azimuth_deg": 45.0,
+    "cross_section": "primary",
+    "culture_temperature_c": 24.579626217338838,
+    "forcing_window": "low",
+    "illuminated_volume_basis": "reported_illuminated_share",
+    "initial_biomass_kg_m3": 1.814754992025506,
+    "k_X": 373.4486322871107,
+    "k_d": 0.004029620663195319,
+    "mu_max": 0.10252649704934645
+   },
+   "factor": null,
+   "id": "mc_049",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 1.603080833111754e-13,
+     "harvest_g": 11928.818506028612,
+     "harvest_only_areal_g_m2_day": 10.688905471351804,
+     "illuminated_volume_m3": 0.7526,
+     "inventory_change_g": -810.4832244385274,
+     "min_pbr_nitrogen_kg_m3": 0.41998651851613295,
+     "predicted_areal_g_m2_day": 9.962666022930184,
+     "predicted_volumetric_g_l_day": 0.2913609874630525,
+     "produced_g": 11118.335281590085
+    },
+    "horizontal": {
+     "biomass_residual_rel": 1.5150569514698367e-13,
+     "harvest_g": 6425.817183791954,
+     "harvest_only_areal_g_m2_day": 6.610923028592546,
+     "illuminated_volume_m3": 0.40880000000000005,
+     "inventory_change_g": -361.7906454604972,
+     "min_pbr_nitrogen_kg_m3": 0.41228837010346303,
+     "predicted_areal_g_m2_day": 6.238710430382158,
+     "predicted_volumetric_g_l_day": 0.3007949671791397,
+     "produced_g": 6064.026538331457
+    }
+   },
+   "summary_sha256": "1dbb32568a854b5ffd5b15f2663cd8112b13d75cef4066c10fac2b3154ac7c3c"
+  },
+  {
+   "draw": {
+    "K_I": 12.554882140450887,
+    "K_j_0": 0.0006346265494705045,
+    "axis_azimuth_deg": 0.0,
+    "cross_section": "primary",
+    "culture_temperature_c": 25.393434486268184,
+    "forcing_window": "median",
+    "illuminated_volume_basis": "tube_cylinder",
+    "initial_biomass_kg_m3": 0.8375801000558394,
+    "k_X": 298.52033843086474,
+    "k_d": 0.009072300240550186,
+    "mu_max": 0.0841433522339546
+   },
+   "factor": null,
+   "id": "mc_050",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 3.768217062292757e-13,
+     "harvest_g": 13445.962413589445,
+     "harvest_only_areal_g_m2_day": 12.048353417194843,
+     "illuminated_volume_m3": 0.9306654076994403,
+     "inventory_change_g": 350.16265362577934,
+     "min_pbr_nitrogen_kg_m3": 0.4006596016009394,
+     "predicted_areal_g_m2_day": 12.362119235855936,
+     "predicted_volumetric_g_l_day": 0.3615336757655981,
+     "produced_g": 13796.125067215224
+    },
+    "horizontal": {
+     "biomass_residual_rel": 3.056965063609884e-13,
+     "harvest_g": 5446.4304849771725,
+     "harvest_only_areal_g_m2_day": 5.603323544215198,
+     "illuminated_volume_m3": 0.3988566032997601,
+     "inventory_change_g": 66.94849028939277,
+     "min_pbr_nitrogen_kg_m3": 0.418887035156856,
+     "predicted_areal_g_m2_day": 5.67220059183803,
+     "predicted_volumetric_g_l_day": 0.2734810999636193,
+     "produced_g": 5513.378975266565
+    }
+   },
+   "summary_sha256": "d6455908adb235b112336dca02b9a7b026661595a1c441804e9faa24a06e1ff4"
+  },
+  {
+   "draw": {
+    "K_I": 16.29630934376633,
+    "K_j_0": 0.0010029869854567231,
+    "axis_azimuth_deg": 45.0,
+    "cross_section": "primary",
+    "culture_temperature_c": 26.195187827685373,
+    "forcing_window": "low",
+    "illuminated_volume_basis": "reported_illuminated_share",
+    "initial_biomass_kg_m3": 0.8207144707923818,
+    "k_X": 322.9881118751706,
+    "k_d": 0.0077765393905354935,
+    "mu_max": 0.09564520844547453
+   },
+   "factor": null,
+   "id": "mc_051",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 1.434235740473001e-13,
+     "harvest_g": 9920.201936890686,
+     "harvest_only_areal_g_m2_day": 8.889069835923554,
+     "illuminated_volume_m3": 0.7526,
+     "inventory_change_g": 107.93049591662829,
+     "min_pbr_nitrogen_kg_m3": 0.4260331030288154,
+     "predicted_areal_g_m2_day": 8.985781749827343,
+     "predicted_volumetric_g_l_day": 0.2627917304194789,
+     "produced_g": 10028.132432807313
+    },
+    "horizontal": {
+     "biomass_residual_rel": 4.587505080422762e-14,
+     "harvest_g": 5334.654352834695,
+     "harvest_only_areal_g_m2_day": 5.488327523492484,
+     "illuminated_volume_m3": 0.40880000000000005,
+     "inventory_change_g": 112.46500712387869,
+     "min_pbr_nitrogen_kg_m3": 0.418991305358713,
+     "predicted_areal_g_m2_day": 5.604032263331865,
+     "predicted_volumetric_g_l_day": 0.2701944126963578,
+     "produced_g": 5447.119359958573
+    }
+   },
+   "summary_sha256": "86f70f67e4631c142db960584f87e8d765acf88d277fea684e8d13ff2b8b3b00"
+  },
+  {
+   "draw": {
+    "K_I": 25.072211314192778,
+    "K_j_0": 0.0009322056933284925,
+    "axis_azimuth_deg": 90.0,
+    "cross_section": "alternative",
+    "culture_temperature_c": 23.93443027598376,
+    "forcing_window": "low",
+    "illuminated_volume_basis": "tube_cylinder",
+    "initial_biomass_kg_m3": 0.5445224677200735,
+    "k_X": 369.49366457328847,
+    "k_d": 0.005121867511660581,
+    "mu_max": 0.10014115014225922
+   },
+   "factor": null,
+   "id": "mc_052",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 3.8666210527415416e-13,
+     "harvest_g": 11360.146735289682,
+     "harvest_only_areal_g_m2_day": 10.17934295276853,
+     "illuminated_volume_m3": 0.9306654076994403,
+     "inventory_change_g": 584.8402126592551,
+     "min_pbr_nitrogen_kg_m3": 0.4122677933387624,
+     "predicted_areal_g_m2_day": 10.70339332253489,
+     "predicted_volumetric_g_l_day": 0.31302376697979395,
+     "produced_g": 11944.986947948937
+    },
+    "horizontal": {
+     "biomass_residual_rel": 3.226426324205188e-13,
+     "harvest_g": 5029.979624254466,
+     "harvest_only_areal_g_m2_day": 5.174876156640398,
+     "illuminated_volume_m3": 0.3988566032997601,
+     "inventory_change_g": 252.06258281078604,
+     "min_pbr_nitrogen_kg_m3": 0.42248362581748716,
+     "predicted_areal_g_m2_day": 5.434199801507461,
+     "predicted_volumetric_g_l_day": 0.2620060618583955,
+     "produced_g": 5282.042207065252
+    }
+   },
+   "summary_sha256": "4d2146b3312dec38a33afe42e74f1bff4f22a4890e4f2f3717aef33cad167c3d"
+  },
+  {
+   "draw": {
+    "K_I": 13.994840766450064,
+    "K_j_0": 0.0012638973143817241,
+    "axis_azimuth_deg": 45.0,
+    "cross_section": "primary",
+    "culture_temperature_c": 25.130678856633722,
+    "forcing_window": "low",
+    "illuminated_volume_basis": "tube_cylinder",
+    "initial_biomass_kg_m3": 1.7348030430156414,
+    "k_X": 365.80167656187484,
+    "k_d": 0.00647701790234802,
+    "mu_max": 0.09027341551056961
+   },
+   "factor": null,
+   "id": "mc_053",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 1.6684801635714734e-13,
+     "harvest_g": 13331.097853945535,
+     "harvest_only_areal_g_m2_day": 11.94542818453901,
+     "illuminated_volume_m3": 0.9306654076994403,
+     "inventory_change_g": -568.5150364612235,
+     "min_pbr_nitrogen_kg_m3": 0.4074641584458604,
+     "predicted_areal_g_m2_day": 11.43600610885691,
+     "predicted_volumetric_g_l_day": 0.33444923525902287,
+     "produced_g": 12762.582817484312
+    },
+    "horizontal": {
+     "biomass_residual_rel": 7.845311686804159e-14,
+     "harvest_g": 5590.945810010464,
+     "harvest_only_areal_g_m2_day": 5.752001862150683,
+     "illuminated_volume_m3": 0.3988566032997601,
+     "inventory_change_g": -410.53282283732983,
+     "min_pbr_nitrogen_kg_m3": 0.42359530902985615,
+     "predicted_areal_g_m2_day": 5.329642990918861,
+     "predicted_volumetric_g_l_day": 0.25696492991930225,
+     "produced_g": 5180.412987173134
+    }
+   },
+   "summary_sha256": "26c7c7feef3542aa38382439d250a5241b4384fd8443d9294efe8243e7779d26"
+  },
+  {
+   "draw": {
+    "K_I": 27.431216069600517,
+    "K_j_0": 0.0006923152917023218,
+    "axis_azimuth_deg": 0.0,
+    "cross_section": "primary",
+    "culture_temperature_c": 24.09379278219523,
+    "forcing_window": "high",
+    "illuminated_volume_basis": "reported_illuminated_share",
+    "initial_biomass_kg_m3": 1.7570189936294445,
+    "k_X": 296.1421383412631,
+    "k_d": 0.006713449395300424,
+    "mu_max": 0.10395263004817981
+   },
+   "factor": null,
+   "id": "mc_054",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 1.7207975005061417e-13,
+     "harvest_g": 13394.192565416954,
+     "harvest_only_areal_g_m2_day": 12.001964664352109,
+     "illuminated_volume_m3": 0.7526,
+     "inventory_change_g": -671.9772754354119,
+     "min_pbr_nitrogen_kg_m3": 0.40564923824360155,
+     "predicted_areal_g_m2_day": 11.399834489230772,
+     "predicted_volumetric_g_l_day": 0.33339138600580553,
+     "produced_g": 12722.215289981541
+    },
+    "horizontal": {
+     "biomass_residual_rel": 2.736582891311457e-13,
+     "harvest_g": 7165.649024366581,
+     "harvest_only_areal_g_m2_day": 7.372066897496483,
+     "illuminated_volume_m3": 0.40880000000000005,
+     "inventory_change_g": -289.0292169772084,
+     "min_pbr_nitrogen_kg_m3": 0.3973465699564581,
+     "predicted_areal_g_m2_day": 7.0747117359972975,
+     "predicted_volumetric_g_l_day": 0.341102172985584,
+     "produced_g": 6876.619807389373
+    }
+   },
+   "summary_sha256": "e1aee540010235669b1d7f891b4228abb1c5a62f507e5dd135cd17352c260d9a"
+  },
+  {
+   "draw": {
+    "K_I": 13.589830236551759,
+    "K_j_0": 0.0010136110699658263,
+    "axis_azimuth_deg": 0.0,
+    "cross_section": "primary",
+    "culture_temperature_c": 29.518874007700035,
+    "forcing_window": "low",
+    "illuminated_volume_basis": "tube_cylinder",
+    "initial_biomass_kg_m3": 1.0604104846529223,
+    "k_X": 247.29473627697485,
+    "k_d": 0.0036076359500387327,
+    "mu_max": 0.10556877638915485
+   },
+   "factor": null,
+   "id": "mc_055",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 2.485330983055711e-13,
+     "harvest_g": 3101.277991953144,
+     "harvest_only_areal_g_m2_day": 2.7789229318576556,
+     "illuminated_volume_m3": 0.9306654076994403,
+     "inventory_change_g": -1054.945575019704,
+     "min_pbr_nitrogen_kg_m3": 0.4772308844123666,
+     "predicted_areal_g_m2_day": 1.8336311979690325,
+     "predicted_volumetric_g_l_day": 0.05362506333683019,
+     "produced_g": 2046.33241693344
+    },
+    "horizontal": {
+     "biomass_residual_rel": 7.548643246268068e-15,
+     "harvest_g": 1198.0623188780824,
+     "harvest_only_areal_g_m2_day": 1.2325744021379448,
+     "illuminated_volume_m3": 0.3988566032997601,
+     "inventory_change_g": -580.4386462139653,
+     "min_pbr_nitrogen_kg_m3": 0.48382968703888274,
+     "predicted_areal_g_m2_day": 0.6354153010947706,
+     "predicted_volumetric_g_l_day": 0.030636094874212157,
+     "produced_g": 617.6236726641171
+    }
+   },
+   "summary_sha256": "2087a495b4d9a62760057597863e59ad67c2b40710b4cda5d40b66548d32c544"
+  },
+  {
+   "draw": {
+    "K_I": 22.560781418669897,
+    "K_j_0": 0.001272061355728004,
+    "axis_azimuth_deg": 90.0,
+    "cross_section": "primary",
+    "culture_temperature_c": 22.52752217768404,
+    "forcing_window": "median",
+    "illuminated_volume_basis": "reported_illuminated_share",
+    "initial_biomass_kg_m3": 0.8287291566701495,
+    "k_X": 250.97484988338095,
+    "k_d": 0.0037130460062600856,
+    "mu_max": 0.09567665452985522
+   },
+   "factor": null,
+   "id": "mc_056",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 1.965285991650958e-12,
+     "harvest_g": 15451.675310515939,
+     "harvest_only_areal_g_m2_day": 13.845587195802812,
+     "illuminated_volume_m3": 0.7526,
+     "inventory_change_g": 598.6611070325798,
+     "min_pbr_nitrogen_kg_m3": 0.3862222766036384,
+     "predicted_areal_g_m2_day": 14.382021879523762,
+     "predicted_volumetric_g_l_day": 0.4206063002502232,
+     "produced_g": 16050.336417548519
+    },
+    "horizontal": {
+     "biomass_residual_rel": 1.3115483951723e-12,
+     "harvest_g": 8431.435729154133,
+     "harvest_only_areal_g_m2_day": 8.674316593779972,
+     "illuminated_volume_m3": 0.40880000000000005,
+     "inventory_change_g": 413.26700036352577,
+     "min_pbr_nitrogen_kg_m3": 0.3729815781697262,
+     "predicted_areal_g_m2_day": 9.09948840485356,
+     "predicted_volumetric_g_l_day": 0.43872533380543943,
+     "produced_g": 8844.70272951766
+    }
+   },
+   "summary_sha256": "2e569ff2a487f28fa9893936b260aaae48616792abdc3852682d65fd2b23f9f9"
+  },
+  {
+   "draw": {
+    "K_I": 24.481129901157292,
+    "K_j_0": 0.0006621731629035063,
+    "axis_azimuth_deg": 45.0,
+    "cross_section": "alternative",
+    "culture_temperature_c": 24.630801962945746,
+    "forcing_window": "low",
+    "illuminated_volume_basis": "tube_cylinder",
+    "initial_biomass_kg_m3": 1.5025986279727683,
+    "k_X": 295.54065490438734,
+    "k_d": 0.002804557794612019,
+    "mu_max": 0.08479671806695423
+   },
+   "factor": null,
+   "id": "mc_057",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 5.209064719484658e-13,
+     "harvest_g": 15219.611324168454,
+     "harvest_only_areal_g_m2_day": 13.6376445557065,
+     "illuminated_volume_m3": 0.9306654076994403,
+     "inventory_change_g": -96.14476179319276,
+     "min_pbr_nitrogen_kg_m3": 0.3916168569515547,
+     "predicted_areal_g_m2_day": 13.551493335461704,
+     "predicted_volumetric_g_l_day": 0.39631725792388,
+     "produced_g": 15123.46656237526
+    },
+    "horizontal": {
+     "biomass_residual_rel": 5.967783875301837e-13,
+     "harvest_g": 6857.3682280562825,
+     "harvest_only_areal_g_m2_day": 7.054905584420044,
+     "illuminated_volume_m3": 0.3988566032997601,
+     "inventory_change_g": -121.65346040888214,
+     "min_pbr_nitrogen_kg_m3": 0.403533741231468,
+     "predicted_areal_g_m2_day": 6.929747703340947,
+     "predicted_volumetric_g_l_day": 0.3341128356967957,
+     "produced_g": 6735.714767647401
+    }
+   },
+   "summary_sha256": "19d257b25af490333e68b4f30f60dad350c37b251c8a3ef4c5015e1748c09c86"
+  },
+  {
+   "draw": {
+    "K_I": 7.657316109393973,
+    "K_j_0": 0.0010785930969030573,
+    "axis_azimuth_deg": 45.0,
+    "cross_section": "primary",
+    "culture_temperature_c": 22.147772658013942,
+    "forcing_window": "high",
+    "illuminated_volume_basis": "reported_illuminated_share",
+    "initial_biomass_kg_m3": 1.170505623311799,
+    "k_X": 305.0855540320932,
+    "k_d": 0.002356981841920898,
+    "mu_max": 0.10287769700269518
+   },
+   "factor": null,
+   "id": "mc_058",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 3.940778092304009e-13,
+     "harvest_g": 22411.839705349146,
+     "harvest_only_areal_g_m2_day": 20.082293642785974,
+     "illuminated_volume_m3": 0.7526,
+     "inventory_change_g": 954.6700928987736,
+     "min_pbr_nitrogen_kg_m3": 0.33547737802203664,
+     "predicted_areal_g_m2_day": 20.937732794128962,
+     "predicted_volumetric_g_l_day": 0.6123299213377337,
+     "produced_g": 23366.50979824792
+    },
+    "horizontal": {
+     "biomass_residual_rel": 3.1150936236463045e-13,
+     "harvest_g": 12160.911794225523,
+     "harvest_only_areal_g_m2_day": 12.511226125746424,
+     "illuminated_volume_m3": 0.40880000000000005,
+     "inventory_change_g": 642.235255188278,
+     "min_pbr_nitrogen_kg_m3": 0.3177619661366209,
+     "predicted_areal_g_m2_day": 13.171961984993622,
+     "predicted_volumetric_g_l_day": 0.6350767385621925,
+     "produced_g": 12803.147049413801
+    }
+   },
+   "summary_sha256": "7b9b7c935e63fb2724040c813ec0376efb6b671b2eb6205e048b64ddc1c762aa"
+  },
+  {
+   "draw": {
+    "K_I": 8.06689458783442,
+    "K_j_0": 0.0005981500940090761,
+    "axis_azimuth_deg": 45.0,
+    "cross_section": "alternative",
+    "culture_temperature_c": 23.98969306793395,
+    "forcing_window": "high",
+    "illuminated_volume_basis": "reported_illuminated_share",
+    "initial_biomass_kg_m3": 1.5531723065029719,
+    "k_X": 249.88265223161446,
+    "k_d": 0.0023624714394583682,
+    "mu_max": 0.11104459601498584
+   },
+   "factor": null,
+   "id": "mc_059",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 1.6231470494656104e-13,
+     "harvest_g": 30260.66832500243,
+     "harvest_only_areal_g_m2_day": 27.11529419803085,
+     "illuminated_volume_m3": 0.7526,
+     "inventory_change_g": 1315.1622212236123,
+     "min_pbr_nitrogen_kg_m3": 0.2774089472667758,
+     "predicted_areal_g_m2_day": 28.293754969736593,
+     "predicted_volumetric_g_l_day": 0.8274588717564476,
+     "produced_g": 31575.83054622604
+    },
+    "horizontal": {
+     "biomass_residual_rel": 2.977507218871564e-13,
+     "harvest_g": 17106.489638950967,
+     "harvest_only_areal_g_m2_day": 17.599269175875477,
+     "illuminated_volume_m3": 0.40880000000000005,
+     "inventory_change_g": 963.3298810130362,
+     "min_pbr_nitrogen_kg_m3": 0.24301842852325883,
+     "predicted_areal_g_m2_day": 18.590349300374488,
+     "predicted_volumetric_g_l_day": 0.8963204126966272,
+     "produced_g": 18069.819519964003
+    }
+   },
+   "summary_sha256": "b1ce6fb02183c5f1e78678258c351cedab1d29f68052f126fc8d94568c52b2da"
+  },
+  {
+   "draw": {
+    "K_I": 9.79453437716233,
+    "K_j_0": 0.0012534594447219994,
+    "axis_azimuth_deg": 90.0,
+    "cross_section": "primary",
+    "culture_temperature_c": 22.75250599000875,
+    "forcing_window": "median",
+    "illuminated_volume_basis": "reported_illuminated_share",
+    "initial_biomass_kg_m3": 1.5149710372596392,
+    "k_X": 225.10010608256323,
+    "k_d": 0.006355435513186144,
+    "mu_max": 0.11226411938660727
+   },
+   "factor": null,
+   "id": "mc_060",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 4.2105218201796633e-14,
+     "harvest_g": 23385.199052186264,
+     "harvest_only_areal_g_m2_day": 20.954479437442888,
+     "illuminated_volume_m3": 0.7526,
+     "inventory_change_g": 583.5100337923342,
+     "min_pbr_nitrogen_kg_m3": 0.33028332922626097,
+     "predicted_areal_g_m2_day": 21.47733789066183,
+     "predicted_volumetric_g_l_day": 0.6281108251042611,
+     "produced_g": 23968.7090859786
+    },
+    "horizontal": {
+     "biomass_residual_rel": 5.530680582852841e-14,
+     "harvest_g": 12590.087603557682,
+     "harvest_only_areal_g_m2_day": 12.952765024236298,
+     "illuminated_volume_m3": 0.40880000000000005,
+     "inventory_change_g": 432.8496784018554,
+     "min_pbr_nitrogen_kg_m3": 0.3131699448200055,
+     "predicted_areal_g_m2_day": 13.398083623415163,
+     "predicted_volumetric_g_l_day": 0.645979031843231,
+     "produced_g": 13022.937281959537
+    }
+   },
+   "summary_sha256": "9b84b7001f87b2625c62c86e467d318d6792b8d90bcd8554ca810788eedb2376"
+  },
+  {
+   "draw": {
+    "K_I": 10.964498704482263,
+    "K_j_0": 0.0012520101854903544,
+    "axis_azimuth_deg": 90.0,
+    "cross_section": "alternative",
+    "culture_temperature_c": 23.33993958076634,
+    "forcing_window": "median",
+    "illuminated_volume_basis": "tube_cylinder",
+    "initial_biomass_kg_m3": 0.6514638813579363,
+    "k_X": 363.40597503220965,
+    "k_d": 0.002719130927872379,
+    "mu_max": 0.09174716557462684
+   },
+   "factor": null,
+   "id": "mc_061",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 3.2483464998923817e-13,
+     "harvest_g": 17253.583348690277,
+     "harvest_only_areal_g_m2_day": 15.460200133235016,
+     "illuminated_volume_m3": 0.9306654076994403,
+     "inventory_change_g": 997.570101385159,
+     "min_pbr_nitrogen_kg_m3": 0.37259409185777126,
+     "predicted_areal_g_m2_day": 16.354080152397344,
+     "predicted_volumetric_g_l_day": 0.478279702570111,
+     "produced_g": 18251.153450075435
+    },
+    "horizontal": {
+     "biomass_residual_rel": 2.643697898488055e-13,
+     "harvest_g": 7624.004075139997,
+     "harvest_only_areal_g_m2_day": 7.843625591707816,
+     "illuminated_volume_m3": 0.3988566032997601,
+     "inventory_change_g": 445.25043673337694,
+     "min_pbr_nitrogen_kg_m3": 0.3857545537309212,
+     "predicted_areal_g_m2_day": 8.301702172709234,
+     "predicted_volumetric_g_l_day": 0.40026064046990945,
+     "produced_g": 8069.254511873374
+    }
+   },
+   "summary_sha256": "032b24f861847b29ed408890a7fb56c6b8a273572b6eda0c9adf75f47a209816"
+  },
+  {
+   "draw": {
+    "K_I": 28.3518065370878,
+    "K_j_0": 0.0008184914771019354,
+    "axis_azimuth_deg": 45.0,
+    "cross_section": "alternative",
+    "culture_temperature_c": 23.030697711695314,
+    "forcing_window": "high",
+    "illuminated_volume_basis": "tube_cylinder",
+    "initial_biomass_kg_m3": 0.6314186245813237,
+    "k_X": 278.2636807904825,
+    "k_d": 0.0035211738524394804,
+    "mu_max": 0.11446451746009315
+   },
+   "factor": null,
+   "id": "mc_062",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 3.6854935336658587e-13,
+     "harvest_g": 20230.079945142545,
+     "harvest_only_areal_g_m2_day": 18.127311778801563,
+     "illuminated_volume_m3": 0.9306654076994403,
+     "inventory_change_g": 1324.4789485144865,
+     "min_pbr_nitrogen_kg_m3": 0.34476862377046463,
+     "predicted_areal_g_m2_day": 19.314120872452534,
+     "predicted_volumetric_g_l_day": 0.5648469311754988,
+     "produced_g": 21554.55889365703
+    },
+    "horizontal": {
+     "biomass_residual_rel": 1.7027670449372332e-13,
+     "harvest_g": 9029.078490479358,
+     "harvest_only_areal_g_m2_day": 9.289175401727736,
+     "illuminated_volume_m3": 0.3988566032997601,
+     "inventory_change_g": 611.9766358076338,
+     "min_pbr_nitrogen_kg_m3": 0.3597703483316795,
+     "predicted_areal_g_m2_day": 9.91878099412242,
+     "predicted_volumetric_g_l_day": 0.4782269407880453,
+     "produced_g": 9641.055126286992
+    }
+   },
+   "summary_sha256": "be51ce9f2f9cfe05e0fcfe1da65dc4385aeb312c26fc897ed98bfb703e0de669"
+  },
+  {
+   "draw": {
+    "K_I": 13.887460552594048,
+    "K_j_0": 0.0004941037238864836,
+    "axis_azimuth_deg": 90.0,
+    "cross_section": "alternative",
+    "culture_temperature_c": 21.166718627420657,
+    "forcing_window": "median",
+    "illuminated_volume_basis": "tube_cylinder",
+    "initial_biomass_kg_m3": 1.992216208856054,
+    "k_X": 336.79064877808355,
+    "k_d": 0.0025108280559020374,
+    "mu_max": 0.09881700133661517
+   },
+   "factor": null,
+   "id": "mc_063",
+   "kind": "monte_carlo",
+   "layouts": {
+    "fence": {
+     "biomass_residual_rel": 1.9242783284059464e-13,
+     "harvest_g": 17951.833737955774,
+     "harvest_only_areal_g_m2_day": 16.085872525049975,
+     "illuminated_volume_m3": 0.9306654076994403,
+     "inventory_change_g": -487.92110339256743,
+     "min_pbr_nitrogen_kg_m3": 0.3772214996350381,
+     "predicted_areal_g_m2_day": 15.648667235271692,
+     "predicted_volumetric_g_l_day": 0.45764970216360606,
+     "produced_g": 17463.912634563207
+    },
+    "horizontal": {
+     "biomass_residual_rel": 2.782844631905753e-13,
+     "harvest_g": 8070.100243972325,
+     "harvest_only_areal_g_m2_day": 8.302572267461239,
+     "illuminated_volume_m3": 0.3988566032997601,
+     "inventory_change_g": -333.86925189544604,
+     "min_pbr_nitrogen_kg_m3": 0.3896605422743285,
+     "predicted_areal_g_m2_day": 7.959085382795144,
+     "predicted_volumetric_g_l_day": 0.3837416166704801,
+     "produced_g": 7736.230992076879
+    }
+   },
+   "summary_sha256": "99e5bd481b073cedf8ee8845d19948a1a8615d11e20754e31b1e5375b93b6eaa"
+  }
+ ],
+ "summary": {
+  "band_sha256": "a8106aff909b051eabdd5937a9b561bc14dbec72fd21e67ff8c950996ef2e881",
+  "direction": {
+   "predicted_areal_g_m2_day": {
+    "central_fence_higher": true,
+    "observed_fence_higher": true,
+    "share_of_draws_fence_higher": 1.0
+   },
+   "predicted_volumetric_g_l_day": {
+    "central_fence_higher": true,
+    "observed_fence_higher": false,
+    "share_of_draws_fence_higher": 0.53125
+   }
+  },
+  "layouts": {
+   "fence": {
+    "predicted_areal_g_m2_day": {
+     "central": 29.546040832759097,
+     "max": 28.293754969736593,
+     "median": 13.36356653707309,
+     "min": -0.05599112107472052,
+     "oat_spread_ranking": [
+      [
+       "culture_temperature_c",
+       29.786865442860613
+      ],
+      [
+       "k_X",
+       14.035568358741672
+      ],
+      [
+       "K_I",
+       13.311373245788673
+      ],
+      [
+       "mu_max",
+       13.000406120558036
+      ],
+      [
+       "k_d",
+       12.321152177913472
+      ],
+      [
+       "illuminated_volume_basis",
+       6.2363311939213055
+      ],
+      [
+       "forcing_window",
+       2.8947744218479876
+      ],
+      [
+       "cross_section",
+       1.602806624903458
+      ],
+      [
+       "axis_azimuth_deg",
+       0.7351117166892394
+      ],
+      [
+       "initial_biomass_kg_m3",
+       0.11719055834783987
+      ],
+      [
+       "K_j_0",
+       0.0953752217407029
+      ]
+     ],
+     "observed": 19.4,
+     "observed_inside_5_95": true,
+     "observed_quantile": 0.765625,
+     "p05": 1.8711035843089023,
+     "p95": 22.605722441752913
+    },
+    "predicted_volumetric_g_l_day": {
+     "central": 0.864082326241068,
+     "max": 0.8274588717564476,
+     "median": 0.3908212855181753,
+     "min": -0.0016374761823739021,
+     "oat_spread_ranking": [
+      [
+       "culture_temperature_c",
+       0.8711253101213953
+      ],
+      [
+       "k_X",
+       0.41047416898206784
+      ],
+      [
+       "K_I",
+       0.3892948779428762
+      ],
+      [
+       "mu_max",
+       0.38020055635594263
+      ],
+      [
+       "k_d",
+       0.36033558256162046
+      ],
+      [
+       "illuminated_volume_basis",
+       0.182383270765623
+      ],
+      [
+       "forcing_window",
+       0.08465849724272434
+      ],
+      [
+       "cross_section",
+       0.04687453336981817
+      ],
+      [
+       "axis_azimuth_deg",
+       0.02149855020506264
+      ],
+      [
+       "initial_biomass_kg_m3",
+       0.003427271046021696
+      ],
+      [
+       "K_j_0",
+       0.0027892753527942737
+      ]
+     ],
+     "observed": 0.57,
+     "observed_inside_5_95": true,
+     "observed_quantile": 0.765625,
+     "p05": 0.05472095388073204,
+     "p95": 0.6611107506550381
+    }
+   },
+   "horizontal": {
+    "predicted_areal_g_m2_day": {
+     "central": 14.110070626707735,
+     "max": 18.590349300374488,
+     "median": 7.4174764928288734,
+     "min": -0.06900718549407259,
+     "oat_spread_ranking": [
+      [
+       "culture_temperature_c",
+       14.268938340009267
+      ],
+      [
+       "k_X",
+       6.712672883237543
+      ],
+      [
+       "k_d",
+       6.369307256470734
+      ],
+      [
+       "mu_max",
+       6.369290859926018
+      ],
+      [
+       "K_I",
+       6.354104315290211
+      ],
+      [
+       "forcing_window",
+       1.4413164441473167
+      ],
+      [
+       "illuminated_volume_basis",
+       0.39629495050792585
+      ],
+      [
+       "axis_azimuth_deg",
+       0.22882379568549105
+      ],
+      [
+       "initial_biomass_kg_m3",
+       0.0798067260030706
+      ],
+      [
+       "K_j_0",
+       0.042431007482051086
+      ],
+      [
+       "cross_section",
+       0.03203483529541451
+      ]
+     ],
+     "observed": 12.1,
+     "observed_inside_5_95": true,
+     "observed_quantile": 0.90625,
+     "p05": 0.8112336015978543,
+     "p95": 13.139055496726545
+    },
+    "predicted_volumetric_g_l_day": {
+     "central": 0.6803069766448373,
+     "max": 0.8963204126966272,
+     "median": 0.35762833090424917,
+     "min": -0.0033271321577499286,
+     "oat_spread_ranking": [
+      [
+       "culture_temperature_c",
+       0.6879666699647325
+      ],
+      [
+       "k_X",
+       0.323646728298953
+      ],
+      [
+       "k_d",
+       0.30709159986555334
+      ],
+      [
+       "mu_max",
+       0.3070908093178616
+      ],
+      [
+       "K_I",
+       0.30635860091577816
+      ],
+      [
+       "forcing_window",
+       0.06949204284281696
+      ],
+      [
+       "illuminated_volume_basis",
+       0.019107077970917707
+      ],
+      [
+       "axis_azimuth_deg",
+       0.011032575863407779
+      ],
+      [
+       "initial_biomass_kg_m3",
+       0.0038478242894337544
+      ],
+      [
+       "K_j_0",
+       0.0020457807178846377
+      ],
+      [
+       "cross_section",
+       0.0015445367017430378
+      ]
+     ],
+     "observed": 0.65,
+     "observed_inside_5_95": false,
+     "observed_quantile": 0.96875,
+     "p05": 0.03911304864846797,
+     "p95": 0.6334901757350299
+    }
+   }
+  },
+  "monte_carlo_samples": 64,
+  "oat_cases": 20,
+  "seed": 215,
+  "status": "declared-assumption band; surrogate forcing; assumed / not qualified card"
+ }
+}
