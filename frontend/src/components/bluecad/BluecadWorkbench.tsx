@@ -732,6 +732,10 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
           clearVisibleDetail("idle");
           setMessage(null);
           publishSelection(nextWorkspaceId, null);
+          // Drop the previous workspace's list and selection so no detail request pairs the new
+          // workspace with a candidate from the old one.
+          setCandidates([]);
+          setSelectedId(null);
           setWorkspaceId(nextWorkspaceId);
         }} disabled={workspaceState !== "ready" || workspaces.length === 0 || pendingAction !== null}>{workspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}</select></label>
         <button type="button" className="secondary-button bluecad-navigator__icon" onClick={() => void refresh()} disabled={!workspaceId || candidateState === "loading" || pendingAction !== null} aria-label="Refresh" title="Refresh candidates">↻</button>
