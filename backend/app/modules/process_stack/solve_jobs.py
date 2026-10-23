@@ -21,6 +21,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from app.core.paths import build_paths
 from app.modules.process_stack import draft, mixed, tear_solver
 
 MAX_ACTIVE_GLOBAL = 2
@@ -70,6 +71,25 @@ def _settled(path: Path, record: dict[str, Any]) -> dict[str, Any]:
                       "message": "The backend stopped while this solve was running; no result was recorded."}
             _write(path / "solve.json", record)
     return record
+
+
+def recover_interrupted() -> int:
+    """Mark unfinished Process solves interrupted when the backend starts, without creating a result."""
+    root = build_paths().workspaces_dir
+    recovered = 0
+    with _lock:
+        for path in root.glob("*/process/drafts/*/runs/*/solve.json"):
+            try:
+                record = _read_solve(path.parent)
+            except draft.DraftError:
+                continue
+            if record.get("state") not in {"running", "stopping"}:
+                continue
+            record.update(state="interrupted", finished_at=_now(),
+                          message="The backend stopped while this solve was running; no result was recorded.")
+            _write(path, record)
+            recovered += 1
+    return recovered
 
 
 def _settings(document: dict[str, Any]) -> dict[str, Any] | None:

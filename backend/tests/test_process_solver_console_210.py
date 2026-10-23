@@ -168,6 +168,11 @@ def test_one_active_solve_per_draft_and_a_restart_marks_running_solves_interrupt
     assert refused.status_code == 409 and refused.json()["detail"]["code"] == "solve_active"
     # Simulate a backend restart: the record still says running but this process is not running it.
     stop = solve_jobs._active.pop(started["run_id"])
+    assert solve_jobs.recover_interrupted() >= 1
+    persisted = solve_jobs._read_solve(solve_jobs._run_dir(
+        state["workspace_id"], state["draft_id"], started["run_id"]))
+    assert persisted["state"] == "interrupted" and not (solve_jobs._run_dir(
+        state["workspace_id"], state["draft_id"], started["run_id"]) / "run.json").exists()
     body = client.get(f"{base}/solves/{started['run_id']}").json()
     assert body["state"] == "interrupted" and body["live"] is False and "no result" in body["message"]
     assert client.post(f"{base}/solves/{started['run_id']}/stop").json()["stop"] == "noop"

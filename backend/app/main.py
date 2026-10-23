@@ -124,8 +124,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             app.state.runtime_startup_snapshot = startup_snapshot_unavailable()
         await lifecycle.startup()
         from app.modules.process_stack.dynamic_jobs import recover_interrupted
+        from app.modules.process_stack.solve_jobs import recover_interrupted as recover_process_solves
 
         await asyncio.to_thread(recover_interrupted)
+        await asyncio.to_thread(recover_process_solves)
         await asyncio.to_thread(_warm_pbr_imports)
         llama_owner = get_llama_cpp_runtime_owner()
         if llama_cpp_runtime_config().manage:
