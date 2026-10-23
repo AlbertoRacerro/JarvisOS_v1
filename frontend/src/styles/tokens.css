@@ -149,6 +149,10 @@
   --color-bg-surface-raised: #fffffb;
   --color-bg-subtle: #e9ecda;
   --color-bg-technical-viewport: #121a16;
+  --color-viewport-grid-major: #7a8e72;
+  --color-viewport-grid-minor: #425946;
+  --color-text-on-viewport: #dfe8d6;
+  --color-text-on-viewport-muted: #a9b6a0;
   --color-text-primary: #15230f;
   --color-text-secondary: #40503a;
   --color-text-muted: #55634c;
@@ -186,6 +190,9 @@
   --color-chart-series-3: #b4541a;
   --color-chart-series-4: #8a3f86;
   --color-chart-series-5: #3a3f44;
+  --color-chart-series-6: #476e68;
+  --color-chart-series-7: #87640e;
+  --color-chart-series-8: #126f73;
   --color-flow-bg: #fafbf2;
   --color-flow-grid: rgb(52 98 26 / 0.16);
   --color-flow-node: #fffffd;
@@ -266,6 +273,10 @@
   --color-bg-surface-raised: #142318;
   --color-bg-subtle: #0b150c;
   --color-bg-technical-viewport: #07110a;
+  --color-viewport-grid-major: #758c6c;
+  --color-viewport-grid-minor: #344a30;
+  --color-text-on-viewport: #dfe8d6;
+  --color-text-on-viewport-muted: #a9b6a0;
   --color-text-primary: #eef0de;
   --color-text-secondary: #bac6a8;
   --color-text-muted: #97a68d;
@@ -311,6 +322,9 @@
   --color-chart-series-3: #f2b35b;
   --color-chart-series-4: #ee92c8;
   --color-chart-series-5: #ede6be;
+  --color-chart-series-6: #a4c8c2;
+  --color-chart-series-7: #e4ca6c;
+  --color-chart-series-8: #73d1cf;
   --color-flow-bg: #07100a;
   --color-flow-grid: rgb(190 220 140 / 0.09);
   --color-flow-node: #112016;

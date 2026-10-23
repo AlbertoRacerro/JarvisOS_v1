@@ -19,6 +19,23 @@ html { background: var(--color-bg-canvas); }
   background: radial-gradient(560px 260px at 260px 110px, var(--lumen-hero-bloom), transparent 100%) no-repeat;
   scrollbar-color: var(--color-border-strong) transparent;
 }
+.application-shell:not(.application-shell--final) {
+  grid-template-columns: var(--lumen-rail-width) minmax(0, 1fr);
+}
+.application-shell:not(.application-shell--final) .shell-topbar {
+  margin: 14px 14px 0;
+  border: 1px solid var(--lumen-panel-border);
+  border-radius: var(--lumen-radius-panel);
+  background: var(--lumen-panel-fill);
+  box-shadow: var(--lumen-shadow-panel);
+}
+.application-shell:not(.application-shell--final) .shell-main:focus { box-shadow: none; }
+.application-shell:not(.application-shell--final) .shell-main:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--color-focus-ring);
+}
+@media (max-width: 60rem) {
+  .application-shell:not(.application-shell--final) { grid-template-columns: minmax(0, 1fr); }
+}
 
 /* ---------- Rail: detached glass capsule carrying the emblem ---------- */
 .application-shell--final { --shell-rail-width: var(--lumen-rail-width); }
@@ -175,7 +192,12 @@ html { background: var(--color-bg-canvas); }
   .application-shell .shell-rail__identity::before { width: 2.5rem; height: 2.5rem; }
   .application-shell .shell-rail__links { gap: 4px; }
   .application-shell .shell-nav-link { min-height: 36px; padding: 6px 12px; }
-  .application-shell--final :is(.shell-sidecar, .shell-navigator) { height: auto; max-height: none; margin: 10px; }
+  .application-shell--final :is(.shell-sidecar, .shell-navigator) {
+    width: auto;
+    height: auto;
+    max-height: none;
+    margin: 10px;
+  }
   .application-shell--final .shell-reopen { border: 1px solid var(--color-border-default); border-radius: var(--lumen-radius-button); }
 }
 

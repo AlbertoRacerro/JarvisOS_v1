@@ -66,6 +66,8 @@ walk("src");
 for (const relative of sourceFiles) {
   read(relative).split("\n").forEach((line, index) => {
     const code = line.replace(/\/\/.*$/, "");
+    // The Sidecar converts a backend-owned context summary at display time.
+    if (relative === "src/components/ai/useJarvisSidecar.tsx" && code.includes('return text.replace(/\\bBLUECAD\\b/g, "BlueCad")')) return;
     if (/(?<![A-Z_])BLUECAD(?![A-Z_])/.test(code)) failures.push(`${relative}:${index + 1} renders BLUECAD instead of BlueCad`);
   });
 }

@@ -48,6 +48,10 @@ const KNOWLEDGE_ROUTES = new Set(["memory-project-basis", "memory-models", "memo
 const TERMINAL_FLOW_STATES = new Set(["complete", "partial_terminal", "failed_terminal", "cancelled_terminal"]);
 const RESPONDER_STORAGE_KEY = "jarvisos.jarvis.responder";
 
+function productDisplayText(text: string): string {
+  return text.replace(/\bBLUECAD\b/g, "BlueCad");
+}
+
 function requestId(): string {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
@@ -961,8 +965,8 @@ export function useJarvisSidecar(
 
     <form onSubmit={(event) => void submit(event)} className="jarvis-sidecar__composer">
       <div className="jarvis-surface-chip" aria-live="polite">
-        <span>{surfaceBrief?.summary ?? (routeId === "design-process" || routeId === "design-bluecad" || routeId === "design-studio" ? "Reading workspace context…" : "No workspace context on this page")}</span>
-        {surfaceBrief?.text ? <details><summary>Workspace context</summary><p>{surfaceBrief.text}</p></details> : null}
+        <span>{surfaceBrief?.summary ? productDisplayText(surfaceBrief.summary) : (routeId === "design-process" || routeId === "design-bluecad" || routeId === "design-studio" ? "Reading workspace context…" : "No workspace context on this page")}</span>
+        {surfaceBrief?.text ? <details><summary>Workspace context</summary><p>{productDisplayText(surfaceBrief.text)}</p></details> : null}
       </div>
       {composerTarget === "relay" && relayStatus?.enabled ? <div className="jarvis-sidecar__relay-target">
         <p className="jarvis-sidecar__hint">Task for {modelDisplayName(null, relayAgent)} via Relay · {accessModeLabel(relayStatus.access_mode)} access at level {relayStatus.repository_level}. {relayStatus.blocked_reason ?? "Only submit a task that contains no strategic or domain IP."}</p>

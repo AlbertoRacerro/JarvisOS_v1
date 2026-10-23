@@ -49,9 +49,9 @@
   display: flex;
   gap: 2px;
   padding: 2px;
-  border: 1px solid #ddd5c8;
+  border: 1px solid var(--color-border-default);
   border-radius: 5px;
-  background: rgba(255, 254, 252, 0.92);
+  background: color-mix(in srgb, var(--color-bg-surface-raised) 92%, transparent);
 }
 .bluecad-viewer__views button,
 .bluecad-viewer__views button:disabled {
@@ -60,10 +60,10 @@
   border: 1px solid transparent !important;
   border-radius: 4px !important;
   background: transparent !important;
-  color: #3f4a37 !important;
+  color: var(--color-text-secondary) !important;
   font-size: 11px;
 }
-.bluecad-viewer__views button:hover:not(:disabled) { background: #eef1e8 !important; }
+.bluecad-viewer__views button:hover:not(:disabled) { background: var(--color-bg-subtle) !important; }
 .bluecad-viewer__views button:disabled { opacity: .5; }
 .bluecad-viewer__hint { margin: 0; font-size: 11px; }
 .bluecad-export { position: relative; }
@@ -76,9 +76,9 @@
   display: grid;
   gap: 2px;
   padding: 4px;
-  border: 1px solid #ddd5c8;
+  border: 1px solid var(--color-border-default);
   border-radius: 5px;
-  background: #fffefc;
+  background: var(--color-bg-surface-raised);
   box-shadow: 0 6px 18px rgba(40, 44, 36, 0.14);
 }
 .bluecad-export__menu--flipped { left: auto; right: 0; }
@@ -100,13 +100,13 @@
 .bluecad-export__menu a:hover,
 .bluecad-export__menu button:hover,
 .bluecad-export__menu a:focus-visible,
-.bluecad-export__menu button:focus-visible { background: #eef1e8; }
+.bluecad-export__menu button:focus-visible { background: var(--color-bg-subtle); }
 .bluecad-export__menu small { color: var(--color-text-muted); font-size: 10px; }
 .bluecad-export__menu button.bluecad-export__handoff,
 .bluecad-export__menu button.bluecad-export__handoff:hover,
-.bluecad-export__menu button.bluecad-export__handoff:focus-visible { background: #eef1e8; color: #1f2933; }
-.bluecad-export__menu button.bluecad-export__handoff small { color: #4a5564; }
-.bluecad-export__status { padding: 5px 8px; overflow-wrap: anywhere; color: #1f2933; font-size: 11px; line-height: 1.35; }
+.bluecad-export__menu button.bluecad-export__handoff:focus-visible { background: var(--color-bg-subtle); color: var(--color-text-primary); }
+.bluecad-export__menu button.bluecad-export__handoff small { color: var(--color-text-secondary); }
+.bluecad-export__status { padding: 5px 8px; overflow-wrap: anywhere; color: var(--color-text-primary); font-size: 11px; line-height: 1.35; }
 .bluecad-create {
   width: min(100%, 52rem);
   margin: 0 auto;
@@ -116,18 +116,18 @@
   text-align: left;
 }
 .bluecad-create__intro { grid-column: 1 / -1; }
-.bluecad-create__intro h2 { margin: 0 0 4px; font-size: 18px; font-weight: 500; color: var(--color-text-primary, #22261f); }
+.bluecad-create__intro h2 { margin: 0 0 4px; font-size: 18px; font-weight: 500; color: var(--color-text-primary, var(--color-text-primary)); }
 .bluecad-create__intro p { margin: 0; }
 .bluecad-create__route {
   display: grid;
   align-content: start;
   gap: 8px;
   padding: 12px;
-  border: 1px solid #ddd5c8;
+  border: 1px solid var(--color-border-default);
   border-radius: 5px;
-  background: #fffefc;
+  background: var(--color-bg-surface-raised);
 }
-.bluecad-create__route h3 { margin: 0; font-size: 14px; font-weight: 500; color: var(--color-text-primary, #22261f); }
+.bluecad-create__route h3 { margin: 0; font-size: 14px; font-weight: 500; color: var(--color-text-primary, var(--color-text-primary)); }
 .bluecad-create__route p { margin: 0; font-size: 12px; }
 .bluecad-create__fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr)); gap: 6px 8px; }
 .bluecad-create__fields label { display: grid; gap: 2px; font-size: 11px; }
@@ -135,7 +135,7 @@
 .bluecad-create__fields select { width: 100%; min-width: 0; }
 .application-shell--final .bluecad-workbench__viewport {
   border: 1px solid var(--color-border-subtle);
-  background-color: #fbfaf6;
+  background-color: var(--color-bg-surface);
 }
 .application-shell--final .bluecad-workbench__empty-viewer {
   display: grid;

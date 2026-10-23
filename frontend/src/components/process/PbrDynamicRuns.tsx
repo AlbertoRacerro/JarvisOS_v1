@@ -22,8 +22,8 @@ function ParPlot({ series, tag }: { series: SeriesResponse; tag: string }) {
   const points = (values: number[]) => values.map((value, index) =>
     `${index ? "L" : "M"}${(inset + (times[index] - t0) / span * (width - 2 * inset)).toFixed(2)},${(height - inset - value / ymax * (height - 2 * inset)).toFixed(2)}`).join(" ");
   return <figure className="pbr-par-plot"><svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="One-day intercepted and absorbed PAR curves" preserveAspectRatio="none">
-    <path d={points(intercepted)} fill="none" stroke="#24729b" strokeWidth="2" vectorEffect="non-scaling-stroke" />
-    <path d={points(absorbed)} fill="none" stroke="#b45e2d" strokeWidth="2" vectorEffect="non-scaling-stroke" />
+    <path d={points(intercepted)} fill="none" stroke="var(--color-chart-series-2)" strokeWidth="2" vectorEffect="non-scaling-stroke" />
+    <path d={points(absorbed)} fill="none" stroke="var(--color-chart-series-3)" strokeWidth="2" vectorEffect="non-scaling-stroke" />
   </svg><figcaption><span className="pbr-par-plot__intercepted">Intercepted PAR</span> · <span className="pbr-par-plot__absorbed">Absorbed PAR</span> · µmol s⁻¹ m⁻¹ · first 24 h · {series.returned_points} points</figcaption>
     <details><summary>PAR values</summary><table><thead><tr><th>Hour</th><th>Intercepted</th><th>Absorbed</th></tr></thead>
       <tbody>{times.map((time, index) => index % Math.max(1, Math.ceil(times.length / 48)) === 0 ? <tr key={index}><td>{formatSig(time / 3600)}</td><td>{formatSig(intercepted[index])}</td><td>{formatSig(absorbed[index])}</td></tr> : null)}</tbody></table></details>
