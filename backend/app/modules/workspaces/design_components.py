@@ -7,7 +7,12 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, ValidationError
 
 from app.core.database import open_sqlite_connection
-from app.modules.bluecad.template import TemplateError, TubeTemplateCreate, create_template_candidate
+from app.modules.bluecad.template import (
+    TemplateError,
+    TubeTemplateCreate,
+    TubeTemplateParams,
+    create_template_candidate,
+)
 from app.modules.events.service import log_event, utc_now
 from app.modules.process_stack import draft
 from app.modules.process_stack.draft import DraftError
@@ -366,13 +371,13 @@ def deepen_component_geometry(
     if revision != payload.expected_draft_revision:
         raise HTTPException(409, detail="Process draft changed; reload before generating geometry.")
     mapping = _tube_mapping(unit, revision)
-    if not mapping.supported:
+    if not mapping.supported or mapping.inner_d_mm is None or mapping.length_mm is None:
         raise HTTPException(422, detail=mapping.basis)
     try:
-        request = TubeTemplateCreate(template="tube", params={
-            "outer_d_mm": mapping.inner_d_mm + 2 * payload.wall_t_mm,
-            "wall_t_mm": payload.wall_t_mm, "length_mm": mapping.length_mm,
-        })
+        request = TubeTemplateCreate(template="tube", params=TubeTemplateParams(
+            outer_d_mm=mapping.inner_d_mm + 2 * payload.wall_t_mm,
+            wall_t_mm=payload.wall_t_mm, length_mm=mapping.length_mm,
+        ))
     except ValidationError as error:
         raise HTTPException(422, detail="Process dimensions are outside the BlueCad tube template range: "
                             + "; ".join(item["msg"] for item in error.errors())) from error
