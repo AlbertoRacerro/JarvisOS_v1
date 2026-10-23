@@ -99,6 +99,7 @@ export function ResidualChart({ series, title }: Readonly<{ series: Series[]; ti
 
 const stateText = (solve: SolveStatus, events: SolveEvent[]) => {
   if (solve.state === "stopping") return "Stop requested — ends at the next iteration boundary";
+  if (solve.state === "running" && solve.events_truncated) return "Running · iteration log full; later iterations are not shown live";
   if (solve.state === "running") return events.length ? `Live · iteration ${events[events.length - 1]!.iteration}` : "Running — waiting for the first iteration";
   if (solve.state === "interrupted") return "Interrupted — no result was recorded";
   if (solve.state === "failed") return `Failed${solve.message ? ` — ${solve.message}` : ""}`;
@@ -139,7 +140,7 @@ export function SolverConsole({ solve, events, onStop }: Readonly<{ solve: Solve
       ) : (
         <>
           {events.length > 0 && (
-            <ResidualChart title={running ? "Residual per iteration (live)" : "Residual per iteration (recorded)"}
+            <ResidualChart title={running && !solve.events_truncated ? "Residual per iteration (live)" : "Residual per iteration (recorded)"}
               series={[{ key: "run", label: "Max normalized residual", points: events.map((event) => ({ iteration: event.iteration, value: event.max_normalized_residual })) }]} />
           )}
           {latest && (
