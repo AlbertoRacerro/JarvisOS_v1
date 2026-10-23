@@ -29,14 +29,21 @@ declare its exact 36-day window. The S01 paper does not report those exact dates
 | Broadband-to-PAR | `0.45 × 4.57 = 2.0565` µmol J⁻¹; **screening assumption** | Existing [spec 171](../specs/171-environment-profiles.md) convention; the actual 2013 spectral PAR fraction is unknown. The same factor is applied to direct and diffuse broadband energy when T2 optics consumes them. |
 | Culture temperature | **scenario pending** | S01 gives only a maintained 20–30 °C range. The KNMI air series must not be treated as culture temperature; a bounded scenario must be declared in the integrated run. |
 
-The CSV columns map to the existing environment profile importer as `ghi`,
-`dni`, `dhi`, `par`, `air_temperature` with units W m⁻², W m⁻², W m⁻²,
-µmol m⁻² s⁻¹ and °C respectively, 60-minute resolution and `end` stamps.
-An imported profile must retain a site snapshot for T2 solar position and
-explicitly label its surrogate origin. For T2 optics, the consuming dynamic
-scenario must explicitly set `par_from_ghi_factor=2.0565`; the CSV importer
-does not copy this conversion into its profile provenance. The committed file is a pinned input,
-not a claim that the C1 systems received this weather.
+[`environment_mapping.json`](../../scripts/qualification/215/environment_mapping.json)
+is the exact mapping accepted by the existing environment-profile CSV importer.
+It maps `ghi`, `dni`, `dhi`, `par` and `air_temperature`, converts the CSV's °C
+to the profile's K, and retains the 60-minute `end` stamps. The importer
+records the CSV SHA-256 and mapping in immutable profile provenance. An offline
+test imports the committed CSV through that owner and reads back all 1,488
+hours. No site or production workspace is changed by this checkpoint.
+
+A consuming C1 run must pin a site snapshot for T2 solar position and label
+the profile as **surrogate KNMI Deelen**, not AlgaePARC weather. It must also
+explicitly set `par_from_ghi_factor=2.0565`; the CSV importer does not copy
+that conversion into its profile provenance. Imported `air_temperature` is
+weather only. Culture temperature remains a separate 20–30 °C scenario. The
+committed file is a pinned input, not a claim that the C1 systems received this
+weather.
 
 Regenerate with the raw archive using the command in the script module docstring.
 The focused offline test checks the committed digest, complete hourly coverage,

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import json
 import math
 import runpy
 from datetime import UTC, datetime
@@ -11,6 +12,11 @@ from pathlib import Path
 
 import pandas as pd
 import pvlib
+
+from app.core.database import initialize_database
+from app.modules.environment import profiles
+from app.modules.workspaces.models import WorkspaceCreate
+from app.modules.workspaces.service import create_workspace
 
 ROOT = Path(__file__).resolve().parents[2]
 DATA = ROOT / "scripts/qualification/215/knmi_2013_deelen_surrogate.csv"
@@ -64,3 +70,23 @@ def test_declared_36_day_forcing_windows() -> None:
     assert [selected[name]["par_dose_mol_m2"] for name in ("low", "median", "high")] == [
         1173.4389, 1303.73874, 1431.838125,
     ]
+
+
+def test_surrogate_imports_through_environment_profile_owner() -> None:
+    initialize_database()
+    wid = create_workspace(WorkspaceCreate(name="C1 surrogate", slug="c1-surrogate-test")).id
+    mapping = json.loads((DATA.parent / "environment_mapping.json").read_text(encoding="utf-8"))
+    imported = profiles.confirm_csv(wid, DATA, DATA.name, mapping)
+    record = profiles.read_profile(wid, imported["digest"], limit=62 * 24)
+    assert record["provenance"]["original_sha256"] == SHA256
+    assert record["provenance"]["column_mapping"] == mapping
+    assert record["resolution_minutes"] == 60
+    assert record["timestamps"][0] == "2013-07-01T01:00:00Z"
+    assert record["timestamps"][-1] == "2013-09-01T00:00:00Z"
+    assert len(record["timestamps"]) == 62 * 24
+    assert record["units"] == {
+        "ghi": "W m-2", "dni": "W m-2", "dhi": "W m-2",
+        "par": "umol m-2 s-1", "air_temperature": "K",
+    }
+    assert record["channels"]["air_temperature"][0] == 14.3 + 273.15
+    assert record["channels"]["par"] != record["channels"]["ghi"]
