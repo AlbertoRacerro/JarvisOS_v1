@@ -169,7 +169,7 @@ function App() {
   } else {
     switch (route.id) {
       case "design-studio":
-        content = <Studio workspaceId={workspaceId} navigate={navigate} engineeringProperties={engineeringProperties} onModelSelectionChange={setStudioModelId} />;
+        content = <Studio workspaceId={workspaceId} navigate={navigate} engineeringProperties={engineeringProperties} onModelSelectionChange={setStudioModelId} onWorkspaceChange={setWorkspaceId} />;
         break;
       case "memory-project-basis":
         content = <><FinalWorkspaceHeader group="memory" active="project-basis" navigate={navigate} /><FinalOperatorReadSurface kind="project-basis" workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} requestedRecordRef={requestedRecordRef} onRecordSelect={selectKnowledge} jarvis={jarvisSidecar} projectSearch={<ProjectSearchPanel workspaceId={workspaceId} navigate={navigate} />} /></>;

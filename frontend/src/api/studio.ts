@@ -73,6 +73,9 @@ export const saveStudioModel = (workspaceId: string, id: string, payload: Partia
 export const testStudioModel = (workspaceId: string, id: string, cases: StudioCase[] | StudioUnitCase[] | StudioGeometryCase[] | ProcedureCase[]) => request<StudioReport | ProcedureReport>(`${model(workspaceId, id)}/test`, "POST", { cases });
 export const publishStudioModel = (workspaceId: string, id: string) => request<StudioVersion>(`${model(workspaceId, id)}/publish`, "POST", {});
 export const reviseStudioModel = (workspaceId: string, id: string) => request<StudioModel>(`${model(workspaceId, id)}/revise`, "POST", {});
+export type StudioExample = { workspace: { id: string; name: string; slug: string }; created: boolean; added: string[] };
+/** Create or reopen the AI-prepared example workspace (spec 209); existing artifacts are never modified. */
+export const openStudioExample = () => request<StudioExample>("/studio/example-workspace", "POST", {});
 export const listStudioLibrary = (workspaceId: string) => request<StudioLibraryEntry[]>(`${root(workspaceId)}/library`);
 /** Untrusted geometry bytes from the current draft test report; the backend re-verifies each hash. */
 export const geometryPreviewUrl = (workspaceId: string, id: string, previewId: string, name: string) => `${API_BASE_URL}${model(workspaceId, id)}/previews/${encodeURIComponent(previewId)}/${name}`;
