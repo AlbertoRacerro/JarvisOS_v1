@@ -3,11 +3,12 @@ import AppLink, { type Navigate } from "../app/AppLink";
 import { listWorkspaces } from "../api/client";
 import {
   activateDesignVersion, createDesignComponent, createDesignVersion, editDesignComponent,
-  listDesignComponents, listDesignVersions,
+  listDesignComponents, listDesignVersions, openDesignUnit,
   type DesignComponent, type DesignVersionSet
 } from "../api/designProject";
 import { listStudioLibrary, type StudioLibraryEntry } from "../api/studio";
 import ProcessDraftEditor from "../stages/ProcessDraftEditor";
+import type { DraftObject } from "../api/processDraft";
 import "./designProject.css";
 
 const NODES = ["Parameters", "Geometry", "Materials", "Physics", "Mesh", "Studies", "Results", "Reduced model"] as const;
@@ -76,6 +77,16 @@ export default function DesignProject({ projectId, navigate }: { projectId: stri
   const selectComponent = (item: DesignComponent) => {
     setSelectedId(item.id); setEditName(item.name); setEditParent(item.parent_id ?? "");
   };
+  const openUnit = async (draftId: string, revision: string, unit: DraftObject) => {
+    if (!projectId || !active) return;
+    setBusy(true); setError(null);
+    try {
+      const component = await openDesignUnit(projectId, active.id, draftId, revision, unit.id);
+      await reload();
+      selectComponent(component); setStage("CAD");
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not open the Process unit."); }
+    finally { setBusy(false); }
+  };
 
   function tree(parentId: string | null, depth = 0): ReactNode {
     return components.filter((item) => item.parent_id === parentId).map((item) => (
@@ -129,10 +140,11 @@ export default function DesignProject({ projectId, navigate }: { projectId: stri
       </aside>
       <main className="design-project__panel design-project__main">
         <h2>{selected?.name ?? stage}</h2>
+        {selected?.source_unit_id ? <p>Process unit model · source draft {selected.source_draft_id?.slice(0, 8)} · unit {selected.source_unit_id.slice(0, 8)}. Process owns the 0D/1D calculation; no CFD or validated geometry is attached yet.</p> : null}
         {selected ? <div className="design-project__nodes" aria-label="Component model tree">{NODES.map((node) => <button key={node} type="button" onClick={() => setStage(node === "Geometry" ? "CAD" : node === "Reduced model" ? "Reduced model" : node === "Physics" || node === "Mesh" ? "CFD" : "Plant")}>{node}</button>)}</div> : null}
         {stage === "Plant" && !selected && active ? <>
           <p>Flowsheet edits and runs use this version's Process data context. The Process editor owns its revisions and solver results.</p>
-          <ProcessDraftEditor key={active.data_workspace_id} workspaceId={active.data_workspace_id} navigate={navigate} />
+          <ProcessDraftEditor key={active.data_workspace_id} workspaceId={active.data_workspace_id} navigate={navigate} onOpenUnit={(draftId, revision, unit) => void openUnit(draftId, revision, unit)} />
         </> : <p>{stage === "Plant" ? "Select Plant to edit this version's flowsheet." : `${stage} is a navigation placeholder in this Phase 1 checkpoint.`}</p>}
         {active?.id === projectId ? <AppLink href="/design/process" navigate={navigate}>Open old Process view</AppLink> : null}
       </main>

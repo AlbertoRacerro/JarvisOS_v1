@@ -9,6 +9,7 @@ export type DesignVersionSet = { project_id: string; active_version_id: string; 
 export type DesignComponent = {
   id: string; project_id: string; version_id: string; parent_id: string | null;
   name: string; revision: number; created_at: string; updated_at: string;
+  source_draft_id: string | null; source_unit_id: string | null;
 };
 
 const base = (projectId: string) => `/workspaces/${encodeURIComponent(projectId)}/design-versions`;
@@ -24,6 +25,11 @@ export const listDesignComponents = (projectId: string, versionId: string) =>
 export const createDesignComponent = (projectId: string, versionId: string, name: string, parentId: string | null) =>
   request<DesignComponent>(components(projectId, versionId), "POST", {
     name, parent_id: parentId, expected_active_version_id: versionId
+  });
+export const openDesignUnit = (projectId: string, versionId: string, draftId: string, revision: string, unitId: string) =>
+  request<DesignComponent>(`${components(projectId, versionId)}/from-unit`, "POST", {
+    draft_id: draftId, unit_id: unitId, expected_draft_revision: revision,
+    expected_active_version_id: versionId
   });
 export const editDesignComponent = (projectId: string, versionId: string, component: DesignComponent,
   name: string, parentId: string | null) =>

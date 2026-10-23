@@ -1,8 +1,10 @@
 from fastapi.testclient import TestClient
+from pydantic import TypeAdapter
 
 from app.core.database import initialize_database, open_sqlite_connection
 from app.main import app
 from app.modules.process_stack import draft
+from app.modules.process_stack.draft_models import DraftOp
 
 
 def test_design_versions_preserve_legacy_data_and_isolate_new_work() -> None:
@@ -134,3 +136,36 @@ def test_component_tree_scopes_identity_and_rejects_cycles_and_stale_edits() -> 
         assert client.post(base, json={
             "name": "Stale version", "expected_active_version_id": project_id,
         }).status_code == 409
+
+
+def test_process_unit_opens_one_version_scoped_component() -> None:
+    initialize_database()
+    with TestClient(app) as client:
+        project_id = client.post("/workspaces", json={"name": "Unit entry", "slug": "unit-entry"}).json()["id"]
+        process = draft.create_draft(project_id, "Plant")
+        changed = draft.patch(project_id, process["draft_id"], process["revision"], [
+            TypeAdapter(DraftOp).validate_python({"op": "add_unit", "id": "pump", "type": "Pump", "tag": "P1", "x": 0, "y": 0})
+        ])
+        base = f"/workspaces/{project_id}/design-versions/{project_id}/components"
+        payload = {"draft_id": process["draft_id"], "unit_id": "pump",
+                   "expected_draft_revision": changed["revision"], "expected_active_version_id": project_id}
+        first = client.post(f"{base}/from-unit", json=payload)
+        assert first.status_code == 200, first.text
+        assert first.json()["source_draft_id"] == process["draft_id"]
+        assert first.json()["source_unit_id"] == "pump"
+        again = client.post(f"{base}/from-unit", json=payload)
+        assert again.status_code == 200 and again.json()["id"] == first.json()["id"]
+        assert len(client.get(base).json()) == 1
+        assert client.post(f"{base}/from-unit", json={**payload, "unit_id": "missing"}).status_code == 404
+        assert client.post(f"{base}/from-unit", json={**payload, "expected_draft_revision": "stale"}).status_code == 409
+
+        version = client.post(f"/workspaces/{project_id}/design-versions", json={
+            "label": "Next", "expected_active_version_id": project_id,
+        }).json()["versions"][1]
+        client.post(f"/workspaces/{project_id}/design-versions/activate", json={
+            "version_id": version["id"], "expected_active_version_id": project_id,
+        })
+        next_base = f"/workspaces/{project_id}/design-versions/{version['id']}/components"
+        assert client.post(f"{next_base}/from-unit", json={
+            **payload, "expected_active_version_id": version["id"],
+        }).status_code == 404

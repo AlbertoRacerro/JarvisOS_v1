@@ -228,7 +228,10 @@ function quantitiesFrom(form: FormState): Record<string, DraftQuantity> | null {
   return result;
 }
 
-export default function ProcessDraftEditor({ workspaceId, navigate }: Readonly<{ workspaceId: string; navigate?: Navigate }>) {
+export default function ProcessDraftEditor({ workspaceId, navigate, onOpenUnit }: Readonly<{
+  workspaceId: string; navigate?: Navigate;
+  onOpenUnit?: (draftId: string, revision: string, unit: DraftObject) => void;
+}>) {
   const [biologyOpen, setBiologyOpen] = useState(false);
   const [registry, setRegistry] = useState<DraftRegistry | null>(null);
   const [drafts, setDrafts] = useState<DraftSummary[]>([]);
@@ -877,10 +880,13 @@ export default function ProcessDraftEditor({ workspaceId, navigate }: Readonly<{
       const inlets = spec?.inlets ?? [];
       const outlets = spec?.outlets ?? [];
       return (
-        <g key={item.id} className={classes} onPointerDown={(event) => onPointerDown(event, item)} data-testid={`node-${item.tag}`}
+        <g key={item.id} className={classes} onPointerDown={(event) => onPointerDown(event, item)}
+          onDoubleClick={() => { if (onOpenUnit) onOpenUnit(draft.draft_id, draft.revision, item); }} data-testid={`node-${item.tag}`}
           role="button" tabIndex={0} aria-label={`${spec?.label ?? item.type} ${item.tag}`}
           onContextMenu={(event) => { setContextUnitId(item.id); setSelectedId(item.id); unitMenu.targetProps.onContextMenu(event); }}
-          onKeyDown={(event) => { setContextUnitId(item.id); setSelectedId(item.id); unitMenu.targetProps.onKeyDown(event); }}
+          onKeyDown={(event) => { if (onOpenUnit && (event.key === "Enter" || event.key === " ")) {
+            event.preventDefault(); onOpenUnit(draft.draft_id, draft.revision, item);
+          } else { setContextUnitId(item.id); setSelectedId(item.id); unitMenu.targetProps.onKeyDown(event); } }}
           onFocus={() => { setSelectedId(item.id); setContextUnitId(item.id); }}>
           <rect x={point.x - width / 2} y={point.y - UNIT_H / 2} width={width} height={UNIT_H} rx={6} />
           <text x={point.x} y={point.y - 3} textAnchor="middle" className="draft-node__tag">{item.tag}</text>
@@ -1678,6 +1684,7 @@ export default function ProcessDraftEditor({ workspaceId, navigate }: Readonly<{
               <button type="button" className="draft-inspector__close" aria-label="Close inspector" title="Close inspector (Esc)" onClick={() => setSelectedId(null)}>×</button>
             </div>
             <div className="draft-rename">
+              {selected.kind === "unit" && onOpenUnit ? <button type="button" onClick={() => onOpenUnit(draft.draft_id, draft.revision, selected)}>Deepen in Design</button> : null}
               <input aria-label="Tag" value={rename} onChange={(event) => setRename(event.target.value)} />
               <button type="button" disabled={!rename || rename === selected.tag} onClick={() => void apply([{ op: "rename", id: selected.id, tag: rename }])}>Rename</button>
               <button type="button" className="draft-delete" onClick={() => { void apply([{ op: "delete", id: selected.id }]); setSelectedId(null); }}>Delete</button>
