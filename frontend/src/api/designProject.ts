@@ -25,3 +25,8 @@ export const createDesignComponent = (projectId: string, versionId: string, name
   request<DesignComponent>(components(projectId, versionId), "POST", {
     name, parent_id: parentId, expected_active_version_id: versionId
   });
+export const editDesignComponent = (projectId: string, versionId: string, component: DesignComponent,
+  name: string, parentId: string | null) =>
+  request<DesignComponent>(`${components(projectId, versionId)}/${encodeURIComponent(component.id)}`, "PUT", {
+    name, parent_id: parentId, expected_revision: component.revision, expected_active_version_id: versionId
+  });

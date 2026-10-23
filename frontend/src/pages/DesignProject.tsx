@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import AppLink, { type Navigate } from "../app/AppLink";
 import { listWorkspaces } from "../api/client";
 import {
-  activateDesignVersion, createDesignComponent, createDesignVersion,
+  activateDesignVersion, createDesignComponent, createDesignVersion, editDesignComponent,
   listDesignComponents, listDesignVersions,
   type DesignComponent, type DesignVersionSet
 } from "../api/designProject";
@@ -22,6 +22,8 @@ export default function DesignProject({ projectId, navigate }: { projectId: stri
   const [stage, setStage] = useState<(typeof STAGES)[number]>("Plant");
   const [newVersion, setNewVersion] = useState("");
   const [newComponent, setNewComponent] = useState("");
+  const [editName, setEditName] = useState("");
+  const [editParent, setEditParent] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -62,11 +64,23 @@ export default function DesignProject({ projectId, navigate }: { projectId: stri
   };
   const active = versions?.versions.find((item) => item.id === versions.active_version_id);
   const selected = components.find((item) => item.id === selectedId);
+  const descendants = new Set<string>();
+  if (selected) {
+    const visit = (id: string) => {
+      if (descendants.has(id)) return;
+      descendants.add(id);
+      components.filter((item) => item.parent_id === id).forEach((item) => visit(item.id));
+    };
+    visit(selected.id);
+  }
+  const selectComponent = (item: DesignComponent) => {
+    setSelectedId(item.id); setEditName(item.name); setEditParent(item.parent_id ?? "");
+  };
 
   function tree(parentId: string | null, depth = 0): ReactNode {
     return components.filter((item) => item.parent_id === parentId).map((item) => (
       <div key={item.id} className="design-project__tree-row" style={{ paddingInlineStart: `${depth * 1.1}rem` }}>
-        <button type="button" aria-current={selectedId === item.id ? "true" : undefined} onClick={() => setSelectedId(item.id)}>{item.name}</button>
+        <button type="button" aria-current={selectedId === item.id ? "true" : undefined} onClick={() => selectComponent(item)}>{item.name}</button>
         {tree(item.id, depth + 1)}
       </div>
     ));
@@ -97,6 +111,21 @@ export default function DesignProject({ projectId, navigate }: { projectId: stri
           <input id="design-component-name" value={newComponent} maxLength={120} onChange={(event) => setNewComponent(event.target.value)} />
           <button type="submit" disabled={!active || busy || !newComponent.trim()}>Add</button>
         </form>
+        {selected && active ? <form onSubmit={(event) => { event.preventDefault(); if (!editName.trim()) return;
+          void perform(() => editDesignComponent(projectId, active.id, selected, editName.trim(), editParent || null));
+        }}>
+          <h3>Edit {selected.name}</h3>
+          <label htmlFor="design-edit-name">Name</label>
+          <input id="design-edit-name" value={editName} maxLength={120} onChange={(event) => setEditName(event.target.value)} />
+          <label htmlFor="design-edit-parent">Parent component</label>
+          <select id="design-edit-parent" value={editParent} onChange={(event) => setEditParent(event.target.value)}>
+            <option value="">Plant</option>
+            {components.filter((item) => !descendants.has(item.id)).map((item) =>
+              <option key={item.id} value={item.id}>{item.name}</option>)}
+          </select>
+          <button type="submit" disabled={busy || !editName.trim() ||
+            (editName.trim() === selected.name && editParent === (selected.parent_id ?? ""))}>Save component</button>
+        </form> : null}
       </aside>
       <main className="design-project__panel design-project__main">
         <h2>{selected?.name ?? stage}</h2>

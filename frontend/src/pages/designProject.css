@@ -3,7 +3,7 @@
 .design-project__header h1 { margin: .2rem 0 0; }
 .design-project__version, .design-project form { display: grid; gap: .45rem; }
 .design-project__version label, .design-project form label { font-size: .82rem; }
-.design-project__version select, .design-project input { min-height: 2.2rem; padding: .4rem .6rem; border: 1px solid var(--color-border-default); border-radius: .5rem; background: var(--color-bg-surface-raised); color: inherit; }
+.design-project select, .design-project input { min-height: 2.2rem; padding: .4rem .6rem; border: 1px solid var(--color-border-default); border-radius: .5rem; background: var(--color-bg-surface-raised); color: inherit; }
 .design-project button { cursor: pointer; border: 1px solid var(--color-border-default); border-radius: .5rem; background: var(--color-bg-surface-raised); color: inherit; padding: .5rem .75rem; }
 .design-project button:hover, .design-project button[aria-current] { border-color: var(--color-accent-border-strong); }
 .design-project button:disabled { opacity: .5; cursor: default; }
