@@ -5,12 +5,10 @@ structured O-grid: a square core block and two outer blocks whose outer faces ar
 the wall arcs. Laminar developed pipe flow is axisymmetric and the RANS mean flow of
 a smooth straight pipe is too, so both symmetry planes are exact for this study.
 
-A 2D-axisymmetric wedge is deliberately not used. With the pinned OpenFOAM v2412
-build, simpleFoam and pisoFoam (Stokes laminar stress) on a wedge pipe return a
-developed pressure gradient 1.24-1.25 times Hagen-Poiseuille with an exact parabolic
-profile and flow rate, independent of wedge angle, convection, gradient and
-pressure-velocity schemes, while icoFoam on the same wedge and simpleFoam with
-symmetry planes are within 1 %. See the spec 216 implementation note.
+A 2D-axisymmetric wedge is deliberately not used. The pinned OpenFOAM v2412
+simpleFoam build showed a systematic pressure-gradient error on an earlier wedge
+probe. The quarter-pipe case also needs numerical qualification before its
+pressure output can be published; see the spec 216 implementation evidence.
 
 The inlet imposes the exact volumetric flow rate (a quarter of the contract value),
 so the faceted wall's slightly smaller area raises the mean velocity rather than
@@ -254,8 +252,33 @@ def control_dict(contract: PipeStudyContract, *, stop_now: bool = False) -> str:
         "purgeWrite": 1, "writeFormat": "ascii", "writePrecision": 12,
         "writeCompression": "off", "timeFormat": "general", "timePrecision": 8,
         "runTimeModifiable": "true",
+        "functions": {
+            "pipe_probes": {
+                "type": "probes", "libs": ('"libsampling.so"',),
+                "writeControl": "timeStep", "writeInterval": contract.solver.max_iterations,
+                "fields": ("p", "U"),
+                "probeLocations": probe_locations(contract),
+            },
+        },
     }
     return render("dictionary", "system", "controlDict", control)
+
+
+def probe_locations(contract: PipeStudyContract) -> tuple[tuple[float, float, float], ...]:
+    """Two developed-section pressure stations, then radial velocity samples.
+
+    Samples stay inside cells, off the symmetry planes and wall. The first two
+    locations have the same radius, so their pressure difference measures the
+    developed gradient without an inlet or outlet boundary value.
+    """
+    length = contract.domain.length_m
+    radius = contract.diameter_m / 2.0
+    return (
+        (0.65 * length, 0.1 * radius, 0.1 * radius),
+        (0.85 * length, 0.1 * radius, 0.1 * radius),
+        (0.85 * length, 0.4 * radius, 0.1 * radius),
+        (0.85 * length, 0.7 * radius, 0.1 * radius),
+    )
 
 
 def system_files(contract: PipeStudyContract, plan: MeshPlan) -> dict[str, str]:

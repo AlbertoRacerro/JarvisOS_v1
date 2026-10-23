@@ -22,6 +22,7 @@ from app.modules.bluecad.cfd_pipe.mesh_check import (
     evaluate_mesh,
     parse_checkmesh,
 )
+from app.modules.bluecad.cfd_pipe.probe_results import ProbeResultError, laminar_comparison, parse_probes
 from app.modules.bluecad.cfd_pipe.residuals import (
     LogParseError,
     ResidualStream,
@@ -218,6 +219,8 @@ def test_case_values_come_from_contract() -> None:
     # No solver-side residualControl; the runner judges convergence and stops via controlDict.
     assert "residualControl" not in files["system/fvSolution"]
     assert "runTimeModifiable true;" in files["system/controlDict"]
+    assert "type probes;" in files["system/controlDict"]
+    assert "probeLocations" in files["system/controlDict"]
     stop = casegen.control_dict(contract, stop_now=True)
     assert "stopAt writeNow;" in stop and "stopAt endTime;" in files["system/controlDict"]
 
@@ -235,6 +238,33 @@ def test_quarter_pipe_geometry_and_exact_flow_rate() -> None:
     # A quarter of the exact contract flow rate, independent of the faceted wall area.
     assert f"volumetricFlowRate constant {contract.flow_rate_m3_s / 4:.12g};" in files["0/U"]
     assert "flowRateInletVelocity" in files["0/U"]
+
+
+def test_real_v2412_probe_samples_report_pressure_and_profile_errors() -> None:
+    contract = laminar(mesh_level=0, inlet={"mean_velocity_m_s": 0.01},
+                       domain=derive_fluid_domain(tube_spec(14.0, 2.0, 200.0)))
+    pressure = (FIXTURES / "laminar_probe_p.txt").read_text()
+    velocity = (FIXTURES / "laminar_probe_U.txt").read_text()
+    comparison = laminar_comparison(contract, pressure, velocity)
+    assert comparison["iteration"] == 300
+    assert comparison["pressure_gradient_pa_m"] == pytest.approx(4.01680543857)
+    assert comparison["hagen_poiseuille_pa_m"] == pytest.approx(3.2064)
+    # This real coarse-mesh result misses the analytic gradient; never mark it validated.
+    assert comparison["pressure_gradient_relative_error"] > 0.25
+    assert comparison["profile_max_error_over_mean_velocity"] < 0.02
+
+
+def test_probe_reader_refuses_missing_or_mismatched_samples() -> None:
+    pressure = (FIXTURES / "laminar_probe_p.txt").read_text()
+    velocity = (FIXTURES / "laminar_probe_U.txt").read_text()
+    contract = laminar(mesh_level=0, inlet={"mean_velocity_m_s": 0.01},
+                       domain=derive_fluid_domain(tube_spec(14.0, 2.0, 200.0)))
+    with pytest.raises(ProbeResultError, match="missing or non-finite"):
+        parse_probes(pressure.replace("0.000295641728524", "nan").replace("0.000286136884695", "nan"), vectors=False)
+    with pytest.raises(ProbeResultError, match="different iterations"):
+        laminar_comparison(contract, pressure, velocity.replace("300 ", "299 "))
+    with pytest.raises(ProbeResultError, match="differs from the typed case"):
+        laminar_comparison(contract, pressure.replace("0.13 ", "0.12 "), velocity.replace("0.13 ", "0.12 "))
 
 
 # --- mesh check ---------------------------------------------------------------------------

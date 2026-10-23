@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.modules.bluecad.spec import SpecValidationError, canonicalize_geometry_spec
 
-DOMAIN_VERSION = "cfd_pipe_fluid_domain_v1"
+DOMAIN_VERSION: Literal["cfd_pipe_fluid_domain_v1"] = "cfd_pipe_fluid_domain_v1"
 
 
 class FluidDomainError(ValueError):

@@ -16,7 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.modules.bluecad.cfd_pipe.domain import FluidDomain
 
-CONTRACT_VERSION = "cfd_pipe_study_v1"
+CONTRACT_VERSION: Literal["cfd_pipe_study_v1"] = "cfd_pipe_study_v1"
 LAMINAR_RE_MAX = 2000.0
 TURBULENT_RE_MIN = 4000.0
 # Development-length margins applied to the textbook entrance-length estimates.
