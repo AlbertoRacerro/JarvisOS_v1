@@ -8,7 +8,7 @@ import {
 } from "../api/designProject";
 import { listStudioLibrary, type StudioLibraryEntry } from "../api/studio";
 import ProcessDraftEditor from "../stages/ProcessDraftEditor";
-import type { DraftObject } from "../api/processDraft";
+import { getDraft, type DraftObject } from "../api/processDraft";
 import "./designProject.css";
 
 const NODES = ["Parameters", "Geometry", "Materials", "Physics", "Mesh", "Studies", "Results", "Reduced model"] as const;
@@ -20,6 +20,9 @@ export default function DesignProject({ projectId, navigate }: { projectId: stri
   const [components, setComponents] = useState<DesignComponent[]>([]);
   const [library, setLibrary] = useState<StudioLibraryEntry[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedNode, setSelectedNode] = useState<(typeof NODES)[number]>("Parameters");
+  const [sourceUnit, setSourceUnit] = useState<DraftObject | null>(null);
+  const [sourceError, setSourceError] = useState<string | null>(null);
   const [stage, setStage] = useState<(typeof STAGES)[number]>("Plant");
   const [newVersion, setNewVersion] = useState("");
   const [newComponent, setNewComponent] = useState("");
@@ -65,6 +68,21 @@ export default function DesignProject({ projectId, navigate }: { projectId: stri
   };
   const active = versions?.versions.find((item) => item.id === versions.active_version_id);
   const selected = components.find((item) => item.id === selectedId);
+  useEffect(() => {
+    let live = true;
+    setSourceUnit(null); setSourceError(null);
+    if (active && selected?.source_draft_id && selected.source_unit_id) {
+      void getDraft(active.data_workspace_id, selected.source_draft_id).then((process) => {
+        if (!live) return;
+        const unit = process.objects.find((item) => item.id === selected.source_unit_id && item.kind === "unit");
+        if (unit) setSourceUnit(unit);
+        else setSourceError("The source Process unit is no longer in this draft.");
+      }).catch((cause: unknown) => {
+        if (live) setSourceError(cause instanceof Error ? cause.message : "Process source is unavailable.");
+      });
+    }
+    return () => { live = false; };
+  }, [active?.data_workspace_id, selected?.source_draft_id, selected?.source_unit_id]);
   const descendants = new Set<string>();
   if (selected) {
     const visit = (id: string) => {
@@ -75,7 +93,8 @@ export default function DesignProject({ projectId, navigate }: { projectId: stri
     visit(selected.id);
   }
   const selectComponent = (item: DesignComponent) => {
-    setSelectedId(item.id); setEditName(item.name); setEditParent(item.parent_id ?? "");
+    setSelectedId(item.id); setSelectedNode("Parameters");
+    setEditName(item.name); setEditParent(item.parent_id ?? "");
   };
   const openUnit = async (draftId: string, revision: string, unit: DraftObject) => {
     if (!projectId || !active) return;
@@ -111,7 +130,13 @@ export default function DesignProject({ projectId, navigate }: { projectId: stri
     </header>
     {error ? <p role="alert" className="design-project__error">{error}</p> : null}
     <nav className="design-project__stages" aria-label="Design stages">
-      {STAGES.map((item) => <button key={item} type="button" aria-current={stage === item ? "step" : undefined} onClick={() => { setStage(item); if (item === "Plant") setSelectedId(null); }}>{item}</button>)}
+      {STAGES.map((item) => <button key={item} type="button" aria-current={stage === item ? "step" : undefined} onClick={() => {
+        setStage(item);
+        if (item === "Plant") setSelectedId(null);
+        else if (item === "CAD") setSelectedNode("Geometry");
+        else if (item === "Reduced model") setSelectedNode("Reduced model");
+        else setSelectedNode("Physics");
+      }}>{item}</button>)}
     </nav>
     <div className="design-project__body">
       <aside className="design-project__panel">
@@ -141,7 +166,17 @@ export default function DesignProject({ projectId, navigate }: { projectId: stri
       <main className="design-project__panel design-project__main">
         <h2>{selected?.name ?? stage}</h2>
         {selected?.source_unit_id ? <p>Process unit model · source draft {selected.source_draft_id?.slice(0, 8)} · unit {selected.source_unit_id.slice(0, 8)}. Process owns the 0D/1D calculation; no CFD or validated geometry is attached yet.</p> : null}
-        {selected ? <div className="design-project__nodes" aria-label="Component model tree">{NODES.map((node) => <button key={node} type="button" onClick={() => setStage(node === "Geometry" ? "CAD" : node === "Reduced model" ? "Reduced model" : node === "Physics" || node === "Mesh" ? "CFD" : "Plant")}>{node}</button>)}</div> : null}
+        {selected ? <>
+          <div className="design-project__nodes" aria-label="Component model tree">{NODES.map((node) => <button key={node} type="button" aria-pressed={selectedNode === node} onClick={() => { setSelectedNode(node); setStage(node === "Geometry" ? "CAD" : node === "Reduced model" ? "Reduced model" : node === "Physics" || node === "Mesh" ? "CFD" : "Plant"); }}>{node}</button>)}</div>
+          <section aria-label={`${selectedNode} details`}><h3>{selectedNode}</h3>
+            {selectedNode === "Parameters" && selected.source_unit_id ? <>
+              {sourceError ? <p role="status">{sourceError}</p> : sourceUnit ? <>
+                <p>{sourceUnit.tag} · {sourceUnit.type} · Process 0D/1D model. Values below are read from the active version's Process draft.</p>
+                {Object.entries(sourceUnit.params ?? {}).length ? <dl>{Object.entries(sourceUnit.params ?? {}).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{value.value} {value.unit}</dd></div>)}</dl> : <p>No typed Process design parameters are set for this unit.</p>}
+              </> : <p>Loading Process parameters…</p>}
+            </> : <p>{selectedNode === "Parameters" ? "No Process source is attached to this component." : `No ${selectedNode.toLowerCase()} capability is attached to this component yet.`}</p>}
+          </section>
+        </> : null}
         {stage === "Plant" && !selected && active ? <>
           <p>Flowsheet edits and runs use this version's Process data context. The Process editor owns its revisions and solver results.</p>
           <ProcessDraftEditor key={active.data_workspace_id} workspaceId={active.data_workspace_id} navigate={navigate} onOpenUnit={(draftId, revision, unit) => void openUnit(draftId, revision, unit)} />
