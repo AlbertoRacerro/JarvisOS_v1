@@ -87,6 +87,9 @@ export default function Studio({ workspaceId, navigate, engineeringProperties, o
   const [mathError, setMathError] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("contract");
   const [wizard, setWizard] = useState(false);
+  const [wizardStep, setWizardStep] = useState(0);
+  const [approach, setApproach] = useState("");
+  const [testIntent, setTestIntent] = useState("");
   const [custom, setCustom] = useState(false);
   const [name, setName] = useState(""); const [question, setQuestion] = useState("");
   const [inputs, setInputs] = useState<StudioVariable[]>([blankVariable()]); const [outputs, setOutputs] = useState<StudioVariable[]>([blankVariable()]);
@@ -118,6 +121,13 @@ export default function Studio({ workspaceId, navigate, engineeringProperties, o
   const locked = model?.status === "published";
   const activeCases = isProc ? procCases : isUnit ? unitCases : isGeometry ? geometryCases : cases;
   const issues = isUnit || (wizard && wizardCategory === "process_unit") ? contractIssues({ inlets, outlets, parameters }) : [];
+  const validVariables = (rows: StudioVariable[], descriptionRequired = false) => rows.every((row) =>
+    /^[A-Za-z_][A-Za-z0-9_]*$/.test(row.name) && !!row.label.trim() && !!row.unit.trim() && (!descriptionRequired || !!row.description.trim()));
+  const guidedFieldsReady = wizardCategory === "process_unit"
+    ? issues.length === 0 && inlets.every((port) => !!port.name.trim() && !!port.label.trim()) && outlets.every((port) => !!port.name.trim() && !!port.label.trim()) && validVariables(parameters)
+    : wizardCategory === "procedure" ? validVariables(parameters, true)
+    : wizardCategory === "geometry" ? inputs.length > 0 && validVariables(inputs)
+    : inputs.length > 0 && outputs.length > 0 && validVariables(inputs) && validVariables(outputs);
   const newest = useMemo(() => model?.versions[model.versions.length - 1] ?? null, [model]);
   useEffect(() => { onModelSelectionChange?.(model?.id ?? null); }, [model?.id, onModelSelectionChange]);
   useEffect(() => {
@@ -154,7 +164,7 @@ export default function Studio({ workspaceId, navigate, engineeringProperties, o
     return () => window.removeEventListener("jarvis:workspace-action", receive);
   }, [workspaceId, draftDirty]);
   useEffect(() => {
-    let alive = true; setModel(null); setSelectedId(null); setError(null); setWizard(startWizard);
+    let alive = true; setModel(null); setSelectedId(null); setError(null); setWizard(startWizard); setWizardStep(0);
     void Promise.all([listStudioCategories(), getStudioRuntimeStatus()]).then(([nextCategories, nextRuntime]) => { if (alive) { setCategories(nextCategories); setRuntime(nextRuntime); } }).catch((cause: Error) => { if (alive) setError(cause.message); });
     if (workspaceId) void Promise.all([listStudioModels(workspaceId), listStudioLibrary(workspaceId)]).then(([nextModels, nextLibrary]) => { if (alive) { setModels(nextModels); setLibrary(nextLibrary); } }).catch((cause: Error) => { if (alive) setError(cause.message); });
     // Test streams name flowsheet compounds; the Process registry is their single source.
@@ -179,13 +189,15 @@ export default function Studio({ workspaceId, navigate, engineeringProperties, o
   const create = (event: React.FormEvent) => { event.preventDefault(); if (!workspaceId) return; void perform(async () => {
     if (wizardCategory === "procedure") {
       const made = await createStudioModel(workspaceId, { category: "procedure", name: name.trim(), engineering_question: question.trim(), parameters, steps: [] });
-      adopt(made); await refreshLists(workspaceId); setWizard(false); setTab("steps"); setNotice("Procedure draft created. Add steps, save, test against a Process draft, then publish."); return;
+      adopt(made); if (embedded) { setAnnotations(`Approach: ${approach}\nTest intent: ${testIntent}`); setAssumptions(assumptions.trim()); }
+      await refreshLists(workspaceId); setWizard(false); setTab("steps"); setNotice("Procedure draft created. Review the guided notes, save, test against a Process draft, then publish."); return;
     }
     const next = await createStudioModel(workspaceId, wizardCategory === "process_unit"
       ? { category: "process_unit", name: name.trim(), engineering_question: question.trim(), inlets, outlets, parameters, symbol: symbol.trim() ? symbol : null, culture_generation: generation }
       : wizardCategory === "geometry" ? { category: "geometry", name: name.trim(), engineering_question: question.trim(), inputs }
       : { name: name.trim(), engineering_question: question.trim(), inputs, outputs });
-    adopt(next); await refreshLists(workspaceId); setWizard(false); setTab("code"); setNotice("Draft created. Edit the Python scaffold, then save and test it.");
+    adopt(next); if (embedded) { setAnnotations(`Approach: ${approach}\nTest intent: ${testIntent}`); setAssumptions(assumptions.trim()); }
+    await refreshLists(workspaceId); setWizard(false); setTab("code"); setNotice("Draft created. Review the guided notes and Python scaffold, then save and test it.");
   }); };
   const save = () => { if (!workspaceId || !model) return; void perform(async () => { const next = await saveStudioModel(workspaceId, model.id, isProc ? { name, engineering_question: question, parameters, steps, annotations, assumptions } : isUnit ? { name, engineering_question: question, ...unitContract, symbol, source, annotations, assumptions } : isGeometry ? { name, engineering_question: question, inputs, source, annotations, assumptions } : { name, engineering_question: question, inputs, outputs, source, annotations, assumptions }); adopt(next); if (isProc) setProcCases(procCases); await refreshLists(workspaceId); setNotice("Draft saved. Documentation reflects the saved source."); }); };
   const test = () => { if (!workspaceId || !model) return; void perform(async () => {
@@ -204,7 +216,7 @@ export default function Studio({ workspaceId, navigate, engineeringProperties, o
   const updateCase = (index: number, patch: Partial<StudioCase>) => setCases(cases.map((item, i) => i === index ? { ...item, ...patch } : item));
 
   return <main className="studio" aria-labelledby="studio-title">
-    <header className="design-stage__header studio-header"><div className="design-stage__title-row"><div><p className="eyebrow">Design</p><h1 id="studio-title">{embedded ? "Workshop" : "Engineering Studio"}</h1></div><div className="studio-header__actions">{!embedded ? <button type="button" disabled={busy || (!!runtime && !runtimeReady)} title="Open a workspace with an AI-prepared pipe calculation, flanged spool geometry, harvest settler unit and harvest-cycle procedure" onClick={openExample}>Open example workspace</button> : null}<button type="button" onClick={() => { setWizard(true); setModel(null); setSelectedId(null); setName(""); setQuestion(""); setInputs([blankVariable()]); setOutputs([blankVariable()]); setCustom(false); resetUnit(); }}>+ New model</button></div></div></header>
+    <header className="design-stage__header studio-header"><div className="design-stage__title-row"><div><p className="eyebrow">Design</p><h1 id="studio-title">{embedded ? "Workshop" : "Engineering Studio"}</h1></div><div className="studio-header__actions">{!embedded ? <button type="button" disabled={busy || (!!runtime && !runtimeReady)} title="Open a workspace with an AI-prepared pipe calculation, flanged spool geometry, harvest settler unit and harvest-cycle procedure" onClick={openExample}>Open example workspace</button> : null}<button type="button" onClick={() => { setWizard(true); setWizardStep(0); setApproach(""); setTestIntent(""); setAssumptions(""); setModel(null); setSelectedId(null); setName(""); setQuestion(""); setInputs([blankVariable()]); setOutputs([blankVariable()]); setCustom(false); resetUnit(); }}>+ New model</button></div></div></header>
     {!runtimeReady && runtime && !isProc && !(wizard && wizardCategory === "procedure") ? <p className="studio-warning" role="status">Studio execution unavailable: {runtime.reason || (runtime.enabled ? "Runtime unavailable" : "Runtime disabled")}. To enable it, start the backend with JARVISOS_STUDIO_USER_CODE_ENABLED=1 on a Linux or WSL2 host with bubblewrap installed. Test and Run stay refused until then.</p> : null}
     {error ? errorCode ? <Refusal code={errorCode} message={error} /> : <p className="studio-error" role="alert">{error}</p> : null}{notice ? <p className="studio-notice" role="status">{notice}</p> : null}
     <div className="studio-layout"><aside className="studio-library"><h2>Library</h2><p>Published versions are recorded and scientifically unqualified.</p>
@@ -212,20 +224,31 @@ export default function Studio({ workspaceId, navigate, engineeringProperties, o
       <h2>Drafts & models</h2>{models.map((item) => <button className={selectedId === item.id ? "is-selected" : ""} type="button" key={item.id} onClick={() => open(item.id)}><strong>{item.name}</strong><span>{item.versions.length} published version{item.versions.length === 1 ? "" : "s"}</span></button>)}
     </aside><section className="studio-workspace">
       {wizard ? <form onSubmit={create}><h2>{wizardCategory === "process_unit" ? "New process unit" : wizardCategory === "geometry" ? "New geometry" : wizardCategory === "procedure" ? "New procedure" : "New calculation"}</h2>
+        {embedded ? <p role="status">Guided initialization · step {wizardStep + 1} of 7</p> : null}
+        {!embedded || wizardStep === 0 ? <>
         <div className="studio-paths" role="group" aria-label="Model category">{categories.filter((category) => category.available && ["calculation", "process_unit", "procedure", "geometry"].includes(category.id)).map((category) => <button type="button" key={category.id} aria-pressed={wizardCategory === category.id} onClick={() => chooseCategory(category.id as StudioCategoryId)}>{category.label}</button>)}</div>
         {wizardCategory === "procedure" ? <><SimulationNotice /><p>A procedure is an ordered list of typed steps (draw, separate, refill, dose, inoculate), optionally repeating or condition-triggered, with numbers that can be bound to parameters. It compiles to a Process draft schedule; it runs no code.</p></> : wizardCategory === "geometry" ? <p>A build123d part. Declare its inputs with units; the scaffold passes their magnitudes to build, which returns one solid in millimetres. {GEOMETRY_NOTICE}</p> : wizardCategory === "process_unit" ? <p>A steady process unit with 1 to 4 material inlets and outlets. It appears in the Process palette once published. {STEADY_LIMITS}</p> : <>
         <div className="studio-paths"><button type="button" aria-pressed={!custom} onClick={() => setCustom(false)}>Guided calculation</button><button type="button" aria-pressed={custom} onClick={() => { setCustom(true); setName(""); setQuestion(""); setInputs([blankVariable()]); setOutputs([blankVariable()]); }}>Custom · no preset</button></div></>}
         {wizardCategory === "calculation" && !custom ? <label>Preset contract<select defaultValue="" onChange={(event) => { const preset = presets.find((item) => item.id === event.target.value); if (preset) { setName(preset.name); setQuestion(preset.question); setInputs(preset.inputs); setOutputs(preset.outputs); } }}><option value="">No preset</option>{presets.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label> : null}
+        </> : null}
+        {!embedded || wizardStep === 1 ? <>
         <label>Model name<input required value={name} onChange={(event) => setName(event.target.value)} placeholder="Pipe pressure-loss correlation" /></label>
         <label>Engineering question<textarea required value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="What should this model calculate?" /></label>
+        </> : null}
+        {embedded && wizardStep === 2 ? <label>What approach should the model use?<textarea required value={approach} onChange={(event) => setApproach(event.target.value)} placeholder="Describe the governing relation or algorithm and its limits." /></label> : null}
+        {!embedded || wizardStep === 3 ? <>
         {wizardCategory === "procedure" ? <><VariableForm title="Parameters" nameLabel="Parameter name" rows={parameters} onChange={setParameters} allowEmpty requireDescription /><p>Example: draw_fraction, unit percent, minimum 0, maximum 100. Values are given in this unit and converted by the host.</p></> : wizardCategory === "process_unit" ? <><PortForm title="Inlets" rows={inlets} onChange={setInlets} /><PortForm title="Outlets" rows={outlets} onChange={setOutlets} />
           <VariableForm title="Parameters" rows={parameters} onChange={setParameters} allowEmpty />
           <CultureGenerationField value={generation} onChange={setGeneration} /><SymbolField value={symbol} onChange={setSymbol} refusal={symbolRefusal} />
           {issues.map((issue) => <p className="studio-warning" key={issue}>{issue}</p>)}</>
           : wizardCategory === "geometry" ? <VariableForm title="Inputs" rows={inputs} onChange={setInputs} />
           : <><VariableForm title="Inputs" rows={inputs} onChange={setInputs} /><VariableForm title="Outputs" rows={outputs} onChange={setOutputs} /></>}
-        <button type="submit" disabled={busy || issues.length > 0}>{wizardCategory === "procedure" ? "Create procedure draft" : "Create draft and Python scaffold"}</button>
-        <h3>Not yet available</h3><div className="studio-categories">{categories.filter((category) => !category.available).map((category) => <div key={category.id}><button type="button" disabled={!category.available} title={category.reason ?? undefined}>{category.label}</button><small>{category.reason || "Available"}</small></div>)}</div>
+        </> : null}
+        {embedded && wizardStep === 4 ? <label>What assumptions bound this model?<textarea required value={assumptions} onChange={(event) => setAssumptions(event.target.value)} /></label> : null}
+        {embedded && wizardStep === 5 ? <label>How should it be tested?<textarea required value={testIntent} onChange={(event) => setTestIntent(event.target.value)} /></label> : null}
+        {embedded && wizardStep === 6 ? <section aria-label="Guided contract review"><h3>Review contract</h3><p><strong>{name}</strong> · {question}</p><p>Approach: {approach}</p><p>Inputs: {wizardCategory === "process_unit" ? inlets.map((port) => port.name).join(", ") : wizardCategory === "procedure" ? parameters.map((item) => `${item.name} [${item.unit}]`).join(", ") : inputs.map((item) => `${item.name} [${item.unit}]`).join(", ")}</p><p>Outputs: {wizardCategory === "process_unit" ? outlets.map((port) => port.name).join(", ") : wizardCategory === "procedure" ? "Process schedule" : wizardCategory === "geometry" ? "One solid" : outputs.map((item) => `${item.name} [${item.unit}]`).join(", ")}</p><p>Assumptions: {assumptions}</p><p>Test intent: {testIntent}</p><p>The draft opens in Studio for source review, Save Draft, Test and Publish. No test or scientific qualification is implied.</p></section> : null}
+        {embedded ? <div className="studio-actions">{wizardStep > 0 ? <button type="button" onClick={() => setWizardStep((step) => step - 1)}>Back</button> : null}{wizardStep < 6 ? <button type="button" disabled={wizardStep === 1 && (!name.trim() || !question.trim()) || wizardStep === 2 && !approach.trim() || wizardStep === 3 && !guidedFieldsReady || wizardStep === 4 && !assumptions.trim() || wizardStep === 5 && !testIntent.trim()} onClick={() => setWizardStep((step) => step + 1)}>Next</button> : <button type="submit" disabled={busy || !guidedFieldsReady}>{wizardCategory === "procedure" ? "Create procedure draft" : "Create draft and Python scaffold"}</button>}</div> : <button type="submit" disabled={busy || issues.length > 0}>{wizardCategory === "procedure" ? "Create procedure draft" : "Create draft and Python scaffold"}</button>}
+        {!embedded || wizardStep === 0 ? <><h3>Not yet available</h3><div className="studio-categories">{categories.filter((category) => !category.available).map((category) => <div key={category.id}><button type="button" disabled={!category.available} title={category.reason ?? undefined}>{category.label}</button><small>{category.reason || "Available"}</small></div>)}</div></> : null}
       </form> : model ? <><div className="studio-model-head"><div><h2>{model.name}</h2><p>{model.engineering_question}</p><small>{isUnit ? "Process unit · " : isProc ? "Procedure · " : isGeometry ? "Geometry · " : ""}Model ID {model.id} · {model.versions.length} published · scientifically unqualified</small></div><div className="studio-actions"><button type="button" disabled={busy || locked || !draftDirty} onClick={save}>Save Draft</button><button type="button" disabled={busy || locked || draftDirty || (!isProc && !runtimeReady) || activeCases.length === 0 || (isProc && procCases.some((item) => !item.draft_id || !item.scenario_id))} onClick={test}>Test</button><button type="button" disabled={busy || locked || !(isProc ? canPublishProcedure(model, draftDirty) : canPublishStudioDraft(model, activeCases as StudioCase[], draftDirty, runtimeReady))} onClick={publish}>Publish</button>{locked ? <button type="button" disabled={busy} onClick={revise}>Revise</button> : null}</div></div>
         {isProc ? <SimulationNotice /> : null}
         {locked ? <p className="studio-notice" role="status">{newest?.version_label} is published and immutable. Revise opens a new draft from it; existing runs keep their version.</p> : null}
