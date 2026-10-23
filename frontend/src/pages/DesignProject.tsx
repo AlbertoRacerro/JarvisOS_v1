@@ -190,7 +190,7 @@ export default function DesignProject({ projectId, navigate, engineeringProperti
       <div className="design-project__workshop-head"><h2>Workshop · {active.label}</h2><button type="button" onClick={() => { setWorkshop(null); void reload(); }}>Back to Design</button></div>
       <Studio key={`${active.data_workspace_id}:${workshop.key}`} workspaceId={active.data_workspace_id} navigate={navigate}
         engineeringProperties={engineeringProperties} requestedModelId={workshop.modelId} startWizard={!workshop.modelId} embedded />
-    </section> : <div className="design-project__body">
+    </section> : <div className={`design-project__body${stage === "Plant" && !selected ? " design-project__body--plant" : ""}`}>
       <aside className="design-project__panel">
         <h2>Components</h2>
         {components.length ? tree(null) : <p>No components in this version.</p>}
