@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { CULTURE_FIELDS, type StudioExpectedStream, type StudioPort, type StudioReport, type StudioUnitCase, type StudioUnitContract, type StudioUnitStream, type StudioVariable } from "../../api/studio";
 import { blankPort, blankUnitCase, CULTURE_INPUTS, fractionSum, hostCheckHelp, MAX_PORTS, svgDataUri } from "./unitLogic";
+import NumericInput from "../ui/NumericInput";
+import { numericOrUndefined } from "../ui/numericStep";
 
 // Spec 190 authoring surfaces for the process_unit category. The 188 editor, documentation and lifecycle are reused as is.
 export function PortForm({ title, rows, onChange }: { title: string; rows: StudioPort[]; onChange(rows: StudioPort[]): void }) {
@@ -34,29 +36,29 @@ export function CultureGenerationField({ value, onChange }: { value: string[]; o
   </fieldset>;
 }
 
-function NumberField({ label, value, onChange, step = "any" }: { label: string; value: number | null | undefined; onChange(value: number | undefined): void; step?: string }) {
-  return <label>{label}<input type="number" step={step} value={value ?? ""} onChange={(event) => onChange(event.target.value === "" ? undefined : Number(event.target.value))} /></label>;
+function NumberField({ label, value, onChange, min, minExclusive, max }: { label: string; value: number | null | undefined; onChange(value: number | undefined): void; min?: number; minExclusive?: boolean; max?: number }) {
+  return <label>{label}<NumericInput min={min} minExclusive={minExclusive} max={max} value={value} onValueChange={(text) => onChange(numericOrUndefined(text))} /></label>;
 }
 
 function Fractions({ title, compounds, values, onChange }: { title: string; compounds: string[]; values: Record<string, number>; onChange(values: Record<string, number>): void }) {
   const names = [...new Set([...compounds, ...Object.keys(values)])];
   return <div className="studio-number-map"><strong>{title} (sum {Number(fractionSum(values).toPrecision(10))})</strong>
-    {names.map((name) => <NumberField key={name} label={name} value={values[name]} onChange={(next) => { const copy = { ...values }; if (next === undefined) delete copy[name]; else copy[name] = next; onChange(copy); }} />)}
+    {names.map((name) => <NumberField key={name} label={name} min={0} max={1} value={values[name]} onChange={(next) => { const copy = { ...values }; if (next === undefined) delete copy[name]; else copy[name] = next; onChange(copy); }} />)}
     {names.length ? null : <small>No flowsheet compounds are available to list.</small>}</div>;
 }
 
 function CultureInputs({ values, onChange }: { values: Record<string, number | null>; onChange(values: Record<string, number | null>): void }) {
   return <div className="studio-number-map"><strong>Culture fields (mass-specific, optional)</strong>
-    {CULTURE_INPUTS.map((name) => <NumberField key={name} label={name} value={values[name]} onChange={(next) => { const copy = { ...values }; if (next === undefined) delete copy[name]; else copy[name] = next; onChange(copy); }} />)}</div>;
+    {CULTURE_INPUTS.map((name) => <NumberField key={name} label={name} min={0} value={values[name]} onChange={(next) => { const copy = { ...values }; if (next === undefined) delete copy[name]; else copy[name] = next; onChange(copy); }} />)}</div>;
 }
 
 function StreamEditor({ name, stream, compounds, onChange }: { name: string; stream: StudioUnitStream; compounds: string[]; onChange(stream: StudioUnitStream): void }) {
   const set = (patch: Partial<StudioUnitStream>) => onChange({ ...stream, ...patch });
   return <fieldset className="studio-stream"><legend>Inlet {name}</legend>
     <div className="studio-number-map">
-      <NumberField label="Mass flow [kg/s]" value={stream.mass_flow_kg_s} onChange={(value) => set({ mass_flow_kg_s: value ?? 0 })} />
-      <NumberField label="Temperature [K]" value={stream.temperature_K} onChange={(value) => set({ temperature_K: value ?? 0 })} />
-      <NumberField label="Pressure [Pa]" value={stream.pressure_Pa} onChange={(value) => set({ pressure_Pa: value ?? 0 })} />
+      <NumberField label="Mass flow [kg/s]" min={0} value={stream.mass_flow_kg_s} onChange={(value) => set({ mass_flow_kg_s: value ?? 0 })} />
+      <NumberField label="Temperature [K]" min={0} minExclusive value={stream.temperature_K} onChange={(value) => set({ temperature_K: value ?? 0 })} />
+      <NumberField label="Pressure [Pa]" min={0} minExclusive value={stream.pressure_Pa} onChange={(value) => set({ pressure_Pa: value ?? 0 })} />
     </div>
     <Fractions title="Mass fractions" compounds={compounds} values={stream.mass_fractions} onChange={(mass_fractions) => set({ mass_fractions })} />
     <CultureInputs values={stream.culture} onChange={(culture) => set({ culture })} />
@@ -67,9 +69,9 @@ function ExpectedEditor({ name, expected, compounds, onChange }: { name: string;
   const set = (patch: Partial<StudioExpectedStream>) => onChange({ ...expected, ...patch });
   return <fieldset className="studio-stream"><legend>Expected outlet {name}</legend>
     <div className="studio-number-map">
-      <NumberField label="Mass flow [kg/s]" value={expected.mass_flow_kg_s} onChange={(value) => set({ mass_flow_kg_s: value ?? null })} />
-      <NumberField label="Temperature [K]" value={expected.temperature_K} onChange={(value) => set({ temperature_K: value ?? null })} />
-      <NumberField label="Pressure [Pa]" value={expected.pressure_Pa} onChange={(value) => set({ pressure_Pa: value ?? null })} />
+      <NumberField label="Mass flow [kg/s]" min={0} value={expected.mass_flow_kg_s} onChange={(value) => set({ mass_flow_kg_s: value ?? null })} />
+      <NumberField label="Temperature [K]" min={0} minExclusive value={expected.temperature_K} onChange={(value) => set({ temperature_K: value ?? null })} />
+      <NumberField label="Pressure [Pa]" min={0} minExclusive value={expected.pressure_Pa} onChange={(value) => set({ pressure_Pa: value ?? null })} />
     </div>
     <Fractions title="Expected mass fractions" compounds={compounds} values={expected.mass_fractions ?? {}} onChange={(values) => set({ mass_fractions: Object.keys(values).length ? values : null })} />
     <button type="button" onClick={() => onChange(null)}>Remove expectation for {name}</button>
@@ -82,7 +84,7 @@ export function UnitCases({ contract, cases, compounds, onChange }: { contract: 
     {contract.inlets.map((port) => <StreamEditor key={port.name} name={port.name} compounds={compounds} stream={item.inlets[port.name] ?? { mass_flow_kg_s: 1, temperature_K: 298.15, pressure_Pa: 101325, mass_fractions: {}, culture: {} }}
       onChange={(stream) => update(index, { inlets: { ...item.inlets, [port.name]: stream } })} />)}
     {contract.parameters.length ? <div className="studio-number-map"><strong>Parameters (declared units)</strong>{contract.parameters.map((variable: StudioVariable) =>
-      <NumberField key={variable.name} label={`${variable.label || variable.name} [${variable.unit}]`} value={item.params[variable.name]} onChange={(value) => { const params = { ...item.params }; if (value === undefined) delete params[variable.name]; else params[variable.name] = value; update(index, { params }); }} />)}</div> : null}
+      <NumberField key={variable.name} label={`${variable.label || variable.name} [${variable.unit}]`} min={variable.min ?? undefined} max={variable.max ?? undefined} value={item.params[variable.name]} onChange={(value) => { const params = { ...item.params }; if (value === undefined) delete params[variable.name]; else params[variable.name] = value; update(index, { params }); }} />)}</div> : null}
     <details><summary>Expected outlet values (optional)</summary>
       <div className="studio-actions">{contract.outlets.map((port) => <button type="button" key={port.name} disabled={Boolean(item.expected_outlets?.[port.name])} onClick={() => update(index, { expected_outlets: { ...(item.expected_outlets ?? {}), [port.name]: {} } })}>Expect values at {port.name}</button>)}</div>
       {Object.entries(item.expected_outlets ?? {}).map(([port, expected]) => <ExpectedEditor key={port} name={port} compounds={compounds} expected={expected}

@@ -4,6 +4,7 @@ import { createLiteratureEntry, createLiteratureSource, listLiteratureSources, l
   type LiteratureEntry, type LiteratureSource, type LiteratureEntryInput, type LiteratureSourceInput } from "../api/literature";
 import "./memory-recovery.css";
 
+import NumericInput from "../components/ui/NumericInput";
 type Props = Readonly<{
   jarvis?: React.ReactNode;
   searchPanel?: React.ReactNode;
@@ -184,7 +185,7 @@ export default function LiteratureKnowledge({ jarvis, searchPanel, workspaceId, 
         <label>Source title<input required autoFocus maxLength={500} value={title} disabled={saving} onChange={(event) => setTitle(event.target.value)} /></label>
         <label>Source type<select value={sourceKind} disabled={saving} onChange={(event) => setSourceKind(event.target.value as typeof sourceKind)}>{["paper", "book", "report", "standard", "dataset", "web", "other"].map((kind) => <option key={kind} value={kind}>{kind}</option>)}</select></label>
         <label>Citation, DOI or URL (optional)<textarea maxLength={4000} value={citation} disabled={saving} onChange={(event) => setCitation(event.target.value)} /></label>
-        <details><summary>Publication details</summary><label>Publisher<input maxLength={500} value={publisher} disabled={saving} onChange={(event) => setPublisher(event.target.value)} /></label><label>Publication year<input type="number" min={0} max={9999} value={year} disabled={saving} onChange={(event) => setYear(event.target.value)} /></label></details>
+        <details><summary>Publication details</summary><label>Publisher<input maxLength={500} value={publisher} disabled={saving} onChange={(event) => setPublisher(event.target.value)} /></label><label>Publication year<NumericInput min={0} max={9999} value={year} disabled={saving} onValueChange={(text) => setYear(text)} /></label></details>
         <button type="submit" disabled={saving || !title.trim()}>{saving ? "Saving source…" : "Save source"}</button><button type="button" disabled={saving} onClick={() => setRegisterOpen(false)}>Cancel</button>
       </form> : null}
       <label className="literature-filter">Find in loaded sources<input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Title, citation or finding…" /></label>

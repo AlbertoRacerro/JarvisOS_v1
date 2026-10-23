@@ -4,7 +4,7 @@ import type { StudioGeometryArtifact, StudioGeometryCase, StudioGeometryFacts } 
 export const GEOMETRY_NOTICE = "Geometry runs build123d in the isolated runtime with the geometry profile: 120 s wall time, 4 GiB memory, 64 MiB per file, 128 MiB for all three files. The STEP, STL and GLB files are untrusted output; they are never executed by JarvisOS. Scientifically unqualified.";
 export const blankGeometryCase = (): StudioGeometryCase => ({ inputs: {} });
 
-export const optional = (value: string): number | null => value === "" ? null : Number(value);
+export const optional = (value: string): number | null => (value.trim() === "" || !Number.isFinite(Number(value)) ? null : Number(value));
 export const size = (bytes: number) => bytes >= 1048576 ? `${(bytes / 1048576).toFixed(1)} MiB` : `${(bytes / 1024).toFixed(1)} KiB`;
 const LIMIT_LABELS: Record<string, string> = { wall_seconds: "wall time (s)", cpu_seconds: "CPU time (s)", memory_bytes: "memory (bytes)", file_bytes: "per-file size (bytes)", scratch_bytes: "scratch space (bytes)", artifact_bytes: "combined artifact size (bytes)" };
 /** The limit a run hit and its configured value, as recorded by the backend. */

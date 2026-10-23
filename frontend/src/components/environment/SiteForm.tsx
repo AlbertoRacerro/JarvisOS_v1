@@ -1,5 +1,6 @@
 import type { Site } from "./types";
 
+import NumericInput from "../ui/NumericInput";
 export type SiteDraft = Omit<Site, "latitude" | "longitude" | "elevation_m"> & {
   latitude: string;
   longitude: string;
@@ -42,12 +43,12 @@ export function SiteForm({ value, onChange, onSave, disabled }: Props) {
       <h3>Site</h3>
       <div className="environment-site-grid">
         <label>Site name<input value={value.name} maxLength={120} onChange={(e) => update("name", e.target.value)} /></label>
-        <label>Latitude (°)<input type="number" min="-90" max="90" step="any"
-          value={value.latitude} onChange={(e) => update("latitude", e.target.value)} /></label>
-        <label>Longitude (°)<input type="number" min="-180" max="180" step="any"
-          value={value.longitude} onChange={(e) => update("longitude", e.target.value)} /></label>
-        <label>Elevation (m)<input type="number" min="-500" max="9000" step="any"
-          value={value.elevation_m} onChange={(e) => update("elevation_m", e.target.value)} /></label>
+        <label>Latitude (°)<NumericInput min={-90} max={90}
+          value={value.latitude} onValueChange={(text) => update("latitude", text)} /></label>
+        <label>Longitude (°)<NumericInput min={-180} max={180}
+          value={value.longitude} onValueChange={(text) => update("longitude", text)} /></label>
+        <label>Elevation (m)<NumericInput min={-500} max={9000}
+          value={value.elevation_m} onValueChange={(text) => update("elevation_m", text)} /></label>
         <label>IANA timezone<input value={value.timezone} onChange={(e) => update("timezone", e.target.value)} /></label>
         <label>Water body<input value={value.water_body ?? ""} maxLength={120}
           onChange={(e) => update("water_body", e.target.value)} /></label>

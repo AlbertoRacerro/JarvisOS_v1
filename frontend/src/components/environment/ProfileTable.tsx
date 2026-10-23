@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { ProfileValues } from "./types";
 import { CHANNEL_LABELS, displayUnit, displayValue, storageValue } from "./types";
 
+import NumericInput from "../ui/NumericInput";
 export type CellChange = { channel: string; index: number; value: number | null };
 
 type Props = {
@@ -73,13 +74,12 @@ export function ProfileTable({ profile, page, timezone, onPage, onSave, disabled
             {columns.map((channel, column) => {
               const key = `${channel}:${row}`;
               const value = profile.channels[channel][row];
-              return <td key={channel}><input
-                type="number"
+              return <td key={channel}><NumericInput
                 value={drafts[key] ?? (displayValue(channel, value) ?? "")}
                 data-cell-row={row}
                 data-cell-column={column}
                 aria-label={`${CHANNEL_LABELS[channel] ?? channel} at ${formatTime(timestamp, timezone)} ${timezone}`}
-                onChange={(event) => setDrafts((current) => ({ ...current, [key]: event.target.value }))}
+                onValueChange={(text) => setDrafts((current) => ({ ...current, [key]: text }))}
                 onKeyDown={(event) => moveCell(event, row, column)}
               /></td>;
             })}

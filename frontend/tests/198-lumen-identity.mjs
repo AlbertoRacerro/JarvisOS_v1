@@ -20,7 +20,8 @@ for (const token of ["--lumen-canvas-base", "--lumen-field-light", "--lumen-pane
   check(light.includes(`${token}:`), `Lumen Light is missing ${token}`);
   check(dark.includes(`${token}:`), `Lumen Dark is missing ${token}`);
 }
-check(light.includes("--color-bg-canvas: #eef0e1"), "Lumen Light canvas drifted");
+// Spec 213 moved Lumen Light from yellow-green toward a cooler pine/fern family.
+check(light.includes("--color-bg-canvas: #e8f1e9"), "Lumen Light canvas drifted");
 check(dark.includes("--color-bg-canvas: #050b06"), "Lumen Dark canvas drifted");
 check(tokens.includes("--lumen-accent-fill: var(--accent-seed)"), "lit accent fill needs a plain-seed fallback");
 check(/--lumen-accent-fill: radial-gradient\([^;]*var\(--accent-seed\)/.test(tokens), "lit accent fill must derive from the user accent seed");

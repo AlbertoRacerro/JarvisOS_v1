@@ -1,5 +1,7 @@
 import { useState } from "react";
 
+import NumericInput from "../ui/NumericInput";
+import { numericOrUndefined } from "../ui/numericStep";
 export type GenerateRequest = {
   name: string;
   kind: "clear_sky" | "synthetic_day";
@@ -48,24 +50,24 @@ export function GeneratorForm({ onGenerate, disabled }: Props) {
             {step === 1440 ? "Daily · 1440 min" : `${step} min`}
           </option>)}
         </select></label>
-        <label>Days<input type="number" min="1" max="730" value={days} onChange={(e) => setDays(Number(e.target.value))} /></label>
+        <label>Days<NumericInput min={1} max={730} value={days} onValueChange={(text) => setDays((numericOrUndefined(text) ?? 0))} /></label>
       </div>
       <label>Generator<select value={kind} onChange={(e) => setKind(e.target.value as GenerateRequest["kind"])}>
         <option value="clear_sky">Clear sky</option><option value="synthetic_day">Synthetic day</option>
       </select></label>
       {kind === "clear_sky" ? (
-        <label>Clearness factor<input type="number" min="0" max="1" step="0.05"
-          value={clearness} onChange={(e) => setClearness(Number(e.target.value))} /></label>
+        <label>Clearness factor<NumericInput min={0} max={1}
+          value={clearness} onValueChange={(text) => setClearness((numericOrUndefined(text) ?? 0))} /></label>
       ) : (
         <div className="environment-form-row">
-          <label>Photoperiod (h)<input type="number" min="0.1" max="24" step="0.1"
-            value={photoperiod} onChange={(e) => setPhotoperiod(Number(e.target.value))} /></label>
-          <label>Peak PAR (µmol/(m²·s))<input type="number" min="0" value={peakPar}
-            onChange={(e) => setPeakPar(Number(e.target.value))} /></label>
-          <label>Mean air temperature (K)<input type="number" min="200" max="350" step="0.1"
-            value={temperatureMean} onChange={(e) => setTemperatureMean(Number(e.target.value))} /></label>
-          <label>Temperature amplitude (K)<input type="number" min="0" step="0.1"
-            value={temperatureAmplitude} onChange={(e) => setTemperatureAmplitude(Number(e.target.value))} /></label>
+          <label>Photoperiod (h)<NumericInput min={0.1} max={24}
+            value={photoperiod} onValueChange={(text) => setPhotoperiod((numericOrUndefined(text) ?? 0))} /></label>
+          <label>Peak PAR (µmol/(m²·s))<NumericInput min={0} value={peakPar}
+            onValueChange={(text) => setPeakPar((numericOrUndefined(text) ?? 0))} /></label>
+          <label>Mean air temperature (K)<NumericInput min={200} max={350}
+            value={temperatureMean} onValueChange={(text) => setTemperatureMean((numericOrUndefined(text) ?? 0))} /></label>
+          <label>Temperature amplitude (K)<NumericInput min={0}
+            value={temperatureAmplitude} onValueChange={(text) => setTemperatureAmplitude((numericOrUndefined(text) ?? 0))} /></label>
         </div>
       )}
       <button type="button" disabled={disabled} onClick={generate}>Generate</button>

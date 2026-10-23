@@ -4,6 +4,7 @@ import { listEnvironmentProfiles, type EnvironmentProfileHead, type SeriesRespon
 import type { DraftOp } from "../../api/processDraft";
 import { formatSig } from "./pbrLogic";
 
+import NumericInput from "../ui/NumericInput";
 type Job = { job_id: string; scenario_id: string; status: string; progress?: number; error?: { code?: string; message?: string } | null;
   identity?: { draft_revision?: string }; created_at?: string; current?: boolean | null };
 type Manifest = { fidelity?: string; channels?: Record<string, string> };
@@ -123,10 +124,10 @@ export default function PbrDynamicRuns({ workspaceId, draftId, revision, tag, ap
     <label>Environment profile<select value={profileId} onChange={(event) => setProfileId(event.target.value)}>
       <option value="">Choose profile…</option>{profiles.map((profile) => <option key={profile.profile_id} value={profile.profile_id}>{profile.name} · {profile.start.slice(0, 10)}</option>)}
     </select></label>
-    <label>GHI to PAR factor (µmol/J; declared input)<input type="number" min="0" step="any" value={parFactor} onChange={(event) => setParFactor(event.target.value)} /></label>
+    <label>GHI to PAR factor (µmol/J; declared input)<NumericInput min={0} value={parFactor} onValueChange={(text) => setParFactor(text)} /></label>
     <div className="pbr-dynamic__initial" role="group" aria-label="Initial culture concentrations">
-      {(["X", "N", "O2"] as const).map((name) => <label key={name}>{name === "O2" ? "O₂" : name} initial (kg/m³)<input type="number" min="0" step="any" value={initial[name]}
-        onChange={(event) => setInitial((old) => ({ ...old, [name]: event.target.value }))} /></label>)}
+      {(["X", "N", "O2"] as const).map((name) => <label key={name}>{name === "O2" ? "O₂" : name} initial (kg/m³)<NumericInput min={0} value={initial[name]}
+        onValueChange={(text) => setInitial((old) => ({ ...old, [name]: text }))} /></label>)}
     </div>
     <button type="button" disabled={busy || !profileId} onClick={() => void start()}>{busy ? "Starting…" : "Run one day"}</button>
     {error && <p className="pbr-failure" role="alert">{error}</p>}

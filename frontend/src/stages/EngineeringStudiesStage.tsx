@@ -20,6 +20,7 @@ import {
 } from "../api/engineeringStudies";
 import type { CapabilityRead, EvaluatorRead } from "../api/generated/engineering";
 
+import NumericInput from "../components/ui/NumericInput";
 const QUALIFICATIONS = new Set(["unqualified", "candidate", "calibrated", "benchmarked", "qualified"]);
 const reasonText = (state: string, reason: string | null | undefined) =>
   `${state}${reason ? ` · ${reason}` : " · reason unavailable"}`;
@@ -360,18 +361,17 @@ function EngineeringStudiesStage({ workspaceId, navigate }: PrimaryStageProps) {
                 </label>
                 <label>
                   Lower bound
-                  <input type="number" value={lower} onChange={(event) => setLower(event.target.value)} required />
+                  <NumericInput value={lower} onValueChange={(text) => setLower(text)} required />
                 </label>
                 <label>
                   Upper bound
-                  <input type="number" value={upper} onChange={(event) => setUpper(event.target.value)} required />
+                  <NumericInput value={upper} onValueChange={(text) => setUpper(text)} required />
                 </label>
                 <label>
                   Grid step
-                  <input
-                    type="number"
+                  <NumericInput
                     value={step}
-                    onChange={(event) => setStep(event.target.value)}
+                    onValueChange={(text) => setStep(text)}
                     required={method === "grid"}
                     disabled={method !== "grid"}
                   />
@@ -411,10 +411,9 @@ function EngineeringStudiesStage({ workspaceId, navigate }: PrimaryStageProps) {
                 </label>
                 <label>
                   Constraint bound
-                  <input
-                    type="number"
+                  <NumericInput
                     value={constraintBound}
-                    onChange={(event) => setConstraintBound(event.target.value)}
+                    onValueChange={(text) => setConstraintBound(text)}
                   />
                 </label>
                 <label>
@@ -423,16 +422,15 @@ function EngineeringStudiesStage({ workspaceId, navigate }: PrimaryStageProps) {
                 </label>
                 <label>
                   Seed
-                  <input type="number" value={seed} onChange={(event) => setSeed(event.target.value)} required />
+                  <NumericInput value={seed} onValueChange={(text) => setSeed(text)} required />
                 </label>
                 <label>
                   Budget (maximum 16)
-                  <input
-                    type="number"
-                    min="1"
-                    max="16"
+                  <NumericInput
+                    min={1}
+                    max={16}
                     value={budget}
-                    onChange={(event) => setBudget(event.target.value)}
+                    onValueChange={(text) => setBudget(text)}
                     required
                   />
                 </label>

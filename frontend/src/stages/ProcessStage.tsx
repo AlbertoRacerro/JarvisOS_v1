@@ -22,6 +22,7 @@ import type { PrimaryStageProps } from "./registry";
 import ProcessDraftEditor from "./ProcessDraftEditor";
 import "./ProcessStage.css";
 
+import NumericInput from "../components/ui/NumericInput";
 const unitTypes = [
   "Mixer",
   "Splitter",
@@ -925,21 +926,19 @@ function NativeDwsimCaseEditor({
           </label>
           <label>
             Canvas X
-            <input
-              type="number"
+            <NumericInput
               aria-label="Canvas X"
               value={placeX}
-              onChange={(e) => setPlaceX(e.target.value)}
+              onValueChange={(text) => setPlaceX(text)}
               disabled={Boolean(runtimeUnavailable) || loading}
             />
           </label>
           <label>
             Canvas Y
-            <input
-              type="number"
+            <NumericInput
               aria-label="Canvas Y"
               value={placeY}
-              onChange={(e) => setPlaceY(e.target.value)}
+              onValueChange={(text) => setPlaceY(text)}
               disabled={Boolean(runtimeUnavailable) || loading}
             />
           </label>
@@ -1359,10 +1358,9 @@ function NativeDwsimCaseEditor({
                   </p>
                   <label>
                     Temperature (K)
-                    <input
-                      type="number"
+                    <NumericInput
                       value={temperature}
-                      onChange={(e) => setTemperature(e.target.value)}
+                      onValueChange={(text) => setTemperature(text)}
                       disabled={loading || Boolean(runtimeUnavailable)}
                       title={
                         runtimeUnavailable
@@ -1373,10 +1371,9 @@ function NativeDwsimCaseEditor({
                   </label>
                   <label>
                     Pressure (Pa)
-                    <input
-                      type="number"
+                    <NumericInput
                       value={pressure}
-                      onChange={(e) => setPressure(e.target.value)}
+                      onValueChange={(text) => setPressure(text)}
                       disabled={loading || Boolean(runtimeUnavailable)}
                       title={
                         runtimeUnavailable
@@ -1387,10 +1384,9 @@ function NativeDwsimCaseEditor({
                   </label>
                   <label>
                     Mass flow (kg/s)
-                    <input
-                      type="number"
+                    <NumericInput
                       value={massFlow}
-                      onChange={(e) => setMassFlow(e.target.value)}
+                      onValueChange={(text) => setMassFlow(text)}
                       disabled={loading || Boolean(runtimeUnavailable)}
                       title={
                         runtimeUnavailable
@@ -1401,10 +1397,9 @@ function NativeDwsimCaseEditor({
                   </label>
                   <label>
                     Molar flow (mol/s)
-                    <input
-                      type="number"
+                    <NumericInput
                       value={molarFlow}
-                      onChange={(e) => setMolarFlow(e.target.value)}
+                      onValueChange={(text) => setMolarFlow(text)}
                       disabled={loading || Boolean(runtimeUnavailable)}
                       title={
                         runtimeUnavailable
@@ -1622,12 +1617,11 @@ function NativeDwsimCaseEditor({
           </label>
           <label>
             Port
-            <input
-              type="number"
+            <NumericInput
               aria-label="Connect port"
-              min="0"
+              min={0}
               value={connectPort}
-              onChange={(e) => setConnectPort(e.target.value)}
+              onValueChange={(text) => setConnectPort(text)}
               disabled={loading || Boolean(runtimeUnavailable)}
               title={
                 runtimeUnavailable
@@ -1690,10 +1684,10 @@ function NativeDwsimCaseEditor({
           <fieldset disabled={dynamicDraftDisabled}>
             <legend>Controller</legend>
             <label>Tag<input value={controllerTag} onChange={(e) => setControllerTag(e.target.value)} /></label>
-            <label>Set point<input type="number" value={controllerSp} onChange={(e) => setControllerSp(e.target.value)} /></label>
-            <label>Kp<input type="number" value={controllerKp} onChange={(e) => setControllerKp(e.target.value)} /></label>
-            <label>Ki<input type="number" value={controllerKi} onChange={(e) => setControllerKi(e.target.value)} /></label>
-            <label>Kd<input type="number" value={controllerKd} onChange={(e) => setControllerKd(e.target.value)} /></label>
+            <label>Set point<NumericInput value={controllerSp} onValueChange={(text) => setControllerSp(text)} /></label>
+            <label>Kp<NumericInput value={controllerKp} onValueChange={(text) => setControllerKp(text)} /></label>
+            <label>Ki<NumericInput value={controllerKi} onValueChange={(text) => setControllerKi(text)} /></label>
+            <label>Kd<NumericInput value={controllerKd} onValueChange={(text) => setControllerKd(text)} /></label>
             <button type="button" disabled={!canDynamic("controller_set") || !controllerTag.trim() || [controllerSp, controllerKp, controllerKi, controllerKd].every((value) => optionalNumber(value) === null)} title={!canDynamic("controller_set") ? dynamicsUnavailableReason ?? unsupported("controller_set") : "Apply controller settings"} onClick={() => void command({ kind: "controller_set", tag: controllerTag.trim(), sp: optionalNumber(controllerSp), kp: optionalNumber(controllerKp), ki: optionalNumber(controllerKi), kd: optionalNumber(controllerKd), out_min: null, out_max: null, reverse_acting: null, active: null, manual_override: null, execution_order: null })}>Apply controller</button>
           </fieldset>
           <fieldset disabled={dynamicDraftDisabled}>
@@ -1701,8 +1695,8 @@ function NativeDwsimCaseEditor({
             <label>Event set<input value={eventSet} onChange={(e) => setEventSet(e.target.value)} /></label>
             <label>Event target<input value={eventTag} onChange={(e) => setEventTag(e.target.value)} /></label>
             <label>Property<input value={eventProperty} onChange={(e) => setEventProperty(e.target.value)} /></label>
-            <label>Value<input type="number" value={eventValue} onChange={(e) => setEventValue(e.target.value)} /></label>
-            <label>At (s)<input type="number" min="0" value={eventAt} onChange={(e) => setEventAt(e.target.value)} /></label>
+            <label>Value<NumericInput value={eventValue} onValueChange={(text) => setEventValue(text)} /></label>
+            <label>At (s)<NumericInput min={0} value={eventAt} onValueChange={(text) => setEventAt(text)} /></label>
             <label>Description<input value={eventDescription} onChange={(e) => setEventDescription(e.target.value)} /></label>
             <button type="button" disabled={!canDynamic("event_add") || !eventSet.trim() || !eventTag.trim() || !eventProperty.trim() || optionalNumber(eventValue) === null || (optionalNumber(eventAt) ?? -1) < 0} title={!canDynamic("event_add") ? dynamicsUnavailableReason ?? unsupported("event_add") : "Add event to the DWSIM schedule"} onClick={() => void command({ kind: "event_add", event_set: eventSet.trim(), schedule: null, tag: eventTag.trim(), property: eventProperty.trim(), value: optionalNumber(eventValue) ?? 0, units: null, at_s: optionalNumber(eventAt) ?? 0, transition: "step", description: eventDescription.trim() || null })}>Add event</button>
             <label>Remove by description<input aria-label="Event description to remove" value={eventDescription} onChange={(e) => setEventDescription(e.target.value)} /></label>
@@ -1711,8 +1705,8 @@ function NativeDwsimCaseEditor({
           <fieldset disabled={dynamicDraftDisabled}>
             <legend>Run dynamics</legend>
             <label>Schedule (optional)<input value={runSchedule} onChange={(e) => setRunSchedule(e.target.value)} /></label>
-            <label>Duration (s)<input type="number" min="0.001" max="3600" value={runDuration} onChange={(e) => setRunDuration(e.target.value)} /></label>
-            <label>Step (s, optional)<input type="number" min="0.001" value={runStep} onChange={(e) => setRunStep(e.target.value)} /></label>
+            <label>Duration (s)<NumericInput min={0.001} max={3600} value={runDuration} onValueChange={(text) => setRunDuration(text)} /></label>
+            <label>Step (s, optional)<NumericInput min={0.001} value={runStep} onValueChange={(text) => setRunStep(text)} /></label>
             <label>Integration method<select value={runMethod} onChange={(e) => setRunMethod(e.target.value as typeof runMethod)}><option value="">Use DWSIM current setup</option><option>ExplicitEuler</option><option>RungeKutta4</option><option>ImplicitEuler</option><option>AdaptiveRK45</option></select></label>
             <button type="button" disabled={!canDynamic("dynamics_run") || (optionalNumber(runDuration) ?? 0) <= 0 || (optionalNumber(runDuration) ?? 0) > 3600 || (runStep.trim() !== "" && (optionalNumber(runStep) ?? 0) <= 0)} title={!canDynamic("dynamics_run") ? dynamicsUnavailableReason ?? unsupported("dynamics_run") : "Run using DWSIM dynamics"} onClick={() => void command({ kind: "dynamics_run", schedule: runSchedule.trim() || null, duration_s: optionalNumber(runDuration) ?? 60, step_s: optionalNumber(runStep), integrator: null, method: runMethod || null, max_wall_time_s: 120, max_steps: 20000, variables: null })}>Run dynamics</button>
           </fieldset>

@@ -1,18 +1,20 @@
 import BluecadGlbViewer from "../BluecadGlbViewer";
 import type { StudioGeometryArtifact, StudioGeometryCase, StudioGeometryCaseResult, StudioGeometryFacts, StudioReport, StudioVariable } from "../../api/studio";
 import { blankGeometryCase, limitText, optional, size } from "./geometryLogic";
+import NumericInput from "../ui/NumericInput";
+import { numericOrUndefined } from "../ui/numericStep";
 
 // Spec 189 surfaces for the geometry category. The 188 wizard, editor, documentation and lifecycle are reused as is.
 export function GeometryCases({ inputs, cases, onChange }: { inputs: StudioVariable[]; cases: StudioGeometryCase[]; onChange(cases: StudioGeometryCase[]): void }) {
   const update = (index: number, patch: Partial<StudioGeometryCase>) => onChange(cases.map((item, i) => i === index ? { ...item, ...patch } : item));
   return <>{cases.map((item, index) => <fieldset className="studio-case" key={index}><legend>Build {index + 1}</legend>
-    <div className="studio-number-map"><strong>Inputs</strong>{inputs.map((variable) => <label key={variable.name}>{variable.label || variable.name} [{variable.unit}]<input type="number" step="any" value={item.inputs[variable.name] ?? ""} onChange={(event) => {
-      const next = { ...item.inputs }; if (event.target.value === "") delete next[variable.name]; else next[variable.name] = Number(event.target.value); update(index, { inputs: next });
+    <div className="studio-number-map"><strong>Inputs</strong>{inputs.map((variable) => <label key={variable.name}>{variable.label || variable.name} [{variable.unit}]<NumericInput min={variable.min ?? undefined} max={variable.max ?? undefined} value={item.inputs[variable.name]} onValueChange={(text) => {
+      const next = { ...item.inputs }; const parsed = numericOrUndefined(text); if (parsed === undefined) delete next[variable.name]; else next[variable.name] = parsed; update(index, { inputs: next });
     }} /></label>)}</div>
     <div className="studio-number-map"><strong>Declared bounds (optional, model units: mm and mm³)</strong>
-      <label>Minimum volume<input type="number" step="any" value={item.volume_min ?? ""} onChange={(event) => update(index, { volume_min: optional(event.target.value) })} /></label>
-      <label>Maximum volume<input type="number" step="any" value={item.volume_max ?? ""} onChange={(event) => update(index, { volume_max: optional(event.target.value) })} /></label>
-      <label>Largest extent<input type="number" min="0" step="any" value={item.max_extent ?? ""} onChange={(event) => update(index, { max_extent: optional(event.target.value) })} /></label>
+      <label>Minimum volume<NumericInput min={0} value={item.volume_min} onValueChange={(text) => update(index, { volume_min: optional(text) })} /></label>
+      <label>Maximum volume<NumericInput min={0} minExclusive value={item.volume_max} onValueChange={(text) => update(index, { volume_max: optional(text) })} /></label>
+      <label>Largest extent<NumericInput min={0} minExclusive value={item.max_extent} onValueChange={(text) => update(index, { max_extent: optional(text) })} /></label>
     </div>
     <button type="button" onClick={() => onChange(cases.filter((_, i) => i !== index))}>Remove build</button>
   </fieldset>)}

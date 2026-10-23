@@ -3,6 +3,8 @@ import type { StudioVariable } from "../../api/studio";
 import type { ActionType, Expectation, Num, ProcedureAction, ProcedureCase, ProcedureReport, ProcedureStep } from "../../api/studioProcedure";
 import { ACTIONS, ACTION_TYPES, blankAction, blankCase, blankStep, boundHint, changeActionType, fromSeconds, getPath, isRef, joinObserved, MAX_ACTIONS, NOTICE, OBSERVED_CHANNELS, setPath, setStepKind, splitObserved, stepIssues, stepKind, TIME_UNITS, toSeconds, type FieldDef, type TimeUnit } from "./procedureLogic";
 
+import NumericInput from "../ui/NumericInput";
+import { numericOrUndefined } from "../ui/numericStep";
 // Spec 191 authoring surfaces for the procedure category. The 188 draft, test, publish and revise lifecycle is reused as is.
 export const SimulationNotice = () => <p className="studio-notice studio-procedure-notice" role="note">{NOTICE}</p>;
 
@@ -20,7 +22,7 @@ function NumField({ label, unit, value, params, onChange, time = false, optional
   const shown = typeof value === "number" ? (time ? Number((value / size).toPrecision(12)) : value) : "";
   return <label className="studio-numfield"><span>{label} [{bound && parameter ? parameter.unit : time ? timeUnit : unit}]{optional ? " (optional)" : ""}</span>
     <span className="studio-numfield__row">
-      {bound ? <output>= parameter {bound}</output> : <input type="number" step="any" aria-label={label} value={shown} onChange={(event) => onChange(event.target.value === "" ? undefined : time ? toSeconds(Number(event.target.value), timeUnit) : Number(event.target.value))} />}
+      {bound ? <output>= parameter {bound}</output> : <NumericInput aria-label={label} value={shown} onValueChange={(text) => onChange(numericOrUndefined(text) === undefined ? undefined : time ? toSeconds((numericOrUndefined(text) ?? 0), timeUnit) : (numericOrUndefined(text) ?? 0))} />}
       {time && !bound ? <select aria-label={`${label} unit`} value={timeUnit} onChange={(event) => setTimeUnit(event.target.value as TimeUnit)}>{TIME_UNITS.map(([name]) => <option key={name} value={name}>{name}</option>)}</select> : null}
       {params.length ? <select aria-label={`Bind ${label} to a parameter`} value={bound} onChange={(event) => onChange(event.target.value ? { $param: event.target.value } : undefined)}><option value="">Literal value</option>{params.map((item) => <option key={item.name} value={item.name}>Parameter {item.name} [{item.unit}]</option>)}</select> : null}
     </span></label>;
@@ -91,11 +93,11 @@ function ExpectEditor({ rows, onChange }: { rows: Expectation[]; onChange(rows: 
     {rows.map((row, index) => <div className="studio-number-map" key={index}>
       <label>Kind<select value={row.kind} onChange={(event) => update(index, { kind: event.target.value as Expectation["kind"] })}><option value="series">Series value</option><option value="fire_time">Fire time</option><option value="balances_closed">Balances closed</option></select></label>
       {row.kind === "series" ? <><label>Channel<input value={row.channel ?? ""} onChange={(event) => update(index, { channel: event.target.value })} placeholder="TankA_V_m3" /></label>
-        <label>Time [s]<input type="number" step="any" value={row.time_s ?? ""} onChange={(event) => update(index, { time_s: event.target.value === "" ? undefined : Number(event.target.value) })} /></label>
+        <label>Time [s]<NumericInput value={row.time_s ?? ""} onValueChange={(text) => update(index, { time_s: numericOrUndefined(text) })} /></label>
         <label>Phase<select value={row.phase ?? "post"} onChange={(event) => update(index, { phase: event.target.value as Expectation["phase"] })}><option value="post">after events</option><option value="pre">before events</option><option value="sample">sample</option></select></label></> : null}
-      {row.kind === "fire_time" ? <label>Fire index (1-based)<input type="number" min="1" step="1" value={row.fire_index ?? ""} onChange={(event) => update(index, { fire_index: event.target.value === "" ? undefined : Number(event.target.value) })} /></label> : null}
-      {row.kind !== "balances_closed" ? <><label>Expected value<input type="number" step="any" value={row.value ?? ""} onChange={(event) => update(index, { value: event.target.value === "" ? undefined : Number(event.target.value) })} /></label>
-        <label>Tolerance<input type="number" min="0" step="any" value={row.tolerance ?? 1e-9} onChange={(event) => update(index, { tolerance: Number(event.target.value) })} /></label>
+      {row.kind === "fire_time" ? <label>Fire index (1-based)<NumericInput integer min={1} value={row.fire_index ?? ""} onValueChange={(text) => update(index, { fire_index: numericOrUndefined(text) })} /></label> : null}
+      {row.kind !== "balances_closed" ? <><label>Expected value<NumericInput value={row.value ?? ""} onValueChange={(text) => update(index, { value: numericOrUndefined(text) })} /></label>
+        <label>Tolerance<NumericInput min={0} value={row.tolerance ?? 1e-9} onValueChange={(text) => update(index, { tolerance: (numericOrUndefined(text) ?? 0) })} /></label>
         <label><input type="checkbox" checked={row.relative ?? false} onChange={(event) => update(index, { relative: event.target.checked })} /> relative tolerance</label></> : null}
       <button type="button" onClick={() => onChange(rows.filter((_, i) => i !== index))}>Remove expectation</button></div>)}
     <button type="button" onClick={() => onChange([...rows, { kind: "balances_closed" }])}>+ Add expectation</button></div>;
@@ -108,7 +110,7 @@ export function ProcedureCases({ cases, parameters, drafts, onChange }: { cases:
     return <fieldset className="studio-case" key={index}><legend>Case {index + 1}</legend>
       <label>Case name<input value={item.name} onChange={(event) => update(index, { name: event.target.value })} /></label>
       <div className="studio-number-map"><strong>Parameter values (declared units)</strong>{parameters.map((variable) => <label key={variable.name}>{variable.label || variable.name} [{variable.unit}]{boundHint(variable)}
-        <input type="number" step="any" aria-label={`Value of ${variable.name}`} value={item.parameter_values[variable.name] ?? ""} onChange={(event) => { const next = { ...item.parameter_values }; if (event.target.value === "") delete next[variable.name]; else next[variable.name] = Number(event.target.value); update(index, { parameter_values: next }); }} /></label>)}</div>
+        <NumericInput aria-label={`Value of ${variable.name}`} value={item.parameter_values[variable.name] ?? ""} onValueChange={(text) => { const next = { ...item.parameter_values }; if (numericOrUndefined(text) === undefined) delete next[variable.name]; else next[variable.name] = (numericOrUndefined(text) ?? 0); update(index, { parameter_values: next }); }} /></label>)}</div>
       <label>Target draft<select aria-label="Target draft" value={item.draft_id} onChange={(event) => update(index, { draft_id: event.target.value, scenario_id: drafts.find((entry) => entry.draft_id === event.target.value)?.scenarios[0]?.id ?? "" })}><option value="">Choose a Process draft…</option>{drafts.map((entry) => <option key={entry.draft_id} value={entry.draft_id}>{entry.name}</option>)}</select></label>
       <label>Scenario<select aria-label="Scenario" value={item.scenario_id} onChange={(event) => update(index, { scenario_id: event.target.value })}><option value="">Choose a scenario…</option>{(draft?.scenarios ?? []).map((scenario) => <option key={scenario.id} value={scenario.id}>{scenario.id}</option>)}</select></label>
       {draft && !draft.scenarios.length ? <p className="studio-warning">This draft has no scenario. Create one in the Test bench tab.</p> : null}
