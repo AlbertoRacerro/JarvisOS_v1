@@ -1664,7 +1664,7 @@ export default function ProcessDraftEditor({ workspaceId, navigate }: Readonly<{
           </aside>
         ) : null}
       </div>
-      <details className="draft-dynamic-studio"><summary>Dynamic Studio · scenarios, schedules and runs</summary>
+      <details className="draft-dynamic-studio"><summary>Dynamic Studio · plant overview, scenarios and runs</summary>
         <DynamicPanel workspaceId={workspaceId} draft={draft} onUpdated={accept} />
       </details>
     </div>
