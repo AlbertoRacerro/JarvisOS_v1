@@ -1,0 +1,21 @@
+.design-project { display: grid; gap: 1rem; min-width: 0; padding: clamp(1rem, 2vw, 1.75rem); color: var(--color-text-primary); }
+.design-project__header { display: flex; align-items: end; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.design-project__header h1 { margin: .2rem 0 0; }
+.design-project__version, .design-project form { display: grid; gap: .45rem; }
+.design-project__version label, .design-project form label { font-size: .82rem; }
+.design-project__version select, .design-project input { min-height: 2.2rem; padding: .4rem .6rem; border: 1px solid var(--color-border-default); border-radius: .5rem; background: var(--color-bg-surface-raised); color: inherit; }
+.design-project button { cursor: pointer; border: 1px solid var(--color-border-default); border-radius: .5rem; background: var(--color-bg-surface-raised); color: inherit; padding: .5rem .75rem; }
+.design-project button:hover, .design-project button[aria-current] { border-color: var(--color-accent-border-strong); }
+.design-project button:disabled { opacity: .5; cursor: default; }
+.design-project__stages { display: flex; gap: .4rem; overflow-x: auto; }
+.design-project__stages button { white-space: nowrap; }
+.design-project__body { display: grid; grid-template-columns: minmax(12rem, 1fr) minmax(19rem, 2.2fr) minmax(12rem, 1fr); gap: .75rem; min-width: 0; }
+.design-project__panel { min-width: 0; padding: 1rem; border: 1px solid var(--color-border-default); border-radius: .8rem; background: var(--color-bg-surface); }
+.design-project__panel h2 { font-size: 1rem; margin: 0 0 .8rem; }
+.design-project__panel h2:not(:first-child) { margin-top: 1.5rem; }
+.design-project__panel p { line-height: 1.5; }
+.design-project__tree-row { display: grid; gap: .3rem; margin: .25rem 0; }
+.design-project__tree-row button { width: 100%; text-align: left; }
+.design-project__nodes { display: flex; gap: .4rem; flex-wrap: wrap; }
+.design-project__error { color: var(--color-status-danger-text); }
+@media (max-width: 850px) { .design-project__body { grid-template-columns: 1fr; } }

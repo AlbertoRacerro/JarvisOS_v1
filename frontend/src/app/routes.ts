@@ -3,6 +3,7 @@ export type PrimaryNavId = "design" | "memory" | "development" | "coding" | "set
 export type StageKind = "model" | "process" | "results" | "lineage" | "review" | "studies";
 
 export type RouteId =
+  | "design-project"
   | "design-process"
   | "design-studies"
   | "design-bluecad"
@@ -41,6 +42,7 @@ export type AppRouteDefinition = Readonly<{
 export type PeerNavItem = Readonly<{ label: string; href: string }>;
 
 export const PRODUCTION_ROUTES: readonly AppRouteDefinition[] = [
+  { id: "design-project", path: "/design/project", title: "Project", primaryNav: "design" },
   { id: "design-process", path: "/design/process", title: "Process", primaryNav: "design", stageKind: "process" },
   { id: "design-studies", path: "/design/studies", title: "Studies", primaryNav: "design", stageKind: "studies" },
   { id: "design-bluecad", path: "/design/bluecad", title: "BlueCad", primaryNav: "design", stageKind: "model" },
