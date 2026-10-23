@@ -463,11 +463,12 @@ export function plantMetrics(manifest: Manifest | null, series: SeriesData | nul
   });
 }
 
-export type PlantChoices = { runIds: string[]; metricIds: string[]; equipmentId: string | null; view: "table" | "charts" };
-export const EMPTY_PLANT_CHOICES: PlantChoices = { runIds: [], metricIds: [], equipmentId: null, view: "table" };
+export type PlantChoices = { runIds: string[]; metricIds: string[]; overviewIds: string[]; equipmentId: string | null; view: "table" | "charts" };
+export const DEFAULT_PLANT_OVERVIEW = ["harvest", "vol_prod", "events"];
+export const EMPTY_PLANT_CHOICES: PlantChoices = { runIds: [], metricIds: [], overviewIds: DEFAULT_PLANT_OVERVIEW, equipmentId: null, view: "table" };
 export const plantChoiceKey = (workspaceId: string, draftId: string) => `jarvis.dynamic.plant.v1:${workspaceId}:${draftId}`;
 /** Restored browser choices are display-only. Unknown IDs are removed and reported, never used as result authority. */
-export function restorePlantChoices(raw: unknown, runIds: string[], metricIds: string[], equipmentIds: string[]): { choices: PlantChoices; removed: string[] } {
+export function restorePlantChoices(raw: unknown, runIds: string[], metricIds: string[], equipmentIds: string[], plantIds: string[]): { choices: PlantChoices; removed: string[] } {
   const saved = raw && typeof raw === "object" ? raw as Record<string, unknown> : {};
   const removed: string[] = [];
   const keep = (value: unknown, allowed: string[], kind: string, cap: number) => {
@@ -478,9 +479,10 @@ export function restorePlantChoices(raw: unknown, runIds: string[], metricIds: s
   };
   const selectedRuns = keep(saved.runIds, runIds, "run", 4);
   const selectedMetrics = keep(saved.metricIds, metricIds, "metric", 50);
+  const overviewIds = keep(saved.overviewIds ?? DEFAULT_PLANT_OVERVIEW, plantIds, "overview KPI", 5);
   const equipmentId = typeof saved.equipmentId === "string" && equipmentIds.includes(saved.equipmentId) ? saved.equipmentId : null;
   if (saved.equipmentId && !equipmentId) removed.push(`equipment ${String(saved.equipmentId)}`);
-  return { choices: { runIds: selectedRuns, metricIds: selectedMetrics, equipmentId, view: saved.view === "charts" ? "charts" : "table" }, removed };
+  return { choices: { runIds: selectedRuns, metricIds: selectedMetrics, overviewIds, equipmentId, view: saved.view === "charts" ? "charts" : "table" }, removed };
 }
 
 export function movePlantMetric(ids: string[], id: string, offset: -1 | 1): string[] {

@@ -27,10 +27,10 @@ assert.match(get("mean_PBR_A").qualification, /sampled points from 20/);
 assert.match(get("final_PBR_B").qualification, /model card: limited/);
 assert.equal(metrics.filter((item) => item.scope === "plant").some((item) => item.id.startsWith("final_")), false);
 
-const saved = { runIds: ["r1", "removed-run", "r2", "r1"], metricIds: ["harvest", "gone", "final_PBR_A"], equipmentId: "removed-unit", view: "charts" };
-const restored = L.restorePlantChoices(saved, ["r1", "r2"], metrics.map((item) => item.id), ["a", "b"]);
-assert.deepEqual(restored.choices, { runIds: ["r1", "r2"], metricIds: ["harvest", "final_PBR_A"], equipmentId: null, view: "charts" });
-assert.deepEqual(restored.removed, ["run removed-run", "metric gone", "equipment removed-unit"]);
+const saved = { runIds: ["r1", "removed-run", "r2", "r1"], metricIds: ["harvest", "gone", "final_PBR_A"], overviewIds: ["harvest", "final_PBR_A"], equipmentId: "removed-unit", view: "charts" };
+const restored = L.restorePlantChoices(saved, ["r1", "r2"], metrics.map((item) => item.id), ["a", "b"], metrics.filter((item) => item.scope === "plant").map((item) => item.id));
+assert.deepEqual(restored.choices, { runIds: ["r1", "r2"], metricIds: ["harvest", "final_PBR_A"], overviewIds: ["harvest"], equipmentId: null, view: "charts" });
+assert.deepEqual(restored.removed, ["run removed-run", "metric gone", "overview KPI final_PBR_A", "equipment removed-unit"]);
 assert.deepEqual(L.movePlantMetric(["harvest", "events", "final_PBR_A"], "final_PBR_A", -1), ["harvest", "final_PBR_A", "events"]);
 assert.deepEqual(L.movePlantMetric(["harvest", "events"], "harvest", -1), ["harvest", "events"]);
 assert.notEqual(L.plantChoiceKey("ws1", "draft"), L.plantChoiceKey("ws2", "draft"));

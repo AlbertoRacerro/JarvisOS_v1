@@ -42,6 +42,8 @@
 .dyn-channels > div { display: grid; gap: 5px; }
 .dyn-plant { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; min-width: 0; overflow-wrap: anywhere; }
 .dyn-plant__cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; }
+.dyn-plant__customize { border: 1px solid var(--color-border-default); border-radius: 6px; padding: 8px 10px; }
+.dyn-plant__customize > div { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 8px; }
 .dyn-plant__cards article, .dyn-plant__local, .dyn-plant__charts figure { display: grid; gap: 5px; border: 1px solid var(--color-border-default); border-radius: 8px; padding: 12px; background: var(--color-bg-surface-raised); }
 .dyn-plant__cards strong { font-size: 1.35rem; }
 .dyn-plant small, .dyn-plant__cards small { display: block; color: var(--color-text-secondary); font-size: .8rem; }

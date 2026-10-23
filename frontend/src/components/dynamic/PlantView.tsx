@@ -2,13 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import type { DraftObject, DraftProjection } from "../../api/processDraft";
 import { exportRunRows, failureText, getDynamicManifest } from "./dynamicApi";
 import {
-  EMPTY_PLANT_CHOICES, fmtKpi, fmtNum, isTerminal, movePlantMetric, plantChoiceKey, plantMetrics, restorePlantChoices, runTitle, staleness,
+  DEFAULT_PLANT_OVERVIEW, EMPTY_PLANT_CHOICES, fmtKpi, fmtNum, isTerminal, movePlantMetric, plantChoiceKey, plantMetrics, restorePlantChoices, runTitle, staleness,
   type DynRun, type Manifest, type PlantChoices, type PlantMetric, type SeriesData,
 } from "./dynamicLogic";
 import { SimulationNotice } from "./SimulationNotice";
 
 type Loaded = { manifest: Manifest | null; series: SeriesData | null; error: string | null };
-const overviewIds = ["harvest", "vol_prod", "events"];
 
 function readChoices(key: string): PlantChoices {
   try {
@@ -16,6 +15,7 @@ function readChoices(key: string): PlantChoices {
     return raw && typeof raw === "object" ? {
       runIds: Array.isArray(raw.runIds) ? raw.runIds.filter((id): id is string => typeof id === "string") : [],
       metricIds: Array.isArray(raw.metricIds) ? raw.metricIds.filter((id): id is string => typeof id === "string") : [],
+      overviewIds: Array.isArray(raw.overviewIds) ? raw.overviewIds.filter((id): id is string => typeof id === "string") : DEFAULT_PLANT_OVERVIEW,
       equipmentId: typeof raw.equipmentId === "string" ? raw.equipmentId : null,
       view: raw.view === "charts" ? "charts" : "table",
     } : EMPTY_PLANT_CHOICES;
@@ -92,7 +92,8 @@ export default function PlantView({ workspaceId, draft, runs }: { workspaceId: s
 
   useEffect(() => {
     if (!activeIds.length || activeIds.some((id) => !loaded[id])) return;
-    const normalized = restorePlantChoices(choices, completed.map((run) => run.job_id), catalog.map((metric) => metric.id), equipment.map((item) => item.id));
+    const normalized = restorePlantChoices(choices, completed.map((run) => run.job_id), catalog.map((metric) => metric.id), equipment.map((item) => item.id),
+      catalog.filter((metric) => metric.scope === "plant").map((metric) => metric.id));
     const next = { ...normalized.choices, runIds: activeIds };
     if (JSON.stringify(next) !== JSON.stringify(choices)) setChoices(next);
     if (normalized.removed.length) setRemoved(normalized.removed);
@@ -102,9 +103,11 @@ export default function PlantView({ workspaceId, draft, runs }: { workspaceId: s
 
   const metricFor = (id: string, runId: string) => byRun[runId]?.find((metric) => metric.id === id);
   const toggleMetric = (id: string) => setChoices((old) => ({ ...old, metricIds: old.metricIds.includes(id) ? old.metricIds.filter((item) => item !== id) : [...old.metricIds, id] }));
+  const toggleOverview = (id: string) => setChoices((old) => ({ ...old, overviewIds: old.overviewIds.includes(id) ? old.overviewIds.filter((item) => item !== id) : old.overviewIds.length < 5 ? [...old.overviewIds, id] : old.overviewIds }));
   const toggleRun = (id: string) => setChoices((old) => ({ ...old, runIds: old.runIds.includes(id) ? old.runIds.filter((item) => item !== id) : old.runIds.length < 4 ? [...old.runIds, id] : old.runIds }));
   const choosePrimary = (id: string) => setChoices((old) => ({ ...old, runIds: [id, ...old.runIds.filter((item) => item !== id)] }));
   const plant = primaryMetrics.filter((metric) => metric.scope === "plant");
+  const plantCatalog = catalog.filter((metric) => metric.scope === "plant");
   const local = primaryMetrics.filter((metric) => metric.scope === "equipment" && equipment.find((item) => item.id === choices.equipmentId)?.tag === metric.owner);
   const loop = primaryMetrics.filter((metric) => metric.scope === "loop");
   const available = ["plant", "equipment", "loop", "unclassified"].map((scope) => ({ scope, rows: catalog.filter((metric) => metric.scope === scope &&
@@ -121,13 +124,16 @@ export default function PlantView({ workspaceId, draft, runs }: { workspaceId: s
       {removed.length ? <p className="dyn-warning" role="status">Saved choices no longer available: {removed.join(", ")}.</p> : null}
       {primary && <p className="dyn-hint">Overview: {qualification(primary, loaded[primary.job_id], undefined, draft.seq)}. Snapshot {loaded[primary.job_id]?.manifest?.snapshot_digest ?? primary.snapshot_digest ?? "unavailable"}.</p>}
       {activeIds.map((id) => loaded[id]?.error ? <p key={id} className="dyn-error" role="alert">Run {id.slice(0, 8)}: {loaded[id].error}</p> : null)}
-      <div className="dyn-plant__cards" aria-label="Important plant-level KPIs">{overviewIds.map((id) => {
-        const metric = plant.find((item) => item.id === id);
-        if (!metric) return null;
-        return <article key={id}><span>{metric.label}</span><strong>{fmtKpi(metric)}</strong><small>{metric.qualification}</small>
+      <details className="dyn-plant__customize"><summary>Customize plant overview · {choices.overviewIds.length} of 5 cards</summary>
+        <div role="group" aria-label="Plant overview KPIs">{plantCatalog.map((metric) => <label key={metric.id}><input type="checkbox" checked={choices.overviewIds.includes(metric.id)}
+          disabled={!choices.overviewIds.includes(metric.id) && choices.overviewIds.length >= 5} onChange={() => toggleOverview(metric.id)} />{metric.label} [{metric.unit}]</label>)}</div></details>
+      <div className="dyn-plant__cards" aria-label="Important plant-level KPIs">{choices.overviewIds.map((id) => {
+        const metric = plant.find((item) => item.id === id), known = plantCatalog.find((item) => item.id === id);
+        if (!known) return null;
+        return <article key={id}><span>{known.label}</span><strong>{metricText(metric)}</strong><small>{metric?.qualification ?? "Not reported by the overview run."}</small>
           <button type="button" onClick={() => toggleMetric(id)}>{choices.metricIds.includes(id) ? "Remove from comparison" : "Add to comparison"}</button></article>;
-      })}</div>
-      <div className="dyn-plant__layout"><div><h5>Process flow diagram · PFD</h5><p className="dyn-hint">Current draft equipment and material streams; a stale run may describe an older revision. This is not a piping and instrumentation diagram (P&ID).</p>
+      })}{!choices.overviewIds.length ? <p>Choose plant-level KPIs above for this overview.</p> : null}</div>
+      <div className="dyn-plant__layout"><div><h5>Process flow diagram · PFD</h5><p className="dyn-hint">Current draft equipment and material streams; a stale run may describe an older revision. Scroll sideways on narrow screens. This is not a piping and instrumentation diagram (P&ID).</p>
         <Pfd objects={draft.objects} selected={choices.equipmentId} onSelect={(id) => setChoices((old) => ({ ...old, equipmentId: id }))} />
         <div className="dyn-plant__equipment" role="group" aria-label="Equipment on PFD">{equipment.map((item) => <button type="button" key={item.id} aria-pressed={choices.equipmentId === item.id}
           onClick={() => setChoices((old) => ({ ...old, equipmentId: item.id }))}>{item.tag}</button>)}</div></div>
