@@ -90,3 +90,18 @@ def test_surrogate_imports_through_environment_profile_owner() -> None:
     }
     assert record["channels"]["air_temperature"][0] == 14.3 + 273.15
     assert record["channels"]["par"] != record["channels"]["ghi"]
+
+
+def test_pinned_handoff_freezes_site_and_par_factor() -> None:
+    initialize_database()
+    wid = create_workspace(WorkspaceCreate(name="C1 T2 handoff", slug="c1-t2-handoff-test")).id
+    handoff = runpy.run_path(str(DATA.parent / "profile_handoff.py"))["pin_profile"](wid)
+    record = profiles.read_profile(wid, handoff["digest"], limit=62 * 24)
+    assert record["parent_digest"] != record["digest"]
+    assert record["provenance"]["original_sha256"] == SHA256
+    assert record["provenance"]["site_snapshot"]["name"] == "KNMI Deelen 275 surrogate"
+    assert record["provenance"]["site_snapshot"]["latitude"] == 52.056
+    assert record["provenance"]["factor_umol_per_j"] == 0.45 * 4.57
+    assert record["label"] == "surrogate; not AlgaePARC measured"
+    assert len(record["timestamps"]) == 62 * 24
+    assert profiles.read_profile(wid, handoff["digest"], limit=1)["digest"] == handoff["digest"]

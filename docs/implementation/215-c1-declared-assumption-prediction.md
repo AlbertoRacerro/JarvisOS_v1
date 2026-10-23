@@ -37,13 +37,17 @@ records the CSV SHA-256 and mapping in immutable profile provenance. An offline
 test imports the committed CSV through that owner and reads back all 1,488
 hours. No site or production workspace is changed by this checkpoint.
 
-A consuming C1 run must pin a site snapshot for T2 solar position and label
-the profile as **surrogate KNMI Deelen**, not AlgaePARC weather. It must also
-explicitly set `par_from_ghi_factor=2.0565`; the CSV importer does not copy
-that conversion into its profile provenance. Imported `air_temperature` is
-weather only. Culture temperature remains a separate 20–30 °C scenario. The
-committed file is a pinned input, not a claim that the C1 systems received this
-weather.
+[`profile_handoff.py`](../../scripts/qualification/215/profile_handoff.py)
+imports through the 171 owner, then creates an immutable child profile with
+the KNMI Deelen site snapshot and `factor_umol_per_j=2.0565` in provenance.
+Those fields let the existing 172/T2 handoff use the same solar location and
+PAR conversion as the CSV construction without relying on mutable workspace
+site state. The parent digest preserves the exact CSV import lineage. Both
+profiles remain labelled **surrogate KNMI Deelen**, not AlgaePARC weather.
+Imported `air_temperature` is weather only. Culture temperature remains a
+separate 20–30 °C scenario; a future dynamic scenario must use a declared
+culture-temperature source. This pinned input is not a claim that C1 received
+this weather.
 
 Regenerate with the raw archive using the command in the script module docstring.
 The focused offline test checks the committed digest, complete hourly coverage,
