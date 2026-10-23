@@ -31,6 +31,7 @@ import {
 } from "../../api/client";
 import { listStudioLibrary, type StudioLibraryEntry } from "../../api/studio";
 import type { ShellRegion, ShellRegionContributions } from "../../stages/registry";
+import BluecadProjectTree, { type ProjectTreeDetail } from "./BluecadProjectTree";
 import BluecadGlbViewer, {
   type GeometryInspectionCommand,
   type GeometryInspectionSnapshot
@@ -88,6 +89,7 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
   const [inspectionCommand, setInspectionCommand] = useState<GeometryInspectionCommand | null>(null);
   const [sceneBindingPresentation, setSceneBindingPresentation] = useState<SceneBindingPresentation>("idle");
   const [showCreate, setShowCreate] = useState(false);
+  const [composerOpen, setComposerOpen] = useState(false);
   const [availability, setAvailability] = useState<BluecadGenerationAvailability | null>(null);
   const [availabilityState, setAvailabilityState] = useState<LoadState>("idle");
   const [studioRefs, setStudioRefs] = useState<BluecadStudioReference[]>([]);
@@ -139,7 +141,8 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
   const briefRef = useRef<HTMLTextAreaElement | null>(null);
   const focusBriefOnMount = useRef(false);
   const filterRef = useRef<HTMLInputElement | null>(null);
-  const candidateRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const candidateRefs = useRef<Record<string, HTMLElement | null>>({});
+  const registerCandidate = useCallback((candidateId: string, node: HTMLElement | null) => { candidateRefs.current[candidateId] = node; }, []);
   const emptyCandidatesRef = useRef<HTMLParagraphElement | null>(null);
   const workbenchTitleRef = useRef<HTMLHeadingElement | null>(null);
   const focusAfterSelectionChange = useRef(false);
@@ -605,6 +608,7 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
         return;
       }
       setBriefText("");
+      setComposerOpen(false);
       const detail = await loadAggregate(mutation.workspaceId, created.id);
       if (!detail || workspaceRef.current !== mutation.workspaceId || selectedRef.current !== created.id) return;
       setMessage(`Candidate saved · ${detail.candidate.status}${detail.candidate.parked_reason ? ` — ${detail.candidate.parked_reason}` : ""}.`);
@@ -661,6 +665,7 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
   const duplicateSelectedBrief = () => {
     if (!selected) return;
     setBriefText(duplicateBrief(selected.brief_text).briefText);
+    setComposerOpen(true);
     const briefNode = briefRef.current;
     if (briefNode) {
       briefNode.scrollIntoView({ block: "nearest" });
@@ -672,6 +677,7 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
   };
 
   const openBriefComposer = () => {
+    setComposerOpen(true);
     requestShellRegionOpen("navigator");
     const briefNode = briefRef.current;
     if (briefNode) {
@@ -690,38 +696,72 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
         ? "Paid AI is enabled for the external tier. A brief starts server-side generation and may spend budget."
         : `Paid AI is off (${availability.blocking_reason ?? "external calls blocked"}). A brief is saved but parks as budget_blocked until paid AI and budget are enabled in Settings.`;
 
+  const treeDetail = useMemo<ProjectTreeDetail | null>(() => {
+    if (!selectedId) return null;
+    const activeAggregate = aggregate?.candidate.id === selectedId ? aggregate : null;
+    const validation = !activeAggregate
+      ? aggregateState === "error" ? "error" : "loading"
+      : !activeAggregate.candidate.report_artifact_id
+        ? "none"
+        : validationState === "loading" || validationState === "idle"
+          ? "loading"
+          : validationState === "error" || validationMessage ? "error" : "ready";
+    return {
+      candidateId: selectedId,
+      inspection,
+      studioRefs,
+      artifacts: activeAggregate?.artifacts ?? null,
+      checks,
+      validation
+    };
+  }, [aggregate, aggregateState, checks, inspection, selectedId, studioRefs, validationMessage, validationState]);
+
   const navigator = useMemo<ReactNode>(() => (
-    <div className="bluecad-workbench__navigator">
-      <label>Workspace<select value={workspaceId} onChange={(event) => {
-        const nextWorkspaceId = event.target.value;
-        mutationGeneration.current += 1;
-        currentSceneSelection.current = null;
-        workspaceRef.current = nextWorkspaceId;
-        selectedRef.current = null;
-        currentList.current = null;
-        currentDetail.current = null;
-        currentValidation.current = null;
-        suppressNextDetailEffect.current = null;
-        clearVisibleDetail("idle");
-        setMessage(null);
-        publishSelection(nextWorkspaceId, null);
-        setWorkspaceId(nextWorkspaceId);
-      }} disabled={workspaceState !== "ready" || workspaces.length === 0 || pendingAction !== null} style={{ width: "100%", minWidth: 0, maxWidth: "100%" }}>{workspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}</select></label>
-      <label>Filter candidates<input ref={filterRef} value={filterText} onChange={(event) => { filterTextRef.current = event.target.value; setFilterText(event.target.value); }} disabled={candidateState === "loading" || pendingAction !== null} /></label>
-      <label className="checkbox-line"><input type="checkbox" checked={showArchived} onChange={(event) => setShowArchived(event.target.checked)} disabled={candidateState === "loading" || pendingAction !== null} />Show archived</label>
-      <button type="button" className="secondary-button" onClick={() => void refresh()} disabled={!workspaceId || candidateState === "loading" || pendingAction !== null}>Refresh</button>
-      <p className="panel-subtitle">New candidate saves your brief and requests AI generation. {aiBriefState}</p>
-      <form className="bluecad-new-form" onSubmit={onCreate}><label>New candidate brief<textarea ref={handleBriefRef} value={briefText} onChange={(event) => setBriefText(event.target.value)} required /></label><button type="submit" disabled={!workspaceId || !briefText.trim() || candidateState === "loading" || pendingAction !== null}>{pendingAction === "create" ? "Creating…" : "New candidate"}</button></form>
-      {workspaceState === "loading" && <p>Loading workspaces…</p>}
+    <div className="bluecad-workbench__navigator bluecad-navigator">
+      <div className="bluecad-navigator__toolbar">
+        <label className="bluecad-navigator__workspace"><span className="visually-hidden">Workspace</span><select aria-label="Workspace" value={workspaceId} onChange={(event) => {
+          const nextWorkspaceId = event.target.value;
+          mutationGeneration.current += 1;
+          currentSceneSelection.current = null;
+          workspaceRef.current = nextWorkspaceId;
+          selectedRef.current = null;
+          currentList.current = null;
+          currentDetail.current = null;
+          currentValidation.current = null;
+          suppressNextDetailEffect.current = null;
+          clearVisibleDetail("idle");
+          setMessage(null);
+          publishSelection(nextWorkspaceId, null);
+          setWorkspaceId(nextWorkspaceId);
+        }} disabled={workspaceState !== "ready" || workspaces.length === 0 || pendingAction !== null}>{workspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}</select></label>
+        <button type="button" className="secondary-button bluecad-navigator__icon" onClick={() => void refresh()} disabled={!workspaceId || candidateState === "loading" || pendingAction !== null} aria-label="Refresh" title="Refresh candidates">↻</button>
+        <label className="bluecad-navigator__filter"><span className="visually-hidden">Filter candidates</span><input ref={filterRef} type="search" placeholder="Filter candidates" value={filterText} onChange={(event) => { filterTextRef.current = event.target.value; setFilterText(event.target.value); }} disabled={candidateState === "loading" || pendingAction !== null} /></label>
+        <label className="checkbox-line bluecad-navigator__archived"><input type="checkbox" checked={showArchived} onChange={(event) => setShowArchived(event.target.checked)} disabled={candidateState === "loading" || pendingAction !== null} />Archived</label>
+      </div>
+      {workspaceState === "loading" && <p className="bluecad-navigator__state">Loading workspaces…</p>}
       {workspaceState === "error" && <p className="error-banner">Workspace discovery failed.</p>}
-      {workspaceState === "ready" && workspaces.length === 0 && <p>No workspaces are available.</p>}
-      {candidateState === "loading" && <p>Loading candidates…</p>}
+      {workspaceState === "ready" && workspaces.length === 0 && <p className="bluecad-navigator__state">No workspaces are available.</p>}
+      {candidateState === "loading" && <p className="bluecad-navigator__state">Loading candidates…</p>}
       {candidateState === "error" && <p className="error-banner">Candidate discovery failed.</p>}
-      <div className="bluecad-candidate-list" aria-label="BlueCad candidates">{visibleCandidates.map((candidate) => <button key={candidate.id} ref={(node) => { candidateRefs.current[candidate.id] = node; }} type="button" aria-pressed={candidate.id === selectedId} className={candidate.id === selectedId ? "bluecad-candidate active" : "bluecad-candidate"} onClick={() => chooseCandidate(candidate.id)} disabled={candidateState === "loading" || pendingAction !== null}><span className={`status-pill status-${candidate.status}`}>{candidate.status}</span><strong>{candidate.brief_text.slice(0, 90)}{candidate.brief_text.length > 90 ? "…" : ""}</strong>{candidate.parked_reason && <small>Parked: {candidate.parked_reason}</small>}</button>)}</div>
-      {candidateState === "ready" && candidates.length === 0 && <p ref={emptyCandidatesRef} tabIndex={-1}>No BlueCad candidates exist in this workspace.</p>}
-      {candidateState === "ready" && candidates.length > 0 && visibleCandidates.length === 0 && <p ref={emptyCandidatesRef} tabIndex={-1}>No candidates match the current filter. Archived candidates may be hidden.</p>}
+      {workspaceId && <BluecadProjectTree
+        workspaceName={workspaces.find((workspace) => workspace.id === workspaceId)?.name ?? "Workspace"}
+        candidates={visibleCandidates}
+        selectedId={selectedId}
+        disabled={candidateState === "loading" || pendingAction !== null}
+        detail={treeDetail}
+        registerCandidate={registerCandidate}
+        onSelectCandidate={chooseCandidate}
+        onSelectMesh={requestInspection}
+        onInspect={() => requestShellRegionOpen("sidecar")}
+      />}
+      {candidateState === "ready" && candidates.length === 0 && <p className="bluecad-navigator__state" ref={emptyCandidatesRef} tabIndex={-1}>No BlueCad candidates exist in this workspace.</p>}
+      {candidateState === "ready" && candidates.length > 0 && visibleCandidates.length === 0 && <p className="bluecad-navigator__state" ref={emptyCandidatesRef} tabIndex={-1}>No candidates match the current filter. Archived candidates may be hidden.</p>}
+      <div className="bluecad-navigator__composer">
+        <button type="button" className="secondary-button" aria-expanded={composerOpen} aria-controls="bluecad-brief-composer" onClick={() => { if (composerOpen) setComposerOpen(false); else openBriefComposer(); }} disabled={!workspaceId}>New from brief</button>
+        {composerOpen && <form id="bluecad-brief-composer" className="bluecad-new-form" onSubmit={onCreate}><p className="panel-subtitle">New candidate saves your brief and requests AI generation. {aiBriefState}</p><label>New candidate brief<textarea ref={handleBriefRef} value={briefText} onChange={(event) => setBriefText(event.target.value)} required /></label><button type="submit" disabled={!workspaceId || !briefText.trim() || candidateState === "loading" || pendingAction !== null}>{pendingAction === "create" ? "Creating…" : "New candidate"}</button></form>}
+      </div>
     </div>
-  ), [aiBriefState, briefText, candidateState, candidates.length, clearVisibleDetail, filterText, handleBriefRef, pendingAction, publishSelection, refresh, selectedId, showArchived, visibleCandidates, workspaceId, workspaceState, workspaces]);
+  ), [aiBriefState, briefText, candidateState, candidates.length, chooseCandidate, clearVisibleDetail, composerOpen, filterText, handleBriefRef, pendingAction, publishSelection, refresh, registerCandidate, requestInspection, requestShellRegionOpen, selectedId, showArchived, treeDetail, visibleCandidates, workspaceId, workspaceState, workspaces]);
 
   const sceneBindingNotice = sceneBindingPresentation === "resolving"
     ? "Resolving engineering binding…"
