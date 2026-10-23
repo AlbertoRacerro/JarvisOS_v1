@@ -65,7 +65,7 @@ export function validationSummary(checks: readonly BluecadValidationCheck[]): st
 
 function buildTree(props: Props): TreeNode {
   const { workspaceName, candidates, selectedId, detail, onSelectCandidate, onSelectMesh, onInspect } = props;
-  const root: TreeNode = { id: ROOT_ID, parentId: null, level: 1, label: workspaceName || "Workspace", meta: `${candidates.length}`, expandable: true, children: [] };
+  const root: TreeNode = { id: ROOT_ID, parentId: null, level: 1, label: workspaceName || "Workspace", meta: `${candidates.length}`, expandable: candidates.length > 0, children: [] };
   for (const candidate of candidates) {
     const candidateNodeId = `candidate:${candidate.id}`;
     const node: TreeNode = {
