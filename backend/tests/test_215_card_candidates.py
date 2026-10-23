@@ -28,6 +28,18 @@ def test_candidate_card_does_not_silently_complete_pbr_parameters():
     assert nutrient["unit"] == "kg N m^-3"
     assert nutrient["state"] == "candidate; cross-strain and nutrient-basis transfer"
     assert nutrient["source_locator"]
+    composition = audit["composition_candidates"]
+    assert audit["composition_source"]["doi"] == "10.3390/app11104337"
+    assert audit["composition_source"]["author_copy_sha256"] == (
+        "3cc0c135f7b686577ef980c26e969270a9d84a05e89675ce12aafce3d9cfaea6"
+    )
+    assert composition["a"]["value"] == (7.1 / 1.008) / (48.7 / 12.011)
+    assert composition["b"]["value"] == (36.5 / 15.999) / (48.7 / 12.011)
+    assert composition["c"]["value"] == (6.80 / 14.007) / (48.7 / 12.011)
+    assert composition["d"]["value"] == (6.43 / 10 / 30.974) / (48.7 / 12.011)
+    assert composition["w_ash"]["value"] == 0.045
+    assert all(row["source_locator"] and "cross-strain" in row["state"]
+               for row in composition.values())
     assert "K_I" not in audit["missing_for_170"]
     assert "K_j_0" not in audit["missing_for_170"]
     assert "I_opt" in audit["nontransferable"]
@@ -35,3 +47,4 @@ def test_candidate_card_does_not_silently_complete_pbr_parameters():
     assert not set(audit["missing_for_170"]) & set(audit["candidates"])
     assert not set(audit["missing_for_170"]) & set(audit["relative_candidates"])
     assert not set(audit["missing_for_170"]) & set(audit["nutrient_candidates"])
+    assert not audit["missing_for_170"]

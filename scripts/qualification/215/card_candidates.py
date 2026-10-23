@@ -29,6 +29,13 @@ NUTRIENT_SOURCE = {
     "strain": "Nannochloropsis gaditana SAG 2.99 (different species from C1 CCAP 211/78)",
     "conditions": "25 degC freshwater Guillard F/2 batch mini-photobioreactors; 12:12 h light:dark; nitrate-limited",
 }
+COMPOSITION_SOURCE = {
+    "doi": "10.3390/app11104337",
+    "author_copy_sha256": "3cc0c135f7b686577ef980c26e969270a9d84a05e89675ce12aafce3d9cfaea6",
+    "locator": "Sanchez-Bayo et al. (2021), Section 2.1 and Table 1",
+    "strain": "Nannochloropsis gaditana supplied by AlgaEnergy (different species from C1 CCAP 211/78)",
+    "conditions": "commercial harvested biomass assayed before hydrothermal liquefaction; cultivation conditions not specified",
+}
 
 # Only quantities with a justified exact symbol conversion enter this table.
 # Their state remains candidate: Table 5 validation is not C1 qualification.
@@ -70,6 +77,39 @@ NUTRIENT_CANDIDATES = {
     },
 }
 
+# Table 1 reports elemental wt% separately from 4.5 wt% ash. Its CHONS
+# percentages sum to 100%, so use elemental mass *ratios* for the ash-free
+# empirical formula; do not also treat those numbers as total-dry fractions.
+# Phosphorus is 6.43 mg/g in a separate trace-element column. Whether it is
+# wholly organic is unknown; the 169 form has no sulfur term (0.90 wt%).
+COMPOSITION_ASSAY = {
+    "C_wt_percent": 48.7, "H_wt_percent": 7.1, "O_wt_percent": 36.5,
+    "N_wt_percent": 6.80, "S_wt_percent": 0.90, "P_mg_per_g": 6.43,
+    "ash_wt_percent": 4.5,
+}
+ATOMIC_MASS = {"C": 12.011, "H": 1.008, "O": 15.999, "N": 14.007, "P": 30.974}
+
+
+def composition_candidates() -> dict:
+    carbon_moles = COMPOSITION_ASSAY["C_wt_percent"] / ATOMIC_MASS["C"]
+    fractions = {
+        "a": (COMPOSITION_ASSAY["H_wt_percent"] / ATOMIC_MASS["H"]) / carbon_moles,
+        "b": (COMPOSITION_ASSAY["O_wt_percent"] / ATOMIC_MASS["O"]) / carbon_moles,
+        "c": (COMPOSITION_ASSAY["N_wt_percent"] / ATOMIC_MASS["N"]) / carbon_moles,
+        "d": (COMPOSITION_ASSAY["P_mg_per_g"] / 10 / ATOMIC_MASS["P"]) / carbon_moles,
+        "w_ash": COMPOSITION_ASSAY["ash_wt_percent"] / 100,
+    }
+    return {
+        symbol: {
+            "value": value, "unit": "1", "state": "candidate; cross-strain composition transfer",
+            "source_locator": COMPOSITION_SOURCE["locator"],
+            "original": "Table 1 elemental ratios to C-mol" if symbol != "w_ash" else "4.5 wt% ash",
+            "transfer": "harvested N. gaditana, not C1 CCAP 211/78; CHON is normalized separately from ash; "
+                        "P organic partition unknown; S (0.90 wt%) omitted by 169 form",
+        }
+        for symbol, value in fractions.items()
+    }
+
 # The source light law has an optimum, while the 170 PBR accepts Monod K_I.
 # A numerical substitution would silently change the model form.
 NONTRANSFERABLE = {
@@ -85,6 +125,8 @@ def build_audit() -> dict:
         "source": SOURCE,
         "relative_source": RELATIVE_SOURCE,
         "nutrient_source": NUTRIENT_SOURCE,
+        "composition_source": COMPOSITION_SOURCE,
+        "composition_assay": COMPOSITION_ASSAY,
         "form_proposal": {"light": "light.monod", "temperature": "temperature.ctmi",
                           "nutrients": ["nutrient.monod"], "loss": "loss.first_order",
                           "stoichiometry": "stoich.photoautotrophic"},
@@ -99,9 +141,11 @@ def build_audit() -> dict:
                      "source_locator": NUTRIENT_SOURCE["locator"]}
             for symbol, row in NUTRIENT_CANDIDATES.items()
         },
+        "composition_candidates": composition_candidates(),
         "nontransferable": NONTRANSFERABLE,
         "missing_for_170": tuple(symbol for symbol in MISSING_170
-                                 if symbol not in RELATIVE_CANDIDATES and symbol not in NUTRIENT_CANDIDATES),
+                                 if symbol not in RELATIVE_CANDIDATES and symbol not in NUTRIENT_CANDIDATES
+                                 and symbol not in composition_candidates()),
     }
 
 

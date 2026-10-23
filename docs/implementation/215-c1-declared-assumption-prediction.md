@@ -122,9 +122,10 @@ source-backed uncertainty bound. The paper's Table 1 gives a training
 temperature range of 20.94–25.44 °C; the fitted 30.03 °C upper cardinal
 temperature lies outside it.
 
-The existing 169/170 card still needs a justified selection of N half-saturation `K_j_0`, N quota,
-stoichiometry and oxygen yield, as well as uncertainty treatment for transferred
-light, extinction and loss parameters. The 2025 paper's two-flux optical coefficients
+The existing 169/170 card still needs an actual candidate revision and
+uncertainty treatment for transferred nutrient, composition, light, extinction
+and loss parameters. N quota and oxygen yield derive from the selected
+stoichiometry. The 2025 paper's two-flux optical coefficients
 and optimum light response cannot be inserted into the 170 cylindrical
 Beer–Lambert/Monod fields without a declared model-form approximation.
 [`card_candidates.py`](../../scripts/qualification/215/card_candidates.py) now
@@ -153,8 +154,8 @@ qualified card:
 
 [`card_candidates.py`](../../scripts/qualification/215/card_candidates.py)
 pins the source, original conditions, conversions and cross-strain state. A
-complete assumed card must still justify nutrient and biomass-composition
-inputs and propagate the dominant transferred-parameter uncertainty.
+complete assumed card must still choose and record the candidate transfers
+and propagate their dominant uncertainty.
 
 ### Cross-strain nitrate half-saturation candidate
 
@@ -178,6 +179,29 @@ observed growth continuing after extracellular nitrate depletion, so the
 simple extracellular Monod factor is also a model-form limitation. The
 conversion and provenance are pinned in `card_candidates.py`; no card or
 biomass prediction is claimed by this checkpoint.
+
+### Cross-strain biomass-composition candidates
+
+The primary [Sánchez-Bayo et al. (2021), *Applied Sciences* 11,
+4337](https://doi.org/10.3390/app11104337) [author PDF](https://burjcdigital.urjc.es/server/api/core/bitstreams/0f40ec97-4b97-4429-a1e9-083d4614e107/content),
+SHA-256 `3cc0c135f7b686577ef980c26e969270a9d84a05e89675ce12aafce3d9cfaea6`,
+reports an elemental assay of harvested *N. gaditana* supplied by AlgaEnergy
+in Section 2.1, Table 1. The culture conditions for that biomass are not
+specified. It is **not** CCAP 211/78 or a C1 sample. The table gives C 48.7,
+H 7.1, O 36.5, N 6.80 and S 0.90 wt%; P 6.43 mg/g; and ash 4.5 wt%.
+The CHONS numbers sum to 100%, so the 169 ash-free CHONP formula uses their
+atomic ratios to carbon, with ash entered separately. P is converted from
+mg/g to 0.643 wt% before its atomic ratio is taken. The source does not
+resolve how much P is organic versus inorganic. The 169 formula has no S term,
+so its 0.90 wt% sulfur remains an explicit model-form residual.
+
+[`card_candidates.py`](../../scripts/qualification/215/card_candidates.py)
+pins these conversions as `a`, `b`, `c`, `d` and `w_ash`, all marked
+**cross-strain candidates** with the source locator and transfer caveat.
+This closes the symbol inventory for a T1 card but does not make a source-
+verified or qualified card: composition, optics, nutrient response and loss
+still need declared transfer uncertainty and an actual 169 card revision before
+any C1 biomass run. No C1 observation was used to select these values.
 
 ## Declared geometry and operation matrix
 
