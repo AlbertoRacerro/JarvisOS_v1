@@ -76,3 +76,61 @@ def test_existing_workspace_is_backfilled_without_changing_its_identity() -> Non
         assert versions.json()["active_version_id"] == "legacy"
         assert versions.json()["versions"][0]["data_workspace_id"] == "legacy"
         assert draft.list_drafts("legacy")[0]["draft_id"] == original["draft_id"]
+
+
+def test_component_tree_scopes_identity_and_rejects_cycles_and_stale_edits() -> None:
+    initialize_database()
+    with TestClient(app) as client:
+        project_id = client.post("/workspaces", json={"name": "Tree", "slug": "tree"}).json()["id"]
+        base = f"/workspaces/{project_id}/design-versions/{project_id}/components"
+        root = client.post(base, json={
+            "name": "Plant unit", "expected_active_version_id": project_id,
+        })
+        assert root.status_code == 201, root.text
+        root_id = root.json()["id"]
+        parent_id = root_id
+        for depth in range(4):
+            child = client.post(base, json={
+                "name": f"Assembly {depth}", "parent_id": parent_id,
+                "expected_active_version_id": project_id,
+            })
+            assert child.status_code == 201, child.text
+            parent_id = child.json()["id"]
+        assert len(client.get(base).json()) == 5
+
+        cycle = client.put(f"{base}/{root_id}", json={
+            "name": "Plant unit", "parent_id": parent_id, "expected_revision": 1,
+            "expected_active_version_id": project_id,
+        })
+        assert cycle.status_code == 409
+        rename = client.put(f"{base}/{root_id}", json={
+            "name": "Renamed unit", "parent_id": None, "expected_revision": 1,
+            "expected_active_version_id": project_id,
+        })
+        assert rename.status_code == 200, rename.text
+        assert rename.json()["revision"] == 2
+        assert client.put(f"{base}/{root_id}", json={
+            "name": "Stale", "expected_revision": 1,
+            "expected_active_version_id": project_id,
+        }).status_code == 409
+
+        versions_path = f"/workspaces/{project_id}/design-versions"
+        new_version = client.post(versions_path, json={
+            "label": "New", "expected_active_version_id": project_id,
+        }).json()["versions"][1]["id"]
+        assert client.get(f"{versions_path}/{new_version}/components").json() == []
+        assert client.post(f"{versions_path}/{new_version}/components", json={
+            "name": "Cross-version child", "parent_id": root_id,
+            "expected_active_version_id": project_id,
+        }).status_code == 409
+        client.post(f"{versions_path}/activate", json={
+            "version_id": new_version, "expected_active_version_id": project_id,
+        })
+        new_base = f"{versions_path}/{new_version}/components"
+        assert client.post(new_base, json={
+            "name": "Cross-version child", "parent_id": root_id,
+            "expected_active_version_id": new_version,
+        }).status_code == 404
+        assert client.post(base, json={
+            "name": "Stale version", "expected_active_version_id": project_id,
+        }).status_code == 409

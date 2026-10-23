@@ -117,6 +117,20 @@ SCHEMA_STATEMENTS = [
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS design_components (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        version_id TEXT NOT NULL,
+        parent_id TEXT,
+        name TEXT NOT NULL,
+        revision INTEGER NOT NULL DEFAULT 1 CHECK (revision > 0),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (version_id) REFERENCES design_project_versions(id),
+        FOREIGN KEY (parent_id) REFERENCES design_components(id)
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS events (
         id TEXT PRIMARY KEY,
         workspace_id TEXT,
@@ -635,6 +649,8 @@ UNION ALL SELECT 'requirement', id, workspace_id, '', COALESCE(statement, '') ||
 """
 
 SCHEMA_INDEX_STATEMENTS = [
+    "CREATE INDEX IF NOT EXISTS idx_design_components_version_parent "
+    "ON design_components(version_id, parent_id)",
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_design_project_one_active "
     "ON design_project_versions(project_id) WHERE active = 1",
     "CREATE INDEX IF NOT EXISTS idx_design_project_versions_project "
