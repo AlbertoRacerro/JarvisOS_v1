@@ -89,10 +89,38 @@ html { background: var(--color-bg-canvas); }
   transition: background-color var(--motion-standard) ease-out, color var(--motion-standard) ease-out, box-shadow var(--motion-standard) ease-out;
 }
 .application-shell .shell-nav-link:hover { background: var(--lumen-nav-hover); border-color: transparent; color: var(--color-text-primary); }
-.application-shell .shell-nav-link[aria-current="page"] {
+.application-shell .shell-nav-link[aria-current] {
   background: radial-gradient(120% 160% at 0% 50%, color-mix(in srgb, var(--accent-seed) 34%, transparent), color-mix(in srgb, var(--accent-seed) 9%, transparent) 70%);
   border-color: var(--color-accent-border);
   box-shadow: inset 3px 0 0 var(--lumen-vein), var(--lumen-selected-glow);
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+/* Spec 213: Design switcher nested under the Design rail entry; identical position on Process, BlueCad and Studio. */
+.application-shell .shell-rail__group { display: grid; gap: 4px; }
+.application-shell .shell-rail__switcher {
+  display: grid;
+  gap: 2px;
+  margin: 0 0 4px 12px;
+  padding: 0 0 0 8px;
+  border-left: 1px solid var(--lumen-rule);
+  list-style: none;
+}
+.application-shell .shell-rail__switcher a {
+  display: flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 6px 12px;
+  border: 1px solid transparent;
+  border-radius: var(--lumen-radius-button);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
+  text-decoration: none;
+}
+.application-shell .shell-rail__switcher a:hover { background: var(--lumen-nav-hover); color: var(--color-text-primary); }
+.application-shell .shell-rail__switcher a[aria-current="page"] {
+  border-color: var(--color-accent-border);
+  background: var(--color-accent-subtle);
   color: var(--color-text-primary);
   font-weight: 600;
 }
@@ -164,6 +192,38 @@ html { background: var(--color-bg-canvas); }
 .application-shell .jarvis-sidecar__title h2 { font-family: var(--font-display); font-weight: 300; letter-spacing: 0; }
 .application-shell .jarvis-chip { border-radius: var(--lumen-radius-button); }
 
+/* Spec 213: resizable navigator and sidecar. The splitter overlays the main area's inner edge (same grid cell),
+ * so the shell grid is unchanged; widths are user preferences clamped to the panel bounds. */
+.application-shell--final .shell-navigator { width: clamp(200px, var(--shell-navigator-width, 240px), 480px); }
+.application-shell--final .shell-sidecar { width: clamp(280px, var(--shell-sidecar-width, var(--jarvis-width, 300px)), 640px); }
+@media (min-width: 761px) { .application-shell--final .shell-main { grid-row: 1; } }
+.application-shell--final .shell-splitter {
+  grid-row: 1;
+  grid-column: 2;
+  z-index: 3;
+  align-self: stretch;
+  width: 12px;
+  margin: 14px 0;
+  cursor: col-resize;
+  touch-action: none;
+  border-radius: 999px;
+}
+.application-shell--final .shell-splitter--navigator { justify-self: start; margin-left: -4px; }
+.application-shell--final .shell-splitter--sidecar { justify-self: end; margin-right: -4px; }
+.application-shell--final .shell-splitter::after {
+  content: "";
+  position: relative;
+  display: block;
+  left: 5px;
+  width: 2px;
+  height: 100%;
+  border-radius: 2px;
+  background: transparent;
+  transition: background-color var(--motion-fast) ease-out;
+}
+.application-shell--final .shell-splitter:is(:hover, :focus-visible, :active)::after { background: var(--color-accent-border-strong); }
+.application-shell--final .shell-splitter:focus-visible { outline: 2px solid var(--color-focus-ring); outline-offset: 0; }
+
 /* ---------- Work islands ---------- */
 .application-shell :is(.studio-library, .studio-workspace) {
   background: var(--lumen-panel-fill);
@@ -198,6 +258,9 @@ html { background: var(--color-bg-canvas); }
   .application-shell .shell-rail__identity::before { width: 2.5rem; height: 2.5rem; }
   .application-shell .shell-rail__links { gap: 4px; }
   .application-shell .shell-nav-link { min-height: 36px; padding: 6px 12px; }
+  .application-shell .shell-rail__group { display: contents; }
+  .application-shell--final .shell-splitter { display: none; }
+  .application-shell .shell-rail__switcher { order: 10; flex: 1 0 100%; display: flex; gap: 4px; margin: 4px 0 0; padding: 4px 0 0; border-left: 0; border-top: 1px solid var(--lumen-rule); }
   .application-shell--final :is(.shell-sidecar, .shell-navigator) {
     width: auto;
     height: auto;

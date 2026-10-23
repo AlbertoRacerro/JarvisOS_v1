@@ -168,15 +168,6 @@ function ProcessStage(props: PrimaryStageProps) {
             </p>
           </div>
         </div>
-        <nav className="design-stage__tabs" aria-label="Design workspaces">
-          <button type="button" className="is-active" aria-current="page">
-            Process
-          </button>
-          <button type="button" onClick={() => navigate("/design/bluecad")}>
-            BlueCad
-          </button>
-          <button type="button" onClick={() => navigate("/design/studio")}>Studio</button>
-        </nav>
         <details className="process-advanced"><summary>Advanced · Native DWSIM cases</summary>{tabs}</details>
         <div className="process-environment-toolbar"><button type="button" onClick={() => setEnvironmentOpen(true)}>Environment…</button></div>
       </header>
@@ -690,15 +681,6 @@ function NativeDwsimCaseEditor({
                 : "DWSIM status unknown"}
           </span>
         </div>
-        <nav className="design-stage__tabs" aria-label="Design workspaces">
-          <button type="button" className="is-active" aria-current="page">
-            Process
-          </button>
-          <button type="button" onClick={() => navigate("/design/bluecad")}>
-            BlueCad
-          </button>
-          <button type="button" onClick={() => navigate("/design/studio")}>Studio</button>
-        </nav>
         {modeTabs}
         <div className="dwsim-truth">
           <label>

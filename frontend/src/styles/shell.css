@@ -134,7 +134,7 @@
   border-color: var(--color-border-default);
 }
 
-.shell-nav-link[aria-current="page"] {
+.shell-nav-link[aria-current] {
   color: var(--color-text-primary);
   background: var(--color-accent-subtle);
   border-color: var(--color-accent-border-strong);

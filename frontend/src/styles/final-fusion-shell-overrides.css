@@ -65,7 +65,7 @@
   border-color: var(--color-border-default);
 }
 
-.application-shell--final .shell-nav-link[aria-current="page"] {
+.application-shell--final .shell-nav-link[aria-current] {
   color: var(--color-text-primary);
   background: var(--color-bg-surface-raised);
   border-color: var(--color-accent-foreground);

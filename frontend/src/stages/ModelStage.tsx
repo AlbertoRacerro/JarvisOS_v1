@@ -2,7 +2,7 @@ import BluecadWorkbench from "../components/bluecad/BluecadWorkbench";
 import "../styles/bluecad-final.css";
 import type { PrimaryStageProps } from "./registry";
 
-function ModelStage({ onSelectionChange, onShellRegionsChange, requestShellRegionOpen, navigate }: PrimaryStageProps) {
+function ModelStage({ onSelectionChange, onShellRegionsChange, requestShellRegionOpen }: PrimaryStageProps) {
   return (
     <section className="bluecad-final-stage design-stage" aria-labelledby="bluecad-final-title">
       <header className="design-stage__header bluecad-final-stage__header">
@@ -14,11 +14,6 @@ function ModelStage({ onSelectionChange, onShellRegionsChange, requestShellRegio
           </div>
           <span className="design-stage__truth-state">Geometry · Server-owned</span>
         </div>
-        <nav className="design-stage__tabs" aria-label="Design workspaces">
-          <button type="button" onClick={() => navigate("/design/process")}>Process</button>
-          <button type="button" className="is-active" aria-current="page">BlueCad</button>
-          <button type="button" onClick={() => navigate("/design/studio")}>Studio</button>
-        </nav>
       </header>
 
       <div className="bluecad-final-stage__body">
