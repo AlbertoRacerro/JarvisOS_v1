@@ -14,7 +14,14 @@ def test_candidate_card_does_not_silently_complete_pbr_parameters():
     assert audit["candidates"]["mu_max"]["value"] == 2.50 / 24
     assert audit["candidates"]["T_opt"]["value"] == 297.65
     assert all(row["state"] == "candidate" and row["source_locator"] for row in audit["candidates"].values())
-    assert "K_I" in audit["missing_for_170"]
+    assert audit["relative_source"]["doi"] == "10.3390/app12125776"
+    assert audit["relative_candidates"]["K_I"]["value"] == 15.28
+    assert audit["relative_candidates"]["k_d"]["value"] == 0.0046
+    assert audit["relative_candidates"]["k_X"]["range"] == [200.0, 380.0]
+    assert all(row["state"] == "candidate; cross-strain transfer" and row["source_locator"]
+               for row in audit["relative_candidates"].values())
+    assert "K_I" not in audit["missing_for_170"]
     assert "I_opt" in audit["nontransferable"]
     assert "r_s" in audit["nontransferable"]
     assert not set(audit["missing_for_170"]) & set(audit["candidates"])
+    assert not set(audit["missing_for_170"]) & set(audit["relative_candidates"])

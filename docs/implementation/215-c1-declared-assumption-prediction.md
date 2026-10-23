@@ -91,9 +91,9 @@ source-backed uncertainty bound. The paper's Table 1 gives a training
 temperature range of 20.94–25.44 °C; the fitted 30.03 °C upper cardinal
 temperature lies outside it.
 
-The existing 169/170 card still needs a source-backed or explicitly assumed
-`K_I`, biomass extinction `k_X`, N half-saturation `K_j_0`, N quota,
-stoichiometry and oxygen yield. The 2025 paper's two-flux optical coefficients
+The existing 169/170 card still needs N half-saturation `K_j_0`, N quota,
+stoichiometry and oxygen yield, as well as uncertainty treatment for transferred
+light, extinction and loss parameters. The 2025 paper's two-flux optical coefficients
 and optimum light response cannot be inserted into the 170 cylindrical
 Beer–Lambert/Monod fields without a declared model-form approximation.
 [`card_candidates.py`](../../scripts/qualification/215/card_candidates.py) now
@@ -103,6 +103,27 @@ It explicitly lists the 2025 optimum irradiance and maintenance loss as
 nontransferable to the current 170 Monod/first-order symbols, and names every
 missing 170 parameter. This is an incomplete audit record, not a stored 169
 card. No complete card has been created and no biomass prediction has been run.
+
+### Cross-strain, model-form-compatible candidates
+
+The primary [Lima et al. (2022), *Applied Sciences* 12, 5776](https://doi.org/10.3390/app12125776)
+author PDF was audited at [the University of Palermo repository](https://iris.unipa.it/retrieve/ed061932-1c36-409f-a9c1-c80257e1204f/Lima_ApplSci_2022.pdf),
+SHA-256 `7b75969c6ffa680a6a29d5ddeb98c4161c0529fe4b1162975dba4b1ddff38b89`.
+It studies *N. gaditana*, **not** CCAP 211/78, in 25 °C laboratory batch
+reactors under artificial light. Its equations match three current 170 forms,
+so the following are **cross-strain candidates**, not C1 measurements or a
+qualified card:
+
+| 170 symbol | Source value and location | Transfer limit |
+| --- | --- | --- |
+| `K_I` | 15.28 µmol m⁻² s⁻¹, Eq. 10 and Table 2; Monod half-saturation from a 4 mm quasi-isoactinic reactor | Same Monod form, but species, spectrum and outdoor tubular light distribution differ. Do not substitute the 2025 same-strain `I_opt` for this parameter. |
+| `k_d` | 0.0046 h⁻¹, Eq. 5 and Table 2; first-order loss fitted to batch trajectories | Same loss placement as 170, but fitted for a different species and batch rather than diluted outdoor operation. Do not substitute the 2025 `r_s` without an equation audit. |
+| `k_X` | 0.20 m² g⁻¹ annular and 0.38 m² g⁻¹ flat, Eq. 1 and Table 2; 200–380 m² kg⁻¹ after exact unit conversion | Eq. 1 uses natural-exponential Beer–Lambert attenuation, as 170 does. The paper attributes the geometry difference partly to aggregation; use these as scenario bounds, not a statistical confidence interval. |
+
+[`card_candidates.py`](../../scripts/qualification/215/card_candidates.py)
+pins the source, original conditions, conversions and cross-strain state. A
+complete assumed card must still justify nutrient and biomass-composition
+inputs and propagate the dominant transferred-parameter uncertainty.
 
 ## Declared geometry and operation matrix
 

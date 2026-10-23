@@ -15,6 +15,13 @@ SOURCE = {
     "strain": "Nannochloropsis sp. CCAP 211/78",
     "conditions": "lab-scale ProviAPT flat panel; 20 mm light path; not outdoor AlgaePARC tubes",
 }
+RELATIVE_SOURCE = {
+    "doi": "10.3390/app12125776",
+    "author_copy_sha256": "7b75969c6ffa680a6a29d5ddeb98c4161c0529fe4b1162975dba4b1ddff38b89",
+    "locator": "Lima et al. (2022), Eq. 1, Eq. 5, Eq. 10, Table 2",
+    "strain": "Nannochloropsis gaditana (different species from C1 CCAP 211/78)",
+    "conditions": "25 degC laboratory batch; 4 mm quasi-isoactinic and 15/30 mm flat panels, 35.5 mm annulus; artificial light",
+}
 
 # Only quantities with a justified exact symbol conversion enter this table.
 # Their state remains candidate: Table 5 validation is not C1 qualification.
@@ -27,6 +34,19 @@ CANDIDATES = {
               "transfer": "same strain; outdoor temperature varies"},
     "T_max": {"value": 30.03 + 273.15, "unit": "K", "original": "30.03 degC",
               "transfer": "same strain; above the cited training range"},
+}
+
+# These are model-form-compatible values from a related Nannochloropsis species,
+# not CCAP 211/78 measurements. The two k_X values are separate fitted reactor
+# outcomes, not a confidence interval or calibrated C1 value. Eq. 1 uses exp.
+RELATIVE_CANDIDATES = {
+    "K_I": {"value": 15.28, "unit": "umol m^-2 s^-1", "original": "15.28 uE s^-1 m^-2",
+            "transfer": "same Monod incident-light form; different species, 25 degC artificial light and outdoor tube optics"},
+    "k_d": {"value": 0.0046, "unit": "h^-1", "original": "0.0046 h^-1",
+            "transfer": "same first-order loss placement in Eq. 5; different species and batch operation"},
+    "k_X": {"value": 200.0, "range": [200.0, 380.0], "unit": "m^2 kg^-1",
+            "original": "0.20 annular / 0.38 flat m^2 g^-1; multiply by 1000",
+            "transfer": "same exponential Beer-Lambert form; fitted attenuation changes with geometry and aggregation"},
 }
 
 # The source light law has an optimum, while the 170 PBR accepts Monod K_I.
@@ -42,13 +62,18 @@ def build_audit() -> dict:
     return {
         "status": "assumed candidate inputs; incomplete; no C1 prediction or qualification",
         "source": SOURCE,
+        "relative_source": RELATIVE_SOURCE,
         "form_proposal": {"light": "light.monod", "temperature": "temperature.ctmi",
                           "nutrients": ["nutrient.monod"], "loss": "loss.first_order",
                           "stoichiometry": "stoich.photoautotrophic"},
         "candidates": {symbol: {**row, "state": "candidate", "source_locator": SOURCE["locator"]}
                        for symbol, row in CANDIDATES.items()},
+        "relative_candidates": {
+            symbol: {**row, "state": "candidate; cross-strain transfer", "source_locator": RELATIVE_SOURCE["locator"]}
+            for symbol, row in RELATIVE_CANDIDATES.items()
+        },
         "nontransferable": NONTRANSFERABLE,
-        "missing_for_170": MISSING_170,
+        "missing_for_170": tuple(symbol for symbol in MISSING_170 if symbol not in RELATIVE_CANDIDATES),
     }
 
 
