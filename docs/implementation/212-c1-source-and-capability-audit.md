@@ -67,4 +67,20 @@ A further [2025 primary study of CCAP 211/78 kinetics](https://doi.org/10.1016/j
 
 ## Bounded next experiment
 
-The publisher page exposes no supplementary file in the checked article view, and a bounded repository search did not locate day-level C1 data; absence has not been proven. Search the original AlgaePARC campaign for day-level light, temperature, dilution and harvested biomass and primary CCAP 211/78 kinetics with matching growth conditions. If complete time-aligned data and a source-verified card are unavailable, run a clearly labelled T2 optical/layout sensitivity case on a declared proxy profile, then publish a **qualified inconclusive** productivity comparison. The first numerical check must preserve the two separate volume/area conventions and report the residuals above. No new physics is justified by this audit alone.
+The publisher page exposes no supplementary file in the checked article view, and a bounded repository search did not locate day-level C1 data; absence has not been proven. Search the original AlgaePARC campaign for day-level light, temperature, dilution and harvested biomass and primary CCAP 211/78 kinetics with matching growth conditions. No new physics is justified by this audit alone.
+
+### Reproducible existing-model exercise
+
+[`c1_proxy_optics.py`](../../scripts/qualification/212/c1_proxy_optics.py) runs the existing `optics_t2.v1` kernel on **one synthetic daylight condition**, while reproducing the S01 geometry and denominator arithmetic independently of the optical model. Run from `backend/` with `PYTHONPATH=. uv run --with numpy python ../scripts/qualification/212/c1_proxy_optics.py`. The script was run on 23 October 2026 with CPython 3.11.16 and NumPy supplied by `uv`; the JSON output includes the exact layout digests.
+
+Source inputs are the 46 mm inner diameter, 3/7 × 80 m loops, total volumes, illuminated shares, ground areas and two observed productivities listed above. The 50 mm outer diameter, 50 mm free tube clearance and 400 mm tube-bottom height have only the secondary S22 access described above. The **3-across × 1-layer horizontal and 1-across × 7-layer fence cross-sections are assumptions**, not established as-built tube arrays: loop count alone does not establish cross-section count. The 45° sun elevation, 90° sun azimuth, 700/100 µmol m⁻² s⁻¹ direct/diffuse PAR, north-south tube axis, 1.49/1.33 refractive indices and 0.2 ground albedo are all sensitivity assumptions. Pitch is 0.10 m, tube-centre height is 0.425 m. There is no 2013 weather, harvest schedule, CCAP 211/78 card, temperature trace or measured array azimuth in this exercise.
+
+| Existing T2 output, one condition | Horizontal proxy | Fence proxy | Meaning |
+| --- | ---: | ---: | --- |
+| Intercepted PAR, µmol s⁻¹ m⁻¹ per tube | 50.3336 | 49.8004 | Model output under assumed condition |
+| Transmitted PAR, same units | 46.4724 | 45.9893 | Model output; both below intercepted PAR |
+| Equivalent thin-limit PAR, µmol m⁻² s⁻¹ | 1101.3223 | 1089.0296 | Model output; **not** a 36-day mean |
+| Cylinder minus reported illuminated volume, m³ | −0.00994 | +0.17807 | S01 geometry/denominator residual, preserved |
+| Volumetric minus areal implied biomass, g/day | +37.3 | +2.8 | S01 observation denominator residual, preserved |
+
+The proxy produces a lower per-tube light field for the assumed fence cross-section at this one sun angle. It cannot predict biomass or explain the observed higher fence ground areal yield. Different arrays, azimuths, weather and operations could change that direction. No predicted ground areal or volumetric productivity is reported, so prediction-minus-S01 discrepancy remains **not computable** for both layouts. This is a qualified inconclusive C1 result, with the first discriminating measurement being time-aligned 2013 DNI/DHI, culture temperature, dilution/harvest and observed biomass, plus a primary-source CCAP 211/78 parameter card and verified as-built cross-sections. A model run with synthetic inputs must remain unqualified even if it converges.
