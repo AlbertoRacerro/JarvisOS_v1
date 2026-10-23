@@ -2,7 +2,7 @@
 
 Status: canonical intake register; **not implementation authority**  
 Created: 2026-08-19  
-Last audit update: 2026-10-20
+Last audit update: 2026-10-23
 Owner: repository maintainer
 
 This is the compact canonical register for external projects, papers, products, repositories, architectural patterns, engineering ideas, hardware concepts and other material that may be useful to JarvisOS, BLUECAD or BlueRev.
@@ -142,6 +142,7 @@ Value grades: `S`, `A`, `B`, `C`, `D`; grade is reference/integration value, not
 | REF-080 | Aurelius personal organization project | academic planning interoperability | CONCEPT | B | PARKED | founder reports prior university planning use, but current repository/API/ownership is inaccessible in the bounded audit. Reuse Development Roadmap UI/time-zone patterns only after observing the real routine; preserve one personal source of truth. [Feasibility note](implementation/personal-operations-aurelius-feasibility-2026-10-15.md). No implementation authority. |
 | REF-081 | Vercel agent skills, Microsoft Playwright CLI, Anthropic Skill Creator and community CAD skills | Relay development harness | CODE-FIRST | B | PROMOTED | [Pinned six-source audit](agent-skills/AUDIT.md) selected two small, explicitly invoked repo-owned Relay skills; direct installer/global setup and broad CAD skill were declined. Product Hermes remains outside this adoption. |
 | REF-082 | Agent Relay 0.7.7 output-parser reliability | repository-development harness | CODE-FIRST | B | AUDITED | [Issue-847 live-host audit and bounded repair](implementation/relay-847-incident.md): GIL-holding quadratic error-detector regex after completed image-bearing turns; exact-version/source-guarded local launcher plus upstream patch, Apache-2.0 source inspected from verified PyPI sdist. No external repository vendoring, mission-supervisor authority, product provider behavior, or spec-201 readiness implied. |
+| REF-083 | de Vree et al. 2015 AlgaePARC C1 tubular comparison | BlueRev scientific qualification | DOCS-FIRST | A | PROMOTED | [Spec 212](specs/212-bluerev-c1-tubular-replication.md) pins the primary publisher paper's horizontal/fence geometry and 36-day summer observations as a bounded comparison case. Its systems differ in volume, area, dilution and service configuration, so the paper cannot isolate orientation or supply all model coefficients; S22 publisher full text remains inaccessible. No code or parameter set is adopted from the paper. |
 
 ---
 
