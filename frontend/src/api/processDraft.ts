@@ -321,6 +321,8 @@ export type StreamResult = {
 export type MaterializationDiff = { path: string; expected: unknown; actual: unknown };
 export type DraftRun = {
   run_id: string;
+  retry_of?: string;
+  retry_settings_diff?: SettingsDiffRow[];
   outcome?: RunOutcome;
   action: "validate" | "run";
   status: string;
@@ -467,6 +469,45 @@ export const executeDraft = (workspaceId: string, draftId: string, revision: str
   post<{ run: DraftRun; draft: DraftProjection }>(
     `${draftPath(workspaceId, draftId)}/revisions/${encodeURIComponent(revision)}/${action}`,
   );
+// Spec 210: background solves with a live iteration log, safe stop, retry and comparison.
+export type SettingsDiffRow = { key: string; a: unknown; b: unknown };
+export type SolveEvent = {
+  seq: number; emitted_at: string; iteration: number; method?: string; omega?: number;
+  max_normalized_residual: number | null; worst_tear?: string; worst_field?: string;
+  q_hat?: number | null; q_hat_stable?: number | null; classification?: string;
+  estimated_error_normalized?: number | null; estimate_valid?: boolean; events?: string[]; non_finite?: string;
+};
+export type SolveState = "running" | "stopping" | "finished" | "failed" | "interrupted";
+export type SolveStatus = {
+  run_id: string; draft_id: string; draft_revision: string; state: SolveState; live: boolean;
+  started_at: string; finished_at?: string; stop_requested_at?: string; status?: string; reason?: string | null;
+  message?: string; iterations_observable: boolean; solver?: Record<string, unknown> | null;
+  retry_of?: string; retry_settings_diff?: SettingsDiffRow[]; events_truncated?: boolean;
+  events: SolveEvent[]; cursor: number; stop?: "requested" | "noop";
+};
+export type ComparisonSide = {
+  run_id: string; draft_revision: string; document_sha256: string; started_at: string; status: string; outcome: RunOutcome;
+  reason?: string | null; method?: string | null; iterations: number; final_max_normalized_residual: number | null;
+  results_label: string; retry_of?: string | null; residuals: { iteration: number; max_normalized_residual: number | null }[];
+};
+export type RunComparison = {
+  a: ComparisonSide; b: ComparisonSide; same_revision: boolean; process_content_differs: boolean;
+  process_content_digests: [string, string];
+  settings_diff: SettingsDiffRow[]; only_in_a: string[]; only_in_b: string[];
+  streams: { stream: string; fields: { field: string; unit: string; a: number | null; b: number | null; delta: number | null }[] }[];
+};
+export const startSolve = (workspaceId: string, draftId: string, revision: string, retryOf?: string) =>
+  post<SolveStatus>(`${draftPath(workspaceId, draftId)}/solves`, { revision, ...(retryOf ? { retry_of: retryOf } : {}) });
+export const getSolve = (workspaceId: string, draftId: string, runId: string, after = 0) =>
+  request<SolveStatus>(`${draftPath(workspaceId, draftId)}/solves/${encodeURIComponent(runId)}?after=${after}`);
+export const stopSolve = (workspaceId: string, draftId: string, runId: string) =>
+  post<SolveStatus>(`${draftPath(workspaceId, draftId)}/solves/${encodeURIComponent(runId)}/stop`);
+export const listSolves = (workspaceId: string, draftId: string) =>
+  request<Omit<SolveStatus, "events" | "cursor" | "live">[]>(`${draftPath(workspaceId, draftId)}/solves`);
+export const listDraftRuns = (workspaceId: string, draftId: string) =>
+  request<Pick<DraftRun, "run_id" | "action" | "status" | "draft_revision" | "started_at" | "outcome">[]>(`${draftPath(workspaceId, draftId)}/runs`);
+export const compareRuns = (workspaceId: string, draftId: string, a: string, b: string) =>
+  request<RunComparison>(`${draftPath(workspaceId, draftId)}/compare?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}`);
 export const getDraftRun = (workspaceId: string, draftId: string, runId: string) =>
   request<DraftRun>(`${draftPath(workspaceId, draftId)}/runs/${encodeURIComponent(runId)}`);
 export const getRunResults = (workspaceId: string, draftId: string, runId: string) =>

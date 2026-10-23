@@ -13,6 +13,7 @@ import json
 import math
 import os
 import re
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
@@ -1689,7 +1690,23 @@ def _endpoint_tag(view: dict[str, Any], endpoint: dict[str, Any] | None) -> str 
 
 def execute(workspace_id: str, draft_id: str, revision: str, action: str) -> dict[str, Any]:
     """Compile the exact revision into DWSIM; validate, or solve only after a verified materialization."""
-    from app.modules.process_stack import draft_compiler, editor, mixed, mixed_runtime
+    return perform(prepare(workspace_id, draft_id, revision, action))
+
+
+@dataclass
+class PreparedRun:
+    """A refused-early, ready-to-perform draft run: typed refusals happen before any run is recorded."""
+
+    workspace_id: str
+    draft_id: str
+    directory: Path
+    record: dict[str, Any]
+    client: Any
+    run: dict[str, Any]
+
+
+def prepare(workspace_id: str, draft_id: str, revision: str, action: str) -> PreparedRun:
+    from app.modules.process_stack import draft_compiler, editor
 
     if action not in {"validate", "run"}:
         raise DraftError("action_invalid", "action must be validate or run")
@@ -1719,12 +1736,24 @@ def execute(workspace_id: str, draft_id: str, revision: str, action: str) -> dic
                            "draft_document_sha256": record["document_sha256"],
                            "compiler_version": COMPILER_VERSION, "dwsim_version": dwsim_version,
                            "mcp_sha256": mcp_sha256, "started_at": started}
+    return PreparedRun(workspace_id, draft_id, directory, record, client, run)
+
+
+def perform(prepared: PreparedRun, observer: Any = None) -> dict[str, Any]:
+    """Run a prepared draft run and record it; ``observer`` sees each tear iteration as it happens (spec 210)."""
+    from app.modules.process_stack import draft_compiler, mixed, mixed_runtime
+
+    workspace_id, draft_id, directory = prepared.workspace_id, prepared.draft_id, prepared.directory
+    record, client, run = prepared.record, prepared.client, prepared.run
+    action, revision, run_id = run["action"], run["draft_revision"], run["run_id"]
+    dwsim_version, mcp_sha256 = run["dwsim_version"], run["mcp_sha256"]
     try:
         with client:
             if mixed.needs_mixed_solve(record["document"]):
                 outcome = mixed_runtime.run(record["document"], action=action, client=client,
                                             dwsim_version=dwsim_version, mcp_sha256=mcp_sha256,
-                                            run_dir=runs_dir(directory) / run_id, workspace_id=workspace_id)
+                                            run_dir=runs_dir(directory) / run_id, workspace_id=workspace_id,
+                                            observer=observer)
             else:
                 outcome = draft_compiler.materialize(
                     record["document"], action=action, client=client, dwsim_version=dwsim_version,

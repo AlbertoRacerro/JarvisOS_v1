@@ -17,6 +17,7 @@ import QuantityInput from "../components/process/QuantityInput";
 import { ownerLabel, ownerShort } from "../components/process/processOwners";
 import { failureTouchesUnit } from "../components/process/pbrLogic";
 import ResultProperties from "../components/process/ResultProperties";
+import { RunComparisonPanel, SettingsDiff, SolverConsole } from "../components/process/SolverConsole";
 import { ObjectResults, OutcomeDetails, ResultsWorkspace, RunStateIndicator, runState } from "../components/process/RunResults";
 import { useFlowsheetViewport, ZOOM_MAX, ZOOM_MIN } from "../components/process/useFlowsheetViewport";
 import { ContextMenu, MenuButton, useContextMenu } from "../components/ui/ContextMenu";
@@ -31,13 +32,17 @@ import {
   getDraftRegistry,
   getDraftRun,
   getRunResults,
+  getSolve,
   listDraftRevisions,
+  listSolves,
   listDrafts,
   modeKey,
   modeLabel,
   optionLabel,
   optionValue,
   patchDraft,
+  startSolve,
+  stopSolve,
   restoreDraftRevision,
   unitLabel,
   type DraftReaction,
@@ -47,6 +52,8 @@ import {
   type DraftQuantity,
   type DraftRegistry,
   type DraftRun,
+  type SolveEvent,
+  type SolveStatus,
   type DraftSummary,
   type Finding,
   type OptionValue,
@@ -230,6 +237,8 @@ export default function ProcessDraftEditor({ workspaceId, navigate }: Readonly<{
   const [notice, setNotice] = useState<Notice>(null);
   const [busy, setBusy] = useState<"validate" | "run" | null>(null);
   const [lastRun, setLastRun] = useState<DraftRun | null>(null);
+  const [solve, setSolve] = useState<SolveStatus | null>(null);
+  const [solveEvents, setSolveEvents] = useState<SolveEvent[]>([]);
   const [solvedRun, setSolvedRun] = useState<DraftRun | null>(null);
   const [resultsView, setResultsView] = useState<ResultsView | null>(null);
   const [setupOpen, setSetupOpen] = useState(false);
@@ -276,6 +285,8 @@ export default function ProcessDraftEditor({ workspaceId, navigate }: Readonly<{
     setDraft(null);
     setLastRun(null);
     setSolvedRun(null);
+    setSolve(null);
+    setSolveEvents([]);
     void (async () => {
       try {
         const [reg, rows] = await Promise.all([getDraftRegistry(workspaceId), listDrafts(workspaceId)]);
@@ -602,10 +613,103 @@ export default function ProcessDraftEditor({ workspaceId, navigate }: Readonly<{
     void apply([{ op: "add_stream", id, tag, stream_type: streamType, ...spot }]).then(() => setSelectedId(id));
   };
 
-  const act = async (action: "validate" | "run", revision?: string) => {
+  // Reattach to the latest solve of this draft after a page reload, including recorded histories.
+  const draftIdForSolve = draft?.draft_id;
+  useEffect(() => {
+    if (!draftIdForSolve) return;
+    let live = true;
+    void listSolves(workspaceId, draftIdForSolve).then(async (rows) => {
+      const latest = rows[0];
+      if (!live || !latest) return;
+      let cursor = 0;
+      const history: SolveEvent[] = [];
+      let snapshot: SolveStatus;
+      do {
+        snapshot = await getSolve(workspaceId, draftIdForSolve, latest.run_id, cursor);
+        history.push(...snapshot.events);
+        cursor = snapshot.cursor;
+      } while (live && !snapshot.live && snapshot.events.length === 500);
+      if (!live) return;
+      setSolveEvents(history);
+      setSolve({ ...snapshot, events: [], cursor });
+      if (snapshot.live) setBusy("run");
+    }).catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [draftIdForSolve, workspaceId]);
+
+  const solveId = solve?.run_id;
+  const solveLive = solve?.live ?? false;
+  useEffect(() => {
+    if (!draftIdForSolve || !solveId || !solveLive) return;
+    let cancelled = false;
+    let cursor = solve?.cursor ?? 0;
+    let timer = 0;
+    const poll = async () => {
+      try {
+        const next = await getSolve(workspaceId, draftIdForSolve, solveId, cursor);
+        if (cancelled) return;
+        cursor = next.cursor;
+        if (next.events.length) setSolveEvents((current) => [...current, ...next.events]);
+        setSolve((current) => (current && current.run_id === next.run_id ? { ...next, events: [] } : current));
+        if (next.live) {
+          timer = window.setTimeout(() => void poll(), 400);
+          return;
+        }
+        setBusy(null);
+        if (next.state === "finished" || next.state === "failed") {
+          const run = await getDraftRun(workspaceId, draftIdForSolve, solveId).catch(() => null);
+          if (cancelled) return;
+          if (run) {
+            setLastRun(run);
+            if (run.outcome?.state === "converged") setSolvedRun(run);
+          }
+          await loadDraft(draftIdForSolve).catch(() => undefined);
+        }
+      } catch (cause) {
+        if (!cancelled) timer = window.setTimeout(() => void poll(), 1500);
+      }
+    };
+    void poll();
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [draftIdForSolve, solveId, solveLive, workspaceId, loadDraft]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const requestStop = () => {
+    if (!draft || !solve) return;
+    void stopSolve(workspaceId, draft.draft_id, solve.run_id)
+      .then((next) => setSolve((current) => (current && current.run_id === next.run_id ? { ...current, state: next.state } : current)))
+      .catch((cause) => setNotice({ tone: "danger", text: errorText(cause) }));
+  };
+
+  const act = async (action: "validate" | "run", revision?: string, retryOf?: string) => {
     if (!draft) return;
     setBusy(action);
     setNotice(null);
+    if (action === "run") {
+      // Spec 210: a Run is a background solve whose iterations are followed live in the solver console.
+      try {
+        const started = await startSolve(workspaceId, draft.draft_id, revision ?? draft.revision, retryOf);
+        setSolveEvents(started.events);
+        setSolve(started);
+        if (!started.live) {
+          setBusy(null);
+          const run = await getDraftRun(workspaceId, draft.draft_id, started.run_id).catch(() => null);
+          if (run) {
+            setLastRun(run);
+            if (run.outcome?.state === "converged") setSolvedRun(run);
+          }
+          await loadDraft(draft.draft_id).catch(() => undefined);
+        }
+      } catch (cause) {
+        setNotice({ tone: "danger", text: errorText(cause) });
+        setBusy(null);
+      }
+      return;
+    }
     try {
       const result = await executeDraft(workspaceId, draft.draft_id, revision ?? draft.revision, action);
       setLastRun(result.run);
@@ -1215,6 +1319,14 @@ export default function ProcessDraftEditor({ workspaceId, navigate }: Readonly<{
         <span>status {run.status.replace(/_/g, " ")} · revision {run.draft_revision.split(":")[0]} · {run.compile_seconds ?? "—"} s</span>
       </header>
       {run.outcome && <OutcomeDetails outcome={run.outcome} />}
+      {run.retry_of && <SettingsDiff rows={run.retry_settings_diff ?? []} caption={`Retry of run ${run.retry_of.slice(0, 8)}`} />}
+      {run.action === "run" && (
+        <div className="draft-solver-actions">
+          <button type="button" disabled={busy !== null || blockers.length > 0}
+            title="Solve the current revision again, linked to this run; change solver settings in Setup first to retry with them"
+            onClick={() => void act("run", undefined, run.run_id)}>Retry on current revision</button>
+        </div>
+      )}
       {run.mixed_solve && run.action === "run" && (
         <section className="draft-mixed-summary" aria-label="Mixed solve summary">
           <p role="status">
@@ -1391,7 +1503,14 @@ export default function ProcessDraftEditor({ workspaceId, navigate }: Readonly<{
           {results.state === "none" ? "No results" : results.state === "current" ? "Results current" : `Results stale (${results.edits_since} edits)`}
         </span>
         <details className="draft-secondary"><summary>More controls</summary>
-          <label className="draft-field draft-field--inline"><span>Draft</span><select aria-label="Process draft" value={draft.draft_id} onChange={(event) => void loadDraft(event.target.value)}>
+          <label className="draft-field draft-field--inline"><span>Draft</span><select aria-label="Process draft" value={draft.draft_id} onChange={(event) => {
+            setSolve(null);
+            setSolveEvents([]);
+            setLastRun(null);
+            setSolvedRun(null);
+            setBusy(null);
+            void loadDraft(event.target.value);
+          }}>
             {drafts.map((row) => (<option key={row.draft_id} value={row.draft_id}>{row.name}</option>))}
           </select></label>
           <button type="button" onClick={() => void createDraft(workspaceId, `Process draft ${drafts.length + 1}`).then((created) => { accept(created); setDrafts((rows) => [{ draft_id: created.draft_id, name: created.name, revision: created.revision, updated_at: "" }, ...rows]); })}>New draft</button>
@@ -1498,7 +1617,9 @@ export default function ProcessDraftEditor({ workspaceId, navigate }: Readonly<{
               ))}
             </ul>
           </section>
-          {lastRun && renderRun(lastRun)}
+          {solve && <SolverConsole solve={solve} events={solveEvents} onStop={requestStop} />}
+          {lastRun && (!solve || !solve.live) && renderRun(lastRun)}
+          <RunComparisonPanel key={draft.draft_id} workspaceId={workspaceId} draftId={draft.draft_id} refreshKey={lastRun?.run_id ?? ""} />
           {renderResults()}
           {revisions && (
             <section className="draft-history" aria-label="Revision history">

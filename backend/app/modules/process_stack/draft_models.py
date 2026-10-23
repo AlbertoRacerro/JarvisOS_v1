@@ -721,6 +721,13 @@ class RestoreRequest(BaseModel):
     source_revision: str
 
 
+class SolveRequest(BaseModel):
+    """Start a background solve of an exact revision (spec 210); ``retry_of`` links it to a parent run."""
+
+    revision: str = Field(min_length=1, max_length=128)
+    retry_of: str | None = Field(default=None, pattern=r"^[a-f0-9]{32}$")
+
+
 class ProposedChange(BaseModel):
     target: str = Field(min_length=1, max_length=32)
     property: str = Field(min_length=1, max_length=40)
