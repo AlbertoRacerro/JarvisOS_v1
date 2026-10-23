@@ -1,8 +1,10 @@
-# Spec 215 C1 prediction — input and assumed-card checkpoints
+# Spec 215 C1 declared-assumption prediction — inputs, band and verdict
 
 Status: pinned inputs, an assumed screening card, a central run and the
-declared-assumption uncertainty band with a **proposed** spec 212 verdict
-(below), pending exact-head semantic review. Every prediction uses surrogate
+declared-assumption uncertainty band with a spec 212 verdict (below). The
+exact-head semantic review changed predicted productivity from harvest-only to
+net production (harvest plus inventory change) and reran the pinned band; the
+verdict did not change. Every prediction uses surrogate
 forcing and an assumed / not qualified card; nothing is *validated*. The
 qualified-inconclusive [spec 212](212-c1-source-and-capability-audit.md)
 residuals stay visible.
@@ -265,8 +267,11 @@ run of both layouts through the real owners. It uses the assumed 169 card, the
 172 pumped culture loop: pump → PBR → dark holdup tank → harvest splitter → feed
 mixer. The PBR holds the calculated tube-cylinder volume; the tank holds the
 rest of S01's working volume. The feed is set to S01's dilution of the working
-volume. Productivity is the harvested biomass over the window, divided by
-ground area or working volume as S01 reports it.
+volume. Productivity is the net biomass produced over the window — harvested
+biomass plus the change in loop inventory — divided by ground area or working
+volume as S01 reports it. Counting harvest alone would let the assumed initial
+inventory wash out into the prediction, or hold growth back in it; the
+harvest-only value is kept beside it as `harvest_only_areal_g_m2_day`.
 
 The central choices are the median-PAR window, 25 °C, 0° azimuth, the 3×1 and
 1×7 cross-sections, 1.0 kg m⁻³ initial biomass and a nutrient-replete
@@ -275,8 +280,8 @@ its known/assumed/scenario state. None was chosen from the C1 observations.
 
 | Layout | Predicted areal (g m⁻² d⁻¹) | Observed areal | Predicted volumetric (g L⁻¹ d⁻¹) | Observed volumetric | Minimum PBR N (kg m⁻³) |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Horizontal | 13.29 | 12.1 | 0.641 | 0.65 | 0.304 |
-| Fence | 27.80 | 19.4 | 0.813 | 0.57 | 0.268 |
+| Horizontal | 14.11 | 12.1 | 0.680 | 0.65 | 0.304 |
+| Fence | 29.55 | 19.4 | 0.864 | 0.57 | 0.268 |
 
 The full 36-day run took about 85 s for both layouts, with a relative biomass
 balance residual below 10⁻¹². Nitrogen stays about 300 times above the
@@ -286,7 +291,7 @@ snapshot digests carry workspace-local identifiers. `summary_digest` therefore
 hashes the output without run-local identifiers or the round-off-level balance
 residual, with floats rounded to nine significant digits. Two independent fresh
 runs gave the summary digest
-`106313442bff802738da99ef6f6cc9c8ba42834cff4f7b6413359263add7c699`; the 15-minute
+`16cd2450156b2876e67e8e9fd4965b03a42dfecd3a5e4178e9f864881523819f`; the 15-minute
 profile digest was
 `sha256:bd3ab32a914ea2c23939e093a993795233b341748f1c518ba60d19b7685bf709`.
 
@@ -297,7 +302,8 @@ its central prediction is sensitive to the assumed stacked 1×7 module and
 `k_X`. The sensitivity analysis and seeded Monte Carlo must cover these before
 any spec 212 verdict is stated. A focused offline test runs a 2-day truncation
 of both layouts. It checks the labels, the volume and dilution mapping, the
-denominator identity, nitrogen sufficiency and the biomass balance.
+net-production and denominator identities, nitrogen sufficiency and the biomass
+balance.
 
 ## Declared-assumption uncertainty band
 
@@ -308,7 +314,7 @@ as the central run, in its own temporary data root. Overrides enter only
 through `run_central(..., overrides=...)`: card symbols go through a new 169
 card revision whose manifest records each replacement, and geometry and
 operation values go through the PBR and tank parameters. With no overrides
-the central case reproduces summary digest `106313442bff…c699` exactly.
+the central case reproduces summary digest `16cd2450156b…819f` exactly.
 
 | Input | OAT levels around central | Monte Carlo law | State |
 | --- | --- | --- | --- |
@@ -327,7 +333,7 @@ the central case reproduces summary digest `106313442bff…c699` exactly.
 No range was chosen from, or adjusted after seeing, the C1 observations.
 `band_results.json` pins every case's draw, per-layout outputs and run summary
 digest. The band summary digest is
-`d42f35ed3bcce26f1b6570e03d9a8da2a6986be6aae6ae12b254de2539c15f6b`
+`a8106aff909b051eabdd5937a9b561bc14dbec72fd21e67ff8c950996ef2e881`
 (floats at six significant digits). The full sweep took about 10 minutes
 with 22 parallel workers. Nitrogen never fell below 0.21 kg N m⁻³ in any case,
 so the replete-feed assumption held throughout, and every biomass balance
@@ -342,15 +348,17 @@ do not close against each other in S01 (horizontal +37.3 g d⁻¹, fence
 
 | Layout, convention | Observed | Central | MC median | MC 5–95 % | Observed quantile in MC |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Horizontal, g m⁻² d⁻¹ | 12.1 | 13.29 | 7.46 | 1.59–12.44 | 0.92 |
-| Horizontal, g L⁻¹ d⁻¹ | 0.65 | 0.641 | 0.360 | 0.077–0.600 | 0.98 |
-| Fence, g m⁻² d⁻¹ | 19.4 | 27.80 | 13.00 | 2.92–21.36 | 0.83 |
-| Fence, g L⁻¹ d⁻¹ | 0.57 | 0.813 | 0.380 | 0.085–0.625 | 0.83 |
+| Horizontal, g m⁻² d⁻¹ | 12.1 | 14.11 | 7.42 | 0.81–13.14 | 0.91 |
+| Horizontal, g L⁻¹ d⁻¹ | 0.65 | 0.680 | 0.358 | 0.039–0.634 | 0.97 |
+| Fence, g m⁻² d⁻¹ | 19.4 | 29.55 | 13.36 | 1.87–22.61 | 0.77 |
+| Fence, g L⁻¹ d⁻¹ | 0.57 | 0.864 | 0.391 | 0.055–0.661 | 0.77 |
 
-The bands are wide: the 95th percentile is about eight times the 5th. Being
+The bands are wide: the 5th percentile is near zero net production. Being
 inside such a band is weak evidence. Three of the four observations lie inside
 their 5–95 % band, in its upper part. Horizontal volumetric productivity lies
-just above it, at the 98th percentile of the draws. The central run sits above
+just above it, at the 97th percentile of the draws. With 64 draws the 5th and
+95th percentiles are themselves uncertain by a few percentile points, so this
+boundary placement is not sharp. The central run sits above
 the Monte Carlo median because 25 °C is close to the card's 24.5 °C optimum,
 while the sampled ranges mostly move growth down.
 
@@ -361,24 +369,27 @@ g m⁻² d⁻¹; horizontal and volumetric rankings have the same top five.
 
 | Rank | Input | Fence areal OAT range | Horizontal areal OAT range |
 | ---: | --- | ---: | ---: |
-| 1 | Culture temperature | 27.1 | 12.9 |
-| 2 | `k_X` | 12.8 | 6.1 |
-| 3 | `K_I` | 12.1 | 5.7 |
-| 4 | `mu_max` | 11.8 | 5.7 |
-| 5 | `k_d` | 11.1 | 5.7 |
-| 6 | Illuminated volume basis | 5.7 | 0.36 |
-| 7 | Forcing window | 2.8 | 1.4 |
-| 8–11 | Optical module, initial biomass, azimuth, nitrate `K_S` | ≤ 1.5 | ≤ 0.87 |
+| 1 | Culture temperature | 29.8 | 14.3 |
+| 2 | `k_X` | 14.0 | 6.7 |
+| 3 | `K_I` | 13.3 | 6.4 |
+| 4 | `mu_max` | 13.0 | 6.4 |
+| 5 | `k_d` | 12.3 | 6.4 |
+| 6 | Illuminated volume basis | 6.2 | 0.40 |
+| 7 | Forcing window | 2.9 | 1.4 |
+| 8–11 | Optical module, azimuth, initial biomass, nitrate `K_S` | ≤ 1.6 | ≤ 0.23 |
 
 Temperature dominates through the card's CTMI cardinal temperatures: the
-same-strain `T_max` of 30.03 °C makes growth nearly stop at a constant 30 °C
-(fence 0.71 g m⁻² d⁻¹). That reflects the transferred `T_max`, which lies
+same-strain `T_max` of 30.03 °C makes growth nearly stop at a constant 30 °C,
+where loss exceeds growth and net production is slightly negative (fence
+−0.24 g m⁻² d⁻¹; harvest alone would show a spurious +0.71 from washing out
+the initial inventory). That reflects the transferred `T_max`, which lies
 above the 2025 study's training range, together with the constant-temperature
 scenario. It is not evidence about the C1 culture. The four biological
 parameters come next and are each about as strong. The illuminated-volume
 convention matters for the fence (its tube cylinder is 0.18 m³ larger than the
 reported illuminated volume) and hardly for the horizontal layout. Weather
-window, azimuth, optical module and nutrient half-saturation are minor.
+window, azimuth, optical module, initial biomass and nutrient half-saturation
+are minor.
 
 ### Direction check
 
@@ -393,7 +404,7 @@ about evenly, so the volumetric direction is not determinable under the
 declared assumptions. It depends mainly on the illuminated-volume convention
 and on biology shared by both layouts.
 
-### Proposed verdict (pending exact-head semantic review)
+### Verdict
 
 **Partially reproduced, consistent under declared assumptions for three of four
 measures.** The horizontal areal, fence areal and fence volumetric observations

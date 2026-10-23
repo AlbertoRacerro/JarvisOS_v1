@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[2] / "scripts/qualification/215"
 BAND = runpy.run_path(str(ROOT / "band.py"))
 CENTRAL = runpy.run_path(str(ROOT / "central_run.py"))
 PINNED = ROOT / "band_results.json"
-CENTRAL_SUMMARY = "106313442bff802738da99ef6f6cc9c8ba42834cff4f7b6413359263add7c699"
+CENTRAL_SUMMARY = "16cd2450156b2876e67e8e9fd4965b03a42dfecd3a5e4178e9f864881523819f"
 
 
 def test_plan_is_seeded_and_inside_declared_ranges() -> None:

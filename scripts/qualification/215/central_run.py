@@ -227,13 +227,21 @@ def run_central(workspace_id: str, days: float | None = None,
             raise RuntimeError(f"{layout} run failed: {result.error}")
         run_days = (dynamic_engine._stamp(case["end_utc"]) - dynamic_engine._stamp(case["start_utc"])) / 86400.0
         harvest_g = 1000.0 * float(result.series["harvest_X_kg"][-1])
+        # Net production over the window is harvest plus the change in loop
+        # inventory, so the assumed initial biomass does not wash out into, or
+        # hold back, the predicted mean productivity.
+        loop_biomass = result.series["PBR_biomass_kg"]
+        inventory_change_g = 1000.0 * float(loop_biomass[-1] - loop_biomass[0])
+        produced_g = harvest_g + inventory_change_g
         row = LAYOUTS[layout]
         nitrogen = result.series["PBR_N"]
         output["layouts"][layout] = {
             **{key: value for key, value in case.items() if key not in {"start_utc", "end_utc"}},
-            "days": run_days, "harvest_g": harvest_g,
-            "predicted_areal_g_m2_day": harvest_g / row["ground_area_m2"] / run_days,
-            "predicted_volumetric_g_l_day": harvest_g / (1000.0 * row["working_volume_m3"]) / run_days,
+            "days": run_days, "harvest_g": harvest_g, "inventory_change_g": inventory_change_g,
+            "produced_g": produced_g,
+            "predicted_areal_g_m2_day": produced_g / row["ground_area_m2"] / run_days,
+            "predicted_volumetric_g_l_day": produced_g / (1000.0 * row["working_volume_m3"]) / run_days,
+            "harvest_only_areal_g_m2_day": harvest_g / row["ground_area_m2"] / run_days,
             "observed_areal_g_m2_day": row["observed_areal_g_m2_day"],
             "observed_volumetric_g_l_day": row["observed_volumetric_g_l_day"],
             "final_loop_biomass_kg_m3": float(result.series["PBR_X_mean"][-1]),

@@ -28,6 +28,9 @@ def test_central_run_reaches_both_layouts_through_t2_loop_owners() -> None:
         assert math.isclose(row["illuminated_volume_m3"] + row["dark_volume_m3"], row["working_volume_m3"])
         assert math.isclose(row["feed_m3_s"] * 86400 / row["working_volume_m3"], row["dilution_per_day"])
         assert row["harvest_g"] > 0
+        # Net production, not harvest alone, so the assumed start inventory cancels.
+        assert math.isclose(row["produced_g"], row["harvest_g"] + row["inventory_change_g"])
+        assert math.isclose(row["predicted_areal_g_m2_day"] * row["ground_area_m2"] * row["days"], row["produced_g"])
         assert math.isclose(row["predicted_areal_g_m2_day"] * row["ground_area_m2"],
                             row["predicted_volumetric_g_l_day"] * 1000 * row["working_volume_m3"])
         # The nutrient-replete assumption must hold: N stays far above the 4 mg/L nitrate K_S.

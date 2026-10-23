@@ -117,6 +117,7 @@ def run_one(case: dict[str, Any], days: float | None = None) -> dict[str, Any]:
     return {**case, "layouts": {
         name: {key: row[key] for key in (
             "predicted_areal_g_m2_day", "predicted_volumetric_g_l_day", "harvest_g",
+            "inventory_change_g", "produced_g", "harvest_only_areal_g_m2_day",
             "illuminated_volume_m3", "min_pbr_nitrogen_kg_m3", "biomass_residual_rel")}
         for name, row in output["layouts"].items()}, "summary_sha256": output["summary_sha256"]}
 
