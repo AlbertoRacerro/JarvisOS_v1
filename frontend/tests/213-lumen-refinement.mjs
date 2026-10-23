@@ -141,4 +141,14 @@ assert.ok(!renderToStaticMarkup(React.createElement(Rail, { current: "memory", c
 assert.ok(!read("src/pages/Studio.tsx").includes("design-stage__tabs"), "Studio no longer carries its own right-aligned switcher");
 assert.match(read("src/components/Layout.tsx"), /setSidecarOpen\([^)]*route\.id === "design-studio"/, "Jarvis opens by default in Studio");
 
+// ---- Items 3, 4 and 10: workspace scope label, tree -> viewport highlight, solver console reveal ----
+const workbench = read("src/components/bluecad/BluecadWorkbench.tsx");
+assert.ok(workbench.includes('aria-describedby="bluecad-workspace-scope"') && workbench.includes("BlueCad only · Process and Studio keep the app workspace"), "the BlueCad-local workspace scope must be stated");
+const viewer = read("src/components/BluecadGlbViewer.tsx");
+assert.ok(viewer.includes("highlightMesh(meshKey ? meshByKey.get(meshKey) : undefined)") && viewer.includes("clearHighlight();"), "a selected part is highlighted in the viewport and restored on cleanup");
+const projectTree = read("src/components/bluecad/BluecadProjectTree.tsx");
+assert.ok(projectTree.includes('"Highlight in the viewport and inspect"') && projectTree.includes('"Open in the inspector"'), "tree rows must say what activating them does");
+const draftEditor = read("src/stages/ProcessDraftEditor.tsx");
+assert.ok(draftEditor.includes("setRevealRunId(started.run_id);") && draftEditor.includes('id="process-solver-console"') && draftEditor.includes('className="draft-console-link"'), "a Run reveals the solver console and the toolbar links to it");
+
 console.log("213 Lumen refinement: ok");

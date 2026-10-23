@@ -184,3 +184,5 @@
 /* Spec 213: a selected part row mirrors its accent highlight in the viewport. */
 .bluecad-tree__item--level-4 > .bluecad-tree__row.is-selected { box-shadow: inset 3px 0 0 var(--accent-seed); }
 .bluecad-tree__item--level-4 > .bluecad-tree__row.is-selected .bluecad-tree__meta { color: var(--color-accent-foreground); font-weight: 600; }
+/* Spec 213 audit: the navigator workspace is BlueCad-local; say so instead of implying a shared project/version. */
+.bluecad-navigator__toolbar .bluecad-navigator__scope { grid-column: 1 / -1; margin-top: -2px; font-size: var(--font-size-caption); color: var(--color-text-muted); }

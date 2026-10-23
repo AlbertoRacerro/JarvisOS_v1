@@ -242,17 +242,18 @@ export default function ProcessDraftEditor({ workspaceId, navigate }: Readonly<{
   // Spec 213: a Run reveals the live solver console; the toolbar keeps a shortcut to it while a solve exists.
   const solverConsoleRef = useRef<HTMLDivElement>(null);
   const [revealRunId, setRevealRunId] = useState<string | null>(null);
-  const showSolverConsole = useCallback(() => {
+  const showSolverConsole = useCallback((moveFocus: boolean) => {
     const target = solverConsoleRef.current;
     if (!target) return;
     const reduced = typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     target.scrollIntoView({ block: "nearest", behavior: reduced ? "auto" : "smooth" });
-    target.focus({ preventScroll: true });
+    // Revealing on Run leaves focus on the toolbar; the explicit shortcut moves focus to the console.
+    if (moveFocus) target.focus({ preventScroll: true });
   }, []);
   useEffect(() => {
     if (!revealRunId || solve?.run_id !== revealRunId) return;
     setRevealRunId(null);
-    const frame = window.requestAnimationFrame(showSolverConsole);
+    const frame = window.requestAnimationFrame(() => showSolverConsole(false));
     return () => window.cancelAnimationFrame(frame);
   }, [revealRunId, solve?.run_id, showSolverConsole]);
   const [solvedRun, setSolvedRun] = useState<DraftRun | null>(null);
@@ -1519,7 +1520,7 @@ export default function ProcessDraftEditor({ workspaceId, navigate }: Readonly<{
             : "Run"}
         </button>
         {solve && (
-          <button type="button" className="draft-console-link" aria-controls="process-solver-console" onClick={showSolverConsole}>
+          <button type="button" className="draft-console-link" aria-controls="process-solver-console" onClick={() => showSolverConsole(true)}>
             {solve.state === "running" || solve.state === "stopping" ? "Live solver console" : "Solver console"}
           </button>
         )}
