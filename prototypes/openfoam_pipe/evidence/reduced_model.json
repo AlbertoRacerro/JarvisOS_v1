@@ -1,0 +1,76 @@
+{
+  "model_id": "smooth_straight_pipe.darcy_friction.laminar",
+  "status": "prototype (issue #913), not published to Process",
+  "form": "f_D = a * Re**b ; dP/L = f_D * rho * U**2 / (2 * D)",
+  "coefficients": {
+    "a": 63.973108017300554,
+    "b": -0.999989162515243
+  },
+  "reference_form": "Hagen-Poiseuille: a = 64, b = -1",
+  "validity": {
+    "reynolds_min": 100.0,
+    "reynolds_max": 1000.0,
+    "assumptions": [
+      "Newtonian, incompressible, isothermal",
+      "steady laminar flow",
+      "smooth straight circular pipe",
+      "hydrodynamically fully developed section only (entrance pressure loss excluded)"
+    ]
+  },
+  "uncertainty": {
+    "max_abs_rel_error_vs_hagen_poiseuille": 0.00036608564613649364,
+    "max_gci_fine": 0.0006494697791007226,
+    "max_abs_fit_residual": 5.412086401923588e-06
+  },
+  "points": [
+    {
+      "reynolds": 100.0,
+      "darcy_f_cfd": 0.6397657051864727,
+      "darcy_f_hp": 0.64,
+      "rel_error": -0.00036608564613649364
+    },
+    {
+      "reynolds": 250.0,
+      "darcy_f_cfd": 0.25590662561016825,
+      "darcy_f_hp": 0.256,
+      "rel_error": -0.00036474371028027974
+    },
+    {
+      "reynolds": 500.0,
+      "darcy_f_cfd": 0.12795416144833544,
+      "darcy_f_hp": 0.128,
+      "rel_error": -0.0003581136848794797
+    },
+    {
+      "reynolds": 1000.0,
+      "darcy_f_cfd": 0.06397824364959613,
+      "darcy_f_hp": 0.064,
+      "rel_error": -0.0003399429750604588
+    }
+  ],
+  "turbulent_spot_checks": [
+    {
+      "reynolds": 20621.49700598802,
+      "model": "kEpsilon",
+      "darcy_f_cfd_finest": 0.024633522860187204,
+      "blasius_f": 0.02640319161182541,
+      "colebrook_smooth_f": 0.02568989528976807,
+      "note": "outside the validated laminar range; not part of the fitted model"
+    },
+    {
+      "reynolds": 20621.49700598802,
+      "model": "kOmegaSST",
+      "darcy_f_cfd_finest": 0.02602403039282351,
+      "blasius_f": 0.02640319161182541,
+      "colebrook_smooth_f": 0.02568989528976807,
+      "note": "outside the validated laminar range; not part of the fitted model"
+    }
+  ],
+  "provenance": {
+    "openfoam": "OpenFOAM v1912 (ESI), Ubuntu package 1912.200626-2build3",
+    "gmsh_package": "4.12.1+ds1-1.1build2",
+    "python3-gmsh_package": "4.12.1+ds1-1.1build2",
+    "git_head_at_run": "9f304558cf12dfe35363287543c8fc0d68e171ed",
+    "note": "Gmsh is installed and recorded but this prototype meshes with blockMesh (structured wedge)."
+  }
+}

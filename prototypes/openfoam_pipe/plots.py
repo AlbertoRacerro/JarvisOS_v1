@@ -9,8 +9,8 @@ from typing import Any
 
 import numpy as np
 
-SERIES = ("#2a78d6", "#eb6834", "#1baf7a", "#eda100")
-MARKERS = ("o", "s", "^", "D")
+SERIES = ("#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4")
+MARKERS = ("o", "s", "^", "D", "v")
 INK, MUTED, SURFACE = "#0b0b0b", "#898781", "#fcfcfb"
 
 
@@ -73,7 +73,7 @@ def make_plots(results: dict[str, Any], out: Path) -> list[str]:
     written.append("laminar_mesh_convergence.png")
 
     # 3. Friction factor vs Re: CFD vs Hagen–Poiseuille, Blasius, Colebrook.
-    fig, ax = plt.subplots(figsize=(5.6, 3.8))
+    fig, (ax, tx) = plt.subplots(1, 2, figsize=(11, 3.9), gridspec_kw={"width_ratios": [1.2, 1]})
     re_l = np.logspace(np.log10(80), np.log10(2300), 50)
     re_t = np.logspace(np.log10(4e3), 5, 50)
     ax.loglog(re_l, 64 / re_l, color=MUTED, lw=1, ls="--", label="64/Re")
@@ -93,6 +93,31 @@ def make_plots(results: dict[str, Any], out: Path) -> list[str]:
     ax.set_ylabel("Darcy friction factor f")
     ax.set_title("Developed-flow friction factor", color=INK, loc="left")
     ax.legend(fontsize=7.5)
+
+    # Right: the C1 turbulent point at readable scale, against radial resolution.
+    if summary["turbulent"]:
+        ref = summary["turbulent"][0]["reference"]
+        for value, name, ls in ((ref["blasius_f"], "Blasius", ":"), (ref["colebrook_smooth_f"], "Colebrook", "-."),
+                                (ref["mckeon_2005_f"], "McKeon 2005", (0, (1, 3)))):
+            tx.axhline(value, color=MUTED, lw=1, ls=ls)
+            tx.text(160, value, f" {name}", color=MUTED, fontsize=7.5, va="bottom")
+        for t in summary["turbulent"]:
+            n = [cases[m["name"]]["contract"]["mesh"]["radial_cells"] for m in t["meshes"]]
+            f = [m["darcy_f"] for m in t["meshes"]]
+            if t["model"] == "kEpsilon":
+                tx.plot(n, f, ls="none", marker=MARKERS[1], color=SERIES[1], label="k-ε, wall functions (y+≈35)")
+            elif "split" in t["group"]:
+                tx.plot(n, f, ls="none", marker=MARKERS[3], mfc="none", ms=9, color=SERIES[3],
+                        label="SST, radial or axial refined alone")
+            else:
+                tx.plot(n, f, marker=MARKERS[2], color=SERIES[2], label="k-ω SST, y+<1 (r, x refined ×2)")
+        tx.set_xscale("log", base=2)
+        tx.set_xticks([8, 15, 30, 60, 120], labels=["8", "15", "30", "60", "120"])
+        tx.set_xlim(6, 400)
+        tx.set_xlabel("radial cells")
+        tx.set_ylabel("Darcy friction factor f")
+        tx.set_title(f"C1 condition, Re = {summary['turbulent'][0]['reynolds']:.0f}", color=INK, loc="left")
+        tx.legend(fontsize=7.5, loc="lower right")
     fig.tight_layout()
     fig.savefig(out / "friction_factor.png", dpi=130)
     plt.close(fig)
@@ -108,7 +133,7 @@ def make_plots(results: dict[str, Any], out: Path) -> list[str]:
             n_it = cases[name]["result"]["iterations"]
             for i, (var, vals) in enumerate(sorted(hist.items())):
                 x = np.linspace(1, n_it, len(vals))
-                ax.semilogy(x, vals, color=SERIES[i % 4], lw=1.2, label=var)
+                ax.semilogy(x, vals, color=SERIES[i], lw=1.2, label=var)
             ax.set_xlabel("SIMPLE iteration")
             ax.set_ylabel("initial residual")
             ax.set_title(name, color=INK, loc="left")

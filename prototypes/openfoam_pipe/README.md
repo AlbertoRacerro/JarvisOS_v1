@@ -25,7 +25,7 @@ Ubuntu 24.04: `sudo apt-get install openfoam gmsh python3-gmsh` (OpenFOAM v1912 
 Gmsh 4.12.1), then `pip install pydantic numpy matplotlib pyvista pytest`.
 
 ```bash
-# full study (16 cases, ~25 min on 4 cores); writes evidence/results.json, reduced_model.json, plots, VTK
+# full study (20 cases, ~41 min wall on 4 cores; the finest SST mesh alone takes ~40 min); writes evidence/results.json, reduced_model.json, plots, VTK
 python3 -m prototypes.openfoam_pipe --work /tmp/pipe_cases --out prototypes/openfoam_pipe/evidence
 # smoke run (~5 s)
 python3 -m prototypes.openfoam_pipe --work /tmp/pipe_quick --out /tmp/pipe_quick_out --quick
