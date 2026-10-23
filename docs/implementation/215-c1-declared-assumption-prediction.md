@@ -1,9 +1,11 @@
 # Spec 215 C1 prediction — input and assumed-card checkpoints
 
-Status: input preparation and an assumed screening card only. **No biomass
-prediction or C1 verdict has been run.** The full 36-day band report still
-requires dynamic runs and uncertainty analysis. This checkpoint does not change the
-qualified-inconclusive result of [spec 212](212-c1-source-and-capability-audit.md).
+Status: pinned inputs, an assumed screening card, a central run and the
+declared-assumption uncertainty band with a **proposed** spec 212 verdict
+(below), pending exact-head semantic review. Every prediction uses surrogate
+forcing and an assumed / not qualified card; nothing is *validated*. The
+qualified-inconclusive [spec 212](212-c1-source-and-capability-audit.md)
+residuals stay visible.
 
 ## Pinned surrogate forcing
 
@@ -232,9 +234,11 @@ without changing the spec 212 source audit. Its 24 scenarios vary the two
 **assumed** representative cross-sections per layout, three **unmeasured**
 array azimuths (0°, 45°, 90°), and two illuminated-volume conventions. The
 3×1 horizontal and 1×7 fence cross-sections reproduce the spec 212 proxy;
-1×3 and 2×4 are alternative optical modules, not claimed as-built arrays.
-The latter fence alternative contains eight representative tubes, deliberately
-showing that an optical module is not a claim about the seven physical loops.
+1×3 and 2×3 are alternative optical modules, not claimed as-built arrays.
+The fence alternative was first declared as 2×4; the 174 T2 owner refuses a
+representative module with more tubes than the unit's seven loops, so it is
+now 2×3 (two adjacent three-high planes). This change was made before any band
+run and not chosen from C1 observations.
 
 | Layout | Source geometry/operation | Reported illuminated / tube-cylinder volume | S01 observed mass implied by areal / volumetric means |
 | --- | --- | ---: | ---: |
@@ -294,3 +298,142 @@ its central prediction is sensitive to the assumed stacked 1×7 module and
 any spec 212 verdict is stated. A focused offline test runs a 2-day truncation
 of both layouts. It checks the labels, the volume and dilution mapping, the
 denominator identity, nitrogen sufficiency and the biomass balance.
+
+## Declared-assumption uncertainty band
+
+[`band.py`](../../scripts/qualification/215/band.py) runs the central case,
+a one-at-a-time (OAT) sweep and a 64-draw Monte Carlo with seed 215. Each case
+is a full 36-day run of both layouts through the same 169/170/171/172/174 path
+as the central run, in its own temporary data root. Overrides enter only
+through `run_central(..., overrides=...)`: card symbols go through a new 169
+card revision whose manifest records each replacement, and geometry and
+operation values go through the PBR and tank parameters. With no overrides
+the central case reproduces summary digest `106313442bff…c699` exactly.
+
+| Input | OAT levels around central | Monte Carlo law | State |
+| --- | --- | --- | --- |
+| Forcing window | low / high 36-day PAR (central median) | choice of three | scenario; KNMI surrogate |
+| Culture temperature | 20, 30 °C (central 25) | uniform 20–30 °C | assumed constant inside S01's maintained range |
+| Array azimuth | 45°, 90° (central 0°) | choice 0/45/90° | scenario; not reported |
+| Optical module | alternative 1×3 / 2×3 (central 3×1 / 1×7) | choice | assumed, not as-built |
+| Illuminated volume | S01 reported share (central tube cylinder) | choice | S01 convention vs calculated; mapped to an equivalent tube length |
+| `k_X` | 380 m² kg⁻¹ (central 200) | uniform 200–380 | cross-strain fitted bounds (Lima 2022) |
+| `K_I` | 7.64, 30.56 µmol m⁻² s⁻¹ | log-uniform ×½–×2 | **assumed** factor-2 screening range; no source interval |
+| `k_d` | 0.0023, 0.0092 h⁻¹ | log-uniform ×½–×2 | **assumed** factor-2 screening range; no source interval |
+| `mu_max` | ±20 % of 2.50 d⁻¹ | uniform ±20 % | **assumed** screening range around the same-strain value |
+| Initial biomass | 0.5, 2.0 kg m⁻³ | log-uniform | assumed; no aligned initial state |
+| Nitrate `K_S` as N | 0.00045, 0.00136 kg m⁻³ | uniform | cross-strain 4 ± 2 mg NO₃⁻ L⁻¹ converted |
+
+No range was chosen from, or adjusted after seeing, the C1 observations.
+`band_results.json` pins every case's draw, per-layout outputs and run summary
+digest. The band summary digest is
+`d42f35ed3bcce26f1b6570e03d9a8da2a6986be6aae6ae12b254de2539c15f6b`
+(floats at six significant digits). The full sweep took about 10 minutes
+with 22 parallel workers. Nitrogen never fell below 0.21 kg N m⁻³ in any case,
+so the replete-feed assumption held throughout, and every biomass balance
+closed below 10⁻⁹ relative.
+
+### Bands against S01 observations
+
+Both S01 denominator conventions are compared on their own definitions: ground
+areal productivity, and volumetric productivity over the working volume. They
+do not close against each other in S01 (horizontal +37.3 g d⁻¹, fence
++2.8 g d⁻¹), so neither is derived from the other here.
+
+| Layout, convention | Observed | Central | MC median | MC 5–95 % | Observed quantile in MC |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Horizontal, g m⁻² d⁻¹ | 12.1 | 13.29 | 7.46 | 1.59–12.44 | 0.92 |
+| Horizontal, g L⁻¹ d⁻¹ | 0.65 | 0.641 | 0.360 | 0.077–0.600 | 0.98 |
+| Fence, g m⁻² d⁻¹ | 19.4 | 27.80 | 13.00 | 2.92–21.36 | 0.83 |
+| Fence, g L⁻¹ d⁻¹ | 0.57 | 0.813 | 0.380 | 0.085–0.625 | 0.83 |
+
+The bands are wide: the 95th percentile is about eight times the 5th. Being
+inside such a band is weak evidence. Three of the four observations lie inside
+their 5–95 % band, in its upper part. Horizontal volumetric productivity lies
+just above it, at the 98th percentile of the draws. The central run sits above
+the Monte Carlo median because 25 °C is close to the card's 24.5 °C optimum,
+while the sampled ranges mostly move growth down.
+
+### Spread ranking
+
+OAT range (maximum minus minimum over central and levels), fence areal in
+g m⁻² d⁻¹; horizontal and volumetric rankings have the same top five.
+
+| Rank | Input | Fence areal OAT range | Horizontal areal OAT range |
+| ---: | --- | ---: | ---: |
+| 1 | Culture temperature | 27.1 | 12.9 |
+| 2 | `k_X` | 12.8 | 6.1 |
+| 3 | `K_I` | 12.1 | 5.7 |
+| 4 | `mu_max` | 11.8 | 5.7 |
+| 5 | `k_d` | 11.1 | 5.7 |
+| 6 | Illuminated volume basis | 5.7 | 0.36 |
+| 7 | Forcing window | 2.8 | 1.4 |
+| 8–11 | Optical module, initial biomass, azimuth, nitrate `K_S` | ≤ 1.5 | ≤ 0.87 |
+
+Temperature dominates through the card's CTMI cardinal temperatures: the
+same-strain `T_max` of 30.03 °C makes growth nearly stop at a constant 30 °C
+(fence 0.71 g m⁻² d⁻¹). That reflects the transferred `T_max`, which lies
+above the 2025 study's training range, together with the constant-temperature
+scenario. It is not evidence about the C1 culture. The four biological
+parameters come next and are each about as strong. The illuminated-volume
+convention matters for the fence (its tube cylinder is 0.18 m³ larger than the
+reported illuminated volume) and hardly for the horizontal layout. Weather
+window, azimuth, optical module and nutrient half-saturation are minor.
+
+### Direction check
+
+| Measure | Observed | Central | Share of Monte Carlo draws with fence higher |
+| --- | --- | --- | ---: |
+| Ground areal | fence higher | fence higher | 100 % |
+| Volumetric (working volume) | horizontal higher | fence higher | 53 % |
+
+The model reproduces the observed areal direction in every draw. The observed
+volumetric direction is not reproduced at the centre, and the draws split
+about evenly, so the volumetric direction is not determinable under the
+declared assumptions. It depends mainly on the illuminated-volume convention
+and on biology shared by both layouts.
+
+### Proposed verdict (pending exact-head semantic review)
+
+**Partially reproduced, consistent under declared assumptions for three of four
+measures.** The horizontal areal, fence areal and fence volumetric observations
+lie inside the predicted 5–95 % bands, and the areal direction is reproduced.
+Horizontal volumetric productivity lies just above its band, and the
+volumetric direction is not determinable. The bands are wide enough that this
+consistency constrains the model only weakly. It is **not** validation: the
+forcing is surrogate KNMI Deelen weather, the card is assumed / not qualified,
+and the spec 212 denominator and illuminated-volume residuals remain
+unresolved.
+
+### Capability gaps for later C cases
+
+1. **Culture temperature.** No measured culture-temperature trace exists, and
+   the CTMI card with transferred `T_max = 30.03 °C` turns the top of S01's
+   range into a growth cliff. A diurnal culture-temperature model or a
+   measured trace, and a same-strain high-temperature response, are needed.
+2. **Strain-specific light and loss.** `K_I` and `k_d` are cross-strain
+   transfers with assumed factor-2 ranges. The same-strain 2025 light law has
+   an optimum (`I_opt`), which the 170 Monod form cannot represent; a
+   photoinhibition form would be needed to use it.
+3. **Optical attenuation.** `k_X` varies with geometry and aggregation, and
+   its 200–380 m² kg⁻¹ span is the second-largest spread.
+4. **Oxygen inhibition.** S01 removes O₂ actively, but the card has no O₂
+   inhibition, so the model cannot test that operating choice.
+5. **Illuminated-volume convention.** S01's reported illuminated share and
+   the tube geometry differ by 0.18 m³ for the fence; resolving it would narrow
+   the fence volumetric comparison.
+6. **Campaign dates and module geometry.** The 36-day window and the
+   as-built cross-sections are unknown. Both are minor here, but they stay
+   declared scenarios.
+
+None of these gaps blocked the comparison, so no new physics was added.
+
+Reproduce from `backend/`:
+
+    PYTHONPATH=. python ../scripts/qualification/215/band.py --workers 22 \
+        --out ../scripts/qualification/215/band_results.json
+
+[`test_215_band.py`](../../backend/tests/test_215_band.py) checks the seeded
+plan against the declared ranges, the illuminated-volume mapping, the module
+tube-count limit and, offline, that the pinned results reproduce the central
+digest and the band summary digest.

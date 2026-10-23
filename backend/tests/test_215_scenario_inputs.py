@@ -17,7 +17,7 @@ def test_declared_scenarios_preserve_source_residuals() -> None:
     spec.loader.exec_module(module)
     result = module.build_inputs()
 
-    assert result["input_sha256"] == "b838021621d47de18c9008ee0fc5485a17a082ba82dc81c1a9b6c76d3c90dcde"
+    assert result["input_sha256"] == "3aa0b29b0b735c22ae555f3571b3a8f7eed0b805a2fd4aac078dd5e1d02dd8d5"
     assert "no biomass prediction" in result["status"]
     assert len(result["scenarios"]) == 24
     identities = {

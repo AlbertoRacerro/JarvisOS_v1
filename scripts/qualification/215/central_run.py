@@ -60,27 +60,42 @@ def _q(value: float, unit: str) -> dict[str, Any]:
     return {"value": value, "unit": unit}
 
 
-def _case(window: dict, layout: str) -> dict[str, Any]:
+# Card symbols a sensitivity case may override through the 169 owner.
+CARD_KEYS = frozenset({"mu_max", "K_I", "k_d", "k_X", "K_j_0"})
+
+
+def _case(window: dict, layout: str, settings: dict[str, Any]) -> dict[str, Any]:
     row = LAYOUTS[layout]
     tube_volume = math.pi * _INPUTS["TUBE_INNER_DIAMETER_M"] ** 2 / 4 * row["loops"] * row["tube_length_m"]
-    dark_volume = row["working_volume_m3"] - tube_volume
+    basis = settings["illuminated_volume_basis"]
+    if basis == "tube_cylinder":
+        lit_volume = tube_volume
+    elif basis == "reported_illuminated_share":
+        lit_volume = row["working_volume_m3"] * row["illuminated_share"]
+    else:
+        raise ValueError(f"Unknown illuminated-volume basis {basis!r}")
+    # The PBR owner derives its volume from tube geometry, so S01's reported
+    # illuminated volume is mapped onto an equivalent effective tube length.
+    tube_length = row["tube_length_m"] * lit_volume / tube_volume
+    dark_volume = row["working_volume_m3"] - lit_volume
     if dark_volume <= 0:
         raise ValueError("Working volume must exceed the illuminated tube volume")
-    across, layers = CENTRAL["cross_section"][layout]
+    across, layers = settings["cross_section"][layout]
     return {
         "layout": layout, "tubes_across": across, "layers": layers,
-        "tube_count": row["loops"], "tube_length_m": row["tube_length_m"],
-        "illuminated_volume_m3": tube_volume, "dark_volume_m3": dark_volume,
+        "tube_count": row["loops"], "tube_length_m": tube_length,
+        "illuminated_volume_m3": lit_volume, "dark_volume_m3": dark_volume,
         "working_volume_m3": row["working_volume_m3"], "ground_area_m2": row["ground_area_m2"],
         "dilution_per_day": row["dilution_per_day"],
         "feed_m3_s": row["dilution_per_day"] * row["working_volume_m3"] / 86400.0,
-        "circulation_m3_s": CENTRAL["liquid_velocity_m_s"] * row["loops"]
+        "circulation_m3_s": settings["liquid_velocity_m_s"] * row["loops"]
         * math.pi * _INPUTS["TUBE_INNER_DIAMETER_M"] ** 2 / 4,
         "start_utc": window["start_utc"], "end_utc": window["end_utc"],
     }
 
 
-def _ops(case: dict[str, Any], card: dict[str, Any], profile: dict[str, Any]) -> list[Any]:
+def _ops(case: dict[str, Any], card: dict[str, Any], profile: dict[str, Any],
+         settings: dict[str, Any]) -> list[Any]:
     from app.modules.process_stack.draft_models import (
         AddStream,
         AddUnit,
@@ -93,26 +108,26 @@ def _ops(case: dict[str, Any], card: dict[str, Any], profile: dict[str, Any]) ->
         SetUnitParams,
     )
 
-    temperature_k = CENTRAL["culture_temperature_c"] + 273.15
+    temperature_k = settings["culture_temperature_c"] + 273.15
     pbr = {
         "tube_inner_diameter": _q(_INPUTS["TUBE_INNER_DIAMETER_M"], "m"),
         "tube_length": _q(case["tube_length_m"], "m"),
         "tube_count": _q(case["tube_count"], "dimensionless"),
-        "liquid_velocity": _q(CENTRAL["liquid_velocity_m_s"], "m/s"),
+        "liquid_velocity": _q(settings["liquid_velocity_m_s"], "m/s"),
         "pump_efficiency": _q(60.0, "percent"), "baffle_friction_multiplier": _q(1.0, "dimensionless"),
-        "oxygen_kla": _q(CENTRAL["oxygen_kla_per_h"], "1/h"), "oxygen_saturation": _q(8.0, "mg/L"),
+        "oxygen_kla": _q(settings["oxygen_kla_per_h"], "1/h"), "oxygen_saturation": _q(8.0, "mg/L"),
         # T2 drives light from the profile; the T1 sinusoid fields are inert but required.
         "peak_par": _q(1500.0, "umol/(m2.s)"), "photoperiod": _q(12.0, "h"),
         "diffuse_fraction": _q(0.2, "dimensionless"),
-        "temperature_mean": _q(CENTRAL["culture_temperature_c"], "degC"),
+        "temperature_mean": _q(settings["culture_temperature_c"], "degC"),
         "temperature_amplitude": _q(0.0, "K"),
         "tubes_across": _q(case["tubes_across"], "dimensionless"),
         "layers": _q(case["layers"], "dimensionless"),
         "pitch_h": _q(_INPUTS["TUBE_PITCH_M"], "m"), "pitch_v": _q(_INPUTS["TUBE_PITCH_M"], "m"),
-        "stagger_offset": _q(0.0, "m"), "axis_azimuth": _q(CENTRAL["axis_azimuth_deg"], "dimensionless"),
+        "stagger_offset": _q(0.0, "m"), "axis_azimuth": _q(settings["axis_azimuth_deg"], "dimensionless"),
         "centre_height_above_sea": _q(_INPUTS["TUBE_CENTRE_HEIGHT_M"], "m"),
-        "n_wall": _q(CENTRAL["n_wall"], "dimensionless"), "n_water": _q(CENTRAL["n_water"], "dimensionless"),
-        "sea_albedo": _q(CENTRAL["ground_albedo"], "dimensionless"),
+        "n_wall": _q(settings["n_wall"], "dimensionless"), "n_water": _q(settings["n_water"], "dimensionless"),
+        "sea_albedo": _q(settings["ground_albedo"], "dimensionless"),
     }
     ops: list[Any] = [
         SetThermo(op="set_thermo", compounds=["Water"], property_package="NRTL"),
@@ -142,12 +157,12 @@ def _ops(case: dict[str, Any], card: dict[str, Any], profile: dict[str, Any]) ->
                       temperature=_q(temperature_k, "K"), mass_flow=_q(1.0, "kg/s"),
                       composition={"Water": 1.0}, composition_basis="mass"),
         SetStreamCulture(op="set_stream_culture", stream="feed", culture={
-            "biomass": _q(0.0, "kg/m3"), "nitrogen": _q(CENTRAL["feed_nitrogen_kg_n_m3"], "kg/m3"),
-            "oxygen": _q(0.0, "kg/m3"), "salinity": _q(CENTRAL["salinity_g_kg"], "g/kg")}),
+            "biomass": _q(0.0, "kg/m3"), "nitrogen": _q(settings["feed_nitrogen_kg_n_m3"], "kg/m3"),
+            "oxygen": _q(0.0, "kg/m3"), "salinity": _q(settings["salinity_g_kg"], "g/kg")}),
         AddStream(op="add_stream", id="harvest", tag="Harvest", x=300, y=200),
         Connect(op="connect", stream="harvest", end="source", unit="split", port=0),
     ]
-    initial = {"X": CENTRAL["initial_biomass_kg_m3"], "N": CENTRAL["feed_nitrogen_kg_n_m3"], "O2": 0.008}
+    initial = {"X": settings["initial_biomass_kg_m3"], "N": settings["feed_nitrogen_kg_n_m3"], "O2": 0.008}
     ops.append(SetScenario(op="set_scenario", id="run", value={
         "units": ["PBR", "Tank"],
         "profiles": [{"profile_id": profile["profile_id"], "digest": profile["digest"]}],
@@ -159,18 +174,31 @@ def _ops(case: dict[str, Any], card: dict[str, Any], profile: dict[str, Any]) ->
     return ops
 
 
-def run_central(workspace_id: str, days: float | None = None) -> dict[str, Any]:
+def run_central(workspace_id: str, days: float | None = None,
+                overrides: dict[str, Any] | None = None) -> dict[str, Any]:
     """Run both layouts once at the central assumptions and report S01 conventions.
 
     ``days`` truncates the declared 36-day window for fast structural tests only.
+    ``overrides`` replaces declared ``CENTRAL`` or ``CARD_KEYS`` values for the
+    sensitivity band; without it the output is the pinned central run.
     """
     from app.modules.process_stack import draft, dynamic_engine
 
-    card = runpy.run_path(str(HERE / "assumed_card.py"))["create_assumed_card"](workspace_id)
+    overrides = dict(overrides or {})
+    unknown = set(overrides) - set(CENTRAL) - CARD_KEYS
+    if unknown:
+        raise ValueError(f"Undeclared overrides {sorted(unknown)}")
+    settings = {**CENTRAL, **{key: value for key, value in overrides.items() if key in CENTRAL}}
+    card_overrides = {key: value for key, value in overrides.items() if key in CARD_KEYS}
+    card = runpy.run_path(str(HERE / "assumed_card.py"))["create_assumed_card"](workspace_id, card_overrides)
     profile = runpy.run_path(str(HERE / "profile_handoff.py"))["pin_t2_profile"](workspace_id)
+    # Culture temperature is a PBR/tank unit parameter (unit_mean), so any
+    # declared value inside 20-30 C reuses the window's pinned 25 C matrix row.
     window = next(case for case in runpy.run_path(str(HERE / "run_matrix.py"))["build_matrix"]()["cases"]
-                  if case["forcing_window"] == CENTRAL["forcing_window"]
-                  and case["pbr_temperature_mean_k"] == CENTRAL["culture_temperature_c"] + 273.15)
+                  if case["forcing_window"] == settings["forcing_window"]
+                  and case["pbr_temperature_mean_k"] == 25.0 + 273.15)
+    if not 20.0 <= settings["culture_temperature_c"] <= 30.0:
+        raise ValueError("Culture temperature must stay inside S01's reported 20-30 C")
     if days is not None:
         start = datetime.fromisoformat(window["start_utc"].replace("Z", "+00:00"))
         window = {**window, "end_utc": (start + timedelta(days=days)).isoformat().replace("+00:00", "Z")}
@@ -180,15 +208,19 @@ def run_central(workspace_id: str, days: float | None = None) -> dict[str, Any]:
         "labels": ["surrogate forcing: KNMI Deelen, not AlgaePARC measured",
                    "assumed / not qualified CCAP 211/78 card"],
         "central": {key: list(value.items()) if isinstance(value, dict) else value
-                    for key, value in CENTRAL.items()},
+                    for key, value in settings.items()},
         "states": STATES, "card_digest": card["card"]["digest"], "profile_digest": profile["digest"],
         "evaluator": dynamic_engine.EVALUATOR_VERSION, "layouts": {},
     }
+    if overrides:
+        output["status"] = output["status"].replace("central declared-assumption run", "declared sensitivity case")
+        output["overrides"] = {key: list(value.items()) if isinstance(value, dict) else value
+                               for key, value in sorted(overrides.items())}
     for layout in LAYOUTS:
-        case = _case(window, layout)
+        case = _case(window, layout, settings)
         state = draft.create_draft(workspace_id, f"C1 {layout} central declared-assumption run")
         state = draft.patch(workspace_id, state["draft_id"], state["revision"],
-                            _ops(case, card["card"], profile))
+                            _ops(case, card["card"], profile, settings))
         snapshot = dynamic_engine.prepare(workspace_id, state["draft_id"], "run")
         result = dynamic_engine.run(snapshot, cancelled=lambda: False, progress=lambda _value: None)
         if result.status != "succeeded":

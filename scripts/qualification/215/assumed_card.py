@@ -60,11 +60,21 @@ def card_inputs() -> dict:
     }
 
 
-def create_assumed_card(workspace_id: str) -> dict:
-    """Persist candidate values and a pinned card; return the complete input manifest."""
+def create_assumed_card(workspace_id: str, overrides: dict[str, float] | None = None) -> dict:
+    """Persist candidate values and a pinned card; return the complete input manifest.
+
+    ``overrides`` replaces declared sensitivity values (card symbols or ``mu_max``)
+    and records each replacement in the manifest; it never fits C1 observations.
+    """
     from app.modules.bio_models import service
 
     manifest = card_inputs()
+    for symbol, value in (overrides or {}).items():
+        row = manifest["mu_max"] if symbol == "mu_max" else manifest["values"][symbol]
+        row["value"] = float(value)
+        row["state"] = "declared sensitivity value; assumed, not qualified"
+    if overrides:
+        manifest["selection"] = f"declared sensitivity overrides {sorted(overrides)}; otherwise central"
     parameter_set = service.create_set(
         workspace_id, "C1 CCAP 211/78 declared-assumption parameters",
         species="Nannochloropsis sp.", strain="CCAP 211/78", actor="spec-215")

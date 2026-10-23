@@ -23,7 +23,7 @@ LAYOUTS = {
               "illuminated_share": 0.71, "ground_area_m2": 31.0,
               "dilution_per_day": 0.27, "observed_areal_g_m2_day": 19.4,
               "observed_volumetric_g_l_day": 0.57,
-              "cross_sections": ((1, 7), (2, 4))},
+              "cross_sections": ((1, 7), (2, 3))},
 }
 TUBE_INNER_DIAMETER_M = 0.046
 TUBE_OUTER_DIAMETER_M = 0.050
