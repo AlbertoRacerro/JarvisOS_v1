@@ -185,9 +185,14 @@ def system_files(case: PipeCase) -> dict[str, str]:
         residual['"(k|omega|epsilon)"'] = tol
     solution = {
         "solvers": {
-            "p": {"solver": "GAMG", "smoother": "GaussSeidel", "tolerance": tol * 1e-3, "relTol": 0.01},
+            # Inner tolerances only affect the path to convergence, not the converged solution
+            # (outer convergence is enforced by residualControl).
+            # DIC smoothing + direct coarsest solve: 8 instead of ~190 GAMG cycles per solve on the
+            # high-aspect-ratio (up to ~600:1) near-wall cells of the y+<1 meshes.
+            "p": {"solver": "GAMG", "smoother": "DICGaussSeidel", "nCellsInCoarsestLevel": 50,
+                  "directSolveCoarsest": "true", "tolerance": tol * 1e-2, "relTol": 0.1},
             '"(U|k|omega|epsilon)"': {"solver": "smoothSolver", "smoother": "symGaussSeidel",
-                                      "tolerance": tol * 1e-3, "relTol": 0.05},
+                                      "tolerance": tol * 1e-2, "relTol": 0.1},
         },
         "SIMPLE": {
             "nNonOrthogonalCorrectors": 0,
