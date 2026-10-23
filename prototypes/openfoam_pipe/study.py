@@ -32,6 +32,11 @@ LAMINAR_RADIAL_LEVELS = (8, 16, 32)          # refinement ratio 2 in r and x
 C1_D, C1_U = 0.046, 0.45
 SST_RADIAL_LEVELS = (30, 60, 120)
 SST_WALL_CELL_TARGET_M = 4.0e-5              # medium mesh; y+ ~ 1 at Re ~ 2e4
+SPLIT_GROUP = "c1_kOmegaSST_split_refinement"
+ITER_GROUP = "iterative_check"
+# Gate for the momentum components excluded from residualControl (see casegen): 100x the
+# p target, floored at 1e-6. Iterative error in f is measured directly by ITER_GROUP cases.
+U_RESIDUAL_FLOOR = 1e-6
 
 
 @dataclass(frozen=True)
@@ -74,17 +79,27 @@ def radial_grading_for_wall_cell(radius: float, n: int, wall_cell: float) -> flo
     return g
 
 
-def c1_case(model: str, nr: int, level: int, grading: float) -> Planned:
+def c1_case(model: str, nr: int, level: int, grading: float, nx: int | None = None,
+            group: str | None = None) -> Planned:
     d, u = C1_D, C1_U
     length = 100 * d
-    nx = {30: 200, 60: 400, 120: 800}.get(nr, 400) if model == "kOmegaSST" else 400
+    default_nx = {30: 200, 60: 400, 120: 800}.get(nr, 400) if model == "kOmegaSST" else 400
+    name = f"c1_{model}_r{nr}" + (f"_x{nx}" if nx is not None and nx != default_nx else "")
+    nx = default_nx if nx is None else nx
     case = PipeCase(
-        name=f"c1_{model}_r{nr}", diameter_m=d, length_m=length, fluid=WATER_20C,
+        name=name, diameter_m=d, length_m=length, fluid=WATER_20C,
         inlet=Inlet(mean_velocity_m_s=u, turbulence_intensity=0.05, mixing_length_over_d=0.07),
         mesh=Mesh(radial_cells=nr, axial_cells=nx, radial_grading=grading),
         turbulence=model, solver=Solver(max_iterations=8000, residual_target=1e-6),
     )
-    return Planned(case, (60 * d, 95 * d), 95 * d, f"c1_{model}", level)
+    return Planned(case, (60 * d, 95 * d), 95 * d, group or f"c1_{model}", level)
+
+
+def _tightened(base: Planned, target: float, max_iterations: int) -> Planned:
+    case = base.case.model_copy(update={
+        "name": base.case.name + "_tight",
+        "solver": Solver(max_iterations=max_iterations, residual_target=target)})
+    return Planned(PipeCase.model_validate(case.model_dump()), base.window, base.profile_x, ITER_GROUP, 0)
 
 
 def plan(quick: bool) -> list[Planned]:
@@ -97,6 +112,13 @@ def plan(quick: bool) -> list[Planned]:
     g = radial_grading_for_wall_cell(C1_D / 2, SST_RADIAL_LEVELS[1], SST_WALL_CELL_TARGET_M)
     cases += [c1_case("kOmegaSST", nr, i, g) for i, nr in enumerate(SST_RADIAL_LEVELS)]
     cases.append(c1_case("kEpsilon", 8, 0, 1.0))  # uniform; wall-adjacent centre at y+ ~ 35
+    # Split refinement (diagnostic, not part of the GCI triplet): which direction limits convergence?
+    cases.append(c1_case("kOmegaSST", 120, 0, g, nx=400, group=SPLIT_GROUP))
+    cases.append(c1_case("kOmegaSST", 60, 1, g, nx=800, group=SPLIT_GROUP))
+    # Iterative convergence: same case, tighter residual target (laminar 10x: p plateaus near 1e-10
+    # from round-off; SST 100x).
+    cases += [_tightened(laminar_case(500.0, 16, 1), 1e-10, 20000),
+              _tightened(c1_case("kOmegaSST", 30, 0, g), 1e-8, 8000)]
     return cases
 
 
@@ -126,15 +148,16 @@ def run_case(planned: Planned, work: Path) -> dict[str, Any]:
 def check_convergence(entry: dict[str, Any]) -> list[str]:
     """Problems that make a run unusable as evidence."""
     res = entry["result"]
-    tol = entry["contract"]["solver"]["residual_target"]
+    tol = entry["contract"]["solver"]["residual_target"]  # p (and k/omega/epsilon) target
     issues = []
     if not entry["mesh_ok"]:
         issues.append("checkMesh failed")
     if not res["converged"]:
         issues.append("SIMPLE residualControl not reached")
     for comp in ("Ux", "Uy"):
-        if res["final_residuals"].get(comp, 1.0) > 100 * tol:
-            issues.append(f"{comp} residual {res['final_residuals'][comp]:.2e} > 100x target")
+        limit = max(100 * tol, U_RESIDUAL_FLOOR)
+        if res["final_residuals"].get(comp, 1.0) > limit:
+            issues.append(f"{comp} residual {res['final_residuals'][comp]:.2e} > {limit:.0e}")
     if abs(res["mass_imbalance"]) > 1e-6:
         issues.append(f"mass imbalance {res['mass_imbalance']:.2e}")
     return issues
@@ -162,6 +185,16 @@ def summarise(entries: list[dict[str, Any]]) -> dict[str, Any]:
         problems = check_convergence(e)
         if problems:
             summary["issues"][e["result"]["name"]] = problems
+    by_name = {e["result"]["name"]: e for e in entries}
+    summary["iterative_convergence"] = [
+        {"case": base, "residual_target": by_name[base]["contract"]["solver"]["residual_target"],
+         "tight_residual_target": e["contract"]["solver"]["residual_target"],
+         "darcy_f": by_name[base]["result"]["darcy_f"], "darcy_f_tight": e["result"]["darcy_f"],
+         "rel_change": e["result"]["darcy_f"] / by_name[base]["result"]["darcy_f"] - 1.0,
+         "final_residuals": by_name[base]["result"]["final_residuals"],
+         "final_residuals_tight": e["result"]["final_residuals"]}
+        for e in by_group.pop(ITER_GROUP, []) for base in [e["result"]["name"].removesuffix("_tight")]
+        if base in by_name]
     for group, items in sorted(by_group.items()):
         items.sort(key=lambda e: e["level"])
         case = PipeCase.model_validate(items[-1]["contract"])
@@ -232,7 +265,7 @@ def reduced_model(summary: dict[str, Any], tools: dict[str, str]) -> dict[str, A
             {"reynolds": t["reynolds"], "model": t["model"], "darcy_f_cfd_finest": t["meshes"][-1]["darcy_f"],
              "blasius_f": t["reference"]["blasius_f"], "colebrook_smooth_f": t["reference"]["colebrook_smooth_f"],
              "note": "outside the validated laminar range; not part of the fitted model"}
-            for t in summary["turbulent"]],
+            for t in summary["turbulent"] if t["group"] != SPLIT_GROUP],
         "provenance": tools,
     }
     return model

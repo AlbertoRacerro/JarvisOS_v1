@@ -84,7 +84,8 @@ def make_plots(results: dict[str, Any], out: Path) -> list[str]:
               label="McKeon et al. 2005")
     ax.loglog([row["reynolds"] for row in lam], [row["meshes"][-1]["darcy_f"] for row in lam], ls="none",
               marker=MARKERS[0], color=SERIES[0], label="CFD laminar (finest)")
-    for i, t in enumerate(sorted(summary["turbulent"], key=lambda t: t["model"])):
+    main_turb = [t for t in summary["turbulent"] if "split" not in t["group"]]
+    for i, t in enumerate(sorted(main_turb, key=lambda t: t["model"])):
         label = {"kOmegaSST": "CFD k-ω SST, y+<1 (finest)", "kEpsilon": "CFD k-ε, wall functions"}[t["model"]]
         ax.loglog([t["reynolds"]], [t["meshes"][-1]["darcy_f"]], ls="none", marker=MARKERS[i + 1],
                   color=SERIES[i + 1], label=label)
@@ -99,7 +100,7 @@ def make_plots(results: dict[str, Any], out: Path) -> list[str]:
 
     # 4. Residual histories (one laminar, one turbulent).
     picks = [lam[-1]["meshes"][-1]["name"]] if lam else []
-    picks += [t["meshes"][1]["name"] for t in summary["turbulent"] if t["model"] == "kOmegaSST"]
+    picks += [t["meshes"][1]["name"] for t in main_turb if t["model"] == "kOmegaSST"]
     if picks:
         fig, axes = plt.subplots(1, len(picks), figsize=(5.2 * len(picks), 3.4), squeeze=False)
         for ax, name in zip(axes[0], picks):
