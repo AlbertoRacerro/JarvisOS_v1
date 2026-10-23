@@ -1,0 +1,160 @@
+{
+  "cases": {
+    "fence": {
+      "component_source": {
+        "draft_revision": "2:541d791ae4ad6f3f",
+        "linked": true,
+        "unit": "C1-fence"
+      },
+      "geometry": {
+        "deepen_detail": "Process dimensions are outside the BlueCad tube template range: Input should be less than or equal to 5000",
+        "deepen_status": 422,
+        "mapping": {
+          "basis": "One representative PBR tube from tube_inner_diameter and tube_length; tube_count and layout are not modelled.",
+          "inner_d_mm": 46.0,
+          "length_mm": 80000.0,
+          "supported": true,
+          "template": "tube"
+        }
+      },
+      "layout_digest_matches_212": true,
+      "prediction_status": "unsupported: no source-matched 2013 forcing or CCAP 211/78 card",
+      "productivity_prediction": null,
+      "reference_layout_digest": "bf9fefe9a10c391d51d4d851e12a7e03b9e81a702142a789d69032b23dffeeb8",
+      "runs": {
+        "process_t2_owner": {
+          "diameter_m": 0.046,
+          "layout_digest": "eb349111daafb4becc590e7a91b79db9d0ad4cc3cf08c9d426c6586c0b46aa78",
+          "model_version": "optics_t2.v1",
+          "outputs": {
+            "proxy_equivalent_par_umol_m2_s": {
+              "minus_212": 4.590698082346307,
+              "unit": "umol m^-2 s^-1",
+              "value": 1093.6203420526676
+            },
+            "proxy_intercepted_umol_s_m_per_tube": {
+              "minus_212": -3.8006805958009195,
+              "unit": "umol s^-1 m^-1",
+              "value": 45.999743898695726
+            },
+            "proxy_transmitted_umol_s_m_per_tube": {
+              "minus_212": -3.5129507637463675,
+              "unit": "umol s^-1 m^-1",
+              "value": 42.4763408567095
+            }
+          }
+        },
+        "recorded_212_setup": {
+          "diameter_m": 0.05,
+          "layout_digest": "bf9fefe9a10c391d51d4d851e12a7e03b9e81a702142a789d69032b23dffeeb8",
+          "model_version": "optics_t2.v1",
+          "outputs": {
+            "proxy_equivalent_par_umol_m2_s": {
+              "minus_212": 0.0,
+              "unit": "umol m^-2 s^-1",
+              "value": 1089.0296439703213
+            },
+            "proxy_intercepted_umol_s_m_per_tube": {
+              "minus_212": 0.0,
+              "unit": "umol s^-1 m^-1",
+              "value": 49.800424494496646
+            },
+            "proxy_transmitted_umol_s_m_per_tube": {
+              "minus_212": 0.0,
+              "unit": "umol s^-1 m^-1",
+              "value": 45.989291620455866
+            }
+          }
+        }
+      },
+      "stored_inputs_digest": "f9c38fc41dfe4e19882ce7754cc64e850f89819b8d8e74e0feaa53aed80662bb",
+      "stored_tube_count": 7.0,
+      "stored_tube_inner_diameter_m": 0.046,
+      "stored_tube_length_m": 80.0,
+      "tube_cylinder_m3": 0.9306654076994403,
+      "tube_cylinder_minus_212_m3": 0.0
+    },
+    "horizontal": {
+      "component_source": {
+        "draft_revision": "2:541d791ae4ad6f3f",
+        "linked": true,
+        "unit": "C1-horizontal"
+      },
+      "geometry": {
+        "deepen_detail": "Process dimensions are outside the BlueCad tube template range: Input should be less than or equal to 5000",
+        "deepen_status": 422,
+        "mapping": {
+          "basis": "One representative PBR tube from tube_inner_diameter and tube_length; tube_count and layout are not modelled.",
+          "inner_d_mm": 46.0,
+          "length_mm": 80000.0,
+          "supported": true,
+          "template": "tube"
+        }
+      },
+      "layout_digest_matches_212": true,
+      "prediction_status": "unsupported: no source-matched 2013 forcing or CCAP 211/78 card",
+      "productivity_prediction": null,
+      "reference_layout_digest": "299d44fa051c4d4e22d5f05cd6030897da2ffe94d9130f34a3d9bb15c25271a1",
+      "runs": {
+        "process_t2_owner": {
+          "diameter_m": 0.046,
+          "layout_digest": "10b7808525ab704931c000e4ff131da265c4b8e730891f40a33b26d09b25c4a4",
+          "model_version": "optics_t2.v1",
+          "outputs": {
+            "proxy_equivalent_par_umol_m2_s": {
+              "minus_212": 3.5705429529573394,
+              "unit": "umol m^-2 s^-1",
+              "value": 1104.8928222820089
+            },
+            "proxy_intercepted_umol_s_m_per_tube": {
+              "minus_212": -3.8840817630015323,
+              "unit": "umol s^-1 m^-1",
+              "value": 46.44954242217285
+            },
+            "proxy_transmitted_umol_s_m_per_tube": {
+              "minus_212": -3.5885341582620356,
+              "unit": "umol s^-1 m^-1",
+              "value": 42.8839038772912
+            }
+          }
+        },
+        "recorded_212_setup": {
+          "diameter_m": 0.05,
+          "layout_digest": "299d44fa051c4d4e22d5f05cd6030897da2ffe94d9130f34a3d9bb15c25271a1",
+          "model_version": "optics_t2.v1",
+          "outputs": {
+            "proxy_equivalent_par_umol_m2_s": {
+              "minus_212": 0.0,
+              "unit": "umol m^-2 s^-1",
+              "value": 1101.3222793290515
+            },
+            "proxy_intercepted_umol_s_m_per_tube": {
+              "minus_212": 0.0,
+              "unit": "umol s^-1 m^-1",
+              "value": 50.33362418517438
+            },
+            "proxy_transmitted_umol_s_m_per_tube": {
+              "minus_212": 0.0,
+              "unit": "umol s^-1 m^-1",
+              "value": 46.47243803555324
+            }
+          }
+        }
+      },
+      "stored_inputs_digest": "a90ad16a3256b4b90f0629095919a4312af95bde7d3165292839f5f1fe17c6c5",
+      "stored_tube_count": 3.0,
+      "stored_tube_inner_diameter_m": 0.046,
+      "stored_tube_length_m": 80.0,
+      "tube_cylinder_m3": 0.3988566032997601,
+      "tube_cylinder_minus_212_m3": 0.0
+    }
+  },
+  "parity_exact": true,
+  "reference": {
+    "input_digest": "c38e2c851f94968b6bf2774b58a6183554952e7dc512d1f66fafd80dcba44877",
+    "model_version": "optics_t2.v1",
+    "script": "scripts/qualification/212/c1_proxy_optics.py"
+  },
+  "scope": "spec 212 one-condition C1 optical proxy rebuilt in the Design shell; no biomass prediction",
+  "tolerance": "exact (bitwise float equality) for deterministic source arithmetic and optics"
+}
