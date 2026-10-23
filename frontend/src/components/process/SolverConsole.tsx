@@ -174,15 +174,19 @@ export function RunComparisonPanel({ workspaceId, draftId, refreshKey }: Readonl
     void listDraftRuns(workspaceId, draftId).then((rows) => {
       const solved = rows.filter((row) => row.action === "run");
       setRuns(solved);
-      setB((current) => current || solved[0]?.run_id || "");
-      setA((current) => current || solved[1]?.run_id || "");
+      setB(solved[0]?.run_id || "");
+      setA(solved[1]?.run_id || "");
     }).catch(() => undefined);
   }, [workspaceId, draftId, refreshKey]);
   useEffect(() => {
     setComparison(null);
     setError(null);
     if (!a || !b || a === b) return;
-    void compareRuns(workspaceId, draftId, a, b).then(setComparison).catch((cause) => setError(String(cause?.message ?? cause)));
+    let active = true;
+    void compareRuns(workspaceId, draftId, a, b)
+      .then((result) => { if (active) setComparison(result); })
+      .catch((cause) => { if (active) setError(String(cause?.message ?? cause)); });
+    return () => { active = false; };
   }, [workspaceId, draftId, a, b]);
   if (runs.length < 2) return null;
   const label = (row: RunRow) => `${row.run_id.slice(0, 8)} · rev ${row.draft_revision.split(":")[0]} · ${row.outcome?.label ?? row.status}`;

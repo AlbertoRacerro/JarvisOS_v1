@@ -26,6 +26,7 @@
 .solver-chart-legend i { display: inline-block; width: 18px; border-top: 2px solid; }
 .solver-chart-legend i.is-dashed { border-top-style: dashed; }
 .solver-compare > summary { cursor: pointer; font-weight: 700; }
+.solver-compare select:focus-visible { outline: 2px solid var(--color-focus-ring); outline-offset: 2px; }
 .solver-compare-pick { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0; }
 .solver-diff { width: 100%; margin: 6px 0; border-collapse: collapse; font-size: 12px; }
 .solver-diff caption { text-align: left; font-weight: 700; padding-bottom: 2px; }

@@ -633,6 +633,12 @@ export default function ProcessDraftEditor({ workspaceId, navigate }: Readonly<{
       setSolveEvents(history);
       setSolve({ ...snapshot, events: [], cursor });
       if (snapshot.live) setBusy("run");
+      else if (snapshot.state === "finished" || snapshot.state === "failed") {
+        const run = await getDraftRun(workspaceId, draftIdForSolve, latest.run_id).catch(() => null);
+        if (!live || !run) return;
+        setLastRun(run);
+        if (run.outcome?.state === "converged") setSolvedRun(run);
+      }
     }).catch(() => undefined);
     return () => {
       live = false;
