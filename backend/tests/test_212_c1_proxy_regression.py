@@ -32,6 +32,7 @@ def test_c1_published_denominators_remain_distinct(c1_output):
 
 def test_c1_proxy_executes_both_layouts_without_inventing_productivity(c1_output):
     assert c1_output["model_version"] == "optics_t2.v1"
+    assert c1_output["input_digest"] == "c38e2c851f94968b6bf2774b58a6183554952e7dc512d1f66fafd80dcba44877"
     assert set(c1_output["cases"]) == {"horizontal", "fence"}
     for case in c1_output["cases"].values():
         assert case["productivity_prediction"] is None

@@ -7,8 +7,10 @@ PYTHONPATH=. uv run --no-project --with numpy python ../scripts/qualification/21
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
+import platform
 
 import numpy as np
 
@@ -36,18 +38,34 @@ def exercise() -> dict:
                  "dni_par_umol_m2_s": 700.0, "dhi_par_umol_m2_s": 100.0,
                  "axis_azimuth_deg": 0.0, "n_wall": 1.49, "n_water": 1.33,
                  "ground_albedo": 0.2}
+    geometry = {"tube_inner_diameter_m": 0.046, "tube_outer_diameter_m": 0.05,
+                "pitch_horizontal_m": 0.10, "pitch_vertical_m": 0.10,
+                "tube_centre_height_m": 0.425}
+    input_digest = hashlib.sha256(json.dumps(
+        {"cases": CASES, "condition": condition, "geometry": geometry},
+        sort_keys=True, separators=(",", ":"),
+    ).encode()).hexdigest()
     output = {"scope": "one-condition optical proxy; no biomass prediction",
-              "model_version": optics_t2.VERSION, "condition": condition, "cases": {}}
+              "model_version": optics_t2.VERSION, "condition": condition,
+              "geometry": geometry, "input_digest": input_digest,
+              "environment": {"python": platform.python_version(), "numpy": np.__version__},
+              "cases": {}}
     for name, case in CASES.items():
         layout = optics_t2.build_layout(
-            diameter=0.05, tubes_across=case["tubes_across"], layers=case["layers"],
-            pitch_h=0.10, pitch_v=0.10, axis_azimuth=0.0,
-            centre_height=0.425, n_wall=1.49, n_water=1.33,
-            lower_albedo=0.2)
+            diameter=geometry["tube_outer_diameter_m"],
+            tubes_across=case["tubes_across"], layers=case["layers"],
+            pitch_h=geometry["pitch_horizontal_m"], pitch_v=geometry["pitch_vertical_m"],
+            axis_azimuth=condition["axis_azimuth_deg"],
+            centre_height=geometry["tube_centre_height_m"],
+            n_wall=condition["n_wall"], n_water=condition["n_water"],
+            lower_albedo=condition["ground_albedo"])
         optical = optics_t2.array_model(layout).evaluate(
-            np.array([math.pi / 4]), np.array([math.pi / 2]),
-            np.array([700.0]), np.array([100.0]))
-        cylinder_m3 = math.pi * 0.046**2 / 4 * case["loops"] * case["tube_length_m"]
+            np.array([math.radians(condition["sun_elevation_deg"])]),
+            np.array([math.radians(condition["sun_azimuth_deg"])]),
+            np.array([condition["dni_par_umol_m2_s"]]),
+            np.array([condition["dhi_par_umol_m2_s"]]))
+        cylinder_m3 = (math.pi * geometry["tube_inner_diameter_m"]**2 / 4
+                       * case["loops"] * case["tube_length_m"])
         reported_lit_m3 = case["working_volume_m3"] * case["illuminated_share"]
         areal_mass_g_d = case["areal_g_m2_d"] * case["ground_area_m2"]
         volumetric_mass_g_d = case["volumetric_g_l_d"] * case["working_volume_m3"] * 1000
