@@ -102,7 +102,7 @@ source-backed uncertainty bound. The paper's Table 1 gives a training
 temperature range of 20.94–25.44 °C; the fitted 30.03 °C upper cardinal
 temperature lies outside it.
 
-The existing 169/170 card still needs N half-saturation `K_j_0`, N quota,
+The existing 169/170 card still needs a justified selection of N half-saturation `K_j_0`, N quota,
 stoichiometry and oxygen yield, as well as uncertainty treatment for transferred
 light, extinction and loss parameters. The 2025 paper's two-flux optical coefficients
 and optimum light response cannot be inserted into the 170 cylindrical
@@ -135,6 +135,29 @@ qualified card:
 pins the source, original conditions, conversions and cross-strain state. A
 complete assumed card must still justify nutrient and biomass-composition
 inputs and propagate the dominant transferred-parameter uncertainty.
+
+### Cross-strain nitrate half-saturation candidate
+
+The primary [Sánchez-Bayo et al. (2020), *Molecules* 25, 2834](https://doi.org/10.3390/molecules25122834)
+full-text XML was checked at [Europe PMC](https://www.ebi.ac.uk/europepmc/webservices/rest/PMC7356364/fullTextXML),
+SHA-256 `dc7c14c7d409c03fc1711609d74c997b852654e0b0afe4ee6b1ff3fba3c21463`.
+Table 2 reports `K_S = 4 ± 2 mg NO₃⁻ L⁻¹` for *N. gaditana* SAG 2.99;
+Section 3.5 Eq. 2 uses a nitrate-limited Monod growth law. The original
+conditions were 25 °C freshwater Guillard F/2 batch mini-photobioreactors
+under 12:12 h light:dark operation, with 134 mg NO₃⁻ L⁻¹ initially. This is
+neither the C1 strain nor its marine outdoor operating environment.
+
+The 167/170 culture field is **total dissolved N as N** in kg m⁻³. Multiplying
+the reported nitrate-ion concentration by `14.0067 / 62.0049` and by `0.001`
+converts the central candidate to `0.0009036 kg N m⁻³`; the source's ±2 mg/L
+corresponds to `0.0004518–0.0013554 kg N m⁻³`. These are a transferred
+screening range, not a C1 uncertainty interval. The model card would select
+`HNO3` as its assumed N source, but the generic inlet does not verify nitrate
+speciation. An independent [*N. gaditana* nitrate-uptake study](https://doi.org/10.3389/fmars.2020.00077)
+observed growth continuing after extracellular nitrate depletion, so the
+simple extracellular Monod factor is also a model-form limitation. The
+conversion and provenance are pinned in `card_candidates.py`; no card or
+biomass prediction is claimed by this checkpoint.
 
 ## Declared geometry and operation matrix
 

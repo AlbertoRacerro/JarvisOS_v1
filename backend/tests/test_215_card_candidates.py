@@ -20,8 +20,18 @@ def test_candidate_card_does_not_silently_complete_pbr_parameters():
     assert audit["relative_candidates"]["k_X"]["range"] == [200.0, 380.0]
     assert all(row["state"] == "candidate; cross-strain transfer" and row["source_locator"]
                for row in audit["relative_candidates"].values())
+    nutrient = audit["nutrient_candidates"]["K_j_0"]
+    assert audit["nutrient_source"]["doi"] == "10.3390/molecules25122834"
+    assert nutrient["value"] == 4.0 * (14.0067 / 62.0049) / 1000
+    assert nutrient["range"] == [2.0 * (14.0067 / 62.0049) / 1000,
+                                 6.0 * (14.0067 / 62.0049) / 1000]
+    assert nutrient["unit"] == "kg N m^-3"
+    assert nutrient["state"] == "candidate; cross-strain and nutrient-basis transfer"
+    assert nutrient["source_locator"]
     assert "K_I" not in audit["missing_for_170"]
+    assert "K_j_0" not in audit["missing_for_170"]
     assert "I_opt" in audit["nontransferable"]
     assert "r_s" in audit["nontransferable"]
     assert not set(audit["missing_for_170"]) & set(audit["candidates"])
     assert not set(audit["missing_for_170"]) & set(audit["relative_candidates"])
+    assert not set(audit["missing_for_170"]) & set(audit["nutrient_candidates"])

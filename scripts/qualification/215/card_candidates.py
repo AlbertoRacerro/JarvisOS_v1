@@ -22,6 +22,13 @@ RELATIVE_SOURCE = {
     "strain": "Nannochloropsis gaditana (different species from C1 CCAP 211/78)",
     "conditions": "25 degC laboratory batch; 4 mm quasi-isoactinic and 15/30 mm flat panels, 35.5 mm annulus; artificial light",
 }
+NUTRIENT_SOURCE = {
+    "doi": "10.3390/molecules25122834",
+    "full_text_xml_sha256": "dc7c14c7d409c03fc1711609d74c997b852654e0b0afe4ee6b1ff3fba3c21463",
+    "locator": "Sánchez-Bayo et al. (2020), Table 2 and Section 3.5, Eq. 2",
+    "strain": "Nannochloropsis gaditana SAG 2.99 (different species from C1 CCAP 211/78)",
+    "conditions": "25 degC freshwater Guillard F/2 batch mini-photobioreactors; 12:12 h light:dark; nitrate-limited",
+}
 
 # Only quantities with a justified exact symbol conversion enter this table.
 # Their state remains candidate: Table 5 validation is not C1 qualification.
@@ -49,6 +56,20 @@ RELATIVE_CANDIDATES = {
             "transfer": "same exponential Beer-Lambert form; fitted attenuation changes with geometry and aggregation"},
 }
 
+# The source reports nitrate ion, whereas the 167/170 culture field is total
+# dissolved nitrogen as N. 1 mg/L = 0.001 kg/m3; use atomic/molecular masses
+# explicitly so a nitrate-ion number cannot silently become an N-as-N number.
+N_AS_NO3 = 14.0067 / 62.0049
+NUTRIENT_CANDIDATES = {
+    "K_j_0": {
+        "value": 4.0 * N_AS_NO3 / 1000,
+        "range": [2.0 * N_AS_NO3 / 1000, 6.0 * N_AS_NO3 / 1000],
+        "unit": "kg N m^-3",
+        "original": "K_S = 4 +/- 2 mg NO3- L^-1; Table 2",
+        "transfer": "nitrate-only Monod fit in freshwater N. gaditana batch; 170 uses total dissolved N as N, and C1 is outdoor marine CCAP 211/78; not a C1 confidence interval",
+    },
+}
+
 # The source light law has an optimum, while the 170 PBR accepts Monod K_I.
 # A numerical substitution would silently change the model form.
 NONTRANSFERABLE = {
@@ -63,6 +84,7 @@ def build_audit() -> dict:
         "status": "assumed candidate inputs; incomplete; no C1 prediction or qualification",
         "source": SOURCE,
         "relative_source": RELATIVE_SOURCE,
+        "nutrient_source": NUTRIENT_SOURCE,
         "form_proposal": {"light": "light.monod", "temperature": "temperature.ctmi",
                           "nutrients": ["nutrient.monod"], "loss": "loss.first_order",
                           "stoichiometry": "stoich.photoautotrophic"},
@@ -72,8 +94,14 @@ def build_audit() -> dict:
             symbol: {**row, "state": "candidate; cross-strain transfer", "source_locator": RELATIVE_SOURCE["locator"]}
             for symbol, row in RELATIVE_CANDIDATES.items()
         },
+        "nutrient_candidates": {
+            symbol: {**row, "state": "candidate; cross-strain and nutrient-basis transfer",
+                     "source_locator": NUTRIENT_SOURCE["locator"]}
+            for symbol, row in NUTRIENT_CANDIDATES.items()
+        },
         "nontransferable": NONTRANSFERABLE,
-        "missing_for_170": tuple(symbol for symbol in MISSING_170 if symbol not in RELATIVE_CANDIDATES),
+        "missing_for_170": tuple(symbol for symbol in MISSING_170
+                                 if symbol not in RELATIVE_CANDIDATES and symbol not in NUTRIENT_CANDIDATES),
     }
 
 
