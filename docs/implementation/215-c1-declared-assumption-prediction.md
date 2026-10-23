@@ -41,3 +41,40 @@ not a claim that the C1 systems received this weather.
 Regenerate with the raw archive using the command in the script module docstring.
 The focused offline test checks the committed digest, complete hourly coverage,
 PAR conversion, solar-position sanity and GHI = DHI + DNI·cos(zenith) closure.
+
+## CCAP 211/78 primary-source card audit
+
+The open-access primary study by [Ihadjadene et al. (2025), *Algal Research*
+90, 104196](https://doi.org/10.1016/j.algal.2025.104196) was read from the
+[University of Antwerp author copy](https://repository.uantwerpen.be/docman/irua/f651d2motoMd7).
+The PDF SHA-256 for this audit is
+`30346040253415e5d477b255ba3876ec266034f11d60edc1e0b48273df41b9db`.
+Its Table 5 reports the following fitted values for **Nannochloropsis sp.
+CCAP 211/78**. The study trained its model on a lab-scale ProviAPT flat-panel
+system (20 mm light path), not the AlgaePARC outdoor tubular systems. These
+are **candidate assumed inputs, not source-verified 169 values or C1-calibrated
+parameters**. The source study's validation applies to its own independent
+lab-scale batches, not to this C1 transfer.
+
+| Symbol | Primary value | Original meaning and C1 transfer |
+| --- | --- | --- |
+| μ_max | 2.50 d⁻¹ (= 0.10417 h⁻¹) | Table 5 maximum specific growth rate; candidate for the 169/170 `mu_max` field, with outdoor-transfer uncertainty. |
+| r_s | 0.08 d⁻¹ (= 0.003333 h⁻¹) | Table 5 maintenance loss in the paper's net-light law (Eq. 8); candidate for 169 `loss.first_order`/170 `k_d`, but the law's placement of loss must be checked before substitution. |
+| I_opt | 112.70 µmol m⁻² s⁻¹ | Table 5 optimum of the paper's photoinhibiting light law (Eq. 8); **not** the Monod half-saturation `K_I` used by 170. |
+| T_min, T_opt, T_max | 6.27, 24.50, 30.03 °C (= 279.42, 297.65, 303.18 K) | Table 5 CTMI card candidates. The 20–30 °C C1 operation approaches the fitted upper limit; this parameter family deserves sensitivity coverage. |
+| pH_min, pH_opt, pH_max | 4.08, 7.80, 11.30 | Table 5; the current 170 T1 model has no pH factor. S01's controlled pH near 7.5 is therefore a disclosed model gap, not a silently applied multiplier. |
+
+Table 5 also lists same-strain literature estimates of μ_max 0.84 and 2.48
+d⁻¹, loss 0.05 and 0.10 d⁻¹, I_opt about 150 and 100 µmol m⁻² s⁻¹, and
+T_opt 22.63 and 25 °C. Those rows are **secondary quotations** in this paper;
+their cited primary studies must be checked before any value is used as a
+source-backed uncertainty bound. The paper's Table 1 gives a training
+temperature range of 20.94–25.44 °C; the fitted 30.03 °C upper cardinal
+temperature lies outside it.
+
+The existing 169/170 card still needs a source-backed or explicitly assumed
+`K_I`, biomass extinction `k_X`, N half-saturation `K_j_0`, N quota,
+stoichiometry and oxygen yield. The 2025 paper's two-flux optical coefficients
+and optimum light response cannot be inserted into the 170 cylindrical
+Beer–Lambert/Monod fields without a declared model-form approximation.
+No complete card has been created and no biomass prediction has been run.
