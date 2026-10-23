@@ -105,3 +105,23 @@ def test_pinned_handoff_freezes_site_and_par_factor() -> None:
     assert record["label"] == "surrogate; not AlgaePARC measured"
     assert len(record["timestamps"]) == 62 * 24
     assert profiles.read_profile(wid, handoff["digest"], limit=1)["digest"] == handoff["digest"]
+
+
+def test_t2_child_holds_hourly_means_at_fifteen_minutes() -> None:
+    initialize_database()
+    wid = create_workspace(WorkspaceCreate(name="C1 T2 15 min", slug="c1-t2-15min-test")).id
+    t2 = runpy.run_path(str(DATA.parent / "profile_handoff.py"))["pin_t2_profile"](wid)
+    hourly = profiles.read_profile(wid, t2["parent_digest"], limit=62 * 24)
+    record = t2  # read_profile pages long series; the created record is the immutable blob content
+    assert profiles.read_profile(wid, t2["digest"], limit=1)["digest"] == t2["digest"]
+    assert record["resolution_minutes"] == 15
+    assert record["timestamps"][0] == "2013-07-01T00:15:00Z"
+    assert record["timestamps"][-1] == hourly["timestamps"][-1]
+    assert len(record["timestamps"]) == 4 * len(hourly["timestamps"])
+    assert record["timestamps"][3::4] == hourly["timestamps"]
+    for name, values in hourly["channels"].items():
+        held = record["channels"][name]
+        assert all(held[4 * i + k] == value for i, value in enumerate(values) for k in range(4))
+    assert record["provenance"]["original_sha256"] == SHA256
+    assert "no sub-hourly weather is observed" in record["provenance"]["subhourly_construction"]
+    assert record["label"] == "surrogate; not AlgaePARC measured"

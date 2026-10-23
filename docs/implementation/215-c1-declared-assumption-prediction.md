@@ -40,9 +40,16 @@ hours. No site or production workspace is changed by this checkpoint.
 [`profile_handoff.py`](../../scripts/qualification/215/profile_handoff.py)
 imports through the 171 owner, then creates an immutable child profile with
 the KNMI Deelen site snapshot and `factor_umol_per_j=2.0565` in provenance.
-Those fields let the existing 172/T2 handoff use the same solar location and
-PAR conversion as the CSV construction without relying on mutable workspace
-site state. The parent digest preserves the exact CSV import lineage. Both
+Those fields let the 172/T2 path use the same solar location and PAR
+conversion as the CSV construction without relying on mutable workspace site
+state. The hourly child is not itself accepted by T2: the 174 owner evaluates
+the sun at interval midpoints and refuses profiles coarser than 15 minutes.
+`pin_t2_profile` therefore creates a second immutable child that holds each
+hourly mean over its four 15-minute intervals. No sub-hourly weather is
+invented; the hourly beam-normal and diffuse irradiance are unchanged, and only
+the T2 sun geometry moves to 15-minute midpoints. Near sunrise and sunset a
+held DNI value can fall on a sub-interval with the sun below the horizon; that
+small beam loss is part of the declared surrogate construction. The parent digest preserves the exact CSV import lineage. Both
 profiles remain labelled **surrogate KNMI Deelen**, not AlgaePARC weather.
 Imported `air_temperature` is weather only. Culture temperature remains a
 separate 20–30 °C scenario; a future dynamic scenario must use a declared
@@ -245,3 +252,45 @@ operating trace. The matrix therefore records those limits without generating
 unobserved temperature or O₂ data. A later dynamic run must declare its
 temperature scenario and map the selected volume basis into the existing PBR
 owner explicitly.
+
+## Central declared-assumption run
+
+[`central_run.py`](../../scripts/qualification/215/central_run.py) is the first
+run of both layouts through the real owners. It uses the assumed 169 card, the
+15-minute surrogate profile (171), T2 optics (174) and the PBR unit (170) in a
+172 pumped culture loop: pump → PBR → dark holdup tank → harvest splitter → feed
+mixer. The PBR holds the calculated tube-cylinder volume; the tank holds the
+rest of S01's working volume. The feed is set to S01's dilution of the working
+volume. Productivity is the harvested biomass over the window, divided by
+ground area or working volume as S01 reports it.
+
+The central choices are the median-PAR window, 25 °C, 0° azimuth, the 3×1 and
+1×7 cross-sections, 1.0 kg m⁻³ initial biomass and a nutrient-replete
+0.5 kg N m⁻³ feed. `CENTRAL` and `STATES` in the script record each value and
+its known/assumed/scenario state. None was chosen from the C1 observations.
+
+| Layout | Predicted areal (g m⁻² d⁻¹) | Observed areal | Predicted volumetric (g L⁻¹ d⁻¹) | Observed volumetric | Minimum PBR N (kg m⁻³) |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Horizontal | 13.29 | 12.1 | 0.641 | 0.65 | 0.304 |
+| Fence | 27.80 | 19.4 | 0.813 | 0.57 | 0.268 |
+
+The full 36-day run took about 85 s for both layouts, with a relative biomass
+balance residual below 10⁻¹². Nitrogen stays about 300 times above the
+transferred nitrate half-saturation, so the replete-feed assumption holds in
+this run. Repeated runs agree only to about 10⁻¹² relative, and card and
+snapshot digests carry workspace-local identifiers. `summary_digest` therefore
+hashes the output without run-local identifiers or the round-off-level balance
+residual, with floats rounded to nine significant digits. Two independent fresh
+runs gave the summary digest
+`106313442bff802738da99ef6f6cc9c8ba42834cff4f7b6413359263add7c699`; the 15-minute
+profile digest was
+`sha256:bd3ab32a914ea2c23939e093a993795233b341748f1c518ba60d19b7685bf709`.
+
+This is **one central point, not a band or a verdict**. At this point the fence
+is higher per ground area, as observed, but not lower per volume. The fence
+module has 0.93 m³ of tube volume against S01's 0.75 m³ illuminated volume, and
+its central prediction is sensitive to the assumed stacked 1×7 module and
+`k_X`. The sensitivity analysis and seeded Monte Carlo must cover these before
+any spec 212 verdict is stated. A focused offline test runs a 2-day truncation
+of both layouts. It checks the labels, the volume and dilution mapping, the
+denominator identity, nitrogen sufficiency and the biomass balance.
