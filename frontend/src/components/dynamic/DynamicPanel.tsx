@@ -9,6 +9,7 @@ import ScheduleEditor from "./ScheduleEditor";
 import ControllerEditor from "./ControllerEditor";
 import RunsPanel, { useDynamicRuns } from "./RunsPanel";
 import Comparison from "./Comparison";
+import PlantView from "./PlantView";
 import "./DynamicPanel.css";
 
 export default function DynamicPanel({ workspaceId, draft, onUpdated }: { workspaceId: string; draft: DraftProjection; onUpdated(next: DraftProjection): void }) {
@@ -16,7 +17,7 @@ export default function DynamicPanel({ workspaceId, draft, onUpdated }: { worksp
   const [links, setLinks] = useState<LinkInfo[]>([]);
   const [runLinks, setRunLinks] = useState<Record<string, LinkInfo>>({});
   const [problem, setProblem] = useState<{ code: string | null; message: string } | null>(null);
-  const [tab, setTab] = useState<"scenario" | "schedule" | "controller" | "runs" | "compare">("scenario");
+  const [tab, setTab] = useState<"plant" | "scenario" | "schedule" | "controller" | "runs" | "compare">("plant");
   const { runs, refresh, problem: runProblem } = useDynamicRuns(workspaceId, draft.draft_id, draft.revision);
   const refreshProfiles = useCallback(() => { void listEnvProfiles(workspaceId).then((next) => { setProfiles(next); setProblem(null); }).catch((cause) => setProblem(failureText(cause))); }, [workspaceId]);
   const reloadLinks = useCallback(() => { void Promise.all([listDraftLinks(workspaceId, draft.draft_id), listRunLinks(workspaceId, draft.draft_id)])
@@ -29,12 +30,13 @@ export default function DynamicPanel({ workspaceId, draft, onUpdated }: { worksp
     } catch (cause) { return { ok: false, ...failureText(cause) }; }
   };
   const content = contentOf(draft.dynamic as Parameters<typeof contentOf>[0]);
-  const tabs = [["scenario", "Scenarios"], ["schedule", "Schedules"], ["controller", "Controllers"], ["runs", "Runs and results"], ["compare", "Compare"]] as const;
+  const tabs = [["plant", "Plant overview"], ["scenario", "Scenarios"], ["schedule", "Schedules"], ["controller", "Controllers"], ["runs", "Runs and results"], ["compare", "Compare"]] as const;
   return <section className="dyn-panel" aria-label="Dynamic Studio"><header><h3>Dynamic Studio</h3><SimulationNotice />
       <p>Create a saved scenario, schedule and controller for the Tier 1 process model. Changes create a draft revision. Start and re-run are explicit.</p>
       <button type="button" onClick={refreshProfiles}>Refresh environment profiles</button></header>
     <div className="dyn-tabs" role="tablist" aria-label="Dynamic Studio sections">{tabs.map(([key, label]) => <button key={key} type="button" role="tab" aria-selected={tab === key} onClick={() => setTab(key)}>{label}</button>)}</div>
     {problem && <Refusal {...problem} />}
+    {tab === "plant" && <PlantView key={`${workspaceId}:${draft.draft_id}`} workspaceId={workspaceId} draft={draft} runs={runs} />}
     {tab === "scenario" && <ScenarioEditor key={draft.draft_id} draft={draft} content={content} profiles={profiles} onPatch={onPatch} />}
     {tab === "schedule" && <ScheduleEditor key={draft.draft_id} draft={draft} content={content} links={links} onPatch={onPatch} />}
     {tab === "controller" && <ControllerEditor key={draft.draft_id} draft={draft} content={content} onPatch={onPatch} />}

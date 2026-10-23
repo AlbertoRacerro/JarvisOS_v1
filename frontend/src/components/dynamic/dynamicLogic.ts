@@ -434,6 +434,61 @@ export function kpis(manifest: Manifest | null, series: SeriesData | null): Kpi[
   return out;
 }
 export const fmtKpi = (kpi: Kpi) => (kpi.value === null ? `not available${kpi.reason ? `: ${kpi.reason}` : ""}` : `${fmtNum(kpi.value)} ${kpi.unit === "1" ? "" : kpi.unit}`.trim());
+
+// Spec 211: explicit metric ownership. A unit or culture-loop value must never be promoted to a plant total.
+export type PlantMetric = Kpi & { scope: "plant" | "equipment" | "loop" | "unclassified"; owner: string | null; qualification: string };
+const PLANT_METRICS = new Set(["harvest", "events", "controller_fires", "vol_prod", "areal_prod"]);
+export function plantMetrics(manifest: Manifest | null, series: SeriesData | null): PlantMetric[] {
+  const unitTags = (manifest?.units ?? []).map((unit) => unit.tag).sort((a, b) => b.length - a.length);
+  const loopTags = Object.keys(manifest?.campaign?.loops ?? {}).sort((a, b) => b.length - a.length);
+  return kpis(manifest, series).map((candidate) => {
+    const exactHarvest = manifest?.productivity?.harvest_kg;
+    const metric = candidate.id === "harvest" && typeof exactHarvest === "number" && Number.isFinite(exactHarvest)
+      ? { ...candidate, value: exactHarvest, reason: undefined } : candidate;
+    let scope: PlantMetric["scope"] = "unclassified";
+    let owner: string | null = null;
+    if (PLANT_METRICS.has(metric.id)) scope = "plant";
+    else {
+      const unit = unitTags.find((tag) => metric.id === `final_${tag}` || metric.id === `mean_${tag}`);
+      const loop = loopTags.find((tag) => metric.id === `campaign_draws_${tag}` || metric.id === `campaign_harvest_${tag}` || metric.id === `campaign_prod_${tag}`);
+      if (unit) { scope = "equipment"; owner = unit; }
+      else if (loop) { scope = "loop"; owner = loop; }
+    }
+    const card = scope === "equipment" ? manifest?.units?.find((unit) => unit.tag === owner)?.model_card_qualification : null;
+    const sampled = metric.id.startsWith("mean_") && (series?.stride ?? 1) > 1;
+    const qualification = ["Tier 1 · unqualified simulation", metric.id === "harvest" && typeof exactHarvest === "number" ? "engine manifest aggregate" : "",
+      card == null ? "" : `model card: ${typeof card === "string" ? card : JSON.stringify(card)}`,
+      sampled ? `mean of ${series?.returned_points ?? "?"} sampled points from ${series?.total_points ?? "?"} (stride ${series?.stride})` : ""].filter(Boolean).join(" · ");
+    return { ...metric, scope, owner, qualification };
+  });
+}
+
+export type PlantChoices = { runIds: string[]; metricIds: string[]; equipmentId: string | null; view: "table" | "charts" };
+export const EMPTY_PLANT_CHOICES: PlantChoices = { runIds: [], metricIds: [], equipmentId: null, view: "table" };
+export const plantChoiceKey = (workspaceId: string, draftId: string) => `jarvis.dynamic.plant.v1:${workspaceId}:${draftId}`;
+/** Restored browser choices are display-only. Unknown IDs are removed and reported, never used as result authority. */
+export function restorePlantChoices(raw: unknown, runIds: string[], metricIds: string[], equipmentIds: string[]): { choices: PlantChoices; removed: string[] } {
+  const saved = raw && typeof raw === "object" ? raw as Record<string, unknown> : {};
+  const removed: string[] = [];
+  const keep = (value: unknown, allowed: string[], kind: string, cap: number) => {
+    const ids = Array.isArray(value) ? value.filter((id): id is string => typeof id === "string") : [];
+    const unique = [...new Set(ids)];
+    for (const id of unique) if (!allowed.includes(id)) removed.push(`${kind} ${id}`);
+    return unique.filter((id) => allowed.includes(id)).slice(0, cap);
+  };
+  const selectedRuns = keep(saved.runIds, runIds, "run", 4);
+  const selectedMetrics = keep(saved.metricIds, metricIds, "metric", 50);
+  const equipmentId = typeof saved.equipmentId === "string" && equipmentIds.includes(saved.equipmentId) ? saved.equipmentId : null;
+  if (saved.equipmentId && !equipmentId) removed.push(`equipment ${String(saved.equipmentId)}`);
+  return { choices: { runIds: selectedRuns, metricIds: selectedMetrics, equipmentId, view: saved.view === "charts" ? "charts" : "table" }, removed };
+}
+
+export function movePlantMetric(ids: string[], id: string, offset: -1 | 1): string[] {
+  const index = ids.indexOf(id), next = index + offset;
+  if (index < 0 || next < 0 || next >= ids.length) return ids;
+  const moved = [...ids]; [moved[index], moved[next]] = [moved[next], moved[index]];
+  return moved;
+}
 /** Provenance rows the results view lists: the digests this run used, never a claim they are unchanged. */
 export function provenanceRows(manifest: Manifest | null, run: Pick<DynRun, "identity" | "snapshot_digest">): { label: string; value: string }[] {
   const rows: { label: string; value: string }[] = [];
