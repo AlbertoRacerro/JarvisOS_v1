@@ -253,6 +253,16 @@ def test_settings_diff_and_event_log_bounds(tmp_path: Any, monkeypatch: pytest.M
     assert [json.loads(line)["iteration"] for line in lines] == [1, 2] and observer.truncated
 
 
+def test_finished_solve_is_not_overwritten_by_a_stale_running_read(tmp_path: Any) -> None:
+    run_id = "a" * 32
+    finished = {"run_id": run_id, "state": "finished", "status": "completed"}
+    solve_jobs._write(tmp_path / "solve.json", finished)
+    stale = {"run_id": run_id, "state": "running"}
+
+    assert solve_jobs._settled(tmp_path, stale) == finished
+    assert solve_jobs._read_solve(tmp_path) == finished
+
+
 def test_iteration_observer_sees_method_events_before_the_next_evaluation(monkeypatch: pytest.MonkeyPatch) -> None:
     step = tear_solver._step
 

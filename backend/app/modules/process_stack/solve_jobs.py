@@ -67,9 +67,13 @@ def _settled(path: Path, record: dict[str, Any]) -> dict[str, Any]:
     """A record claiming to run that this process does not run was cut off by a restart: say so, invent nothing."""
     with _lock:
         if record.get("state") in {"running", "stopping"} and record["run_id"] not in _active:
-            record = {**record, "state": "interrupted", "finished_at": _now(),
-                      "message": "The backend stopped while this solve was running; no result was recorded."}
-            _write(path / "solve.json", record)
+            # The worker can finish between the caller's read and this lock.
+            # Read the authoritative file again before declaring its result lost.
+            record = _read_solve(path)
+            if record.get("state") in {"running", "stopping"} and record["run_id"] not in _active:
+                record = {**record, "state": "interrupted", "finished_at": _now(),
+                          "message": "The backend stopped while this solve was running; no result was recorded."}
+                _write(path / "solve.json", record)
     return record
 
 
