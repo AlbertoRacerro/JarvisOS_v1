@@ -37,3 +37,9 @@ export const editDesignComponent = (projectId: string, versionId: string, compon
   request<DesignComponent>(`${components(projectId, versionId)}/${encodeURIComponent(component.id)}`, "PUT", {
     name, parent_id: parentId, expected_revision: component.revision, expected_active_version_id: versionId
   });
+export const attachDesignGeometry = (projectId: string, versionId: string, component: DesignComponent,
+  candidateId: string, draftRevision: string | null) =>
+  request<DesignComponent>(`${components(projectId, versionId)}/${encodeURIComponent(component.id)}/geometry`, "PUT", {
+    candidate_id: candidateId, expected_revision: component.revision, expected_active_version_id: versionId,
+    expected_draft_revision: draftRevision
+  });

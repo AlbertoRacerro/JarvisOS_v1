@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import AppLink, { type Navigate } from "../app/AppLink";
-import { listWorkspaces } from "../api/client";
+import { bluecadArtifactContentUrl, getBluecadCandidateAggregate, listBluecadCandidates, listWorkspaces,
+  type BluecadCandidate, type BluecadCandidateAggregateRead } from "../api/client";
 import {
-  activateDesignVersion, createDesignComponent, createDesignVersion, editDesignComponent,
+  activateDesignVersion, attachDesignGeometry, createDesignComponent, createDesignVersion, editDesignComponent,
   listDesignComponents, listDesignVersions, openDesignUnit,
   type DesignComponent, type DesignVersionSet
 } from "../api/designProject";
@@ -11,6 +12,7 @@ import ProcessDraftEditor from "../stages/ProcessDraftEditor";
 import Studio from "./Studio";
 import type { EngineeringPropertiesController } from "../components/engineering/EngineeringProperties";
 import { getDraft, type DraftObject } from "../api/processDraft";
+import BluecadGlbViewer from "../components/BluecadGlbViewer";
 import "./designProject.css";
 
 const NODES = ["Parameters", "Geometry", "Materials", "Physics", "Mesh", "Studies", "Results", "Reduced model"] as const;
@@ -24,7 +26,11 @@ export default function DesignProject({ projectId, navigate, engineeringProperti
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedNode, setSelectedNode] = useState<(typeof NODES)[number]>("Parameters");
   const [sourceUnit, setSourceUnit] = useState<DraftObject | null>(null);
+  const [sourceRevision, setSourceRevision] = useState<string | null>(null);
   const [sourceError, setSourceError] = useState<string | null>(null);
+  const [geometryCandidates, setGeometryCandidates] = useState<BluecadCandidate[]>([]);
+  const [geometrySelection, setGeometrySelection] = useState("");
+  const [geometryAggregate, setGeometryAggregate] = useState<BluecadCandidateAggregateRead | null>(null);
   const [stage, setStage] = useState<(typeof STAGES)[number]>("Plant");
   const [workshop, setWorkshop] = useState<{ modelId: string | null; key: number } | null>(null);
   const [newVersion, setNewVersion] = useState("");
@@ -74,10 +80,29 @@ export default function DesignProject({ projectId, navigate, engineeringProperti
   const selected = components.find((item) => item.id === selectedId);
   useEffect(() => {
     let live = true;
-    setSourceUnit(null); setSourceError(null);
+    setGeometryCandidates([]); setGeometrySelection("");
+    if (active) void listBluecadCandidates(active.data_workspace_id).then((items) => {
+      if (live) setGeometryCandidates(items.filter((item) => item.status === "valid"));
+    }).catch((cause: unknown) => { if (live) setError(cause instanceof Error ? cause.message : "BlueCad candidates are unavailable."); });
+    return () => { live = false; };
+  }, [active?.data_workspace_id, active?.id]);
+  useEffect(() => {
+    let live = true;
+    setGeometryAggregate(null);
+    if (active && selected?.geometry_candidate_id) {
+      void getBluecadCandidateAggregate(active.data_workspace_id, selected.geometry_candidate_id).then((item) => {
+        if (live) setGeometryAggregate(item);
+      }).catch((cause: unknown) => { if (live) setError(cause instanceof Error ? cause.message : "Attached geometry is unavailable."); });
+    }
+    return () => { live = false; };
+  }, [active?.data_workspace_id, selected?.geometry_candidate_id]);
+  useEffect(() => {
+    let live = true;
+    setSourceUnit(null); setSourceRevision(null); setSourceError(null);
     if (active && selected?.source_draft_id && selected.source_unit_id) {
       void getDraft(active.data_workspace_id, selected.source_draft_id).then((process) => {
         if (!live) return;
+        setSourceRevision(process.revision);
         const unit = process.objects.find((item) => item.id === selected.source_unit_id && item.kind === "unit");
         if (unit) setSourceUnit(unit);
         else setSourceError("The source Process unit is no longer in this draft.");
@@ -98,6 +123,7 @@ export default function DesignProject({ projectId, navigate, engineeringProperti
   }
   const selectComponent = (item: DesignComponent) => {
     setSelectedId(item.id); setSelectedNode("Parameters");
+    setGeometrySelection("");
     setEditName(item.name); setEditParent(item.parent_id ?? "");
   };
   const openUnit = async (draftId: string, revision: string, unit: DraftObject) => {
@@ -173,7 +199,7 @@ export default function DesignProject({ projectId, navigate, engineeringProperti
       </aside>
       <main className="design-project__panel design-project__main">
         <h2>{selected?.name ?? stage}</h2>
-        {selected?.source_unit_id ? <p>Process unit model · source draft {selected.source_draft_id?.slice(0, 8)} · unit {selected.source_unit_id.slice(0, 8)}. Process owns the 0D/1D calculation; no CFD or validated geometry is attached yet.</p> : null}
+        {selected?.source_unit_id ? <p>Process unit model · source draft {selected.source_draft_id?.slice(0, 8)} · unit {selected.source_unit_id.slice(0, 8)}. Process owns the 0D/1D calculation; {selected.geometry_candidate_id ? "validated BlueCad geometry is attached" : "no validated geometry is attached yet"}. No CFD is implied.</p> : null}
         {selected ? <>
           <div className="design-project__nodes" aria-label="Component model tree">{NODES.map((node) => <button key={node} type="button" aria-pressed={selectedNode === node} onClick={() => { setSelectedNode(node); setStage(node === "Geometry" ? "CAD" : node === "Reduced model" ? "Reduced model" : node === "Physics" || node === "Mesh" ? "CFD" : "Plant"); }}>{node}</button>)}</div>
           <section aria-label={`${selectedNode} details`}><h3>{selectedNode}</h3>
@@ -181,6 +207,9 @@ export default function DesignProject({ projectId, navigate, engineeringProperti
               <p>A validated BlueCad candidate is attached to this component in the active project version.</p>
               {selected.geometry_source_draft_revision ? <p>Process source revision: {selected.geometry_source_draft_revision.slice(0, 12)}</p> : null}
               <details><summary>Geometry reference</summary><code>{selected.geometry_candidate_id}</code></details>
+              {active && geometryAggregate?.candidate.id === selected.geometry_candidate_id && geometryAggregate.candidate.glb_artifact_id
+                ? <BluecadGlbViewer artifactUrl={bluecadArtifactContentUrl(active.data_workspace_id, geometryAggregate.candidate.glb_artifact_id)} />
+                : <p>Loading geometry preview or no GLB artifact is available.</p>}
               <p>Geometry remains a separate BlueCad candidate; no CFD or reduced model is implied.</p>
             </> : selectedNode === "Parameters" && selected.source_unit_id ? <>
               {sourceError ? <p role="status">{sourceError}</p> : sourceUnit ? <>
@@ -189,6 +218,20 @@ export default function DesignProject({ projectId, navigate, engineeringProperti
               </> : <p>Loading Process parameters…</p>}
             </> : <p>{selectedNode === "Parameters" ? "No Process source is attached to this component." : `No ${selectedNode.toLowerCase()} capability is attached to this component yet.`}</p>}
           </section>
+          {selectedNode === "Geometry" && active ? <form onSubmit={(event) => {
+            event.preventDefault();
+            if (!geometrySelection || (selected.source_draft_id && !sourceRevision)) return;
+            void perform(() => attachDesignGeometry(projectId, active.id, selected, geometrySelection,
+              selected.source_draft_id ? sourceRevision : null));
+          }}>
+            <label htmlFor="design-geometry-candidate">Attach validated BlueCad candidate</label>
+            <select id="design-geometry-candidate" value={geometrySelection} onChange={(event) => setGeometrySelection(event.target.value)}>
+              <option value="">Choose a candidate</option>
+              {geometryCandidates.map((item) => <option key={item.id} value={item.id}>{item.brief_text.slice(0, 80)} · {item.id.slice(0, 8)}</option>)}
+            </select>
+            <button type="submit" disabled={busy || !geometrySelection || Boolean(selected.source_draft_id && !sourceRevision)}>Attach geometry</button>
+            {!geometryCandidates.length ? <p>No validated BlueCad candidates in this project version.</p> : null}
+          </form> : null}
         </> : null}
         {stage === "Plant" && !selected && active ? <>
           <p>Flowsheet edits and runs use this version's Process data context. The Process editor owns its revisions and solver results.</p>
