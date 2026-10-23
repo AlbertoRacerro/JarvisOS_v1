@@ -152,7 +152,7 @@ html { background: var(--color-bg-canvas); }
   color: var(--color-text-primary);
 }
 .application-shell :is(input, select, textarea)::placeholder { color: var(--color-text-muted); opacity: 1; }
-.application-shell :is(input[type="number"], table) { font-variant-numeric: tabular-nums lining-nums; }
+.application-shell :is(input[type="number"], .numeric-input > input, table) { font-variant-numeric: tabular-nums lining-nums; }
 /* Primary actions: the lit chlorophyll fill (derived from the selected accent seed). */
 .application-shell :is(button.primary-button, .jarvis-primary-button, button.draft-run-button, button.jarvis-send, .design-stage__title-row > button):not(:disabled) {
   background: var(--lumen-accent-fill);
@@ -168,6 +168,9 @@ html { background: var(--color-bg-canvas); }
   border-color: transparent;
   filter: brightness(1.06) saturate(1.04);
 }
+
+/* Spec 213: capsule header actions keep one line instead of wrapping into a tall pill. */
+.application-shell .final-fusion__panel-head > button { flex: none; white-space: nowrap; }
 
 /* ---------- Glass islands: navigator, sidecar ---------- */
 .application-shell--final :is(.shell-sidecar, .shell-navigator) {
@@ -192,29 +195,29 @@ html { background: var(--color-bg-canvas); }
 .application-shell .jarvis-sidecar__title h2 { font-family: var(--font-display); font-weight: 300; letter-spacing: 0; }
 .application-shell .jarvis-chip { border-radius: var(--lumen-radius-button); }
 
-/* Spec 213: resizable navigator and sidecar. The splitter overlays the main area's inner edge (same grid cell),
- * so the shell grid is unchanged; widths are user preferences clamped to the panel bounds. */
+/* Spec 213: resizable navigator and sidecar. Each splitter overlays the gap on its panel's side (same grid cell as
+ * the panel), so the shell grid is unchanged and the main area's scrollbar stays free; widths are user preferences
+ * clamped to the panel bounds. */
 .application-shell--final .shell-navigator { width: clamp(200px, var(--shell-navigator-width, 240px), 480px); }
 .application-shell--final .shell-sidecar { width: clamp(280px, var(--shell-sidecar-width, var(--jarvis-width, 300px)), 640px); }
-@media (min-width: 761px) { .application-shell--final .shell-main { grid-row: 1; } }
+@media (min-width: 761px) { .application-shell--final :is(.shell-main, .shell-navigator, .shell-sidecar, .shell-reopen) { grid-row: 1; } }
 .application-shell--final .shell-splitter {
   grid-row: 1;
-  grid-column: 2;
   z-index: 3;
   align-self: stretch;
-  width: 12px;
+  width: 10px;
   margin: 14px 0;
   cursor: col-resize;
   touch-action: none;
   border-radius: 999px;
 }
-.application-shell--final .shell-splitter--navigator { justify-self: start; margin-left: -4px; }
-.application-shell--final .shell-splitter--sidecar { justify-self: end; margin-right: -4px; }
+.application-shell--final .shell-splitter--navigator { grid-column: 1; justify-self: end; margin-right: -3px; }
+.application-shell--final .shell-splitter--sidecar { grid-column: 3; justify-self: start; margin-left: -3px; }
 .application-shell--final .shell-splitter::after {
   content: "";
   position: relative;
   display: block;
-  left: 5px;
+  left: 4px;
   width: 2px;
   height: 100%;
   border-radius: 2px;
