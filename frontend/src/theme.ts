@@ -1,33 +1,42 @@
 export type AppearancePreference = "system" | "light" | "dark";
 export type ResolvedAppearance = "light" | "dark";
-export type AccentPreset = "microalgae" | "leaf-chlorophyll" | "lagoon" | "custom";
+// Spec 213: a curated accent set designed per appearance replaces the free custom HEX picker.
+export type AccentPreset = "microalgae" | "leaf-chlorophyll" | "lagoon" | "glacier" | "iris" | "ember";
 
 export type AccentPreference = Readonly<{
   preset: AccentPreset;
-  customHex?: string;
 }>;
 
 export const APPEARANCE_STORAGE_KEY = "jarvisos:appearance:v1";
 export const APPEARANCE_OPTIONS: readonly AppearancePreference[] = ["system", "light", "dark"];
 export const ACCENT_STORAGE_KEY = "jarvisos:accent:v1";
 export const VISUAL_PREFERENCE_EVENT = "jarvisos:visual-preference-change";
+export const DEFAULT_ACCENT_PRESET: AccentPreset = "microalgae";
+// Lumen Dark keeps the approved chlorophyll seed; Lumen Light uses a cooler pine/fern green of the same family.
 export const DEFAULT_ACCENT_HEX = "#8DB943";
-export const ACCENT_PRESETS: Readonly<Record<Exclude<AccentPreset, "custom">, string>> = {
-  microalgae: DEFAULT_ACCENT_HEX,
-  "leaf-chlorophyll": "#5F8F52",
-  lagoon: "#4F938A"
+export const DEFAULT_LIGHT_ACCENT_HEX = "#357D4D";
+// Light seeds sit near OKLCH L 0.53 / C 0.10 (white text >= 4.5:1); dark seeds near L 0.77 / C 0.09-0.12.
+export const ACCENT_PRESETS: Readonly<Record<AccentPreset, Readonly<Record<ResolvedAppearance, string>>>> = {
+  microalgae: { light: DEFAULT_LIGHT_ACCENT_HEX, dark: DEFAULT_ACCENT_HEX },
+  "leaf-chlorophyll": { light: "#4B763B", dark: "#8EC374" },
+  lagoon: { light: "#1E7C72", dark: "#69C4B6" },
+  glacier: { light: "#3770A3", dark: "#81BCE5" },
+  iris: { light: "#7159A0", dark: "#BAA9E4" },
+  ember: { light: "#AF5A21", dark: "#EAA76B" }
 };
 export const ACCENT_OPTIONS: readonly AccentPreset[] = [
   "microalgae",
   "leaf-chlorophyll",
   "lagoon",
-  "custom"
+  "glacier",
+  "iris",
+  "ember"
 ];
 
 const ACCENT_FOREGROUND_LIGHT = "#FFFFFF";
 const ACCENT_FOREGROUND_DARK = "#000000";
 // Spec 198 Lumen: accent text must stay readable on the deepest light tint (panel top) and the raised dark surface.
-const ACCENT_TEXT_LIGHT_SURFACE = "#E2EEC8";
+const ACCENT_TEXT_LIGHT_SURFACE = "#D7F0DC";
 const ACCENT_TEXT_DARK_SURFACE = "#142318";
 const MIN_TEXT_CONTRAST = 4.5;
 
@@ -141,32 +150,60 @@ export function writeAppearancePreference(preference: AppearancePreference): voi
   notifyVisualPreferenceChange();
 }
 
+function srgbToOklab(hex: string): readonly [number, number, number] {
+  const normalized = normalizeAccentHex(hex) ?? DEFAULT_ACCENT_HEX;
+  const [red, green, blue] = [1, 3, 5].map((offset) => srgbChannelToLinear(Number.parseInt(normalized.slice(offset, offset + 2), 16)));
+  const l = Math.cbrt((0.4122214708 * red) + (0.5363325363 * green) + (0.0514459929 * blue));
+  const m = Math.cbrt((0.2119034982 * red) + (0.6806995451 * green) + (0.1073969566 * blue));
+  const s = Math.cbrt((0.0883024619 * red) + (0.2817188376 * green) + (0.6299787005 * blue));
+  return [
+    (0.2104542553 * l) + (0.793617785 * m) - (0.0040720468 * s),
+    (1.9779984951 * l) - (2.428592205 * m) + (0.4505937099 * s),
+    (0.0259040371 * l) + (0.7827717662 * m) - (0.808675766 * s)
+  ];
+}
+
+// A stored pre-213 custom HEX migrates to the perceptually nearest curated preset (OKLab, either appearance).
+export function nearestAccentPreset(hex: string): AccentPreset {
+  const normalized = normalizeAccentHex(hex);
+  if (!normalized) return DEFAULT_ACCENT_PRESET;
+  const target = srgbToOklab(normalized);
+  let best: AccentPreset = DEFAULT_ACCENT_PRESET;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (const preset of ACCENT_OPTIONS) {
+    for (const seed of Object.values(ACCENT_PRESETS[preset])) {
+      const candidate = srgbToOklab(seed);
+      const distance = Math.hypot(target[0] - candidate[0], target[1] - candidate[1], target[2] - candidate[2]);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = preset;
+      }
+    }
+  }
+  return best;
+}
+
+export function safeAccentPreference(value: unknown): AccentPreference {
+  if (!value || typeof value !== "object") return { preset: DEFAULT_ACCENT_PRESET };
+  const { preset, customHex } = value as { preset?: unknown; customHex?: unknown };
+  if (isAccentPreset(preset)) return { preset };
+  if (preset === "custom" && typeof customHex === "string") return { preset: nearestAccentPreset(customHex) };
+  return { preset: DEFAULT_ACCENT_PRESET };
+}
+
 export function readAccentPreference(): AccentPreference {
   const storage = safeStorage();
-  if (!storage) return { preset: "microalgae" };
+  if (!storage) return { preset: DEFAULT_ACCENT_PRESET };
   try {
     const raw = storage.getItem(ACCENT_STORAGE_KEY);
-    if (!raw) return { preset: "microalgae" };
-    const parsed = JSON.parse(raw) as { preset?: unknown; customHex?: unknown };
-    if (!isAccentPreset(parsed.preset)) return { preset: "microalgae" };
-    if (parsed.preset !== "custom") return { preset: parsed.preset };
-    if (typeof parsed.customHex !== "string") return { preset: "microalgae" };
-    const customHex = normalizeAccentHex(parsed.customHex);
-    return customHex ? { preset: "custom", customHex } : { preset: "microalgae" };
+    return raw ? safeAccentPreference(JSON.parse(raw)) : { preset: DEFAULT_ACCENT_PRESET };
   } catch {
-    return { preset: "microalgae" };
+    return { preset: DEFAULT_ACCENT_PRESET };
   }
 }
 
 export function writeAccentPreference(preference: AccentPreference): AccentPreference {
-  const safePreference = preference.preset === "custom"
-    ? (() => {
-      const customHex = normalizeAccentHex(preference.customHex ?? "");
-      return customHex ? { preset: "custom" as const, customHex } : { preset: "microalgae" as const };
-    })()
-    : isAccentPreset(preference.preset)
-      ? { preset: preference.preset }
-      : { preset: "microalgae" as const };
+  const safePreference = safeAccentPreference(preference);
   const storage = safeStorage();
   if (storage) {
     try {
@@ -179,30 +216,23 @@ export function writeAccentPreference(preference: AccentPreference): AccentPrefe
   return safePreference;
 }
 
-export function accentHex(preference: AccentPreference): string {
-  if (preference.preset === "custom") {
-    return normalizeAccentHex(preference.customHex ?? "") ?? DEFAULT_ACCENT_HEX;
-  }
-  return ACCENT_PRESETS[preference.preset] ?? DEFAULT_ACCENT_HEX;
+export function accentHex(preference: AccentPreference, appearance: ResolvedAppearance): string {
+  return ACCENT_PRESETS[safeAccentPreference(preference).preset][appearance];
 }
 
-export function applyAccentPreference(preference: AccentPreference): AccentPreference {
-  const safePreference = preference.preset === "custom"
-    ? (() => {
-      const customHex = normalizeAccentHex(preference.customHex ?? "");
-      return customHex ? { preset: "custom" as const, customHex } : { preset: "microalgae" as const };
-    })()
-    : isAccentPreset(preference.preset)
-      ? { preset: preference.preset }
-      : { preset: "microalgae" as const };
-  if (typeof document === "undefined") return safePreference;
-  const root = document.documentElement;
-  const seed = accentHex(safePreference);
-  const appearance: ResolvedAppearance = root.dataset.theme === "dark" ? "dark" : "light";
-  root.dataset.accent = safePreference.preset;
+function applyAccentSeed(root: HTMLElement, preference: AccentPreference, appearance: ResolvedAppearance): void {
+  const seed = accentHex(preference, appearance);
+  root.dataset.accent = preference.preset;
   root.style.setProperty("--accent-seed", seed);
   root.style.setProperty("--color-accent-on", accentForegroundHex(seed));
   root.style.setProperty("--color-accent-foreground", accentTextForegroundHex(seed, appearance));
+}
+
+export function applyAccentPreference(preference: AccentPreference): AccentPreference {
+  const safePreference = safeAccentPreference(preference);
+  if (typeof document === "undefined") return safePreference;
+  const root = document.documentElement;
+  applyAccentSeed(root, safePreference, root.dataset.theme === "dark" ? "dark" : "light");
   return safePreference;
 }
 
@@ -222,8 +252,8 @@ export function applyResolvedAppearance(resolved: ResolvedAppearance): void {
   const root = document.documentElement;
   root.dataset.theme = resolved;
   root.style.colorScheme = resolved;
-  const seed = normalizeAccentHex(root.style.getPropertyValue("--accent-seed")) ?? DEFAULT_ACCENT_HEX;
-  root.style.setProperty("--color-accent-foreground", accentTextForegroundHex(seed, resolved));
+  // Each curated accent has its own seed per appearance.
+  applyAccentSeed(root, safeAccentPreference({ preset: root.dataset.accent ?? readAccentPreference().preset }), resolved);
 }
 
 export function applyAppearancePreference(preference: AppearancePreference): ResolvedAppearance {

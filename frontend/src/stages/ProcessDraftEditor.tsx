@@ -752,6 +752,7 @@ export default function ProcessDraftEditor({ workspaceId, navigate }: Readonly<{
         <p>No process draft yet. A draft is the Jarvis-owned flowsheet: edits are instant and DWSIM runs only on Validate/Run.</p>
         <button
           type="button"
+          className="primary-button"
           onClick={() =>
             void createDraft(workspaceId, "Process draft").then((created) => {
               accept(created);

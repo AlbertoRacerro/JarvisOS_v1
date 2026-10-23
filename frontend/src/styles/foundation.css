@@ -245,21 +245,24 @@ textarea::placeholder {
   color: var(--color-text-primary) !important;
 }
 
+/* Spec 213 Lumen control family: one capsule shape, one accent hue family. The default button is a quiet tonal
+ * fill (Design may stay filled); primary actions use the lit accent fill (lumen.css); secondary/ghost are outlined. */
 button:not(.nav-button):not(.bluecad-candidate),
 .ui-button:not(.nav-button) {
   min-height: var(--control-height-default);
   padding: var(--space-2) var(--space-4);
-  border: var(--border-width-default) solid var(--color-accent-primary);
-  border-radius: var(--radius-md);
-  background: var(--color-accent-primary);
-  color: var(--color-text-on-accent);
+  border: var(--border-width-default) solid var(--color-accent-border);
+  border-radius: var(--lumen-radius-button);
+  background: var(--color-accent-subtle);
+  color: var(--color-accent-foreground);
+  font-weight: 500;
   cursor: pointer;
 }
 
 button:not(.nav-button):not(.bluecad-candidate):hover:not(:disabled),
 .ui-button:not(.nav-button):hover:not(:disabled) {
-  border-color: var(--color-accent-hover);
-  background: var(--color-accent-hover);
+  border-color: var(--color-accent-border-strong);
+  background: var(--color-accent-surface);
 }
 
 .secondary-button,

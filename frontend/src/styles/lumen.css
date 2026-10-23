@@ -134,6 +134,12 @@ html { background: var(--color-bg-canvas); }
   color: var(--color-accent-on);
   box-shadow: var(--lumen-accent-shadow);
 }
+.application-shell :is(button.primary-button, .jarvis-primary-button, button.draft-run-button, button.jarvis-send, .design-stage__title-row > button):hover:not(:disabled) {
+  background: var(--lumen-accent-fill);
+  background-color: var(--color-accent-primary);
+  border-color: transparent;
+  filter: brightness(1.06) saturate(1.04);
+}
 
 /* ---------- Glass islands: navigator, sidecar ---------- */
 .application-shell--final :is(.shell-sidecar, .shell-navigator) {

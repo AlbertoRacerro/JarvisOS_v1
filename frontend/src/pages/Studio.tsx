@@ -273,7 +273,7 @@ export default function Studio({ workspaceId, navigate, engineeringProperties, o
           <EngineeringPropertiesPanel controller={engineeringProperties} navigate={navigate} />
           {engineeringProperties.runResult?.output?.outputs ? <section className="studio-report"><h4>Latest result</h4>{Object.entries(engineeringProperties.runResult.output.outputs).map(([name, item]) => <p key={name}>{name} = {String(item.value)} {item.unit}</p>)}<p>Outputs are recorded as proposed Parameters, never promoted automatically.</p></section> : null}
         </> : <p>Publish a version first. Only published versions can be run.</p>}</div> : null}
-      </> : <div className="studio-empty"><h2>No model selected</h2><button type="button" onClick={() => setWizard(true)}>New model</button></div>}
+      </> : <div className="studio-empty"><h2>No model selected</h2><button type="button" className="primary-button" onClick={() => setWizard(true)}>New model</button></div>}
     </section></div>
   </main>;
 }

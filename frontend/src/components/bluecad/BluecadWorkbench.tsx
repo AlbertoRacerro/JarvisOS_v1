@@ -1007,7 +1007,7 @@ function CreateGeometryPanel({ heading, intro, aiBriefState, disabled, pending, 
         {TEMPLATE_FIELDS[kind].map((field) => <label key={`${kind}-${field.key}`}>{field.label}<input type="number" inputMode="decimal" min={field.min} max={field.max} step={field.step} value={raw[kind][field.key]} onChange={(event) => setRaw((current) => ({ ...current, [kind]: { ...current[kind], [field.key]: event.target.value } }))} disabled={disabled} required /></label>)}
       </div>
       {problem && <p className="error-banner" role="alert">{problem}</p>}
-      <div className="button-row"><button type="submit" disabled={disabled}>{pending ? "Building…" : `Create ${kind}`}</button>{onCancel && <button type="button" className="secondary-button" onClick={onCancel}>Cancel</button>}</div>
+      <div className="button-row"><button type="submit" className="primary-button" disabled={disabled}>{pending ? "Building…" : `Create ${kind}`}</button>{onCancel && <button type="button" className="secondary-button" onClick={onCancel}>Cancel</button>}</div>
     </form>
     <section className="bluecad-create__route" aria-labelledby="bluecad-ai-title">
       <h3 id="bluecad-ai-title">AI brief</h3>
