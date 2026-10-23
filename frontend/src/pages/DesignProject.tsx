@@ -7,6 +7,7 @@ import {
   type DesignComponent, type DesignVersionSet
 } from "../api/designProject";
 import { listStudioLibrary, type StudioLibraryEntry } from "../api/studio";
+import ProcessDraftEditor from "../stages/ProcessDraftEditor";
 import "./designProject.css";
 
 const NODES = ["Parameters", "Geometry", "Materials", "Physics", "Mesh", "Studies", "Results", "Reduced model"] as const;
@@ -85,7 +86,7 @@ export default function DesignProject({ projectId, navigate }: { projectId: stri
     </header>
     {error ? <p role="alert" className="design-project__error">{error}</p> : null}
     <nav className="design-project__stages" aria-label="Design stages">
-      {STAGES.map((item) => <button key={item} type="button" aria-current={stage === item ? "step" : undefined} onClick={() => setStage(item)}>{item}</button>)}
+      {STAGES.map((item) => <button key={item} type="button" aria-current={stage === item ? "step" : undefined} onClick={() => { setStage(item); if (item === "Plant") setSelectedId(null); }}>{item}</button>)}
     </nav>
     <div className="design-project__body">
       <aside className="design-project__panel">
@@ -100,8 +101,11 @@ export default function DesignProject({ projectId, navigate }: { projectId: stri
       <main className="design-project__panel design-project__main">
         <h2>{selected?.name ?? stage}</h2>
         {selected ? <div className="design-project__nodes" aria-label="Component model tree">{NODES.map((node) => <button key={node} type="button" onClick={() => setStage(node === "Geometry" ? "CAD" : node === "Reduced model" ? "Reduced model" : node === "Physics" || node === "Mesh" ? "CFD" : "Plant")}>{node}</button>)}</div> : null}
-        <p>{stage === "Plant" ? "Plant uses the existing Process model. Unit entry and version-aware editing are being connected here." : `${stage} is a navigation placeholder in this Phase 1 checkpoint.`}</p>
-        {active?.id === projectId ? <AppLink href="/design/process" navigate={navigate}>Open current Process workspace</AppLink> : <p>This version has a separate data context. Existing Process navigation still opens the original workspace.</p>}
+        {stage === "Plant" && !selected && active ? <>
+          <p>Flowsheet edits and runs use this version's Process data context. The Process editor owns its revisions and solver results.</p>
+          <ProcessDraftEditor key={active.data_workspace_id} workspaceId={active.data_workspace_id} navigate={navigate} />
+        </> : <p>{stage === "Plant" ? "Select Plant to edit this version's flowsheet." : `${stage} is a navigation placeholder in this Phase 1 checkpoint.`}</p>}
+        {active?.id === projectId ? <AppLink href="/design/process" navigate={navigate}>Open old Process view</AppLink> : null}
       </main>
       <aside className="design-project__panel">
         <h2>Library</h2>
