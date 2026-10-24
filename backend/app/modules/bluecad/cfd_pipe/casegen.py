@@ -34,6 +34,7 @@ from app.modules.bluecad.cfd_pipe.foam_dict import render
 from app.modules.bluecad.cfd_pipe.references import friction_estimate
 
 CASEGEN_VERSION = "cfd_pipe_casegen_v2"
+MAX_PROCESSORS = 64
 MANIFEST_NAME = "jarvis_case_manifest.json"
 DOMAIN_FRACTION = 0.25
 # Core block: edge midpoints at CORE_EDGE * R on the symmetry planes, corner at CORE_CORNER * R
@@ -375,16 +376,32 @@ def manifest_digest(manifest: dict[str, Any]) -> str:
     return "sha256:" + hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
-def write_case(contract: PipeStudyContract, case_dir: Path, tool_versions: dict[str, str]) -> dict[str, Any]:
-    """Write the case and its manifest; refuses to overwrite a non-empty directory."""
+def decompose_par_dict(processors: int) -> str:
+    """Domain decomposition for an MPI run; scotch needs no geometric input."""
+    if not 2 <= processors <= MAX_PROCESSORS:
+        raise ValueError(f"parallel runs need 2 to {MAX_PROCESSORS} processors, got {processors}")
+    return render("dictionary", "system", "decomposeParDict", {"numberOfSubdomains": processors, "method": "scotch"})
+
+
+def write_case(contract: PipeStudyContract, case_dir: Path, tool_versions: dict[str, str],
+               processors: int = 1) -> dict[str, Any]:
+    """Write the case and its manifest; refuses to overwrite a non-empty directory.
+
+    ``processors`` > 1 adds ``system/decomposeParDict`` and records the count in
+    the manifest; a serial case and its manifest are unchanged.
+    """
     case_dir = Path(case_dir)
     if case_dir.exists() and any(case_dir.iterdir()):
         raise FileExistsError(f"case directory {case_dir} is not empty")
     files = generate(contract)
+    if processors != 1:
+        files["system/decomposeParDict"] = decompose_par_dict(processors)
     for rel, text in files.items():
         path = case_dir / rel
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8")
     manifest = case_manifest(contract, files, tool_versions)
+    if processors != 1:
+        manifest["processors"] = processors
     (case_dir / MANIFEST_NAME).write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return manifest

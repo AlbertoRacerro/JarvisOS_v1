@@ -160,6 +160,39 @@ def test_runner_bounds_the_solver_by_the_contract_wall_time_limit() -> None:
     assert dict(module.tool_steps(laminar()))["openfoam_simplefoam"] == 1800
 
 
+def test_runner_plans_mpi_steps_and_keeps_serial_steps_unchanged(tmp_path: Path) -> None:
+    spec = importlib.util.spec_from_file_location("run_case_216", REPO / "scripts/qualification/216/run_case.py")
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    contract = laminar(solver={"max_iterations": 600, "wall_time_limit_s": 4800})
+    entries = {"openfoam_simplefoam": {"entrypoint": "/env/bin/simpleFoam", "version_pin": "v2412"}}
+    serial = module.command_steps(contract, tmp_path, entries, 1)
+    assert [(tool, timeout) for tool, _, timeout in serial] == list(module.tool_steps(contract))
+    parallel = module.command_steps(contract, tmp_path, entries, 8)
+    assert [tool for tool, _, _ in parallel] == ["openfoam_blockmesh", "openfoam_checkmesh", "openfoam_decomposepar",
+                                                 "openfoam_mpiexec", "openfoam_reconstructpar"]
+    launcher = parallel[3]
+    assert launcher[2] == 4800
+    assert launcher[1][:3] == ["-genv", "LD_PRELOAD", "/env/lib/mpich-3.3/libPstream.so"]
+    assert launcher[1][-6:] == ["-np", "8", "/env/bin/simpleFoam", "-parallel", "-case", str(tmp_path)]
+    assert parallel[4][1] == ["-latestTime", "-case", str(tmp_path)]
+
+
+def test_parallel_case_adds_only_the_decomposition_and_records_processors(tmp_path: Path) -> None:
+    contract = c1_turbulent()
+    pins = {"openfoam_simplefoam": "v2412"}
+    serial = casegen.write_case(contract, tmp_path / "serial", pins)
+    parallel = casegen.write_case(contract, tmp_path / "parallel", pins, processors=6)
+    assert "processors" not in serial and parallel["processors"] == 6
+    assert set(parallel["files"]) - set(serial["files"]) == {"system/decomposeParDict"}
+    assert {k: v for k, v in parallel["files"].items() if k in serial["files"]} == serial["files"]
+    text = (tmp_path / "parallel" / "system" / "decomposeParDict").read_text()
+    assert "numberOfSubdomains 6;" in text and "method scotch;" in text
+    with pytest.raises(ValueError, match="2 to 64"):
+        casegen.decompose_par_dict(1)
+
+
 # --- references ---------------------------------------------------------------------------
 
 

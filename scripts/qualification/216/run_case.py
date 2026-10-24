@@ -15,7 +15,7 @@ import hashlib
 import json
 from pathlib import Path
 
-from app.modules.bluecad.cfd_pipe.casegen import manifest_digest, mesh_plan, write_case
+from app.modules.bluecad.cfd_pipe.casegen import MAX_PROCESSORS, manifest_digest, mesh_plan, write_case
 from app.modules.bluecad.cfd_pipe.contract import PipeStudyContract
 from app.modules.bluecad.cfd_pipe.mesh_check import evaluate_mesh, parse_checkmesh, plan_refusals
 from app.modules.bluecad.cfd_pipe.probe_results import ProbeResultError, laminar_comparison, turbulent_comparison
@@ -23,7 +23,12 @@ from app.modules.bluecad.cfd_pipe.residuals import LogParseError, ResidualStream
 from app.modules.bluecad.registry import ToolRegistryError, resolve_tool, run_tool
 
 TOOLS = ("openfoam_blockmesh", "openfoam_checkmesh", "openfoam_simplefoam")
+PARALLEL_TOOLS = ("openfoam_decomposepar", "openfoam_mpiexec", "openfoam_reconstructpar")
 _REPO = Path(__file__).resolve().parents[3]
+# conda-forge openfoam-2412 links its binaries with RPATH .../lib/sys-mpich, which
+# the package does not ship, so they fall back to lib/dummy/libPstream.so and abort
+# under MPI. Ranks preload the shipped MPICH Pstream instead (spec 216 requirement 1).
+_MPI_PSTREAM = Path("lib") / "mpich-3.3" / "libPstream.so"
 
 
 def tool_steps(contract: PipeStudyContract) -> tuple[tuple[str, float], ...]:
@@ -32,24 +37,46 @@ def tool_steps(contract: PipeStudyContract) -> tuple[tuple[str, float], ...]:
             ("openfoam_simplefoam", contract.solver.wall_time_limit_s))
 
 
-def run(contract: PipeStudyContract, registry: Path, out: Path) -> dict:
+def command_steps(contract: PipeStudyContract, case: Path, entries: dict[str, dict],
+                  processors: int) -> list[tuple[str, list[str], float]]:
+    """(tool id, arguments, wall-clock bound) for a serial or MPI run of ``case``."""
+    steps = [(tool_id, ["-case", str(case)], timeout) for tool_id, timeout in tool_steps(contract)]
+    if processors == 1:
+        return steps
+    solver = entries["openfoam_simplefoam"]
+    pstream = Path(solver["entrypoint"]).resolve().parent.parent / _MPI_PSTREAM
+    mpi_solver = ["-genv", "LD_PRELOAD", str(pstream), "-genv", "WM_PROJECT_VERSION", solver["version_pin"],
+                  "-np", str(processors), solver["entrypoint"], "-parallel", "-case", str(case)]
+    return [*steps[:2], ("openfoam_decomposepar", ["-case", str(case)], 600),
+            ("openfoam_mpiexec", mpi_solver, steps[2][2]),
+            ("openfoam_reconstructpar", ["-latestTime", "-case", str(case)], 600)]
+
+
+def run(contract: PipeStudyContract, registry: Path, out: Path, processors: int = 1) -> dict:
     out = out.resolve()
     if out.is_relative_to(_REPO):
         raise ValueError("qualification output must be outside the repository")
     if out.exists():
         raise FileExistsError(f"qualification output already exists: {out}")
+    if not 1 <= processors <= MAX_PROCESSORS:
+        raise ValueError(f"processors must be 1 to {MAX_PROCESSORS}")
     plan = mesh_plan(contract)
     refusals = plan_refusals(contract, plan)
     if refusals:
         return {"status": "refused", "refusals": refusals}
+    tools = TOOLS + (PARALLEL_TOOLS if processors > 1 else ())
     try:
-        entries = {tool_id: resolve_tool(tool_id, registry) for tool_id in TOOLS}
+        entries = {tool_id: resolve_tool(tool_id, registry) for tool_id in tools}
     except ToolRegistryError as exc:
         return {"status": "unavailable", "reason": str(exc)}
     pins = {tool_id: entry["version_pin"] for tool_id, entry in entries.items()}
-    out.mkdir(parents=True)
     case = out / "case"
-    manifest = write_case(contract, case, pins)
+    steps = command_steps(contract, case, entries, processors)
+    pstream = Path(steps[3][1][2]) if processors > 1 else None
+    if pstream is not None and not pstream.is_file():
+        return {"status": "unavailable", "reason": f"MPI Pstream library missing: {pstream}"}
+    out.mkdir(parents=True)
+    manifest = write_case(contract, case, pins, processors)
     report: dict = {
         "status": "running", "case_manifest_digest": manifest_digest(manifest),
         "contract_digest": manifest["contract_digest"],
@@ -58,15 +85,17 @@ def run(contract: PipeStudyContract, registry: Path, out: Path) -> dict:
         "tool_binary_sha256": {tool_id: entry["binary_sha256"] for tool_id, entry in entries.items()},
         "tool_provenance": {tool_id: entry["provenance_url"] for tool_id, entry in entries.items()},
         "tool_licenses": {tool_id: entry["license"] for tool_id, entry in entries.items()},
-        "mesh_plan": plan.model_dump(mode="json"),
+        "mesh_plan": plan.model_dump(mode="json"), "processors": processors,
     }
+    if pstream is not None:
+        report["mpi_pstream_sha256"] = hashlib.sha256(pstream.read_bytes()).hexdigest()
 
     def save() -> None:
         (out / "run_report.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
     save()
-    for tool_id, timeout in tool_steps(contract):
-        result = run_tool(tool_id, ["-case", str(case)], case, timeout, registry)
+    for tool_id, args, timeout in steps:
+        result = run_tool(tool_id, args, case, timeout, registry)
         (out / f"{tool_id}.log").write_text(result.stdout + result.stderr, encoding="utf-8")
         if result.returncode:
             report.update(status="failed", stage=tool_id, returncode=result.returncode,
@@ -81,7 +110,7 @@ def run(contract: PipeStudyContract, registry: Path, out: Path) -> dict:
                 save()
                 return report
             save()
-        if tool_id == "openfoam_simplefoam":
+        if tool_id in ("openfoam_simplefoam", "openfoam_mpiexec"):
             stream = ResidualStream()
             try:
                 rows = stream.feed(result.stdout)
@@ -108,6 +137,10 @@ def run(contract: PipeStudyContract, registry: Path, out: Path) -> dict:
                 report.update(status="failed", stage="probe_parse", reason=str(exc))
                 save()
                 return report
+            if processors == 1:
+                report["status"] = "measured"
+            save()
+        if tool_id == "openfoam_reconstructpar":
             report["status"] = "measured"
             save()
     return report
@@ -118,9 +151,10 @@ def main() -> int:
     parser.add_argument("--contract", required=True, type=Path)
     parser.add_argument("--registry", required=True, type=Path)
     parser.add_argument("--out", required=True, type=Path)
+    parser.add_argument("--processors", type=int, default=1, help="MPI ranks; 1 runs serially")
     args = parser.parse_args()
     contract = PipeStudyContract.model_validate_json(args.contract.read_text(encoding="utf-8"))
-    report = run(contract, args.registry.resolve(), args.out)
+    report = run(contract, args.registry.resolve(), args.out, args.processors)
     print(json.dumps(report, indent=2, sort_keys=True))
     return 0 if report["status"] == "measured" else 2
 

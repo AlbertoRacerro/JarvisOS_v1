@@ -28,6 +28,9 @@ TOOLS = {
     "openfoam_blockmesh": ("openfoam", "blockMesh"),
     "openfoam_checkmesh": ("openfoam", "checkMesh"),
     "openfoam_simplefoam": ("openfoam", "simpleFoam"),
+    "openfoam_decomposepar": ("openfoam", "decomposePar"),
+    "openfoam_reconstructpar": ("openfoam", "reconstructPar"),
+    "openfoam_mpiexec": ("mpich", "mpiexec"),
     "gmsh": ("gmsh", "gmsh"),
 }
 
