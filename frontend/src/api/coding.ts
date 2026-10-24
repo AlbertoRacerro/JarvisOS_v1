@@ -242,7 +242,7 @@ export function readRelayMonitor(repository = CODING_REPOSITORY): Promise<RelayM
 export type ProviderQuotaWindow = Readonly<{
   id: string;
   label: string | null;
-  kind: "five_hour" | "weekly" | "pool";
+  kind: "five_hour" | "weekly" | "frontier" | "pool";
   used_percent: number;
   remaining_percent: number;
   resets_at: string | null;

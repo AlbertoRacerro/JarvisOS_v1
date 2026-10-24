@@ -100,11 +100,14 @@ def _buckets(node: Any, depth: int = 0) -> list[dict[str, Any]]:
     return found + [b for key, value in node.items() if key != "buckets" for b in _buckets(value, depth + 1)]
 
 
-AGY_FAMILIES = {"gemini": None, "3p": "Claude & GPT"}
+# Antigravity's third-party (Claude & GPT) pool is deliberately not shown: the maintainer does not use those models.
+AGY_HIDDEN_FAMILIES = {"3p"}
+FRONTIER_MARKERS = ("opus", "argon")
 
 
 def agy_entry(reading: dict[str, Any] | None, now: datetime) -> dict[str, Any] | None:
-    """The agy reading as a Relay-style entry: Gemini 5-hour/weekly buckets fill the fixed rows, the rest are pools."""
+    """The agy reading as a Relay-style entry: Gemini 5-hour/weekly buckets fill the fixed rows, Argon is the
+    frontier-model row, any other family is a pool row, and the Claude & GPT pool is omitted."""
     if reading is None:
         return None
     windows = []
@@ -116,11 +119,13 @@ def agy_entry(reading: dict[str, Any] | None, now: datetime) -> dict[str, Any] |
         if isinstance(fraction, bool) or not isinstance(fraction, (int, float)) or not 0 <= fraction <= 1:
             continue
         family, _, span = bucket_id.lower().rpartition("-")
-        kind = {"5h": "five_hour", "weekly": "weekly"}.get(span, "pool")
-        prefix = AGY_FAMILIES.get(family, family.replace("-", " ").capitalize() or None)
-        if prefix:
-            kind = "pool"
-        label = f"{prefix} · {'5-hour' if span == '5h' else span}" if prefix else None
+        if family in AGY_HIDDEN_FAMILIES:
+            continue
+        if family == "gemini":
+            kind, label = {"5h": "five_hour", "weekly": "weekly"}.get(span, "pool"), None
+        else:
+            name = family.replace("-", " ").capitalize() or bucket_id
+            kind, label = "pool", f"{name} · {'5-hour' if span == '5h' else span}"
         windows.append({"id": bucket_id, "label": label, "kind": kind, "used_percent": round((1 - fraction) * 100, 3),
                         "resets_at": bucket.get("reset_time")})
     return {"status": "ok", "as_of": _iso(now), "windows": windows}
@@ -148,7 +153,11 @@ def _short(value: Any) -> str | None:
 
 
 def window_kind(window: dict[str, Any]) -> str:
-    """``five_hour``, ``weekly`` or ``pool`` (a model-specific or other window, shown on its own row)."""
+    """``five_hour``, ``weekly``, ``frontier`` (the provider's top model pool: Claude Opus, Antigravity Argon, shown
+    on one shared row) or ``pool`` (any other model-specific window, shown on its own row)."""
+    key = str(window.get("id") or "").strip().lower()
+    if any(marker in key for marker in FRONTIER_MARKERS):
+        return "frontier"
     if window.get("kind") in ("five_hour", "weekly", "pool"):
         return str(window["kind"])
     minutes = window.get("window_minutes")
@@ -157,7 +166,6 @@ def window_kind(window: dict[str, Any]) -> str:
             return "five_hour"
         if minutes == 10080:
             return "weekly"
-    key = str(window.get("id") or "").strip().lower()
     if key in FIVE_HOUR_IDS:
         return "five_hour"
     if key in WEEKLY_IDS:

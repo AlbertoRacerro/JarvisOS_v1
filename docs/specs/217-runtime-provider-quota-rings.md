@@ -4,17 +4,18 @@ State: **in review** (live state in [`STATUS.md`](STATUS.md)). Maintainer [issue
 
 ## Outcome
 
-Beside the spec 206 Relay owner panel, Coding → Runtime shows how much provider quota is left: one column each for Claude, Codex (ChatGPT) and Antigravity; a 5-hour row and a weekly row; and an extra row only for a model-specific pool the provider actually reports (for example Claude's Opus weekly window, Antigravity's Claude & GPT pool or Gemini 4 Argon). Each cell is a ring with the **remaining** percentage visible in its centre, the time to reset, and distinct states for exhausted, out of date, not signed in and not available. A missing value is never drawn as 0 %.
+Beside the spec 206 Relay owner panel, Coding → Runtime shows how much provider quota is left: one column each for Claude, Codex (ChatGPT) and Antigravity; a 5-hour row, a weekly row and one shared **Frontier model** row (Claude Opus, Antigravity Gemini 4 Argon; Codex has none), shown only when a provider reports such a pool. Each cell is a ring with the **remaining** percentage visible in its centre, the time to reset, and distinct states for exhausted, out of date, not signed in and not available. A missing value is never drawn as 0 %.
 
 ## Contract
 
 1. **Source.** Claude and Codex windows come from `agent-relay --json limits --refresh`, the source spec 195 already uses (`agents[].agent_key/status/as_of/windows[].id/used_percent/resets_at`, optional `label` and `window_minutes`). The backend runs it at most once per TTL (default 600 s, `JARVISOS_PROVIDER_QUOTA_TTL_S`, bounded 60–3600 s), with concurrent requests sharing one reading. The binary can be overridden with `JARVISOS_AGENT_RELAY_BIN`. No provider is probed for the UI, and no credit-consuming call is made.
 2. **Normalisation.**
    - `window_minutes` 300/10080 classifies a window as 5-hour or weekly. Otherwise these ids do: `five_hour`, `5h`, `session`, `primary`, `hourly` for 5-hour; `seven_day`, `weekly`, `week`, `7d`, `secondary` for weekly. Anything else is a pool row.
+   - A window whose id contains `opus` or `argon` is the provider's frontier-model window.
    - `remaining = 100 − used_percent`.
    - Out-of-range, non-numeric or boolean usage drops the window.
    - A window is *out of date* when the reading is older than 30 minutes or its reset time has already passed. A passed reset never shows as exhausted.
-3. **Antigravity** buckets come from the agy CLI's own `/quota` command run headless: `agy -p /quota --output-format json` (`command.data.groups[].buckets[]` with `id`, `remaining_fraction` 0..1, `reset_time`, `disabled`). Per the CLI docs and community reports this starts no model turn and spends no quota. The binary can be overridden with `JARVISOS_AGY_BIN`. `gemini-5h`/`gemini-weekly` fill the fixed rows. Other families become pool rows: `3p-*` is labelled "Claude & GPT", and any other family (e.g. an Argon bucket) is labelled by its id prefix. Disabled or out-of-range buckets are dropped. Nothing is estimated from sessions or tokens, and no language-server endpoint, CSRF token or cookie is used.
+3. **Antigravity** buckets come from the agy CLI's own `/quota` command run headless: `agy -p /quota --output-format json` (`command.data.groups[].buckets[]` with `id`, `remaining_fraction` 0..1, `reset_time`, `disabled`). Per the CLI docs and community reports this starts no model turn and spends no quota. The binary can be overridden with `JARVISOS_AGY_BIN`. `gemini-5h`/`gemini-weekly` fill the fixed rows and the Argon bucket fills the Frontier model row. The third-party `3p-*` (Claude & GPT inside Antigravity) buckets are deliberately omitted, because the maintainer does not use those models. Any other unknown family becomes its own pool row. Disabled or out-of-range buckets are dropped. Nothing is estimated from sessions or tokens, and no language-server endpoint, CSRF token or cookie is used.
 4. **Safety.** The endpoint `GET /api/coding/provider-quotas?repository=…` is read-only and repository-scoped like spec 206. Only validated numbers, ISO timestamps and short identifiers reach the browser. Ids or labels that look like tokens or match `devctx.find_secret` are dropped. No stdout, stderr or paths are forwarded.
 5. **UI.** The view is read-only with no controls and re-asks the server once a minute (the server cache bounds CLI calls). It uses Lumen tokens in Light and Dark, stacks under the owner panel below 900 px, provides ARIA labels with the same value as the ring, and respects reduced motion.
 
@@ -25,7 +26,7 @@ No change to the supervisor, failover, mission state, provider login, credential
 ## Evidence
 
 - Backend tests: `backend/tests/test_coding_provider_quota_217.py` covers window kinds, `window_minutes`, exhausted/stale/past reset, unusable windows, unauthenticated/missing/unreadable states, Antigravity never estimated, secret and path exclusion, TTL cache and bounds, missing binary, and repository scoping.
-- Backend tests also cover agy bucket mapping (Gemini rows, Claude & GPT and Argon pools, disabled and junk buckets) and agy output with log lines before the JSON.
+- Backend tests also cover agy bucket mapping (Gemini rows, Argon as frontier, Claude & GPT pool omitted, disabled and junk buckets) and agy output with log lines before the JSON.
 - Frontend test: `frontend/tests/217-provider-quota-rings.mjs`, which renders the real view.
 - Chromium screenshots in Light/Dark, wide and narrow, against fake `agent-relay` and `agy` readings, attached to the PR.
 

@@ -8,6 +8,7 @@ const ROWS: readonly { kind: ProviderQuotaWindow["kind"]; label: string }[] = [
   { kind: "five_hour", label: "5-hour" },
   { kind: "weekly", label: "Weekly" },
 ];
+const FRONTIER_MODELS = ["Opus", "Argon"];
 const RADIUS = 22;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 
@@ -34,7 +35,7 @@ function age(iso: string | null | undefined, now: Date): string | null {
   return Number.isFinite(minutes) ? (minutes < 1 ? "read just now" : `read ${minutes} min ago`) : null;
 }
 
-export function QuotaRing({ window, now }: Readonly<{ window: ProviderQuotaWindow; now: Date }>) {
+export function QuotaRing({ window, now, model }: Readonly<{ window: ProviderQuotaWindow; now: Date; model?: string | null }>) {
   const left = Math.max(0, Math.min(100, window.remaining_percent));
   const state = window.exhausted ? "exhausted" : window.stale ? "stale" : left <= 15 ? "low" : "ok";
   const reset = until(window.resets_at, now);
@@ -46,6 +47,7 @@ export function QuotaRing({ window, now }: Readonly<{ window: ProviderQuotaWindo
       <text x="28" y="28" dominantBaseline="central" textAnchor="middle">{`${Math.round(left)}%`}</text>
     </svg>
     <span className="coding-quota-caption">
+      {model ? <span className="coding-quota-model">{model}</span> : null}
       <strong>{window.exhausted ? "Exhausted" : "left"}</strong>
       {window.stale ? <em>out of date</em> : null}
       {reset ? <span title={`Resets in ${reset}`}>↻ {reset}</span> : null}
@@ -65,6 +67,13 @@ function cell(provider: ProviderQuota, window: ProviderQuotaWindow | undefined, 
 export function ProviderQuotaView({ data, error, now = new Date() }: Readonly<{ data: ProviderQuotas | null; error: string | null; now?: Date }>) {
   const providers = data?.providers ?? [];
   const pools = providers.flatMap((p) => p.windows.filter((w) => w.kind === "pool").map((w) => ({ provider: p.provider, window: w })));
+  const frontier = providers.some((p) => p.windows.some((w) => w.kind === "frontier"));
+  // One shared row for each provider's top model pool (Claude Opus, Antigravity Argon); its name sits under the ring.
+  const modelName = (w: ProviderQuotaWindow) => {
+    const text = `${w.label ?? ""} ${w.id}`.toLowerCase();
+    const known = FRONTIER_MODELS.find((name) => text.includes(name.toLowerCase()));
+    return known ?? (w.label ?? w.id).split(/[ ·_-]/)[0];
+  };
   return <section className="coding-control-section coding-quota" aria-label="Provider usage">
     <header><h3>Provider usage</h3><span>{data ? age(data.read_at, now) : error ? "unavailable" : "reading…"}</span></header>
     {error ? <p className="coding-control-empty" role="status">Provider usage unavailable: {error}</p> : null}
@@ -75,6 +84,11 @@ export function ProviderQuotaView({ data, error, now = new Date() }: Readonly<{ 
         <span className="coding-quota-rowlabel">{row.label}</span>
         {providers.map((p) => <div key={p.provider}>{cell(p, p.windows.find((w) => w.kind === row.kind), now)}</div>)}
       </div>)}
+      {frontier ? <div className="coding-quota-row" role="group" aria-label="Frontier model">
+        <span className="coding-quota-rowlabel">Frontier model</span>
+        {providers.map((p) => { const w = p.windows.find((item) => item.kind === "frontier");
+          return <div key={p.provider}>{w ? <QuotaRing window={w} now={now} model={modelName(w)} /> : null}</div>; })}
+      </div> : null}
       {pools.map(({ provider, window }) => <div key={`${provider}/${window.id}`} className="coding-quota-row" role="group" aria-label={window.label ?? window.id}>
         <span className="coding-quota-rowlabel">{window.label ?? window.id.replace(/_/g, " ")}</span>
         {providers.map((p) => <div key={p.provider}>{p.provider === provider ? <QuotaRing window={window} now={now} /> : null}</div>)}

@@ -48,7 +48,7 @@ def test_five_hour_weekly_and_model_pool_windows_are_normalised() -> None:
     claude = provider(payload, "claude")
     assert claude["status"] == "ok"
     kinds = [(w["kind"], w["used_percent"], w["remaining_percent"]) for w in claude["windows"]]
-    assert kinds == [("five_hour", 51.0, 49.0), ("weekly", 12.3, 87.7), ("pool", 80.0, 20.0)]
+    assert kinds == [("five_hour", 51.0, 49.0), ("weekly", 12.3, 87.7), ("frontier", 80.0, 20.0)]
     assert claude["windows"][2]["label"] == "Opus weekly"
     assert not any(w["stale"] or w["exhausted"] for w in claude["windows"])
 
@@ -89,8 +89,9 @@ def test_antigravity_buckets_from_agy_quota() -> None:
     agy = provider(pq.normalize(reading(AGY), NOW), "antigravity")
     assert agy["status"] == "ok" and agy["source"] == "agy /quota" and agy["as_of"] == iso(NOW)
     rows = [(w["id"], w["kind"], w["label"], w["remaining_percent"]) for w in agy["windows"]]
+    # The Claude & GPT (3p) pool is never shown; Argon is the frontier-model row.
     assert rows == [("gemini-5h", "five_hour", None, 100.0), ("gemini-weekly", "weekly", None, 49.0),
-                    ("3p-5h", "pool", "Claude & GPT · 5-hour", 100.0), ("argon-weekly", "pool", "Argon · weekly", 49.0)]
+                    ("argon-weekly", "frontier", "Argon · weekly", 49.0)]
 
 
 def test_antigravity_is_never_estimated() -> None:
