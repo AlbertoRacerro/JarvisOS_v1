@@ -114,6 +114,30 @@ accepted as a publishable pipe correlation. A separate level 0 trial changing
 only `consistent yes` to `consistent no` with the existing U relaxation 0.9
 failed with a floating-point exception and supplied no usable result.
 
+### Radial pressure and axial-development check (2026-10-24)
+
+The unchanged saved level 0 `300/` field was resampled with pinned v2412
+`simpleFoam -postProcess` at x = 0.13 and 0.17 m. At each station, five points
+had z = 0.5 mm and y = 0.5, 1.5, 2.5, 3.5, or 4.0 mm. The temporary case was
+outside the repository; only its `controlDict` probe locations changed.
+The raw output is preserved in
+`backend/tests/fixtures/cfd_pipe/laminar_radial_probe_{p,U}.txt`.
+
+| y (mm) | Density-scaled pressure gradient (Pa/m) | Ux at 0.13 m (m/s) | Ux change to 0.17 m (m/s) |
+| ---: | ---: | ---: | ---: |
+| 0.5 | 4.016805 | 0.019521201 | +2.418e-7 |
+| 1.5 | 4.016805 | 0.018275295 | +1.335e-7 |
+| 2.5 | 4.016805 | 0.014518725 | −4.235e-8 |
+| 3.5 | 4.016805 | 0.009856709 | −9.448e-8 |
+| 4.0 | 4.016805 | 0.007924333 | −8.997e-8 |
+
+The pressure gradient is independent of these radial sample points to the
+reported precision. The sampled axial velocities change by at most 0.0025%
+of the 0.01 m/s mean speed between stations. This excludes radial probe
+placement and a still-developing axial profile in that interval as explanations
+for the 25% pressure excess. It does not identify the discrete balance error;
+the case remains unqualified and publication remains refused.
+
 The maintainer-owned [cloud prototype PR #916](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/916)
 was read as input. It reports laminar agreement within 0.037% using ESI
 OpenFOAM v1912, a wedge mesh and a longer entrance allowance. Those are
