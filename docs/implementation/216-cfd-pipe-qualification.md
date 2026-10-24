@@ -311,6 +311,60 @@ result was read (also `~/jarvis-control/work/evidence/216-solver-controls/c85-mu
 
 Misses are reported, not retuned.
 
+### Multi-Re points and candidate reduced models: result against M1–M3 (2026-10-24)
+
+The first set ran at `f4a498ee`. Re 1000 (laminar) and Re 4×10⁴ (turbulent)
+solved and met their residual targets, but the runner's probe guard refused
+both after solving. Their upstream pressure station (0.65 L: 0.65 m and 1.69 m)
+lay before the development length (0.90 m and 1.775 m). The contract had
+accepted them because it compared the development length with the whole tube.
+`ff79f48a` makes the contract refuse such a tube before a run, so both
+contracts are now refused at validation. Replacement points on the same
+tubes, Re 700 and Re 2.8×10⁴, were added to the tolerance record before they
+ran. Re 700 and 2.8×10⁴ ran on 8 MPI ranks; the other laminar runs were serial.
+Evidence: `~/jarvis-control/work/evidence/216-solver-controls/c85-multire/`.
+
+| Run | Re | Cells | ΔP/L (Pa/m) | Reference (Pa/m) | Error | Profile error / U | Max final initial residual | Verdict |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| laminar, 10 mm × 1.0 m, L1 | 100 | 259,200 | 3.2274 | 3.2186 (H–P) | +0.27% | 0.40% | 2.2e-8 | M1, M2 met |
+| laminar | 500 | 259,200 | 16.138 | 16.093 (H–P) | +0.28% | 0.40% | 9.0e-9 | M1, M2 met |
+| laminar | 700 | 259,200 | 22.609 | 22.530 (H–P) | +0.35% | 0.42% | 3.4e-8 | M1, M2 met |
+| laminar | 1000 | 259,200 | — | — | — | — | 9.1e-9 | M1 missed: probe guard refusal, replaced |
+| SST low-Re, 46 mm × 2.6 m, L1 | 10,000 | 533,925 | 16.202 | 15.956 (Colebrook) | +1.54% | — | 1.0e-7 | M1, M3 met |
+| SST (cycle 84 level 1) | 20,621 | 533,925 | 55.886 | 56.444 | −0.99% | — | 1.0e-7 | T1–T3 met |
+| SST | 28,000 | 533,925 | 95.008 | 96.683 | −1.73% | — | 9.9e-8 | M1, M3 met |
+| SST | 40,000 | 533,925 | — | — | — | — | 9.4e-8 | M1 missed: probe guard refusal, replaced |
+
+`scripts/qualification/216/fit_reduced_model.py` fitted two **candidate**
+models from these run reports. It reads each contract back from its case
+manifest and checks it against the report's contract digest. Both files are
+in the evidence directory. They are not published to Studio or pinned in
+Process.
+
+| Candidate | Re range | f = a Re^b | Discretization | Fit | Correlation | Combined | Version id |
+| --- | --- | --- | ---: | ---: | ---: | ---: | --- |
+| `c1_tube.darcy.turbulent_sst` (46 mm, 2.6 m) | 1.0×10⁴–2.8×10⁴ | a = 0.4260, b = −0.2834 | 0.42% | 0.33% | 1.73% | **2.48%** | `sha256:5914b3555c2e10a3dff8ed6aff072b9105a87500a2db34ff9e97952130ec2121` |
+| `d10_tube.darcy.laminar` (10 mm, 1.0 m) | 100–700 | a = 64.09, b = −0.9997 | 0.30% | 0.03% | 0.35% | **0.68%** | `sha256:5dacac23de0dbae57f8f5de52dd8c31e4dd1d95cc48186a25415185c120cb4e2` |
+
+Limits:
+
+- SST with a resolved wall gives a steeper Re dependence than both
+  correlations (b = −0.283 against Blasius −0.25). Its deviation moves from
+  +1.5% to −1.7% of Colebrook across the range. The correlation term dominates
+  the uncertainty, and the model must not be extrapolated.
+- The turbulent discretization term comes from the Re ≈ 2×10⁴ three-mesh study
+  on the same tube. It is assumed to hold at 1×10⁴ and 2.8×10⁴.
+- The laminar discretization term comes from the cycle 83 three-mesh study,
+  which used a different tube (10 mm × 0.2 m, Re 100). The laminar candidate
+  only demonstrates the laminar segment and Hagen–Poiseuille recovery. It is
+  not a model of the C1 tube. On the C1 tube, fully developed laminar flow
+  fits only below about Re 630.
+- Re 2000–4000 is outside both candidates. Evaluation refuses it.
+
+**Still open before acceptance:** publication through the Studio published
+version owner and 109/110 handoff, Process pinning and its fidelity label, the
+live residual console, the viewport fields, and the browser walk.
+
 ### Superseded first runs: casegen v1, defective stress path
 
 | Mesh level | Cells | Final residual target | Measured ΔP/L (Pa/m) | Error vs HP | Profile max error / mean speed |
