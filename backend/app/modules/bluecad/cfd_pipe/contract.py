@@ -62,10 +62,17 @@ class Inlet(BaseModel):
 
 
 class SolverControls(BaseModel):
+    """Iteration budget, convergence target and the solver's wall-clock bound.
+
+    The runner stops the solver at ``wall_time_limit_s`` and reports the run as
+    failed; a timed-out run is never measured or published.
+    """
+
     model_config = _STRICT
 
     max_iterations: int = Field(default=20000, ge=10, le=200000)
     residual_target: float = Field(default=1e-6, gt=0, lt=1e-2)
+    wall_time_limit_s: int = Field(default=1800, ge=60, le=172800)
 
 
 class PipeStudyContract(BaseModel):

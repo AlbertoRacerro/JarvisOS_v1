@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import math
 import os
@@ -39,6 +40,7 @@ from app.modules.bluecad.cfd_pipe.residuals import (
 from app.modules.bluecad.template import TubeTemplateCreate, template_geometry_spec
 
 FIXTURES = Path(__file__).parent / "fixtures" / "cfd_pipe"
+REPO = Path(__file__).resolve().parents[2]
 
 
 def tube_spec(outer_d_mm: float = 50.0, wall_t_mm: float = 2.0, length_mm: float = 2000.0) -> dict:
@@ -117,6 +119,8 @@ def test_contract_derives_c1_reynolds_and_flow_rate_equivalence() -> None:
         ({"domain": derive_fluid_domain(tube_spec(length_mm=1000.0))}, "developed flow"),
         ({"outlet_pressure_pa": float("inf")}, "finite"),
         ({"mesh_level": 5}, "less than or equal"),
+        ({"solver": {"wall_time_limit_s": 59}}, "greater than or equal to 60"),
+        ({"solver": {"wall_time_limit_s": 172801}}, "less than or equal to 172800"),
         ({"unknown": 1}, "Extra inputs"),
     ],
 )
@@ -138,6 +142,17 @@ def test_contract_digest_is_stable_and_input_sensitive() -> None:
     assert contract_digest(c1_turbulent()) == contract_digest(c1_turbulent())
     assert contract_digest(c1_turbulent(mesh_level=1)) != contract_digest(c1_turbulent())
     assert contract_digest(c1_turbulent(fluid={"density_kg_m3": 1000.0})) != contract_digest(c1_turbulent())
+    assert contract_digest(c1_turbulent(solver={"wall_time_limit_s": 7200})) != contract_digest(c1_turbulent())
+
+
+def test_runner_bounds_the_solver_by_the_contract_wall_time_limit() -> None:
+    spec = importlib.util.spec_from_file_location("run_case_216", REPO / "scripts/qualification/216/run_case.py")
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    steps = dict(module.tool_steps(laminar(solver={"max_iterations": 600, "wall_time_limit_s": 4800})))
+    assert steps["openfoam_simplefoam"] == 4800
+    assert dict(module.tool_steps(laminar()))["openfoam_simplefoam"] == 1800
 
 
 # --- references ---------------------------------------------------------------------------

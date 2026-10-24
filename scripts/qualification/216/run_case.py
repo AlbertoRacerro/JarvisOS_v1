@@ -26,6 +26,12 @@ TOOLS = ("openfoam_blockmesh", "openfoam_checkmesh", "openfoam_simplefoam")
 _REPO = Path(__file__).resolve().parents[3]
 
 
+def tool_steps(contract: PipeStudyContract) -> tuple[tuple[str, float], ...]:
+    """Pinned tools in order with their wall-clock bounds; the solver's comes from the contract."""
+    return (("openfoam_blockmesh", 120), ("openfoam_checkmesh", 120),
+            ("openfoam_simplefoam", contract.solver.wall_time_limit_s))
+
+
 def run(contract: PipeStudyContract, registry: Path, out: Path) -> dict:
     out = out.resolve()
     if out.is_relative_to(_REPO):
@@ -59,7 +65,7 @@ def run(contract: PipeStudyContract, registry: Path, out: Path) -> dict:
         (out / "run_report.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
     save()
-    for tool_id, timeout in (("openfoam_blockmesh", 120), ("openfoam_checkmesh", 120), ("openfoam_simplefoam", 1800)):
+    for tool_id, timeout in tool_steps(contract):
         result = run_tool(tool_id, ["-case", str(case)], case, timeout, registry)
         (out / f"{tool_id}.log").write_text(result.stdout + result.stderr, encoding="utf-8")
         if result.returncode:
