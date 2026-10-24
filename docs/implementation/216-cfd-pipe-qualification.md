@@ -68,6 +68,27 @@ The next bounded check is the discrete wall-stress/pressure balance and the
 mesh's wall-face geometry; only a converged physical balance can justify
 changing the case generator or the reported pressure result.
 
+### Developed-section pressure check (2026-10-24)
+
+The saved level 0 `300/` field was copied to a separate external diagnostic
+case and resampled with pinned v2412 `postProcess` at ten axial stations, all
+at `(y, z) = (0.5, 0.5) mm`. No solver input or field was changed. The outputs
+are preserved in `backend/tests/fixtures/cfd_pipe/laminar_axial_probe_{p,U}.txt`.
+The sampled axial velocity approaches 0.01952 m/s by x = 0.10 m and stays within 0.02% of
+that value through x = 0.18 m. Density-scaled pressure gradients are:
+
+| Axial interval | Measured gradient |
+| --- | ---: |
+| 0.02–0.06 m | 4.189823 Pa/m |
+| 0.06–0.10 m | 4.024052 Pa/m |
+| 0.10–0.14 m | 4.017085 Pa/m |
+| 0.14–0.18 m | 4.016832 Pa/m |
+
+The 25% excess is already present in the nearly developed interior and is
+not explained by the choice of the original 0.13–0.17 m probe interval. This
+diagnostic still leaves the discrete wall-stress/pressure balance and mesh
+geometry unresolved. The resampled field is not a qualification run.
+
 The maintainer-owned [cloud prototype PR #916](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/916)
 was read as input. It reports laminar agreement within 0.037% using ESI
 OpenFOAM v1912, a wedge mesh and a longer entrance allowance. Those are
