@@ -157,3 +157,37 @@ def test_route_requires_the_runtime_repository(monkeypatch: pytest.MonkeyPatch) 
     ok = client.get(f"{prefix}/provider-quotas", params={"repository": CANONICAL_RUNTIME_REPOSITORY})
     assert ok.status_code == 200 and [p["provider"] for p in ok.json()["providers"]] == ["claude", "codex", "antigravity"]
     assert client.get(f"{prefix}/provider-quotas", params={"repository": "someone/else"}).status_code == 400
+
+
+# Shapes captured from the maintainer's host on 2026-10-24 (agent-relay limits, agy 1.4 `/quota`); free text trimmed.
+REAL_RELAY = {"command": "limits", "agents": [
+    {"agent_key": "claude", "display_name": "Claude Code", "status": "ok", "plan": None, "reason": None,
+     "as_of": "2026-10-24T13:39:36.058877+00:00", "windows": [
+         {"id": "session", "label": "5-hour limit", "used_percent": 6.0, "resets_at": "2026-10-24T17:20:00.001189+00:00"},
+         {"id": "weekly", "label": "Weekly limit", "used_percent": 80.0, "resets_at": "2026-10-26T06:00:00.001234+00:00"}]},
+    {"agent_key": "codex", "display_name": "Codex", "status": "ok", "plan": "plus", "reason": None,
+     "as_of": "2026-10-22T14:16:38.267Z", "windows": [
+         {"id": "session", "label": "5-hour limit", "used_percent": 4.0, "resets_at": "2026-10-22T17:37:26+00:00"},
+         {"id": "weekly", "label": "Weekly limit", "used_percent": 88.0, "resets_at": "2026-10-27T07:45:12+00:00"}]}]}
+REAL_AGY = "\n" + json.dumps({"conversation_id": "", "status": "SUCCESS", "num_turns": 0, "command": {"name": "usage", "data": {"groups": [
+    {"name": "Gemini Models", "buckets": [
+        {"id": "gemini-weekly", "name": "Weekly Limit Remaining", "window": "weekly", "remaining_fraction": 1,
+         "reset_time": "2026-10-31T13:39:53Z"},
+        {"id": "gemini-5h", "name": "Five Hour Limit Remaining", "window": "5h", "remaining_fraction": 1,
+         "reset_time": "2026-10-24T18:39:53Z"}]},
+    {"name": "Claude and GPT models", "buckets": [
+        {"id": "3p-weekly", "window": "weekly", "remaining_fraction": 1, "reset_time": "2026-10-31T13:39:53Z"},
+        {"id": "3p-5h", "window": "5h", "remaining_fraction": 1, "reset_time": "2026-10-24T18:39:53Z"}]},
+    {"name": "Gemini 4 Argon", "buckets": [
+        {"id": "gemini-argon-wtu-weekly", "name": "Gemini 4 Argon Weekly Limit", "window": "weekly",
+         "remaining_fraction": 0.4909217357635498, "reset_time": "2026-10-25T07:58:48Z"}]}]}}})
+
+
+def test_real_host_readings_map_to_the_expected_rings() -> None:
+    now = datetime(2026, 10, 24, 13, 40, tzinfo=UTC)
+    payload = pq.normalize({"relay": REAL_RELAY, "agy": pq._json_document(REAL_AGY)}, now)
+    rows = {p["provider"]: [(w["kind"], w["remaining_percent"], w["stale"]) for w in p["windows"]] for p in payload["providers"]}
+    assert rows["claude"] == [("five_hour", 94.0, False), ("weekly", 20.0, False)]
+    # Relay's Codex reading was two days old on the host: shown, but flagged out of date.
+    assert rows["codex"] == [("five_hour", 96.0, True), ("weekly", 12.0, True)]
+    assert rows["antigravity"] == [("weekly", 100.0, False), ("five_hour", 100.0, False), ("frontier", 49.1, False)]
