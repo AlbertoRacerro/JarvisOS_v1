@@ -28,7 +28,7 @@ const data = { state: "ok", read_at: "2026-10-24T11:57:00Z", providers: [
     windows: [win("five_hour", 51), win("weekly", 12), win("pool", 80, { id: "seven_day_opus", label: "Opus weekly" })] },
   { provider: "codex", label: "Codex (ChatGPT)", source: "agent-relay limits", status: "ok",
     windows: [win("five_hour", 100, { exhausted: true }), win("weekly", 40, { stale: true })] },
-  { provider: "antigravity", label: "Antigravity", source: null, status: "unavailable", reason: "no_local_source", windows: [] },
+  { provider: "antigravity", label: "Antigravity", source: "agy /quota", status: "unavailable", reason: "agy_quota_unreadable", windows: [] },
 ] };
 const html = render({ data });
 
@@ -41,15 +41,18 @@ assert.equal((html.match(/role="group"/g) ?? []).length, 3, "two fixed rows plus
 // The visible percentage is the same metric as the ring: remaining.
 assert.ok(html.includes(">49%</text>") && html.includes('aria-label="49% left"'));
 assert.ok(html.includes(">88%</text>") && html.includes(">20%</text>"));
-assert.ok(html.includes("resets in 2 h 30 min"));
+assert.ok(html.includes("↻ 2h 30m") && html.includes('title="Resets in 2h 30m"'));
 const later = render({ data: { ...data, providers: [{ ...data.providers[0], windows: [win("weekly", 10, { resets_at: "2026-10-25T21:59:00Z" })] }] } });
-assert.ok(later.includes("resets in 1 d 9 h"), "a reset beyond a day is shown in days");
+assert.ok(later.includes("↻ 1d 9h"), "a reset beyond a day is shown in days");
 assert.equal((html.match(/class="coding-quota-value"/g) ?? []).length, 4, "an empty (0 %) ring draws no arc");
 
 // Exhausted, stale and missing are distinct and never shown as 0 %.
 assert.ok(html.includes('data-state="exhausted"') && html.includes(">Exhausted<"));
 assert.ok(html.includes('data-state="stale"') && html.includes("out of date"));
-assert.ok(html.includes("No readable source") && html.includes("Antigravity: usage is visible only in the app itself (Antigravity › Settings › Models). Nothing is estimated here."));
+assert.ok(html.includes("agy /quota unreadable"));
+const agy = render({ data: { ...data, providers: [{ provider: "antigravity", label: "Antigravity", source: "agy /quota", status: "ok",
+  windows: [win("five_hour", 0), win("weekly", 51), win("pool", 51, { id: "argon-weekly", label: "Argon · weekly" })] }] } });
+assert.ok(agy.includes('aria-label="Argon · weekly"') && agy.includes(">100%</text>") && agy.includes(">49%</text>"));
 assert.equal((html.match(/>N\/A</g) ?? []).length, 2, "Antigravity shows N/A in both fixed rows");
 assert.equal((html.match(/>0%</g) ?? []).length, 1, "only the really exhausted window shows 0 %; missing values never do");
 

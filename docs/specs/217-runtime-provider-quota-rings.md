@@ -4,7 +4,7 @@ State: **in review** (live state in [`STATUS.md`](STATUS.md)). Maintainer [issue
 
 ## Outcome
 
-Beside the spec 206 Relay owner panel, Coding → Runtime shows how much provider quota is left: one column each for Claude, Codex (ChatGPT) and Antigravity; a 5-hour row and a weekly row; and an extra row only for a model-specific pool the provider actually reports (for example an Opus weekly window). Each cell is a ring with the **remaining** percentage visible in its centre, the time to reset, and distinct states for exhausted, out of date, not signed in and not available. A missing value is never drawn as 0 %.
+Beside the spec 206 Relay owner panel, Coding → Runtime shows how much provider quota is left: one column each for Claude, Codex (ChatGPT) and Antigravity; a 5-hour row and a weekly row; and an extra row only for a model-specific pool the provider actually reports (for example Claude's Opus weekly window, Antigravity's Claude & GPT pool or Gemini 4 Argon). Each cell is a ring with the **remaining** percentage visible in its centre, the time to reset, and distinct states for exhausted, out of date, not signed in and not available. A missing value is never drawn as 0 %.
 
 ## Contract
 
@@ -14,7 +14,7 @@ Beside the spec 206 Relay owner panel, Coding → Runtime shows how much provide
    - `remaining = 100 − used_percent`.
    - Out-of-range, non-numeric or boolean usage drops the window.
    - A window is *out of date* when the reading is older than 30 minutes or its reset time has already passed. A passed reset never shows as exhausted.
-3. **Antigravity** has no verified legitimate local source, so it is reported as not available with a pointer to its own settings page. Nothing is estimated from sessions or tokens, and no private endpoint or cookie is used.
+3. **Antigravity** buckets come from the agy CLI's own `/quota` command run headless: `agy -p /quota --output-format json` (`command.data.groups[].buckets[]` with `id`, `remaining_fraction` 0..1, `reset_time`, `disabled`). Per the CLI docs and community reports this starts no model turn and spends no quota. The binary can be overridden with `JARVISOS_AGY_BIN`. `gemini-5h`/`gemini-weekly` fill the fixed rows. Other families become pool rows: `3p-*` is labelled "Claude & GPT", and any other family (e.g. an Argon bucket) is labelled by its id prefix. Disabled or out-of-range buckets are dropped. Nothing is estimated from sessions or tokens, and no language-server endpoint, CSRF token or cookie is used.
 4. **Safety.** The endpoint `GET /api/coding/provider-quotas?repository=…` is read-only and repository-scoped like spec 206. Only validated numbers, ISO timestamps and short identifiers reach the browser. Ids or labels that look like tokens or match `devctx.find_secret` are dropped. No stdout, stderr or paths are forwarded.
 5. **UI.** The view is read-only with no controls and re-asks the server once a minute (the server cache bounds CLI calls). It uses Lumen tokens in Light and Dark, stacks under the owner panel below 900 px, provides ARIA labels with the same value as the ring, and respects reduced motion.
 
@@ -25,7 +25,8 @@ No change to the supervisor, failover, mission state, provider login, credential
 ## Evidence
 
 - Backend tests: `backend/tests/test_coding_provider_quota_217.py` covers window kinds, `window_minutes`, exhausted/stale/past reset, unusable windows, unauthenticated/missing/unreadable states, Antigravity never estimated, secret and path exclusion, TTL cache and bounds, missing binary, and repository scoping.
+- Backend tests also cover agy bucket mapping (Gemini rows, Claude & GPT and Argon pools, disabled and junk buckets) and agy output with log lines before the JSON.
 - Frontend test: `frontend/tests/217-provider-quota-rings.mjs`, which renders the real view.
-- Chromium screenshots in Light/Dark, wide and narrow, against a fake `agent-relay`, attached to the PR.
+- Chromium screenshots in Light/Dark, wide and narrow, against fake `agent-relay` and `agy` readings, attached to the PR.
 
-The exact `agent-relay limits` window ids on the maintainer's host still need to be checked once with a real reading. The normaliser accepts both id conventions above, and an unknown id appears as its own row instead of being misfiled.
+The exact `agent-relay limits` window ids and the `agy /quota` bucket ids on the maintainer's host still need to be checked once with a real reading. The normaliser accepts both id conventions above, and an unknown id appears as its own row instead of being misfiled.

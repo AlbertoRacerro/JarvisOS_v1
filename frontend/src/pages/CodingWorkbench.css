@@ -187,13 +187,13 @@
 .coding-relay-timeline summary { cursor: pointer; }
 .coding-relay-timeline pre { margin: 4px 0 6px 2ch; padding: 6px 8px; max-height: 220px; overflow: auto; white-space: pre-wrap; border-left: 2px solid var(--fusion-line); font: inherit; }
 /* Spec 217: provider usage rings beside the Relay owner panel; stacked when narrow. */
-.coding-relay-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 380px); gap: 14px; align-items: start; }
+.coding-relay-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(340px, 460px); gap: 14px; align-items: start; }
 .coding-relay-row > * { min-width: 0; }
 @media (max-width: 900px) { .coding-relay-row { grid-template-columns: minmax(0, 1fr); } }
 .coding-quota-grid { display: grid; align-items: center; gap: 8px 10px; padding: 10px; border: 1px solid var(--fusion-line); border-radius: 5px; background: var(--fusion-panel); }
 .coding-quota-row { display: contents; }
 .coding-quota-provider { font-size: 12px; font-weight: 600; text-align: center; overflow-wrap: anywhere; }
-.coding-quota-rowlabel { color: var(--fusion-muted); font-size: 12px; white-space: nowrap; }
+.coding-quota-rowlabel { color: var(--fusion-muted); font-size: 12px; max-width: 9em; }
 .coding-quota-cell { display: flex; flex-direction: column; align-items: center; gap: 2px; text-align: center; }
 .coding-quota-cell svg { width: 56px; height: 56px; }
 .coding-quota-track { fill: none; stroke: var(--fusion-line); stroke-width: 5; }

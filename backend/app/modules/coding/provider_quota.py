@@ -1,8 +1,9 @@
 """Read-only provider quota rings for Coding → Runtime (spec 217).
 
-Claude and Codex usage windows come from ``agent-relay --json limits --refresh`` (the source spec 195 uses), read
-at most once per TTL and normalised here. Antigravity has no verified local source, so it is reported as not
-available rather than estimated. Nothing in this module writes owner, mission, Relay or credential state, and no
+Claude and Codex usage windows come from ``agent-relay --json limits --refresh`` (the source spec 195 uses).
+Antigravity buckets come from the agy CLI's own ``/quota`` command run headless (``agy -p /quota --output-format
+json``), which starts no model turn and spends no quota. Both are read at most once per TTL and normalised here;
+an unreadable source is reported as not available, never estimated. Nothing in this module writes owner, mission, Relay or credential state, and no
 tool output, path or secret reaches the payload: only validated numbers, timestamps and short identifiers.
 """
 
@@ -23,7 +24,7 @@ from app.modules.coding import relay_monitor
 PROVIDERS = (
     ("claude", "Claude", "claude"),
     ("codex", "Codex (ChatGPT)", "codex"),
-    ("antigravity", "Antigravity", None),
+    ("antigravity", "Antigravity", "agy"),
 )
 EXHAUSTED_PERCENT = 99.5
 STALE_AFTER = timedelta(minutes=30)
@@ -34,7 +35,7 @@ READ_TIMEOUT_S = 90
 FIVE_HOUR_IDS = {"five_hour", "5h", "session", "primary", "hourly"}
 WEEKLY_IDS = {"seven_day", "weekly", "week", "7d", "secondary"}
 AUTH_STATUSES = {"unauthenticated", "not_authenticated", "auth", "auth_required", "logged_out", "not_logged_in"}
-_ID = re.compile(r"^[A-Za-z0-9_.\- ]{1,40}$")
+_ID = re.compile(r"^[A-Za-z0-9_.&·()\- ]{1,40}$")
 _TOKENISH = re.compile(r"[A-Za-z0-9]{20,}")
 
 Reader = Callable[[], "dict[str, Any] | None"]
@@ -60,6 +61,71 @@ def read_relay_limits() -> dict[str, Any] | None:
     return data if isinstance(data, dict) else None
 
 
+def _json_document(text: str) -> dict[str, Any] | None:
+    """The CLI's JSON object: the whole output, or else its last line that parses as an object."""
+    for candidate in [text, *reversed(text.strip().splitlines())]:
+        try:
+            data = json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(data, dict):
+            return data
+    return None
+
+
+def read_agy_quota() -> dict[str, Any] | None:
+    """One headless ``agy`` ``/quota`` reading (no model turn), or None when agy is missing, slow or prints no JSON."""
+    binary = os.environ.get("JARVISOS_AGY_BIN", "agy")
+    try:
+        proc = subprocess.run([binary, "-p", "/quota", "--output-format", "json"], capture_output=True, text=True,
+                              timeout=READ_TIMEOUT_S, check=False, cwd=tempfile.gettempdir(), stdin=subprocess.DEVNULL)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return _json_document(proc.stdout)
+
+
+def read_all() -> dict[str, Any]:
+    return {"relay": read_relay_limits(), "agy": read_agy_quota()}
+
+
+def _buckets(node: Any, depth: int = 0) -> list[dict[str, Any]]:
+    """Every ``buckets`` entry in the agy reading (documented under ``command.data.groups[]``), bounded in depth."""
+    if depth > 6:
+        return []
+    if isinstance(node, list):
+        return [b for item in node for b in _buckets(item, depth + 1)]
+    if not isinstance(node, dict):
+        return []
+    found = [b for b in node.get("buckets", []) if isinstance(b, dict)] if isinstance(node.get("buckets"), list) else []
+    return found + [b for key, value in node.items() if key != "buckets" for b in _buckets(value, depth + 1)]
+
+
+AGY_FAMILIES = {"gemini": None, "3p": "Claude & GPT"}
+
+
+def agy_entry(reading: dict[str, Any] | None, now: datetime) -> dict[str, Any] | None:
+    """The agy reading as a Relay-style entry: Gemini 5-hour/weekly buckets fill the fixed rows, the rest are pools."""
+    if reading is None:
+        return None
+    windows = []
+    for bucket in _buckets(reading):
+        bucket_id = _short(bucket.get("id"))
+        fraction = bucket.get("remaining_fraction")
+        if bucket_id is None or bucket.get("disabled") is True:
+            continue
+        if isinstance(fraction, bool) or not isinstance(fraction, (int, float)) or not 0 <= fraction <= 1:
+            continue
+        family, _, span = bucket_id.lower().rpartition("-")
+        kind = {"5h": "five_hour", "weekly": "weekly"}.get(span, "pool")
+        prefix = AGY_FAMILIES.get(family, family.replace("-", " ").capitalize() or None)
+        if prefix:
+            kind = "pool"
+        label = f"{prefix} · {'5-hour' if span == '5h' else span}" if prefix else None
+        windows.append({"id": bucket_id, "label": label, "kind": kind, "used_percent": round((1 - fraction) * 100, 3),
+                        "resets_at": bucket.get("reset_time")})
+    return {"status": "ok", "as_of": _iso(now), "windows": windows}
+
+
 def _ts(value: Any) -> datetime | None:
     if not isinstance(value, str) or len(value) > 40:
         return None
@@ -83,6 +149,8 @@ def _short(value: Any) -> str | None:
 
 def window_kind(window: dict[str, Any]) -> str:
     """``five_hour``, ``weekly`` or ``pool`` (a model-specific or other window, shown on its own row)."""
+    if window.get("kind") in ("five_hour", "weekly", "pool"):
+        return str(window["kind"])
     minutes = window.get("window_minutes")
     if isinstance(minutes, int) and not isinstance(minutes, bool):
         if minutes == 300:
@@ -134,29 +202,31 @@ def normalize_agent(entry: Any, now: datetime) -> dict[str, Any]:
     return {"status": "ok", "as_of": _iso(as_of), "windows": windows}
 
 
-def normalize(reading: dict[str, Any] | None, now: datetime) -> dict[str, Any]:
-    agents = reading.get("agents") if isinstance(reading, dict) else None
+def normalize(readings: dict[str, Any], now: datetime) -> dict[str, Any]:
+    relay = readings.get("relay")
+    agents = relay.get("agents") if isinstance(relay, dict) else None
     by_key = {a.get("agent_key"): a for a in agents if isinstance(a, dict)} if isinstance(agents, list) else {}
     providers = []
-    for key, label, relay_key in PROVIDERS:
-        if relay_key is None:
-            body = {"status": "unavailable", "reason": "no_local_source", "windows": []}
-        elif reading is None:
-            body = {"status": "unavailable", "reason": "relay_limits_unreadable", "windows": []}
+    for key, label, source_key in PROVIDERS:
+        if source_key == "agy":
+            source, entry = "agy /quota", agy_entry(readings.get("agy"), now)
+            body = normalize_agent(entry, now) if entry else {"status": "unavailable", "reason": "agy_quota_unreadable", "windows": []}
         else:
-            body = normalize_agent(by_key.get(relay_key), now)
-        providers.append({"provider": key, "label": label, "source": "agent-relay limits" if relay_key else None, **body})
+            source = "agent-relay limits"
+            body = (normalize_agent(by_key.get(source_key), now) if isinstance(relay, dict)
+                    else {"status": "unavailable", "reason": "relay_limits_unreadable", "windows": []})
+        providers.append({"provider": key, "label": label, "source": source, **body})
     return {"state": "ok", "read_at": _iso(now), "providers": providers}
 
 
 class QuotaCache:
     """At most one limits reading per TTL; concurrent requests share the one in flight."""
 
-    def __init__(self, reader: Reader = read_relay_limits, clock: Callable[[], datetime] | None = None):
+    def __init__(self, reader: Reader = read_all, clock: Callable[[], datetime] | None = None):
         self.reader = reader
         self.clock = clock or (lambda: datetime.now(UTC))
         self._lock = threading.Lock()
-        self._reading: dict[str, Any] | None = None
+        self._reading: dict[str, Any] = {}
         self._read_at: datetime | None = None
 
     def get(self) -> dict[str, Any]:
@@ -164,7 +234,7 @@ class QuotaCache:
             now = self.clock()
             ttl = timedelta(seconds=ttl_seconds())
             if self._read_at is None or now - self._read_at >= ttl:
-                self._reading = self.reader()
+                self._reading = self.reader() or {}
                 self._read_at = now
             payload = normalize(self._reading, self._read_at)
             payload["next_read_at"] = _iso(self._read_at + ttl)

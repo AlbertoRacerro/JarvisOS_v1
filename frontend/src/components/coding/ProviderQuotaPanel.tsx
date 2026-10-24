@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { readProviderQuotas, type ProviderQuota, type ProviderQuotas, type ProviderQuotaWindow } from "../../api/coding";
 
-// Read-only provider usage rings (spec 217). The server reads agent-relay at most once per TTL; this panel only
+// Read-only provider usage rings (spec 217). The server reads agent-relay and agy /quota at most once per TTL; this panel only
 // re-asks the server once a minute and never calls a provider or CLI itself.
 const POLL_MS = 60_000;
 const ROWS: readonly { kind: ProviderQuotaWindow["kind"]; label: string }[] = [
@@ -12,7 +12,7 @@ const RADIUS = 22;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 
 const REASONS: Record<string, string> = {
-  no_local_source: "No readable source",
+  agy_quota_unreadable: "agy /quota unreadable",
   relay_limits_unreadable: "agent-relay limits unreadable",
   no_reading: "No reading",
   no_usage_windows: "No usage windows reported",
@@ -23,9 +23,9 @@ function until(iso: string | null, now: Date): string | null {
   if (!iso) return null;
   const minutes = Math.round((new Date(iso).getTime() - now.getTime()) / 60_000);
   if (!Number.isFinite(minutes) || minutes <= 0) return null;
-  if (minutes < 60) return `resets in ${minutes} min`;
+  if (minutes < 60) return `${minutes}m`;
   const hours = Math.floor(minutes / 60);
-  return hours < 24 ? `resets in ${hours} h ${minutes % 60} min` : `resets in ${Math.floor(hours / 24)} d ${hours % 24} h`;
+  return hours < 24 ? `${hours}h ${minutes % 60}m` : `${Math.floor(hours / 24)}d ${hours % 24}h`;
 }
 
 function age(iso: string | null | undefined, now: Date): string | null {
@@ -48,7 +48,7 @@ export function QuotaRing({ window, now }: Readonly<{ window: ProviderQuotaWindo
     <span className="coding-quota-caption">
       <strong>{window.exhausted ? "Exhausted" : "left"}</strong>
       {window.stale ? <em>out of date</em> : null}
-      {reset ? <span>{reset}</span> : null}
+      {reset ? <span title={`Resets in ${reset}`}>↻ {reset}</span> : null}
     </span>
   </div>;
 }
@@ -80,7 +80,6 @@ export function ProviderQuotaView({ data, error, now = new Date() }: Readonly<{ 
         {providers.map((p) => <div key={p.provider}>{p.provider === provider ? <QuotaRing window={window} now={now} /> : null}</div>)}
       </div>)}
     </div> : null}
-    {providers.some((p) => p.reason === "no_local_source") ? <p className="coding-control-note">{providers.filter((p) => p.reason === "no_local_source").map((p) => p.label).join(", ")}: usage is visible only in the app itself (Antigravity › Settings › Models). Nothing is estimated here.</p> : null}
   </section>;
 }
 
