@@ -221,12 +221,56 @@ along one wall). The `icoFoam` field is smooth and symmetric, and its own
 gives 3.530 Pa/m. This is the same pattern as the quarter-pipe wall-stress
 check above.
 
-**Conclusion for the next repair:** the 25% excess comes from the pinned
+**Conclusion at that checkpoint:** the 25% excess comes from the pinned
 `simpleFoam`/`pimpleFoam` laminar momentum-transport path of this v2412
 build when walls lie in two transverse directions. It is not a spec 216 case
-generator defect. The exact mechanism inside that path is not identified.
-Changing the generator would not repair it. The repair must either identify
-and avoid the defective operator or setting, or re-pin a toolchain that passes
-the square-duct and channel controls. The pressure output stays unpublishable
-until then. Any solver change needs a new laminar and turbulent qualification
-on the typed cases.
+generator defect. The section below identifies the defective operator.
+
+### Defective tensor transpose in the pinned build (2026-10-24)
+
+Rerunning the 40×16×16 `simpleFoam` duct for 2000 iterations with `p` and `U`
+tolerance 1e-15, relative tolerance 0.01 and up to 200 sweeps gives
+3.483047 Pa/m (+22.17%), the same value as before. Solver-tolerance
+stagnation is therefore not the cause.
+
+A diagnostic copy of the same duct then added a run-time-compiled
+`vectorCodedSource` fvOption. It adds `+fvc::div(ν dev2(T(fvc::grad(U))))`,
+which cancels the explicit `Stokes` term. Nothing else changed. The pressure
+gradient became 2.810508 Pa/m (−1.42%), which matches the `icoFoam` control
+to all printed digits. The same cancellation on the generated level 0
+quarter pipe (300 iterations, final initial residuals ≤ 5.6e-9) gave
+3.220790 Pa/m against Hagen–Poiseuille 3.2064 Pa/m (+0.45%), instead of
+4.016805 Pa/m (+25.3%). Its centreline speed moved from 0.019521 to
+0.019656 m/s (analytic 0.02).
+
+The same fvOption wrote OpenFOAM's own `grad(U)`, `T(grad(U))`,
+`dev2(T(grad(U)))` and the divergence term. Their y and z divergence
+components match a NumPy replication to seven digits. The axial component
+does not: it is −1.415 Pa/m equivalent at the duct centre, where the
+continuum and replicated values are about 4e-9. At every cell checked, the
+axial value equals `ν ∂_z(∂_z u_x)`, not `ν ∂_z(∂_x u_z)`. The written fields
+show why. On a temporary field, `T(fvc::grad(U))` puts (∇U)_zx in both the
+XZ and ZX entries. XY/YX and YZ/ZY transpose correctly. For a stored field,
+`T(g)` and `g.T()` are exact (zero difference). The installed
+`Tensor<Cmpt>::T()` header is correct, so the fault is in the compiled
+in-place field transpose of this conda-forge build. `linearViscousStress`
+applies `T()` to the temporary returned by `fvc::grad(U)`.
+
+This explains every control. A one-wall channel has no `∂_z u_x`, so the
+spurious term is zero and it passes. A duct or pipe has walls in both
+transverse directions, so the solver adds about half a transverse Laplacian
+as a body force. The error does not shrink with refinement.
+
+**Conclusion for the next repair:** the pinned build's transpose of a
+temporary tensor field is wrong. Every pinned `simpleFoam`/`pimpleFoam`
+momentum-transport model that calls `dev2(T(fvc::grad(U)))` is affected:
+laminar `Stokes` and the RAS/LES `linearViscousStress` family. The turbulent
+qualification is affected too. Spec 216 requirement 1 allows working around a
+known release defect in the adapter, with documentation, or moving the pin.
+The repair should do one of these and add a regression control: the
+40×16×16 square duct within about 2% of f·Re = 56.908 and the one-wall
+channel. The typed laminar and turbulent qualification must then be rerun.
+The coded-source run above is diagnostic only and is not a typed case.
+Pressure output stays unpublishable until that rerun passes. Inputs, logs,
+written fields and analysis scripts are in
+`~/jarvis-control/work/evidence/216-solver-controls/c80-*`.
