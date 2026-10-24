@@ -66,7 +66,8 @@ standard SIMPLE trial must not be cited as agreement with Hagen–Poiseuille:
 its iteration-300 pressure was transient and the run subsequently diverged.
 The next bounded check is the discrete wall-stress/pressure balance and the
 mesh's wall-face geometry; only a converged physical balance can justify
-changing the case generator or the reported pressure result.
+changing the case generator or the reported pressure result. The saved-field
+check below narrows this discrepancy but does not resolve it.
 
 ### Developed-section pressure check (2026-10-24)
 
@@ -88,6 +89,30 @@ The 25% excess is already present in the nearly developed interior and is
 not explained by the choice of the original 0.13–0.17 m probe interval. This
 diagnostic still leaves the discrete wall-stress/pressure balance and mesh
 geometry unresolved. The resampled field is not a qualification run.
+
+### Saved-field wall-stress check (2026-10-24)
+
+Pinned v2412 `simpleFoam -postProcess -func wallShearStress -time 300` was
+applied to the saved level 0 and 1 fields. For wall faces whose axial centres
+lie in the original 0.13–0.17 m pressure interval, the axial kinematic wall
+stress was averaged by each face's area from `constant/polyMesh`. For a
+developed quarter-pipe, the wall-implied pressure gradient is
+`rho * 2 * |mean wallShearStress_x| / R` (R = 5 mm). This is a diagnostic force
+balance from the saved fields, not a new solver run or qualification result.
+
+| Mesh level | Wall faces in interval | Mean axial kinematic wall stress (m²/s²) | Wall-implied gradient (Pa/m) | Sampled pressure gradient (Pa/m) |
+| --- | ---: | ---: | ---: | ---: |
+| 0 | 256 | 8.426385e-6 | 3.364487 | 4.016805 |
+| 1 | 576 | 8.418050e-6 | 3.361159 | 4.013776 |
+
+The wall-implied gradient is about 5% above Hagen–Poiseuille, while the
+sampled pressure gradient is about 25% above it. Their roughly 19% mismatch
+persists across refinement. The profile and near-constant axial velocity in
+the developed interval make entrance loss an inadequate explanation. The
+discrete pressure/momentum balance remains unresolved; neither gradient is
+accepted as a publishable pipe correlation. A separate level 0 trial changing
+only `consistent yes` to `consistent no` with the existing U relaxation 0.9
+failed with a floating-point exception and supplied no usable result.
 
 The maintainer-owned [cloud prototype PR #916](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/916)
 was read as input. It reports laminar agreement within 0.037% using ESI
