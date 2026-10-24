@@ -9,14 +9,17 @@ tool output, path or secret reaches the payload: only validated numbers, timesta
 
 from __future__ import annotations
 
+import glob
 import json
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 import threading
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 from app.modules.coding import relay_monitor
@@ -49,16 +52,32 @@ def ttl_seconds() -> int:
     return max(MIN_TTL_S, min(MAX_TTL_S, value))
 
 
-def read_relay_limits() -> dict[str, Any] | None:
-    """One ``agent-relay`` limits reading, or None when the tool is missing, slow or prints no JSON."""
-    binary = os.environ.get("JARVISOS_AGENT_RELAY_BIN", "agent-relay")
+def host_which(command: str) -> str | None:
+    """Resolve a host CLI as the Relay gateway does: services started by the launcher do not inherit a login PATH."""
+    entries = [str(Path.home() / ".local" / "bin")]
+    entries += sorted(glob.glob(str(Path.home() / ".nvm" / "versions" / "node" / "*" / "bin")), reverse=True)
+    entries.append(os.getenv("PATH", "/usr/bin:/bin"))
+    return shutil.which(command, path=os.pathsep.join(entries))
+
+
+def _run(env_key: str, command: str, args: list[str]) -> tuple[str | None, str | None]:
+    """The CLI's stdout, or None and a short failure code (``not_found``, ``timeout``); stderr is never kept."""
+    binary = os.environ.get(env_key) or host_which(command) or command
     try:
-        proc = subprocess.run([binary, "--json", "limits", "--refresh"], capture_output=True, text=True,
-                              timeout=READ_TIMEOUT_S, check=False, cwd=tempfile.gettempdir())
-        data = json.loads(proc.stdout)
-    except (OSError, subprocess.TimeoutExpired, json.JSONDecodeError):
-        return None
-    return data if isinstance(data, dict) else None
+        proc = subprocess.run([binary, *args], capture_output=True, text=True, timeout=READ_TIMEOUT_S, check=False,
+                              cwd=tempfile.gettempdir(), stdin=subprocess.DEVNULL)
+    except subprocess.TimeoutExpired:
+        return None, "timeout"
+    except OSError:
+        return None, "not_found"
+    return proc.stdout, None
+
+
+def read_relay_limits() -> tuple[dict[str, Any] | None, str | None]:
+    """One ``agent-relay`` limits reading, or None and why: the tool is missing, slow or prints no JSON."""
+    stdout, error = _run("JARVISOS_AGENT_RELAY_BIN", "agent-relay", ["--json", "limits", "--refresh"])
+    data = _json_document(stdout) if stdout is not None else None
+    return data, None if data is not None else error or "no_json"
 
 
 def _json_document(text: str) -> dict[str, Any] | None:
@@ -73,19 +92,16 @@ def _json_document(text: str) -> dict[str, Any] | None:
     return None
 
 
-def read_agy_quota() -> dict[str, Any] | None:
-    """One headless ``agy`` ``/quota`` reading (no model turn), or None when agy is missing, slow or prints no JSON."""
-    binary = os.environ.get("JARVISOS_AGY_BIN", "agy")
-    try:
-        proc = subprocess.run([binary, "-p", "/quota", "--output-format", "json"], capture_output=True, text=True,
-                              timeout=READ_TIMEOUT_S, check=False, cwd=tempfile.gettempdir(), stdin=subprocess.DEVNULL)
-    except (OSError, subprocess.TimeoutExpired):
-        return None
-    return _json_document(proc.stdout)
+def read_agy_quota() -> tuple[dict[str, Any] | None, str | None]:
+    """One headless ``agy`` ``/quota`` reading (no model turn), or None and why: agy is missing, slow or prints no JSON."""
+    stdout, error = _run("JARVISOS_AGY_BIN", "agy", ["-p", "/quota", "--output-format", "json"])
+    data = _json_document(stdout) if stdout is not None else None
+    return data, None if data is not None else error or "no_json"
 
 
 def read_all() -> dict[str, Any]:
-    return {"relay": read_relay_limits(), "agy": read_agy_quota()}
+    (relay, relay_error), (agy, agy_error) = read_relay_limits(), read_agy_quota()
+    return {"relay": relay, "agy": agy, "errors": {"relay": relay_error, "agy": agy_error}}
 
 
 def _buckets(node: Any, depth: int = 0) -> list[dict[str, Any]]:
@@ -210,19 +226,30 @@ def normalize_agent(entry: Any, now: datetime) -> dict[str, Any]:
     return {"status": "ok", "as_of": _iso(as_of), "windows": windows}
 
 
+READ_ERRORS = ("not_found", "timeout", "no_json")
+UNREADABLE = {"relay": "relay_limits_unreadable", "agy": "agy_quota_unreadable"}
+
+
+def _reason(source: str, error: Any) -> str:
+    """``relay_not_found``, ``agy_timeout``…, or the generic unreadable reason when the cause is unknown."""
+    return f"{source}_{error}" if error in READ_ERRORS else UNREADABLE[source]
+
+
 def normalize(readings: dict[str, Any], now: datetime) -> dict[str, Any]:
     relay = readings.get("relay")
+    raw_errors = readings.get("errors")
+    errors: dict[str, Any] = raw_errors if isinstance(raw_errors, dict) else {}
     agents = relay.get("agents") if isinstance(relay, dict) else None
     by_key = {a.get("agent_key"): a for a in agents if isinstance(a, dict)} if isinstance(agents, list) else {}
     providers = []
     for key, label, source_key in PROVIDERS:
         if source_key == "agy":
             source, entry = "agy /quota", agy_entry(readings.get("agy"), now)
-            body = normalize_agent(entry, now) if entry else {"status": "unavailable", "reason": "agy_quota_unreadable", "windows": []}
+            body = normalize_agent(entry, now) if entry else {"status": "unavailable", "reason": _reason("agy", errors.get("agy")), "windows": []}
         else:
             source = "agent-relay limits"
             body = (normalize_agent(by_key.get(source_key), now) if isinstance(relay, dict)
-                    else {"status": "unavailable", "reason": "relay_limits_unreadable", "windows": []})
+                    else {"status": "unavailable", "reason": _reason("relay", errors.get("relay")), "windows": []})
         providers.append({"provider": key, "label": label, "source": source, **body})
     return {"state": "ok", "read_at": _iso(now), "providers": providers}
 
