@@ -12,14 +12,16 @@ tools:
     entrypoint: build123d
     capabilities: [brep, sweep, boolean, fillet, step_export, stl_export]
     health_check: "python -c 'import build123d'"
+  # Pin moved 4.13.1 -> 4.15.2 by spec 216: the conda-forge release installed in
+  # the project cfd environment (operator registry enables it with path and hash).
   - id: gmsh
     kind: mesher
     integration_mode: subprocess
-    version_pin: "4.13.1"
+    version_pin: "4.15.2"
     license:
       spdx: GPL-2.0-or-later
       boundary: C
-      verified_date: "2026-07-03"
+      verified_date: "2026-10-24"
     enabled: false
     entrypoint: null
     binary_sha256: null
@@ -67,4 +69,78 @@ tools:
     binary_sha256: null
     provenance_url: null
     capabilities: [laminar_channel_flow]
+    health_check: null
+  # Spec 216 smooth-tube study binaries. Same OpenFOAM v2412 install as above;
+  # disabled here, enabled by the operator registry with absolute path and hash.
+  - id: openfoam_checkmesh
+    kind: mesher
+    integration_mode: subprocess
+    version_pin: "v2412"
+    license:
+      spdx: GPL-3.0-or-later
+      boundary: C
+      verified_date: "2026-10-24"
+    enabled: false
+    entrypoint: null
+    binary_sha256: null
+    provenance_url: null
+    capabilities: [mesh_quality_check]
+    health_check: null
+  - id: openfoam_simplefoam
+    kind: cfd_solver
+    integration_mode: subprocess
+    version_pin: "v2412"
+    license:
+      spdx: GPL-3.0-or-later
+      boundary: C
+      verified_date: "2026-10-24"
+    enabled: false
+    entrypoint: null
+    binary_sha256: null
+    provenance_url: null
+    capabilities: [steady_incompressible_pipe_flow, laminar, rans_komega_sst, rans_kepsilon]
+    health_check: null
+  # Spec 216 MPI execution: domain decomposition/reconstruction from the same
+  # OpenFOAM install, and the MPICH launcher shipped in that conda environment.
+  - id: openfoam_decomposepar
+    kind: mesher
+    integration_mode: subprocess
+    version_pin: "v2412"
+    license:
+      spdx: GPL-3.0-or-later
+      boundary: C
+      verified_date: "2026-10-24"
+    enabled: false
+    entrypoint: null
+    binary_sha256: null
+    provenance_url: null
+    capabilities: [domain_decomposition]
+    health_check: null
+  - id: openfoam_reconstructpar
+    kind: cfd_solver
+    integration_mode: subprocess
+    version_pin: "v2412"
+    license:
+      spdx: GPL-3.0-or-later
+      boundary: C
+      verified_date: "2026-10-24"
+    enabled: false
+    entrypoint: null
+    binary_sha256: null
+    provenance_url: null
+    capabilities: [field_reconstruction]
+    health_check: null
+  - id: openfoam_mpiexec
+    kind: cfd_solver
+    integration_mode: subprocess
+    version_pin: "4.3.2"
+    license:
+      spdx: LicenseRef-MPICH
+      boundary: C
+      verified_date: "2026-10-24"
+    enabled: false
+    entrypoint: null
+    binary_sha256: null
+    provenance_url: null
+    capabilities: [mpi_launch]
     health_check: null

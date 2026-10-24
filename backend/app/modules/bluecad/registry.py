@@ -239,7 +239,7 @@ def run_tool(tool_id: str, args: list[str], cwd: str | Path, timeout: float, reg
         raise ToolRegistryError("TOOL_NOT_SUBPROCESS", "Tool is not configured for subprocess execution", {"tool_id": tool_id})
     command = [tool["entrypoint"], *args]
     env = dict(_MINIMAL_ENV)
-    if tool_id in {"openfoam", "openfoam_blockmesh"}:
+    if tool_id == "openfoam" or tool_id.startswith("openfoam_"):
         prefix = Path(tool["entrypoint"]).resolve().parent.parent
         env.update({
             "PATH": str(prefix / "bin"),
