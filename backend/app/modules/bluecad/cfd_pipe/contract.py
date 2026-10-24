@@ -24,6 +24,9 @@ LAMINAR_ENTRY_COEFF = 0.06
 TURBULENT_ENTRY_COEFF = 4.4
 DEVELOPMENT_MARGIN = 1.5
 MAX_MESH_LEVEL = 4
+# Fractions of the tube length at the two developed-section pressure stations.
+UPSTREAM_STATION_FRACTION = 0.65
+DOWNSTREAM_STATION_FRACTION = 0.85
 
 _STRICT = ConfigDict(extra="forbid", frozen=True, allow_inf_nan=False)
 
@@ -144,9 +147,10 @@ class PipeStudyContract(BaseModel):
                 raise ValueError("standard kEpsilon is valid only with wall functions")
             if re < TURBULENT_RE_MIN:
                 raise ValueError(f"turbulent_rans requested at Re={re:.0f} < {TURBULENT_RE_MIN:.0f}")
-        if self.domain.length_m < self.required_length_m:
+        if UPSTREAM_STATION_FRACTION * self.domain.length_m < self.required_length_m:
             raise ValueError(
-                f"tube length {self.domain.length_m:.4g} m is shorter than the "
+                f"tube length {self.domain.length_m:.4g} m puts the upstream pressure station at "
+                f"{UPSTREAM_STATION_FRACTION:.0%} of the length, before the "
                 f"{self.required_length_m:.4g} m needed for developed flow"
             )
         return self

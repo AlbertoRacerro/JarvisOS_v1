@@ -62,7 +62,7 @@ def turbulent_mesh() -> Discretization:
 
 
 def c1_model():
-    points = [point(turbulent(re), err) for re, err in ((1e4, -0.02), (2e4, -0.01), (4e4, -0.005))]
+    points = [point(turbulent(re), err) for re, err in ((1e4, -0.02), (2e4, -0.01), (2.8e4, -0.005))]
     return publish("c1_tube.darcy", points, [turbulent_mesh()], TOL)
 
 
@@ -80,7 +80,7 @@ def test_published_model_states_validity_uncertainty_and_provenance() -> None:
     (segment,) = model.segments
     assert segment.regime == "turbulent_rans" and segment.reference == "colebrook_smooth"
     assert segment.validity.reynolds_min == pytest.approx(1e4, rel=1e-9)
-    assert segment.validity.reynolds_max == pytest.approx(4e4, rel=1e-9)
+    assert segment.validity.reynolds_max == pytest.approx(2.8e4, rel=1e-9)
     assert segment.validity.diameter_m == pytest.approx(0.046)
     u = segment.uncertainty
     # Points sit on L1, 0.33% below the Richardson value: 1.25 x 0.33% exceeds the 0.185% fine GCI.
@@ -102,15 +102,15 @@ def test_version_identity_is_deterministic_and_tamper_evident() -> None:
 
 
 def test_publication_refuses_failed_unconverged_and_out_of_tolerance_runs() -> None:
-    good = [point(turbulent(1e4)), point(turbulent(4e4))]
+    good = [point(turbulent(1e4)), point(turbulent(2.8e4))]
     cases = [
         ([point(turbulent(1e4), status="failed"), good[1]], "not measured"),
         ([point(turbulent(1e4), residual_converged=False), good[1]], "residual target"),
         ([point(turbulent(1e4), -0.12), good[1]], "beyond the stated ±10%"),
         ([good[0]], "two or more Reynolds numbers"),
-        ([good[0], point(turbulent(4e4, turbulence_model="kEpsilon", wall_treatment="wall_function"))],
+        ([good[0], point(turbulent(2.8e4, turbulence_model="kEpsilon", wall_treatment="wall_function"))],
          "differ in fluid, model or boundary"),
-        ([good[0], point(turbulent(4e4, domain=derive_fluid_domain(tube(2700.0))))], "tube geometries"),
+        ([good[0], point(turbulent(2.8e4, domain=derive_fluid_domain(tube(2700.0))))], "tube geometries"),
         ([], "no study runs"),
     ]
     for points, reason in cases:
@@ -125,13 +125,13 @@ def test_publication_refuses_a_non_monotonic_mesh_study() -> None:
     oscillating = three_mesh_study((1.0, 1.1, 0.9), 1.5)
     evidence = Discretization(regime="turbulent_rans", reynolds=2e4, study=oscillating, point_level_value=1.1)
     with pytest.raises(PublicationRefused, match="oscillatory"):
-        publish("m", [point(turbulent(1e4)), point(turbulent(4e4))], [evidence], TOL)
+        publish("m", [point(turbulent(1e4)), point(turbulent(2.8e4))], [evidence], TOL)
 
 
 def test_laminar_segment_reproduces_hagen_poiseuille() -> None:
     study = three_mesh_study((3.2122, 3.2154, 3.2208), 1.5)
     evidence = Discretization(regime="laminar", reynolds=100.0, study=study, point_level_value=3.2154)
-    model = publish("lam", [point(laminar(re), 0.003) for re in (100, 500, 1000)], [evidence], TOL)
+    model = publish("lam", [point(laminar(re), 0.003) for re in (100, 300, 600)], [evidence], TOL)
     (segment,) = model.segments
     assert segment.b == pytest.approx(-1.0, abs=1e-9)
     assert segment.a == pytest.approx(64.0 * 1.003, rel=1e-9)
@@ -153,10 +153,10 @@ def test_evaluation_inside_range_matches_the_fit_and_states_uncertainty() -> Non
 def test_evaluation_outside_validity_refuses_or_warns_visibly() -> None:
     model = c1_model()
     props = {"density_kg_m3": 998.2, "dynamic_viscosity_pa_s": 1.002e-3}
-    refused = evaluate(model, reynolds=8e4, diameter_m=0.046, **props)
+    refused = evaluate(model, reynolds=5e4, diameter_m=0.046, **props)
     assert refused.status == "refused" and refused.darcy is None
     assert "outside the validated range" in refused.violations[0]
-    warned = evaluate(model, reynolds=8e4, diameter_m=0.046, out_of_range="warn", **props)
+    warned = evaluate(model, reynolds=5e4, diameter_m=0.046, out_of_range="warn", **props)
     assert warned.status == "out_of_range_warned" and warned.darcy is not None
     assert warned.relative_uncertainty is None
     other_bore = evaluate(model, reynolds=2e4, diameter_m=0.04, **props)
@@ -168,7 +168,7 @@ def test_evaluation_outside_validity_refuses_or_warns_visibly() -> None:
 def test_obsolescence_after_geometry_or_study_input_change() -> None:
     model = c1_model()
     template = study_template_digest(turbulent(2e4))
-    assert study_template_digest(turbulent(3e4, mesh_level=2)) == template
+    assert study_template_digest(turbulent(2.5e4, mesh_level=2)) == template
     current = {"turbulent_rans": template}
     assert obsolescence(model, geometry_digest=model.geometry_digest, study_templates=current) == ()
     longer = derive_fluid_domain(tube(2700.0)).geometry_digest

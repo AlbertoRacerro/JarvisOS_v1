@@ -48,7 +48,7 @@ FIXTURES = Path(__file__).parent / "fixtures" / "cfd_pipe"
 REPO = Path(__file__).resolve().parents[2]
 
 
-def tube_spec(outer_d_mm: float = 50.0, wall_t_mm: float = 2.0, length_mm: float = 2000.0) -> dict:
+def tube_spec(outer_d_mm: float = 50.0, wall_t_mm: float = 2.0, length_mm: float = 2600.0) -> dict:
     return template_geometry_spec(TubeTemplateCreate.model_validate(
         {"template": "tube", "params": {"outer_d_mm": outer_d_mm, "wall_t_mm": wall_t_mm, "length_mm": length_mm}}
     ))
@@ -76,7 +76,7 @@ def c1_turbulent(**overrides) -> PipeStudyContract:
 def test_fluid_domain_is_the_bore_and_digest_tracks_geometry() -> None:
     domain = derive_fluid_domain(tube_spec())
     assert domain.inner_diameter_m == pytest.approx(0.046)
-    assert domain.length_m == pytest.approx(2.0)
+    assert domain.length_m == pytest.approx(2.6)
     assert domain.patches == ("inlet", "outlet", "wall")
     assert derive_fluid_domain(tube_spec()).geometry_digest == domain.geometry_digest
     assert derive_fluid_domain(tube_spec(length_mm=2100.0)).geometry_digest != domain.geometry_digest
@@ -377,8 +377,12 @@ def test_turbulent_comparison_reports_signed_errors_against_both_correlations() 
 
 def test_real_v2412_turbulent_probes_before_development_length_are_refused() -> None:
     # The first C1 SST run used a 2 m tube: its 1.3 m station lies inside the 1.59 m allowance.
-    contract = c1_turbulent(solver={"max_iterations": 1500, "residual_target": 1e-5},
-                            domain=derive_fluid_domain(tube_spec(length_mm=2000.0)))
+    # The contract now refuses that tube before a run; the probe guard stays as a second line.
+    short = derive_fluid_domain(tube_spec(length_mm=2000.0))
+    with pytest.raises(ValidationError, match="upstream pressure station"):
+        c1_turbulent(domain=short)
+    contract = c1_turbulent(solver={"max_iterations": 1500, "residual_target": 1e-5}).model_copy(
+        update={"domain": short})
     pressure = (FIXTURES / "turbulent_sst_2m_probe_p.txt").read_text()
     velocity = (FIXTURES / "turbulent_sst_2m_probe_U.txt").read_text()
     assert parse_probes(pressure, vectors=False).iteration == 1500
@@ -472,7 +476,9 @@ def test_checkmesh_parsing_from_real_v2412_log() -> None:
     report = parse_checkmesh((FIXTURES / "checkMesh_ok.log").read_text())
     assert report == CheckMeshReport(cells=121800, max_non_orthogonality_deg=26.0357950025, max_skewness=0.53926781269,
                                      max_aspect_ratio=290.510122154, failed_checks=0)
-    record = evaluate_mesh(c1_turbulent(), casegen.mesh_plan(c1_turbulent()), report)
+    # The fixture is the level-0 mesh of the first 2 m C1 tube.
+    contract = c1_turbulent().model_copy(update={"domain": derive_fluid_domain(tube_spec(length_mm=2000.0))})
+    record = evaluate_mesh(contract, casegen.mesh_plan(contract), report)
     assert record.accepted and record.refusals == ()
 
 

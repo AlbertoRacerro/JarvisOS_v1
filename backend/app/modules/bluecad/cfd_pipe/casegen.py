@@ -29,7 +29,12 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
-from app.modules.bluecad.cfd_pipe.contract import PipeStudyContract, contract_digest
+from app.modules.bluecad.cfd_pipe.contract import (
+    DOWNSTREAM_STATION_FRACTION,
+    UPSTREAM_STATION_FRACTION,
+    PipeStudyContract,
+    contract_digest,
+)
 from app.modules.bluecad.cfd_pipe.foam_dict import render
 from app.modules.bluecad.cfd_pipe.references import friction_estimate
 
@@ -285,10 +290,10 @@ def probe_locations(contract: PipeStudyContract) -> tuple[tuple[float, float, fl
     length = contract.domain.length_m
     radius = contract.diameter_m / 2.0
     return (
-        (0.65 * length, 0.1 * radius, 0.1 * radius),
-        (0.85 * length, 0.1 * radius, 0.1 * radius),
-        (0.85 * length, 0.4 * radius, 0.1 * radius),
-        (0.85 * length, 0.7 * radius, 0.1 * radius),
+        (UPSTREAM_STATION_FRACTION * length, 0.1 * radius, 0.1 * radius),
+        (DOWNSTREAM_STATION_FRACTION * length, 0.1 * radius, 0.1 * radius),
+        (DOWNSTREAM_STATION_FRACTION * length, 0.4 * radius, 0.1 * radius),
+        (DOWNSTREAM_STATION_FRACTION * length, 0.7 * radius, 0.1 * radius),
     )
 
 
