@@ -23,7 +23,12 @@ from app.modules.bluecad.cfd_pipe.mesh_check import (
     evaluate_mesh,
     parse_checkmesh,
 )
-from app.modules.bluecad.cfd_pipe.mesh_study import MeshStudyError, refinement_ratio, three_mesh_study
+from app.modules.bluecad.cfd_pipe.mesh_study import (
+    MeshStudyError,
+    refinement_ratio,
+    refinement_ratios,
+    three_mesh_study,
+)
 from app.modules.bluecad.cfd_pipe.probe_results import (
     ProbeResultError,
     laminar_comparison,
@@ -378,6 +383,34 @@ def test_three_mesh_study_never_reports_gci_for_oscillatory_or_divergent_triplet
     divergent = three_mesh_study((1.0, 1.1, 1.15), 1.5)
     assert divergent.convergence == "divergent" and divergent.gci_fine is None
     assert three_mesh_study((2.0, 2.0, 2.0), 1.5).convergence == "converged"
+
+
+def test_three_mesh_study_solves_order_for_non_constant_ratio() -> None:
+    r21, r32 = 1.4909, 1.5
+    values = tuple(1.0 + 0.01 * h**2 for h in (1.0, r21, r21 * r32))
+    study = three_mesh_study(values, (r21, r32))
+    assert study.convergence == "monotonic"
+    assert study.observed_order == pytest.approx(2.0)
+    assert study.extrapolated == pytest.approx(1.0)
+    assert study.gci_fine == pytest.approx(1.25 * abs(values[1] - values[0]) / values[0] / (r21**2 - 1.0))
+    # The constant-ratio formula would misstate the order on the same triplet.
+    assert three_mesh_study(values, r21).observed_order != pytest.approx(2.0)
+
+
+def test_converged_laminar_triplet_is_monotonic_with_gci() -> None:
+    # Typed laminar levels 2/1/0, 600 iterations, all residual-converged (cycle 83 runs).
+    study = three_mesh_study((3.2121806796689745, 3.2153669223401247, 3.2207775720011185), 1.5)
+    assert study.convergence == "monotonic"
+    assert study.observed_order == pytest.approx(1.306, abs=1e-3)
+    assert study.extrapolated == pytest.approx(3.207617, abs=1e-6)
+    assert study.gci_fine == pytest.approx(0.001776, abs=1e-6)
+
+
+def test_refinement_ratios_allow_rounded_turbulent_levels() -> None:
+    r21, r32 = refinement_ratios((1_769_284, 533_925, 158_200))
+    assert r21 == pytest.approx(1.4909, abs=1e-4) and r32 == pytest.approx(1.5)
+    with pytest.raises(MeshStudyError, match="not constant"):
+        refinement_ratio((1_769_284, 533_925, 158_200))
 
 
 def test_refinement_ratio_from_generated_mesh_levels() -> None:
