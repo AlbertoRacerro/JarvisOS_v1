@@ -60,14 +60,21 @@ not typed cases or qualification evidence.
 | Linear convection | `div(phi,U)` from bounded linear-upwind to `Gauss linear` | 4.015921 Pa/m | completed 300 iterations |
 | Fixed-speed inlet | `flowRateInletVelocity` to `fixedValue` at 0.01 m/s | 4.010354 Pa/m | residual-converged at 300 iterations |
 | Standard SIMPLE trial | `consistent no`, velocity relaxation 0.5 | 3.080548 Pa/m at iteration 300; −25539.4 Pa/m at iteration 1500 | **failed**: continuity and momentum residuals did not converge |
+| Relaxed standard SIMPLE | `consistent no`, velocity relaxation 0.7, pressure-field relaxation 0.3 | 4.016811 Pa/m | completed 500 iterations; final Ux and p residuals below 1e-8 |
 
-The first two input changes do not explain the 25% pressure excess. The
-standard SIMPLE trial must not be cited as agreement with Hagen–Poiseuille:
+The inlet, convection and relaxed standard SIMPLE changes do not explain the
+25% pressure excess. The first standard SIMPLE trial must not be cited as
+agreement with Hagen–Poiseuille:
 its iteration-300 pressure was transient and the run subsequently diverged.
-The next bounded check is the discrete wall-stress/pressure balance and the
-mesh's wall-face geometry; only a converged physical balance can justify
-changing the case generator or the reported pressure result. The saved-field
-check below narrows this discrepancy but does not resolve it.
+The relaxed trial copied the generated level 0 case into an external diagnostic
+directory, removed its saved fields, and changed only `fvSolution` and the
+iteration/write limit in `controlDict`. Its final probe values were
+`p(0.13 m) = 0.000286128986166` and `p(0.17 m) = 0.000125166824916` m²/s²;
+at 998.2 kg/m³ they yield 4.016811 Pa/m, within 0.0002% of the baseline.
+This is a solver-setting diagnostic, not a typed qualification run. The
+saved-field checks below narrow the discrepancy but do not resolve the
+discrete axial momentum balance. Only a converged physical balance can
+justify changing the case generator or the reported pressure result.
 
 ### Developed-section pressure check (2026-10-24)
 
