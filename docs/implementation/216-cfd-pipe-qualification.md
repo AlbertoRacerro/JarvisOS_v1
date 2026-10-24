@@ -143,13 +143,73 @@ second-order sequence. The current laminar levels 0/1/2
 (3.220777, 3.215386, 3.218273 Pa/m) are **oscillatory**. Level 2 is also not
 residual-converged, so no GCI is reported for them.
 
-**Still open before publication:** rerun laminar level 2 with a larger
-iteration budget (the runner's 1800 s solver timeout must become a typed,
-contract-derived bound; 300 iterations already took 1230 s), then compute the
-laminar GCI. Then run a three-level turbulent mesh study on the 3 m contract
-and state tolerances before comparing. After that comes the rest of spec 216:
-live residual console, viewport, publication and Process pinning. No reduced
-model is published.
+### Laminar three-mesh study, residual-converged (2026-10-24)
+
+The solver timeout is now a typed contract value (`SolverControls.wall_time_limit_s`).
+The same laminar contract was rerun on all three levels with 600 iterations and a
+4800 s bound. Each level met the 1e-6 residual target (final initial residuals
+≤ 3.2e-8), and `checkMesh` accepted every mesh with zero failed checks. The run
+directories are `~/jarvis-control/work/evidence/216-solver-controls/c83-lam/`.
+
+| Mesh level | Cells | Measured ΔP/L (Pa/m) | Error vs HP 3.2064 | Profile max error / mean speed | Solver time | Case manifest digest |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| 0 | 15,360 | 3.220778 | +0.448% | 0.797% | 14 s | `sha256:9e01104677c1a7503aaee59a06da9f079cc7b8951057cc29a625da6413e665ed` |
+| 1 | 51,840 | 3.215367 | +0.280% | 0.397% | 128 s | `sha256:99d485b14c22879543c6d459d6edcbab28d794e1146f8cfedff043328a62723b` |
+| 2 | 174,960 | 3.212181 | +0.180% | 0.188% | 1540 s | `sha256:741cb01af5fd98f3de6119b6aa3116398c68d1d8758a53a19116db18006cd4da` |
+
+Levels 0 and 1 reproduce their 300-iteration values to 2e-5 Pa/m. Level 2
+moved from the unconverged 3.218273 to 3.212181 Pa/m. That removes the earlier
+oscillation. `mesh_study.three_mesh_study` with r = 1.5 now gives:
+
+| Quantity | Value |
+| --- | ---: |
+| Convergence | monotonic |
+| Observed order p | 1.31 |
+| Richardson extrapolation | 3.207617 Pa/m (+0.038% vs HP) |
+| Fine-mesh GCI | 0.178% (±0.0057 Pa/m) |
+| Fine-mesh error vs HP | +0.180% |
+
+The analytic value lies 0.002% outside the fine-mesh GCI band, i.e. at its edge.
+The observed order is below the formal second order of the schemes. Likely
+contributors are the polygonal O-grid wall, whose area deficit shrinks with
+refinement (0.16% at level 0), and `cellPoint` probe interpolation. Neither is
+separated here. The profile error also converges monotonically (p = 1.61).
+No laminar tolerance was stated before this comparison, so it is reported as a
+measurement with uncertainty, not as a pass. Mass conservation was checked
+above (imbalance ≤ 3.4e-8 of the prescribed rate).
+
+### Turbulent three-mesh study: tolerances stated before the runs (2026-10-24)
+
+These acceptance tolerances are fixed in this commit, before any of the runs
+below exist. They are builder-stated for spec 216 contract 5d and are open to
+maintainer review on PR #917. If a run misses them, that is reported as a miss.
+
+- **Case.** The C1 condition: D = 46 mm, v = 0.45 m/s, water at 20 °C
+  (Re 20,621), k-ω SST with a low-Re resolved wall (estimated y⁺ 0.50 on every
+  level). Mesh levels 0, 1 and 2 have 158,200, 533,925 and 1,769,284 cells.
+  Each runs 2000 iterations with residual target 1e-5. The tube is **2.6 m**,
+  not 3 m: at 3 m, level 2 has 2,040,412 cells and is refused by the
+  2,000,000-cell budget. The pressure stations at 0.65 L and 0.85 L are 1.69 m
+  and 2.21 m, past the 1.59 m development allowance. The geometry digest is
+  `sha256:21d7f06a289e564a0331246a3ca2a0c5e158267f8c152c906ef96fa1dfb0ece2`.
+- **T1 (residuals).** Every level meets the 1e-5 residual target, and
+  `checkMesh` accepts it.
+- **T2 (mesh sensitivity).** The three pressure gradients converge monotonically,
+  and the fine-mesh GCI is ≤ 3%. Radial rounding makes the refinement ratio
+  non-constant (1.491 and 1.500), so the order is solved with Celik's
+  non-constant-ratio form.
+- **T3 (correlation).** The fine-mesh gradient is within ±10% of smooth-pipe
+  Colebrook (56.444 Pa/m at this Re). The Blasius error is also reported, with
+  no separate tolerance. ±10% is about the published scatter of RANS
+  smooth-pipe friction predictions and the correlations' own ±5%. It is not a
+  plant-accuracy claim.
+
+Model limitation: k-ω SST with a resolved low-Re wall on a smooth wall. Wall
+functions, roughness, transition and swirl are not tested.
+
+**Still open before publication:** run and report the turbulent study above,
+then the rest of spec 216: live residual console, viewport, publication and
+Process pinning. No reduced model is published.
 
 ### Superseded first runs: casegen v1, defective stress path
 
