@@ -151,3 +151,20 @@ OpenFOAM v1912, a wedge mesh and a longer entrance allowance. Those are
 prototype claims from a different tool release and mesh; they do not validate
 this v2412 case. The next repair can use its field and mesh analysis as a
 comparison without modifying or merging that lane.
+
+### Saved-field flow balance (2026-10-24)
+
+The unchanged level 0 and 1 `300/phi` surface-scalar fields were read from the
+external pinned-v2412 cases. Summing each inlet and outlet patch's face fluxes
+gives the following volumetric rates. The prescribed quarter-pipe rate is
+`π(0.005 m)²(0.01 m/s)/4 = 1.96349540849e-7 m³/s`.
+
+| Mesh level | Inlet flux (m³/s) | Outlet flux (m³/s) | Absolute imbalance / prescribed rate |
+| --- | ---: | ---: | ---: |
+| 0 | −1.96349540849e-7 | 1.96349534126e-7 | 3.42e-8 |
+| 1 | −1.96349540849e-7 | 1.96349543474e-7 | 1.34e-8 |
+
+This excludes an incorrect imposed quarter-flow or gross mass imbalance as the
+source of the 25% pressure excess. It is a saved-field diagnostic, not an
+independent solver run or numerical qualification. The discrete axial momentum
+balance remains unresolved, so publication is still refused.
