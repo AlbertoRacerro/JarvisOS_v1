@@ -33,7 +33,7 @@ from app.modules.bluecad.cfd_pipe.contract import PipeStudyContract, contract_di
 from app.modules.bluecad.cfd_pipe.foam_dict import render
 from app.modules.bluecad.cfd_pipe.references import friction_estimate
 
-CASEGEN_VERSION = "cfd_pipe_casegen_v1"
+CASEGEN_VERSION = "cfd_pipe_casegen_v2"
 MANIFEST_NAME = "jarvis_case_manifest.json"
 DOMAIN_FRACTION = 0.25
 # Core block: edge midpoints at CORE_EDGE * R on the symmetry planes, corner at CORE_CORNER * R
@@ -43,6 +43,13 @@ CORE_CORNER = 0.6
 REFINEMENT_RATIO = 1.5
 MAX_AXIAL_CELLS = 5000
 C_MU = 0.09
+# Pinned-v2412 defect workaround (docs/implementation/216-cfd-pipe-qualification.md): in the
+# conda-forge openfoam-2412 build, T() of a temporary tensor field writes (grad U)_zx into both
+# XZ and ZX, so dev2(T(fvc::grad(U))) in the laminar/RAS stress adds a spurious body force when
+# walls lie in two transverse directions (+22% on a square duct, +25% on the quarter pipe).
+# Caching grad(U) makes fvc::grad return a non-reusable reference, so T() takes the allocating,
+# correct path. Measured: square duct 2.8105 Pa/m (icoFoam 2.8105; analytic 2.8511).
+CACHED_FIELDS = ("grad(U)",)
 # First-cell-centre y+ targets by wall treatment.
 LOW_RE_YPLUS = 0.5
 WALL_FUNCTION_YPLUS = 60.0
@@ -255,6 +262,9 @@ def control_dict(contract: PipeStudyContract, *, stop_now: bool = False) -> str:
         "functions": {
             "pipe_probes": {
                 "type": "probes", "libs": ('"libsampling.so"',),
+                # Interpolate to the probe point; the default cell-centre value biases the
+                # radial profile by up to half a cell's velocity change.
+                "interpolationScheme": "cellPoint",
                 "writeControl": "timeStep", "writeInterval": contract.solver.max_iterations,
                 "fields": ("p", "U"),
                 "probeLocations": probe_locations(contract),
@@ -309,6 +319,7 @@ def system_files(contract: PipeStudyContract, plan: MeshPlan) -> dict[str, str]:
         },
         "SIMPLE": {"nNonOrthogonalCorrectors": 0, "consistent": "yes"},
         "relaxationFactors": {"equations": {"U": 0.9, '".*"': 0.7}},
+        "cache": {name: "yes" for name in CACHED_FIELDS},
     }
     return {
         "system/blockMeshDict": render("dictionary", "system", "blockMeshDict", block_mesh_dict(contract, plan)),

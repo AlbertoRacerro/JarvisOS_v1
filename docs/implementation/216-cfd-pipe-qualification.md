@@ -1,6 +1,6 @@
 # Spec 216 CFD pipe qualification — in progress
 
-This is a measured checkpoint for the first typed smooth-tube case. It is **not**
+This is a measured checkpoint for the first typed smooth-tube cases. It is **not**
 the spec 216 acceptance run or a qualified reduced model. All solver outputs
 below were generated outside the repository by pinned OpenFOAM v2412 tools.
 
@@ -23,6 +23,81 @@ and `scripts/qualification/216/run_case.py --contract <JSON> --registry <YAML>
 manifest, registry and tool-binary SHA-256 values, mesh check, full logs,
 residual verdict and analytic error to that external directory. It reports
 measurement without claiming numerical qualification or publication.
+
+### Current result: casegen v2 with the pinned-build workaround (2026-10-24)
+
+The defect identified in the last section below is now worked around in the
+adapter, as spec 216 requirement 1 allows. Case generator
+`cfd_pipe_casegen_v2` writes `cache { grad(U) yes; }` into `fvSolution`.
+With a cached gradient, `fvc::grad(U)` returns a reference instead of a
+reusable temporary. `T()` then allocates its result and transposes correctly.
+That covers every `simpleFoam` stress path that calls `fvc::grad(U)`: laminar
+`Stokes` and the RAS `linearViscousStress` family. This is a dictionary
+entry, not compiled code. conda-forge has no other OpenFOAM release to move
+the pin to (only two `openfoam-2412` builds). Probes now use `cellPoint`
+interpolation. The default cell-centre value biased the radial profile
+comparison by up to half a cell's velocity change: 2.1% at level 0 and 5.1%
+at level 1 on the same fields.
+
+Regression controls: `scripts/qualification/216/solver_controls.py` generates
+two `blockMesh` cases from typed values. Both reuse the generated pipe
+case's `fvSchemes`, `fvSolution` and transport dictionaries. It runs them with
+the pinned tools. The tool-dependent test
+`test_solver_controls_with_real_openfoam_detect_the_transpose_defect` runs
+both controls. It also checks that the square duct **fails** when the cache
+entry is removed.
+
+| Control (pinned v2412) | Mesh | Measured | Analytic | Error | Tolerance |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Square duct, four walls | 40×16×16 | 2.810362 Pa/m | 2.851091 Pa/m (f·Re 56.908) | −1.43% | 2% |
+| Same settings without the cache entry (hand-written control above) | 40×16×16 | 3.483047 Pa/m | 2.851091 Pa/m | +22.2% | fails |
+| Half channel, one wall | 80×16×16 | 1.200088 Pa/m | 1.2024 Pa/m | −0.19% | 2% |
+
+The −1.4% duct residual equals the `icoFoam` control on the same mesh. It is
+discretisation error at 16 cells per side, not the defect.
+
+Typed laminar reruns, from `run_case.py`, with the same contract as below
+(Re 99.62, 300 iterations):
+
+| Mesh level | Cells | Measured ΔP/L (Pa/m) | Error vs HP 3.2064 | Profile max error / mean speed | Case manifest digest |
+| --- | ---: | ---: | ---: | ---: | --- |
+| 0 | 15,360 | 3.220777 | +0.448% | 0.797% | `sha256:39629a90b242538e72abe886e46d36db242b73ed5c46475643aedabdff3fa577` |
+| 1 | 51,840 | 3.215386 | +0.280% | 0.400% | `sha256:aa3b56243979ef3c18b736e1185cfcc52b2fe13d2e12997788984849e52b3ad2` |
+| 2 | 174,960 | 3.218273 | +0.370% | 0.552% | `sha256:d3977c14b5470e7c3f93407f6b78272fae7f33d8468a279987f303fee35c7eeb` |
+
+Levels 0 and 1 met the 1e-6 residual target. Level 2 did **not**: its final
+initial residuals were Ux 9.4e-6 and p 4.0e-7 after 300 iterations
+(1230 s). Its value is shown for completeness only. It must not be used for
+an observed order or GCI until it is rerun with a larger iteration budget.
+All three meshes pass `checkMesh` with zero failed checks. The pressure error
+is now within 0.5% on every mesh, against +25% before. No mesh-sensitivity
+uncertainty is claimed yet.
+
+The level 0 probe output is preserved in
+`backend/tests/fixtures/cfd_pipe/laminar_cached_grad_probe_{p,U}.txt`.
+
+One typed turbulent case ran at level 0: the C1 condition (D = 46 mm,
+L = 2 m, v = 0.45 m/s, Re 20,621). It used k-ω SST, low-Re resolved walls,
+estimated y⁺ 0.50 and 121,800 cells, with `checkMesh` accepted. It ran 1500
+iterations with every residual below the 1e-5 target. Manifest:
+`sha256:c4609aeeb56ee558fff1dbf586e9fd9a7ac5aa3be2826d7f94aad88b05960d85`.
+The probe gradient between 0.65 L and 0.85 L, density-scaled, is
+54.454 Pa/m. That is −3.53% against smooth-pipe Colebrook (56.444 Pa/m) and
+−6.01% against Blasius (57.938 Pa/m). This is a single mesh. Its first
+pressure station, at 1.3 m, lies before the contract's 1.59 m development
+allowance, so it is a measurement and not yet the turbulent qualification.
+`run_case.py` does not yet compute a turbulent comparison; the numbers above
+were computed by hand from the probe file. The external run directories are
+`~/jarvis-control/work/evidence/216-solver-controls/c81-typed/v2/` and
+`c81-controls-v2/`.
+
+**Still open before publication:** a turbulent comparison computed by the
+runner itself, with stations inside the developed section; a turbulent mesh
+study; an observed order or GCI on the three laminar meshes; and the rest of
+spec 216 (live residual console, viewport, publication, Process pinning). No
+reduced model is published.
+
+### Superseded first runs: casegen v1, defective stress path
 
 | Mesh level | Cells | Final residual target | Measured ΔP/L (Pa/m) | Error vs HP | Profile max error / mean speed |
 | --- | ---: | --- | ---: | ---: | ---: |

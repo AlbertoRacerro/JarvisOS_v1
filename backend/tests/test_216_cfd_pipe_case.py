@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from app.modules.bluecad.cfd_pipe import casegen, references
+from app.modules.bluecad.cfd_pipe import casegen, references, solver_controls
 from app.modules.bluecad.cfd_pipe.contract import PipeStudyContract, contract_digest
 from app.modules.bluecad.cfd_pipe.domain import FluidDomainError, derive_fluid_domain
 from app.modules.bluecad.cfd_pipe.foam_dict import FoamDictError, fmt_scalar, render
@@ -254,6 +254,24 @@ def test_real_v2412_probe_samples_report_pressure_and_profile_errors() -> None:
     assert comparison["profile_max_error_over_mean_velocity"] < 0.02
 
 
+def test_generated_cases_cache_grad_u_to_avoid_pinned_transpose_defect() -> None:
+    for contract in (laminar(), c1_turbulent(), c1_turbulent(turbulence_model="kEpsilon", wall_treatment="wall_function")):
+        solution = casegen.generate(contract)["system/fvSolution"]
+        assert "cache\n{\n    grad(U) yes;\n}" in solution
+        assert "interpolationScheme cellPoint;" in casegen.generate(contract)["system/controlDict"]
+    assert casegen.CASEGEN_VERSION == "cfd_pipe_casegen_v2"
+
+
+def test_real_v2412_probe_samples_with_cached_gradient_match_hagen_poiseuille() -> None:
+    contract = laminar(mesh_level=0, inlet={"mean_velocity_m_s": 0.01},
+                       domain=derive_fluid_domain(tube_spec(14.0, 2.0, 200.0)))
+    comparison = laminar_comparison(contract, (FIXTURES / "laminar_cached_grad_probe_p.txt").read_text(),
+                                    (FIXTURES / "laminar_cached_grad_probe_U.txt").read_text())
+    assert comparison["pressure_gradient_pa_m"] == pytest.approx(3.22077746097)
+    assert abs(comparison["pressure_gradient_relative_error"]) < 0.01
+    assert comparison["profile_max_error_over_mean_velocity"] < 0.01
+
+
 def test_probe_reader_refuses_missing_or_mismatched_samples() -> None:
     pressure = (FIXTURES / "laminar_probe_p.txt").read_text()
     velocity = (FIXTURES / "laminar_probe_U.txt").read_text()
@@ -401,3 +419,82 @@ def test_generated_case_meshes_and_passes_check_with_real_openfoam(tmp_path: Pat
     check = run_tool("openfoam_checkmesh", [], case_dir, 120)
     record = evaluate_mesh(contract, casegen.mesh_plan(contract), parse_checkmesh(check.stdout))
     assert record.accepted, record.refusals
+
+
+# --- solver controls ----------------------------------------------------------------------
+
+
+def test_solver_controls_reuse_generated_solver_settings_and_are_deterministic() -> None:
+    contract = solver_controls_contract()
+    pipe = casegen.generate(contract)
+    for control in solver_controls.CONTROL_NAMES:
+        files = solver_controls.generate_control(control, contract)
+        assert files == solver_controls.generate_control(control, contract)
+        assert files["system/fvSchemes"] == pipe["system/fvSchemes"]
+        assert files["system/fvSolution"] == pipe["system/fvSolution"]
+        assert files["constant/transportProperties"] == pipe["constant/transportProperties"]
+        for text in files.values():
+            assert "#" not in text.split("\n", 1)[1] and "$" not in text
+    duct = solver_controls.generate_control("square_duct", contract)
+    assert "symmetry" not in duct["system/blockMeshDict"] and "volumetricFlowRate constant 1e-06;" in duct["0/U"]
+    channel = solver_controls.generate_control("half_channel", contract)
+    assert "symmetryPlane" in channel["system/blockMeshDict"] and "constant 2.5e-07;" in channel["0/U"]
+    with pytest.raises(ValueError, match="laminar"):
+        solver_controls.generate_control("square_duct", c1_turbulent())
+
+
+def solver_controls_contract() -> PipeStudyContract:
+    return laminar(mesh_level=0, inlet={"mean_velocity_m_s": 0.01}, domain=derive_fluid_domain(tube_spec(14.0, 2.0, 200.0)))
+
+
+def _control_probe_text(control: str, upstream: float, downstream: float, iteration: int = 300) -> str:
+    rows = [f"# Probe {i} ({x} {y} {z})" for i, (x, y, z) in enumerate(solver_controls.probe_locations(control))]
+    return "\n".join([*rows, "# Time 0 1", f"{iteration} {upstream} {downstream}", ""])
+
+
+def test_solver_control_comparison_against_analytic_answers() -> None:
+    contract = solver_controls_contract()
+    assert solver_controls.analytic_gradient_pa_m("square_duct", contract) == pytest.approx(2.8510908)
+    assert solver_controls.analytic_gradient_pa_m("half_channel", contract) == pytest.approx(1.2024)
+    # Pinned v2412 kinematic cell-centre probe values: cached grad(U) duct, and the uncached defective duct.
+    good = solver_controls.compare_control("square_duct", contract,
+                                           _control_probe_text("square_duct", 0.00020409051033, 9.1466979157e-05))
+    assert good.passed and good.relative_error == pytest.approx(-0.01423, abs=1e-4)
+    bad = solver_controls.compare_control("square_duct", contract,
+                                          _control_probe_text("square_duct", 0.000253278479555, 0.000113705360111))
+    assert not bad.passed and bad.relative_error > 0.2
+    with pytest.raises(ProbeResultError, match="final iteration"):
+        solver_controls.compare_control("square_duct", contract, _control_probe_text("square_duct", 1e-4, 0.0, 299))
+    with pytest.raises(ProbeResultError, match="locations"):
+        solver_controls.compare_control("square_duct", contract,
+                                        _control_probe_text("square_duct", 1e-4, 0.0).replace("0.13 ", "0.12 "))
+
+
+@pytest.mark.skipif(
+    not os.environ.get("JARVISOS_BLUECAD_TOOL_REGISTRY"),
+    reason="operator tool registry with OpenFOAM is not configured",
+)
+def test_solver_controls_with_real_openfoam_detect_the_transpose_defect(tmp_path: Path, monkeypatch) -> None:
+    from app.modules.bluecad.registry import ToolRegistryError, resolve_tool, run_tool
+
+    try:
+        for tool in ("openfoam_blockmesh", "openfoam_simplefoam"):
+            resolve_tool(tool)
+    except ToolRegistryError as exc:
+        pytest.skip(f"OpenFOAM tools unavailable: {exc.code}")
+    contract = solver_controls_contract()
+
+    def measure(control: str, case: Path) -> solver_controls.ControlComparison:
+        for rel, text in solver_controls.generate_control(control, contract).items():
+            (case / rel).parent.mkdir(parents=True, exist_ok=True)
+            (case / rel).write_text(text, encoding="utf-8")
+        for tool in ("openfoam_blockmesh", "openfoam_simplefoam"):
+            result = run_tool(tool, [], case, 900)
+            assert result.returncode == 0, result.stdout[-2000:] + result.stderr[-2000:]
+        pressure = (case / "postProcessing" / "control_probes" / "0" / "p").read_text()
+        return solver_controls.compare_control(control, contract, pressure)
+
+    for control in solver_controls.CONTROL_NAMES:
+        assert measure(control, tmp_path / control).passed
+    monkeypatch.setattr(casegen, "CACHED_FIELDS", ())
+    assert not measure("square_duct", tmp_path / "uncached_duct").passed
