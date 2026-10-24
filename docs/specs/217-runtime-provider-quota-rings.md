@@ -1,6 +1,6 @@
 # 217 — Provider quota rings in Coding → Runtime
 
-State: **in review** (live state in [`STATUS.md`](STATUS.md)). Maintainer [issue #919](https://github.com/AlbertoRacerro/JarvisOS_v1/issues/919), assigned by the maintainer to a separate interactive cloud lane ([claim](https://github.com/AlbertoRacerro/JarvisOS_v1/issues/919#issuecomment-6384160561)). Depends on 206. Contract and implementation ship in one PR because this is a small read-only enhancement.
+State: **merged** (live state in [`STATUS.md`](STATUS.md)). Maintainer [issue #919](https://github.com/AlbertoRacerro/JarvisOS_v1/issues/919), assigned by the maintainer to a separate interactive cloud lane ([claim](https://github.com/AlbertoRacerro/JarvisOS_v1/issues/919#issuecomment-6384160561)). Depends on 206. Contract and implementation ship in one PR because this is a small read-only enhancement.
 
 ## Outcome
 
