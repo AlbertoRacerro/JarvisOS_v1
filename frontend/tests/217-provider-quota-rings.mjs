@@ -1,0 +1,70 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import ts from "typescript";
+
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const read = path => readFileSync(resolve(root, path), "utf8");
+const require = createRequire(import.meta.url);
+
+// Render the real panel module; only the API client is replaced (it reads import.meta.env).
+const module = { exports: {} };
+const code = ts.transpileModule(read("src/components/coding/ProviderQuotaPanel.tsx"), {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX }
+}).outputText;
+new Function("require", "module", "exports", code)(name => name === "../../api/coding" ? {} : require(name), module, module.exports);
+const { ProviderQuotaView } = module.exports;
+const now = new Date("2026-10-24T12:00:00Z");
+const render = props => renderToStaticMarkup(React.createElement(ProviderQuotaView, { error: null, now, ...props }));
+const win = (kind, used, extra = {}) => ({ id: kind, label: null, kind, used_percent: used, remaining_percent: 100 - used,
+  resets_at: "2026-10-24T14:30:00Z", exhausted: false, stale: false, ...extra });
+
+const data = { state: "ok", read_at: "2026-10-24T11:57:00Z", providers: [
+  { provider: "claude", label: "Claude", source: "agent-relay limits", status: "ok", as_of: "2026-10-24T11:57:00Z",
+    windows: [win("five_hour", 51), win("weekly", 12), win("pool", 80, { id: "seven_day_opus", label: "Opus weekly" })] },
+  { provider: "codex", label: "Codex (ChatGPT)", source: "agent-relay limits", status: "ok",
+    windows: [win("five_hour", 100, { exhausted: true }), win("weekly", 40, { stale: true })] },
+  { provider: "antigravity", label: "Antigravity", source: null, status: "unavailable", reason: "no_local_source", windows: [] },
+] };
+const html = render({ data });
+
+// Three provider columns, 5-hour and weekly rows, and a third row only for the pool that exists.
+for (const fragment of ["Claude", "Codex (ChatGPT)", "Antigravity", 'aria-label="5-hour"', 'aria-label="Weekly"', 'aria-label="Opus weekly"', "read 3 min ago"]) {
+  assert.ok(html.includes(fragment), `missing ${fragment}`);
+}
+assert.equal((html.match(/role="group"/g) ?? []).length, 3, "two fixed rows plus one pool row");
+
+// The visible percentage is the same metric as the ring: remaining.
+assert.ok(html.includes(">49%</text>") && html.includes('aria-label="49% left"'));
+assert.ok(html.includes(">88%</text>") && html.includes(">20%</text>"));
+assert.ok(html.includes("resets in 2 h 30 min"));
+const later = render({ data: { ...data, providers: [{ ...data.providers[0], windows: [win("weekly", 10, { resets_at: "2026-10-25T21:59:00Z" })] }] } });
+assert.ok(later.includes("resets in 1 d 9 h"), "a reset beyond a day is shown in days");
+assert.equal((html.match(/class="coding-quota-value"/g) ?? []).length, 4, "an empty (0 %) ring draws no arc");
+
+// Exhausted, stale and missing are distinct and never shown as 0 %.
+assert.ok(html.includes('data-state="exhausted"') && html.includes(">Exhausted<"));
+assert.ok(html.includes('data-state="stale"') && html.includes("out of date"));
+assert.ok(html.includes("No readable source") && html.includes("Antigravity: usage is visible only in the app itself (Antigravity › Settings › Models). Nothing is estimated here."));
+assert.equal((html.match(/>N\/A</g) ?? []).length, 2, "Antigravity shows N/A in both fixed rows");
+assert.equal((html.match(/>0%</g) ?? []).length, 1, "only the really exhausted window shows 0 %; missing values never do");
+
+const unauthenticated = render({ data: { ...data, providers: [{ provider: "claude", label: "Claude", source: "agent-relay limits",
+  status: "unauthenticated", reason: "not_authenticated", windows: [] }] } });
+assert.ok(unauthenticated.includes("Not signed in"));
+
+const failed = render({ data: null, error: "server unreachable" });
+assert.ok(failed.includes("Provider usage unavailable: server unreachable") && !failed.includes("<svg"));
+assert.ok(!/<input|<textarea|<button/.test(html), "the usage view is read-only");
+
+// Placement: beside the Relay owner panel in Coding → Runtime, stacking on narrow screens.
+const page = read("src/pages/CodingWorkbench.tsx");
+assert.ok(page.includes('<div className="coding-relay-row"><RelayMonitorPanel /><ProviderQuotaPanel /></div>'));
+const css = read("src/pages/CodingWorkbench.css");
+assert.ok(/@media \(max-width: 900px\) \{ \.coding-relay-row \{ grid-template-columns: minmax\(0, 1fr\); \} \}/.test(css));
+assert.ok(css.includes("prefers-reduced-motion: reduce) { .coding-quota-value"));
+console.log("217 provider quota rings: ok");

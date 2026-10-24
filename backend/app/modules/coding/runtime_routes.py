@@ -19,7 +19,7 @@ from app.modules.ai.jarvis_context_models import (
     JarvisResolvedRef,
     JarvisRouteDescriptor,
 )
-from app.modules.coding import relay_monitor
+from app.modules.coding import provider_quota, relay_monitor
 from app.modules.coding.actions import (
     CodingActionError,
     CodingActionsService,
@@ -344,6 +344,13 @@ def relay_monitor_snapshot(repository: str) -> dict[str, object]:
     """Read-only spec 205 owner snapshot: mission, task, state and reason. Never locks or writes."""
     _require_runtime_repository(repository)
     return relay_monitor.snapshot()
+
+
+@router.get("/provider-quotas")
+def provider_quotas(repository: str) -> dict[str, object]:
+    """Read-only spec 217 provider usage windows, read at most once per TTL. Never writes or probes a provider."""
+    _require_runtime_repository(repository)
+    return provider_quota.quotas()
 
 
 @router.get("/relay-monitor/timeline")
