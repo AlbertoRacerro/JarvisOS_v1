@@ -268,6 +268,49 @@ Reynolds number for a validated range. Then the rest of spec 216: live
 residual console, viewport, publication and Process pinning. No reduced
 model is published.
 
+### Reduced-model fitting and multi-Re tolerances stated before the runs (2026-10-24)
+
+`backend/app/modules/bluecad/cfd_pipe/reduced_model.py` fits, guards, versions,
+evaluates and ages the reduced model (offline tests in
+`backend/tests/test_216_reduced_model.py`). Each regime segment fits a Darcy
+factor `f = a Re^b` by least squares in log space. It uses measured,
+residual-converged runs of **one** tube geometry and **one** study template
+(the contract without inlet, mesh level and run budget). The segment's
+relative uncertainty is the linear sum of three terms:
+
+- discretization: `max(GCI_fine, 1.25 |f_point_level − f_extrapolated| / f_extrapolated)`
+  from the segment's three-mesh study. Points run on a coarser level than the
+  study's fine mesh carry their distance from the Richardson value;
+- fit: the largest relative residual of the power law;
+- correlation: the largest deviation from Hagen–Poiseuille (laminar) or smooth
+  Colebrook (turbulent).
+
+Publication refuses runs that are unmeasured or unconverged, runs that span
+more than one tube geometry, segments with fewer than two Reynolds numbers or
+without a monotonic mesh study, and points outside the stated tolerance. The
+version id is the SHA-256 of the canonical model content, and tampering is
+detected. Outside the validated Re range (including the transitional gap),
+or at another diameter or another fluid, evaluation refuses, or with `warn`
+returns the number with the violation and no uncertainty. Obsolescence
+reports a changed geometry digest or a changed study template. Nothing is
+published to Studio or pinned in Process yet.
+
+Multi-Re points for the range, with tolerances fixed in this commit before any
+result was read (also `~/jarvis-control/work/evidence/216-solver-controls/c85-multire/TOLERANCES.txt`):
+
+- **M1 (completion).** Every run is `measured`, residual-converged and
+  `checkMesh`-accepted.
+- **M2 (laminar).** Re 100, 500 and 1000 on a 10 mm bore, 1.0 m tube, level 1:
+  ΔP/L within ±2% of Hagen–Poiseuille and a profile error ≤ 2% of the mean
+  velocity.
+- **M3 (turbulent).** Re 1×10⁴ and 4×10⁴ on the C1 tube (46 mm, 2.6 m),
+  SST with a resolved wall, level 1, 8 MPI ranks each: ΔP/L within ±10% of
+  smooth Colebrook (the T3 band). The level-1 discretization uncertainty comes
+  from the Re ≈ 2×10⁴ three-mesh study and is not re-derived at each Re. The
+  reduced model states this as an assumption.
+
+Misses are reported, not retuned.
+
 ### Superseded first runs: casegen v1, defective stress path
 
 | Mesh level | Cells | Final residual target | Measured ΔP/L (Pa/m) | Error vs HP | Profile max error / mean speed |
