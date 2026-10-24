@@ -239,6 +239,38 @@ export function readRelayMonitor(repository = CODING_REPOSITORY): Promise<RelayM
   return requestJson(`/api/coding/relay-monitor?${query({ repository })}`);
 }
 
+export type ProviderQuotaWindow = Readonly<{
+  id: string;
+  label: string | null;
+  kind: "five_hour" | "weekly" | "frontier" | "pool";
+  used_percent: number;
+  remaining_percent: number;
+  resets_at: string | null;
+  exhausted: boolean;
+  stale: boolean;
+}>;
+
+export type ProviderQuota = Readonly<{
+  provider: "claude" | "codex" | "antigravity";
+  label: string;
+  source: string | null;
+  status: "ok" | "unavailable" | "unauthenticated";
+  reason?: string;
+  as_of?: string | null;
+  windows: readonly ProviderQuotaWindow[];
+}>;
+
+export type ProviderQuotas = Readonly<{
+  state: "ok";
+  read_at: string;
+  next_read_at?: string;
+  providers: readonly ProviderQuota[];
+}>;
+
+export function readProviderQuotas(repository = CODING_REPOSITORY): Promise<ProviderQuotas> {
+  return requestJson(`/api/coding/provider-quotas?${query({ repository })}`);
+}
+
 export function readRelayMonitorTimeline(cursor: string | null, repository = CODING_REPOSITORY): Promise<RelayMonitorPage> {
   return requestJson(`/api/coding/relay-monitor/timeline?${query({ repository, cursor: cursor ?? undefined })}`);
 }
