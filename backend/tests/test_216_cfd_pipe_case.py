@@ -439,6 +439,16 @@ def test_converged_laminar_triplet_is_monotonic_with_gci() -> None:
     assert study.gci_fine == pytest.approx(0.001776, abs=1e-6)
 
 
+def test_turbulent_c1_triplet_meets_the_pre_stated_mesh_tolerance() -> None:
+    # Typed C1 SST levels 2/1/0 on the 2.6 m tube (cycle 84); T2 requires monotonic and GCI <= 3%.
+    cells = (1_769_284, 533_925, 158_200)
+    study = three_mesh_study((55.99108585951357, 55.8861340447833, 55.642746085032904), refinement_ratios(cells))
+    assert study.convergence == "monotonic"
+    assert study.observed_order == pytest.approx(2.050, abs=1e-3)
+    assert study.extrapolated == pytest.approx(56.07386, abs=1e-4)
+    assert study.gci_fine is not None and study.gci_fine == pytest.approx(0.001848, abs=1e-6) and study.gci_fine <= 0.03
+
+
 def test_refinement_ratios_allow_rounded_turbulent_levels() -> None:
     r21, r32 = refinement_ratios((1_769_284, 533_925, 158_200))
     assert r21 == pytest.approx(1.4909, abs=1e-4) and r32 == pytest.approx(1.5)

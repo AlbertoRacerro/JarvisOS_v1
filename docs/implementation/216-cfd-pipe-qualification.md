@@ -19,7 +19,7 @@ from the level 0 real run; trailing spaces were removed for repository checks.
 
 Use the operator registry built by `scripts/qualification/216/operator_registry.py`
 and `scripts/qualification/216/run_case.py --contract <JSON> --registry <YAML>
---out <external directory>` to repeat one typed case. The command writes a
+--out <external directory> [--processors N]` to repeat one typed case. The command writes a
 manifest, registry and tool-binary SHA-256 values, mesh check, full logs,
 residual verdict and analytic error to that external directory. It reports
 measurement without claiming numerical qualification or publication.
@@ -207,9 +207,66 @@ maintainer review on PR #917. If a run misses them, that is reported as a miss.
 Model limitation: k-ω SST with a resolved low-Re wall on a smooth wall. Wall
 functions, roughness, transition and swirl are not tested.
 
-**Still open before publication:** run and report the turbulent study above,
-then the rest of spec 216: live residual console, viewport, publication and
-Process pinning. No reduced model is published.
+### MPI-parallel execution (2026-10-24)
+
+Serial level 2 was projected to exceed its 24 h wall-time bound: level 1 alone
+took 13,985 s serially. `run_case.py --processors N` now runs
+`decomposePar`, then `simpleFoam -parallel` under the pinned MPICH `mpiexec`,
+then `reconstructPar -latestTime`. All three are hash-pinned registry tools.
+The case generator writes a typed scotch `decomposeParDict` and records
+`processors` in the manifest only when N > 1. Serial cases and manifests are
+unchanged.
+
+The conda-forge `openfoam-2412` binaries carry RPATH `lib/sys-mpich`, which
+the package does not ship. They therefore load `lib/dummy/libPstream.so`,
+which aborts under MPI ("The dummy Pstream library cannot be used in parallel
+mode"). As spec 216 requirement 1 allows, the adapter works around this by
+preloading the shipped `lib/mpich-3.3/libPstream.so` into the ranks only
+(`mpiexec -genv LD_PRELOAD`). The report records that library's SHA-256.
+
+The parallel path reproduces the serial result on both regimes:
+
+| Case | Serial | MPI | Relative difference |
+| --- | ---: | ---: | ---: |
+| Laminar level 0, 600 iterations, 4 ranks | 3.2207776 Pa/m | 3.2207775 Pa/m | 1e-8 |
+| Turbulent C1 level 1, 2000 iterations, 6 ranks | 55.88613 Pa/m | 55.88525 Pa/m | 1.6e-5 |
+
+### Turbulent three-mesh study: result against T1–T3 (2026-10-24)
+
+The study ran with the contracts and tolerances fixed at `4f2ccf87`. Levels 0
+and 1 ran serially at that runner. Level 2 ran on 16 MPI ranks at `c73b0332`.
+The run directories are `~/jarvis-control/work/evidence/216-solver-controls/c84-turb/`
+(`run-l0`, `run-l1`, `run-l2-np16`, and the cross-check `run-l1-np6`).
+
+| Mesh level | Cells | ΔP/L (Pa/m) | vs Colebrook 56.444 | vs Blasius 57.938 | Max final initial residual | Solver time | Case manifest digest |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| 0 | 158,200 | 55.643 | −1.42% | −3.96% | 9.7e-8 | 968 s | `sha256:0f692a4e8bfbc1e74d1d12ccad69cf7c1d8905c22f0a102a6d15fa267c903e1c` |
+| 1 | 533,925 | 55.886 | −0.99% | −3.54% | 1.0e-7 | 13,985 s | `sha256:e3cfb85094128c5c17ba35d23de6ec932fe22d5e982795ee5964c4b9cd125fe5` |
+| 2 | 1,769,284 | 55.991 | −0.80% | −3.36% | 5.5e-6 (Uy, Uz) | 11,796 s (16 ranks) | `sha256:1eba33fb686875c6aa65b4447332736942e0e85ab3a146ac699945e577fb01fd` |
+
+Mesh study (Celik, r21 = 1.491, r32 = 1.500): **monotonic**, observed order
+p = 2.05, Richardson extrapolation 56.074 Pa/m (−0.66% vs Colebrook), fine-mesh
+GCI **0.185%** (±0.10 Pa/m).
+
+| Tolerance | Required | Measured | Verdict |
+| --- | --- | --- | --- |
+| T1 residuals and mesh | every level ≤ 1e-5, `checkMesh` accepted | max 5.5e-6; all accepted, zero failed checks | **met** |
+| T2 mesh sensitivity | monotonic, fine GCI ≤ 3% | monotonic, 0.185% | **met** |
+| T3 correlation | fine mesh within ±10% of Colebrook | −0.80% | **met** |
+
+Limits of this result: level 2 met the residual target, but its transverse
+velocity residuals (5.5e-6) were about 50 times those of levels 0 and 1. The
+probes record only the final iteration, so the iterative error is not
+quantified separately from the GCI. All three levels under-predict both
+correlations and approach Colebrook from below. The Colebrook–Blasius spread
+(2.6%) is larger than the mesh uncertainty. The single-condition result
+supports SST with a resolved wall at Re ≈ 2×10⁴ only. It is not a range
+qualification.
+
+**Still open before publication:** the reduced model needs more than one
+Reynolds number for a validated range. Then the rest of spec 216: live
+residual console, viewport, publication and Process pinning. No reduced
+model is published.
 
 ### Superseded first runs: casegen v1, defective stress path
 
