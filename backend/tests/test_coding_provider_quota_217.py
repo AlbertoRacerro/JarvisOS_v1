@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -145,7 +147,40 @@ def test_ttl_is_bounded(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_missing_tools_are_unreadable_not_an_error(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("JARVISOS_AGENT_RELAY_BIN", "/nonexistent/agent-relay")
     monkeypatch.setenv("JARVISOS_AGY_BIN", "/nonexistent/agy")
-    assert pq.read_all() == {"relay": None, "agy": None}
+    readings = pq.read_all()
+    assert readings == {"relay": None, "agy": None, "errors": {"relay": "not_found", "agy": "not_found"}}
+    assert {p["reason"] for p in pq.normalize(readings, NOW)["providers"]} == {"relay_not_found", "agy_not_found"}
+
+
+def test_tools_outside_the_service_path_are_found(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    # The launcher starts the backend without a login PATH; the CLIs usually live in ~/.local/bin.
+    bin_dir = tmp_path / ".local" / "bin"
+    bin_dir.mkdir(parents=True)
+    tool = bin_dir / "agent-relay"
+    tool.write_text("#!/bin/sh\necho 'warming up'\necho '{\"agents\": []}'\n")
+    tool.chmod(0o755)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("PATH", "/usr/bin:/bin")
+    monkeypatch.delenv("JARVISOS_AGENT_RELAY_BIN", raising=False)
+    assert pq.read_relay_limits() == ({"agents": []}, None)
+
+
+def test_read_failures_name_their_cause(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    silent = tmp_path / "silent"
+    silent.write_text("#!/bin/sh\necho 'not signed in' >&2\nexit 1\n")
+    silent.chmod(0o755)
+    monkeypatch.setenv("JARVISOS_AGY_BIN", str(silent))
+    assert pq.read_agy_quota() == (None, "no_json")
+
+    def slow(*args: object, **kwargs: object) -> None:
+        raise subprocess.TimeoutExpired("agent-relay", pq.READ_TIMEOUT_S)
+
+    monkeypatch.setattr(pq.subprocess, "run", slow)
+    assert pq.read_relay_limits() == (None, "timeout")
+    reasons = pq.normalize({"relay": None, "agy": None, "errors": {"relay": "timeout", "agy": "no_json"}}, NOW)
+    assert {p["reason"] for p in reasons["providers"]} == {"relay_timeout", "agy_no_json"}
+    junk = pq.normalize({"relay": None, "agy": None, "errors": {"relay": "/home/x/secret", "agy": 3}}, NOW)
+    assert {p["reason"] for p in junk["providers"]} == {"relay_limits_unreadable", "agy_quota_unreadable"}
 
 
 def test_route_requires_the_runtime_repository(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -15,6 +15,12 @@ const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 const REASONS: Record<string, string> = {
   agy_quota_unreadable: "agy /quota unreadable",
   relay_limits_unreadable: "agent-relay limits unreadable",
+  relay_not_found: "agent-relay not found",
+  relay_timeout: "agent-relay timed out",
+  relay_no_json: "agent-relay printed no reading",
+  agy_not_found: "agy not found",
+  agy_timeout: "agy /quota timed out",
+  agy_no_json: "agy /quota printed no reading",
   no_reading: "No reading",
   no_usage_windows: "No usage windows reported",
   not_authenticated: "Not signed in",
