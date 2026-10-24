@@ -46,6 +46,28 @@ be published from these runs. The next numerical repair must trace the
 pressure equation, boundary conditions, sampling and mesh family, then rerun
 the three-mesh laminar and turbulent qualification before publication.
 
+### Controlled solver diagnostics (2026-10-24)
+
+The level 0 generated case was copied into separate external `/tmp` directories;
+each diagnostic copy changed only the stated solver input. All variants ran
+`blockMesh` and `simpleFoam` with the same pinned v2412 installation and used
+the same two pressure probe locations. These hand-edited copies are diagnostics,
+not typed cases or qualification evidence.
+
+| Variant | Solver input change | Final pressure gradient | Solver verdict |
+| --- | --- | ---: | --- |
+| Generated baseline | none | 4.016805 Pa/m | residual-converged at 300 iterations |
+| Linear convection | `div(phi,U)` from bounded linear-upwind to `Gauss linear` | 4.015921 Pa/m | completed 300 iterations |
+| Fixed-speed inlet | `flowRateInletVelocity` to `fixedValue` at 0.01 m/s | 4.010354 Pa/m | residual-converged at 300 iterations |
+| Standard SIMPLE trial | `consistent no`, velocity relaxation 0.5 | 3.080548 Pa/m at iteration 300; −25539.4 Pa/m at iteration 1500 | **failed**: continuity and momentum residuals did not converge |
+
+The first two input changes do not explain the 25% pressure excess. The
+standard SIMPLE trial must not be cited as agreement with Hagen–Poiseuille:
+its iteration-300 pressure was transient and the run subsequently diverged.
+The next bounded check is the discrete wall-stress/pressure balance and the
+mesh's wall-face geometry; only a converged physical balance can justify
+changing the case generator or the reported pressure result.
+
 The maintainer-owned [cloud prototype PR #916](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/916)
 was read as input. It reports laminar agreement within 0.037% using ESI
 OpenFOAM v1912, a wedge mesh and a longer entrance allowance. Those are
