@@ -168,3 +168,65 @@ This excludes an incorrect imposed quarter-flow or gross mass imbalance as the
 source of the 25% pressure excess. It is a saved-field diagnostic, not an
 independent solver run or numerical qualification. The discrete axial momentum
 balance remains unresolved, so publication is still refused.
+
+### Solver-path controls outside the case generator (2026-10-24)
+
+Hand-written `blockMesh` cases, independent of the spec 216 generator, were run
+with the same pinned v2412 installation, the generated level 0 `fvSchemes`,
+`fvSolution` (SIMPLEC), transport properties and probe method. Each control has
+an exact analytic laminar answer. These are external diagnostics, not typed
+cases or qualification evidence. Inputs, logs, probe output and the two duct
+fields are preserved outside the repository in
+`~/jarvis-control/work/evidence/216-solver-controls/`.
+
+| Control | Mesh | Solver | Measured gradient | Analytic | Error |
+| --- | --- | --- | ---: | ---: | ---: |
+| Plane half-channel, one wall, z one cell | 200×20×1 | `simpleFoam` | 1.200936 Pa/m | 1.2024 Pa/m | −0.12% |
+| Plane half-channel, one wall, z resolved | 80×16×16 | `simpleFoam` | 1.200091 Pa/m | 1.2024 Pa/m | −0.19% |
+| Square-duct quarter, two walls, two `symmetryPlane` | 80×16×16 | `simpleFoam` | 3.533717 Pa/m | 2.851106 Pa/m | +23.94% |
+| Same quarter, `symmetry` patch type | 80×16×16 | `simpleFoam` | 3.533717 Pa/m | 2.851106 Pa/m | +23.94% |
+| Full square duct, four walls | 80×32×32 | `simpleFoam` | 3.530449 Pa/m | 2.851106 Pa/m | +23.83% |
+| Full square duct, four walls | 40×16×16 | `simpleFoam` | 3.483047 Pa/m | 2.851106 Pa/m | +22.16% |
+| Same, `grad(U) leastSquares` | 40×16×16 | `simpleFoam` | 3.495584 Pa/m | 2.851106 Pa/m | +22.60% |
+| Same, `div(phi,U)` bounded upwind | 40×16×16 | `simpleFoam` | 3.484025 Pa/m | 2.851106 Pa/m | +22.20% |
+| Same, transient to steady | 40×16×16 | `pimpleFoam` | 3.483039 Pa/m | 2.851106 Pa/m | +22.16% |
+| Same, transient to steady | 40×16×16 | `icoFoam` | 2.810508 Pa/m | 2.851106 Pa/m | −1.42% |
+
+The square-duct analytic value is the series solution (Poiseuille number
+f·Re = 56.908). The generated level 0 quarter pipe with
+`nNonOrthogonalCorrectors 2` gave 4.016806 Pa/m, unchanged from the baseline.
+The generated mesh's outlet area is 1.960343e-5 m², 0.16% below the exact
+quarter circle; the wall vector area matches the arc geometry.
+
+The excess therefore occurs on a plain orthogonal duct and does not depend on
+the generator, O-grid, symmetry patch type, non-orthogonal correction, gradient
+or convection scheme, or SIMPLEC. It appears with walls in two transverse
+directions but not with one wall direction. `icoFoam` gives the expected
+result on the same mesh, flow rate and schemes. `simpleFoam` and `pimpleFoam`
+share the laminar `Stokes` momentum-transport term
+`-fvc::div(nuEff*dev2(T(grad(U)))) - fvm::laplacian(nuEff, U)`; `icoFoam` uses
+`-fvm::laplacian(nu, U)` only. The installed `linearViscousStress.C` source
+has the standard form, and `turbulenceFields` reports uniform `nuEff`
+1.00380685233e-6 m²/s.
+
+The converged 40×16×16 `simpleFoam` field is also internally inconsistent.
+An independent NumPy evaluation of the saved field gives an axial `ν∇²u` of
+2.8757 Pa/m equivalent, while its pressure gradient is 3.4828 Pa/m. That
+evaluation finds the explicit `dev2(T(grad U))` term negligible in the
+developed section. Wall-adjacent cells have an odd–even zig-zag and are not
+mirror-symmetric (for example 1.894, 1.985, 3.043, 2.626, 3.619… mm/s
+along one wall). The `icoFoam` field is smooth and symmetric, and its own
+`ν∇²u` (2.8097 Pa/m) matches its pressure gradient (2.8102 Pa/m). The saved
+4-wall square-duct wall-shear balance gives 2.915 Pa/m, while the pressure
+gives 3.530 Pa/m. This is the same pattern as the quarter-pipe wall-stress
+check above.
+
+**Conclusion for the next repair:** the 25% excess comes from the pinned
+`simpleFoam`/`pimpleFoam` laminar momentum-transport path of this v2412
+build when walls lie in two transverse directions. It is not a spec 216 case
+generator defect. The exact mechanism inside that path is not identified.
+Changing the generator would not repair it. The repair must either identify
+and avoid the defective operator or setting, or re-pin a toolchain that passes
+the square-duct and channel controls. The pressure output stays unpublishable
+until then. Any solver change needs a new laminar and turbulent qualification
+on the typed cases.
