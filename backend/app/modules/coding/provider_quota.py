@@ -237,7 +237,8 @@ def _reason(source: str, error: Any) -> str:
 
 def normalize(readings: dict[str, Any], now: datetime) -> dict[str, Any]:
     relay = readings.get("relay")
-    errors = readings.get("errors") if isinstance(readings.get("errors"), dict) else {}
+    raw_errors = readings.get("errors")
+    errors: dict[str, Any] = raw_errors if isinstance(raw_errors, dict) else {}
     agents = relay.get("agents") if isinstance(relay, dict) else None
     by_key = {a.get("agent_key"): a for a in agents if isinstance(a, dict)} if isinstance(agents, list) else {}
     providers = []
