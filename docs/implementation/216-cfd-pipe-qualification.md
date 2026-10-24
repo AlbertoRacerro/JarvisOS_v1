@@ -86,16 +86,70 @@ The probe gradient between 0.65 L and 0.85 L, density-scaled, is
 −6.01% against Blasius (57.938 Pa/m). This is a single mesh. Its first
 pressure station, at 1.3 m, lies before the contract's 1.59 m development
 allowance, so it is a measurement and not yet the turbulent qualification.
-`run_case.py` does not yet compute a turbulent comparison; the numbers above
-were computed by hand from the probe file. The external run directories are
+These numbers were computed by hand from the probe file; the runner now
+refuses this probe set (next section). The external run directories are
 `~/jarvis-control/work/evidence/216-solver-controls/c81-typed/v2/` and
 `c81-controls-v2/`.
 
-**Still open before publication:** a turbulent comparison computed by the
-runner itself, with stations inside the developed section; a turbulent mesh
-study; an observed order or GCI on the three laminar meshes; and the rest of
-spec 216 (live residual console, viewport, publication, Process pinning). No
-reduced model is published.
+### Runner-computed turbulent comparison in the developed section (2026-10-24)
+
+`run_case.py` now computes the turbulent comparison itself
+(`probe_results.turbulent_comparison`). It reports the density-scaled probe
+gradient, the Darcy factor, smooth-pipe Colebrook and Blasius gradients, and
+signed errors (measured minus reference, over reference). Both the laminar and
+turbulent comparisons now **refuse** a probe set whose upstream pressure station
+lies before the contract's development length. The 2 m run above is refused
+(1.3 m station, 1.59 m allowance); its probes are kept as the refusal fixture
+`backend/tests/fixtures/cfd_pipe/turbulent_sst_2m_probe_{p,U}.txt`.
+
+The same C1 contract was rerun with a 3 m tube, so the stations are at 1.95 m
+and 2.55 m, both past the allowance. Everything else is unchanged: k-ω SST,
+low-Re resolved walls, level 0, estimated y⁺ 0.50, 182,700 cells, `checkMesh`
+accepted with zero failed checks, 1500 iterations, final initial residuals
+≤ 1.0e-7, 1030 s.
+
+| Quantity | Value |
+| --- | ---: |
+| Re | 20,621 |
+| Measured ΔP/L | 55.530 Pa/m |
+| Darcy f (measured) | 0.02527 |
+| Colebrook, smooth | 56.444 Pa/m |
+| Blasius | 57.938 Pa/m |
+| Signed error vs Colebrook | −1.62% |
+| Signed error vs Blasius | −4.16% |
+
+Case manifest
+`sha256:d44d76d4d959b1f0d2fbabe7c72b8c8964453ce999f17e573a3b3e24fc81f42e`,
+contract `sha256:87bba56544ffa9671097661acf23773fc1f92f1518750ffa2252e1d277956458`.
+Probes are preserved in
+`backend/tests/fixtures/cfd_pipe/turbulent_sst_3m_probe_{p,U}.txt`; the run
+directory is `~/jarvis-control/work/evidence/216-solver-controls/c82-turb/`.
+Moving the stations downstream changed the error against Colebrook from
+−3.5% to −1.6%, which is consistent with the 2 m stations including
+development effects. The value is still from **one mesh**. Colebrook and Blasius
+differ by 2.6% from each other at this Re, so the result is within correlation
+scatter, but no turbulent tolerance has been stated or met yet.
+Model limitation: k-ω SST with a resolved low-Re wall (first cell y⁺ ≈ 0.5)
+on a smooth wall. Wall functions, roughness and transition are not tested.
+
+### Mesh-study tooling (2026-10-24)
+
+`cfd_pipe/mesh_study.py` computes a three-mesh observed order, Richardson
+extrapolation and fine-mesh GCI (safety factor 1.25) with a constant
+refinement ratio, following Celik et al. (2008). The generated mesh levels
+refine by r = 1.5 (cell ratio 3.375). Oscillatory or divergent triplets get no
+order and no GCI. Offline tests recover p = 2 from a manufactured
+second-order sequence. The current laminar levels 0/1/2
+(3.220777, 3.215386, 3.218273 Pa/m) are **oscillatory**. Level 2 is also not
+residual-converged, so no GCI is reported for them.
+
+**Still open before publication:** rerun laminar level 2 with a larger
+iteration budget (the runner's 1800 s solver timeout must become a typed,
+contract-derived bound; 300 iterations already took 1230 s), then compute the
+laminar GCI. Then run a three-level turbulent mesh study on the 3 m contract
+and state tolerances before comparing. After that comes the rest of spec 216:
+live residual console, viewport, publication and Process pinning. No reduced
+model is published.
 
 ### Superseded first runs: casegen v1, defective stress path
 

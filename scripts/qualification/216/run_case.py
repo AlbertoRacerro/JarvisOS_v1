@@ -18,7 +18,7 @@ from pathlib import Path
 from app.modules.bluecad.cfd_pipe.casegen import manifest_digest, mesh_plan, write_case
 from app.modules.bluecad.cfd_pipe.contract import PipeStudyContract
 from app.modules.bluecad.cfd_pipe.mesh_check import evaluate_mesh, parse_checkmesh, plan_refusals
-from app.modules.bluecad.cfd_pipe.probe_results import ProbeResultError, laminar_comparison
+from app.modules.bluecad.cfd_pipe.probe_results import ProbeResultError, laminar_comparison, turbulent_comparison
 from app.modules.bluecad.cfd_pipe.residuals import LogParseError, ResidualStream, converged, required_fields
 from app.modules.bluecad.registry import ToolRegistryError, resolve_tool, run_tool
 
@@ -93,15 +93,15 @@ def run(contract: PipeStudyContract, registry: Path, out: Path) -> dict:
                 report.update(status="failed", stage="solver_completion", reason=stream.fatal or "solver output is incomplete")
                 save()
                 return report
-            if contract.regime == "laminar":
-                probes = case / "postProcessing" / "pipe_probes" / "0"
-                try:
-                    report["laminar_comparison"] = laminar_comparison(
-                        contract, (probes / "p").read_text(), (probes / "U").read_text())
-                except (OSError, ProbeResultError) as exc:
-                    report.update(status="failed", stage="probe_parse", reason=str(exc))
-                    save()
-                    return report
+            probes = case / "postProcessing" / "pipe_probes" / "0"
+            key, compare = (("laminar_comparison", laminar_comparison) if contract.regime == "laminar"
+                            else ("turbulent_comparison", turbulent_comparison))
+            try:
+                report[key] = compare(contract, (probes / "p").read_text(), (probes / "U").read_text())
+            except (OSError, ProbeResultError) as exc:
+                report.update(status="failed", stage="probe_parse", reason=str(exc))
+                save()
+                return report
             report["status"] = "measured"
             save()
     return report

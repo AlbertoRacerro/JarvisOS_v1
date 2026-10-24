@@ -22,7 +22,13 @@ from app.modules.bluecad.cfd_pipe.mesh_check import (
     evaluate_mesh,
     parse_checkmesh,
 )
-from app.modules.bluecad.cfd_pipe.probe_results import ProbeResultError, laminar_comparison, parse_probes
+from app.modules.bluecad.cfd_pipe.mesh_study import MeshStudyError, refinement_ratio, three_mesh_study
+from app.modules.bluecad.cfd_pipe.probe_results import (
+    ProbeResultError,
+    laminar_comparison,
+    parse_probes,
+    turbulent_comparison,
+)
 from app.modules.bluecad.cfd_pipe.residuals import (
     LogParseError,
     ResidualStream,
@@ -284,6 +290,89 @@ def test_probe_reader_refuses_missing_or_mismatched_samples() -> None:
     with pytest.raises(ProbeResultError, match="differs from the typed case"):
         laminar_comparison(contract, pressure.replace("0.13 ", "0.12 "), velocity.replace("0.13 ", "0.12 "))
 
+
+
+def _probe_text(contract: PipeStudyContract, pressures: tuple[float, float], iteration: int = 1500) -> tuple[str, str]:
+    locations = casegen.probe_locations(contract)
+    header = "".join(f"# Probe {i} ({x!r} {y!r} {z!r})\n" for i, (x, y, z) in enumerate(locations))
+    pressure = header + f"{iteration} {pressures[0]!r} {pressures[1]!r} {pressures[1]!r} {pressures[1]!r}\n"
+    velocity = header + f"{iteration}" + " (0.5 0 0)" * len(locations) + "\n"
+    return pressure, velocity
+
+
+def test_turbulent_comparison_reports_signed_errors_against_both_correlations() -> None:
+    contract = c1_turbulent(domain=derive_fluid_domain(tube_spec(length_mm=3000.0)))
+    stations = casegen.probe_locations(contract)
+    assert stations[0][0] >= contract.required_length_m
+    target = 0.97 * references.pressure_gradient_pa_m(
+        references.darcy_colebrook_smooth(contract.reynolds), contract.fluid.density_kg_m3,
+        contract.mean_velocity_m_s, contract.diameter_m)
+    drop = target * (stations[1][0] - stations[0][0]) / contract.fluid.density_kg_m3
+    comparison = turbulent_comparison(contract, *_probe_text(contract, (0.04 + drop, 0.04)))
+    assert comparison["iteration"] == 1500
+    assert comparison["pressure_gradient_pa_m"] == pytest.approx(target)
+    assert comparison["colebrook_smooth_pa_m"] == pytest.approx(56.444, rel=1e-4)
+    assert comparison["blasius_pa_m"] == pytest.approx(57.938, rel=1e-4)
+    assert comparison["signed_error_vs_colebrook"] == pytest.approx(-0.03)
+    assert comparison["signed_error_vs_blasius"] < comparison["signed_error_vs_colebrook"]
+    assert comparison["darcy_friction_factor"] == pytest.approx(0.97 * references.darcy_colebrook_smooth(contract.reynolds))
+    with pytest.raises(ProbeResultError, match="turbulent_rans contract"):
+        turbulent_comparison(laminar(), *_probe_text(laminar(), (1.0, 0.5)))
+    with pytest.raises(ProbeResultError, match="laminar contract"):
+        laminar_comparison(contract, *_probe_text(contract, (1.0, 0.5)))
+
+
+def test_real_v2412_turbulent_probes_before_development_length_are_refused() -> None:
+    # The first C1 SST run used a 2 m tube: its 1.3 m station lies inside the 1.59 m allowance.
+    contract = c1_turbulent(solver={"max_iterations": 1500, "residual_target": 1e-5},
+                            domain=derive_fluid_domain(tube_spec(length_mm=2000.0)))
+    pressure = (FIXTURES / "turbulent_sst_2m_probe_p.txt").read_text()
+    velocity = (FIXTURES / "turbulent_sst_2m_probe_U.txt").read_text()
+    assert parse_probes(pressure, vectors=False).iteration == 1500
+    with pytest.raises(ProbeResultError, match="before the 1.59 m development length"):
+        turbulent_comparison(contract, pressure, velocity)
+
+
+
+def test_real_v2412_turbulent_developed_section_probes_against_correlations() -> None:
+    contract = c1_turbulent(solver={"max_iterations": 1500, "residual_target": 1e-5},
+                            domain=derive_fluid_domain(tube_spec(length_mm=3000.0)))
+    comparison = turbulent_comparison(contract, (FIXTURES / "turbulent_sst_3m_probe_p.txt").read_text(),
+                                      (FIXTURES / "turbulent_sst_3m_probe_U.txt").read_text())
+    assert comparison["pressure_gradient_pa_m"] == pytest.approx(55.5303764, rel=1e-7)
+    assert comparison["signed_error_vs_colebrook"] == pytest.approx(-0.0161848, abs=1e-6)
+    assert comparison["signed_error_vs_blasius"] == pytest.approx(-0.0415514, abs=1e-6)
+
+# --- mesh study ---------------------------------------------------------------------------
+
+
+def test_three_mesh_study_recovers_second_order_and_gci() -> None:
+    values = tuple(1.0 + 0.01 * h**2 for h in (1.0, 1.5, 2.25))
+    study = three_mesh_study(values, 1.5)
+    assert study.convergence == "monotonic"
+    assert study.observed_order == pytest.approx(2.0)
+    assert study.extrapolated == pytest.approx(1.0)
+    assert study.gci_fine == pytest.approx(1.25 * (0.0125 / 1.01) / (1.5**2 - 1.0))
+
+
+def test_three_mesh_study_never_reports_gci_for_oscillatory_or_divergent_triplets() -> None:
+    # Typed laminar levels 2/1/0 on the pinned build (level 2 not residual-converged).
+    oscillatory = three_mesh_study((3.218273, 3.215386, 3.220777), 1.5)
+    assert oscillatory.convergence == "oscillatory"
+    assert oscillatory.gci_fine is None and oscillatory.observed_order is None
+    divergent = three_mesh_study((1.0, 1.1, 1.15), 1.5)
+    assert divergent.convergence == "divergent" and divergent.gci_fine is None
+    assert three_mesh_study((2.0, 2.0, 2.0), 1.5).convergence == "converged"
+
+
+def test_refinement_ratio_from_generated_mesh_levels() -> None:
+    assert refinement_ratio((174_960, 51_840, 15_360)) == pytest.approx(1.5)
+    with pytest.raises(MeshStudyError, match="not constant"):
+        refinement_ratio((174_960, 60_000, 15_360))
+    with pytest.raises(MeshStudyError, match="strictly decreasing"):
+        refinement_ratio((15_360, 51_840, 174_960))
+    with pytest.raises(MeshStudyError, match="below the recommended"):
+        refinement_ratio((2_000, 1_500, 1_125))
 
 # --- mesh check ---------------------------------------------------------------------------
 

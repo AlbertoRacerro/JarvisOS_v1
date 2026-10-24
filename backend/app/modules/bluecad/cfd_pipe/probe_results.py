@@ -8,7 +8,12 @@ from dataclasses import dataclass
 
 from app.modules.bluecad.cfd_pipe.casegen import probe_locations
 from app.modules.bluecad.cfd_pipe.contract import PipeStudyContract
-from app.modules.bluecad.cfd_pipe.references import poiseuille_velocity, pressure_gradient_pa_m
+from app.modules.bluecad.cfd_pipe.references import (
+    darcy_blasius,
+    darcy_colebrook_smooth,
+    poiseuille_velocity,
+    pressure_gradient_pa_m,
+)
 
 _PROBE = re.compile(r"^# Probe (\d+) \(([^)]+)\)$")
 _VECTOR = re.compile(r"\(([^)]+)\)")
@@ -78,14 +83,13 @@ def parse_probes(text: str, *, vectors: bool) -> ProbeSample:
     return ProbeSample(iteration, tuple(locations), values)
 
 
-def laminar_comparison(contract: PipeStudyContract, pressure_text: str, velocity_text: str) -> dict[str, float | int]:
-    """Compare final developed-section probes to Hagen–Poiseuille and its profile.
+def _developed_samples(contract: PipeStudyContract, pressure_text: str, velocity_text: str
+                       ) -> tuple[int, float, ProbeSample]:
+    """Return the final iteration, the density-scaled gradient and the velocity sample.
 
-    Pressure probes contain kinematic pressure; multiplying by density is required
-    before reporting Pa/m. Errors are reported, never converted to a pass claim.
+    The upstream pressure station must lie past the contract's development length;
+    otherwise the gradient includes entrance-region losses and is refused.
     """
-    if contract.regime != "laminar":
-        raise ProbeResultError("laminar comparison requires a laminar contract")
     pressure = parse_probes(pressure_text, vectors=False)
     velocity = parse_probes(velocity_text, vectors=True)
     expected = probe_locations(contract)
@@ -96,10 +100,28 @@ def laminar_comparison(contract: PipeStudyContract, pressure_text: str, velocity
             raise ProbeResultError("probe location differs from the typed case")
     if pressure.iteration != velocity.iteration:
         raise ProbeResultError("pressure and velocity samples are from different iterations")
+    if expected[0][0] < contract.required_length_m:
+        raise ProbeResultError(
+            f"upstream pressure station at {expected[0][0]:.4g} m lies before the "
+            f"{contract.required_length_m:.4g} m development length"
+        )
     p0, p1 = pressure.values[:2]
     if not isinstance(p0, float) or not isinstance(p1, float):
         raise ProbeResultError("pressure samples are not scalar")
     gradient = (p0 - p1) * contract.fluid.density_kg_m3 / (expected[1][0] - expected[0][0])
+    return pressure.iteration, gradient, velocity
+
+
+def laminar_comparison(contract: PipeStudyContract, pressure_text: str, velocity_text: str) -> dict[str, float | int]:
+    """Compare final developed-section probes to Hagen–Poiseuille and its profile.
+
+    Pressure probes contain kinematic pressure; multiplying by density is required
+    before reporting Pa/m. Errors are reported, never converted to a pass claim.
+    """
+    if contract.regime != "laminar":
+        raise ProbeResultError("laminar comparison requires a laminar contract")
+    iteration, gradient, velocity = _developed_samples(contract, pressure_text, velocity_text)
+    expected = probe_locations(contract)
     reference = pressure_gradient_pa_m(64.0 / contract.reynolds, contract.fluid.density_kg_m3,
                                        contract.mean_velocity_m_s, contract.diameter_m)
     errors = []
@@ -110,9 +132,34 @@ def laminar_comparison(contract: PipeStudyContract, pressure_text: str, velocity
         profile = poiseuille_velocity(radius, contract.diameter_m / 2.0, contract.mean_velocity_m_s)
         errors.append(abs(value[0] - profile) / contract.mean_velocity_m_s)
     return {
-        "iteration": pressure.iteration,
+        "iteration": iteration,
         "pressure_gradient_pa_m": gradient,
         "hagen_poiseuille_pa_m": reference,
         "pressure_gradient_relative_error": abs(gradient - reference) / reference,
         "profile_max_error_over_mean_velocity": max(errors),
+    }
+
+
+def turbulent_comparison(contract: PipeStudyContract, pressure_text: str, velocity_text: str) -> dict[str, float | int]:
+    """Compare the final developed-section RANS gradient to smooth-pipe correlations.
+
+    Errors are signed (measured minus reference, over reference). Colebrook and
+    Blasius are correlations with their own scatter of a few percent; the report
+    states the difference and makes no qualification claim.
+    """
+    if contract.regime != "turbulent_rans":
+        raise ProbeResultError("turbulent comparison requires a turbulent_rans contract")
+    iteration, gradient, _ = _developed_samples(contract, pressure_text, velocity_text)
+    rho, speed, diameter = contract.fluid.density_kg_m3, contract.mean_velocity_m_s, contract.diameter_m
+    colebrook = pressure_gradient_pa_m(darcy_colebrook_smooth(contract.reynolds), rho, speed, diameter)
+    blasius = pressure_gradient_pa_m(darcy_blasius(contract.reynolds), rho, speed, diameter)
+    return {
+        "iteration": iteration,
+        "reynolds": contract.reynolds,
+        "pressure_gradient_pa_m": gradient,
+        "darcy_friction_factor": 2.0 * diameter * gradient / (rho * speed**2),
+        "colebrook_smooth_pa_m": colebrook,
+        "blasius_pa_m": blasius,
+        "signed_error_vs_colebrook": (gradient - colebrook) / colebrook,
+        "signed_error_vs_blasius": (gradient - blasius) / blasius,
     }
